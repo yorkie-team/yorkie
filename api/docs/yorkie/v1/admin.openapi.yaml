@@ -22,6 +22,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/BroadcastByAdmin:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ChangePassword:
     post:
       description: ""
@@ -453,6 +465,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.AcceptInviteRequest'
       required: true
+    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminRequest'
+      required: true
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest:
       content:
         application/json:
@@ -786,6 +807,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.AcceptInviteResponse'
+      description: ""
+    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminResponse'
       description: ""
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse:
       content:
@@ -1321,6 +1351,33 @@ components:
           title: member
           type: object
       title: AcceptInviteResponse
+      type: object
+    yorkie.v1.BroadcastByAdminRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+        payload:
+          additionalProperties: false
+          description: ""
+          format: byte
+          title: payload
+          type: string
+        topic:
+          additionalProperties: false
+          description: ""
+          title: topic
+          type: string
+      title: BroadcastByAdminRequest
+      type: object
+    yorkie.v1.BroadcastByAdminResponse:
+      additionalProperties: false
+      description: ""
+      title: BroadcastByAdminResponse
       type: object
     yorkie.v1.Change:
       additionalProperties: false

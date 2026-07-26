@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
@@ -350,6 +351,38 @@ func (c *Client) GetChannels(
 	}
 
 	return channels, nil
+}
+
+// Broadcast broadcasts an event to clients watching the given channel.
+func (c *Client) Broadcast(
+	ctx context.Context,
+	project *types.Project,
+	channelKey key.Key,
+	topic string,
+	payload []byte,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
+	firstPath, err := channel.FirstKeyPath(channelKey)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.client.Broadcast(
+		ctx,
+		withShardKey(connect.NewRequest(&api.ClusterServiceBroadcastRequest{
+			ProjectId:  project.ID.String(),
+			ChannelKey: channelKey.String(),
+			Topic:      topic,
+			Payload:    payload,
+		}), project.PublicKey, firstPath),
+	)
+	if err != nil {
+		return fromConnectError(err)
+	}
+
+	return nil
 }
 
 // GetChannelCount gets the channel count for the given project.

@@ -720,6 +720,110 @@ func (x *ClusterServiceGetChannelsResponse) GetChannels() []*ChannelSummary {
 	return nil
 }
 
+type ClusterServiceBroadcastRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	ChannelKey    string                 `protobuf:"bytes,2,opt,name=channel_key,json=channelKey,proto3" json:"channel_key,omitempty"`
+	Topic         string                 `protobuf:"bytes,3,opt,name=topic,proto3" json:"topic,omitempty"`
+	Payload       []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClusterServiceBroadcastRequest) Reset() {
+	*x = ClusterServiceBroadcastRequest{}
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClusterServiceBroadcastRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterServiceBroadcastRequest) ProtoMessage() {}
+
+func (x *ClusterServiceBroadcastRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterServiceBroadcastRequest.ProtoReflect.Descriptor instead.
+func (*ClusterServiceBroadcastRequest) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ClusterServiceBroadcastRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ClusterServiceBroadcastRequest) GetChannelKey() string {
+	if x != nil {
+		return x.ChannelKey
+	}
+	return ""
+}
+
+func (x *ClusterServiceBroadcastRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *ClusterServiceBroadcastRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+type ClusterServiceBroadcastResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClusterServiceBroadcastResponse) Reset() {
+	*x = ClusterServiceBroadcastResponse{}
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClusterServiceBroadcastResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterServiceBroadcastResponse) ProtoMessage() {}
+
+func (x *ClusterServiceBroadcastResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterServiceBroadcastResponse.ProtoReflect.Descriptor instead.
+func (*ClusterServiceBroadcastResponse) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{13}
+}
+
 type ClusterServiceGetChannelCountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
@@ -729,7 +833,7 @@ type ClusterServiceGetChannelCountRequest struct {
 
 func (x *ClusterServiceGetChannelCountRequest) Reset() {
 	*x = ClusterServiceGetChannelCountRequest{}
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[12]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -741,7 +845,7 @@ func (x *ClusterServiceGetChannelCountRequest) String() string {
 func (*ClusterServiceGetChannelCountRequest) ProtoMessage() {}
 
 func (x *ClusterServiceGetChannelCountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[12]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -754,7 +858,7 @@ func (x *ClusterServiceGetChannelCountRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ClusterServiceGetChannelCountRequest.ProtoReflect.Descriptor instead.
 func (*ClusterServiceGetChannelCountRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{12}
+	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ClusterServiceGetChannelCountRequest) GetProjectId() string {
@@ -773,7 +877,7 @@ type ClusterServiceGetChannelCountResponse struct {
 
 func (x *ClusterServiceGetChannelCountResponse) Reset() {
 	*x = ClusterServiceGetChannelCountResponse{}
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[13]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -785,7 +889,7 @@ func (x *ClusterServiceGetChannelCountResponse) String() string {
 func (*ClusterServiceGetChannelCountResponse) ProtoMessage() {}
 
 func (x *ClusterServiceGetChannelCountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[13]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -798,7 +902,7 @@ func (x *ClusterServiceGetChannelCountResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ClusterServiceGetChannelCountResponse.ProtoReflect.Descriptor instead.
 func (*ClusterServiceGetChannelCountResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{13}
+	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ClusterServiceGetChannelCountResponse) GetChannelCount() int32 {
@@ -818,7 +922,7 @@ type InvalidateCacheRequest struct {
 
 func (x *InvalidateCacheRequest) Reset() {
 	*x = InvalidateCacheRequest{}
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[14]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -830,7 +934,7 @@ func (x *InvalidateCacheRequest) String() string {
 func (*InvalidateCacheRequest) ProtoMessage() {}
 
 func (x *InvalidateCacheRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[14]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -843,7 +947,7 @@ func (x *InvalidateCacheRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvalidateCacheRequest.ProtoReflect.Descriptor instead.
 func (*InvalidateCacheRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{14}
+	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *InvalidateCacheRequest) GetCacheType() CacheType {
@@ -869,7 +973,7 @@ type InvalidateCacheResponse struct {
 
 func (x *InvalidateCacheResponse) Reset() {
 	*x = InvalidateCacheResponse{}
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[15]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -881,7 +985,7 @@ func (x *InvalidateCacheResponse) String() string {
 func (*InvalidateCacheResponse) ProtoMessage() {}
 
 func (x *InvalidateCacheResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_cluster_proto_msgTypes[15]
+	mi := &file_yorkie_v1_cluster_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -894,7 +998,7 @@ func (x *InvalidateCacheResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvalidateCacheResponse.ProtoReflect.Descriptor instead.
 func (*InvalidateCacheResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{15}
+	return file_yorkie_v1_cluster_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *InvalidateCacheResponse) GetSuccess() bool {
@@ -952,7 +1056,15 @@ const file_yorkie_v1_cluster_proto_rawDesc = "" +
 	"\fchannel_keys\x18\x02 \x03(\tR\vchannelKeys\x12(\n" +
 	"\x10include_sub_path\x18\x03 \x01(\bR\x0eincludeSubPath\"Z\n" +
 	"!ClusterServiceGetChannelsResponse\x125\n" +
-	"\bchannels\x18\x01 \x03(\v2\x19.yorkie.v1.ChannelSummaryR\bchannels\"E\n" +
+	"\bchannels\x18\x01 \x03(\v2\x19.yorkie.v1.ChannelSummaryR\bchannels\"\x90\x01\n" +
+	"\x1eClusterServiceBroadcastRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1f\n" +
+	"\vchannel_key\x18\x02 \x01(\tR\n" +
+	"channelKey\x12\x14\n" +
+	"\x05topic\x18\x03 \x01(\tR\x05topic\x12\x18\n" +
+	"\apayload\x18\x04 \x01(\fR\apayload\"!\n" +
+	"\x1fClusterServiceBroadcastResponse\"E\n" +
 	"$ClusterServiceGetChannelCountRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\"L\n" +
@@ -968,14 +1080,15 @@ const file_yorkie_v1_cluster_proto_rawDesc = "" +
 	"\x16CACHE_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12CACHE_TYPE_PROJECT\x10\x01\x12\x15\n" +
 	"\x11CACHE_TYPE_CLIENT\x10\x02\x12\x17\n" +
-	"\x13CACHE_TYPE_DOCUMENT\x10\x032\x8a\a\n" +
+	"\x13CACHE_TYPE_DOCUMENT\x10\x032\xf0\a\n" +
 	"\x0eClusterService\x12s\n" +
 	"\x0eDetachDocument\x12..yorkie.v1.ClusterServiceDetachDocumentRequest\x1a/.yorkie.v1.ClusterServiceDetachDocumentResponse\"\x00\x12v\n" +
 	"\x0fCompactDocument\x12/.yorkie.v1.ClusterServiceCompactDocumentRequest\x1a0.yorkie.v1.ClusterServiceCompactDocumentResponse\"\x00\x12p\n" +
 	"\rPurgeDocument\x12-.yorkie.v1.ClusterServicePurgeDocumentRequest\x1a..yorkie.v1.ClusterServicePurgeDocumentResponse\"\x00\x12j\n" +
 	"\vGetDocument\x12+.yorkie.v1.ClusterServiceGetDocumentRequest\x1a,.yorkie.v1.ClusterServiceGetDocumentResponse\"\x00\x12m\n" +
 	"\fListChannels\x12,.yorkie.v1.ClusterServiceListChannelsRequest\x1a-.yorkie.v1.ClusterServiceListChannelsResponse\"\x00\x12j\n" +
-	"\vGetChannels\x12+.yorkie.v1.ClusterServiceGetChannelsRequest\x1a,.yorkie.v1.ClusterServiceGetChannelsResponse\"\x00\x12v\n" +
+	"\vGetChannels\x12+.yorkie.v1.ClusterServiceGetChannelsRequest\x1a,.yorkie.v1.ClusterServiceGetChannelsResponse\"\x00\x12d\n" +
+	"\tBroadcast\x12).yorkie.v1.ClusterServiceBroadcastRequest\x1a*.yorkie.v1.ClusterServiceBroadcastResponse\"\x00\x12v\n" +
 	"\x0fGetChannelCount\x12/.yorkie.v1.ClusterServiceGetChannelCountRequest\x1a0.yorkie.v1.ClusterServiceGetChannelCountResponse\"\x00\x12Z\n" +
 	"\x0fInvalidateCache\x12!.yorkie.v1.InvalidateCacheRequest\x1a\".yorkie.v1.InvalidateCacheResponse\"\x00BE\n" +
 	"\x11dev.yorkie.api.v1P\x01Z.github.com/yorkie-team/yorkie/api/yorkie/v1;v1b\x06proto3"
@@ -993,7 +1106,7 @@ func file_yorkie_v1_cluster_proto_rawDescGZIP() []byte {
 }
 
 var file_yorkie_v1_cluster_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_yorkie_v1_cluster_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_yorkie_v1_cluster_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_yorkie_v1_cluster_proto_goTypes = []any{
 	(CacheType)(0), // 0: yorkie.v1.CacheType
 	(*ClusterServiceDetachDocumentRequest)(nil),   // 1: yorkie.v1.ClusterServiceDetachDocumentRequest
@@ -1008,20 +1121,22 @@ var file_yorkie_v1_cluster_proto_goTypes = []any{
 	(*ClusterServiceListChannelsResponse)(nil),    // 10: yorkie.v1.ClusterServiceListChannelsResponse
 	(*ClusterServiceGetChannelsRequest)(nil),      // 11: yorkie.v1.ClusterServiceGetChannelsRequest
 	(*ClusterServiceGetChannelsResponse)(nil),     // 12: yorkie.v1.ClusterServiceGetChannelsResponse
-	(*ClusterServiceGetChannelCountRequest)(nil),  // 13: yorkie.v1.ClusterServiceGetChannelCountRequest
-	(*ClusterServiceGetChannelCountResponse)(nil), // 14: yorkie.v1.ClusterServiceGetChannelCountResponse
-	(*InvalidateCacheRequest)(nil),                // 15: yorkie.v1.InvalidateCacheRequest
-	(*InvalidateCacheResponse)(nil),               // 16: yorkie.v1.InvalidateCacheResponse
-	(*Project)(nil),                               // 17: yorkie.v1.Project
-	(*DocumentSummary)(nil),                       // 18: yorkie.v1.DocumentSummary
-	(*ChannelSummary)(nil),                        // 19: yorkie.v1.ChannelSummary
+	(*ClusterServiceBroadcastRequest)(nil),        // 13: yorkie.v1.ClusterServiceBroadcastRequest
+	(*ClusterServiceBroadcastResponse)(nil),       // 14: yorkie.v1.ClusterServiceBroadcastResponse
+	(*ClusterServiceGetChannelCountRequest)(nil),  // 15: yorkie.v1.ClusterServiceGetChannelCountRequest
+	(*ClusterServiceGetChannelCountResponse)(nil), // 16: yorkie.v1.ClusterServiceGetChannelCountResponse
+	(*InvalidateCacheRequest)(nil),                // 17: yorkie.v1.InvalidateCacheRequest
+	(*InvalidateCacheResponse)(nil),               // 18: yorkie.v1.InvalidateCacheResponse
+	(*Project)(nil),                               // 19: yorkie.v1.Project
+	(*DocumentSummary)(nil),                       // 20: yorkie.v1.DocumentSummary
+	(*ChannelSummary)(nil),                        // 21: yorkie.v1.ChannelSummary
 }
 var file_yorkie_v1_cluster_proto_depIdxs = []int32{
-	17, // 0: yorkie.v1.ClusterServiceDetachDocumentRequest.project:type_name -> yorkie.v1.Project
-	17, // 1: yorkie.v1.ClusterServiceGetDocumentRequest.project:type_name -> yorkie.v1.Project
-	18, // 2: yorkie.v1.ClusterServiceGetDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	19, // 3: yorkie.v1.ClusterServiceListChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
-	19, // 4: yorkie.v1.ClusterServiceGetChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
+	19, // 0: yorkie.v1.ClusterServiceDetachDocumentRequest.project:type_name -> yorkie.v1.Project
+	19, // 1: yorkie.v1.ClusterServiceGetDocumentRequest.project:type_name -> yorkie.v1.Project
+	20, // 2: yorkie.v1.ClusterServiceGetDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	21, // 3: yorkie.v1.ClusterServiceListChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
+	21, // 4: yorkie.v1.ClusterServiceGetChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
 	0,  // 5: yorkie.v1.InvalidateCacheRequest.cache_type:type_name -> yorkie.v1.CacheType
 	1,  // 6: yorkie.v1.ClusterService.DetachDocument:input_type -> yorkie.v1.ClusterServiceDetachDocumentRequest
 	3,  // 7: yorkie.v1.ClusterService.CompactDocument:input_type -> yorkie.v1.ClusterServiceCompactDocumentRequest
@@ -1029,18 +1144,20 @@ var file_yorkie_v1_cluster_proto_depIdxs = []int32{
 	7,  // 9: yorkie.v1.ClusterService.GetDocument:input_type -> yorkie.v1.ClusterServiceGetDocumentRequest
 	9,  // 10: yorkie.v1.ClusterService.ListChannels:input_type -> yorkie.v1.ClusterServiceListChannelsRequest
 	11, // 11: yorkie.v1.ClusterService.GetChannels:input_type -> yorkie.v1.ClusterServiceGetChannelsRequest
-	13, // 12: yorkie.v1.ClusterService.GetChannelCount:input_type -> yorkie.v1.ClusterServiceGetChannelCountRequest
-	15, // 13: yorkie.v1.ClusterService.InvalidateCache:input_type -> yorkie.v1.InvalidateCacheRequest
-	2,  // 14: yorkie.v1.ClusterService.DetachDocument:output_type -> yorkie.v1.ClusterServiceDetachDocumentResponse
-	4,  // 15: yorkie.v1.ClusterService.CompactDocument:output_type -> yorkie.v1.ClusterServiceCompactDocumentResponse
-	6,  // 16: yorkie.v1.ClusterService.PurgeDocument:output_type -> yorkie.v1.ClusterServicePurgeDocumentResponse
-	8,  // 17: yorkie.v1.ClusterService.GetDocument:output_type -> yorkie.v1.ClusterServiceGetDocumentResponse
-	10, // 18: yorkie.v1.ClusterService.ListChannels:output_type -> yorkie.v1.ClusterServiceListChannelsResponse
-	12, // 19: yorkie.v1.ClusterService.GetChannels:output_type -> yorkie.v1.ClusterServiceGetChannelsResponse
-	14, // 20: yorkie.v1.ClusterService.GetChannelCount:output_type -> yorkie.v1.ClusterServiceGetChannelCountResponse
-	16, // 21: yorkie.v1.ClusterService.InvalidateCache:output_type -> yorkie.v1.InvalidateCacheResponse
-	14, // [14:22] is the sub-list for method output_type
-	6,  // [6:14] is the sub-list for method input_type
+	13, // 12: yorkie.v1.ClusterService.Broadcast:input_type -> yorkie.v1.ClusterServiceBroadcastRequest
+	15, // 13: yorkie.v1.ClusterService.GetChannelCount:input_type -> yorkie.v1.ClusterServiceGetChannelCountRequest
+	17, // 14: yorkie.v1.ClusterService.InvalidateCache:input_type -> yorkie.v1.InvalidateCacheRequest
+	2,  // 15: yorkie.v1.ClusterService.DetachDocument:output_type -> yorkie.v1.ClusterServiceDetachDocumentResponse
+	4,  // 16: yorkie.v1.ClusterService.CompactDocument:output_type -> yorkie.v1.ClusterServiceCompactDocumentResponse
+	6,  // 17: yorkie.v1.ClusterService.PurgeDocument:output_type -> yorkie.v1.ClusterServicePurgeDocumentResponse
+	8,  // 18: yorkie.v1.ClusterService.GetDocument:output_type -> yorkie.v1.ClusterServiceGetDocumentResponse
+	10, // 19: yorkie.v1.ClusterService.ListChannels:output_type -> yorkie.v1.ClusterServiceListChannelsResponse
+	12, // 20: yorkie.v1.ClusterService.GetChannels:output_type -> yorkie.v1.ClusterServiceGetChannelsResponse
+	14, // 21: yorkie.v1.ClusterService.Broadcast:output_type -> yorkie.v1.ClusterServiceBroadcastResponse
+	16, // 22: yorkie.v1.ClusterService.GetChannelCount:output_type -> yorkie.v1.ClusterServiceGetChannelCountResponse
+	18, // 23: yorkie.v1.ClusterService.InvalidateCache:output_type -> yorkie.v1.InvalidateCacheResponse
+	15, // [15:24] is the sub-list for method output_type
+	6,  // [6:15] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -1058,7 +1175,7 @@ func file_yorkie_v1_cluster_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_yorkie_v1_cluster_proto_rawDesc), len(file_yorkie_v1_cluster_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

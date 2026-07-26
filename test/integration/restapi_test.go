@@ -27,11 +27,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -305,6 +308,65 @@ func TestRESTAPI(t *testing.T) {
 			})
 		}
 		wg.Wait()
+	})
+
+	t.Run("broadcast by admin test", func(t *testing.T) {
+		ctx := context.Background()
+		project := helper.CreateProject(t, defaultServer, t.Name())
+
+		cli, err := client.Dial(
+			defaultServer.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Deactivate(ctx))
+			assert.NoError(t, cli.Close())
+		}()
+
+		ch, err := channel.New(key.Key("room-1"))
+		require.NoError(t, err)
+		require.NoError(t, cli.Attach(ctx, ch))
+
+		eventCh := make(chan []byte, 1)
+		ch.SubscribeBroadcastEvent(
+			"mention",
+			func(_ string, _ string, payload []byte) error {
+				eventCh <- payload
+				return nil
+			},
+		)
+
+		countCh, closeWatch, err := cli.WatchChannel(ctx, ch)
+		require.NoError(t, err)
+		defer closeWatch()
+
+		select {
+		case <-countCh:
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout waiting for channel watch initialization")
+		}
+
+		res := post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/BroadcastByAdmin", defaultServer.RPCAddr()),
+			`{"channel_key":"room-1","topic":"mention","payload":"InlvcmtpZSI="}`,
+		)
+
+		var ack map[string]any
+		assert.NoError(t, gojson.Unmarshal(res, &ack))
+		assert.Empty(t, ack)
+
+		select {
+		case payload := <-eventCh:
+			var value string
+			assert.NoError(t, gojson.Unmarshal(payload, &value))
+			assert.Equal(t, "yorkie", value)
+		case <-time.After(2 * time.Second):
+			t.Fatal("timeout waiting for admin broadcast")
+		}
 	})
 }
 

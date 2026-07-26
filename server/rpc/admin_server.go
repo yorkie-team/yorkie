@@ -893,6 +893,34 @@ func (s *adminServer) GetChannels(
 	}), nil
 }
 
+// BroadcastByAdmin broadcasts an event to clients watching the given channel.
+func (s *adminServer) BroadcastByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.BroadcastByAdminRequest],
+) (*connect.Response[api.BroadcastByAdminResponse], error) {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	clusterClient, err := s.backend.ClusterClient()
+	if err != nil {
+		return nil, err
+	}
+	if err := clusterClient.Broadcast(
+		ctx,
+		project,
+		channelKey,
+		req.Msg.Topic,
+		req.Msg.Payload,
+	); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.BroadcastByAdminResponse{}), nil
+}
+
 // makeChannelSessionCountCacheKey creates a cache key for session count.
 func makeChannelSessionCountCacheKey(projectID types.ID, channelKey key.Key, includeSubPath bool) string {
 	return fmt.Sprintf("%s:%s:%t", projectID, channelKey, includeSubPath)

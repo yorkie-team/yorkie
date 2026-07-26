@@ -24,6 +24,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -316,6 +317,30 @@ func (s *clusterServer) GetChannels(
 	return connect.NewResponse(&api.ClusterServiceGetChannelsResponse{
 		Channels: channels,
 	}), nil
+}
+
+// Broadcast broadcasts an event to clients watching the given channel.
+func (s *clusterServer) Broadcast(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceBroadcastRequest],
+) (*connect.Response[api.ClusterServiceBroadcastResponse], error) {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return nil, err
+	}
+
+	s.backend.PubSub.PublishChannel(ctx, events.ChannelEvent{
+		Type: events.ChannelBroadcast,
+		Key: types.ChannelRefKey{
+			ProjectID:  types.ID(req.Msg.ProjectId),
+			ChannelKey: channelKey,
+		},
+		Publisher: time.InitialActorID,
+		Topic:     req.Msg.Topic,
+		Payload:   req.Msg.Payload,
+	})
+
+	return connect.NewResponse(&api.ClusterServiceBroadcastResponse{}), nil
 }
 
 // GetChannelCount gets the channel count for the given project.
