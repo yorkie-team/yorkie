@@ -54,6 +54,21 @@ func FuzzCounterValueFromBytes(f *testing.F) {
 	})
 }
 
+func FuzzValueFromBytes(f *testing.F) {
+	f.Add(byte(crdt.Null), []byte{})
+	f.Add(byte(crdt.Boolean), []byte{1})
+	f.Add(byte(crdt.Integer), []byte{0, 0, 0, 0})
+	f.Add(byte(crdt.Long), []byte{0, 0, 0, 0, 0, 0, 0, 0})
+	f.Add(byte(crdt.Double), []byte{0, 0, 0, 0, 0, 0, 0, 0})
+	f.Add(byte(crdt.String), []byte("yorkie"))
+	f.Add(byte(crdt.Bytes), []byte("yorkie"))
+	f.Add(byte(crdt.Date), []byte{0, 0, 0, 0, 0, 0, 0, 0})
+
+	f.Fuzz(func(t *testing.T, rawValueType byte, value []byte) {
+		_, _ = crdt.ValueFromBytes(crdt.ValueType(rawValueType), value)
+	})
+}
+
 func addProtoSeeds(f *testing.F, messages ...proto.Message) {
 	f.Helper()
 	for _, message := range messages {
