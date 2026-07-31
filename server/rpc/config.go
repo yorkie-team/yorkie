@@ -19,6 +19,7 @@ package rpc
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -45,6 +46,14 @@ type Config struct {
 	// KeyFile is the path to the key file.
 	KeyFile string `yaml:"KeyFile"`
 
+	// ReadHeaderTimeout is the maximum duration for reading request headers
+	// (Slowloris protection). Default is "5s".
+	ReadHeaderTimeout string `yaml:"ReadHeaderTimeout"`
+
+	// IdleTimeout is the maximum duration to wait for the next request on
+	// idle keep-alive connections. Default is "2m".
+	IdleTimeout string `yaml:"IdleTimeout"`
+
 	// Auth is the configuration for authentication.
 	Auth auth.Config `yaml:"Auth"`
 }
@@ -68,5 +77,47 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.ReadHeaderTimeout != "" {
+		if _, err := time.ParseDuration(c.ReadHeaderTimeout); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--rpc-read-header-timeout" flag: %w`,
+				c.ReadHeaderTimeout,
+				err,
+			)
+		}
+	}
+
+	if c.IdleTimeout != "" {
+		if _, err := time.ParseDuration(c.IdleTimeout); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--rpc-idle-timeout" flag: %w`,
+				c.IdleTimeout,
+				err,
+			)
+		}
+	}
+
 	return nil
+}
+
+// ParseReadHeaderTimeout returns the timeout for reading request headers.
+func (c *Config) ParseReadHeaderTimeout() time.Duration {
+	result, err := time.ParseDuration(c.ReadHeaderTimeout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse read header timeout: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseIdleTimeout returns the timeout for idle keep-alive connections.
+func (c *Config) ParseIdleTimeout() time.Duration {
+	result, err := time.ParseDuration(c.IdleTimeout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse idle timeout: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
 }

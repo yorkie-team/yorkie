@@ -86,14 +86,21 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(httphealth.NewHandler(healthChecker))
 	mux.Handle(mcp.NewHandler(be))
 
-	// TODO(hackerwins): We need to provide proper http server configuration.
+	idleTimeout := conf.ParseIdleTimeout()
 	return &Server{
 		conf: conf,
 		httpServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
+			// ReadTimeout and WriteTimeout stay unset. They would cut
+			// long-lived streams such as WatchDocument.
+			ReadHeaderTimeout: conf.ParseReadHeaderTimeout(),
+			IdleTimeout:       idleTimeout,
 			Handler: h2c.NewHandler(newCORS().Handler(mux),
 				&http2.Server{
 					MaxConcurrentStreams: math.MaxUint32,
+					// http.Server's IdleTimeout does not reach h2c
+					// connections, so it is set here as well.
+					IdleTimeout: idleTimeout,
 				},
 			),
 		},

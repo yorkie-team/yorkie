@@ -9,6 +9,14 @@ RPC:
   # KeyFile is the file containing the TLS private key.
   KeyFile: ""
 
+  # ReadHeaderTimeout is the maximum duration for reading request headers,
+  # protecting against Slowloris attacks (default: "5s").
+  ReadHeaderTimeout: "5s"
+
+  # IdleTimeout is the maximum duration to wait for the next request on idle
+  # keep-alive connections (default: "2m").
+  IdleTimeout: "2m"
+
   # Auth is the configuration of AuthHandler for cookie-based session management.
   Auth:
     # GitHubClientID is GitHub OAuth Client ID.

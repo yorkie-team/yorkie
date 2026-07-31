@@ -66,8 +66,10 @@ var logger *zap.Logger
 
 // Below are the values of the Yorkie config used in the test.
 var (
-	RPCPort       = 11101
-	ProfilingPort = 11102
+	RPCPort              = 11101
+	RPCReadHeaderTimeout = server.DefaultRPCReadHeaderTimeout.String()
+	RPCIdleTimeout       = server.DefaultRPCIdleTimeout.String()
+	ProfilingPort        = 11102
 
 	MembershipLeaseDuration   = "15s"
 	MembershipRenewalInterval = "5s"
@@ -349,7 +351,9 @@ func TestConfig() *server.Config {
 	portOffset += 100
 	return &server.Config{
 		RPC: &rpc.Config{
-			Port: RPCPort + portOffset,
+			Port:              RPCPort + portOffset,
+			ReadHeaderTimeout: RPCReadHeaderTimeout,
+			IdleTimeout:       RPCIdleTimeout,
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
