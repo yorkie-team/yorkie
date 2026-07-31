@@ -75,6 +75,16 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		v1connect.AdminServiceName,
 	)
 
+	readHeaderTimeout, err := conf.ParseReadHeaderTimeout()
+	if err != nil {
+		return nil, err
+	}
+
+	idleTimeout, err := conf.ParseIdleTimeout()
+	if err != nil {
+		return nil, err
+	}
+
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 
 	mux := http.NewServeMux()
@@ -86,14 +96,13 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(httphealth.NewHandler(healthChecker))
 	mux.Handle(mcp.NewHandler(be))
 
-	idleTimeout := conf.ParseIdleTimeout()
 	return &Server{
 		conf: conf,
 		httpServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
 			// ReadTimeout and WriteTimeout stay unset. They would cut
 			// long-lived streams such as WatchDocument.
-			ReadHeaderTimeout: conf.ParseReadHeaderTimeout(),
+			ReadHeaderTimeout: readHeaderTimeout,
 			IdleTimeout:       idleTimeout,
 			Handler: h2c.NewHandler(newCORS().Handler(mux),
 				&http2.Server{

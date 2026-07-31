@@ -77,47 +77,37 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.ReadHeaderTimeout != "" {
-		if _, err := time.ParseDuration(c.ReadHeaderTimeout); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--rpc-read-header-timeout" flag: %w`,
-				c.ReadHeaderTimeout,
-				err,
-			)
-		}
+	if _, err := c.ParseReadHeaderTimeout(); err != nil {
+		return err
 	}
 
-	if c.IdleTimeout != "" {
-		if _, err := time.ParseDuration(c.IdleTimeout); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--rpc-idle-timeout" flag: %w`,
-				c.IdleTimeout,
-				err,
-			)
-		}
+	if _, err := c.ParseIdleTimeout(); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 // ParseReadHeaderTimeout returns the timeout for reading request headers.
-func (c *Config) ParseReadHeaderTimeout() time.Duration {
-	result, err := time.ParseDuration(c.ReadHeaderTimeout)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse read header timeout: %v\n", err)
-		os.Exit(1)
-	}
-
-	return result
+func (c *Config) ParseReadHeaderTimeout() (time.Duration, error) {
+	return parseTimeout(c.ReadHeaderTimeout, "--rpc-read-header-timeout")
 }
 
 // ParseIdleTimeout returns the timeout for idle keep-alive connections.
-func (c *Config) ParseIdleTimeout() time.Duration {
-	result, err := time.ParseDuration(c.IdleTimeout)
+func (c *Config) ParseIdleTimeout() (time.Duration, error) {
+	return parseTimeout(c.IdleTimeout, "--rpc-idle-timeout")
+}
+
+// parseTimeout parses the given duration string and rejects non-positive
+// values, which would silently disable the timeout.
+func parseTimeout(value, flag string) (time.Duration, error) {
+	result, err := time.ParseDuration(value)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse idle timeout: %v\n", err)
-		os.Exit(1)
+		return 0, fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, value, flag, err)
+	}
+	if result <= 0 {
+		return 0, fmt.Errorf(`invalid argument "%s" for "%s" flag: must be greater than 0`, value, flag)
 	}
 
-	return result
+	return result, nil
 }
