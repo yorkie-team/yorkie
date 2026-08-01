@@ -48,22 +48,37 @@ func ValueFromBytes(valueType ValueType, value []byte) (interface{}, error) {
 	case Null:
 		return nil, nil
 	case Boolean:
+		if len(value) < 1 {
+			return nil, fmt.Errorf("invalid boolean payload: got %d bytes, want 1", len(value))
+		}
 		if value[0] == 1 {
 			return true, nil
 		}
 		return false, nil
 	case Integer:
+		if len(value) < 4 {
+			return nil, fmt.Errorf("invalid integer payload: got %d bytes, want 4", len(value))
+		}
 		val := int32(binary.LittleEndian.Uint32(value))
 		return val, nil
 	case Long:
+		if len(value) < 8 {
+			return nil, fmt.Errorf("invalid long payload: got %d bytes, want 8", len(value))
+		}
 		return int64(binary.LittleEndian.Uint64(value)), nil
 	case Double:
+		if len(value) < 8 {
+			return nil, fmt.Errorf("invalid double payload: got %d bytes, want 8", len(value))
+		}
 		return math.Float64frombits(binary.LittleEndian.Uint64(value)), nil
 	case String:
 		return string(value), nil
 	case Bytes:
 		return value, nil
 	case Date:
+		if len(value) < 8 {
+			return nil, fmt.Errorf("invalid date payload: got %d bytes, want 8", len(value))
+		}
 		v := int64(binary.LittleEndian.Uint64(value))
 		return gotime.UnixMilli(v), nil
 	default:
