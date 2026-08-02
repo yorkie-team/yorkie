@@ -526,3 +526,98 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 
 	RunTestTreeConcurrency("concurrently-edit-style-test", t, initialState, initialXML, ranges, editOperations, styleOperations)
 }
+
+// TestTreeConcurrencyInsertIntoRemovedRange reproduces issue #1302:
+// a concurrent Tree.Edit that inserts into a range concurrently removed
+// by a merge must converge on both replicas.
+func TestTreeConcurrencyInsertIntoRemovedRange(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	initialState := json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		},
+	}
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", initialState)
+		return nil
+	}))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+	assert.Equal(t, `<r><p>ab</p><p>cd</p></r>`, d1.Root().GetTree("t").ToXML())
+	assert.Equal(t, `<r><p>ab</p><p>cd</p></r>`, d2.Root().GetTree("t").ToXML())
+
+	// c1 inserts an empty <p> at index 6 (inside the 2nd paragraph,
+	// between 'c' and 'd'); c2 removes range [0,6).
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(6, 6, &json.TreeNode{Type: "p"}, 0)
+		return nil
+	}))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 6, nil, 0)
+		return nil
+	}))
+
+	flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	assert.True(t, flag, "d1: %s\nd2: %s",
+		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+}
+
+// TestTreeConcurrencyInsertIntoRemovedRangeMultiInsert probes whether two
+// concurrent inserts at the same index inside a concurrently-removed range
+// converge across all three replicas (issue #1302, multi-insert variant).
+func TestTreeConcurrencyInsertIntoRemovedRangeMultiInsert(t *testing.T) {
+	clients := activeClients(t, 3)
+	c1, c2, c3 := clients[0], clients[1], clients[2]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+	d3 := document.New(helper.TestKey(t))
+	assert.NoError(t, c3.Attach(ctx, d3))
+
+	initialState := json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		},
+	}
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", initialState)
+		return nil
+	}))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+	assert.NoError(t, c3.Sync(ctx))
+
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(6, 6, &json.TreeNode{Type: "i"}, 0)
+		return nil
+	}))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(6, 6, &json.TreeNode{Type: "b"}, 0)
+		return nil
+	}))
+	assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 6, nil, 0)
+		return nil
+	}))
+
+	flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}, {c3, d3}})
+	assert.True(t, flag, "d1: %s\nd2: %s\nd3: %s",
+		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML(), d3.Root().GetTree("t").ToXML())
+}

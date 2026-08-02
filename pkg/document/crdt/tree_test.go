@@ -369,6 +369,44 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
 	})
 
+	t.Run("merge moves an element tombstone with correct length accounting", func(t *testing.T) {
+		// 01. Create <root><p>ab</p><p><b></b>cd</p></root>.
+		//       0   1 2 3    4   5   6    7 8 9    10
+		// <root> <p> a b </p> <p> <b> </b> c d </p>  </root>
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+		_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "b", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(7, 7, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "cd"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>ab</p><p><b></b>cd</p></root>", tree.ToXML())
+
+		// 02. Delete b, the second paragraph's open tag, the <b></b>
+		// element and c, merging the paragraph. The <b></b> element becomes
+		// a tombstone moved into the first paragraph. Its padding must not
+		// inflate the visible length of the (surviving) first paragraph.
+		_, _, err = tree.EditT(2, 8, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
+
+		node := tree.ToTreeNodeForTest()
+		assert.Equal(t, 4, node.Size)
+		assert.Equal(t, 2, node.Children[0].Size)
+	})
+
 	t.Run("delete nodes between element nodes in different levels test", func(t *testing.T) {
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1   2 3 4    5    6   7 8 9    10
