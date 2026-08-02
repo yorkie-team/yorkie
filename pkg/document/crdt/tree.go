@@ -1199,24 +1199,27 @@ func (t *Tree) mergeNodes(
 	editedAt *time.Ticket,
 ) error {
 	for _, node := range toBeMovedToFromParents {
-		if node.removedAt == nil {
-			// Record source parent and merge ticket on the moved child.
-			// Both fields are persisted; MergedAt must be stored
-			// explicitly because source.removedAt can be overwritten
-			// by later concurrent deletes (LWW).
-			if node.Index.Parent != nil {
-				node.MergedFrom = node.Index.Parent.Value.id
-				node.MergedAt = editedAt
-			}
-			// Detach from old parent to prevent ghost references.
-			if node.Index.Parent != nil {
-				if err := node.Index.Parent.DetachChild(node.Index); err != nil {
-					return err
-				}
-			}
-			if err := fromParent.Append(node); err != nil {
-				return err
-			}
+		// A moved child must have a source parent to record; skip
+		// otherwise rather than append an untracked node (a node without
+		// MergedFrom is invisible to propagateMergeDeletes and
+		// rebuildMergeState).
+		if node.Index.Parent == nil {
+			continue
+		}
+		// Record source parent and merge ticket on the moved child.
+		// Both fields are persisted; MergedAt must be stored explicitly
+		// because source.removedAt can be overwritten by later concurrent
+		// deletes (LWW). Tombstoned children are moved too (kept removed):
+		// they stay as RGA anchors so a concurrent insert referencing one
+		// resolves in the merge target and orders via the RGA tie-break,
+		// converging with the replica that inserted before the merge.
+		// MoveChild relocates the node with correct length accounting for
+		// both live and tombstoned children (visible-neutral for the
+		// latter), so index positions stay correct on both parents.
+		node.MergedFrom = node.Index.Parent.Value.id
+		node.MergedAt = editedAt
+		if err := fromParent.Index.MoveChild(node.Index); err != nil {
+			return err
 		}
 	}
 	// Set forwarding pointer on merge-source nodes.
@@ -1329,7 +1332,11 @@ func (t *Tree) collectBetween(
 				// artifact of a concurrent split, not an intentional merge.
 				if ticketKnown(versionVector, node.id.CreatedAt) {
 					toBeMergedNodes = append(toBeMergedNodes, node)
-					for _, child := range node.Index.Children() {
+					// Include removed children (Children(true)) so tombstones
+					// move with the merge and survive as RGA anchors; a
+					// concurrent insert referencing one then resolves in the
+					// merge target and orders via the RGA tie-break.
+					for _, child := range node.Index.Children(true) {
 						toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
 					}
 				}
@@ -1833,10 +1840,13 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	}
 
 	// 02-1. If the parent has been tombstoned by a merge, redirect to the
-	// merge destination using the forwarding pointer. The insertion
-	// boundary is the first child in the target whose MergedFrom points
-	// back at the tombstoned parent (i.e. the first child moved by the
-	// merge, in target child order).
+	// merge destination using the forwarding pointer. The merge moved the
+	// parent's children (including tombstones) here, so a left-sibling
+	// anchor already resolves in the target via the normal path; only a
+	// left-most position still points at the emptied tombstone. The
+	// insertion boundary is the first child in the target whose MergedFrom
+	// points back at the tombstoned parent (i.e. the first child moved by
+	// the merge, in target child order).
 	if realParentNode.IsRemoved() && isLeftMost && realParentNode.mergedInto != nil {
 		mergeTarget := t.findFloorNode(realParentNode.mergedInto)
 		if mergeTarget != nil && !mergeTarget.IsRemoved() {

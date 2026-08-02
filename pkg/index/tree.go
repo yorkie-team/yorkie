@@ -650,6 +650,53 @@ func (n *Node[V]) DetachChild(child *Node[V]) error {
 	return nil
 }
 
+// MoveChild detaches the given child from its current parent (if any) and
+// appends it to this node, preserving both length dimensions on both
+// parents. Unlike DetachChild followed by Append, it is correct for
+// tombstoned children: a removed node contributes no VisibleLength to
+// either parent (remove() already excluded it from its ancestors), so only
+// the include-removed TotalLength is relocated. It is used by merge to move
+// tombstones as RGA anchors without corrupting index positions.
+func (n *Node[V]) MoveChild(child *Node[V]) error {
+	if n.IsText() {
+		return ErrInvalidMethodCallForTextNode
+	}
+
+	removed := child.Value.IsRemoved()
+
+	if child.Parent != nil {
+		offset := -1
+		for i, c := range child.Parent.children {
+			if c == child {
+				offset = i
+				break
+			}
+		}
+		if offset == -1 {
+			return ErrChildNotFound
+		}
+
+		child.Parent.children = append(
+			child.Parent.children[:offset],
+			child.Parent.children[offset+1:]...,
+		)
+		if !removed {
+			child.UpdateAncestorsLength(-(child.PaddedLength()))
+		}
+		child.UpdateAncestorsLength(-(child.PaddedLength(true)), true)
+		child.Parent = nil
+	}
+
+	n.children = append(n.children, child)
+	child.Parent = n
+	if !removed {
+		child.UpdateAncestorsLength(child.PaddedLength())
+	}
+	child.UpdateAncestorsLength(child.PaddedLength(true), true)
+
+	return nil
+}
+
 // InsertBefore inserts the given node before the given child.
 func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 	if n.IsText() {

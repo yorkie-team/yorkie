@@ -74,6 +74,11 @@ execution and rebuilt from the persisted `MergedFrom` field on
 snapshot load via `rebuildMergeState`. This enables a fast nil-check
 on the hot path without persisting a separate field.
 
+This redirect fires only for a *left-most* position, whose anchor is
+the tombstoned parent itself. A position with a left-sibling anchor
+resolves through the normal path, because the merge moves the sibling
+(live or tombstone) into the target — see §6.1.
+
 ### §1.2 Inverted Range Guard
 
 **Function**: `traverseInPosRange`
@@ -186,6 +191,26 @@ merge-target (`fromParent`). Each moved child receives:
   merge timestamp must be stable for version-vector checks.
 - **`mergedInto`** (runtime cache): set on the source node, pointing
   to the target. Rebuilt from `MergedFrom` on snapshot load.
+
+Both live and **tombstoned** children are moved, in child order
+(`collectBetween` collects them with `Children(true)`). Moving the
+tombstones preserves the source's full RGA sequence in the target, so
+a concurrent insert anchored on a removed sibling (e.g. `c` in a
+`cd → c,d` split whose `c` was deleted) resolves in the target through
+the normal path and is ordered against the other concurrent inserts by
+the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04).
+This is what makes the merging replica converge with a replica that
+applied the insert *before* the merge, including when several clients
+insert at the same anchor.
+
+The relocation uses `index.Node.MoveChild`, which keeps both length
+dimensions correct on **both** parents. A tombstone occupies no visible
+index positions — `remove()` already debited its `VisibleLength` from
+its ancestors — so for a removed node `MoveChild` relocates only the
+include-removed `TotalLength` and leaves `VisibleLength` untouched on
+source and target alike. (Reusing the alive-node `DetachChild`/`Append`
+pair would double-count the tombstone's visible length on the target and
+under-count it on the source.)
 
 ### §6.2 Delete Propagation to Merge-Moved Children
 
@@ -418,3 +443,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 16 | §7.3 | Boundary insert migration in SplitElement |
 | Fix 17 | §7.4 | Empty sibling re-parenting in Split |
 | Fix 18 | §3 | Cross-parent range narrowing |
+| Fix 19 | §6.1 | Move tombstones with merge to preserve RGA anchors |
