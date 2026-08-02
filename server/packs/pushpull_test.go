@@ -115,7 +115,9 @@ func TestMain(m *testing.M) {
 
 	testRPCServer, err = rpc.NewServer(
 		&rpc.Config{
-			Port: helper.RPCPort,
+			Port:              helper.RPCPort,
+			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+			IdleTimeout:       helper.RPCIdleTimeout,
 		}, testBackend,
 	)
 	if err != nil {

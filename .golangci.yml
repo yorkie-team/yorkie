@@ -31,9 +31,6 @@ linters:
     generated: lax
     rules:
       - linters:
-          - gosec
-        text: 'G112:'
-      - linters:
           - lll
         path: api/types/updatable_project_fields.go
     paths:

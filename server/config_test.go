@@ -40,6 +40,8 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultRPCPort, conf.RPC.Port)
 	assert.Equal(t, "", conf.RPC.CertFile)
 	assert.Equal(t, "", conf.RPC.KeyFile)
+	assertDurationEqual(t, server.DefaultRPCReadHeaderTimeout, conf.RPC.ReadHeaderTimeout)
+	assertDurationEqual(t, server.DefaultRPCIdleTimeout, conf.RPC.IdleTimeout)
 
 	assert.Equal(t, server.DefaultGitHubUserURL, conf.RPC.Auth.GitHubUserURL)
 	assert.Equal(t, server.DefaultGitHubDeviceAuthURL, conf.RPC.Auth.GitHubDeviceAuthURL)

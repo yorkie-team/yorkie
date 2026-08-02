@@ -19,6 +19,7 @@ package rpc
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -45,6 +46,14 @@ type Config struct {
 	// KeyFile is the path to the key file.
 	KeyFile string `yaml:"KeyFile"`
 
+	// ReadHeaderTimeout is the maximum duration for reading request headers
+	// (Slowloris protection). Default is "5s".
+	ReadHeaderTimeout string `yaml:"ReadHeaderTimeout"`
+
+	// IdleTimeout is the maximum duration to wait for the next request on
+	// idle keep-alive connections. Default is "2m".
+	IdleTimeout string `yaml:"IdleTimeout"`
+
 	// Auth is the configuration for authentication.
 	Auth auth.Config `yaml:"Auth"`
 }
@@ -68,5 +77,37 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if _, err := c.ParseReadHeaderTimeout(); err != nil {
+		return err
+	}
+
+	if _, err := c.ParseIdleTimeout(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// ParseReadHeaderTimeout returns the timeout for reading request headers.
+func (c *Config) ParseReadHeaderTimeout() (time.Duration, error) {
+	return parseTimeout(c.ReadHeaderTimeout, "--rpc-read-header-timeout")
+}
+
+// ParseIdleTimeout returns the timeout for idle keep-alive connections.
+func (c *Config) ParseIdleTimeout() (time.Duration, error) {
+	return parseTimeout(c.IdleTimeout, "--rpc-idle-timeout")
+}
+
+// parseTimeout parses the given duration string and rejects non-positive
+// values, which would silently disable the timeout.
+func parseTimeout(value, flag string) (time.Duration, error) {
+	result, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, value, flag, err)
+	}
+	if result <= 0 {
+		return 0, fmt.Errorf(`invalid argument "%s" for "%s" flag: must be greater than 0`, value, flag)
+	}
+
+	return result, nil
 }

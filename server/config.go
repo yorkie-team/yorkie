@@ -37,8 +37,10 @@ import (
 
 // Below are the values of the default values of Yorkie config.
 const (
-	DefaultRPCPort       = 8080
-	DefaultProfilingPort = 8081
+	DefaultRPCPort              = 8080
+	DefaultRPCReadHeaderTimeout = 5 * time.Second
+	DefaultRPCIdleTimeout       = 2 * time.Minute
+	DefaultProfilingPort        = 8081
 
 	DefaultMembershipLeaseDuration   = 15 * time.Second
 	DefaultMembershipRenewalInterval = 5 * time.Second
@@ -185,6 +187,12 @@ func (c *Config) ensureRPCDefaultValue() {
 	}
 	if c.RPC.Port == 0 {
 		c.RPC.Port = DefaultRPCPort
+	}
+	if c.RPC.ReadHeaderTimeout == "" {
+		c.RPC.ReadHeaderTimeout = DefaultRPCReadHeaderTimeout.String()
+	}
+	if c.RPC.IdleTimeout == "" {
+		c.RPC.IdleTimeout = DefaultRPCIdleTimeout.String()
 	}
 	if c.RPC.Auth.GitHubAuthURL == "" {
 		c.RPC.Auth.GitHubAuthURL = DefaultGitHubAuthURL

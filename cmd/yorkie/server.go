@@ -40,6 +40,9 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
+	rpcReadHeaderTimeout time.Duration
+	rpcIdleTimeout       time.Duration
+
 	adminTokenDuration            time.Duration
 	authGitHubClientID            string
 	authGitHubClientSecret        string
@@ -100,6 +103,9 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			conf.RPC.ReadHeaderTimeout = rpcReadHeaderTimeout.String()
+			conf.RPC.IdleTimeout = rpcIdleTimeout.String()
+
 			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
 			conf.RPC.Auth.GitHubClientID = authGitHubClientID
 			conf.RPC.Auth.GitHubClientSecret = authGitHubClientSecret
@@ -263,6 +269,19 @@ func init() {
 		"rpc-key-file",
 		"",
 		"RPC key file's path",
+	)
+	cmd.Flags().DurationVar(
+		&rpcReadHeaderTimeout,
+		"rpc-read-header-timeout",
+		server.DefaultRPCReadHeaderTimeout,
+		"Maximum duration for reading request headers (Slowloris protection)",
+	)
+	cmd.Flags().DurationVar(
+		&rpcIdleTimeout,
+		"rpc-idle-timeout",
+		server.DefaultRPCIdleTimeout,
+		"Maximum duration to wait for the next request on idle keep-alive connections. "+
+			"Should exceed the idle timeout of any fronting load balancer.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Profiling.Port,

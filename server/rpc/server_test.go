@@ -90,7 +90,9 @@ func TestMain(m *testing.M) {
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port: helper.RPCPort,
+		Port:              helper.RPCPort,
+		ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+		IdleTimeout:       helper.RPCIdleTimeout,
 	}, be)
 	if err != nil {
 		log.Fatal(err)
@@ -252,16 +254,20 @@ func TestConfig_Validate(t *testing.T) {
 		{config: &rpc.Config{Port: 8080, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
 		// not to use tls
 		{config: &rpc.Config{
-			Port:     8080,
-			CertFile: "",
-			KeyFile:  "",
+			Port:              8080,
+			CertFile:          "",
+			KeyFile:           "",
+			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+			IdleTimeout:       helper.RPCIdleTimeout,
 		},
 			expected: nil},
 		// pass any file existing
 		{config: &rpc.Config{
-			Port:     8080,
-			CertFile: "server_test.go",
-			KeyFile:  "server_test.go",
+			Port:              8080,
+			CertFile:          "server_test.go",
+			KeyFile:           "server_test.go",
+			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+			IdleTimeout:       helper.RPCIdleTimeout,
 		},
 			expected: nil},
 	}

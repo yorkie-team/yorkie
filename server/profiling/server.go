@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -59,9 +60,12 @@ func NewServer(conf *Config, metrics *prometheus.Metrics) *Server {
 	}
 
 	return &Server{
-		conf:       conf,
-		serveMux:   serveMux,
-		httpServer: &http.Server{Addr: fmt.Sprintf(":%d", conf.Port)},
+		conf:     conf,
+		serveMux: serveMux,
+		httpServer: &http.Server{
+			Addr:              fmt.Sprintf(":%d", conf.Port),
+			ReadHeaderTimeout: 5 * time.Second, // Slowloris protection (gosec G112)
+		},
 	}
 }
 
