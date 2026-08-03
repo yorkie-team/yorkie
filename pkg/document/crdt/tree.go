@@ -1128,7 +1128,7 @@ func (t *Tree) Edit(
 
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	if err := t.mergeNodes(
-		fromParent, toBeMovedToFromParents, toBeMergedNodes, editedAt,
+		fromParent, toBeMovedToFromParents, editedAt,
 	); err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, err
 	}
@@ -1185,19 +1185,63 @@ func (t *Tree) Edit(
 	return pairs, diff, nil
 }
 
-// mergeNodes moves children to fromParent and sets forwarding pointers
-// on merge-source nodes. On each moved child it records MergedFrom
+// resolveMergeTarget follows the mergedInto forwarding chain from the given
+// node while the current node is a merge-away tombstone, returning the final
+// live target. When a merge lands on a parent that a prior concurrent merge
+// already merged away (a chained merge P->Q->R, applied Q->R before this
+// P->Q), the children must flow to that parent's final destination so the
+// merge chain stays flat (P->R, not P->Q) and both replicas converge. The
+// seen set guards against cycles from a concurrent mutual merge.
+func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
+	target := node
+	seen := map[*TreeNode]bool{target: true}
+	for target.IsRemoved() && target.mergedInto != nil {
+		next := t.findFloorNode(target.mergedInto)
+		if next == nil || seen[next] {
+			break
+		}
+		seen[next] = true
+		target = next
+	}
+	return target
+}
+
+// mergeNodes moves children to the merge target and sets forwarding
+// pointers on merge-source nodes. On each moved child it records MergedFrom
 // (the source parent's ID) and MergedAt (the merge ticket) — both
 // persisted in the snapshot encoding. MergedAt must be captured here
 // because the source's removedAt is not immutable (later LWW tombstones
 // overwrite it). On each merge-source parent it sets mergedInto as a
 // runtime cache used by FindTreeNodesWithSplitText.
+//
+// §6.3 Chained-Merge Flattening (Fix 20): a merge chain P->Q->R is kept
+// flat so the runtime state matches what rebuildMergeState derives from a
+// snapshot (which can only ever represent the compressed chain, because it
+// records one MergedFrom pointer per child and reads the child's final
+// physical parent). Two mechanisms keep it flat:
+//
+//  1. The destination is resolved through resolveMergeTarget, so children
+//     merged into an already-merged-away parent forward to the final live
+//     target R instead of piling up under the removed intermediate Q.
+//  2. A child's MergedFrom is stamped only on its first move, preserving the
+//     original source P across later merges. The redirect boundary in
+//     FindTreeNodesWithSplitText then still resolves (first child with
+//     MergedFrom == P), and every source's mergedInto is (re)pointed at the
+//     resolved destination — deriving it from each moved child's MergedFrom
+//     exactly as rebuildMergeState does, so runtime and snapshot agree.
+//
+// mergedInto is set solely from moved children (never from the merge-source
+// list directly), so it is set only when rebuildMergeState can reconstruct
+// it — a source with no moved child of its own (e.g. an intermediate that
+// only relayed another source's children) is left unset on both paths,
+// keeping runtime and snapshot consistent.
 func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
-	toBeMergedNodes []*TreeNode,
 	editedAt *time.Ticket,
 ) error {
+	dest := t.resolveMergeTarget(fromParent)
+
 	for _, node := range toBeMovedToFromParents {
 		// A moved child must have a source parent to record; skip
 		// otherwise rather than append an untracked node (a node without
@@ -1216,23 +1260,41 @@ func (t *Tree) mergeNodes(
 		// MoveChild relocates the node with correct length accounting for
 		// both live and tombstoned children (visible-neutral for the
 		// latter), so index positions stay correct on both parents.
-		node.MergedFrom = node.Index.Parent.Value.id
-		node.MergedAt = editedAt
-		if err := fromParent.Index.MoveChild(node.Index); err != nil {
+		//
+		// MergedFrom and MergedAt are stamped together, only on the first
+		// move, so a child carried through a chained merge keeps its
+		// original source P and the original P->Q merge ticket (Fix 20).
+		// Stamping MergedAt on every move would diverge: a replica that
+		// applied P->Q then Q->R would record the Q->R ticket, while a
+		// replica where Q was already merged records the P->Q ticket on the
+		// single forwarded move — an inconsistency the §7.1 split VV check
+		// would then resolve differently on each side.
+		if node.MergedFrom == nil {
+			node.MergedFrom = node.Index.Parent.Value.id
+			node.MergedAt = editedAt
+		}
+		if err := dest.Index.MoveChild(node.Index); err != nil {
 			return err
 		}
-	}
-	// Set forwarding pointer on merge-source nodes.
-	for _, src := range toBeMergedNodes {
-		src.mergedInto = fromParent.id
+		// Point this child's original source at the resolved destination,
+		// path-compressing a transitive source (a prior merge whose children
+		// were just relocated again) from the now-removed intermediate to the
+		// final target. Deriving mergedInto from a *moved* child — one that
+		// had a parent above — mirrors rebuildMergeState, which likewise skips
+		// parentless children, so runtime and snapshot agree. (A parentless
+		// child, detached by a concurrent split cascade, is continue'd above
+		// and must not repoint its source here.)
+		if src := t.findFloorNode(node.MergedFrom); src != nil {
+			src.mergedInto = dest.id
+		}
 	}
 	return nil
 }
 
 // propagateMergeDeletes tombstones children that were moved by prior
 // merges when the merge-source node is fully deleted (not a merge
-// boundary). It skips when mergedInto points to fromParent, which
-// indicates a concurrent merge rather than a delete. The list of
+// boundary). It skips when mergedInto points to the merge destination,
+// which indicates a concurrent merge rather than a delete. The list of
 // moved children is recomputed on the fly from the merge target's
 // children filtered by MergedFrom.
 func (t *Tree) propagateMergeDeletes(
@@ -1241,11 +1303,16 @@ func (t *Tree) propagateMergeDeletes(
 	toBeMergedNodes []*TreeNode,
 	editedAt *time.Ticket,
 ) []GCPair {
+	// Compare against the resolved destination, not fromParent: mergeNodes
+	// points every source's mergedInto at the flattened target (§6.3), so a
+	// chained merge (dest != fromParent) must recognize a concurrent-merge
+	// boundary by dest to skip it here.
+	dest := t.resolveMergeTarget(fromParent)
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
 		if node.mergedInto == nil ||
 			slices.Contains(toBeMergedNodes, node) ||
-			node.mergedInto.Equal(fromParent.id) {
+			node.mergedInto.Equal(dest.id) {
 			continue
 		}
 		mergeTarget := t.findFloorNode(node.mergedInto)

@@ -67,7 +67,8 @@ node pointers. Two concurrent issues can corrupt resolution results.
 When the resolved parent has been tombstoned by a concurrent merge,
 its children have already been moved to the merge destination. The
 `mergedInto` forwarding pointer redirects resolution to that
-destination.
+destination. The pointer is kept flat across chained merges (§6.3), so
+it always resolves to the final live target in a single hop.
 
 `mergedInto` is a runtime cache on `TreeNode`, set during merge
 execution and rebuilt from the persisted `MergedFrom` field on
@@ -78,6 +79,16 @@ This redirect fires only for a *left-most* position, whose anchor is
 the tombstoned parent itself. A position with a left-sibling anchor
 resolves through the normal path, because the merge moves the sibling
 (live or tombstone) into the target — see §6.1.
+
+**Known limitation**: the left-most redirect returns its boundary
+directly, *before* the step-04 RGA `CreatedAt` tie-break. So when two
+clients concurrently insert at the left-most position of the *same*
+merged-away parent, their relative order is decided by application order,
+not by `CreatedAt`, and replicas diverge. This is independent of chained
+merges (it reproduces on a single merge) and predates Fix 20; a
+left-sibling-anchored insert is unaffected because it takes the normal
+path. Fixing it means routing the left-most redirect through step 04
+rather than returning early — deferred, tracked as a follow-up.
 
 ### §1.2 Inverted Range Guard
 
@@ -220,6 +231,42 @@ identified via `child.MergedFrom == source.id`.
 
 Skip propagation when `mergedInto == fromParent`: this indicates a
 concurrent merge (both sides merged into each other), not a delete.
+
+### §6.3 Chained-Merge Flattening
+
+A merge chain P→Q→R arises when the intermediate target Q of one merge
+(P→Q) is itself merged away by another (Q→R). A left-most insert anchored
+at P must still resolve in the final live target R, on every replica and
+after a snapshot reload.
+
+The snapshot model can only ever represent a **compressed** chain. The
+proto persists one `MergedFrom` pointer per moved child; `rebuildMergeState`
+sets `source.mergedInto` to the *current physical parent* of that source's
+children. After P→Q→R the children physically live in R, so any faithful
+rebuild yields `P.mergedInto = R` — never the intermediate Q. There is no
+way to reconstruct Q from the snapshot without a proto change (a non-goal).
+
+So the runtime is made to match the compressed form instead of building a
+multi-hop chain that a reload could not reproduce. `mergeNodes` keeps the
+chain flat with two mechanisms:
+
+1. **Destination resolution** (`resolveMergeTarget`): the merge destination
+   follows the `mergedInto` chain from `fromParent` while it is a merged-away
+   tombstone, to the final live target. When Q→R was applied before P→Q on a
+   replica, P's children forward to R instead of piling up under the removed
+   Q.
+2. **Original-source preservation**: `MergedFrom` is stamped only on a
+   child's first move, so a child carried through the chain keeps its
+   original source P. Every source's `mergedInto` is then (re)pointed at the
+   resolved destination — direct sources from `toBeMergedNodes`, transitive
+   sources recovered from the moved children's preserved `MergedFrom` (path
+   compression). Both derive `mergedInto == child's new parent`, the exact
+   rule `rebuildMergeState` uses, so runtime and snapshot agree.
+
+With the chain flat, `FindTreeNodesWithSplitText`'s §1.1 redirect stays a
+single hop: `P.mergedInto` already points at the live R, and its boundary
+lookup (first child with `MergedFrom == P`) still resolves because P's
+children retained their original `MergedFrom`. No redirect change is needed.
 
 ## Phase 7: Split
 
@@ -396,10 +443,14 @@ check.
 | Category | Total | Pass |
 |----------|------:|-----:|
 | Basic Edit + Edit | 27 | 27 |
-| Merge | 12 | 12 |
+| Merge | 13 | 13 |
 | Split | 14 | 14 |
 | Style | 16 | 16 |
-| **Total** | **69** | **69** |
+| **Total** | **70** | **70** |
+
+The Merge category includes `TestTreeChainedMerge` (§6.3), which asserts
+both convergence and snapshot round-trip: after a chained merge, the tree
+reconstructed from the snapshot must match the runtime tree node-for-node.
 
 ### Property-based suite (`test/complex/tree_concurrency_test.go`)
 
@@ -444,3 +495,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 17 | §7.4 | Empty sibling re-parenting in Split |
 | Fix 18 | §3 | Cross-parent range narrowing |
 | Fix 19 | §6.1 | Move tombstones with merge to preserve RGA anchors |
+| Fix 20 | §6.3 | Flatten chained merge (P→Q→R) for redirect + snapshot consistency |
