@@ -44,9 +44,11 @@ Root cause: two sites disagreed about a merge chain.
 - [x] Regression: property matrix (1599), tree integration (161), document
   unit (243), `golangci-lint` (0 issues)
 - [x] Design doc: add §6.3 + Fix 20 to `docs/design/concurrent-merge-split.md`
-- [ ] Self code-review (workflow, high) over the branch diff
-- [ ] Open PR
-- [ ] Port the same fix to yorkie-js-sdk (`packages/sdk/src/document/crdt/tree.ts`)
+- [x] Self code-review (workflow, high) over the branch diff — fixed the two
+  confirmed findings (MergedAt stamp-once, propagate skip vs dest)
+- [x] Open PR — yorkie-team/yorkie#1906
+- [x] Port the same fix to yorkie-js-sdk (`packages/sdk/src/document/crdt/tree.ts`)
+  — yorkie-team/yorkie-js-sdk#1305 (RED→GREEN verified, 164 tree tests pass)
 
 ## Notes
 
