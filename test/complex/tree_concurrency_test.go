@@ -621,3 +621,196 @@ func TestTreeConcurrencyInsertIntoRemovedRangeMultiInsert(t *testing.T) {
 	assert.True(t, flag, "d1: %s\nd2: %s\nd3: %s",
 		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML(), d3.Root().GetTree("t").ToXML())
 }
+
+// TestTreeConcurrencyStyleAcrossMergedAnchor verifies that a concurrent
+// Tree.Style whose range ends inside a merge-removed paragraph does not
+// style a node concurrently inserted at the merged anchor.
+func TestTreeConcurrencyStyleAcrossMergedAnchor(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	initialState := json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		},
+	}
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", initialState)
+		return nil
+	}))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	// c1 inserts an empty <p> after the second paragraph, then styles a
+	// range ending inside the second paragraph; the inserted <p> is outside
+	// the styled range on c1's view. c2 concurrently removes [0,5),
+	// merging across the paragraphs.
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(8, 8, &json.TreeNode{Type: "p"}, 0)
+		return nil
+	}))
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(0, 5, map[string]string{"bold": "x"})
+		return nil
+	}))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 5, nil, 0)
+		return nil
+	}))
+
+	flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	assert.True(t, flag, "d1: %s\nd2: %s",
+		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+}
+
+// TestTreeConcurrencyRemoveStyleAcrossMergedAnchor is the RemoveStyle
+// variant: it must not leave an attribute container on a node concurrently
+// inserted at the merged anchor.
+func TestTreeConcurrencyRemoveStyleAcrossMergedAnchor(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	initialState := json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		},
+	}
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", initialState)
+		return nil
+	}))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(8, 8, &json.TreeNode{Type: "p"}, 0)
+		return nil
+	}))
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").RemoveStyle(0, 5, []string{"bold"})
+		return nil
+	}))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 5, nil, 0)
+		return nil
+	}))
+
+	flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	assert.True(t, flag, "d1: %s\nd2: %s",
+		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+}
+
+// TestTreeConcurrencyStyleCoveringMergedContent verifies the style still
+// lands when the range genuinely covers the merged paragraph.
+func TestTreeConcurrencyStyleCoveringMergedContent(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	initialState := json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		},
+	}
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", initialState)
+		return nil
+	}))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(4, 8, map[string]string{"bold": "x"})
+		return nil
+	}))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 4, nil, 0)
+		return nil
+	}))
+
+	flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	assert.True(t, flag, "d1: %s\nd2: %s",
+		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+	assert.Equal(t, `<r><p bold="x">cd</p></r>`, d1.Root().GetTree("t").ToXML())
+}
+
+// TestTreeConcurrencyStyleAcrossChainedMerge verifies the style range
+// boundary also converges when its anchor parent was chain-merged
+// (p3 into p2, then p2 into p1 - the merge target itself removed).
+func TestTreeConcurrencyStyleAcrossChainedMerge(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	initialState := json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+		},
+	}
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", initialState)
+		return nil
+	}))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	// d1: insert an empty <p> at the end, then style a range ending at the
+	// leftmost position inside the third paragraph.
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(12, 12, &json.TreeNode{Type: "p"}, 0)
+		return nil
+	}))
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(0, 9, map[string]string{"bold": "x"})
+		return nil
+	}))
+	// d2: chain-merge concurrently - p3 into p2, then p2 into p1.
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(7, 9, nil, 0)
+		return nil
+	}))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(3, 5, nil, 0)
+		return nil
+	}))
+
+	flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	assert.True(t, flag, "d1: %s\nd2: %s",
+		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+	assert.Equal(t, `<r><p bold="x">abcdef</p><p></p></r>`, d1.Root().GetTree("t").ToXML())
+}

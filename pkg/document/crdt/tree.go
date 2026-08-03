@@ -1683,11 +1683,11 @@ func (t *Tree) Style(
 ) ([]GCPair, resource.DataSize, error) {
 	var diff resource.DataSize
 
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, err
@@ -1791,11 +1791,11 @@ func (t *Tree) RemoveStyle(
 ) ([]GCPair, resource.DataSize, error) {
 	var diff resource.DataSize
 
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, err
@@ -1883,14 +1883,37 @@ func (t *Tree) RemoveStyle(
 	return pairs, diff, nil
 }
 
+// PosBoundary selects how a position inside a merged-away parent resolves
+// in FindTreeNodesWithSplitText.
+type PosBoundary int
+
+const (
+	// BoundaryInsert places the position at the insertion boundary in the
+	// merge target (before the first moved child), so RGA ordering breaks
+	// ties between concurrent inserts at the same anchor.
+	BoundaryInsert PosBoundary = iota
+
+	// BoundaryRange places the position right after the merge-source
+	// tombstone, so a style range neither grows over nor shrinks past
+	// nodes concurrently inserted at that anchor.
+	BoundaryRange
+)
+
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
 // splits the text node if the position is in the middle of the text node.
 // crdt.TreePos is a position in the CRDT perspective. This is different
 // from indexTree.TreePos which is a position of the tree in physical
 // perspective.
-func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
+// The optional boundary selects how a position inside a merged-away parent
+// resolves; it defaults to BoundaryInsert.
+func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, boundary ...PosBoundary) (
 	*TreeNode, *TreeNode, resource.DataSize, error,
 ) {
+	mode := BoundaryInsert
+	if len(boundary) > 0 {
+		mode = boundary[0]
+	}
+
 	var diff resource.DataSize
 	// 01. Find the parent and left sibling nodes of the given position.
 	parentNode, leftNode := t.ToTreeNodes(pos)
@@ -1915,6 +1938,16 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	// points back at the tombstoned parent (i.e. the first child moved by
 	// the merge, in target child order).
 	if realParentNode.IsRemoved() && isLeftMost && realParentNode.mergedInto != nil {
+		// §9.3 Range Boundary at Merged-Away Anchors: a range boundary
+		// resolves to the position right after the merge-source tombstone,
+		// not the insertion boundary below. The insertion boundary sits
+		// before the first moved child, so it would extend a style range
+		// over nodes concurrently inserted between the tombstone and the
+		// moved children — nodes the styling client saw outside its range
+		// (after the then-live parent).
+		if mode == BoundaryRange && realParentNode.Index.Parent != nil {
+			return realParentNode.Index.Parent.Value, realParentNode, diff, nil
+		}
 		mergeTarget := t.findFloorNode(realParentNode.mergedInto)
 		if mergeTarget != nil && !mergeTarget.IsRemoved() {
 			targetChildren := mergeTarget.Index.Children(true)

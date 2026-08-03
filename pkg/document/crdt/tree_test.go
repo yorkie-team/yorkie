@@ -407,6 +407,53 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, 2, node.Children[0].Size)
 	})
 
+	t.Run("resolves a range boundary right after the merge-source tombstone", func(t *testing.T) {
+		// 01. Create <root><p>ab</p><p>cd</p></root>.
+		//       0   1 2 3    4   5 6 7     8
+		// <root> <p> a b </p> <p> c d </p>  </root>
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+		_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		p2Node := crdt.NewTreeNode(helper.PosT(ctx), "p", nil)
+		_, _, err = tree.EditT(4, 4, []*crdt.TreeNode{p2Node}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(5, 5, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "cd"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
+
+		// 02. Capture the leftmost position inside the second paragraph,
+		// then merge the second paragraph into the first.
+		pos := crdt.NewTreePos(p2Node.ID(), p2Node.ID())
+		_, _, err = tree.EditT(3, 5, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
+
+		// 03. An insert boundary resolves into the merge target before the
+		// moved children, while a range boundary resolves right after the
+		// merge-source tombstone, leaving the moved children outside.
+		insertParent, insertLeft, _, err := tree.FindTreeNodesWithSplitText(pos, helper.TimeT(ctx))
+		assert.NoError(t, err)
+		idx, err := tree.ToIndex(insertParent, insertLeft)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, idx)
+
+		rangeParent, rangeLeft, _, err := tree.FindTreeNodesWithSplitText(
+			pos, helper.TimeT(ctx), crdt.BoundaryRange)
+		assert.NoError(t, err)
+		assert.True(t, rangeLeft.IsRemoved())
+		idx, err = tree.ToIndex(rangeParent, rangeLeft)
+		assert.NoError(t, err)
+		assert.Equal(t, 6, idx)
+	})
+
 	t.Run("delete nodes between element nodes in different levels test", func(t *testing.T) {
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1   2 3 4    5    6   7 8 9    10
