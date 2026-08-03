@@ -1128,7 +1128,7 @@ func (t *Tree) Edit(
 
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	if err := t.mergeNodes(
-		fromParent, toBeMovedToFromParents, toBeMergedNodes, editedAt,
+		fromParent, toBeMovedToFromParents, editedAt,
 	); err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, err
 	}
@@ -1229,10 +1229,15 @@ func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
 //     MergedFrom == P), and every source's mergedInto is (re)pointed at the
 //     resolved destination — deriving it from each moved child's MergedFrom
 //     exactly as rebuildMergeState does, so runtime and snapshot agree.
+//
+// mergedInto is set solely from moved children (never from the merge-source
+// list directly), so it is set only when rebuildMergeState can reconstruct
+// it — a source with no moved child of its own (e.g. an intermediate that
+// only relayed another source's children) is left unset on both paths,
+// keeping runtime and snapshot consistent.
 func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
-	toBeMergedNodes []*TreeNode,
 	editedAt *time.Ticket,
 ) error {
 	dest := t.resolveMergeTarget(fromParent)
@@ -1282,11 +1287,6 @@ func (t *Tree) mergeNodes(
 		if src := t.findFloorNode(node.MergedFrom); src != nil {
 			src.mergedInto = dest.id
 		}
-	}
-	// Direct sources with no moved child of their own (e.g. an already-emptied
-	// source) still forward to the resolved destination.
-	for _, src := range toBeMergedNodes {
-		src.mergedInto = dest.id
 	}
 	return nil
 }
