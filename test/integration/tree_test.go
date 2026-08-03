@@ -5195,3 +5195,104 @@ func TestTreeLWW(t *testing.T) {
 
 	})
 }
+
+// TestTreeChainedMerge covers a concurrent insert anchored at the left-most
+// position of a paragraph that is removed by a chained merge (P->Q->R, where
+// the intermediate target Q is itself merged away). See issue
+// yorkie-team/yorkie-js-sdk#1304.
+func TestTreeChainedMerge(t *testing.T) {
+	clients := activeClients(t, 3)
+	c1, c2, c3 := clients[0], clients[1], clients[2]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("converges when insert is anchored in a chained merge", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		d3 := document.New(helper.TestKey(t))
+		assert.NoError(t, c3.Attach(ctx, d3))
+
+		// Initial: <r><p>ab</p><p>cd</p><p>ef</p></r>.
+		//   0   1 2 3    4   5 6 7    8   9 ...
+		// <r> <p> a b </p> <p> c d </p> <p> e f </p> </r>
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "cd"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ef"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
+		assert.Equal(t, "<r><p>ab</p><p>cd</p><p>ef</p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p>ab</p><p>cd</p><p>ef</p></r>", d3.Root().GetTree("t").ToXML())
+
+		// C1 merges p2 into p1: Edit(2, 6) removes b, </p>, <p>, c.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 6, nil, 0)
+			return nil
+		}))
+		// C2 merges p3 into p2: Edit(6, 10) removes d, </p>, <p>, e.
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(6, 10, nil, 0)
+			return nil
+		}))
+		// C3 inserts <x> at the left-most position of p3: Edit(9, 9).
+		assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(9, 9, &json.TreeNode{Type: "x", Children: []json.TreeNode{}}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<r><p>ad</p><p>ef</p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p>ab</p><p>cf</p></r>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p>ab</p><p>cd</p><p><x></x>ef</p></r>", d3.Root().GetTree("t").ToXML())
+
+		// Full sync until every replica sees every operation.
+		for i := 0; i < 3; i++ {
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.NoError(t, c3.Sync(ctx))
+		}
+
+		// The insert must survive on every replica: x is anchored before e,
+		// so it lands between the surviving a and f in the merge target.
+		assert.Equal(t, "<r><p>a<x></x>f</p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		assert.Equal(t, d1.Marshal(), d3.Marshal())
+		assertCloneAndRootTreeEqual(t, 1, d1)
+		assertCloneAndRootTreeEqual(t, 2, d2)
+		assertCloneAndRootTreeEqual(t, 3, d3)
+
+		// Snapshot round-trip: a fresh client loading the post-chained-merge
+		// snapshot must reconstruct the identical tree (no resurrected
+		// tombstone, no lost insert).
+		type node struct {
+			xml       string
+			length    int
+			isRemoved bool
+		}
+		var runtimeNodes, snapshotNodes []node
+		index.TraverseNode(d1.Root().GetTree("t").IndexTree.Root(), func(n *index.Node[*crdt.TreeNode], _ int) {
+			runtimeNodes = append(runtimeNodes, node{index.ToXML(n), n.Len(), n.Value.IsRemoved()})
+		})
+		bytes, err := converter.ObjectToBytes(d1.RootObject())
+		assert.NoError(t, err)
+		sRoot, err := converter.BytesToObject(bytes)
+		assert.NoError(t, err)
+		index.TraverseNode(sRoot.Get("t").(*crdt.Tree).IndexTree.Root(), func(n *index.Node[*crdt.TreeNode], _ int) {
+			snapshotNodes = append(snapshotNodes, node{index.ToXML(n), n.Len(), n.Value.IsRemoved()})
+		})
+		assert.Equal(t, runtimeNodes, snapshotNodes)
+	})
+}
