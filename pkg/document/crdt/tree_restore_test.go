@@ -49,7 +49,8 @@ func textSpan(node, parent *crdt.TreeNode) *crdt.TreeRestoreSpan {
 		ID:       node.ID(),
 		NodeType: node.Type(),
 		IsText:   true,
-		Length:   len([]rune(node.Value)),
+		// Length is UTF-16 code units, per TreeRestoreSpan's contract.
+		Length:   node.Length(),
 		Value:    node.Value,
 		ParentID: parent.ID(),
 	}
@@ -72,7 +73,8 @@ func TestTreeRestoreUnremove(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 
-	untombstoned, recreated := tree.Restore([]*crdt.TreeRestoreSpan{span})
+	untombstoned, recreated, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+	assert.NoError(t, err)
 	assert.Len(t, untombstoned, 1, "the tombstone is revived in place")
 	assert.Empty(t, recreated, "nothing was purged, so nothing is recreated")
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
@@ -97,7 +99,8 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	assert.Equal(t, "<r></r>", tree.ToXML())
 
 	// Restore (undo): the same identities come back, parent before child.
-	untombstoned, recreated := tree.Restore(spans)
+	untombstoned, recreated, err := tree.Restore(spans)
+	assert.NoError(t, err)
 	assert.Len(t, untombstoned, 2)
 	assert.Empty(t, recreated)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
@@ -136,8 +139,9 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Positive(t, n, "the deleted subtree should be purged")
 
-	// Restore through Execute (identity-addressed; positions unused). An empty
-	// version vector marks the trusted local path, skipping identity checks.
+	// Restore through Execute (identity-addressed; positions unused). A max
+	// version vector places every actor's clock at the maximum, so all restore
+	// tickets fall within known range and pass identity validation.
 	restoreOp := operations.NewRestoreTreeEdit(
 		parent, nil, nil, helper.TimeT(ctx),
 		spans, crdt.RestoreModeRestore, nil,
@@ -168,7 +172,8 @@ func TestTreeRestoreParentGoneSkip(t *testing.T) {
 		ParentID: ghostParent,
 	}
 
-	untombstoned, recreated := tree.Restore([]*crdt.TreeRestoreSpan{orphan})
+	untombstoned, recreated, err := tree.Restore([]*crdt.TreeRestoreSpan{orphan})
+	assert.NoError(t, err)
 	assert.Empty(t, untombstoned)
 	assert.Empty(t, recreated, "a node with no surviving parent is skipped (B1)")
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")

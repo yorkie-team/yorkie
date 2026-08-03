@@ -374,6 +374,9 @@ func toTreeRestoreSpans(spans []*crdt.TreeRestoreSpan) ([]*api.TreeRestoreSpan, 
 	}
 	pbSpans := make([]*api.TreeRestoreSpan, 0, len(spans))
 	for _, span := range spans {
+		if span.ID == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
 		if span.Length < 0 || span.Length > math.MaxInt32 {
 			return nil, ErrInvalidRestoreSpan
 		}

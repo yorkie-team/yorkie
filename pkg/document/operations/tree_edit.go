@@ -132,7 +132,10 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			// its size from docSize.GC, and diff.Add books the same size into
 			// Live — the node just became visible. Recreated nodes are brand
 			// new, so they only need the Live addition. Mirrors Text restore.
-			untombstoned, recreated := obj.Restore(toRestore)
+			untombstoned, recreated, err := obj.Restore(toRestore)
+			if err != nil {
+				return err
+			}
 			for _, node := range untombstoned {
 				root.UnregisterGCPair(crdt.GCPair{Parent: obj, Child: node})
 				diff.Add(node.DataSize())

@@ -549,7 +549,13 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mode := fromRestoreMode(pbEdit.RestoreMode); mode != crdt.RestoreModeNone {
+	mode := fromRestoreMode(pbEdit.RestoreMode)
+	// Restore payload without a mode (or vice versa) is malformed: the spans
+	// would be silently dropped as an ordinary edit. Reject it.
+	if mode == crdt.RestoreModeNone && (len(restoreSpans) > 0 || len(retombstoneSpans) > 0) {
+		return nil, ErrInvalidRestoreSpan
+	}
+	if mode != crdt.RestoreModeNone {
 		return operations.NewRestoreEdit(
 			parentCreatedAt,
 			from,
@@ -733,7 +739,13 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 	if err != nil {
 		return nil, err
 	}
-	if mode := fromRestoreMode(pbTreeEdit.RestoreMode); mode != crdt.RestoreModeNone {
+	mode := fromRestoreMode(pbTreeEdit.RestoreMode)
+	// Restore payload without a mode (or vice versa) is malformed: the spans
+	// would be silently dropped as an ordinary edit. Reject it.
+	if mode == crdt.RestoreModeNone && (len(restoreSpans) > 0 || len(retombstoneSpans) > 0) {
+		return nil, ErrInvalidRestoreSpan
+	}
+	if mode != crdt.RestoreModeNone {
 		return operations.NewRestoreTreeEdit(
 			parentCreatedAt,
 			from,

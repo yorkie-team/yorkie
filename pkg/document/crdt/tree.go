@@ -884,7 +884,7 @@ func (t *Tree) Purge(child GCChild) error {
 // parent-before-child order. Returns (untombstoned, recreated); the caller
 // un-registers GC pairs for the un-tombstoned nodes and accounts recreated
 // sizes to Live. Mirrors the JS CRDTTree.restore.
-func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*TreeNode) {
+func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*TreeNode, err error) {
 	for _, span := range spans {
 		if !span.IsText {
 			node := t.findFloorNode(span.ID)
@@ -895,7 +895,11 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 				}
 				continue
 			}
-			if created := t.recreateFromSpan(span, span.ID.Offset, span.Length); created != nil {
+			created, cErr := t.recreateFromSpan(span, span.ID.Offset, span.Length)
+			if cErr != nil {
+				return nil, nil, cErr
+			}
+			if created != nil {
 				recreated = append(recreated, created)
 			}
 			continue
@@ -912,11 +916,12 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 				piece := pieces[pieceIdx]
 				pieceStart := piece.id.Offset
 				pieceEnd := pieceStart + piece.Length()
-				if pieceEnd > end {
-					// Piece wider than the span. Under causal delivery the
+				if pieceStart < start || pieceEnd > end {
+					// Piece straddles a span boundary. Under causal delivery the
 					// forward delete split at span boundaries on every replica
 					// before its undo could arrive, so this is unexpected; skip
-					// rather than un-tombstone beyond the span.
+					// rather than un-tombstone beyond the span. Mirrors the guard
+					// in Retombstone so undo/redo stay symmetric.
 					break
 				}
 				if piece.IsRemoved() {
@@ -932,14 +937,18 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 				if pieceIdx < len(pieces) {
 					gapEnd = min(pieces[pieceIdx].id.Offset, end)
 				}
-				if created := t.recreateFromSpan(span, cursor, gapEnd-cursor); created != nil {
+				created, cErr := t.recreateFromSpan(span, cursor, gapEnd-cursor)
+				if cErr != nil {
+					return nil, nil, cErr
+				}
+				if created != nil {
 					recreated = append(recreated, created)
 				}
 				cursor = gapEnd
 			}
 		}
 	}
-	return untombstoned, recreated
+	return untombstoned, recreated, nil
 }
 
 // Retombstone re-removes the nodes described by spans (redo of an
@@ -966,8 +975,10 @@ func (t *Tree) Retombstone(spans []*TreeRestoreSpan, executedAt *time.Ticket) []
 			if piece.IsRemoved() {
 				continue
 			}
-			if piece.IsText() && piece.id.Offset+piece.Length() > start+span.Length {
-				// Piece wider than the span; skip (see Restore).
+			if piece.IsText() && (piece.id.Offset < start || piece.id.Offset+piece.Length() > end) {
+				// Piece straddles a span boundary (uses the same clamped end as
+				// findPiecesOverlapping); skip so we never re-tombstone content
+				// outside the span. Mirrors the guard in Restore.
 				continue
 			}
 			if piece.remove(executedAt) {
@@ -1016,13 +1027,13 @@ func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*
 // id-order fallback (first slot whose child id > node id — a pure function of
 // ids, identical on every replica). Parent genuinely absent → skip (B1).
 // Mirrors the JS CRDTTree.recreateFromSpan.
-func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) *TreeNode {
+func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*TreeNode, error) {
 	if span.ParentID == nil {
-		return nil
+		return nil, nil
 	}
 	parent := t.findFloorNode(span.ParentID)
 	if parent == nil || !parent.id.Equal(span.ParentID) {
-		return nil // B1: parent gone; leave the node unplaced.
+		return nil, nil // B1: parent gone; leave the node unplaced.
 	}
 
 	var node *TreeNode
@@ -1052,20 +1063,27 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) *Tree
 		return n.Index.Parent != nil && n.Index.Parent.Value == parent
 	}
 
+	// attach inserts node at the resolved slot and registers it. A failed
+	// insertion must not leave a half-attached node in NodeMapByID, so the
+	// error is returned before Put and Restore drops the node entirely.
+	attach := func(insert func() error) (*TreeNode, error) {
+		if err := insert(); err != nil {
+			return nil, err
+		}
+		t.NodeMapByID.Put(node.id, node)
+		return node, nil
+	}
+
 	// (a) same-insertion successor / predecessor piece (text): exact slot.
 	if span.IsText {
 		succ := t.findFloorNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset + length})
 		if succ != nil && succ.IsText() && sameParent(succ) && succ.id.Offset == offset+length {
-			_ = parent.InsertAt(node, childIndex(succ))
-			t.NodeMapByID.Put(node.id, node)
-			return node
+			return attach(func() error { return parent.InsertAt(node, childIndex(succ)) })
 		}
 		if offset > span.ID.Offset || offset > 0 {
 			pred := t.findFloorNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset - 1})
 			if pred != nil && pred.IsText() && sameParent(pred) {
-				_ = parent.InsertAfter(node, pred)
-				t.NodeMapByID.Put(node.id, node)
-				return node
+				return attach(func() error { return parent.InsertAfter(node, pred) })
 			}
 		}
 	}
@@ -1073,18 +1091,14 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) *Tree
 	// (b) captured left boundary sibling, if it still exists under this parent.
 	if span.LeftSiblingID != nil {
 		if left := t.findFloorNode(span.LeftSiblingID); left != nil && sameParent(left) {
-			_ = parent.InsertAfter(node, left)
-			t.NodeMapByID.Put(node.id, node)
-			return node
+			return attach(func() error { return parent.InsertAfter(node, left) })
 		}
 	}
 
 	// (c) captured right boundary sibling (redundant anchor): insert before it.
 	if span.RightSiblingID != nil {
 		if right := t.findFloorNode(span.RightSiblingID); right != nil && sameParent(right) {
-			_ = parent.InsertAt(node, childIndex(right))
-			t.NodeMapByID.Put(node.id, node)
-			return node
+			return attach(func() error { return parent.InsertAt(node, childIndex(right)) })
 		}
 	}
 
@@ -1096,9 +1110,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) *Tree
 			break
 		}
 	}
-	_ = parent.InsertAt(node, insertIdx)
-	t.NodeMapByID.Put(node.id, node)
-	return node
+	return attach(func() error { return parent.InsertAt(node, insertIdx) })
 }
 
 // MetaSize returns the size of the metadata of this element.

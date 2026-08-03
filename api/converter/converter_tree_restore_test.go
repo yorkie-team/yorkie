@@ -246,3 +246,53 @@ func TestTreeRestoreSpanRejectsLengthOverflow(t *testing.T) {
 	_, err = converter.ToOperations([]operations.Operation{op})
 	assert.Error(t, err)
 }
+
+// TestTreeRestoreSpanRejectsNilID guards serialization: a span with a nil id
+// is malformed and must be rejected before toTreeNodeID dereferences it.
+func TestTreeRestoreSpanRejectsNilID(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+		[]*crdt.TreeRestoreSpan{{
+			ID:       nil,
+			NodeType: "text",
+			IsText:   true,
+			Length:   1,
+			Value:    "x",
+			ParentID: crdt.NewTreeNodeID(seed, 0),
+		}}, crdt.RestoreModeRestore, nil)
+	_, err = converter.ToOperations([]operations.Operation{op})
+	assert.Error(t, err)
+}
+
+// TestTreeRestoreSpanRejectsSpansWithoutMode guards the wire boundary: spans
+// present but the mode unset would silently drop them into an ordinary edit,
+// so deserialization must reject the mismatch.
+func TestTreeRestoreSpanRejectsSpansWithoutMode(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+		[]*crdt.TreeRestoreSpan{{
+			ID:       crdt.NewTreeNodeID(seed, 2),
+			NodeType: "text",
+			IsText:   true,
+			Length:   1,
+			Value:    "x",
+			ParentID: crdt.NewTreeNodeID(seed, 0),
+		}}, crdt.RestoreModeRestore, nil)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+
+	// Blank the mode while keeping the spans: a malformed restore payload.
+	pbOps[0].GetTreeEdit().RestoreMode = api.RestoreMode_RESTORE_MODE_UNSPECIFIED
+	_, err = converter.FromOperations(pbOps)
+	assert.Error(t, err)
+}
