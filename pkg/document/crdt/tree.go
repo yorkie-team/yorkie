@@ -1271,24 +1271,22 @@ func (t *Tree) mergeNodes(
 		if err := dest.Index.MoveChild(node.Index); err != nil {
 			return err
 		}
-	}
-	// Point every merge-source's forwarding pointer at the resolved
-	// destination. The direct sources are in toBeMergedNodes; transitive
-	// sources (a prior merge's source whose children were just relocated
-	// again) are recovered from the moved children's preserved MergedFrom,
-	// path-compressing their pointer from the now-removed intermediate to
-	// the final target. Both derive mergedInto == child's new parent, the
-	// same rule rebuildMergeState uses on snapshot load.
-	for _, src := range toBeMergedNodes {
-		src.mergedInto = dest.id
-	}
-	for _, node := range toBeMovedToFromParents {
-		if node.MergedFrom == nil {
-			continue
-		}
+		// Point this child's original source at the resolved destination,
+		// path-compressing a transitive source (a prior merge whose children
+		// were just relocated again) from the now-removed intermediate to the
+		// final target. Deriving mergedInto from a *moved* child — one that
+		// had a parent above — mirrors rebuildMergeState, which likewise skips
+		// parentless children, so runtime and snapshot agree. (A parentless
+		// child, detached by a concurrent split cascade, is continue'd above
+		// and must not repoint its source here.)
 		if src := t.findFloorNode(node.MergedFrom); src != nil {
 			src.mergedInto = dest.id
 		}
+	}
+	// Direct sources with no moved child of their own (e.g. an already-emptied
+	// source) still forward to the resolved destination.
+	for _, src := range toBeMergedNodes {
+		src.mergedInto = dest.id
 	}
 	return nil
 }
