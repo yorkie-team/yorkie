@@ -37,6 +37,11 @@ func ToConnectError(err error) error {
 		return nil
 	}
 
+	var connectErr *connect.Error
+	if goerrors.As(err, &connectErr) {
+		return connectErr
+	}
+
 	if goerrors.Is(err, context.Canceled) {
 		return connect.NewError(connect.CodeCanceled, err)
 	}
