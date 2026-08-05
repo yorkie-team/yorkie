@@ -17,6 +17,7 @@
 package warehouse
 
 import (
+	"context"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -27,62 +28,110 @@ import (
 type DummyWarehouse struct{}
 
 // GetActiveUsers does nothing.
-func (w *DummyWarehouse) GetActiveUsers(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (w *DummyWarehouse) GetActiveUsers(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	return nil, nil
 }
 
 // GetActiveUsersCount does nothing.
-func (w *DummyWarehouse) GetActiveUsersCount(id types.ID, from, to time.Time) (int, error) {
+func (w *DummyWarehouse) GetActiveUsersCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	return 0, nil
 }
 
 // GetActiveDocuments does nothing.
-func (w *DummyWarehouse) GetActiveDocuments(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (w *DummyWarehouse) GetActiveDocuments(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	return nil, nil
 }
 
 // GetActiveDocumentsCount does nothing.
-func (w *DummyWarehouse) GetActiveDocumentsCount(id types.ID, from, to time.Time) (int, error) {
+func (w *DummyWarehouse) GetActiveDocumentsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	return 0, nil
 }
 
 // GetActiveClients does nothing.
-func (w *DummyWarehouse) GetActiveClients(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (w *DummyWarehouse) GetActiveClients(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	return nil, nil
 }
 
 // GetActiveClientsCount does nothing.
-func (w *DummyWarehouse) GetActiveClientsCount(id types.ID, from, to time.Time) (int, error) {
+func (w *DummyWarehouse) GetActiveClientsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	return 0, nil
 }
 
 // GetActiveChannels does nothing.
-func (w *DummyWarehouse) GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (w *DummyWarehouse) GetActiveChannels(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	return nil, nil
 }
 
 // GetActiveChannelsCount does nothing.
-func (w *DummyWarehouse) GetActiveChannelsCount(id types.ID, from, to time.Time) (int, error) {
+func (w *DummyWarehouse) GetActiveChannelsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	return 0, nil
 }
 
 // GetSessions does nothing.
-func (w *DummyWarehouse) GetSessions(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (w *DummyWarehouse) GetSessions(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	return nil, nil
 }
 
 // GetSessionsCount does nothing.
-func (w *DummyWarehouse) GetSessionsCount(id types.ID, from, to time.Time) (int, error) {
+func (w *DummyWarehouse) GetSessionsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	return 0, nil
 }
 
 // GetPeakSessionsPerChannel does nothing.
-func (w *DummyWarehouse) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (w *DummyWarehouse) GetPeakSessionsPerChannel(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	return nil, nil
 }
 
 // GetPeakSessionsPerChannelCount does nothing.
-func (w *DummyWarehouse) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Time) (int, error) {
+func (w *DummyWarehouse) GetPeakSessionsPerChannelCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	return 0, nil
 }
 
