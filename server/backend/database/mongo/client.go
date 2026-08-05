@@ -1739,6 +1739,61 @@ func (c *Client) UpdateProjectStats(
 	return nil
 }
 
+// GetProjectWarehouseStats returns the cached warehouse stats stored on the
+// project document. Bypasses ProjectCache.
+func (c *Client) GetProjectWarehouseStats(
+	ctx context.Context,
+	projectID types.ID,
+) (*database.ProjectWarehouseStats, error) {
+	var doc struct {
+		StatsWarehouse          map[string]database.StatsWarehouseRange `bson:"stats_warehouse"`
+		StatsWarehouseUpdatedAt gotime.Time                             `bson:"stats_warehouse_updated_at"`
+	}
+	err := c.collection(ColProjects).FindOne(
+		ctx,
+		bson.M{"_id": projectID},
+		options.FindOne().SetProjection(bson.M{
+			"stats_warehouse":            1,
+			"stats_warehouse_updated_at": 1,
+		}),
+	).Decode(&doc)
+	if err == mongo.ErrNoDocuments {
+		return &database.ProjectWarehouseStats{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project warehouse stats %s: %w", projectID, err)
+	}
+	return &database.ProjectWarehouseStats{
+		Ranges:    doc.StatsWarehouse,
+		UpdatedAt: doc.StatsWarehouseUpdatedAt,
+	}, nil
+}
+
+// UpdateProjectWarehouseStats writes the cached warehouse stats on the project
+// document.
+func (c *Client) UpdateProjectWarehouseStats(
+	ctx context.Context,
+	projectID types.ID,
+	ranges map[string]database.StatsWarehouseRange,
+	updatedAt gotime.Time,
+) error {
+	res, err := c.collection(ColProjects).UpdateOne(
+		ctx,
+		bson.M{"_id": projectID},
+		bson.M{"$set": bson.M{
+			"stats_warehouse":            ranges,
+			"stats_warehouse_updated_at": updatedAt,
+		}},
+	)
+	if err != nil {
+		return fmt.Errorf("update project warehouse stats %s: %w", projectID, err)
+	}
+	if res.MatchedCount == 0 {
+		return database.ErrProjectNotFound
+	}
+	return nil
+}
+
 // CountActivatedClients counts clients with status = activated for the given
 // project. Uses secondary read preference to keep load off the primary.
 func (c *Client) CountActivatedClients(

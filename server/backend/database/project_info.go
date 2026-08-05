@@ -161,6 +161,15 @@ type ProjectInfo struct {
 	// StatsUpdatedAt is the time when the stats fields above were last refreshed.
 	// Zero value indicates the refresh has not run yet for this project.
 	StatsUpdatedAt time.Time `bson:"stats_updated_at"`
+
+	// StatsWarehouse holds cached warehouse (StarRocks) time-series stats keyed by
+	// date-range label ("1w", "4w"). Refreshed by the project-stats housekeeping
+	// task. Nil until the first refresh finds warehouse data for the project.
+	StatsWarehouse map[string]StatsWarehouseRange `bson:"stats_warehouse,omitempty"`
+
+	// StatsWarehouseUpdatedAt is the time when StatsWarehouse was last refreshed.
+	// Zero value indicates the warehouse cache has not been populated yet.
+	StatsWarehouseUpdatedAt time.Time `bson:"stats_warehouse_updated_at"`
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
@@ -232,6 +241,8 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		StatsClientsCount:           i.StatsClientsCount,
 		StatsDocumentsCount:         i.StatsDocumentsCount,
 		StatsUpdatedAt:              i.StatsUpdatedAt,
+		StatsWarehouse:              i.StatsWarehouse,
+		StatsWarehouseUpdatedAt:     i.StatsWarehouseUpdatedAt,
 	}
 }
 
@@ -348,4 +359,35 @@ type ProjectStatsCounts struct {
 	ClientsCount   int64
 	DocumentsCount int64
 	UpdatedAt      time.Time
+}
+
+// StatsMetricPoint is one time-bucketed value in a cached warehouse series.
+type StatsMetricPoint struct {
+	Time  int64 `bson:"time"`
+	Value int64 `bson:"value"`
+}
+
+// StatsWarehouseMetric holds one warehouse metric's cached daily series and its
+// range-wide total for a single date range.
+type StatsWarehouseMetric struct {
+	Series []StatsMetricPoint `bson:"series"`
+	Count  int64              `bson:"count"`
+}
+
+// StatsWarehouseRange holds all six warehouse metrics cached for one date range.
+type StatsWarehouseRange struct {
+	ActiveUsers            StatsWarehouseMetric `bson:"active_users"`
+	ActiveDocuments        StatsWarehouseMetric `bson:"active_documents"`
+	ActiveClients          StatsWarehouseMetric `bson:"active_clients"`
+	ActiveChannels         StatsWarehouseMetric `bson:"active_channels"`
+	Sessions               StatsWarehouseMetric `bson:"sessions"`
+	PeakSessionsPerChannel StatsWarehouseMetric `bson:"peak_sessions_per_channel"`
+}
+
+// ProjectWarehouseStats is the cached warehouse stats read for GetProjectStats:
+// the per-range metric bundles plus the time they were last refreshed. A zero
+// UpdatedAt marks a cold start (never refreshed), where callers query live.
+type ProjectWarehouseStats struct {
+	Ranges    map[string]StatsWarehouseRange
+	UpdatedAt time.Time
 }

@@ -202,6 +202,54 @@ func TestProjectStatsCounts(t *testing.T) {
 	})
 }
 
+func TestProjectWarehouseStats(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns empty when project has no warehouse cache", func(t *testing.T) {
+		db, err := memory.New()
+		assert.NoError(t, err)
+
+		info, err := db.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+		assert.NoError(t, err)
+
+		stats, err := db.GetProjectWarehouseStats(ctx, info.ID)
+		assert.NoError(t, err)
+		assert.Empty(t, stats.Ranges)
+		assert.True(t, stats.UpdatedAt.IsZero())
+	})
+
+	t.Run("returns cached ranges after UpdateProjectWarehouseStats", func(t *testing.T) {
+		db, err := memory.New()
+		assert.NoError(t, err)
+
+		info, err := db.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+		assert.NoError(t, err)
+
+		now := time.Now()
+		ranges := map[string]database.StatsWarehouseRange{
+			"1w": {
+				Sessions: database.StatsWarehouseMetric{
+					Series: []database.StatsMetricPoint{{Time: 1, Value: 10}, {Time: 2, Value: 20}},
+					Count:  25,
+				},
+				ActiveClients: database.StatsWarehouseMetric{Count: 30},
+			},
+		}
+		assert.NoError(t, db.UpdateProjectWarehouseStats(ctx, info.ID, ranges, now))
+
+		stats, err := db.GetProjectWarehouseStats(ctx, info.ID)
+		assert.NoError(t, err)
+		assert.WithinDuration(t, now, stats.UpdatedAt, time.Millisecond)
+		assert.Len(t, stats.Ranges, 1)
+
+		week := stats.Ranges["1w"]
+		assert.Equal(t, int64(25), week.Sessions.Count)
+		assert.Len(t, week.Sessions.Series, 2)
+		assert.Equal(t, int64(20), week.Sessions.Series[1].Value)
+		assert.Equal(t, int64(30), week.ActiveClients.Count)
+	})
+}
+
 func TestFindProjectInfosForRefresh(t *testing.T) {
 	ctx := context.Background()
 

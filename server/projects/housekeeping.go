@@ -23,6 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -60,6 +61,11 @@ func RefreshStats(
 		return database.ZeroID, 0, nil
 	}
 
+	// The warehouse cache is only maintained when a warehouse is configured;
+	// otherwise the read path falls back to the (empty) DummyWarehouse anyway.
+	_, isDummy := be.Warehouse.(*warehouse.DummyWarehouse)
+	warehouseEnabled := be.Warehouse != nil && !isDummy
+
 	processed := 0
 	for _, p := range projects {
 		cc, err := be.DB.CountActivatedClients(ctx, p.ID)
@@ -75,6 +81,11 @@ func RefreshStats(
 		if err := be.DB.UpdateProjectStats(ctx, p.ID, cc, dc, time.Now()); err != nil {
 			logging.From(ctx).Warnf("update project stats %s: %v", p.ID, err)
 			continue
+		}
+		if warehouseEnabled {
+			if err := refreshProjectWarehouseStats(ctx, be, p.ID); err != nil {
+				logging.From(ctx).Warnf("refresh warehouse stats %s: %v", p.ID, err)
+			}
 		}
 		processed++
 	}

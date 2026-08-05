@@ -1696,6 +1696,56 @@ func (d *DB) UpdateProjectStats(
 	return nil
 }
 
+// GetProjectWarehouseStats returns the cached warehouse stats on the project.
+func (d *DB) GetProjectWarehouseStats(
+	_ context.Context,
+	projectID types.ID,
+) (*database.ProjectWarehouseStats, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find project %s: %w", projectID, err)
+	}
+	if raw == nil {
+		return &database.ProjectWarehouseStats{}, nil
+	}
+	info := raw.(*database.ProjectInfo)
+	return &database.ProjectWarehouseStats{
+		Ranges:    info.StatsWarehouse,
+		UpdatedAt: info.StatsWarehouseUpdatedAt,
+	}, nil
+}
+
+// UpdateProjectWarehouseStats writes the cached warehouse stats on the project.
+func (d *DB) UpdateProjectWarehouseStats(
+	_ context.Context,
+	projectID types.ID,
+	ranges map[string]database.StatsWarehouseRange,
+	updatedAt gotime.Time,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "id", projectID.String())
+	if err != nil {
+		return fmt.Errorf("find project %s: %w", projectID, err)
+	}
+	if raw == nil {
+		return database.ErrProjectNotFound
+	}
+	info := raw.(*database.ProjectInfo).DeepCopy()
+	info.StatsWarehouse = ranges
+	info.StatsWarehouseUpdatedAt = updatedAt
+
+	if err := txn.Insert(tblProjects, info); err != nil {
+		return fmt.Errorf("update project warehouse stats %s: %w", projectID, err)
+	}
+	txn.Commit()
+	return nil
+}
+
 // CountActivatedClients counts clients with status = activated for the given project.
 func (d *DB) CountActivatedClients(
 	_ context.Context,

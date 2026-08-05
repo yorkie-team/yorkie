@@ -138,76 +138,22 @@ func GetProjectStats(
 	from time.Time,
 	to time.Time,
 ) (*types.ProjectStats, error) {
-	// NOTE(raararaara): The warehouse (StarRocks) metrics, the cached counts
-	// (MongoDB), and the live channel count (cluster RPC) are independent reads.
-	// They are fetched concurrently so the dashboard entry latency is bounded by
-	// the slowest single read instead of the sum of all reads. errgroup cancels
-	// the derived context on the first error, so a slow query is not left running
-	// after the client has already given up.
+	// NOTE(raararaara): The warehouse metrics, the cached counts (MongoDB), and the
+	// live channel count (cluster RPC) are independent reads, fetched concurrently
+	// so entry latency is bounded by the slowest single read. The warehouse metrics
+	// are served from the project-stats cache when the requested window is a cached
+	// range; otherwise warehouseStatsFor falls back to a live query. errgroup
+	// cancels the derived context on the first error, so a slow query is not left
+	// running after the client has already given up.
 	var (
-		activeUsers                 []types.MetricPoint
-		activeUsersCount            int
-		activeDocuments             []types.MetricPoint
-		activeDocumentsCount        int
-		activeClients               []types.MetricPoint
-		activeClientsCount          int
-		activeChannels              []types.MetricPoint
-		activeChannelsCount         int
-		sessions                    []types.MetricPoint
-		sessionsCount               int
-		peakSessionsPerChannel      []types.MetricPoint
-		peakSessionsPerChannelCount int
-		counts                      *database.ProjectStatsCounts
-		channelsCount               int
+		ws            *warehouseStats
+		counts        *database.ProjectStatsCounts
+		channelsCount int
 	)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() (err error) {
-		activeUsers, err = be.Warehouse.GetActiveUsers(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeUsersCount, err = be.Warehouse.GetActiveUsersCount(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeDocuments, err = be.Warehouse.GetActiveDocuments(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeDocumentsCount, err = be.Warehouse.GetActiveDocumentsCount(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeClients, err = be.Warehouse.GetActiveClients(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeClientsCount, err = be.Warehouse.GetActiveClientsCount(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeChannels, err = be.Warehouse.GetActiveChannels(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		activeChannelsCount, err = be.Warehouse.GetActiveChannelsCount(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		sessions, err = be.Warehouse.GetSessions(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		sessionsCount, err = be.Warehouse.GetSessionsCount(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		peakSessionsPerChannel, err = be.Warehouse.GetPeakSessionsPerChannel(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
-		peakSessionsPerChannelCount, err = be.Warehouse.GetPeakSessionsPerChannelCount(ctx, id, from, to)
+		ws, err = warehouseStatsFor(ctx, be, id, from, to)
 		return err
 	})
 	g.Go(func() (err error) {
@@ -223,18 +169,18 @@ func GetProjectStats(
 	}
 
 	return &types.ProjectStats{
-		ActiveUsersCount:            activeUsersCount,
-		ActiveUsers:                 activeUsers,
-		ActiveDocumentsCount:        activeDocumentsCount,
-		ActiveDocuments:             activeDocuments,
-		ActiveClientsCount:          activeClientsCount,
-		ActiveClients:               activeClients,
-		ActiveChannelsCount:         activeChannelsCount,
-		ActiveChannels:              activeChannels,
-		SessionsCount:               sessionsCount,
-		Sessions:                    sessions,
-		PeakSessionsPerChannelCount: peakSessionsPerChannelCount,
-		PeakSessionsPerChannel:      peakSessionsPerChannel,
+		ActiveUsersCount:            ws.activeUsersCount,
+		ActiveUsers:                 ws.activeUsers,
+		ActiveDocumentsCount:        ws.activeDocumentsCount,
+		ActiveDocuments:             ws.activeDocuments,
+		ActiveClientsCount:          ws.activeClientsCount,
+		ActiveClients:               ws.activeClients,
+		ActiveChannelsCount:         ws.activeChannelsCount,
+		ActiveChannels:              ws.activeChannels,
+		SessionsCount:               ws.sessionsCount,
+		Sessions:                    ws.sessions,
+		PeakSessionsPerChannelCount: ws.peakSessionsPerChannelCount,
+		PeakSessionsPerChannel:      ws.peakSessionsPerChannel,
 		DocumentsCount:              counts.DocumentsCount,
 		ClientsCount:                counts.ClientsCount,
 		ChannelsCount:               int64(channelsCount),

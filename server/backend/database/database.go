@@ -307,6 +307,22 @@ type Database interface {
 		updatedAt gotime.Time,
 	) error
 
+	// GetProjectWarehouseStats returns the cached warehouse (StarRocks) time-series
+	// stats stored on the project document, keyed by date-range label. Bypasses
+	// ProjectCache. Returns a zero-valued ProjectWarehouseStats (empty Ranges, zero
+	// UpdatedAt) when the project is missing or the warehouse cache is unpopulated;
+	// callers detect the cold-start state with UpdatedAt.IsZero() and query live.
+	GetProjectWarehouseStats(ctx context.Context, projectID types.ID) (*ProjectWarehouseStats, error)
+
+	// UpdateProjectWarehouseStats writes the cached warehouse stats on the project
+	// document. Returns ErrProjectNotFound when the project doesn't exist.
+	UpdateProjectWarehouseStats(
+		ctx context.Context,
+		projectID types.ID,
+		ranges map[string]StatsWarehouseRange,
+		updatedAt gotime.Time,
+	) error
+
 	// CountActivatedClients counts clients with status = activated for the given
 	// project. Slow on large collections; used by the project-stats refresh task only.
 	// MongoDB implementations MUST use SecondaryPreferred read preference to keep
