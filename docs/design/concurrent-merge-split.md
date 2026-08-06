@@ -419,6 +419,30 @@ attribute deep-copy in §7.2 — causing divergence.
 Helper: `ticketKnown(vv, ticket)` — reused for the unknown-sibling
 check.
 
+### §9.3 Range Boundary at Merged-Away Anchors
+
+A style position anchored at the left-most position inside a parent
+that a concurrent merge removed must not resolve to the insertion
+boundary of §1.1. The insertion boundary sits before the first child
+moved by the merge, so nodes concurrently inserted between the
+merge-source tombstone and the moved children fall inside the styled
+range on the applying replica — while the styling replica saw them
+outside its range, after the then-live parent. Replicas then diverge
+on attributes.
+
+`FindTreeNodesWithSplitText` takes a boundary mode: `BoundaryInsert`
+(default, §1.1 behavior for edits) and `BoundaryRange`, used by
+`Style`/`RemoveStyle`, which resolves the position to right after the
+merge-source tombstone. In visible coordinates this lands before both
+the concurrent inserts and the moved children, so a range end excludes
+them and a range start includes them — matching the styling replica in
+both directions. Ranges that genuinely cover the merged content
+(anchored outside the merged parent) are unaffected.
+
+A range end anchored after a moved child (a non-left-most position in
+the merged parent) does not go through the §1.1 redirect and can still
+diverge; this remains a follow-up.
+
 ## Key Design Decisions
 
 | Decision | Reason |
@@ -496,3 +520,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 18 | §3 | Cross-parent range narrowing |
 | Fix 19 | §6.1 | Move tombstones with merge to preserve RGA anchors |
 | Fix 20 | §6.3 | Flatten chained merge (P→Q→R) for redirect + snapshot consistency |
+| Fix 21 | §9.3 | Style range boundary right after merge-source tombstone |
