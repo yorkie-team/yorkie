@@ -150,7 +150,7 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 			// 2. Revive the content the reversed edit removed (by identity).
 			if len(toRestore) > 0 {
 				untombstoned, recreated, stillTombstoned := obj.Restore(
-					toRestore, e.executedAt)
+					toRestore, e.executedAt, e.from)
 
 				// Register the still-tombstoned split remainders (which include
 				// any split-born target) BEFORE un-registering the
