@@ -82,8 +82,8 @@ func TestTextRestore(t *testing.T) {
 		_, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "0189", a.String())
-		a.Restore(spanD1(seed), tick(4))
-		a.Restore(spanD2(seed), tick(5))
+		a.Restore(spanD1(seed), tick(4), nil)
+		a.Restore(spanD2(seed), tick(5), nil)
 
 		// Replica B: identical deletes, restore u2 then u1.
 		b := seededText(t, seed)
@@ -93,8 +93,8 @@ func TestTextRestore(t *testing.T) {
 		assert.NoError(t, err)
 		_, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
-		b.Restore(spanD2(seed), tick(5))
-		b.Restore(spanD1(seed), tick(4))
+		b.Restore(spanD2(seed), tick(5), nil)
+		b.Restore(spanD1(seed), tick(4), nil)
 
 		assert.Equal(t, "0123456789", a.String(), "replica A")
 		assert.Equal(t, "0123456789", b.String(), "replica B")
@@ -113,10 +113,10 @@ func TestTextRestore(t *testing.T) {
 		// Undo only d1: it clears the tombstone on the "45" nodes, so "45"
 		// reappears while "23"/"67" stay tombstoned by d2 (design doc's
 		// "Order B": "01" + "45" + "89").
-		text.Restore(spanD1(seed), tick(4))
+		text.Restore(spanD1(seed), tick(4), nil)
 		assert.Equal(t, "014589", text.String())
 		// Undo d2 as well: the full range comes back exactly once.
-		text.Restore(spanD2(seed), tick(5))
+		text.Restore(spanD2(seed), tick(5), nil)
 		assert.Equal(t, "0123456789", text.String())
 	})
 
@@ -129,8 +129,8 @@ func TestTextRestore(t *testing.T) {
 		_, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 		assert.Equal(t, "016789", text.String())
 
-		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4))
-		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 5, Content: "234"}}, tick(5))
+		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4), nil)
+		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 5, Content: "234"}}, tick(5), nil)
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -141,13 +141,13 @@ func TestTextRestore(t *testing.T) {
 		deleteRange(t, text, 4, 6, tick(2))
 		assert.Equal(t, "01236789", text.String())
 
-		text.Restore(spanD1(seed), tick(3))
+		text.Restore(spanD1(seed), tick(3), nil)
 		assert.Equal(t, "0123456789", text.String())
 
 		text.Retombstone(spanD1(seed), tick(4))
 		assert.Equal(t, "01236789", text.String())
 
-		text.Restore(spanD1(seed), tick(5))
+		text.Restore(spanD1(seed), tick(5), nil)
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -156,8 +156,8 @@ func TestTextRestore(t *testing.T) {
 		seed := tick(1)
 		text := seededText(t, seed)
 		deleteRange(t, text, 4, 6, tick(2))
-		text.Restore(spanD1(seed), tick(3))
-		text.Restore(spanD1(seed), tick(3)) // duplicate delivery
+		text.Restore(spanD1(seed), tick(3), nil)
+		text.Restore(spanD1(seed), tick(3), nil) // duplicate delivery
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -305,6 +305,69 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 	assert.Zero(t, gc.Data, "GC data must be zero after purging all tombstones")
 	assert.Zero(t, gc.Meta, "GC meta must be zero after purging all tombstones")
 	assert.Equal(t, "014589", text.String())
+}
+
+// TestTextRestoreAfterGCKeepsOrderAcrossInsertions reproduces wafflebase#629:
+// text typed character-by-character makes each character its own single-char
+// insertion (distinct createdAt, offset 0). Deleting a contiguous run and then
+// restoring it after the tombstones were GC-purged forces every character down
+// the recreate path. Because no character shares an insertion with any other,
+// none of the same-insertion anchor rungs fire; each fragment must chain after
+// the one placed just before it, or the run comes back reversed
+// ("my name" -> "eman ym"). Unlike TestTextRestoreExecuteAfterGC (a single
+// "0123456789" insertion, one recreate), this exercises the multi-fragment
+// ordering the chain anchor exists for.
+func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
+	const s = "hello my name is"
+	textTicket := tick(1)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
+	root := helper.TestRoot()
+	root.RegisterElement(text)
+
+	// Type char by char: each Edit is a distinct insertion (createdAt = tick).
+	charAt := make([]*time.Ticket, len(s))
+	for i := 0; i < len(s); i++ {
+		charAt[i] = tick(int64(2000 + i))
+		f, e, err := text.CreateRange(i, i)
+		assert.NoError(t, err)
+		_, _, _, err = text.Edit(f, e, string(s[i]), nil, charAt[i], nil)
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, s, text.String())
+
+	// Delete the contiguous run "my name" ([6,13)).
+	f, e, err := text.CreateRange(6, 13)
+	assert.NoError(t, err)
+	op := operations.NewEdit(textTicket, f, e, "", nil, tick(3000))
+	assert.NoError(t, op.Execute(root, nil))
+	assert.Equal(t, "hello  is", text.String())
+
+	// Purge the tombstones so restore must recreate rather than un-tombstone.
+	n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+	assert.NoError(t, err)
+	assert.Positive(t, n, "the deleted run should be purged")
+
+	// The reverse op carries the delete's left boundary as its `from`, the
+	// fallback anchor for the first recreated fragment (its whole insertion is
+	// purged). Resolve it against the current (post-delete) text.
+	restoreFrom, _, err := text.CreateRange(6, 6)
+	assert.NoError(t, err)
+
+	// One restore span per deleted character, in document order — exactly what
+	// the client's reverse op carries.
+	spans := make([]*crdt.RestoreSpan, 0, 7)
+	for i := 6; i < 13; i++ {
+		spans = append(spans, &crdt.RestoreSpan{
+			CreatedAt: charAt[i], Start: 0, End: 1, Content: string(s[i]),
+		})
+	}
+	restoreOp := operations.NewRestoreEdit(textTicket, restoreFrom, nil, tick(3001),
+		spans, crdt.RestoreModeRestore, nil)
+	assert.NoError(t, restoreOp.Execute(root, helper.MaxVersionVector(restoreActor)))
+
+	assert.Equal(t, s, text.String(),
+		"a purged multi-insertion run must be recreated in document order, not reversed")
+	assert.True(t, text.RGATreeSplit().CheckWeight())
 }
 
 // victimActor is a distinct identity used to forge cross-actor restore spans

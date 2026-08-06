@@ -733,7 +733,17 @@ func subValue[V RGATreeSplitValue](full V, from, to int) V {
 //     register them before un-registering (keeps GC accounting balanced)
 func (s *RGATreeSplit[V]) restore(
 	spans []restoreSpanValue[V],
+	fromPos *RGATreeSplitNodePos,
+	executedAt *time.Ticket,
 ) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair) {
+	// chainAnchor is the node last placed at the current cursor (un-tombstoned
+	// or recreated), in document order. When a recreated fragment has no
+	// surviving same-insertion anchor, chaining after this keeps a purged
+	// multi-fragment run in left-to-right order instead of each fragment
+	// prepending at the same fixed fallback (initialHead), which would rebuild
+	// the run reversed. Spans arrive in document order, so this is always the
+	// recreated fragment's left neighbour.
+	var chainAnchor *RGATreeSplitNode[V]
 	for _, span := range spans {
 		pieces := s.findPiecesOverlapping(span.createdAt, span.start, span.end)
 
@@ -755,6 +765,9 @@ func (s *RGATreeSplit[V]) restore(
 					target.SetRemovedAt(nil)
 					s.treeByIndex.Splay(target.indexNode)
 					untombstoned = append(untombstoned, target)
+					chainAnchor = target
+				} else {
+					chainAnchor = piece
 				}
 				cursor = overlapEnd
 				if overlapEnd >= pieceEnd {
@@ -765,9 +778,11 @@ func (s *RGATreeSplit[V]) restore(
 				val := subValue(span.value, cursor-span.start, gapEnd-span.start)
 				newNode := NewRGATreeSplitNode(
 					NewRGATreeSplitNodeID(span.createdAt, cursor), val)
-				prev := s.findRestoreAnchor(span.createdAt, cursor, gapEnd)
+				prev := s.findRestoreAnchor(
+					span.createdAt, cursor, gapEnd, chainAnchor, fromPos, executedAt)
 				s.InsertAfter(prev, newNode)
 				recreated = append(recreated, newNode)
+				chainAnchor = newNode
 				cursor = gapEnd
 			}
 		}
@@ -892,9 +907,17 @@ func (s *RGATreeSplit[V]) isolateRange(
 //	(a) piece covering gapEnd → before it (exact original slot)
 //	(b) nearest surviving piece left of gapStart → after it
 //	(c) rightmost surviving piece (right of gap) → before it
-//	(d) head (deterministic last resort when the whole insertion is purged)
+//	(d) chain anchor: the fragment placed just before this one in the same
+//	    restore (document order) → after it, so a purged multi-fragment run is
+//	    rebuilt left-to-right rather than reversed
+//	(e) the operation's from position (refined) → the surviving left neighbour
+//	    of the run, anchoring the first fragment when its whole insertion is
+//	    purged; mirrors the JS fallbackAnchor (see design-doc caveat)
+//	(f) head (deterministic last resort)
 func (s *RGATreeSplit[V]) findRestoreAnchor(
 	createdAt *time.Ticket, gapStart, gapEnd int,
+	chainAnchor *RGATreeSplitNode[V],
+	fromPos *RGATreeSplitNodePos, executedAt *time.Ticket,
 ) *RGATreeSplitNode[V] {
 	if succ := s.findPieceCovering(createdAt, gapEnd); succ != nil {
 		return succ.prev
@@ -909,6 +932,14 @@ func (s *RGATreeSplit[V]) findRestoreAnchor(
 	if key, node := s.treeByID.Floor(rightmostID); key != nil &&
 		key.hasSameCreatedAt(rightmostID) && node.ID().Offset() >= gapEnd {
 		return node.prev
+	}
+	if chainAnchor != nil {
+		return chainAnchor
+	}
+	if fromPos != nil && executedAt != nil {
+		if left, _, _, err := s.findNodeWithSplit(fromPos, executedAt); err == nil && left != nil {
+			return left
+		}
 	}
 	return s.initialHead
 }
