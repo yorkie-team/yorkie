@@ -74,6 +74,15 @@ func TestBytesToObjectMalformed(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name: "member with nil oneof body",
+			elem: &api.JSONElement{Body: &api.JSONElement_JsonObject{
+				JsonObject: &api.JSONElement_JSONObject{
+					CreatedAt: validTicket(),
+					Nodes:     []*api.RHTNode{{Key: "k", Element: &api.JSONElement{}}},
+				},
+			}},
+		},
 	}
 
 	for _, tc := range tests {
@@ -107,6 +116,24 @@ func TestBytesToArrayMalformed(t *testing.T) {
 				JsonArray: &api.JSONElement_JSONArray{
 					CreatedAt: validTicket(),
 					Nodes:     []*api.RGANode{{Element: nilCreatedAtPrimitive()}},
+				},
+			}},
+		},
+		{
+			name: "nil element without position timestamps",
+			elem: &api.JSONElement{Body: &api.JSONElement_JsonArray{
+				JsonArray: &api.JSONElement_JSONArray{
+					CreatedAt: validTicket(),
+					Nodes:     []*api.RGANode{{Element: nil}},
+				},
+			}},
+		},
+		{
+			name: "element with nil oneof body",
+			elem: &api.JSONElement{Body: &api.JSONElement_JsonArray{
+				JsonArray: &api.JSONElement_JSONArray{
+					CreatedAt: validTicket(),
+					Nodes:     []*api.RGANode{{Element: &api.JSONElement{}}},
 				},
 			}},
 		},
