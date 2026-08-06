@@ -180,6 +180,7 @@ After creation:
 - every later attachment observes the persisted value;
 - conflicting client requests are ignored;
 - presence is never persisted or synchronized.
+- Missing or `null` `DisablePresence` fields in legacy documents default to `false` on both MongoDB and in-memory backends.
 
 This contract is immutable. There is no migration or runtime toggle.
 
@@ -204,23 +205,17 @@ message AttachDocumentResponse {
 Clients therefore synchronize against the document's actual policy
 instead of the value they originally requested.
 
+Older SDKs that do not recognize field `5` will ignore `disable_presence` in `AttachDocumentResponse`. However, server-side filtering (`stripPresenceChanges` and snapshot resets) remains authoritative, ensuring presence is never persisted or broadcasted even for older clients.
+
 ---
 
 ### Document Creation
 
-During the first `AttachDocument`, the server persists the
-`disable_presence` option together with the document metadata.
+During the first `AttachDocument`, the server persists the `disable_presence` option together with the document metadata.
 
-The value is written only when the document is created.
+The value is written only when the document is created. MongoDB performs this through `$setOnInsert`, while the in-memory backend performs the equivalent insert-only initialization.
 
-MongoDB performs this through `$setOnInsert`, while the in-memory
-backend performs the equivalent insert-only initialization.
-
-Because the value is only written during creation, ownership of the
-decision belongs to the document itself rather than to individual
-clients.
-
-Subsequent attachments never overwrite the persisted value.
+If concurrent first-attach requests arrive with conflicting values, `$setOnInsert` ensures the first writer fixes the document policy. Losing requests re-read `DocInfo.DisablePresence` from storage before building the `AttachDocumentResponse` to ensure they observe the fixated policy.
 
 ---
 
@@ -233,15 +228,12 @@ Presence is removed at three independent stages.
 
 #### Incoming Changes
 
-Before incoming changes are persisted,
-`stripPresenceChanges()` removes all presence information.
+Before incoming changes are persisted, `stripPresenceChanges()` removes all presence information.
 
-- Presence-only changes are discarded.
-- Mixed operation/presence changes retain their document operations
-  while removing only the presence update.
+- Presence-only changes are discarded, but the client's pushed checkpoint sequence is still acknowledged to maintain version vector continuity.
+- Mixed operation/presence changes retain their document operations while removing only the presence update.
 
-This prevents clients from introducing new presence data into the
-document.
+This guarantees sequence alignment between client and server without persisting presence data.
 
 #### Pulled Changes
 
@@ -286,11 +278,10 @@ presence throughout its lifecycle.
 
 #### Attach
 
-The client skips the initial `Presence.Initialize()` step.
+The client evaluates presence initialization after receiving `AttachDocumentResponse`.
 
-As a result, attaching a presenceless document never generates the
-automatic initial `PUT` presence change that ordinary documents
-produce.
+- If `AttachDocumentResponse.DisablePresence` is `true`, the client skips `Presence.Initialize()` and avoids generating the initial `PUT` change.
+- If the server returns `false` (e.g., attaching to an existing presence-enabled document even when `WithDisablePresence()` was requested locally), the client defers to the server's policy and initializes presence normally.
 
 #### Update
 
@@ -317,18 +308,17 @@ reintroduce presence into a presenceless document.
 
 ---
 
-### Verification
+### Acceptance Criteria
 
-The implementation is covered by integration and unit tests.
-
-The tests verify:
+The implementation will be verified through integration and unit tests covering:
 
 - persistence through first attachment;
-- immutable document behavior;
+- default `false` fallback for legacy documents without `DisablePresence`;
+- immutable document behavior and re-reading on concurrent attach races;
 - warning (rather than rejection) for conflicting attach requests;
-- stripping of presence from incoming and outgoing synchronization;
+- stripping of presence from incoming and outgoing synchronization while maintaining checkpoint sequence alignment;
 - snapshot generation without presence;
-- client-side suppression of presence-only updates;
+- client-side deferred presence initialization based on server response;
 - preservation of document operations when mixed with presence updates.
 
 ## Design Decisions
