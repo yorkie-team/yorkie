@@ -109,6 +109,9 @@ func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
 }
 
 func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
+	if pbElem == nil {
+		return nil, fmt.Errorf("json element is nil")
+	}
 	switch decoded := pbElem.Body.(type) {
 	case *api.JSONElement_JsonObject:
 		return fromJSONObject(decoded.JsonObject)
@@ -128,11 +131,17 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 }
 
 func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
+	if pbObj == nil {
+		return nil, fmt.Errorf("json object is nil")
+	}
 	members := crdt.NewElementRHT()
 	for _, pbNode := range pbObj.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
 			return nil, err
+		}
+		if elem.CreatedAt() == nil {
+			return nil, fmt.Errorf("json object member has nil createdAt")
 		}
 		members.Set(pbNode.Key, elem)
 	}
@@ -163,6 +172,9 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 }
 
 func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
+	if pbArr == nil {
+		return nil, fmt.Errorf("json array is nil")
+	}
 	elements := crdt.NewRGATreeList()
 	for _, pbNode := range pbArr.Nodes {
 		if pbNode.Element == nil {
@@ -185,6 +197,9 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
 			return nil, err
+		}
+		if elem.CreatedAt() == nil {
+			return nil, fmt.Errorf("json array element has nil createdAt")
 		}
 
 		posMovedAt, err := fromTimeTicket(pbNode.PositionMovedAt)
