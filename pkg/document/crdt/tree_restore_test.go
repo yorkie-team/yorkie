@@ -21,9 +21,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -208,4 +210,280 @@ func TestTreeRestoreRejectsForgedIdentity(t *testing.T) {
 	vv := helper.VersionVectorOf(map[time.ActorID]int64{restoreActor: time.MaxLamport})
 	assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "state untouched on rejection")
+}
+
+// treeRestoreActorA/B are two actors distinct from InitialActorID (which
+// createHelloTree uses to create nodes), so a version vector that knows only
+// InitialActorID sees both actors' operations as concurrent.
+var treeRestoreActorA, _ = time.ActorIDFromHex("00000000000000000000000a")
+var treeRestoreActorB, _ = time.ActorIDFromHex("00000000000000000000000b")
+
+// elementPaddingLength mirrors the unexported constant of the same name in
+// pkg/index: an element node occupies its content length plus an open and a
+// close token.
+const elementPaddingLength = 2
+
+// expectVisibleLength recomputes a node's VisibleLength from its subtree
+// without mutating anything. It mirrors Node.PaddedLength: a removed child
+// contributes nothing to its parent, an element child contributes its own
+// length plus padding.
+//
+// NOTE: index.Node.UpdateDescendantsLength cannot be used for verification
+// because it ACCUMULATES into VisibleLength rather than assigning it, so
+// calling it on an already-computed tree double counts.
+func expectVisibleLength(n *index.Node[*crdt.TreeNode]) int {
+	if n.IsText() {
+		return n.Value.Length()
+	}
+
+	sum := 0
+	for _, child := range n.Children(true) {
+		length := expectVisibleLength(child)
+		if child.Value.IsRemoved() {
+			continue
+		}
+		if child.IsText() {
+			sum += length
+		} else {
+			sum += length + elementPaddingLength
+		}
+	}
+	return sum
+}
+
+// assertLengthCacheSound checks every node's cached VisibleLength against the
+// recomputation. Restore mutates tombstones in place through unremove(), which
+// hand-maintains the ancestor length cache; if that bookkeeping drifts, the
+// tree still renders correctly but every later index-based edit resolves to
+// the wrong offset. This assertion is what catches that.
+func assertLengthCacheSound(t *testing.T, tree *crdt.Tree, label string) {
+	t.Helper()
+
+	var walk func(*index.Node[*crdt.TreeNode])
+	walk = func(node *index.Node[*crdt.TreeNode]) {
+		want := expectVisibleLength(node)
+		assert.Equal(t, want, node.VisibleLength,
+			"%s: stale VisibleLength cache on %q", label, node.Type)
+
+		if node.IsText() {
+			return
+		}
+		for _, child := range node.Children(true) {
+			walk(child)
+		}
+	}
+	walk(tree.IndexTree.Root())
+}
+
+// TestTreeLengthCacheChecker validates assertLengthCacheSound itself against
+// states produced WITHOUT any restore code. Without this, a bug in the checker
+// would silently make the integrity tests below vacuous.
+func TestTreeLengthCacheChecker(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		start, end int
+	}{
+		{"pristine", 0, 0},
+		{"whole text deleted", 1, 6},
+		{"text partially deleted (splits)", 2, 4},
+		{"subtree deleted", 0, 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := helper.TextChangeContext(helper.TestRoot())
+			tree := createHelloTree(t, ctx)
+			if tc.start != tc.end {
+				_, _, err := tree.EditT(tc.start, tc.end, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+				assert.NoError(t, err)
+			}
+			assertLengthCacheSound(t, tree, tc.name)
+		})
+	}
+}
+
+// TestTreeRestoreLengthCacheIntegrity pins unremove()'s ancestor bookkeeping.
+// remove() decrements ancestor VisibleLength and stops at the first removed
+// ancestor; unremove() must mirror that exactly, in EITHER span order, or the
+// index cache silently drifts.
+func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		childFirst bool
+	}{
+		{"parent before child", false},
+		{"child before parent", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := helper.TextChangeContext(helper.TestRoot())
+			tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+			before := tree.Root().Len()
+
+			p := tree.Root().Children()[0]
+			text := p.Children()[0]
+			spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+			if tc.childFirst {
+				spans = []*crdt.TreeRestoreSpan{textSpan(text, p), elementSpan(p, tree.Root())}
+			}
+
+			_, _, err := tree.EditT(0, 7, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+			assert.NoError(t, err)
+			assert.Equal(t, "<r></r>", tree.ToXML())
+
+			_, _, err = tree.Restore(spans)
+			assert.NoError(t, err)
+
+			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+			assert.Equal(t, before, tree.Root().Len(), "visible length is restored exactly")
+			assertLengthCacheSound(t, tree, tc.name)
+		})
+	}
+}
+
+// TestTreeRestoreRecreateKeepsTreeEditable covers the recreateFromSpan path:
+// after a GC purge the nodes are rebuilt from scratch and spliced in by the
+// anchor ladder. A node spliced in with a wrong length cache renders fine but
+// misplaces the NEXT index-based edit, so the test edits afterwards.
+func TestTreeRestoreRecreateKeepsTreeEditable(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	root.RegisterElement(tree)
+	parent := tree.CreatedAt()
+
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+
+	from, err := tree.FindPos(0)
+	assert.NoError(t, err)
+	to, err := tree.FindPos(7)
+	assert.NoError(t, err)
+	assert.NoError(t, operations.NewTreeEdit(parent, from, to, nil, 0,
+		helper.TimeT(ctx)).Execute(root, nil))
+	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	assert.NoError(t, err)
+	assert.Positive(t, n, "the deleted subtree should be purged")
+
+	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+		helper.TimeT(ctx), spans, crdt.RestoreModeRestore, nil).
+		Execute(root, helper.MaxVersionVector()))
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+	assertLengthCacheSound(t, tree, "after recreate")
+
+	// The recreated subtree must behave like any other: an edit at index 3
+	// lands between "he" and "llo".
+	_, _, err = tree.EditT(3, 3, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "Z"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>heZllo</p></r>", tree.ToXML(),
+		"index-based edits resolve correctly after a recreate")
+	assertLengthCacheSound(t, tree, "after edit on recreated subtree")
+}
+
+// TestTreeRestoreDocSizeSymmetry pins the GC accounting in TreeEdit.Execute.
+// Restore moves a tombstone's size GC->Live via UnregisterGCPair + diff.Add,
+// and retombstone moves it back. Either half getting the removedAt ticket
+// wrong leaks size permanently, which only shows up as drifting doc-size
+// metrics in production.
+func TestTreeRestoreDocSizeSymmetry(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	root.RegisterElement(tree)
+	parent := tree.CreatedAt()
+
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+
+	baseline := root.DocSize()
+
+	from, err := tree.FindPos(0)
+	assert.NoError(t, err)
+	to, err := tree.FindPos(7)
+	assert.NoError(t, err)
+	assert.NoError(t, operations.NewTreeEdit(parent, from, to, nil, 0,
+		helper.TimeT(ctx)).Execute(root, nil))
+	afterDelete := root.DocSize()
+	assert.NotEqual(t, baseline, afterDelete, "the delete must move size Live->GC")
+
+	// Undo: every byte comes back to Live and GC empties out.
+	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+		helper.TimeT(ctx), spans, crdt.RestoreModeRestore, nil).
+		Execute(root, helper.MaxVersionVector()))
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+	assert.Equal(t, baseline, root.DocSize(), "restore returns docSize to baseline")
+
+	// Redo: RestoreModeRetombstone swaps the span sets, so the spans in the
+	// restore slot are the ones re-tombstoned.
+	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+		helper.TimeT(ctx), spans, crdt.RestoreModeRetombstone, nil).
+		Execute(root, helper.MaxVersionVector()))
+	assert.Equal(t, "<r></r>", tree.ToXML())
+	assert.Equal(t, afterDelete, root.DocSize(), "redo returns docSize to the post-delete state")
+}
+
+// TestTreeRestoreConvergesUnderConcurrentEdit is the regression test for this
+// feature's whole reason to exist: reviving by identity converges where
+// copy-reinsertion diverged. Two replicas apply the same three operations --
+// a delete D, its undo U, and a CONCURRENT insert X by another actor -- in two
+// different causally legal orders, and must agree.
+func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
+	tD := time.NewTicket(100, 0, treeRestoreActorA)
+	tX := time.NewTicket(150, 0, treeRestoreActorB)
+
+	// Knows InitialActorID, so the nodes' creation is causally visible, but
+	// knows neither A nor B, so D and X are concurrent with each other.
+	vv := helper.MaxVersionVector()
+
+	// Both replicas are built from identical tickets, so node identities (and
+	// therefore D's positions and U's span) are portable between them.
+	newReplica := func() (*crdt.Tree, *change.Context, *crdt.TreePos, *crdt.TreePos, *crdt.TreeRestoreSpan) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx)
+		p := tree.Root().Children()[0]
+		text := p.Children()[0]
+
+		// D addresses the pristine state, as it would on the replica that
+		// generated it before ever seeing X.
+		from, err := tree.FindPos(1)
+		assert.NoError(t, err)
+		to, err := tree.FindPos(6)
+		assert.NoError(t, err)
+		return tree, ctx, from, to, textSpan(text, p)
+	}
+
+	applyD := func(tree *crdt.Tree, ctx *change.Context, from, to *crdt.TreePos) {
+		_, _, err := tree.Edit(from, to, nil, 0, tD, issueTicket(ctx), vv)
+		assert.NoError(t, err)
+	}
+	applyU := func(tree *crdt.Tree, span *crdt.TreeRestoreSpan) {
+		_, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		assert.NoError(t, err)
+	}
+	applyX := func(tree *crdt.Tree, ctx *change.Context) {
+		_, _, err := tree.EditT(3, 3, []*crdt.TreeNode{
+			crdt.NewTreeNode(crdt.NewTreeNodeID(tX, 0), "text", nil, "W"),
+		}, 0, tX, issueTicket(ctx))
+		assert.NoError(t, err)
+	}
+
+	// Replica 1 sees X last: D -> U -> X.
+	r1, ctx1, from1, to1, span1 := newReplica()
+	applyD(r1, ctx1, from1, to1)
+	applyU(r1, span1)
+	applyX(r1, ctx1)
+
+	// Replica 2 sees X first: X -> D -> U. U stays after D, which is the only
+	// ordering causality actually requires.
+	r2, ctx2, from2, to2, span2 := newReplica()
+	applyX(r2, ctx2)
+	applyD(r2, ctx2, from2, to2)
+	applyU(r2, span2)
+
+	assert.Equal(t, r1.ToXML(), r2.ToXML(), "replicas must converge on the same content")
+	assert.Equal(t, "<r><p>heWllo</p></r>", r1.ToXML(),
+		"the undo revives the original text and the concurrent insert survives")
+	assertLengthCacheSound(t, r1, "replica 1")
+	assertLengthCacheSound(t, r2, "replica 2")
 }
