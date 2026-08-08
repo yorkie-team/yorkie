@@ -132,6 +132,9 @@ message Operation {
     repeated TreeNodes contents = 5;
     int32 split_level = 7;
     TimeTicket executed_at = 6;
+    repeated TreeRestoreSpan restore_spans = 8; // identity-preserving undo/redo
+    RestoreMode restore_mode = 9;
+    repeated TreeRestoreSpan retombstone_spans = 10;
   }
   message TreeStyle {
     TimeTicket parent_created_at = 1;
@@ -450,6 +453,27 @@ enum RestoreMode {
   RESTORE_MODE_UNSPECIFIED = 0;
   RESTORE_MODE_RESTORE = 1;
   RESTORE_MODE_RETOMBSTONE = 2;
+}
+
+// TreeRestoreSpan carries a tree node run from a single deletion, addressed
+// by TreeNodeID identity, for identity-preserving Tree undo/redo. Unlike the
+// text RestoreSpan (flat offsets), a tree span records the node's structure
+// (type/attrs) and its position anchors, because in a tree id-order is not
+// sibling-order: left_sibling_id and right_sibling_id are redundant external
+// boundary anchors of the deleted run, so restore can reconstruct the run's
+// internal order from the op's own spans and needs only one surviving
+// boundary to place it. value/attributes are a deep copy so a GC-purged node
+// can be recreated.
+message TreeRestoreSpan {
+  TreeNodeID id = 1;
+  string node_type = 2;
+  bool is_text = 3;
+  int32 length = 4;
+  string value = 5;
+  map<string, NodeAttr> attributes = 6;
+  TreeNodeID parent_id = 7;
+  TreeNodeID left_sibling_id = 8;
+  TreeNodeID right_sibling_id = 9;
 }
 
 message TimeTicket {

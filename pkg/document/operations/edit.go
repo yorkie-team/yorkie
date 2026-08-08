@@ -201,13 +201,32 @@ func validateRestoreIdentities(
 	spans []*crdt.RestoreSpan,
 	versionVector time.VersionVector,
 ) error {
-	if len(spans) == 0 || len(versionVector) == 0 {
+	if len(spans) == 0 {
+		return nil
+	}
+	createdAts := make([]*time.Ticket, 0, len(spans))
+	for _, span := range spans {
+		createdAts = append(createdAts, span.CreatedAt)
+	}
+	return validateRestoreTickets(createdAts, versionVector)
+}
+
+// validateRestoreTickets rejects any restore identity the acting change could
+// not causally have observed (actor absent from the version vector, or a
+// lamport beyond the actor's known clock). An empty version vector marks the
+// trusted local path (json application). Shared by the Text and Tree restore
+// paths.
+func validateRestoreTickets(
+	createdAts []*time.Ticket,
+	versionVector time.VersionVector,
+) error {
+	if len(createdAts) == 0 || len(versionVector) == 0 {
 		return nil
 	}
 
-	for _, span := range spans {
-		known, ok := versionVector.Get(span.CreatedAt.ActorID())
-		if !ok || span.CreatedAt.Lamport() > known {
+	for _, createdAt := range createdAts {
+		known, ok := versionVector.Get(createdAt.ActorID())
+		if !ok || createdAt.Lamport() > known {
 			return ErrUnknownRestoreIdentity
 		}
 	}
