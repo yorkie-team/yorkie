@@ -549,13 +549,19 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A restore payload and a restore mode only mean anything together, so
+	// reject either one without the other. Without this, Execute's span-based
+	// guard falls through to the ordinary edit path: spans without a mode are
+	// silently dropped, and a mode without spans applies from/to as a range
+	// DELETION under a "restore" label (also discarding content/attributes).
+	// Neither is something a well-formed client sends.
 	mode := fromRestoreMode(pbEdit.RestoreMode)
-	// Restore payload without a mode (or vice versa) is malformed: the spans
-	// would be silently dropped as an ordinary edit. Reject it.
-	if mode == crdt.RestoreModeNone && (len(restoreSpans) > 0 || len(retombstoneSpans) > 0) {
+	hasMode := mode != crdt.RestoreModeNone
+	hasSpans := len(restoreSpans) > 0 || len(retombstoneSpans) > 0
+	if hasMode != hasSpans {
 		return nil, ErrInvalidRestoreSpan
 	}
-	if mode != crdt.RestoreModeNone {
+	if hasMode {
 		return operations.NewRestoreEdit(
 			parentCreatedAt,
 			from,
@@ -739,13 +745,19 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 	if err != nil {
 		return nil, err
 	}
+	// A restore payload and a restore mode only mean anything together, so
+	// reject either one without the other. Without this, Execute's span-based
+	// guard falls through to the ordinary edit path: spans without a mode are
+	// silently dropped, and a mode without spans applies from/to as a range
+	// DELETION under a "restore" label (also discarding contents/split_level).
+	// Neither is something a well-formed client sends.
 	mode := fromRestoreMode(pbTreeEdit.RestoreMode)
-	// Restore payload without a mode (or vice versa) is malformed: the spans
-	// would be silently dropped as an ordinary edit. Reject it.
-	if mode == crdt.RestoreModeNone && (len(restoreSpans) > 0 || len(retombstoneSpans) > 0) {
+	hasMode := mode != crdt.RestoreModeNone
+	hasSpans := len(restoreSpans) > 0 || len(retombstoneSpans) > 0
+	if hasMode != hasSpans {
 		return nil, ErrInvalidRestoreSpan
 	}
-	if mode != crdt.RestoreModeNone {
+	if hasMode {
 		return operations.NewRestoreTreeEdit(
 			parentCreatedAt,
 			from,

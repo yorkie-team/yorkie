@@ -296,3 +296,65 @@ func TestTreeRestoreSpanRejectsSpansWithoutMode(t *testing.T) {
 	_, err = converter.FromOperations(pbOps)
 	assert.Error(t, err)
 }
+
+// TestTreeRestoreSpanRejectsModeWithoutSpans guards the other direction of the
+// same mismatch. A mode with no spans is worse than a silent no-op: Execute
+// keys the restore path off span presence, so the op falls through to the
+// ordinary edit path and applies from/to as a range DELETION, discarding the
+// contents too. No well-formed client emits this (the JS SDK gates its write
+// path on span length), so it can only arrive from a buggy or hostile peer and
+// must not reach the tree.
+func TestTreeRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	// Serialize an ordinary edit, then set only the mode.
+	op := operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+	assert.Empty(t, pbOps[0].GetTreeEdit().RestoreSpans)
+	assert.Empty(t, pbOps[0].GetTreeEdit().RetombstoneSpans)
+
+	for _, mode := range []api.RestoreMode{
+		api.RestoreMode_RESTORE_MODE_RESTORE,
+		api.RestoreMode_RESTORE_MODE_RETOMBSTONE,
+	} {
+		pbOps[0].GetTreeEdit().RestoreMode = mode
+		_, err = converter.FromOperations(pbOps)
+		assert.ErrorIs(t, err, converter.ErrInvalidRestoreSpan, "mode %v with no spans", mode)
+	}
+
+	// An ordinary edit (no mode, no spans) still round-trips.
+	pbOps[0].GetTreeEdit().RestoreMode = api.RestoreMode_RESTORE_MODE_UNSPECIFIED
+	ops, err := converter.FromOperations(pbOps)
+	assert.NoError(t, err)
+	assert.Len(t, ops, 1)
+}
+
+// TestRestoreSpanRejectsModeWithoutSpans is the Text counterpart: the same
+// mismatch reaches Edit.Execute, which also keys off span presence.
+func TestRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(seed, 0), 0)
+
+	op := operations.NewEdit(seed, pos, pos, "", nil, executedAt)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+	assert.Empty(t, pbOps[0].GetEdit().RestoreSpans)
+	assert.Empty(t, pbOps[0].GetEdit().RetombstoneSpans)
+
+	pbOps[0].GetEdit().RestoreMode = api.RestoreMode_RESTORE_MODE_RESTORE
+	_, err = converter.FromOperations(pbOps)
+	assert.ErrorIs(t, err, converter.ErrInvalidRestoreSpan)
+
+	pbOps[0].GetEdit().RestoreMode = api.RestoreMode_RESTORE_MODE_UNSPECIFIED
+	ops, err := converter.FromOperations(pbOps)
+	assert.NoError(t, err)
+	assert.Len(t, ops, 1)
+}
