@@ -23,6 +23,7 @@ import (
 	"strconv"
 	gotime "time"
 
+	"connectrpc.com/connect"
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -108,14 +109,25 @@ func PushPull(
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
-	// 01. push the change pack to the database.
+	// 01. Validate the incoming request before any database mutation.
+	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+	if err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+	if err := validatePushPullRequest(clientInfo.Checkpoint(docKey.DocID), reqPack, docInfo); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+
+	// 02. push the change pack to the database.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
 
-	// 02. pull the pack from the database.
+	// 03. pull the pack from the database.
 	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold,
 		docInfo, reqPack, cpAfterPush, initialSeq, opts)
 
@@ -146,7 +158,7 @@ func PushPull(
 	be.Metrics.AddPushPullSnapshotBytes(hostname, project, resPack.SnapshotLen())
 	be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
-	// 03. publish document event and store the snapshot if needed.
+	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
 			publisher, err := clientInfo.ID.ToActorID()
@@ -189,6 +201,37 @@ func PushPull(
 	}
 
 	return resPack, nil
+}
+
+func validatePushPullRequest(
+	cpBeforePush change.Checkpoint,
+	reqPack *change.Pack,
+	docInfo *database.DocInfo,
+) error {
+	if reqPack.Checkpoint.ServerSeq > docInfo.ServerSeq {
+		return connect.NewError(
+			connect.CodeInvalidArgument,
+			errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
+		)
+	}
+	// The clientSeq of the changes in the request pack must be continuous.
+	expectedClientSeq := cpBeforePush.ClientSeq + 1
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			continue
+		}
+
+		if cn.ID().ClientSeq() != expectedClientSeq {
+			return connect.NewError(
+				connect.CodeInvalidArgument,
+				errors.InvalidArgument("change clientSeq must increase by one").WithCode("ErrInvalidClientSeq"),
+			)
+		}
+
+		expectedClientSeq++
+	}
+
+	return nil
 }
 
 // pushPack pushes the given ChangePack to the database.
@@ -398,12 +441,9 @@ func preparePack(
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
-		return nil, fmt.Errorf(
-			"serverSeq(%d) of request greater than serverSeq(%d) of ClientInfo: %w",
-			reqPack.Checkpoint.ServerSeq,
-			initialServerSeq,
-			ErrInvalidServerSeq,
-		)
+		return nil, errors.InvalidArgument(
+			"checkpoint serverSeq exceeds server state",
+		).WithCode("ErrInvalidServerSeq")
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.

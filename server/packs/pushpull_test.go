@@ -284,4 +284,184 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, int64(2), clientInfo.Checkpoint(docID).ServerSeq)
 		assert.Equal(t, uint32(2), clientInfo.Checkpoint(docID).ClientSeq)
 	})
+
+	t.Run("non-sequential client seq is rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(
+			ctx,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
+						},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 3,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(
+			ctx,
+			testBackend,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			pack,
+			packs.PushPullOptions{
+				Mode:   types.SyncModePushPull,
+				Status: document.StatusAttached,
+			},
+		)
+
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	})
+
+	t.Run("future server seq checkpoint is rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(
+			ctx,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
+						},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 2, ClientSeq: 2},
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 2,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(
+			ctx,
+			testBackend,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			pack,
+			packs.PushPullOptions{
+				Mode:   types.SyncModePushPull,
+				Status: document.StatusAttached,
+			},
+		)
+
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	})
 }
