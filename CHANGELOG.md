@@ -7,6 +7,24 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.14] - 2026-08-09
+
+### Added
+
+- Identity-preserving restore for Tree undo/redo by @harrykim8672 in https://github.com/yorkie-team/yorkie/pull/1893
+- Add an Admin REST API for broadcasting channel events by @lshtar13 in https://github.com/yorkie-team/yorkie/pull/1895
+
+### Changed
+
+- Add HTTP server timeouts to prevent Slowloris attacks by @nasagong in https://github.com/yorkie-team/yorkie/pull/1902
+
+### Fixed
+
+- Recreate purged text runs in order on restore, not reversed by @harrykim8672 in https://github.com/yorkie-team/yorkie/pull/1913
+- Keep style ranges from crossing a concurrent merge anchor by @Nahee-Park in https://github.com/yorkie-team/yorkie/pull/1909
+- Flatten chained merge to converge an anchored concurrent insert by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1906
+- Move tombstones with merge to preserve tree RGA anchors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1905
+
 ## [v0.7.13] - 2026-07-23
 
 ### Added
