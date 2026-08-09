@@ -88,7 +88,7 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector).Next(),
+		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector),
 		"",
 		nil,
 	)
