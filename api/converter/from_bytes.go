@@ -46,9 +46,13 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	root, ok := obj.(*crdt.Object)
+	if !ok {
+		return nil, nil, fmt.Errorf("snapshot root is not an object")
+	}
 
 	presences := fromPresences(pbSnapshot.GetPresences())
-	return obj.(*crdt.Object), presences, nil
+	return root, presences, nil
 }
 
 // BytesToObject creates an Object from the given byte array.
@@ -374,6 +378,9 @@ func fromTextNode(
 	if err != nil {
 		return nil, err
 	}
+	if id == nil {
+		return nil, fmt.Errorf("text node id is nil")
+	}
 
 	attrs := crdt.NewRHT()
 	for key, pbAttr := range pbNode.Attributes {
@@ -410,6 +417,9 @@ func fromTextNodeID(
 	if err != nil {
 		return nil, err
 	}
+	if createdAt == nil {
+		return nil, fmt.Errorf("text node id has nil createdAt")
+	}
 
 	return crdt.NewRGATreeSplitNodeID(
 		createdAt,
@@ -420,6 +430,9 @@ func fromTextNodeID(
 func fromJSONTree(
 	pbTree *api.JSONElement_Tree,
 ) (*crdt.Tree, error) {
+	if pbTree == nil {
+		return nil, fmt.Errorf("json tree is nil")
+	}
 	createdAt, err := fromTimeTicket(pbTree.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -435,6 +448,9 @@ func fromJSONTree(
 	root, err := FromTreeNodes(pbTree.Nodes)
 	if err != nil {
 		return nil, err
+	}
+	if root == nil {
+		return nil, fmt.Errorf("json tree has no root node")
 	}
 
 	tree := crdt.NewTree(

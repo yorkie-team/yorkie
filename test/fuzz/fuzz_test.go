@@ -27,7 +27,10 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func FuzzFromChangePack(f *testing.F) {
@@ -91,6 +94,35 @@ func FuzzBytesToArray(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _ = converter.BytesToArray(data)
+	})
+}
+
+func FuzzBytesToTree(f *testing.F) {
+	root := helper.BuildTreeNode(&json.TreeNode{
+		Type: "r",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
+		},
+	})
+	if seed, err := converter.TreeToBytes(crdt.NewTree(root, time.InitialTicket)); err == nil {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = converter.BytesToTree(data)
+	})
+}
+
+func FuzzBytesToSnapshot(f *testing.F) {
+	if seed, err := converter.SnapshotToBytes(
+		crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket),
+		map[string]presence.Data{},
+	); err == nil {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _, _ = converter.BytesToSnapshot(data)
 	})
 }
 

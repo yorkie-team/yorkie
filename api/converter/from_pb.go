@@ -991,6 +991,9 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	if err != nil {
 		return nil, err
 	}
+	if createdAt == nil {
+		return nil, goerrors.New("tree node id has nil createdAt")
+	}
 
 	return crdt.NewTreeNodeID(
 		createdAt,

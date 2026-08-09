@@ -150,3 +150,108 @@ func TestBytesToArrayMalformed(t *testing.T) {
 		})
 	}
 }
+
+// TestBytesToTreeMalformed verifies BytesToTree returns an error (never panics)
+// on malformed snapshots that proto.Unmarshal still accepts.
+func TestBytesToTreeMalformed(t *testing.T) {
+	tests := []struct {
+		name string
+		elem *api.JSONElement
+	}{
+		{
+			name: "mismatched body (no tree)",
+			elem: &api.JSONElement{Body: &api.JSONElement_JsonObject{
+				JsonObject: &api.JSONElement_JSONObject{CreatedAt: validTicket()},
+			}},
+		},
+		{
+			name: "empty tree nodes",
+			elem: &api.JSONElement{Body: &api.JSONElement_Tree_{
+				Tree: &api.JSONElement_Tree{CreatedAt: validTicket()},
+			}},
+		},
+		{
+			name: "tree node with nil createdAt",
+			elem: &api.JSONElement{Body: &api.JSONElement_Tree_{
+				Tree: &api.JSONElement_Tree{
+					CreatedAt: validTicket(),
+					Nodes: []*api.TreeNode{{
+						Id:    &api.TreeNodeID{CreatedAt: nil, Offset: 0},
+						Type:  "text",
+						Value: "x",
+					}},
+				},
+			}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := proto.Marshal(tc.elem)
+			assert.NoError(t, err)
+
+			tree, err := converter.BytesToTree(data)
+			assert.Error(t, err)
+			assert.Nil(t, tree)
+		})
+	}
+}
+
+// TestBytesToSnapshotMalformed verifies BytesToSnapshot returns an error (never
+// panics) on malformed snapshots that proto.Unmarshal still accepts.
+func TestBytesToSnapshotMalformed(t *testing.T) {
+	objectWithChild := func(child *api.JSONElement) *api.Snapshot {
+		return &api.Snapshot{Root: &api.JSONElement{Body: &api.JSONElement_JsonObject{
+			JsonObject: &api.JSONElement_JSONObject{
+				CreatedAt: validTicket(),
+				Nodes:     []*api.RHTNode{{Key: "t", Element: child}},
+			},
+		}}}
+	}
+
+	tests := []struct {
+		name string
+		snap *api.Snapshot
+	}{
+		{
+			name: "non-object root",
+			snap: &api.Snapshot{Root: &api.JSONElement{
+				Body: &api.JSONElement_Primitive_{
+					Primitive: &api.JSONElement_Primitive{
+						Type:      api.ValueType_VALUE_TYPE_NULL,
+						CreatedAt: validTicket(),
+					},
+				},
+			}},
+		},
+		{
+			name: "text node with nil id",
+			snap: objectWithChild(&api.JSONElement{Body: &api.JSONElement_Text_{
+				Text: &api.JSONElement_Text{
+					CreatedAt: validTicket(),
+					Nodes:     []*api.TextNode{{Id: nil, Value: "x"}},
+				},
+			}}),
+		},
+		{
+			name: "text node id with nil createdAt",
+			snap: objectWithChild(&api.JSONElement{Body: &api.JSONElement_Text_{
+				Text: &api.JSONElement_Text{
+					CreatedAt: validTicket(),
+					Nodes:     []*api.TextNode{{Id: &api.TextNodeID{CreatedAt: nil, Offset: 0}, Value: "x"}},
+				},
+			}}),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := proto.Marshal(tc.snap)
+			assert.NoError(t, err)
+
+			obj, _, err := converter.BytesToSnapshot(data)
+			assert.Error(t, err)
+			assert.Nil(t, obj)
+		})
+	}
+}
