@@ -37,6 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -342,6 +343,12 @@ func TestPacks(t *testing.T) {
 			ClientID:  types.IDFromActorID(actorID),
 		})
 		assert.NoError(t, err)
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
 
 		pack, err := converter.FromChangePack(&api.ChangePack{
 			DocumentKey: helper.TestKey(t).String(),
@@ -373,6 +380,7 @@ func TestPacks(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
 	})
 
 	t.Run("future server seq checkpoint is rejected", func(t *testing.T) {
@@ -432,6 +440,12 @@ func TestPacks(t *testing.T) {
 			ClientID:  types.IDFromActorID(actorID),
 		})
 		assert.NoError(t, err)
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
 
 		pack, err := converter.FromChangePack(&api.ChangePack{
 			DocumentKey: helper.TestKey(t).String(),
@@ -463,6 +477,7 @@ func TestPacks(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
 	})
 
 	t.Run("client seq gaps remain rejected with disable presence", func(t *testing.T) {
@@ -522,6 +537,12 @@ func TestPacks(t *testing.T) {
 			ClientID:  types.IDFromActorID(actorID),
 		})
 		assert.NoError(t, err)
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
 
 		// Gap: after attach (ClientSeq=1), presence-only occupies 2 and the
 		// document change jumps to 4. Stripping presence first would leave
@@ -570,6 +591,7 @@ func TestPacks(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
 	})
 
 	t.Run("disable presence keeps continuous interleaved client seq", func(t *testing.T) {
@@ -675,5 +697,35 @@ func TestPacks(t *testing.T) {
 			},
 		)
 		assert.NoError(t, err)
+
+		clientInfoAfter, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, uint32(3), clientInfoAfter.Checkpoint(docID).ClientSeq)
 	})
+}
+
+// assertRejectedPushPullUnchanged reloads DocInfo/ClientInfo after a rejected
+// PushPull and asserts neither document nor client checkpoints advanced.
+func assertRejectedPushPullUnchanged(
+	t *testing.T,
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	clientRefKey types.ClientRefKey,
+	docID types.ID,
+	docServerSeqBefore int64,
+	clientCPBefore change.Checkpoint,
+) {
+	t.Helper()
+
+	docInfoAfter, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+	assert.NoError(t, err)
+	assert.Equal(t, docServerSeqBefore, docInfoAfter.ServerSeq)
+
+	clientInfoAfter, err := clients.FindActiveClientInfo(ctx, testBackend, clientRefKey)
+	assert.NoError(t, err)
+	assert.Equal(t, clientCPBefore.ServerSeq, clientInfoAfter.Checkpoint(docID).ServerSeq)
+	assert.Equal(t, clientCPBefore.ClientSeq, clientInfoAfter.Checkpoint(docID).ClientSeq)
 }
