@@ -102,22 +102,24 @@ func PushPull(
 	start := gotime.Now()
 	hostname := be.Config.Hostname
 
-	// 00. Strip presence on the way in when the document opted out. Doing
+	// 00. Validate ClientSeq continuity against the original request.
+	// Presence stripping must not run first: presence-only changes also
+	// occupy ClientSeq, and dropping them early would hide gaps.
+	if err := validateClientSeqContinuity(clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+
+	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
 	// changes collection, regardless of which SDK version sent it.
 	if opts.DisablePresence {
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
-	// 01. Validate ClientSeq continuity before any database mutation.
+	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
-	if err := validateClientSeqContinuity(clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
-		be.Metrics.AddPushPullErrors(hostname, project, 1)
-		return nil, err
-	}
-
-	// 02. push the change pack to the database.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
