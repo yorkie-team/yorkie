@@ -23,6 +23,7 @@ import (
 	"strconv"
 	gotime "time"
 
+	"connectrpc.com/connect"
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -101,21 +102,31 @@ func PushPull(
 	start := gotime.Now()
 	hostname := be.Config.Hostname
 
-	// 00. Strip presence on the way in when the document opted out. Doing
+	// 00. Validate ClientSeq continuity against the original request.
+	// Presence stripping must not run first: presence-only changes also
+	// occupy ClientSeq, and dropping them early would hide gaps.
+	if err := validateClientSeqContinuity(clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+
+	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
 	// changes collection, regardless of which SDK version sent it.
 	if opts.DisablePresence {
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
-	// 01. push the change pack to the database.
+	// 02. push the change pack to the database.
+	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
+	// run after epoch mismatch handling, so they live in pushPack.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
 
-	// 02. pull the pack from the database.
+	// 03. pull the pack from the database.
 	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold,
 		docInfo, reqPack, cpAfterPush, initialSeq, opts)
 
@@ -146,7 +157,7 @@ func PushPull(
 	be.Metrics.AddPushPullSnapshotBytes(hostname, project, resPack.SnapshotLen())
 	be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
-	// 03. publish document event and store the snapshot if needed.
+	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
 			publisher, err := clientInfo.ID.ToActorID()
@@ -191,6 +202,27 @@ func PushPull(
 	return resPack, nil
 }
 
+func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {
+	// The clientSeq of the changes in the request pack must be continuous.
+	expectedClientSeq := cpBeforePush.ClientSeq + 1
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			continue
+		}
+
+		if cn.ID().ClientSeq() != expectedClientSeq {
+			return connect.NewError(
+				connect.CodeInvalidArgument,
+				errors.InvalidArgument("change clientSeq must increase by one").WithCode("ErrInvalidClientSeq"),
+			)
+		}
+
+		expectedClientSeq++
+	}
+
+	return nil
+}
+
 // pushPack pushes the given ChangePack to the database.
 func pushPack(
 	ctx context.Context,
@@ -225,23 +257,26 @@ func pushPack(
 	// because FindDocInfoByRefKey populates the docCache. Without the lock,
 	// a concurrent goroutine's stale MongoDB read can overwrite a fresher
 	// cache entry, causing ErrConflictOnUpdate in CreateChangeInfos.
+	// ServerSeq validation also belongs here so it observes the same locked
+	// DocInfo snapshot and never runs ahead of epoch mismatch handling.
 	if len(pushables) > 0 || reqPack.IsRemoved {
 		locker := be.Lockers.Locker(DocPushKey(docKey))
 		defer locker.Unlock()
-	}
 
-	// 03. Discard stale-epoch changes before storing them.
-	// pushPack runs before preparePack. Without this check, stale-epoch
-	// changes would be inserted into the in-memory changeCache, polluting
-	// it with operations that reference pre-compaction CRDT node IDs.
-	// preparePack will return ErrEpochMismatch to the client downstream.
-	if len(pushables) > 0 {
-		if clientDocInfo := clientInfo.Documents[docKey.DocID]; clientDocInfo != nil {
-			currentDocInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
-			if err != nil {
-				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-			}
-			if clientDocInfo.Epoch != currentDocInfo.Epoch {
+		currentDocInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+		if err != nil {
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		}
+
+		clientDocInfo := clientInfo.Documents[docKey.DocID]
+		epochMismatch := clientDocInfo != nil && clientDocInfo.Epoch != currentDocInfo.Epoch
+		if epochMismatch {
+			// 03. Discard stale-epoch changes before storing them.
+			// pushPack runs before preparePack. Without this check, stale-epoch
+			// changes would be inserted into the in-memory changeCache, polluting
+			// it with operations that reference pre-compaction CRDT node IDs.
+			// preparePack will return ErrEpochMismatch to the client downstream.
+			if len(pushables) > 0 {
 				logging.From(ctx).Warnf(
 					"discarding %d changes from stale epoch: client(%d) != doc(%d)",
 					len(pushables),
@@ -250,6 +285,11 @@ func pushPack(
 				)
 				pushables = nil
 			}
+		} else if reqPack.Checkpoint.ServerSeq > currentDocInfo.ServerSeq {
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, connect.NewError(
+				connect.CodeInvalidArgument,
+				errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
+			)
 		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
@@ -398,12 +438,9 @@ func preparePack(
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
-		return nil, fmt.Errorf(
-			"serverSeq(%d) of request greater than serverSeq(%d) of ClientInfo: %w",
-			reqPack.Checkpoint.ServerSeq,
-			initialServerSeq,
-			ErrInvalidServerSeq,
-		)
+		return nil, errors.InvalidArgument(
+			"checkpoint serverSeq exceeds server state",
+		).WithCode("ErrInvalidServerSeq")
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.

@@ -37,6 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -284,4 +285,447 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, int64(2), clientInfo.Checkpoint(docID).ServerSeq)
 		assert.Equal(t, uint32(2), clientInfo.Checkpoint(docID).ClientSeq)
 	})
+
+	t.Run("non-sequential client seq is rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(
+			ctx,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
+						},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
+
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 3,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(
+			ctx,
+			testBackend,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			pack,
+			packs.PushPullOptions{
+				Mode:   types.SyncModePushPull,
+				Status: document.StatusAttached,
+			},
+		)
+
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
+	})
+
+	t.Run("future server seq checkpoint is rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(
+			ctx,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
+						},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
+
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 2, ClientSeq: 2},
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 2,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(
+			ctx,
+			testBackend,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			pack,
+			packs.PushPullOptions{
+				Mode:   types.SyncModePushPull,
+				Status: document.StatusAttached,
+			},
+		)
+
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
+	})
+
+	t.Run("client seq gaps remain rejected with disable presence", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(
+			ctx,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
+						},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
+
+		// Gap: after attach (ClientSeq=1), presence-only occupies 2 and the
+		// document change jumps to 4. Stripping presence first would leave
+		// only ClientSeq=4 and hide the hole; validation must see the raw pack.
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 4},
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 2,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
+					PresenceChange: &api.PresenceChange{
+						Type: api.PresenceChange_CHANGE_TYPE_PUT,
+						Presence: &api.Presence{
+							Data: map[string]string{"k": "v"},
+						},
+					},
+				},
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 4,
+						Lamport:   3,
+						ActorId:   clientID,
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(
+			ctx,
+			testBackend,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			pack,
+			packs.PushPullOptions{
+				Mode:            types.SyncModePushPull,
+				Status:          document.StatusAttached,
+				DisablePresence: true,
+			},
+		)
+
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
+	})
+
+	t.Run("disable presence keeps continuous interleaved client seq", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(
+			ctx,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
+						},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+
+		// Continuous: presence-only ClientSeq=2 then document ClientSeq=3.
+		// Strip drops the presence change, but validation must accept the
+		// original continuous sequence.
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 2,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
+					PresenceChange: &api.PresenceChange{
+						Type: api.PresenceChange_CHANGE_TYPE_PUT,
+						Presence: &api.Presence{
+							Data: map[string]string{"k": "v"},
+						},
+					},
+				},
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 3,
+						Lamport:   3,
+						ActorId:   clientID,
+					},
+				},
+			},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(
+			ctx,
+			testBackend,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			pack,
+			packs.PushPullOptions{
+				Mode:            types.SyncModePushPull,
+				Status:          document.StatusAttached,
+				DisablePresence: true,
+			},
+		)
+		assert.NoError(t, err)
+
+		clientInfoAfter, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, uint32(3), clientInfoAfter.Checkpoint(docID).ClientSeq)
+	})
+}
+
+// assertRejectedPushPullUnchanged reloads DocInfo/ClientInfo after a rejected
+// PushPull and asserts neither document nor client checkpoints advanced.
+func assertRejectedPushPullUnchanged(
+	t *testing.T,
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	clientRefKey types.ClientRefKey,
+	docID types.ID,
+	docServerSeqBefore int64,
+	clientCPBefore change.Checkpoint,
+) {
+	t.Helper()
+
+	docInfoAfter, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+	assert.NoError(t, err)
+	assert.Equal(t, docServerSeqBefore, docInfoAfter.ServerSeq)
+
+	clientInfoAfter, err := clients.FindActiveClientInfo(ctx, testBackend, clientRefKey)
+	assert.NoError(t, err)
+	assert.Equal(t, clientCPBefore.ServerSeq, clientInfoAfter.Checkpoint(docID).ServerSeq)
+	assert.Equal(t, clientCPBefore.ClientSeq, clientInfoAfter.Checkpoint(docID).ClientSeq)
 }

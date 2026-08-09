@@ -1611,6 +1611,102 @@ func RunDeactivateClientWithAttachingDocumentTest(
 	}
 }
 
+// RunDeactivateClientWithAttachedDocumentTest ensures that deactivating a client
+// that still has an attached document succeeds through the server-side detach path.
+// This covers the ClientSeq continuity of the presence-clear change created by
+// cluster DetachDocument (must be checkpoint.ClientSeq+1, not +2).
+func RunDeactivateClientWithAttachedDocumentTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	be *backend.Backend,
+) {
+	ctx := context.Background()
+
+	activateResp, err := testClient.ActivateClient(
+		ctx,
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}),
+	)
+	assert.NoError(t, err)
+
+	clientID, err := hex.DecodeString(activateResp.Msg.ClientId)
+	assert.NoError(t, err)
+
+	attachResp, err := testClient.AttachDocument(
+		ctx,
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: activateResp.Msg.ClientId,
+			ChangePack: &api.ChangePack{
+				DocumentKey: helper.TestKey(t).String(),
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+				Changes: []*api.Change{
+					{
+						Id: &api.ChangeID{
+							ClientSeq: 1,
+							Lamport:   1,
+							ActorId:   clientID,
+						},
+					},
+				},
+			},
+		}),
+	)
+	assert.NoError(t, err)
+
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+	assert.NoError(t, err)
+
+	actorID, err := time.ActorIDFromHex(activateResp.Msg.ClientId)
+	assert.NoError(t, err)
+	refKey := types.ClientRefKey{
+		ProjectID: projectInfo.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	}
+	docID := types.ID(attachResp.Msg.DocumentId)
+	docRefKey := types.DocRefKey{
+		ProjectID: projectInfo.ID,
+		DocID:     docID,
+	}
+
+	clientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	if assert.NotNil(t, clientInfo.Documents[docID]) {
+		assert.Equal(t, database.DocumentAttached, clientInfo.Documents[docID].Status)
+	}
+	cpBeforeDeactivate := clientInfo.Checkpoint(docID)
+
+	_, err = testClient.DeactivateClient(
+		ctx,
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientId:    activateResp.Msg.ClientId,
+			Synchronous: true,
+		}),
+	)
+	assert.NoError(t, err)
+
+	clientInfoAfter, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	assert.Equal(t, database.ClientDeactivated, clientInfoAfter.Status)
+	if assert.NotNil(t, clientInfoAfter.Documents[docID]) {
+		assert.Equal(t, database.DocumentDetached, clientInfoAfter.Documents[docID].Status)
+	}
+
+	// Detach resets the client's checkpoint, so assert ClientSeq continuity on
+	// the persisted server-built presence-clear change instead.
+	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docRefKey)
+	assert.NoError(t, err)
+	changes, err := be.DB.FindChangeInfosBetweenServerSeqs(ctx, docRefKey, 1, docInfo.ServerSeq)
+	assert.NoError(t, err)
+	var latestByActor *database.ChangeInfo
+	for _, info := range changes {
+		if info.ActorID == types.ID(actorID.String()) {
+			latestByActor = info
+		}
+	}
+	if assert.NotNil(t, latestByActor) {
+		assert.Equal(t, cpBeforeDeactivate.ClientSeq+1, latestByActor.ClientSeq)
+	}
+}
+
 // RunAdminGetChannelsTest runs the GetChannels test in admin.
 func RunAdminGetChannelsTest(
 	t *testing.T,

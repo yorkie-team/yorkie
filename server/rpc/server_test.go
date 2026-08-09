@@ -141,6 +141,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		testcases.RunDeactivateClientWithAttachingDocumentTest(t, testClient, testBackend)
 	})
 
+	t.Run("deactivate with attached document test", func(t *testing.T) {
+		testcases.RunDeactivateClientWithAttachedDocumentTest(t, testClient, testBackend)
+	})
+
 	t.Run("attach/detach document test", func(t *testing.T) {
 		testcases.RunAttachAndDetachDocumentTest(t, testClient)
 	})
