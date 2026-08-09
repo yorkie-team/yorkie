@@ -109,13 +109,10 @@ func PushPull(
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
-	// 01. Validate the incoming request before any database mutation.
-	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
-	if err != nil {
-		be.Metrics.AddPushPullErrors(hostname, project, 1)
-		return nil, err
-	}
-	if err := validatePushPullRequest(clientInfo.Checkpoint(docKey.DocID), reqPack, docInfo); err != nil {
+	// 01. Validate ClientSeq continuity before any database mutation.
+	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
+	// run after epoch mismatch handling, so they live in pushPack.
+	if err := validateClientSeqContinuity(clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
@@ -203,17 +200,7 @@ func PushPull(
 	return resPack, nil
 }
 
-func validatePushPullRequest(
-	cpBeforePush change.Checkpoint,
-	reqPack *change.Pack,
-	docInfo *database.DocInfo,
-) error {
-	if reqPack.Checkpoint.ServerSeq > docInfo.ServerSeq {
-		return connect.NewError(
-			connect.CodeInvalidArgument,
-			errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
-		)
-	}
+func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {
 	// The clientSeq of the changes in the request pack must be continuous.
 	expectedClientSeq := cpBeforePush.ClientSeq + 1
 	for _, cn := range reqPack.Changes {
@@ -268,23 +255,26 @@ func pushPack(
 	// because FindDocInfoByRefKey populates the docCache. Without the lock,
 	// a concurrent goroutine's stale MongoDB read can overwrite a fresher
 	// cache entry, causing ErrConflictOnUpdate in CreateChangeInfos.
+	// ServerSeq validation also belongs here so it observes the same locked
+	// DocInfo snapshot and never runs ahead of epoch mismatch handling.
 	if len(pushables) > 0 || reqPack.IsRemoved {
 		locker := be.Lockers.Locker(DocPushKey(docKey))
 		defer locker.Unlock()
-	}
 
-	// 03. Discard stale-epoch changes before storing them.
-	// pushPack runs before preparePack. Without this check, stale-epoch
-	// changes would be inserted into the in-memory changeCache, polluting
-	// it with operations that reference pre-compaction CRDT node IDs.
-	// preparePack will return ErrEpochMismatch to the client downstream.
-	if len(pushables) > 0 {
-		if clientDocInfo := clientInfo.Documents[docKey.DocID]; clientDocInfo != nil {
-			currentDocInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
-			if err != nil {
-				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-			}
-			if clientDocInfo.Epoch != currentDocInfo.Epoch {
+		currentDocInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+		if err != nil {
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		}
+
+		clientDocInfo := clientInfo.Documents[docKey.DocID]
+		epochMismatch := clientDocInfo != nil && clientDocInfo.Epoch != currentDocInfo.Epoch
+		if epochMismatch {
+			// 03. Discard stale-epoch changes before storing them.
+			// pushPack runs before preparePack. Without this check, stale-epoch
+			// changes would be inserted into the in-memory changeCache, polluting
+			// it with operations that reference pre-compaction CRDT node IDs.
+			// preparePack will return ErrEpochMismatch to the client downstream.
+			if len(pushables) > 0 {
 				logging.From(ctx).Warnf(
 					"discarding %d changes from stale epoch: client(%d) != doc(%d)",
 					len(pushables),
@@ -293,6 +283,11 @@ func pushPack(
 				)
 				pushables = nil
 			}
+		} else if reqPack.Checkpoint.ServerSeq > currentDocInfo.ServerSeq {
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, connect.NewError(
+				connect.CodeInvalidArgument,
+				errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
+			)
 		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
