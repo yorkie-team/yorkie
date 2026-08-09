@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func FuzzFromChangePack(f *testing.F) {
@@ -66,6 +67,30 @@ func FuzzValueFromBytes(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, rawValueType byte, value []byte) {
 		_, _ = crdt.ValueFromBytes(crdt.ValueType(rawValueType), value)
+	})
+}
+
+func FuzzBytesToObject(f *testing.F) {
+	if seed, err := converter.ObjectToBytes(
+		crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket),
+	); err == nil {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = converter.BytesToObject(data)
+	})
+}
+
+func FuzzBytesToArray(f *testing.F) {
+	if seed, err := converter.ArrayToBytes(
+		crdt.NewArray(crdt.NewRGATreeList(), time.InitialTicket),
+	); err == nil {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = converter.BytesToArray(data)
 	})
 }
 

@@ -347,6 +347,7 @@ func (t *Text) Edit(
 func (t *Text) Restore(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
+	from *RGATreeSplitNodePos,
 ) (untombstoned, recreated []*RGATreeSplitNode[*TextValue], stillTombstoned []GCPair) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
@@ -361,7 +362,10 @@ func (t *Text) Restore(
 			value:     NewTextValue(s.Content, attrs),
 		})
 	}
-	return t.rgaTreeSplit.restore(internal)
+	// `from` is the op's left boundary; it anchors a fragment whose whole
+	// insertion was purged (fallback rung in findRestoreAnchor). Identity
+	// (createdAt+offset) still addresses every surviving piece first.
+	return t.rgaTreeSplit.restore(internal, from, executedAt)
 }
 
 // Retombstone re-removes a previously restored range under its original
