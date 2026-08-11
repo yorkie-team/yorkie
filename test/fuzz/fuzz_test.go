@@ -26,10 +26,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -123,6 +125,37 @@ func FuzzBytesToSnapshot(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _, _ = converter.BytesToSnapshot(data)
+	})
+}
+
+func FuzzVersionVectorFromBytes(f *testing.F) {
+	if seed, err := time.NewVersionVector().Bytes(); err == nil {
+		f.Add(seed)
+	}
+	f.Add([]byte{})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = time.VersionVectorFromBytes(data)
+	})
+}
+
+func FuzzActorIDFromHex(f *testing.F) {
+	f.Add("")
+	f.Add("000000000000000000000000")
+	f.Add("not-a-hex-string")
+
+	f.Fuzz(func(t *testing.T, str string) {
+		_, _ = time.ActorIDFromHex(str)
+	})
+}
+
+func FuzzParseKeyPath(f *testing.F) {
+	f.Add("a/b/c")
+	f.Add("")
+	f.Add("a//b")
+
+	f.Fuzz(func(t *testing.T, str string) {
+		_, _ = channel.ParseKeyPath(key.Key(str))
 	})
 }
 
