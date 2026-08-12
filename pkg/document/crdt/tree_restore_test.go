@@ -75,7 +75,7 @@ func TestTreeRestoreUnremove(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 
-	untombstoned, recreated, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+	untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
 	assert.NoError(t, err)
 	assert.Len(t, untombstoned, 1, "the tombstone is revived in place")
 	assert.Empty(t, recreated, "nothing was purged, so nothing is recreated")
@@ -96,12 +96,12 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
-	pairs := tree.Retombstone(spans, helper.TimeT(ctx))
+	pairs, _, _ := tree.Retombstone(spans, helper.TimeT(ctx))
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
 	assert.Equal(t, "<r></r>", tree.ToXML())
 
 	// Restore (undo): the same identities come back, parent before child.
-	untombstoned, recreated, err := tree.Restore(spans)
+	untombstoned, recreated, _, _, err := tree.Restore(spans)
 	assert.NoError(t, err)
 	assert.Len(t, untombstoned, 2)
 	assert.Empty(t, recreated)
@@ -174,7 +174,7 @@ func TestTreeRestoreParentGoneSkip(t *testing.T) {
 		ParentID: ghostParent,
 	}
 
-	untombstoned, recreated, err := tree.Restore([]*crdt.TreeRestoreSpan{orphan})
+	untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{orphan})
 	assert.NoError(t, err)
 	assert.Empty(t, untombstoned)
 	assert.Empty(t, recreated, "a node with no surviving parent is skipped (B1)")
@@ -328,7 +328,7 @@ func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, "<r></r>", tree.ToXML())
 
-			_, _, err = tree.Restore(spans)
+			_, _, _, _, err = tree.Restore(spans)
 			assert.NoError(t, err)
 
 			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
@@ -458,7 +458,7 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 		assert.NoError(t, err)
 	}
 	applyU := func(tree *crdt.Tree, span *crdt.TreeRestoreSpan) {
-		_, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		_, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
 		assert.NoError(t, err)
 	}
 	applyX := func(tree *crdt.Tree, ctx *change.Context) {
