@@ -887,6 +887,16 @@ func (t *Tree) Purge(child GCChild) error {
 func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 	untombstoned, recreated []*TreeNode, pairs []GCPair, diff resource.DataSize, err error,
 ) {
+	// Splitting a removed straddler buffers born-removed remainders as pending
+	// GC pairs (see TreeNode.Split). Drain them into the returned pairs on EVERY
+	// path — including a mid-restore error — so they can never linger to
+	// contaminate the next operation's drain. The caller registers these BEFORE
+	// un-registering the un-tombstoned targets, so a split-born target is walked
+	// gc->live correctly (mirrors the Text path).
+	defer func() {
+		pairs = append(pairs, t.drainPendingGCPairs()...)
+	}()
+
 	for _, span := range spans {
 		if !span.IsText {
 			node := t.findFloorNode(span.ID)
@@ -899,7 +909,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 			}
 			created, cErr := t.recreateFromSpan(span, span.ID.Offset, span.Length)
 			if cErr != nil {
-				return nil, nil, nil, resource.DataSize{}, cErr
+				return nil, nil, nil, diff, cErr
 			}
 			if created != nil {
 				recreated = append(recreated, created)
@@ -926,7 +936,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 				overlapEnd := min(pieceEnd, end)
 				target, iErr := t.isolateTextRange(piece, cursor, overlapEnd, &diff)
 				if iErr != nil {
-					return nil, nil, nil, resource.DataSize{}, iErr
+					return nil, nil, nil, diff, iErr
 				}
 				if target.IsRemoved() {
 					target.unremove()
@@ -943,7 +953,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 				}
 				created, cErr := t.recreateFromSpan(span, cursor, gapEnd-cursor)
 				if cErr != nil {
-					return nil, nil, nil, resource.DataSize{}, cErr
+					return nil, nil, nil, diff, cErr
 				}
 				if created != nil {
 					recreated = append(recreated, created)
@@ -953,12 +963,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 		}
 	}
 
-	// Splitting a removed straddler buffers born-removed remainders as pending
-	// GC pairs (see TreeNode.Split). The caller registers these BEFORE
-	// un-registering the un-tombstoned targets, so a split-born target is
-	// walked gc->live correctly (mirrors the Text path).
-	pairs = t.drainPendingGCPairs()
-	return untombstoned, recreated, pairs, diff, nil
+	return untombstoned, recreated, nil, diff, nil
 }
 
 // isolateTextRange splits piece so that a node exactly covering the absolute
@@ -981,6 +986,9 @@ func (t *Tree) isolateTextRange(
 		diff.Add(d)
 		// Split's right half is registered under offset `from`; pick it up.
 		node = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: from})
+		if node == nil {
+			return nil, ErrNodeNotFound
+		}
 	}
 	if to < node.id.Offset+node.Length() {
 		d, err := node.Split(t, to-node.id.Offset, nil, nil)

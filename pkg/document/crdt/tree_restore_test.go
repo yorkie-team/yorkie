@@ -96,7 +96,8 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
-	pairs, _, _ := tree.Retombstone(spans, helper.TimeT(ctx))
+	pairs, _, rErr := tree.Retombstone(spans, helper.TimeT(ctx))
+	assert.NoError(t, rErr)
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
 	assert.Equal(t, "<r></r>", tree.ToXML())
 
