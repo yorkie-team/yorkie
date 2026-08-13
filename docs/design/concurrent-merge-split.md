@@ -440,8 +440,79 @@ both directions. Ranges that genuinely cover the merged content
 (anchored outside the merged parent) are unaffected.
 
 A range end anchored after a moved child (a non-left-most position in
-the merged parent) does not go through the §1.1 redirect and can still
-diverge; this remains a follow-up.
+the merged parent) does not go through the §1.1 redirect; §9.4 covers
+it with a per-node filter.
+
+### §9.4 Per-Node Filter at Moved Anchors
+
+A range end anchored after a moved child resolves through the moved
+child directly into the merge target. Nodes that sit between the
+merge-source tombstone and the moved children — concurrent inserts
+anchored at the tombstone — then fall inside the traversal, although
+the styling client saw them outside its range, after the then-live
+parent. The version-vector check in `canStyle` does not help: the
+interloper may be the styling client's own insert, causally known but
+positionally excluded.
+
+Two mechanisms close this:
+
+1. **Intended-parent stamp.** An insert whose position was declared
+   inside a merged-away parent physically lands in the merge target.
+   `intendedMergeParent` stamps such content with
+   `MergedFrom = declared parent` (merge ticket taken from a moved
+   sibling), making it indistinguishable from merge-moved children —
+   which is what it logically is. This also aligns merge-delete
+   propagation: when the declared parent is later fully deleted, the
+   insert dies with it, matching the replica that applied the insert
+   into the live parent and cascaded the delete.
+2. **Interloper filter.** `mergedAnchorInterloperGuard` activates when
+   the range-end position's declared parent is a merged-away tombstone
+   sitting directly under the merge target and the merge is unknown to
+   the styling client's version vector. During the style traversal it
+   skips element nodes under the target, positioned after the
+   tombstone, that carry **no merge stamp at all** — only such nodes
+   (concurrent inserts anchored at the tombstone) are positively
+   identifiable as interlopers. Any node with a `MergedFrom` fails
+   open: a child that reached the declared parent via an earlier merge
+   keeps the *original* source in `MergedFrom` (first-move stamp rule,
+   Fix 20), and path compression on `mergedInto` makes "was it inside
+   the declared parent" unrecoverable afterwards, so stamped nodes
+   fall back to pre-§9.4 behavior rather than risk skipping a node the
+   styler legitimately covered. Each traversed node is judged by its
+   highest ancestor directly under the target, so an interloper's
+   descendants are skipped with it. Moved children and stamped inserts
+   pass the filter; nodes before the tombstone are untouched.
+
+`SplitElement` copies `MergedFrom`/`MergedAt` to the split product
+(as `SplitText` always has), so a split half of a merge-moved element
+carries the same provenance under either merge-then-split or
+split-then-merge application order and is judged identically by the
+filter.
+
+**Known limitations** (tracked as follow-ups):
+
+- A range *start* anchored after a moved child shrinks the traversal
+  on the applying replica instead of growing it (the interlopers sit
+  before the start), which a skip filter cannot compensate; likewise
+  an edit-only divergence independent of styling.
+- A node moved into the target by an *earlier, different* merge that
+  the styler knew (and therefore saw outside its range) also fails
+  open and is styled on the applying replica — the pre-§9.4 behavior;
+  distinguishing it from an earlier merge *into* the declared parent
+  would require provenance that path compression discards.
+- A relay-only merged parent (one whose children all arrived via an
+  earlier merge and keep the older source's `MergedFrom`) never gets
+  `mergedInto` set, so neither the stamp nor the filter activates in
+  that shape.
+- The stamp's `MergedAt` fallback reads the declared parent's
+  `removedAt` when no moved sibling survives to donate the immutable
+  merge ticket; `removedAt` is LWW-mutable, so the fallback can
+  disagree across replicas in GC-timing corners.
+- Stamped inserts participate in `propagateMergeDeletes` and in the
+  §1.1 redirect boundary scan; the delete cascade is intended
+  (declared-parent deletion should take the insert with it), but both
+  interactions widen `MergedFrom`'s original "physically moved"
+  meaning.
 
 ## Key Design Decisions
 
@@ -521,3 +592,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 19 | §6.1 | Move tombstones with merge to preserve RGA anchors |
 | Fix 20 | §6.3 | Flatten chained merge (P→Q→R) for redirect + snapshot consistency |
 | Fix 21 | §9.3 | Style range boundary right after merge-source tombstone |
+| Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
