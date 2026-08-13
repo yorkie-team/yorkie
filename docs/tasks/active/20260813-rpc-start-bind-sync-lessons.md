@@ -33,6 +33,15 @@ packs' tests silently running against the other package's server. Errors
 that are only logged do not just hide themselves — they let unrelated
 bugs live behind them.
 
+## Replacing a stdlib wrapper means inheriting what it did for you
+
+Swapping `ListenAndServeTLS` for `ServeTLS` looked like a pure "hoist
+the listen out" refactor. It was not: `ListenAndServeTLS` carries a
+`defer ln.Close()` that `ServeTLS` does not, precisely because
+`ServeTLS` can return before `Serve` takes ownership. Read the wrapper
+being replaced line by line — the difference between it and the inner
+call *is* the thing you now have to do yourself.
+
 ## Don't take a timing race's local pass as evidence
 
 The "port accepts connections immediately after Start" assertion passed

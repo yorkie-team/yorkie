@@ -68,6 +68,26 @@ so ports below `RPCPort` stay free for fixed-port packages.
 - `test/helper/helper.go` — `PacksRPCPort`
 - `server/packs/pushpull_test.go` — uses `PacksRPCPort`
 
+## Review round 1 (CodeRabbit)
+
+Both findings landed on this commit and both were valid:
+
+- **`ServeTLS` leaks the listener.** `Serve` closes the listener itself
+  (`net/http/server.go` `defer l.Close()`), but `ServeTLS` returns early
+  on HTTP/2 setup or `LoadX509KeyPair` failure, before it ever reaches
+  `Serve`. `ListenAndServeTLS` — the call this commit replaced — has a
+  compensating `defer ln.Close()`, so dropping it was a regression: a
+  bad key pair would leave the port bound, so clients would connect and
+  hang instead of being refused. Added `defer lis.Close()` to the TLS
+  branch, plus a test that a bogus key pair releases the port.
+- **`assert` in test setup.** `rpc.NewServer` returns `nil` on error and
+  `net.Dial`/`net.Listen` return nil values, so a setup failure panicked
+  the test binary instead of failing the subtest — which would have
+  destroyed the diagnostic value of the very test meant to catch a
+  regression here. Setup calls now use `require`.
+
+## Notes
+
 `server/profiling/server.go` has the same goroutine-wrapped
 `ListenAndServe`. It is left alone here: nothing dials the profiling
 port right after `Start`, and changing it would turn a currently silent

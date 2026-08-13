@@ -26,9 +26,11 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/admin"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -252,20 +254,20 @@ func TestServerStart(t *testing.T) {
 			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
 			IdleTimeout:       helper.RPCIdleTimeout,
 		}, testBackend)
-		assert.NoError(t, err)
-		assert.NoError(t, svr.Start())
+		require.NoError(t, err)
+		require.NoError(t, svr.Start())
 		defer svr.Shutdown(true)
 
 		// NOTE(hackerwins): Start should not return until the port is bound,
 		// so a client dialing right after it must not be refused.
 		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", helper.RPCPort+10))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NoError(t, conn.Close())
 	})
 
 	t.Run("port already in use test", func(t *testing.T) {
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", helper.RPCPort+11))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer func() { assert.NoError(t, lis.Close()) }()
 
 		svr, err := rpc.NewServer(&rpc.Config{
@@ -273,8 +275,32 @@ func TestServerStart(t *testing.T) {
 			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
 			IdleTimeout:       helper.RPCIdleTimeout,
 		}, testBackend)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Error(t, svr.Start())
+	})
+
+	t.Run("listener released when serving fails test", func(t *testing.T) {
+		// NOTE(hackerwins): server_test.go is a readable file but not a key
+		// pair, so ServeTLS fails while loading it, before it reaches Serve.
+		svr, err := rpc.NewServer(&rpc.Config{
+			Port:              helper.RPCPort + 12,
+			CertFile:          "server_test.go",
+			KeyFile:           "server_test.go",
+			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+			IdleTimeout:       helper.RPCIdleTimeout,
+		}, testBackend)
+		require.NoError(t, err)
+		require.NoError(t, svr.Start())
+		defer svr.Shutdown(true)
+
+		// The port must not stay bound once serving has given up.
+		assert.Eventually(t, func() bool {
+			lis, err := net.Listen("tcp", fmt.Sprintf(":%d", helper.RPCPort+12))
+			if err != nil {
+				return false
+			}
+			return lis.Close() == nil
+		}, 3*time.Second, 10*time.Millisecond)
 	})
 }
 

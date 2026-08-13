@@ -153,6 +153,12 @@ func (s *Server) listenAndServe() error {
 		logging.DefaultLogger().Infof(fmt.Sprintf("serving RPC on %d", s.conf.Port))
 
 		if s.conf.CertFile != "" && s.conf.KeyFile != "" {
+			// NOTE(hackerwins): Serve closes the listener on its own, but
+			// ServeTLS can bail out on HTTP/2 setup or key loading before it
+			// reaches Serve. Close here so a failed start does not leave the
+			// port bound, accepting connections nobody serves.
+			defer func() { _ = lis.Close() }()
+
 			if err := s.httpServer.ServeTLS(lis, s.conf.CertFile, s.conf.KeyFile); !errors.Is(err, http.ErrServerClosed) {
 				logging.DefaultLogger().Errorf("HTTP server ServeTLS: %v", err)
 			}
