@@ -56,7 +56,7 @@ var (
 
 var (
 	testRPCServer *rpc.Server
-	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
+	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.PacksRPCPort)
 	testClient    v1connect.YorkieServiceClient
 	testBackend   *backend.Backend
 	testMockDB    *MockDB
@@ -115,7 +115,7 @@ func TestMain(m *testing.M) {
 
 	testRPCServer, err = rpc.NewServer(
 		&rpc.Config{
-			Port:              helper.RPCPort,
+			Port:              helper.PacksRPCPort,
 			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
 			IdleTimeout:       helper.RPCIdleTimeout,
 		}, testBackend,

@@ -71,6 +71,12 @@ var (
 	RPCIdleTimeout       = server.DefaultRPCIdleTimeout.String()
 	ProfilingPort        = 11102
 
+	// PacksRPCPort is the port of the RPC server owned by the packs test
+	// package. Test packages run as concurrent processes, so a package that
+	// binds a fixed port needs one of its own. TestConfig hands out
+	// RPCPort + 100n, so ports below RPCPort stay free for this.
+	PacksRPCPort = 11001
+
 	MembershipLeaseDuration   = "15s"
 	MembershipRenewalInterval = "5s"
 

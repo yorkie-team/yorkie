@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"testing"
@@ -241,6 +242,39 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 	t.Run("admin get channels multi path test", func(t *testing.T) {
 		testcases.RunAdminGetChannelsMultiPathTest(t, testClient, testAdminClient)
+	})
+}
+
+func TestServerStart(t *testing.T) {
+	t.Run("listening before start returns test", func(t *testing.T) {
+		svr, err := rpc.NewServer(&rpc.Config{
+			Port:              helper.RPCPort + 10,
+			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+			IdleTimeout:       helper.RPCIdleTimeout,
+		}, testBackend)
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
+		defer svr.Shutdown(true)
+
+		// NOTE(hackerwins): Start should not return until the port is bound,
+		// so a client dialing right after it must not be refused.
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", helper.RPCPort+10))
+		assert.NoError(t, err)
+		assert.NoError(t, conn.Close())
+	})
+
+	t.Run("port already in use test", func(t *testing.T) {
+		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", helper.RPCPort+11))
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, lis.Close()) }()
+
+		svr, err := rpc.NewServer(&rpc.Config{
+			Port:              helper.RPCPort + 11,
+			ReadHeaderTimeout: helper.RPCReadHeaderTimeout,
+			IdleTimeout:       helper.RPCIdleTimeout,
+		}, testBackend)
+		assert.NoError(t, err)
+		assert.Error(t, svr.Start())
 	})
 }
 
