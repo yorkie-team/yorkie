@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"time"
 
@@ -139,18 +140,33 @@ func (s *Server) Shutdown(graceful bool) {
 }
 
 func (s *Server) listenAndServe() error {
+	// NOTE(hackerwins): The listener is opened here instead of inside the
+	// goroutine below. Otherwise Start would return before the port is bound,
+	// so a bind failure would be silently swallowed and a client dialing right
+	// after Start could be refused.
+	lis, err := net.Listen("tcp", s.httpServer.Addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", s.httpServer.Addr, err)
+	}
+
 	go func() {
 		logging.DefaultLogger().Infof(fmt.Sprintf("serving RPC on %d", s.conf.Port))
 
 		if s.conf.CertFile != "" && s.conf.KeyFile != "" {
-			if err := s.httpServer.ListenAndServeTLS(s.conf.CertFile, s.conf.KeyFile); !errors.Is(err, http.ErrServerClosed) {
-				logging.DefaultLogger().Errorf("HTTP server ListenAndServeTLS: %v", err)
+			// NOTE(hackerwins): Serve closes the listener on its own, but
+			// ServeTLS can bail out on HTTP/2 setup or key loading before it
+			// reaches Serve. Close here so a failed start does not leave the
+			// port bound, accepting connections nobody serves.
+			defer func() { _ = lis.Close() }()
+
+			if err := s.httpServer.ServeTLS(lis, s.conf.CertFile, s.conf.KeyFile); !errors.Is(err, http.ErrServerClosed) {
+				logging.DefaultLogger().Errorf("HTTP server ServeTLS: %v", err)
 			}
 			return
 		}
 
-		if err := s.httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
+		if err := s.httpServer.Serve(lis); !errors.Is(err, http.ErrServerClosed) {
+			logging.DefaultLogger().Errorf("HTTP server Serve: %v", err)
 		}
 	}()
 	return nil

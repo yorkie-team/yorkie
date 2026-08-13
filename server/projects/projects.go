@@ -19,9 +19,11 @@ package projects
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/lithammer/shortuuid/v4"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/authz"
@@ -136,74 +138,88 @@ func GetProjectStats(
 	from time.Time,
 	to time.Time,
 ) (*types.ProjectStats, error) {
-	activeUsers, err := be.Warehouse.GetActiveUsers(id, from, to)
-	if err != nil {
-		return nil, err
-	}
+	// NOTE(raararaara): The warehouse (StarRocks) metrics, the cached counts
+	// (MongoDB), and the live channel count (cluster RPC) are independent reads.
+	// They are fetched concurrently so the dashboard entry latency is bounded by
+	// the slowest single read instead of the sum of all reads. errgroup cancels
+	// the derived context on the first error, so a slow query is not left running
+	// after the client has already given up.
+	var (
+		activeUsers                 []types.MetricPoint
+		activeUsersCount            int
+		activeDocuments             []types.MetricPoint
+		activeDocumentsCount        int
+		activeClients               []types.MetricPoint
+		activeClientsCount          int
+		activeChannels              []types.MetricPoint
+		activeChannelsCount         int
+		sessions                    []types.MetricPoint
+		sessionsCount               int
+		peakSessionsPerChannel      []types.MetricPoint
+		peakSessionsPerChannelCount int
+		counts                      *database.ProjectStatsCounts
+		channelsCount               int
+	)
 
-	activeUsersCount, err := be.Warehouse.GetActiveUsersCount(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	activeDocuments, err := be.Warehouse.GetActiveDocuments(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	activeDocumentsCount, err := be.Warehouse.GetActiveDocumentsCount(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	activeClients, err := be.Warehouse.GetActiveClients(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	activeClientsCount, err := be.Warehouse.GetActiveClientsCount(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	activeChannels, err := be.Warehouse.GetActiveChannels(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	activeChannelsCount, err := be.Warehouse.GetActiveChannelsCount(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	sessions, err := be.Warehouse.GetSessions(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	sessionsCount, err := be.Warehouse.GetSessionsCount(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	peakSessionsPerChannel, err := be.Warehouse.GetPeakSessionsPerChannel(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	peakSessionsPerChannelCount, err := be.Warehouse.GetPeakSessionsPerChannelCount(id, from, to)
-	if err != nil {
-		return nil, err
-	}
-
-	counts, err := be.DB.GetProjectStatsCounts(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	channelsCount, err := be.BroadcastChannelCount(ctx, id)
-	if err != nil {
-		return nil, err
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() (err error) {
+		activeUsers, err = be.Warehouse.GetActiveUsers(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeUsersCount, err = be.Warehouse.GetActiveUsersCount(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeDocuments, err = be.Warehouse.GetActiveDocuments(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeDocumentsCount, err = be.Warehouse.GetActiveDocumentsCount(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeClients, err = be.Warehouse.GetActiveClients(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeClientsCount, err = be.Warehouse.GetActiveClientsCount(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeChannels, err = be.Warehouse.GetActiveChannels(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		activeChannelsCount, err = be.Warehouse.GetActiveChannelsCount(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		sessions, err = be.Warehouse.GetSessions(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		sessionsCount, err = be.Warehouse.GetSessionsCount(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		peakSessionsPerChannel, err = be.Warehouse.GetPeakSessionsPerChannel(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		peakSessionsPerChannelCount, err = be.Warehouse.GetPeakSessionsPerChannelCount(ctx, id, from, to)
+		return err
+	})
+	g.Go(func() (err error) {
+		counts, err = be.DB.GetProjectStatsCounts(ctx, id)
+		return err
+	})
+	g.Go(func() (err error) {
+		channelsCount, err = be.BroadcastChannelCount(ctx, id)
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("collect project stats: %w", err)
 	}
 
 	return &types.ProjectStats{

@@ -18,6 +18,7 @@
 package warehouse
 
 import (
+	"context"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -34,40 +35,88 @@ type Warehouse interface {
 	Close() error
 
 	// GetActiveUsers returns the active users of the given project.
-	GetActiveUsers(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+	GetActiveUsers(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) ([]types.MetricPoint, error)
 
 	// GetActiveUsersCount returns the active users count of the given project.
-	GetActiveUsersCount(id types.ID, from, to time.Time) (int, error)
+	GetActiveUsersCount(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) (int, error)
 
 	// GetActiveDocuments returns the active documents of the given project.
-	GetActiveDocuments(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+	GetActiveDocuments(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) ([]types.MetricPoint, error)
 
 	// GetActiveDocumentsCount returns the active documents count of the given project.
-	GetActiveDocumentsCount(id types.ID, from, to time.Time) (int, error)
+	GetActiveDocumentsCount(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) (int, error)
 
 	// GetActiveClients returns the active clients of the given project.
-	GetActiveClients(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+	GetActiveClients(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) ([]types.MetricPoint, error)
 
 	// GetActiveClientsCount returns the active clients count of the given project.
-	GetActiveClientsCount(id types.ID, from, to time.Time) (int, error)
+	GetActiveClientsCount(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) (int, error)
 
 	// GetActiveChannels returns the active channels of the given project.
-	GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+	GetActiveChannels(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) ([]types.MetricPoint, error)
 
 	// GetActiveChannelsCount returns the active channels count of the given project.
-	GetActiveChannelsCount(id types.ID, from, to time.Time) (int, error)
+	GetActiveChannelsCount(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) (int, error)
 
 	// GetSessions returns the sessions of the given project.
-	GetSessions(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+	GetSessions(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) ([]types.MetricPoint, error)
 
 	// GetSessionsCount returns the sessions count of the given project.
-	GetSessionsCount(id types.ID, from, to time.Time) (int, error)
+	GetSessionsCount(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) (int, error)
 
 	// GetPeakSessionsPerChannel returns the peak sessions per channel of the given project.
-	GetPeakSessionsPerChannel(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+	GetPeakSessionsPerChannel(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) ([]types.MetricPoint, error)
 
 	// GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
-	GetPeakSessionsPerChannelCount(id types.ID, from, to time.Time) (int, error)
+	GetPeakSessionsPerChannelCount(
+		ctx context.Context,
+		id types.ID,
+		from, to time.Time,
+	) (int, error)
 }
 
 // Ensure creates a warehouse instance.

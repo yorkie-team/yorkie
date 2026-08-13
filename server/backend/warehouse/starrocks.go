@@ -17,6 +17,7 @@
 package warehouse
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -50,7 +51,11 @@ func (r *StarRocks) dial(dsn string) error {
 }
 
 // GetActiveUsers returns the number of active users in the given time range.
-func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (r *StarRocks) GetActiveUsers(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return nil, err
 	}
@@ -61,7 +66,7 @@ func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.Met
 	query := fmt.Sprintf(`
 	SELECT 
 	    DATE(timestamp) AS event_date, 
-	    COUNT(DISTINCT user_id) AS active_users
+	    APPROX_COUNT_DISTINCT(user_id) AS active_users
 	FROM 
 	    user_events
 	WHERE
@@ -74,7 +79,7 @@ func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.Met
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	metrics, err := r.queryMetrics(query)
+	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active users: %w", err)
 	}
@@ -82,7 +87,11 @@ func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.Met
 }
 
 // GetActiveUsersCount returns the total number of active users in the given time range.
-func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, error) {
+func (r *StarRocks) GetActiveUsersCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return 0, err
 	}
@@ -92,7 +101,7 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT 
-	    COUNT(DISTINCT user_id) AS active_users
+	    APPROX_COUNT_DISTINCT(user_id) AS active_users
 	FROM 
 	    user_events
 	WHERE
@@ -101,7 +110,7 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 		AND timestamp < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	count, err := r.queryCount(query)
+	count, err := r.queryCount(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("get active users count: %w", err)
 	}
@@ -109,7 +118,11 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 }
 
 // GetActiveDocuments returns the number of active documents in the given time range.
-func (r *StarRocks) GetActiveDocuments(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (r *StarRocks) GetActiveDocuments(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return nil, err
 	}
@@ -120,7 +133,7 @@ func (r *StarRocks) GetActiveDocuments(id types.ID, from, to time.Time) ([]types
 	query := fmt.Sprintf(`
 	SELECT 
 	    DATE(timestamp) AS event_date, 
-	    COUNT(DISTINCT document_key) AS active_documents
+	    APPROX_COUNT_DISTINCT(document_key) AS active_documents
 	FROM 
 	    document_events
 	WHERE
@@ -133,7 +146,7 @@ func (r *StarRocks) GetActiveDocuments(id types.ID, from, to time.Time) ([]types
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	metrics, err := r.queryMetrics(query)
+	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active documents: %w", err)
 	}
@@ -141,7 +154,11 @@ func (r *StarRocks) GetActiveDocuments(id types.ID, from, to time.Time) ([]types
 }
 
 // GetActiveDocumentsCount returns the total number of active documents in the given time range.
-func (r *StarRocks) GetActiveDocumentsCount(id types.ID, from, to time.Time) (int, error) {
+func (r *StarRocks) GetActiveDocumentsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return 0, err
 	}
@@ -151,7 +168,7 @@ func (r *StarRocks) GetActiveDocumentsCount(id types.ID, from, to time.Time) (in
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT 
-		COUNT(DISTINCT document_key) AS active_documents
+		APPROX_COUNT_DISTINCT(document_key) AS active_documents
 	FROM 
 		document_events
 	WHERE
@@ -160,7 +177,7 @@ func (r *StarRocks) GetActiveDocumentsCount(id types.ID, from, to time.Time) (in
 		AND timestamp < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	count, err := r.queryCount(query)
+	count, err := r.queryCount(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("get active documents count: %w", err)
 	}
@@ -168,7 +185,11 @@ func (r *StarRocks) GetActiveDocumentsCount(id types.ID, from, to time.Time) (in
 }
 
 // GetActiveClients returns the number of active clients in the given time range.
-func (r *StarRocks) GetActiveClients(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (r *StarRocks) GetActiveClients(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return nil, err
 	}
@@ -179,7 +200,7 @@ func (r *StarRocks) GetActiveClients(id types.ID, from, to time.Time) ([]types.M
 	query := fmt.Sprintf(`
 	SELECT
 	    DATE(timestamp) AS event_date,
-	    COUNT(DISTINCT client_id) AS active_clients
+	    APPROX_COUNT_DISTINCT(client_id) AS active_clients
 	FROM
 	    client_events
 	WHERE
@@ -193,7 +214,7 @@ func (r *StarRocks) GetActiveClients(id types.ID, from, to time.Time) ([]types.M
 	    event_date ASC;
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	metrics, err := r.queryMetrics(query)
+	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active clients: %w", err)
 	}
@@ -201,7 +222,11 @@ func (r *StarRocks) GetActiveClients(id types.ID, from, to time.Time) ([]types.M
 }
 
 // GetActiveClientsCount returns the total number of active clients in the given time range.
-func (r *StarRocks) GetActiveClientsCount(id types.ID, from, to time.Time) (int, error) {
+func (r *StarRocks) GetActiveClientsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return 0, err
 	}
@@ -211,7 +236,7 @@ func (r *StarRocks) GetActiveClientsCount(id types.ID, from, to time.Time) (int,
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT
-		COUNT(DISTINCT client_id) AS active_clients
+		APPROX_COUNT_DISTINCT(client_id) AS active_clients
 	FROM
 		client_events
 	WHERE
@@ -221,7 +246,7 @@ func (r *StarRocks) GetActiveClientsCount(id types.ID, from, to time.Time) (int,
 		AND timestamp < '%s';
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	count, err := r.queryCount(query)
+	count, err := r.queryCount(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("get active clients count: %w", err)
 	}
@@ -229,7 +254,11 @@ func (r *StarRocks) GetActiveClientsCount(id types.ID, from, to time.Time) (int,
 }
 
 // GetActiveChannels returns the active channels of the given project.
-func (r *StarRocks) GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (r *StarRocks) GetActiveChannels(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return nil, err
 	}
@@ -240,7 +269,7 @@ func (r *StarRocks) GetActiveChannels(id types.ID, from, to time.Time) ([]types.
 	query := fmt.Sprintf(`
 	SELECT 
 	    DATE(timestamp) AS event_date, 
-	    COUNT(DISTINCT channel_key) AS channels
+	    APPROX_COUNT_DISTINCT(channel_key) AS channels
 	FROM 
 	    channel_events
 	WHERE
@@ -253,7 +282,7 @@ func (r *StarRocks) GetActiveChannels(id types.ID, from, to time.Time) ([]types.
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	metrics, err := r.queryMetrics(query)
+	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active channels: %w", err)
 	}
@@ -261,7 +290,11 @@ func (r *StarRocks) GetActiveChannels(id types.ID, from, to time.Time) ([]types.
 }
 
 // GetActiveChannelsCount returns the active channels count of the given project.
-func (r *StarRocks) GetActiveChannelsCount(id types.ID, from, to time.Time) (int, error) {
+func (r *StarRocks) GetActiveChannelsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return 0, err
 	}
@@ -271,7 +304,7 @@ func (r *StarRocks) GetActiveChannelsCount(id types.ID, from, to time.Time) (int
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT 
-	    COUNT(DISTINCT channel_key) AS channels
+	    APPROX_COUNT_DISTINCT(channel_key) AS channels
 	FROM 
 	    channel_events
 	WHERE
@@ -280,7 +313,7 @@ func (r *StarRocks) GetActiveChannelsCount(id types.ID, from, to time.Time) (int
 		AND timestamp < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	count, err := r.queryCount(query)
+	count, err := r.queryCount(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("get active channels count: %w", err)
 	}
@@ -288,7 +321,11 @@ func (r *StarRocks) GetActiveChannelsCount(id types.ID, from, to time.Time) (int
 }
 
 // GetSessions returns the sessions of the given project.
-func (r *StarRocks) GetSessions(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (r *StarRocks) GetSessions(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return nil, err
 	}
@@ -299,7 +336,7 @@ func (r *StarRocks) GetSessions(id types.ID, from, to time.Time) ([]types.Metric
 	query := fmt.Sprintf(`
 	SELECT 
 	    DATE(timestamp) AS event_date, 
-	    COUNT(DISTINCT session_id) AS sessions
+	    APPROX_COUNT_DISTINCT(session_id) AS sessions
 	FROM 
 	    session_events
 	WHERE
@@ -312,7 +349,7 @@ func (r *StarRocks) GetSessions(id types.ID, from, to time.Time) ([]types.Metric
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	metrics, err := r.queryMetrics(query)
+	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get sessions: %w", err)
 	}
@@ -320,7 +357,11 @@ func (r *StarRocks) GetSessions(id types.ID, from, to time.Time) ([]types.Metric
 }
 
 // GetSessionsCount returns the sessions count of the given project.
-func (r *StarRocks) GetSessionsCount(id types.ID, from, to time.Time) (int, error) {
+func (r *StarRocks) GetSessionsCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return 0, err
 	}
@@ -330,7 +371,7 @@ func (r *StarRocks) GetSessionsCount(id types.ID, from, to time.Time) (int, erro
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT 
-	    COUNT(DISTINCT session_id) AS sessions
+	    APPROX_COUNT_DISTINCT(session_id) AS sessions
 	FROM 
 	    session_events
 	WHERE
@@ -339,7 +380,7 @@ func (r *StarRocks) GetSessionsCount(id types.ID, from, to time.Time) (int, erro
 		AND timestamp < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	count, err := r.queryCount(query)
+	count, err := r.queryCount(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("get sessions count: %w", err)
 	}
@@ -347,7 +388,11 @@ func (r *StarRocks) GetSessionsCount(id types.ID, from, to time.Time) (int, erro
 }
 
 // GetPeakSessionsPerChannel returns the peak sessions per channel of the given project.
-func (r *StarRocks) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+func (r *StarRocks) GetPeakSessionsPerChannel(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return nil, err
 	}
@@ -363,7 +408,7 @@ func (r *StarRocks) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) (
 	    SELECT 
 	        DATE(timestamp) AS event_date,
 	        channel_key,
-	        COUNT(DISTINCT session_id) AS session_count
+	        APPROX_COUNT_DISTINCT(session_id) AS session_count
 	    FROM 
 	        session_events
 	    WHERE
@@ -379,7 +424,7 @@ func (r *StarRocks) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) (
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	metrics, err := r.queryMetrics(query)
+	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get peak sessions per channel: %w", err)
 	}
@@ -387,7 +432,11 @@ func (r *StarRocks) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) (
 }
 
 // GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
-func (r *StarRocks) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Time) (int, error) {
+func (r *StarRocks) GetPeakSessionsPerChannelCount(
+	ctx context.Context,
+	id types.ID,
+	from, to time.Time,
+) (int, error) {
 	if err := validateTimeRange(from, to); err != nil {
 		return 0, err
 	}
@@ -402,7 +451,7 @@ func (r *StarRocks) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Ti
 	    SELECT 
 	        DATE(timestamp) AS event_date,
 	        channel_key,
-	        COUNT(DISTINCT session_id) AS session_count
+	        APPROX_COUNT_DISTINCT(session_id) AS session_count
 	    FROM 
 	        session_events
 	    WHERE
@@ -414,7 +463,7 @@ func (r *StarRocks) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Ti
 	) AS channel_sessions;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	count, err := r.queryCount(query)
+	count, err := r.queryCount(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("get peak sessions per channel count: %w", err)
 	}
@@ -442,8 +491,8 @@ func validateTimeRange(from, to time.Time) error {
 }
 
 // queryMetrics queries the metrics from the StarRocks.
-func (r *StarRocks) queryMetrics(query string) ([]types.MetricPoint, error) {
-	rows, err := r.driver.Query(query)
+func (r *StarRocks) queryMetrics(ctx context.Context, query string) ([]types.MetricPoint, error) {
+	rows, err := r.driver.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query metrics: %w", err)
 	}
@@ -479,8 +528,8 @@ func (r *StarRocks) queryMetrics(query string) ([]types.MetricPoint, error) {
 }
 
 // queryCount queries the count from the StarRocks.
-func (r *StarRocks) queryCount(query string) (int, error) {
-	rows, err := r.driver.Query(query)
+func (r *StarRocks) queryCount(ctx context.Context, query string) (int, error) {
+	rows, err := r.driver.QueryContext(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("query count: %w", err)
 	}
