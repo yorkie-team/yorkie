@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.15] - 2026-08-13
+
+### Changed
+
+- Speed up GetProjectStats with approximate, concurrent reads by @raararaara in https://github.com/yorkie-team/yorkie/pull/1925
+- Validate Checkpoint in ChangePack for PushPull API requests by @YBSeok in https://github.com/yorkie-team/yorkie/pull/1910
+
+### Fixed
+
+- Isolate spans in Tree restore so overlapping undo converges by @harrykim8672 in https://github.com/yorkie-team/yorkie/pull/1924
+- Add fuzz coverage for tree and snapshot decoding by @lemon0333 in https://github.com/yorkie-team/yorkie/pull/1920
+
 ## [v0.7.14] - 2026-08-09
 
 ### Added
