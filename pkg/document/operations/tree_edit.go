@@ -122,24 +122,38 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			}
 
 			var diff resource.DataSize
-			// 1. Re-remove (retombstone) by identity.
-			for _, pair := range obj.Retombstone(toRetombstone, e.executedAt) {
+			// 1. Re-remove (retombstone) by identity. Isolating a straddling
+			// piece splits it (live-split overhead accounted to diff).
+			retombstonePairs, retombstoneDiff, err := obj.Retombstone(toRetombstone, e.executedAt)
+			if err != nil {
+				return err
+			}
+			diff.Add(retombstoneDiff)
+			for _, pair := range retombstonePairs {
 				root.RegisterGCPair(pair)
 				root.AdjustDiffForGCPair(&diff, pair)
 			}
-			// 2. Revive (restore) by identity. For an un-tombstoned node
-			// (removedAt already cleared by Restore) UnregisterGCPair removes
-			// its size from docSize.GC, and diff.Add books the same size into
-			// Live — the node just became visible. Recreated nodes are brand
-			// new, so they only need the Live addition. Mirrors Text restore.
-			untombstoned, recreated, err := obj.Restore(toRestore)
+			// 2. Revive (restore) by identity. Isolating a range out of a
+			// straddling piece can split off born-removed remainders as pending
+			// GC pairs; register them FIRST so a split-born un-tombstoned target
+			// is walked gc->live correctly by the UnregisterGCPair below. For an
+			// un-tombstoned node (removedAt already cleared by Restore)
+			// UnregisterGCPair removes its size from docSize.GC, and diff.Add
+			// books the same size into Live — the node just became visible.
+			// Recreated nodes are brand new, so they only need the Live
+			// addition, plus any live-split overhead. Mirrors Text restore.
+			untombstoned, recreated, restorePairs, restoreDiff, err := obj.Restore(toRestore)
 			if err != nil {
 				return err
+			}
+			for _, pair := range restorePairs {
+				root.RegisterGCPair(pair)
 			}
 			for _, node := range untombstoned {
 				root.UnregisterGCPair(crdt.GCPair{Parent: obj, Child: node})
 				diff.Add(node.DataSize())
 			}
+			diff.Add(restoreDiff)
 			for _, node := range recreated {
 				diff.Add(node.DataSize())
 			}

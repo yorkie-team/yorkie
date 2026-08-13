@@ -884,7 +884,19 @@ func (t *Tree) Purge(child GCChild) error {
 // parent-before-child order. Returns (untombstoned, recreated); the caller
 // un-registers GC pairs for the un-tombstoned nodes and accounts recreated
 // sizes to Live. Mirrors the JS CRDTTree.restore.
-func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*TreeNode, err error) {
+func (t *Tree) Restore(spans []*TreeRestoreSpan) (
+	untombstoned, recreated []*TreeNode, pairs []GCPair, diff resource.DataSize, err error,
+) {
+	// Splitting a removed straddler buffers born-removed remainders as pending
+	// GC pairs (see TreeNode.Split). Drain them into the returned pairs on EVERY
+	// path — including a mid-restore error — so they can never linger to
+	// contaminate the next operation's drain. The caller registers these BEFORE
+	// un-registering the un-tombstoned targets, so a split-born target is walked
+	// gc->live correctly (mirrors the Text path).
+	defer func() {
+		pairs = append(pairs, t.drainPendingGCPairs()...)
+	}()
+
 	for _, span := range spans {
 		if !span.IsText {
 			node := t.findFloorNode(span.ID)
@@ -897,7 +909,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 			}
 			created, cErr := t.recreateFromSpan(span, span.ID.Offset, span.Length)
 			if cErr != nil {
-				return nil, nil, cErr
+				return nil, nil, nil, diff, cErr
 			}
 			if created != nil {
 				recreated = append(recreated, created)
@@ -905,7 +917,13 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 			continue
 		}
 
-		// Text: surviving pieces may be split finer than the span.
+		// Text: pieces may be split finer than the span, and a concurrent op or
+		// a post-GC recreate can leave pieces whose boundaries straddle it.
+		// Isolate the exact [start, end) sub-range out of every overlapping
+		// piece — splitting at the span boundaries, live or removed — so all
+		// replicas converge on identical segmentation (the tree analogue of
+		// RGATreeSplit.isolateRange), then revive removed parts and recreate
+		// purged gaps.
 		start := span.ID.Offset
 		end := start + span.Length
 		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
@@ -914,22 +932,18 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 		for cursor < end {
 			if pieceIdx < len(pieces) && pieces[pieceIdx].id.Offset <= cursor {
 				piece := pieces[pieceIdx]
-				pieceStart := piece.id.Offset
-				pieceEnd := pieceStart + piece.Length()
-				if pieceStart < start || pieceEnd > end {
-					// Piece straddles a span boundary. Under causal delivery the
-					// forward delete split at span boundaries on every replica
-					// before its undo could arrive, so this is unexpected; skip
-					// rather than un-tombstone beyond the span. Mirrors the guard
-					// in Retombstone so undo/redo stay symmetric.
-					break
+				pieceEnd := piece.id.Offset + piece.Length()
+				overlapEnd := min(pieceEnd, end)
+				target, iErr := t.isolateTextRange(piece, cursor, overlapEnd, &diff)
+				if iErr != nil {
+					return nil, nil, nil, diff, iErr
 				}
-				if piece.IsRemoved() {
-					piece.unremove()
-					untombstoned = append(untombstoned, piece)
+				if target.IsRemoved() {
+					target.unremove()
+					untombstoned = append(untombstoned, target)
 				}
-				cursor = min(pieceEnd, end)
-				if cursor >= pieceEnd {
+				cursor = overlapEnd
+				if overlapEnd >= pieceEnd {
 					pieceIdx++
 				}
 			} else {
@@ -939,7 +953,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 				}
 				created, cErr := t.recreateFromSpan(span, cursor, gapEnd-cursor)
 				if cErr != nil {
-					return nil, nil, cErr
+					return nil, nil, nil, diff, cErr
 				}
 				if created != nil {
 					recreated = append(recreated, created)
@@ -948,14 +962,56 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*Tre
 			}
 		}
 	}
-	return untombstoned, recreated, nil
+
+	return untombstoned, recreated, nil, diff, nil
+}
+
+// isolateTextRange splits piece so that a node exactly covering the absolute
+// offset interval [from, to) of its insertion exists, and returns it. Splitting
+// at the caller's boundaries — rather than skipping a straddler — is what lets
+// concurrent restores converge on identical text-node segmentation across
+// replicas (the tree analogue of RGATreeSplit.isolateRange). A live split's
+// metadata overhead is added to diff; a removed split buffers a pending GC pair
+// internally (zero here). Requires pieceStart <= from < to <= pieceEnd. Mirrors
+// the JS CRDTTree.isolateTextRange.
+func (t *Tree) isolateTextRange(
+	piece *TreeNode, from, to int, diff *resource.DataSize,
+) (*TreeNode, error) {
+	node := piece
+	if from > node.id.Offset {
+		d, err := node.Split(t, from-node.id.Offset, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		diff.Add(d)
+		// Split's right half is registered under offset `from`; pick it up.
+		node = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: from})
+		if node == nil {
+			return nil, ErrNodeNotFound
+		}
+	}
+	if to < node.id.Offset+node.Length() {
+		d, err := node.Split(t, to-node.id.Offset, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		diff.Add(d)
+	}
+	return node, nil
 }
 
 // Retombstone re-removes the nodes described by spans (redo of an
-// identity-preserving undo). Live pieces only; idempotent. Returns GC pairs
-// for the newly tombstoned nodes. Mirrors the JS CRDTTree.retombstone.
-func (t *Tree) Retombstone(spans []*TreeRestoreSpan, executedAt *time.Ticket) []GCPair {
+// identity-preserving undo). Live pieces only; idempotent. A piece that
+// straddles a span boundary is split at that boundary so only the in-span range
+// is re-removed (symmetric with Restore's isolate, so undo/redo stay mirror
+// images and segmentation stays convergent). Returns the GC pairs for the newly
+// tombstoned nodes and the live-split overhead. Mirrors the JS
+// CRDTTree.retombstone.
+func (t *Tree) Retombstone(
+	spans []*TreeRestoreSpan, executedAt *time.Ticket,
+) ([]GCPair, resource.DataSize, error) {
 	var pairs []GCPair
+	var diff resource.DataSize
 	for _, span := range spans {
 		start := span.ID.Offset
 		length := span.Length
@@ -975,18 +1031,22 @@ func (t *Tree) Retombstone(spans []*TreeRestoreSpan, executedAt *time.Ticket) []
 			if piece.IsRemoved() {
 				continue
 			}
-			if piece.IsText() && (piece.id.Offset < start || piece.id.Offset+piece.Length() > end) {
-				// Piece straddles a span boundary (uses the same clamped end as
-				// findPiecesOverlapping); skip so we never re-tombstone content
-				// outside the span. Mirrors the guard in Restore.
-				continue
+			target := piece
+			if piece.IsText() {
+				from := max(piece.id.Offset, start)
+				to := min(piece.id.Offset+piece.Length(), end)
+				var iErr error
+				target, iErr = t.isolateTextRange(piece, from, to, &diff)
+				if iErr != nil {
+					return nil, resource.DataSize{}, iErr
+				}
 			}
-			if piece.remove(executedAt) {
-				pairs = append(pairs, GCPair{Parent: t, Child: piece})
+			if target.remove(executedAt) {
+				pairs = append(pairs, GCPair{Parent: t, Child: target})
 			}
 		}
 	}
-	return pairs
+	return pairs, diff, nil
 }
 
 // findPiecesOverlapping collects surviving pieces (live or tombstoned) of the
