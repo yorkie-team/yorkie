@@ -182,6 +182,41 @@ https://github.com/yorkie-team/yorkie/blob/422901861aedbd3a86fdcb9cf3b5740d6daf3
 
 During the traversal of the given range in `traverseInPosRange` (STEP3), the process of converting the provided `CRDTTree.TreePos` to an `IndexTree.TreePos` is executed. To determine the `offset` for this conversion, the `FindOffset` function is utilized. In doing so, calculating the `offset` excluding the removed nodes prevents potential issues that can arise in concurrent editing scenarios.
 
+### One Node per TreeNodeID
+
+Every position is anchored by `TreeNodeID`, so an ID must name a single node.
+`NodeMapByID` is keyed by that ID and cannot hold two entries for it: the
+second `Put` overwrites the first, and the winner follows the order the nodes
+were put — operation order on a live replica, document order when a tree is
+rebuilt from a snapshot in `NewTree`. Two nodes under one ID therefore make the
+same position resolve to different nodes on different replicas, and the offset
+it anchors can fall outside the node it lands on.
+
+Three rules keep that from breaking a document. Every replica, including the
+SDKs, has to apply them the same way:
+
+1. **Content that reuses an identity is dropped.** Content created by an edit
+   carries that edit's lamport and actor, so a content node whose `CreatedAt`
+   names another change is a copy of a node that already exists — an undo that
+   reverses a deletion by re-inserting the removed nodes rather than reviving
+   them. The copy is dropped and the rest of the edit applies. Content from the
+   edit's own change is kept even when its ID collides: the delimiters an
+   element split consumes are simulated rather than replayed, so those IDs can
+   legitimately collide and the node belongs to the document.
+
+2. **A live node keeps the ID over a tombstone.** For documents that already
+   carry two nodes under one ID, the live one wins the registration, so a live
+   replica and one rebuilt from a snapshot resolve the ID the same way.
+   Collecting the tombstone leaves that registration alone.
+
+3. **An unresolvable position fails the operation, never the process.**
+   Splitting a node at an offset past its end returns `ErrSplitOutOfRange`
+   instead of slicing out of range.
+
+Dropping content rather than rejecting the change is deliberate. Such changes
+are already in the history of existing documents, and a change the server
+refuses to replay is a document that can never be loaded again.
+
 ### Risks and Mitigation
 
 - In the current conflict resolution policy of Yorkie, when both insert and delete operations occur simultaneously, even if the insert range is included in the delete range, the inserted node remains after synchronization. This might not always reflect the user's intention accurately.

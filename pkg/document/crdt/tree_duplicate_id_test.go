@@ -152,6 +152,97 @@ func TestTreeEditDropsDuplicatedContentNodeID(t *testing.T) {
 	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML(), "the copy is not inserted")
 }
 
+// TestTreeEditDropsDuplicatedContentFromAnotherActor covers a copy sent by a
+// different client: what marks content as a copy is that its id belongs to
+// another change, whether that change is earlier or merely another actor's.
+func TestTreeEditDropsDuplicatedContentFromAnotherActor(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree, textID := createDigitTree(t, ctx, helper.TestRoot())
+
+	_, _, err := tree.EditT(6, 7, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+
+	actorID, err := time.ActorIDFromHex("0123456789abcdef01234567")
+	assert.NoError(t, err)
+	undoAt := time.NewTicket(helper.TimeT(ctx).Lamport(), 1, actorID)
+	_, _, err = tree.EditT(6, 6, []*crdt.TreeNode{
+		crdt.NewTreeNode(crdt.NewTreeNodeID(textID.CreatedAt, 5), "text", nil, "5"),
+	}, 0, undoAt, func() *time.Ticket { return undoAt })
+	assert.NoError(t, err)
+
+	assert.Empty(t, duplicatedIDs(tree), "a TreeNodeID must name at most one node")
+	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML(), "the copy is not inserted")
+}
+
+// TestTreeEditKeepsCollidingContentFromSameChange guards the other side of the
+// rule. The delimiters an element split consumes are simulated rather than
+// replayed (see the note in operations.TreeEdit), so an id issued by this edit
+// can collide with one already in the tree. That content belongs to the
+// document and must be inserted, not dropped as a copy.
+func TestTreeEditKeepsCollidingContentFromSameChange(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree, _ := createDigitTree(t, ctx, helper.TestRoot())
+
+	// Reuse the id of the <p> already in the tree, under this edit's own
+	// lamport and actor.
+	existingID := tree.Root().Children()[0].ID()
+	editedAt := time.NewTicket(
+		existingID.CreatedAt.Lamport(),
+		existingID.CreatedAt.Delimiter()+1,
+		existingID.CreatedAt.ActorID(),
+	)
+	_, _, err := tree.EditT(12, 12, []*crdt.TreeNode{
+		crdt.NewTreeNode(crdt.NewTreeNodeID(existingID.CreatedAt, 0), "p", nil),
+	}, 0, editedAt, func() *time.Ticket { return editedAt })
+	assert.NoError(t, err)
+
+	assert.Equal(t, "<r><p>0123456789</p><p></p></r>", tree.ToXML(),
+		"content issued by this change is inserted even when its id collides")
+}
+
+// TestTreePurgeKeepsLiveNodeResolvable verifies that collecting a tombstone
+// leaves the live node that shares its id resolvable. NodeMapByID is keyed by
+// id, so removing the entry of a duplicated id would take the live node's
+// registration with it and put the document back where it started: positions
+// anchored at that id resolving to a node that does not span their offset.
+func TestTreePurgeKeepsLiveNodeResolvable(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree, textID := createDigitTree(t, ctx, root)
+
+	corruptWithDuplicatedNodeID(t, tree, ctx, textID)
+
+	id := crdt.NewTreeNodeID(textID.CreatedAt, 5)
+	_, live := tree.NodeMapByID.Floor(id)
+	assert.False(t, live.IsRemoved())
+
+	var tombstone *crdt.TreeNode
+	for _, node := range tree.Nodes() {
+		if node.ID().Equal(id) && node.IsRemoved() {
+			tombstone = node
+			break
+		}
+	}
+	assert.NotNil(t, tombstone)
+	assert.NoError(t, tree.Purge(tombstone))
+
+	_, resolved := tree.NodeMapByID.Floor(id)
+	assert.Equal(t, live, resolved, "the live node keeps the id after its tombstone is collected")
+	assert.Equal(t, "<r><p>0123456789</p></r>", tree.ToXML())
+}
+
+// TestSplitTextRejectsOutOfRangeOffset covers the guard that keeps an
+// unresolvable position from crashing the process. A position can anchor past
+// the end of the node it resolves to, and slicing there panics.
+func TestSplitTextRejectsOutOfRangeOffset(t *testing.T) {
+	node := crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "hello")
+
+	split, _, err := node.SplitText(node.Len()+1, 0)
+	assert.ErrorIs(t, err, crdt.ErrSplitOutOfRange)
+	assert.Nil(t, split)
+	assert.Equal(t, "hello", node.Value, "a rejected split leaves the node untouched")
+}
+
 // TestTreeNodeIDResolvesSameAfterSnapshotRebuild verifies that an id resolves
 // to the same node before and after a snapshot rebuild. Otherwise a position
 // anchored at that id means one thing on a live replica and another on one
@@ -173,11 +264,13 @@ func TestTreeNodeIDResolvesSameAfterSnapshotRebuild(t *testing.T) {
 		live.Value, live.IsRemoved(), cold.Value, cold.IsRemoved())
 }
 
-// TestTreeEditAfterSnapshotRebuildDoesNotPanic reproduces the server crash
+// TestTreeEditAfterSnapshotRebuildAppliesAtDuplicatedID reproduces the failure
 // that makes a document unopenable: on a tree rebuilt from a snapshot, an edit
-// anchored at a duplicated id resolves to a node that does not span the
-// anchored offset, and splitting it runs past the end of its value.
-func TestTreeEditAfterSnapshotRebuildDoesNotPanic(t *testing.T) {
+// anchored at a duplicated id used to resolve to a node that does not span the
+// anchored offset, and splitting it ran past the end of its value — a panic
+// before the guard, an error after it. Either way the change cannot apply, and
+// a change that cannot apply is a document that cannot load.
+func TestTreeEditAfterSnapshotRebuildAppliesAtDuplicatedID(t *testing.T) {
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	root := helper.TestRoot()
 	tree, textID := createDigitTree(t, ctx, root)

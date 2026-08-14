@@ -96,6 +96,17 @@ issue.
 - [x] Verify against the production data: the document's snapshot and
       changes now replay cleanly, and replaying its full history creates
       no new duplicate ids
+- [x] Make `Tree.Purge` remove only the entry the purged node holds.
+      `NodeMapByID.Remove` is keyed by id, so collecting the tombstone of
+      a duplicated pair unregistered the live node with it and put the
+      document back where it started — found in review, reproduced, and
+      now covered by `TestTreePurgeKeepsLiveNodeResolvable`
+- [x] Cover the guard and both sides of the drop rule directly:
+      `TestSplitTextRejectsOutOfRangeOffset`,
+      `TestTreeEditKeepsCollidingContentFromSameChange`,
+      `TestTreeEditDropsDuplicatedContentFromAnotherActor`
+- [x] Write the three rules into `docs/design/tree.md`, since the SDKs
+      have to apply them the same way
 
 ## Follow-ups
 
@@ -111,3 +122,13 @@ issue.
   identity.
 - Documents that already carry duplicate ids in their snapshots keep
   them. They load, but nothing removes the duplicates.
+- A dropped content node is silent. `pkg/document` has no logger — it is
+  the shared document model, not server code — so counting drops needs
+  the signal to travel out of `Tree.Edit` to a layer that can log it.
+  Until then the divergence from a client that kept the content is not
+  measurable in production.
+- `ErrSplitOutOfRange` has no RPC mapping, so a position that still
+  cannot resolve surfaces as an internal error. Worth mapping once
+  something consumes it. More broadly, there is no panic-recovery
+  interceptor: `recover()` appears nowhere outside tests, so the next
+  panic will also reach clients as an unexplained 503.
