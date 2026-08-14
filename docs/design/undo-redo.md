@@ -305,9 +305,13 @@ for the rules and their limits. That contains the damage but does not remove
 it: an undo that took the copy path no longer restores its text, and until the
 same rules run in the SDKs, the client that issued it diverges from the server.
 
-The repair is to stop copying — route every reverse through the restore path,
-or have the copy issue fresh IDs. Until then the rules above are what keeps
-documents loadable.
+The repair is to route every reverse the restore path can express through it.
+Issuing fresh IDs for the copies would stop the collision, but it keeps the
+copy-based model that duplicates content when undo ranges overlap and that
+Tree's reconciliation cannot converge (see Analysis: Overlapping Undo Content
+Duplication below) —
+a narrower fix for the identity problem alone, not for undo correctness. Until
+then the rules above are what keeps documents loadable.
 
 #### Position Representation
 
