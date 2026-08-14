@@ -807,9 +807,20 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 		createdAt:   createdAt,
 	}
 
+	// Registering every node is the cost of loading a document, so it runs
+	// without the duplicate check: a plain Put per node, then one comparison
+	// to see whether any ID was claimed twice. Only a tree that carries
+	// duplicates pays for resolving them.
+	nodeCount := 0
 	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
-		tree.putNode(node.Value)
+		tree.NodeMapByID.Put(node.Value.id, node.Value)
+		nodeCount++
 	})
+	if tree.NodeMapByID.Len() != nodeCount {
+		index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
+			tree.putNode(node.Value)
+		})
+	}
 
 	// Rebuild runtime merge state from the persisted MergedFrom field.
 	// MergedFrom is the only merge-related field written to the snapshot;
