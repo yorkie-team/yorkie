@@ -1,0 +1,204 @@
+/*
+ * Copyright 2026 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package crdt_test
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
+)
+
+// A TreeNodeID (createdAt + offset) is the identity every position anchors to,
+// so it must name at most one node. The SDK's copy-reinsert undo path
+// re-inserts a deleted piece under its ORIGINAL id, which leaves two nodes
+// under one id. NodeMapByID.Put then silently overwrites, so which node an id
+// resolves to depends on the order the nodes were put: insertion order in a
+// live document, document order in one rebuilt from a snapshot. The two
+// disagree, and an edit anchored at such an id splits a node past its end.
+// This is what makes a document unopenable — see wafflebase#725.
+
+// duplicatedIDs returns the ids that name more than one node in the tree.
+func duplicatedIDs(tree *crdt.Tree) []string {
+	counts := map[string]int{}
+	for _, node := range tree.Nodes() {
+		counts[node.IDString()]++
+	}
+
+	var dupes []string
+	for id, count := range counts {
+		if count > 1 {
+			dupes = append(dupes, fmt.Sprintf("%s x%d", id, count))
+		}
+	}
+	return dupes
+}
+
+// createDigitTree builds <r><p>0123456789</p></r> in a root object under the
+// key "t", and returns the tree with the id of its text node.
+func createDigitTree(t *testing.T, ctx *change.Context, root *crdt.Root) (*crdt.Tree, *crdt.TreeNodeID) {
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+
+	textID := helper.PosT(ctx)
+	_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(textID, "text", nil, "0123456789"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>0123456789</p></r>", tree.ToXML())
+
+	root.Object().Set("t", tree)
+	root.RegisterElement(tree)
+
+	return tree, textID
+}
+
+// corruptWithDuplicatedNodeID reproduces the state an older SDK left in stored
+// documents: the character at text offset 5 is deleted, and a copy of it is
+// attached under the tombstone's ORIGINAL id. It bypasses Tree.Edit so the
+// test keeps exercising an already-corrupted document even once the edit path
+// refuses to create duplicates.
+func corruptWithDuplicatedNodeID(
+	t *testing.T,
+	tree *crdt.Tree,
+	ctx *change.Context,
+	textID *crdt.TreeNodeID,
+) {
+	_, _, err := tree.EditT(6, 7, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML())
+
+	p := tree.Root().Children()[0]
+	_, tombstone := tree.NodeMapByID.Floor(crdt.NewTreeNodeID(textID.CreatedAt, 5))
+	assert.NotNil(t, tombstone)
+	assert.True(t, tombstone.IsRemoved(), "the deleted piece is still a tombstone")
+
+	// The copy lands before the tombstone, where an insert at the same index
+	// puts it, and wins NodeMapByID because it is put last.
+	offset := 0
+	for i, child := range p.Children(true) {
+		if child == tombstone {
+			offset = i
+			break
+		}
+	}
+	dupe := crdt.NewTreeNode(crdt.NewTreeNodeID(textID.CreatedAt, 5), "text", nil, "5")
+	assert.NoError(t, p.InsertAt(dupe, offset))
+	tree.NodeMapByID.Put(dupe.ID(), dupe)
+	assert.Equal(t, "<r><p>0123456789</p></r>", tree.ToXML())
+}
+
+// rebuildFromSnapshot round-trips the root object through the snapshot
+// encoding, as the server does on compaction and on AttachDocument when the
+// document is not in the cache.
+func rebuildFromSnapshot(t *testing.T, root *crdt.Root) *crdt.Tree {
+	snapshot, err := converter.ObjectToBytes(root.Object())
+	assert.NoError(t, err)
+
+	obj, err := converter.BytesToObject(snapshot)
+	assert.NoError(t, err)
+
+	tree, ok := obj.Get("t").(*crdt.Tree)
+	assert.True(t, ok)
+
+	return tree
+}
+
+// TestTreeEditDropsDuplicatedContentNodeID verifies that an edit whose content
+// carries an id already present in the tree never leaves two nodes sharing
+// that id. This is what the SDK's copy-reinsert undo path
+// (tree_edit_operation.ts, cloneAndDropPreTombstoned) sends when cmd+z
+// reverses a deletion.
+func TestTreeEditDropsDuplicatedContentNodeID(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree, textID := createDigitTree(t, ctx, helper.TestRoot())
+
+	_, _, err := tree.EditT(6, 7, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML())
+
+	// The undo arrives as a later change, so it carries a later lamport than
+	// the id its content reuses.
+	undoAt := time.NewTicket(helper.TimeT(ctx).Lamport()+1, 1, time.InitialActorID)
+	_, _, err = tree.EditT(6, 6, []*crdt.TreeNode{
+		crdt.NewTreeNode(crdt.NewTreeNodeID(textID.CreatedAt, 5), "text", nil, "5"),
+	}, 0, undoAt, func() *time.Ticket { return undoAt })
+	assert.NoError(t, err, "the rest of the history must stay replayable")
+
+	assert.Empty(t, duplicatedIDs(tree), "a TreeNodeID must name at most one node")
+	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML(), "the copy is not inserted")
+}
+
+// TestTreeNodeIDResolvesSameAfterSnapshotRebuild verifies that an id resolves
+// to the same node before and after a snapshot rebuild. Otherwise a position
+// anchored at that id means one thing on a live replica and another on one
+// that restarted.
+func TestTreeNodeIDResolvesSameAfterSnapshotRebuild(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree, textID := createDigitTree(t, ctx, root)
+
+	corruptWithDuplicatedNodeID(t, tree, ctx, textID)
+	rebuilt := rebuildFromSnapshot(t, root)
+	assert.Equal(t, tree.ToXML(), rebuilt.ToXML())
+
+	id := crdt.NewTreeNodeID(textID.CreatedAt, 5)
+	_, live := tree.NodeMapByID.Floor(id)
+	_, cold := rebuilt.NodeMapByID.Floor(id)
+	assert.Equal(t, live.IsRemoved(), cold.IsRemoved(),
+		"live resolves to %q(removed=%v), rebuilt to %q(removed=%v)",
+		live.Value, live.IsRemoved(), cold.Value, cold.IsRemoved())
+}
+
+// TestTreeEditAfterSnapshotRebuildDoesNotPanic reproduces the server crash
+// that makes a document unopenable: on a tree rebuilt from a snapshot, an edit
+// anchored at a duplicated id resolves to a node that does not span the
+// anchored offset, and splitting it runs past the end of its value.
+func TestTreeEditAfterSnapshotRebuildDoesNotPanic(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree, textID := createDigitTree(t, ctx, root)
+
+	corruptWithDuplicatedNodeID(t, tree, ctx, textID)
+
+	// Keep editing before the duplicated id: this splits the run owning
+	// offsets 0..5, so the piece at offset 0 no longer spans up to offset 5.
+	_, _, err := tree.EditT(4, 4, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "x"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>012x3456789</p></r>", tree.ToXML())
+
+	rebuilt := rebuildFromSnapshot(t, root)
+
+	parentID := rebuilt.Root().Children()[0].ID()
+	from := crdt.NewTreePos(parentID, crdt.NewTreeNodeID(textID.CreatedAt, 5))
+	to := crdt.NewTreePos(parentID, crdt.NewTreeNodeID(textID.CreatedAt, 6))
+	assert.NotPanics(t, func() {
+		_, _, err := rebuilt.Edit(from, to, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil)
+		assert.NoError(t, err)
+	})
+}

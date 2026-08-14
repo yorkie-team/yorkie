@@ -34,6 +34,11 @@ import (
 var (
 	// ErrNodeNotFound is returned when the node is not found.
 	ErrNodeNotFound = errors.New("node not found")
+
+	// ErrSplitOutOfRange is returned when a position anchors past the end of
+	// the node it resolves to, which means the position cannot be resolved on
+	// this replica.
+	ErrSplitOutOfRange = errors.New("split offset out of range")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -349,7 +354,7 @@ func (n *TreeNode) Split(
 			}
 		}
 		n.InsNextID = split.id
-		tree.NodeMapByID.Put(split.id, split)
+		tree.putNode(split)
 
 		// NOTE: A piece split off an already-tombstoned node inherits
 		// removedAt without going through remove(), so no GC pair is
@@ -389,6 +394,15 @@ func (n *TreeNode) SplitText(
 
 	if offset == 0 || offset == n.Len() {
 		return nil, diff, nil
+	}
+
+	// A position that anchors past the end of this node cannot be resolved
+	// here. Report it instead of slicing out of range: the caller turns it
+	// into a failed operation rather than a crashed server.
+	if offset < 0 || offset > n.Len() {
+		return nil, diff, fmt.Errorf(
+			"split %s at %d of %d: %w", n.IDString(), offset, n.Len(), ErrSplitOutOfRange,
+		)
 	}
 
 	encoded := utf16.Encode([]rune(n.Value))
@@ -794,7 +808,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	}
 
 	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
-		tree.NodeMapByID.Put(node.Value.id, node.Value)
+		tree.putNode(node.Value)
 	})
 
 	// Rebuild runtime merge state from the persisted MergedFrom field.
@@ -1130,7 +1144,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		if err := insert(); err != nil {
 			return nil, err
 		}
-		t.NodeMapByID.Put(node.id, node)
+		t.putNode(node)
 		return node, nil
 	}
 
@@ -1393,6 +1407,11 @@ func (t *Tree) Edit(
 	var diff resource.DataSize
 	var pairs []GCPair
 
+	// Phase 0: Identity check — a TreeNodeID must name a single node, so
+	// content that reuses an ID already in the tree is dropped before
+	// anything is mutated.
+	contents = t.dropDuplicateContents(contents, editedAt)
+
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -1507,7 +1526,7 @@ func (t *Tree) Edit(
 					diff.Add(node.Value.DataSize())
 				}
 
-				t.NodeMapByID.Put(node.Value.id, node.Value)
+				t.putNode(node.Value)
 			})
 		}
 	}
@@ -2417,6 +2436,75 @@ func (t *Tree) ToPath(parentNode, leftSiblingNode *TreeNode) ([]int, error) {
 	}
 
 	return t.IndexTree.TreePosToPath(treePos)
+}
+
+// dropDuplicateContents returns the contents that would not put a second node
+// under an ID already in the tree.
+//
+// Content created by this edit carries this edit's lamport and actor, so a
+// content node whose ID names an older change is a copy of a node that already
+// exists — what the SDK's copy-reinsert undo sends when it reverses a
+// deletion. Inserting it would leave two nodes under one identity, so the copy
+// is dropped and the rest of the edit applies.
+//
+// Content from this edit's own change is kept even when its ID collides: the
+// delimiters an element split consumes are simulated rather than replayed (see
+// the note in operations.TreeEdit), so an ID issued here can legitimately
+// collide, and dropping it would lose a node the client already inserted.
+//
+// Dropping rather than failing is deliberate: such changes are already in the
+// history of existing documents, and a change the server refuses to replay is
+// a document that can never be loaded again. The visible cost is that an undo
+// from those clients does not restore the text; the repair is for the client
+// to reverse deletions through the restore path, which revives the node under
+// its original identity instead of copying it.
+func (t *Tree) dropDuplicateContents(contents []*TreeNode, editedAt *time.Ticket) []*TreeNode {
+	kept := make([]*TreeNode, 0, len(contents))
+	for _, content := range contents {
+		reused := false
+		index.TraverseNode(content.Index, func(node *index.Node[*TreeNode], _ int) {
+			createdAt := node.Value.id.CreatedAt
+			if createdAt.Lamport() == editedAt.Lamport() &&
+				createdAt.ActorID().Compare(editedAt.ActorID()) == 0 {
+				return
+			}
+
+			if key, existing := t.NodeMapByID.Floor(node.Value.id); existing != nil &&
+				key.Equal(node.Value.id) {
+				reused = true
+			}
+		})
+		if !reused {
+			kept = append(kept, content)
+		}
+	}
+
+	return kept
+}
+
+// putNode registers the node under its ID in NodeMapByID, keeping a live node
+// over a tombstone when both claim the same ID.
+//
+// Documents written by older clients can carry two nodes under one ID (an undo
+// that re-inserted a deleted piece by copy). Plain Put lets the winner depend
+// on the order the nodes were put — operation order on a live replica,
+// document order on one rebuilt from a snapshot — so after a restart the same
+// position resolves to a different node and its offset can fall outside that
+// node. Keeping the live one makes both orders agree, since a position that
+// still resolves is anchored in a node that is actually part of the document.
+//
+// Nodes with the same state keep the last-put-wins behavior: element IDs
+// issued for a split can legitimately collide with an inserted node's ID (see
+// the delimiter note in operations.TreeEdit), and that resolution order is
+// what the rest of the tree already assumes.
+func (t *Tree) putNode(node *TreeNode) {
+	key, existing := t.NodeMapByID.Floor(node.id)
+	if existing != nil && existing != node && key.Equal(node.id) &&
+		node.IsRemoved() && !existing.IsRemoved() {
+		return
+	}
+
+	t.NodeMapByID.Put(node.id, node)
 }
 
 // findFloorNode returns node from given id.
