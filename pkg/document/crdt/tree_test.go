@@ -505,18 +505,24 @@ func TestTreeEdit(t *testing.T) {
 
 		// 02. Merge the second paragraph into the first, then apply an
 		// insert that still declares the merged-away paragraph as parent.
-		_, _, err = tree.EditT(3, 5, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+		// A later delete LWW-overwrites the tombstone first, so the merge
+		// ticket is only recoverable from the moved sibling.
+		mergeTicket := helper.TimeT(ctx)
+		_, _, err = tree.EditT(3, 5, nil, 0, mergeTicket, issueTicket(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
+		p2Node.SetRemovedAt(helper.TimeT(ctx))
 		content := crdt.NewTreeNode(helper.PosT(ctx), "b", nil)
 		_, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
 			helper.TimeT(ctx), issueTicket(ctx), nil)
 		assert.NoError(t, err)
 
 		// 03. The content lands in the merge target but is stamped as
-		// merged-from the declared parent, like a merge-moved child.
+		// merged-from the declared parent, like a merge-moved child,
+		// carrying the moved sibling's merge ticket.
 		assert.NotNil(t, content.MergedFrom)
 		assert.True(t, content.MergedFrom.Equal(p2Node.ID()))
+		assert.Equal(t, mergeTicket, content.MergedAt)
 	})
 
 	t.Run("delete nodes between element nodes in different levels test", func(t *testing.T) {
