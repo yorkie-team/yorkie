@@ -284,6 +284,31 @@ Forward:  edit([from, to], content)
 Reverse:  edit([from, from + insertedSize], removedNodes)
 ```
 
+Since identity-preserving restore landed, step 2 is a fallback rather than the
+primary path: an edit that was merge- and split-free carries `restoreSpans` and
+`retombstoneSpans`, and its reverse revives the nodes under their original
+identity instead of re-inserting copies. The copy path still runs when the
+spans are incomplete — that is, when the edit involved a merge or a split — and
+in every SDK from 0.7.13 and earlier, which has no restore path at all.
+
+#### Identity of Copied Content
+
+The deep copy in step 2 keeps each node's `CRDTTreeNodeID`, so undoing a
+deletion re-inserts nodes under IDs the tree already uses for the tombstones.
+Two nodes then share one identity, and every position anchored at that ID
+becomes ambiguous — the failure that made a production document unopenable
+(yorkie#1927).
+
+The server drops such content when it replays the change and keeps the live
+node registered for the shared ID; see [tree](tree.md#one-node-per-treenodeid)
+for the rules and their limits. That contains the damage but does not remove
+it: an undo that took the copy path no longer restores its text, and until the
+same rules run in the SDKs, the client that issued it diverges from the server.
+
+The repair is to stop copying — route every reverse through the restore path,
+or have the copy issue fresh IDs. Until then the rules above are what keeps
+documents loadable.
+
 #### Position Representation
 
 The reverse operation stores both representations:
@@ -554,11 +579,18 @@ it creates new nodes independent of GC state.
 
 #### Remaining Options
 
+Identity-preserving restore has since landed: `TreeRestoreSpan` carries each
+node's identity and value, `CRDTTree.Restore` un-tombstones the survivors and
+recreates the purged ones, and `Retombstone` is its redo counterpart. It is the
+primary reverse for merge- and split-free edits; the copy-based options below
+were written before it and remain relevant only to the edits that still fall
+back to copying.
+
 | Approach | Pros | Cons |
 |----------|------|------|
 | Node-ID overlap detection | Extend undo op with removed node IDs; reconciliation compares node sets instead of index ranges. Content re-insert preserved (GC-safe). | Significant change to operation model and reconciliation logic. |
 | Reconciliation content trimming | Case 3: when undo fully contained by remote delete, clear content. | Only handles full containment; partial overlap (Cases 5-6) can't predict future undo intent. |
-| Identity-preserving restore (GC-recreate) | Undo un-tombstones surviving nodes and recreates purged nodes under their original IDs. GC-safe: carried values make restore independent of tombstone survival, extending Approach B past its multi-client GC failure. | Significant change to operation model on the scale of Approach B. Re-injecting nodes with past `createdAt` needs a convergence proof against the GC contract. |
+| Identity-preserving restore (GC-recreate) — **implemented** | Undo un-tombstones surviving nodes and recreates purged nodes under their original IDs. GC-safe: carried values make restore independent of tombstone survival, extending Approach B past its multi-client GC failure. | Significant change to operation model on the scale of Approach B. Re-injecting nodes with past `createdAt` needs a convergence proof against the GC contract. |
 | Accept as known limitation | Document the issue; focus on other improvements. | Overlapping undo is uncommon in practice; users can work around. |
 
 ### Analysis: Tree Redo Divergence (resolved)

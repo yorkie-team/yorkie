@@ -217,6 +217,29 @@ Dropping content rather than rejecting the change is deliberate. Such changes
 are already in the history of existing documents, and a change the server
 refuses to replay is a document that can never be loaded again.
 
+#### What the rules do not solve
+
+They contain the damage; they do not remove its sources. Two remain:
+
+- **Undo by copy.** Reversing a deletion by re-inserting a copy of the removed
+  nodes is what produces duplicate IDs in the first place. SDKs from 0.7.13 and
+  earlier take that path for every tree deletion; later ones prefer the
+  identity-preserving restore and fall back to copying when the edit involved a
+  merge or a split. See [undo-redo](undo-redo.md).
+- **Simulated split delimiters.** Element splits allocate their tickets by
+  simulating the delimiters the client consumed instead of replaying them, so
+  two nodes in one change can be issued the same ID. Rule 1 has to exempt
+  same-change content for exactly this reason, which is what keeps
+  "one node per ID" a goal rather than an invariant.
+
+Because the drop happens on the server, a client that took the copy path keeps
+the content locally and believes the operation succeeded. It diverges until it
+reloads, and its later edits anchor on a node the server resolves differently.
+The rules therefore have to hold in the SDKs as well, not only here.
+
+Documents that already carry duplicate IDs keep them. They load, and positions
+resolve consistently, but nothing removes the duplicates.
+
 ### Risks and Mitigation
 
 - In the current conflict resolution policy of Yorkie, when both insert and delete operations occur simultaneously, even if the insert range is included in the delete range, the inserted node remains after synchronization. This might not always reflect the user's intention accurately.
