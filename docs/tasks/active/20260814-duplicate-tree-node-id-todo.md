@@ -10,7 +10,7 @@ reset reason: remote reset`, and the compaction housekeeping logged
 
 The serving pod was panicking:
 
-```
+```text
 http2: panic serving: runtime error: slice bounds out of range [:50] with capacity 49
   crdt.(*TreeNode).SplitText              tree.go:395
   crdt.(*Tree).FindTreeNodesWithSplitText tree.go:2303
@@ -30,7 +30,7 @@ gateway reports as `503 UR upstream_reset_before_response_started
 Replaying the document's stored snapshot and changes offline reproduced
 the panic deterministically at one change, a plain range deletion:
 
-```
+```text
 TreeEdit from{left=34:4:ana7…:50} to{left=34:4:ana7…:51}
 ```
 
@@ -38,7 +38,7 @@ The tree held **two nodes under the id `34:4:ana7…:50`** — one live, one
 tombstoned. They were created by an earlier change whose content node
 carried an id from an older change:
 
-```
+```text
 seq=147  TreeEdit delete [34:4:…:50, 34:4:…:51)
 seq=149  TreeEdit insert content={id=34:4:…:50 "R"}   ← the id it just deleted
 ```
