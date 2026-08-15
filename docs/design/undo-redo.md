@@ -14,6 +14,9 @@ edits. This document describes the architecture, reverse operation generation fo
 each data type, and the position reconciliation mechanism that keeps undo
 operations valid when remote edits arrive.
 
+The mechanism described here is implemented in the JS SDK. Porting it to the Go
+SDK is covered by [undo-redo-go-port.md](undo-redo-go-port.md).
+
 ### Goals
 
 - Provide per-client undo/redo for all mutable data types: Object, Array, Text,
