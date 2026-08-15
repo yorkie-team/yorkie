@@ -119,6 +119,15 @@ func (r *Root) RegisterElement(element Element) {
 	}
 }
 
+// DeregisterElement deregisters the given element and its descendants from
+// the hash tables. It is exported for operations that must replace an
+// element under a pre-existing createdAt during undo/redo (set_operation.ts:
+// 98-104 in the JS SDK), where a previously tombstoned element is restored
+// under the same identity and its stale entry must be dropped first.
+func (r *Root) DeregisterElement(element Element) int {
+	return r.deregisterElement(element)
+}
+
 // deregisterElement deregister the given element from hash tables.
 func (r *Root) deregisterElement(element Element) int {
 	count := 0

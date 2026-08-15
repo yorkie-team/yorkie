@@ -105,20 +105,32 @@ func TestCounterDedup(t *testing.T) {
 
 	t.Run("dedup counter has no undo test", func(t *testing.T) {
 		// A dedup counter cannot be undone: HyperLogLog cannot remove an
-		// actor once added, so Increase produces no reverse operation for it.
+		// actor once added, so Increase produces no reverse operation for
+		// it. The counter's own creation is a Set, though, and that is
+		// undoable; the two are pushed as separate Updates here so the
+		// dedup Increase's own (lack of) undo entry can be observed on its
+		// own, without the creation's reverse masking it.
 		ctx := context.Background()
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, doc))
 		defer func() { assert.NoError(t, c1.Detach(ctx, doc)) }()
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewDedupCounter("uv").Add("user-1")
+			root.SetNewDedupCounter("uv")
+			return nil
+		}))
+		assert.Equal(t, `{"uv":0}`, doc.Marshal())
+		assert.True(t, doc.CanUndo())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("uv").Add("user-1")
 			return nil
 		}))
 		assert.Equal(t, `{"uv":1}`, doc.Marshal())
 
-		assert.False(t, doc.CanUndo())
+		// The dedup Increase contributed no reverse, so undo reaches past
+		// it to the counter's own creation.
 		assert.NoError(t, doc.Undo())
-		assert.Equal(t, `{"uv":1}`, doc.Marshal())
+		assert.Equal(t, `{}`, doc.Marshal())
 	})
 }

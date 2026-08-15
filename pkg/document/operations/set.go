@@ -53,7 +53,7 @@ func NewSet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Set) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Object)
@@ -61,11 +61,47 @@ func (o *Set) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operat
 		return nil, ErrNotApplicableDataType
 	}
 
+	// During undo/redo, skip rather than execute when obj or any of its
+	// ancestors has been concurrently removed (set_operation.ts:81-89).
+	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, obj) {
+		return nil, nil
+	}
+
+	// The reverse must be built from the value at this key before it is
+	// overwritten below (set_operation.ts:91-92): it restores the previous
+	// value, or removes the key entirely when there was none.
+	previous := obj.Get(o.key)
+	var reverseOp Operation
+	if previous != nil && previous.RemovedAt() == nil {
+		copied, err := previous.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		reverseOp = NewSet(o.parentCreatedAt, o.key, copied, o.executedAt)
+	} else {
+		reverseOp = NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt)
+	}
+
 	value, err := o.value.DeepCopy()
 	if err != nil {
 		return nil, err
 	}
-	removed := obj.Set(o.key, value)
+	// SetWithExecutedAt uses o.executedAt (rather than value's own createdAt)
+	// as the LWW tie-break ticket. For local and remote Sets these are
+	// always equal (the json layer issues one fresh ticket for both), so
+	// this is behavior-preserving there; for undo/redo restoring an older
+	// value under its original createdAt, it is required for the restore to
+	// win the LWW comparison at all.
+	removed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
+
+	// NOTE(hackerwins): During undo/redo, this Set may restore an element
+	// under a createdAt that is already registered (set_operation.ts:98-104)
+	// -- for example, undoing a Remove re-inserts the removed element under
+	// its original identity. The stale entry must be deregistered before the
+	// restored element is registered again.
+	if source == OpSourceUndoRedo && root.FindByCreatedAt(value.CreatedAt()) != nil {
+		root.DeregisterElement(value)
+	}
 	root.RegisterElement(value)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
@@ -73,7 +109,7 @@ func (o *Set) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operat
 	if value.RemovedAt() != nil {
 		root.RegisterRemovedElementPair(obj, value)
 	}
-	return nil, nil
+	return reverseOp, nil
 }
 
 // ParentCreatedAt returns the creation time of the Object.

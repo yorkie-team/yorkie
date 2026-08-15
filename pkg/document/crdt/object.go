@@ -53,6 +53,14 @@ func (o *Object) Set(k string, v Element) Element {
 	return o.memberNodes.Set(k, v)
 }
 
+// SetWithExecutedAt behaves like Set, but uses the given executedAt as the
+// LWW tie-break ticket instead of v's own createdAt. It is used when
+// undo/redo restores an element under its original createdAt, mirroring
+// CRDTObject.set's separate executedAt parameter in the JS SDK (object.ts).
+func (o *Object) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
+	return o.memberNodes.SetWithExecutedAt(k, v, executedAt)
+}
+
 // Members returns the member of this object as a map.
 func (o *Object) Members() map[string]Element {
 	return o.memberNodes.Elements()
@@ -76,6 +84,13 @@ func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticke
 // Delete deletes the element of the given key.
 func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
 	return o.memberNodes.Delete(k, deletedAt)
+}
+
+// SubPathOf returns the key of the member with the given creation time, and
+// false if no such member is registered. It mirrors CRDTObject.subPathOf in
+// the JS SDK (object.ts:59-63).
+func (o *Object) SubPathOf(createdAt *time.Ticket) (string, bool) {
+	return o.memberNodes.SubPathOf(createdAt)
 }
 
 // Descendants traverse the descendants of this object.

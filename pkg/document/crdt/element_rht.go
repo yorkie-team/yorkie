@@ -100,16 +100,27 @@ func (rht *ElementRHT) Has(key string) bool {
 
 // Set sets the value of the given key. If there is an existing value, it is removed.
 func (rht *ElementRHT) Set(k string, v Element) Element {
+	return rht.SetWithExecutedAt(k, v, v.CreatedAt())
+}
+
+// SetWithExecutedAt behaves like Set, but uses the given executedAt as the
+// LWW tie-break ticket instead of v's own createdAt. This is required when
+// undo/redo restores an element under its original (older) createdAt: the
+// comparison must use the operation's fresh execution ticket, not the
+// restored element's creation ticket, or the restore can never win against
+// whatever currently occupies the key. It mirrors the separate `executedAt`
+// parameter of ElementRHT.set in the JS SDK (element_rht.ts:92-114).
+func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByKey[k]
 	var removed Element
-	if ok && node.Remove(v.CreatedAt()) {
+	if ok && !node.isRemoved() && node.Remove(executedAt) {
 		removed = node.elem
 	}
 	newNode := newElementRHTNode(k, v)
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
-	if !ok || v.CreatedAt().After(node.elem.CreatedAt()) {
+	if !ok || executedAt.After(node.elem.CreatedAt()) {
 		rht.nodeMapByKey[k] = newNode
-		v.SetMovedAt(v.CreatedAt())
+		v.SetMovedAt(executedAt)
 	} else if !node.isRemoved() {
 		// The new node loses the LWW conflict — mark it as removed
 		// so it doesn't appear as a duplicate during iteration.
@@ -145,6 +156,18 @@ func (rht *ElementRHT) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time
 	}
 
 	return node.elem, nil
+}
+
+// SubPathOf returns the key of the node with the given creation time, and
+// false if no such node is registered. It mirrors ElementRHT.subPathOf in
+// the JS SDK (element_rht.ts) and is used to build the reverse Set for an
+// undone Remove on an Object.
+func (rht *ElementRHT) SubPathOf(createdAt *time.Ticket) (string, bool) {
+	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		return "", false
+	}
+	return node.Key(), true
 }
 
 // Elements returns a map of elements because the map easy to use for loop.

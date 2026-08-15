@@ -52,6 +52,40 @@ const (
 	OpSourceUndoRedo
 )
 
+// isRemovedOrOrphaned reports whether elem, or any of its ancestors up to
+// the document root, has been removed. During undo/redo an operation
+// targeting such an element is skipped rather than executed, mirroring
+// set_operation.ts:81-89 and remove_operation.ts:84-92.
+//
+// The Go Root does not maintain a live parent index the way the JS SDK's
+// elementPairMapByCreatedAt does (it only tracks parents for elements
+// already marked removed). The ancestor chain is instead recovered by
+// walking the document tree from the root once per call. This only runs on
+// the undo/redo path, not on every local or remote edit.
+func isRemovedOrOrphaned(root *crdt.Root, elem crdt.Element) bool {
+	if elem == nil {
+		return false
+	}
+
+	parents := make(map[string]crdt.Container)
+	root.Object().Descendants(func(child crdt.Element, parent crdt.Container) bool {
+		parents[child.CreatedAt().Key()] = parent
+		return false
+	})
+
+	for elem != nil {
+		if elem.RemovedAt() != nil {
+			return true
+		}
+		parent, ok := parents[elem.CreatedAt().Key()]
+		if !ok {
+			return false
+		}
+		elem = parent
+	}
+	return false
+}
+
 // Operation represents an operation to be executed on a document.
 type Operation interface {
 	// Execute executes this operation on the given document(`root`) and

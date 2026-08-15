@@ -48,22 +48,75 @@ func NewRemove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Remove) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
-	switch parent := parentElem.(type) {
-	case crdt.Container:
-		elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+	parent, ok := parentElem.(crdt.Container)
+	if !ok {
+		return nil, ErrNotApplicableDataType
+	}
+
+	target := root.FindByCreatedAt(o.createdAt)
+
+	// During undo/redo, skip rather than execute when the target or any of
+	// its ancestors has been concurrently removed (remove_operation.ts:
+	// 84-92).
+	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, target) {
+		return nil, nil
+	}
+
+	// Both toReverseOperation and DeleteByCreatedAt look up the target
+	// element by the same createdAt, so the reverse must be built before
+	// DeleteByCreatedAt removes it (remove_operation.ts:94-99).
+	reverseOp, err := o.toReverseOperation(parent, target)
+	if err != nil {
+		return nil, err
+	}
+
+	elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+	if err != nil {
+		return nil, err
+	}
+	if elem != nil {
+		root.RegisterRemovedElementPair(parent, elem)
+	}
+	return reverseOp, nil
+}
+
+// toReverseOperation returns the reverse operation of this Remove, or nil
+// when it has none. It mirrors RemoveOperation.toReverseOperation
+// (remove_operation.ts:125-155): for an Array parent the reverse is an Add
+// that restores the element after its previous sibling; for an Object
+// parent it is a Set that restores the element under its key.
+func (o *Remove) toReverseOperation(parent crdt.Container, value crdt.Element) (Operation, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	switch p := parent.(type) {
+	case *crdt.Array:
+		prevCreatedAt, err := p.FindPrevCreatedAt(o.createdAt)
 		if err != nil {
 			return nil, err
 		}
-		if elem != nil {
-			root.RegisterRemovedElementPair(parent, elem)
+		copied, err := value.DeepCopy()
+		if err != nil {
+			return nil, err
 		}
+		return NewAdd(o.parentCreatedAt, prevCreatedAt, copied, o.executedAt), nil
+	case *crdt.Object:
+		key, ok := p.SubPathOf(o.createdAt)
+		if !ok {
+			return nil, nil
+		}
+		copied, err := value.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		return NewSet(o.parentCreatedAt, key, copied, o.executedAt), nil
 	default:
-		return nil, ErrNotApplicableDataType
+		return nil, nil
 	}
-	return nil, nil
 }
 
 // ParentCreatedAt returns the creation time of the Container.

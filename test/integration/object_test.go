@@ -162,4 +162,154 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
+
+	t.Run("object set/remove undo/redo test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+		defer func() { assert.NoError(t, c1.Detach(ctx, doc)) }()
+
+		// set over a new key
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k1", "v1")
+			return nil
+		}))
+		assert.Equal(t, `{"k1":"v1"}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{}`, doc.Marshal())
+
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{"k1":"v1"}`, doc.Marshal())
+
+		// set over an existing key
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k1", "v2")
+			return nil
+		}))
+		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"k1":"v1"}`, doc.Marshal())
+
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
+
+		// remove
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k1")
+			return nil
+		}))
+		assert.Equal(t, `{}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
+
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{}`, doc.Marshal())
+	})
+
+	t.Run("reverse set operation is skipped when an ancestor was removed concurrently", func(t *testing.T) {
+		// Test scenario:
+		// c1: set shape.circle.point to {x: 0, y: 0}
+		// c1: set shape.circle.point.x to 1 (SET over an existing key)
+		// c2: delete shape (two levels above the SET's target object)
+		// c1: undo (no changes, since shape -- and therefore point -- is gone)
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("shape").
+				SetNewObject("circle").
+				SetNewObject("point").
+				SetInteger("x", 0).
+				SetInteger("y", 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+
+		d2 := document.New(helper.TestKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("shape").GetObject("circle").GetObject("point").SetInteger("x", 1)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(
+			t,
+			`{"shape":{"circle":{"point":{"x":1,"y":0}}}}`,
+			d1.Marshal(),
+		)
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("shape")
+			return nil
+		})
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c2, d2}, {c1, d1}})
+		assert.Equal(t, `{}`, d1.Marshal())
+
+		assert.NoError(t, d1.Undo())
+		assert.Equal(t, `{}`, d1.Marshal())
+		assert.False(t, d1.CanRedo())
+	})
+
+	t.Run("reverse remove operation is skipped when an ancestor was removed concurrently", func(t *testing.T) {
+		// Test scenario:
+		// c1: set shape.circle.color to 'red'
+		// c1: set shape.circle.point to {x: 0, y: 0} (a brand new key, so its
+		//     undo reverse is a Remove targeting point, two levels below shape)
+		// c2: delete shape
+		// c1: undo (no changes, since shape -- and therefore point -- is gone)
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("shape").SetNewObject("circle").SetString("color", "red")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+
+		d2 := document.New(helper.TestKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("shape").GetObject("circle").
+				SetNewObject("point").SetInteger("x", 0).SetInteger("y", 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(
+			t,
+			`{"shape":{"circle":{"color":"red","point":{"x":0,"y":0}}}}`,
+			d1.Marshal(),
+		)
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("shape")
+			return nil
+		})
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c2, d2}, {c1, d1}})
+		assert.Equal(t, `{}`, d1.Marshal())
+
+		assert.NoError(t, d1.Undo())
+		assert.Equal(t, `{}`, d1.Marshal())
+		assert.False(t, d1.CanRedo())
+	})
 }
