@@ -34,6 +34,11 @@ import (
 var (
 	// ErrNodeNotFound is returned when the node is not found.
 	ErrNodeNotFound = errors.New("node not found")
+
+	// ErrSplitOutOfRange is returned when a position anchors past the end of
+	// the node it resolves to, which means the position cannot be resolved on
+	// this replica.
+	ErrSplitOutOfRange = errors.New("split offset out of range")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -349,7 +354,7 @@ func (n *TreeNode) Split(
 			}
 		}
 		n.InsNextID = split.id
-		tree.NodeMapByID.Put(split.id, split)
+		tree.putNode(split)
 
 		// NOTE: A piece split off an already-tombstoned node inherits
 		// removedAt without going through remove(), so no GC pair is
@@ -389,6 +394,15 @@ func (n *TreeNode) SplitText(
 
 	if offset == 0 || offset == n.Len() {
 		return nil, diff, nil
+	}
+
+	// A position that anchors past the end of this node cannot be resolved
+	// here. Report it instead of slicing out of range: the caller turns it
+	// into a failed operation rather than a crashed server.
+	if offset < 0 || offset > n.Len() {
+		return nil, diff, fmt.Errorf(
+			"split %s at %d of %d: %w", n.IDString(), offset, n.Len(), ErrSplitOutOfRange,
+		)
 	}
 
 	encoded := utf16.Encode([]rune(n.Value))
@@ -793,9 +807,20 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 		createdAt:   createdAt,
 	}
 
+	// Registering every node is the cost of loading a document, so it runs
+	// without the duplicate check: a plain Put per node, then one comparison
+	// to see whether any ID was claimed twice. Only a tree that carries
+	// duplicates pays for resolving them.
+	nodeCount := 0
 	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
 		tree.NodeMapByID.Put(node.Value.id, node.Value)
+		nodeCount++
 	})
+	if tree.NodeMapByID.Len() != nodeCount {
+		index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
+			tree.putNode(node.Value)
+		})
+	}
 
 	// Rebuild runtime merge state from the persisted MergedFrom field.
 	// MergedFrom is the only merge-related field written to the snapshot;
@@ -855,7 +880,12 @@ func (t *Tree) Purge(child GCChild) error {
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err
 	}
-	t.NodeMapByID.Remove(node.id)
+	// NodeMapByID is keyed by ID, so an unconditional Remove would also
+	// unregister a different node that shares this one's ID — see putNode.
+	// Only drop the entry this node actually holds.
+	if key, registered := t.NodeMapByID.Floor(node.id); registered == node && key.Equal(node.id) {
+		t.NodeMapByID.Remove(node.id)
+	}
 
 	insPrevID := node.InsPrevID
 	insNextID := node.InsNextID
@@ -1130,7 +1160,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		if err := insert(); err != nil {
 			return nil, err
 		}
-		t.NodeMapByID.Put(node.id, node)
+		t.putNode(node)
 		return node, nil
 	}
 
@@ -1477,6 +1507,13 @@ func (t *Tree) Edit(
 	}
 
 	// Phase 8: Insert — insert the given node at the given position.
+	//
+	// The identity check runs here rather than on entry: Phase 1 splits text
+	// nodes to resolve the range, and a split can create the very ID a content
+	// node carries. Checking before that would let the copy through and leave
+	// two nodes under one ID.
+	contents = t.dropDuplicateContents(contents, editedAt)
+
 	if len(contents) != 0 {
 		leftInChildren := fromLeft
 
@@ -1507,7 +1544,7 @@ func (t *Tree) Edit(
 					diff.Add(node.Value.DataSize())
 				}
 
-				t.NodeMapByID.Put(node.Value.id, node.Value)
+				t.putNode(node.Value)
 			})
 		}
 	}
@@ -2417,6 +2454,84 @@ func (t *Tree) ToPath(parentNode, leftSiblingNode *TreeNode) ([]int, error) {
 	}
 
 	return t.IndexTree.TreePosToPath(treePos)
+}
+
+// dropDuplicateContents returns the contents that would not put a second node
+// under an ID already in the tree.
+//
+// Content created by this edit carries this edit's lamport and actor, so a
+// content node whose ID names an older change is a copy of a node that already
+// exists — what the SDK's copy-reinsert undo sends when it reverses a
+// deletion. Inserting it would leave two nodes under one identity, so the copy
+// is dropped and the rest of the edit applies.
+//
+// Content from this edit's own change is kept even when its ID collides: the
+// delimiters an element split consumes are simulated rather than replayed (see
+// the note in operations.TreeEdit), so an ID issued here can legitimately
+// collide, and dropping it would lose a node the client already inserted.
+//
+// Dropping rather than failing is deliberate: such changes are already in the
+// history of existing documents, and a change the server refuses to replay is
+// a document that can never be loaded again. The visible cost is that an undo
+// from those clients does not restore the text; the repair is for the client
+// to reverse deletions through the restore path, which revives the node under
+// its original identity instead of copying it.
+//
+// A collision anywhere in a content node's subtree drops that whole subtree,
+// on the grounds that a copy is copied whole. A partial drop would insert an
+// element whose text the tree already holds elsewhere.
+func (t *Tree) dropDuplicateContents(contents []*TreeNode, editedAt *time.Ticket) []*TreeNode {
+	kept := make([]*TreeNode, 0, len(contents))
+	for _, content := range contents {
+		reused := false
+		index.TraverseNode(content.Index, func(node *index.Node[*TreeNode], _ int) {
+			createdAt := node.Value.id.CreatedAt
+			if createdAt.Lamport() == editedAt.Lamport() &&
+				createdAt.ActorID().Compare(editedAt.ActorID()) == 0 {
+				return
+			}
+
+			if key, existing := t.NodeMapByID.Floor(node.Value.id); existing != nil &&
+				key.Equal(node.Value.id) {
+				reused = true
+			}
+		})
+		if !reused {
+			kept = append(kept, content)
+		}
+	}
+
+	return kept
+}
+
+// putNode registers the node under its ID in NodeMapByID, keeping a live node
+// over a tombstone when both claim the same ID.
+//
+// Documents written by older clients can carry two nodes under one ID (an undo
+// that re-inserted a deleted piece by copy). Plain Put lets the winner depend
+// on the order the nodes were put — operation order on a live replica,
+// document order on one rebuilt from a snapshot — so after a restart the same
+// position resolves to a different node and its offset can fall outside that
+// node. Keeping the live one makes both orders agree for a live/tombstone
+// pair, which is the shape those documents carry.
+//
+// Two nodes in the same state keep the last-put-wins behavior, and stay
+// order-dependent: element IDs issued for a split can legitimately collide
+// with an inserted node's ID (see the delimiter note in operations.TreeEdit),
+// and that resolution order is what the rest of the tree already assumes.
+//
+// A node this refuses stays in the index tree while another node answers for
+// its ID, so it is reachable by traversal but not by lookup. That is the
+// intended trade for a duplicate: the alternative is unregistering a node that
+// positions still resolve through.
+func (t *Tree) putNode(node *TreeNode) {
+	key, existing := t.NodeMapByID.Floor(node.id)
+	if existing != nil && existing != node && key.Equal(node.id) &&
+		node.IsRemoved() && !existing.IsRemoved() {
+		return
+	}
+
+	t.NodeMapByID.Put(node.id, node)
 }
 
 // findFloorNode returns node from given id.
