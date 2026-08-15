@@ -223,6 +223,41 @@ func TestHistoryStack(t *testing.T) {
 		assert.Equal(t, presence.Data{"color": "blue"}, myPresence())
 	})
 
+	t.Run("presence undo of a newly introduced key restores the zero value test", func(t *testing.T) {
+		// change.Context.ReversePresence rebuilds a key's undo value from
+		// previousPresence[key], a snapshot taken when the context was
+		// created. For a key that did not exist in that snapshot -- i.e.
+		// the tracked Set introduced it, rather than changing it -- Go's
+		// map indexing yields the zero value, the empty string, so undo
+		// restores "" rather than removing the key.
+		//
+		// JS's equivalent (context.ts's getReversePresence) assigns
+		// `undefined` for the same case, and yorkie-js-sdk's deepcopy
+		// (JSON.parse(JSON.stringify(...))) drops object keys whose value
+		// is undefined before the change reaches the wire -- so JS
+		// removes the key on undo instead of sending "".
+		//
+		// This is a confirmed, deliberate divergence between the two
+		// SDKs, not a bug to fix here: see
+		// docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md
+		// ("Related: undoing a newly introduced presence key"). This test
+		// pins Go's current behavior so a future change to it is a
+		// conscious decision, not an accident.
+		doc := document.New("d1")
+		myPresence := func() presence.Data {
+			return doc.PresenceForTest(doc.ActorID().String())
+		}
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("color", "blue", presence.WithHistory())
+			return nil
+		}))
+		assert.Equal(t, presence.Data{"color": "blue"}, myPresence())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, presence.Data{"color": ""}, myPresence())
+	})
+
 	t.Run("disabled presence set with history leaves no undo entry test", func(t *testing.T) {
 		// A document that opted out of presence must not resurrect presence
 		// via undo: Update drops the presence change entirely, so no
