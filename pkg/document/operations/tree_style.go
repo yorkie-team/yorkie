@@ -80,11 +80,11 @@ func NewTreeStyleRemove(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) error {
+func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Tree)
 	if !ok {
-		return ErrNotApplicableDataType
+		return nil, ErrNotApplicableDataType
 	}
 
 	var pairs []crdt.GCPair
@@ -102,10 +102,10 @@ func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) e
 	}
 	root.Acc(diff)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return nil, nil
 }
 
 // FromPos returns the start point of the editing range.
@@ -126,6 +126,11 @@ func (e *TreeStyle) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (e *TreeStyle) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (e *TreeStyle) SetExecutedAt(executedAt *time.Ticket) {
+	e.executedAt = executedAt
 }
 
 // ParentCreatedAt returns the creation time of the Text.

@@ -50,11 +50,28 @@ func New(id ID, message string, operations []operations.Operation, pc *inner.Cha
 	}
 }
 
-// Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root, presences *inner.Map) error {
+// Execute applies this change to the given JSON root. It returns the
+// operations that actually executed and the reverse operations that undo
+// them, in reverse order.
+func (c *Change) Execute(
+	root *crdt.Root,
+	presences *inner.Map,
+	source operations.OpSource,
+) ([]operations.Operation, []operations.Operation, error) {
+	var executed []operations.Operation
+	var reverseOps []operations.Operation
+
 	for _, op := range c.operations {
-		if err := op.Execute(root, c.ID().versionVector); err != nil {
-			return err
+		reverseOp, err := op.Execute(root, source, c.ID().versionVector)
+		if err != nil {
+			return nil, nil, err
+		}
+		executed = append(executed, op)
+
+		// NOTE(hackerwins): Reverse operations are accumulated in reverse
+		// order so that undoing a change replays its operations backwards.
+		if reverseOp != nil {
+			reverseOps = append([]operations.Operation{reverseOp}, reverseOps...)
 		}
 	}
 
@@ -62,7 +79,7 @@ func (c *Change) Execute(root *crdt.Root, presences *inner.Map) error {
 		c.presenceChange.Execute(c.id.actorID, presences)
 	}
 
-	return nil
+	return executed, reverseOps, nil
 }
 
 // ID returns the ID of this change.

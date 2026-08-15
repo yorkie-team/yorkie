@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -232,7 +233,7 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
+		if _, _, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal); err != nil {
 			return err
 		}
 
@@ -300,7 +301,7 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 	}
 
 	for _, c := range changes {
-		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
+		if _, _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
 			return err
 		}
 	}

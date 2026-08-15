@@ -107,7 +107,7 @@ func NewRestoreEdit(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error {
+func (e *Edit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -118,10 +118,10 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 		// observed, so a client cannot forge a node under another actor's
 		// clock or advance it. See validateRestoreIdentities.
 		if err := validateRestoreIdentities(e.restoreSpans, versionVector); err != nil {
-			return err
+			return nil, err
 		}
 		if err := validateRestoreIdentities(e.retombstoneSpans, versionVector); err != nil {
-			return err
+			return nil, err
 		}
 
 		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
@@ -179,15 +179,15 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 			}
 			root.Acc(diff)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 
 	default:
-		return ErrNotApplicableDataType
+		return nil, ErrNotApplicableDataType
 	}
 
-	return nil
+	return nil, nil
 }
 
 // validateRestoreIdentities rejects restore/retombstone spans whose node
@@ -251,6 +251,11 @@ func (e *Edit) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (e *Edit) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (e *Edit) SetExecutedAt(executedAt *time.Ticket) {
+	e.executedAt = executedAt
 }
 
 // ParentCreatedAt returns the creation time of the Text.

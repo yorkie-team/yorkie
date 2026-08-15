@@ -133,7 +133,8 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 	to, err := tree.FindPos(7)
 	assert.NoError(t, err)
 	delOp := operations.NewTreeEdit(parent, from, to, nil, 0, helper.TimeT(ctx))
-	assert.NoError(t, delOp.Execute(root, nil))
+	_, err = delOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "<r></r>", tree.ToXML())
 
 	// Purge: the tombstones are physically removed, so restore cannot
@@ -149,7 +150,8 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 		parent, nil, nil, helper.TimeT(ctx),
 		spans, crdt.RestoreModeRestore, nil,
 	)
-	assert.NoError(t, restoreOp.Execute(root, helper.MaxVersionVector()))
+	_, err = restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(),
 		"the purged subtree is recreated under its original identity")
@@ -209,7 +211,8 @@ func TestTreeRestoreRejectsForgedIdentity(t *testing.T) {
 	// The acting change knows only restoreActor, never victimActor, so the
 	// forged identity is uncausal and must be rejected.
 	vv := helper.VersionVectorOf(map[time.ActorID]int64{restoreActor: time.MaxLamport})
-	assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
+	_, err := op.Execute(root, operations.OpSourceRemote, vv)
+	assert.ErrorIs(t, err, operations.ErrUnknownRestoreIdentity)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "state untouched on rejection")
 }
 
@@ -358,15 +361,17 @@ func TestTreeRestoreRecreateKeepsTreeEditable(t *testing.T) {
 	assert.NoError(t, err)
 	to, err := tree.FindPos(7)
 	assert.NoError(t, err)
-	assert.NoError(t, operations.NewTreeEdit(parent, from, to, nil, 0,
-		helper.TimeT(ctx)).Execute(root, nil))
+	_, err = operations.NewTreeEdit(parent, from, to, nil, 0,
+		helper.TimeT(ctx)).Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	n, err := root.GarbageCollect(helper.MaxVersionVector())
 	assert.NoError(t, err)
 	assert.Positive(t, n, "the deleted subtree should be purged")
 
-	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+	_, err = operations.NewRestoreTreeEdit(parent, nil, nil,
 		helper.TimeT(ctx), spans, crdt.RestoreModeRestore, nil).
-		Execute(root, helper.MaxVersionVector()))
+		Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 	assertLengthCacheSound(t, tree, "after recreate")
 
@@ -403,23 +408,26 @@ func TestTreeRestoreDocSizeSymmetry(t *testing.T) {
 	assert.NoError(t, err)
 	to, err := tree.FindPos(7)
 	assert.NoError(t, err)
-	assert.NoError(t, operations.NewTreeEdit(parent, from, to, nil, 0,
-		helper.TimeT(ctx)).Execute(root, nil))
+	_, err = operations.NewTreeEdit(parent, from, to, nil, 0,
+		helper.TimeT(ctx)).Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	afterDelete := root.DocSize()
 	assert.NotEqual(t, baseline, afterDelete, "the delete must move size Live->GC")
 
 	// Undo: every byte comes back to Live and GC empties out.
-	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+	_, err = operations.NewRestoreTreeEdit(parent, nil, nil,
 		helper.TimeT(ctx), spans, crdt.RestoreModeRestore, nil).
-		Execute(root, helper.MaxVersionVector()))
+		Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 	assert.Equal(t, baseline, root.DocSize(), "restore returns docSize to baseline")
 
 	// Redo: RestoreModeRetombstone swaps the span sets, so the spans in the
 	// restore slot are the ones re-tombstoned.
-	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+	_, err = operations.NewRestoreTreeEdit(parent, nil, nil,
 		helper.TimeT(ctx), spans, crdt.RestoreModeRetombstone, nil).
-		Execute(root, helper.MaxVersionVector()))
+		Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 	assert.Equal(t, "<r></r>", tree.ToXML())
 	assert.Equal(t, afterDelete, root.DocSize(), "redo returns docSize to the post-delete state")
 }

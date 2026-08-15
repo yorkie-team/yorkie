@@ -106,7 +106,7 @@ func NewRestoreTreeEdit(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) error {
+func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -118,10 +118,10 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 		// state, so reject any the acting change could not causally observe.
 		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
 			if err := validateTreeRestoreIdentities(e.restoreSpans, versionVector); err != nil {
-				return err
+				return nil, err
 			}
 			if err := validateTreeRestoreIdentities(e.retombstoneSpans, versionVector); err != nil {
-				return err
+				return nil, err
 			}
 
 			toRestore, toRetombstone := e.restoreSpans, e.retombstoneSpans
@@ -134,7 +134,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			// piece splits it (live-split overhead accounted to diff).
 			retombstonePairs, retombstoneDiff, err := obj.Retombstone(toRetombstone, e.executedAt)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			diff.Add(retombstoneDiff)
 			for _, pair := range retombstonePairs {
@@ -152,7 +152,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			// addition, plus any live-split overhead. Mirrors Text restore.
 			untombstoned, recreated, restorePairs, restoreDiff, err := obj.Restore(toRestore)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			for _, pair := range restorePairs {
 				root.RegisterGCPair(pair)
@@ -166,7 +166,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 				diff.Add(node.DataSize())
 			}
 			root.Acc(diff)
-			return nil
+			return nil, nil
 		}
 
 		var contents []*crdt.TreeNode
@@ -177,7 +177,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 
 				clone, err = content.DeepCopy()
 				if err != nil {
-					return err
+					return nil, err
 				}
 
 				contents = append(contents, clone)
@@ -229,14 +229,14 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 		}
 		root.Acc(diff)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 	default:
-		return ErrNotApplicableDataType
+		return nil, ErrNotApplicableDataType
 	}
 
-	return nil
+	return nil, nil
 }
 
 // FromPos returns the start point of the editing range.
@@ -252,6 +252,11 @@ func (e *TreeEdit) ToPos() *crdt.TreePos {
 // SetActor sets the given actor to this operation.
 func (e *TreeEdit) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (e *TreeEdit) SetExecutedAt(executedAt *time.Ticket) {
+	e.executedAt = executedAt
 }
 
 // ParentCreatedAt returns the creation time of the Text.

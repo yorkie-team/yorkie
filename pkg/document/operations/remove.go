@@ -48,22 +48,22 @@ func NewRemove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Remove) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Remove) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
 	switch parent := parentElem.(type) {
 	case crdt.Container:
 		elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if elem != nil {
 			root.RegisterRemovedElementPair(parent, elem)
 		}
 	default:
-		return ErrNotApplicableDataType
+		return nil, ErrNotApplicableDataType
 	}
-	return nil
+	return nil, nil
 }
 
 // ParentCreatedAt returns the creation time of the Container.
@@ -79,6 +79,11 @@ func (o *Remove) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (o *Remove) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Remove) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
 }
 
 // CreatedAt returns the creation time of the target element.

@@ -36,16 +36,37 @@ var (
 	ErrUnknownRestoreIdentity = errors.New("restore span identity is not causally known")
 )
 
+// OpSource represents the source of an operation execution. Some operations
+// behave differently under undo/redo, where a Set or an Add acts as a
+// replacement rather than an insertion.
+type OpSource int
+
+const (
+	// OpSourceLocal is an operation executed by a local edit.
+	OpSourceLocal OpSource = iota
+
+	// OpSourceRemote is an operation received from another client.
+	OpSourceRemote
+
+	// OpSourceUndoRedo is an operation replayed from the undo/redo stack.
+	OpSourceUndoRedo
+)
+
 // Operation represents an operation to be executed on a document.
 type Operation interface {
-	// Execute executes this operation on the given document(`root`).
-	Execute(root *crdt.Root, versionVector time.VersionVector) error
+	// Execute executes this operation on the given document(`root`) and
+	// returns the reverse operation that undoes it. The reverse is nil when
+	// this operation has none.
+	Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error)
 
 	// ExecutedAt returns execution time of this operation.
 	ExecutedAt() *time.Ticket
 
 	// SetActor sets the given actor to this operation.
 	SetActor(id time.ActorID)
+
+	// SetExecutedAt sets the given execution time to this operation.
+	SetExecutedAt(executedAt *time.Ticket)
 
 	// ParentCreatedAt returns the creation time of the target element to
 	// execute the operation.

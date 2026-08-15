@@ -52,25 +52,25 @@ func NewAdd(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Add) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return ErrNotApplicableDataType
+		return nil, ErrNotApplicableDataType
 	}
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err = obj.InsertAfter(o.prevCreatedAt, value, o.executedAt); err != nil {
-		return err
+		return nil, err
 	}
 
 	root.RegisterElement(value)
-	return nil
+	return nil, nil
 }
 
 // Value returns the value of this operation.
@@ -91,6 +91,11 @@ func (o *Add) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (o *Add) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Add) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
 }
 
 // PrevCreatedAt returns the creation time of previous element.

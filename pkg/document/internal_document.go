@@ -21,6 +21,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -314,7 +315,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			prevPresence = d.Presence(clientID)
 		}
 
-		if err := c.Execute(d.root, d.presences); err != nil {
+		if _, _, err := c.Execute(d.root, d.presences, operations.OpSourceRemote); err != nil {
 			return nil, err
 		}
 

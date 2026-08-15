@@ -59,28 +59,28 @@ func NewIncreaseWithActor(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
-		return ErrNotApplicableDataType
+		return nil, ErrNotApplicableDataType
 	}
 
 	value := o.value.(*crdt.Primitive)
 	if cnt.IsDedup() {
 		if o.actor == "" {
-			return ErrNotApplicableDataType
+			return nil, ErrNotApplicableDataType
 		}
 		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		if _, err := cnt.Increase(value); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 // Value return the value of this operation.
@@ -101,6 +101,11 @@ func (o *Increase) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (o *Increase) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Increase) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
 }
 
 // Actor returns the actor for dedup mode. Empty string means normal mode.
