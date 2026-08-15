@@ -32,6 +32,9 @@ import (
 // Every position anchors by TreeNodeID, so an ID must name a single node.
 // See docs/design/tree-content-identity.md.
 
+// textNodeType is the node type a tree uses for text.
+const textNodeType = "text"
+
 // treeNodeIDs returns every node id in the tree under key "t", sorted.
 func treeNodeIDs(t *testing.T, root *crdt.Object) []string {
 	t.Helper()
@@ -75,7 +78,7 @@ func newTreeDoc(t *testing.T, hexActor string) *document.Document {
 			Type: "r",
 			Children: []json.TreeNode{{
 				Type:     "p",
-				Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				Children: []json.TreeNode{{Type: textNodeType, Value: "ab"}},
 			}},
 		})
 		return nil
@@ -94,10 +97,10 @@ func TestBulkContentsGetDistinctIDs(t *testing.T) {
 	assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 		r.GetTree("t").EditBulkByPath([]int{1}, []int{1}, []*json.TreeNode{{
 			Type:     "p",
-			Children: []json.TreeNode{{Type: "text", Value: "x"}},
+			Children: []json.TreeNode{{Type: textNodeType, Value: "x"}},
 		}, {
 			Type:     "p",
-			Children: []json.TreeNode{{Type: "text", Value: "y"}},
+			Children: []json.TreeNode{{Type: textNodeType, Value: "y"}},
 		}}, 0)
 		return nil
 	}))
@@ -117,7 +120,7 @@ func TestSingleContentEditKeepsItsIDs(t *testing.T) {
 	assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 		r.GetTree("t").Edit(2, 2, &json.TreeNode{
 			Type:     "p",
-			Children: []json.TreeNode{{Type: "text", Value: "x"}},
+			Children: []json.TreeNode{{Type: textNodeType, Value: "x"}},
 		}, 0)
 		return nil
 	}))
@@ -143,10 +146,10 @@ func TestOriginatorAndReplicaAgree(t *testing.T) {
 	assert.NoError(t, origin.Update(func(r *json.Object, p *presence.Presence) error {
 		r.GetTree("t").EditBulkByPath([]int{0, 1}, []int{0, 1}, []*json.TreeNode{{
 			Type:     "p",
-			Children: []json.TreeNode{{Type: "text", Value: "x"}},
+			Children: []json.TreeNode{{Type: textNodeType, Value: "x"}},
 		}, {
 			Type:     "p",
-			Children: []json.TreeNode{{Type: "text", Value: "y"}},
+			Children: []json.TreeNode{{Type: textNodeType, Value: "y"}},
 		}}, 0)
 		return nil
 	}))
@@ -174,8 +177,8 @@ func TestSplitTicketDoesNotCollideWithContent(t *testing.T) {
 	doc := newTreeDoc(t, "000000000000000000000001")
 
 	assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-		r.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "q"}, 1)
-		r.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "z"}, 0)
+		r.GetTree("t").Edit(2, 2, &json.TreeNode{Type: textNodeType, Value: "q"}, 1)
+		r.GetTree("t").Edit(1, 1, &json.TreeNode{Type: textNodeType, Value: "z"}, 0)
 		return nil
 	}))
 
