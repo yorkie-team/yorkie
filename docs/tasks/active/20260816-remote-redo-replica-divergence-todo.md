@@ -473,3 +473,68 @@ the text — this is not a cosmetic problem: it fails the peer's
       reverses, which also carry normalized positions but never resolve
       them positionally (identity addressing) except in
       `findRestoreAnchor`'s fallback rung, which does refine first
+
+## Related: a text node's tombstoned attribute is resurrected by a snapshot round trip
+
+Found while building the Text `Style` reverse operation (the reverse of a
+`Style` call that added a key which did not exist before removes that key
+via `RHT.Remove`, tombstoning it), while adding the round-trip coverage
+this document's usual pattern calls for. **Present identically in JS, so
+not fixed** — per this document's usual rule.
+
+A text node's per-character style attributes are an `RHT` (Go:
+`pkg/document/crdt/text.go`'s `TextValue.attrs`; JS:
+`CRDTTextValue`'s `attrs`), the same structure used for object keys and
+tree node attributes. Snapshot encoding writes every attribute node
+regardless of tombstone state (Go: `toTextNodes`,
+`api/converter/to_bytes.go:246-259`, iterating
+`value.Attrs().Nodes()` unfiltered; JS: `toTextNodes`,
+`packages/sdk/src/api/converter.ts:756-780`, iterating the RHT's
+unfiltered `Symbol.iterator`), but for text nodes specifically — unlike
+the sibling `toRHT`/object-and-tree path (Go has no equivalent generic
+helper here; JS's `toRHT`, `converter.ts:803-816`) — the encoder never
+sets the wire's `is_removed` field on `NodeAttr` (Go:
+`api.NodeAttr.IsRemoved`, `api/yorkie/v1/resources.pb.go:1232`; JS:
+`PbNodeAttr.isRemoved`). The decoder matches this gap symmetrically: Go's
+`fromTextNode` (`api/converter/from_bytes.go:382-415`) calls
+`attrs.Set(key, pbAttr.Value, updatedAt)` unconditionally, and JS's
+`fromTextNode` (`converter.ts:1278-1290`) calls
+`textValue.setAttr(key, value.value, ...)` unconditionally — both always
+construct a live node, regardless of what the tombstone state was before
+encoding.
+
+So: style an attribute, remove it (directly, or as this port's `Style`
+undo removing a newly added key), snapshot-encode, decode. The decoded
+replica has the attribute back, live, at whatever value it held at the
+moment of removal — even though the pre-snapshot replica correctly showed
+it absent. This is not observable through the ordinary wire protocol
+(`toRHT`/`fromRHT`, used for individual `Style`/`RemoveStyle` operations
+and for object/tree attributes, carries `is_removed` correctly) — only
+the snapshot path for `Text` specifically is affected, since that is the
+one place a text node's full current attribute state, tombstones
+included, has to survive being written out and read back rather than
+being replayed as a sequence of operations.
+
+Confirmed pre-existing and unrelated to this port: `toTextNodes` and
+`fromTextNode` predate this branch by years on both sides (Go:
+`git blame` on `to_bytes.go`'s `toTextNodes` shows the attribute-copying
+loop from 2020, untouched by this port's commits; the `attrs :=
+make(map[string]*api.NodeAttr)` line is from 2023, also unrelated). The
+port's own `Style`/`RemoveStyle` `PrevAttr` capture (introduced widening
+the CRDT-layer return values) does not touch encoding at all, so this bug
+was reachable before this port started — the round-trip test just needed
+a removed-attribute case to surface it, which nothing before did.
+
+### Tasks
+
+- [ ] Confirm the same gap for `RGATreeSplitNode`-adjacent tombstoned
+      attributes doesn't already have separate handling elsewhere (e.g.
+      GC purge of the RHT node itself, which removes it from the map
+      entirely and would sidestep this — check whether that GC pass runs
+      before every snapshot or is best-effort)
+- [ ] Decide the fix: add `is_removed` to the text-node attribute
+      encode/decode path on both sides, mirroring `toRHT`/`fromRHT`
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+      per this document's usual rule for cross-SDK behavior changes
+- [ ] Add regression coverage: style an attribute, remove it, snapshot
+      round trip, assert the attribute stays absent -- in both SDKs
