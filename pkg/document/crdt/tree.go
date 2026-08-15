@@ -1423,11 +1423,6 @@ func (t *Tree) Edit(
 	var diff resource.DataSize
 	var pairs []GCPair
 
-	// Phase 0: Identity check — a TreeNodeID must name a single node, so
-	// content that reuses an ID already in the tree is dropped before
-	// anything is mutated.
-	contents = t.dropDuplicateContents(contents, editedAt)
-
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -1512,6 +1507,13 @@ func (t *Tree) Edit(
 	}
 
 	// Phase 8: Insert — insert the given node at the given position.
+	//
+	// The identity check runs here rather than on entry: Phase 1 splits text
+	// nodes to resolve the range, and a split can create the very ID a content
+	// node carries. Checking before that would let the copy through and leave
+	// two nodes under one ID.
+	contents = t.dropDuplicateContents(contents, editedAt)
+
 	if len(contents) != 0 {
 		leftInChildren := fromLeft
 

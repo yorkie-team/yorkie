@@ -152,6 +152,22 @@ func TestTreeEditDropsDuplicatedContentNodeID(t *testing.T) {
 	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML(), "the copy is not inserted")
 }
 
+// TestTreeEditDropsContentIDCreatedByItsOwnSplit covers the copy whose id does
+// not exist yet when the edit starts: resolving the range splits a text node
+// and creates that id moments before the content is inserted under it.
+func TestTreeEditDropsContentIDCreatedByItsOwnSplit(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree, textID := createDigitTree(t, ctx, helper.TestRoot())
+
+	undoAt := time.NewTicket(helper.TimeT(ctx).Lamport()+1, 1, time.InitialActorID)
+	_, _, err := tree.EditT(6, 6, []*crdt.TreeNode{
+		crdt.NewTreeNode(crdt.NewTreeNodeID(textID.CreatedAt, 5), "text", nil, "5"),
+	}, 0, undoAt, func() *time.Ticket { return undoAt })
+	assert.NoError(t, err)
+
+	assert.Empty(t, duplicatedIDs(tree), "a TreeNodeID must name at most one node")
+}
+
 // TestTreeEditDropsDuplicatedContentFromAnotherActor covers a copy sent by a
 // different client: what marks content as a copy is that its id belongs to
 // another change, whether that change is earlier or merely another actor's.
