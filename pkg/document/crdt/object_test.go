@@ -21,7 +21,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -79,5 +82,28 @@ func TestObject(t *testing.T) {
 		copied, err := obj.DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, `{"key":"v1"}`, copied.Marshal())
+	})
+
+	t.Run("deep copy does not resurrect a deleted Text member", func(t *testing.T) {
+		// Regression test: Text.DeepCopy (like Tree.DeepCopy) did not
+		// propagate removedAt, so a deleted Text member came back as live
+		// in the clone -- not just a size mismatch (caught indirectly by
+		// TestDocumentSize), but a resurrection bug: the user's Update
+		// closure reads through a DeepCopy'd cloneRoot, and the
+		// cached-snapshot path copies through DeepCopy too.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("t").Edit(0, 0, "hello")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("t")
+			return nil
+		}))
+		assert.Equal(t, `{}`, doc.Marshal())
+
+		copied, err := doc.RootObject().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, `{}`, copied.Marshal())
 	})
 }
