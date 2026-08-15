@@ -437,9 +437,10 @@ func (t *Text) NormalizePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, err
 	return t.rgaTreeSplit.normalizePos(pos)
 }
 
-// RefinePos remaps the given position onto the current split chain, so a
-// position recorded before the chain was split still addresses the same place
-// in the text.
+// RefinePos remaps the given position onto the current split chain by
+// reinterpreting its offset against the live text. A position recorded before
+// the chain was split still addresses the same place; one recorded before a
+// deletion does not, since removed characters no longer consume offset.
 func (t *Text) RefinePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
 	return t.rgaTreeSplit.refinePos(pos)
 }

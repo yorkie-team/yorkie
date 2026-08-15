@@ -268,8 +268,17 @@ func TestTextNormalizeAndRefinePos(t *testing.T) {
 		"a normalized position is anchored on the head")
 
 	// Split the run and tombstone "23": the chain is now
-	// ["01"]{"23"}["456789"], and the normalized offset 4 must still land
-	// between "3" and "4" -- removed characters do not consume offset.
+	// ["01"]{"23"}["456789"] and the live text reads "01456789".
+	//
+	// refinePos does NOT preserve the character the position originally sat
+	// next to. It reinterprets the offset against the text as it now reads:
+	// offset 4 walked over live characters only (removed ones have length 0
+	// and are stepped over without consuming any of it) lands after "0145",
+	// between "5" and "6" -- index 4 of the current live text, not the
+	// "3"|"4" boundary it named before the delete. So the position moves.
+	//
+	// That is the JS behavior (rga_tree_split.ts refinePos), ported as-is,
+	// and it is what the findRestoreAnchor from-position fallback inherits.
 	delFrom, delTo, err := text.CreateRange(2, 4)
 	require.NoError(t, err)
 	_, _, _, _, _, err = text.Edit(delFrom, delTo, "", nil, ctx.IssueTimeTicket(), nil)
@@ -280,7 +289,8 @@ func TestTextNormalizeAndRefinePos(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, refined.ID().CreatedAt().Compare(seed))
 	assert.Equal(t, 4, refined.ID().Offset(), "the refined position names the live run starting at \"4\"")
-	assert.Equal(t, 2, refined.RelativeOffset(), "offset 4 from the head is \"01\" plus 2 live characters")
+	assert.Equal(t, 2, refined.RelativeOffset(),
+		"offset 4 over live text is \"01\" plus 2 more characters, i.e. between \"5\" and \"6\"")
 
 	// Refining an offset past the end of the chain snaps to the last node.
 	beyond, err := text.RefinePos(crdt.NewRGATreeSplitNodePos(normalized.ID(), 100))

@@ -68,20 +68,44 @@ func insertTicket(t *testing.T, doc *document.Document, key string) *time.Ticket
 	return nodes[0].ID().CreatedAt()
 }
 
-// assertAllCharsFrom asserts that no live character in the text under key
-// carries an identity other than seed -- i.e. that undo revived the removed
-// run rather than re-inserting a copy under the undo's own ticket.
-func assertAllCharsFrom(t *testing.T, doc *document.Document, key string, seed *time.Ticket) {
+// assertAllCharsFrom asserts that every live character in the text under key
+// carries one of the given identities -- i.e. that undo and redo revived
+// content rather than re-inserting copies under their own tickets. Pass one
+// seed per original insertion.
+func assertAllCharsFrom(t *testing.T, doc *document.Document, key string, seeds ...*time.Ticket) {
 	t.Helper()
 
 	for _, node := range textOf(t, doc, key).Nodes() {
 		if node.RemovedAt() != nil {
 			continue
 		}
-		assert.Zero(t, node.ID().CreatedAt().Compare(seed),
-			"live node %s should keep the identity it was inserted under (%s)",
-			node.ID().ToTestString(), seed.ToTestString())
+
+		known := false
+		for _, seed := range seeds {
+			if node.ID().CreatedAt().Compare(seed) == 0 {
+				known = true
+				break
+			}
+		}
+		assert.True(t, known,
+			"live node %s should keep an identity it was inserted under, not one minted by undo/redo",
+			node.ID().ToTestString())
 	}
+}
+
+// runTicket returns the identity of the node holding the given run, live or
+// tombstoned. Used to pin that a run keeps its identity across a full
+// undo/redo cycle, including one that purges and recreates it.
+func runTicket(t *testing.T, doc *document.Document, key, value string) *time.Ticket {
+	t.Helper()
+
+	for _, node := range textOf(t, doc, key).Nodes() {
+		if node.Value().Value() == value {
+			return node.ID().CreatedAt()
+		}
+	}
+	t.Fatalf("no node holding %q in text %q", value, key)
+	return nil
 }
 
 // newTextDoc returns a document holding an empty Text under "t". The text is
@@ -113,6 +137,7 @@ func TestTextUndo(t *testing.T) {
 		// collect, and redo revives that same identity.
 		doc := newTextDoc(t)
 		editText(t, doc, 0, 0, "ABCD")
+		seed := insertTicket(t, doc, "t")
 		assert.Equal(t, `[{"val":"ABCD"}]`, doc.Root().GetText("t").Marshal())
 		assert.True(t, doc.CanUndo())
 
@@ -123,10 +148,18 @@ func TestTextUndo(t *testing.T) {
 		assert.Equal(t, `[]`, doc.Root().GetText("t").Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 
+		// The redo revives content the GC pass above purged, so it has to
+		// recreate the run. Collecting again afterwards is what catches a
+		// revived node left registered for collection: without it, a stale
+		// registration only surfaces on some later, unrelated GC pass.
 		assert.True(t, doc.CanRedo())
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, `[{"val":"ABCD"}]`, doc.Root().GetText("t").Marshal())
+		assertAllCharsFrom(t, doc, "t", seed)
 		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(t, 0, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, `[{"val":"ABCD"}]`, doc.Root().GetText("t").Marshal())
+		assertAllCharsFrom(t, doc, "t", seed)
 	})
 
 	t.Run("delete undo revives by identity and survives gc test", func(t *testing.T) {
@@ -171,6 +204,7 @@ func TestTextUndo(t *testing.T) {
 
 		editText(t, doc, 1, 3, "XY")
 		assert.Equal(t, `[{"val":"A"},{"val":"XY"},{"val":"D"}]`, doc.Root().GetText("t").Marshal())
+		inserted := runTicket(t, doc, "t", "XY")
 
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, `[{"val":"A"},{"val":"BC"},{"val":"D"}]`, doc.Root().GetText("t").Marshal())
@@ -181,32 +215,77 @@ func TestTextUndo(t *testing.T) {
 		assert.Equal(t, `[{"val":"A"},{"val":"BC"},{"val":"D"}]`, doc.Root().GetText("t").Marshal())
 		assertAllCharsFrom(t, doc, "t", seed)
 
+		// The redo has to do both halves against a chain the GC pass changed
+		// underneath it: recreate the purged "XY" and re-remove "BC". Both
+		// runs must come back under the identity they were born with, and the
+		// re-removed one must be the only thing left pending collection.
 		assert.True(t, doc.CanRedo())
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, `[{"val":"A"},{"val":"XY"},{"val":"D"}]`, doc.Root().GetText("t").Marshal())
+		assertAllCharsFrom(t, doc, "t", seed, inserted)
+		assert.Zero(t, runTicket(t, doc, "t", "XY").Compare(inserted),
+			"the revived insertion must keep its original identity, not one minted by the redo")
+		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, `[{"val":"A"},{"val":"XY"},{"val":"D"}]`, doc.Root().GetText("t").Marshal())
+		assertAllCharsFrom(t, doc, "t", seed, inserted)
 	})
 
 	t.Run("chained undo redo returns to each state test", func(t *testing.T) {
+		// Chained undo/redo is where a copy-reinserted reverse would show up:
+		// a fresh node sorts ahead of an as-yet-unrevived neighbour and the
+		// text comes back in the wrong order. So every step asserts identity
+		// and the pending-collection count, not just the visible text --
+		// content alone would pass with stale registrations accumulating.
 		doc := newTextDoc(t)
 		editText(t, doc, 0, 0, "ABCD")
+		first := insertTicket(t, doc, "t")
 		editText(t, doc, 4, 4, "EF")
+		second := runTicket(t, doc, "t", "EF")
 		editText(t, doc, 0, 2, "")
 		assert.Equal(t, "CDEF", textOf(t, doc, "t").String())
+		assert.Equal(t, 1, doc.GarbageLen(), `"AB" is tombstoned`)
 
+		// Undo the delete: "AB" comes back and stops being garbage.
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "ABCDEF", textOf(t, doc, "t").String())
+		assertAllCharsFrom(t, doc, "t", first, second)
+		assert.Equal(t, 0, doc.GarbageLen())
+
+		// Undo the "EF" insert: it is re-removed by identity.
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "ABCD", textOf(t, doc, "t").String())
+		assertAllCharsFrom(t, doc, "t", first)
+		assert.Equal(t, 1, doc.GarbageLen(), `"EF" is tombstoned`)
+
+		// Undo the "ABCD" insert: its span covers both pieces the delete
+		// split it into, so both are re-removed.
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "", textOf(t, doc, "t").String())
+		assert.Equal(t, 3, doc.GarbageLen(), `"EF", "AB" and "CD"`)
 
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "ABCD", textOf(t, doc, "t").String())
+		assertAllCharsFrom(t, doc, "t", first)
+		assert.Equal(t, 1, doc.GarbageLen())
+
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "ABCDEF", textOf(t, doc, "t").String())
+		assertAllCharsFrom(t, doc, "t", first, second)
+		assert.Equal(t, 0, doc.GarbageLen())
+
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "CDEF", textOf(t, doc, "t").String())
+		assertAllCharsFrom(t, doc, "t", first, second)
+		assert.Equal(t, 1, doc.GarbageLen())
 		assert.False(t, doc.CanRedo())
+
+		// Collecting at the end must leave the final state untouched: every
+		// revive above had to unregister what it brought back, or a pass here
+		// purges live text.
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, "CDEF", textOf(t, doc, "t").String())
+		assertAllCharsFrom(t, doc, "t", first, second)
 	})
 
 	t.Run("undo keeps attributes of the removed run test", func(t *testing.T) {

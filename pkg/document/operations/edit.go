@@ -289,12 +289,23 @@ func (e *Edit) toReverseOperation(
 
 	// Neither removed nor inserted anything: the reverse is an ordinary
 	// no-op edit. Kept rather than dropped so an edit is always undoable,
-	// matching the JS SDK. removedValues is collected in lockstep with
-	// removedSpans, so it is necessarily empty here too and the content and
-	// attributes below always come out empty; the shape is kept as JS has it
-	// rather than collapsed, so the two stay comparable.
+	// matching the JS SDK.
+	//
+	// Everything below evaluates to empty in practice. Reaching here requires
+	// len(removedSpans) == 0, and Text.Edit fills removedValues and
+	// removedSpans in one loop, so removedValues is empty too. The shape is
+	// kept as JS has it (edit_operation.ts:300-323) rather than collapsed to
+	// a constant, so a future divergence in what Text.Edit reports shows up
+	// as a behavior difference rather than as silently unreachable code that
+	// someone already deleted.
+
+	// JS keys this on removedValues.length === 1 and reads the attributes off
+	// the removed value itself. Go's removedValues carries only text, so the
+	// attributes come from the parallel removedSpans entry -- the length
+	// check on it is a bounds guard for that indexing, not a second
+	// condition JS is missing.
 	var attributes map[string]string
-	if len(removedValues) == 1 && len(removedSpans) == 1 {
+	if len(removedValues) == 1 && len(removedSpans) > 0 {
 		attributes = removedSpans[0].Attributes
 	}
 
@@ -305,6 +316,10 @@ func (e *Edit) toReverseOperation(
 			fromPos.ID(),
 			fromPos.RelativeOffset()+len(utf16.Encode([]rune(e.content))),
 		),
+		// NOTE: joining a slice that is always empty here, and the only use
+		// of the strings import. It mirrors JS's removedValues.map(...).join('')
+		// and is deliberate -- do not drop it as dead code without also
+		// revisiting the block comment above.
 		content:     strings.Join(removedValues, ""),
 		attributes:  attributes,
 		isUndoOp:    true,

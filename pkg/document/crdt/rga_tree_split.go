@@ -490,6 +490,11 @@ func (s *RGATreeSplit[V]) normalizePos(pos *RGATreeSplitNodePos) (*RGATreeSplitN
 // For example, a position (1:2:0, rel=5) taken before ["12345"](1:2:0) was
 // split into ["1"](1:2:0) ["23"](1:2:1) ["45"](1:2:3) refines to (1:2:3,
 // rel=2), the same place in the text.
+//
+// A pure split preserves the place, as above. A deletion does not: the offset
+// is reinterpreted against the text as it now reads, so a position past a
+// since-removed run moves left by the length of what was removed rather than
+// sticking to the character it originally sat next to.
 func (s *RGATreeSplit[V]) refinePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
 	node := s.findFloorNode(pos.id)
 	if node == nil {
