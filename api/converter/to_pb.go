@@ -538,6 +538,9 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 		pbTreeEdit.RetombstoneSpans = retombstoneSpans
 		pbTreeEdit.RestoreMode = toRestoreMode(e.RestoreMode())
 	}
+	for _, ticket := range e.SplitTickets() {
+		pbTreeEdit.SplitTickets = append(pbTreeEdit.SplitTickets, ToTimeTicket(ticket))
+	}
 	return &api.Operation_TreeEdit_{TreeEdit: pbTreeEdit}, nil
 }
 

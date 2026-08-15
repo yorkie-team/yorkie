@@ -436,13 +436,24 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
+	// Splitting an element creates nodes that need tickets. Record the ones
+	// issued so the operation can carry them: every other replica then uses
+	// them instead of reconstructing them from the operation, which it cannot
+	// do correctly once content has descendants. See
+	// docs/design/tree-content-identity.md.
+	var splitTickets []*time.Ticket
+	issueSplitTicket := func() *time.Ticket {
+		issued := t.context.IssueTimeTicket()
+		splitTickets = append(splitTickets, issued)
+		return issued
+	}
 	pairs, diff, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
 		splitLevel,
 		ticket,
-		t.context.IssueTimeTicket,
+		issueSplitTicket,
 		nil,
 	)
 	if err != nil {
@@ -456,14 +467,16 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 
 	t.context.Acc(diff)
 
-	t.context.Push(operations.NewTreeEdit(
+	edit := operations.NewTreeEdit(
 		t.CreatedAt(),
 		fromPos,
 		toPos,
 		nodes,
 		splitLevel,
 		ticket,
-	))
+	)
+	edit.SetSplitTickets(splitTickets)
+	t.context.Push(edit)
 
 	return true
 }

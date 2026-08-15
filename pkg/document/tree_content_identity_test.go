@@ -165,16 +165,12 @@ func TestOriginatorAndReplicaAgree(t *testing.T) {
 		"a replica must give the inserted nodes the ids the originator issued")
 }
 
-// TestSplitTicketCollidesWithContent is the source this change does NOT
-// remove, kept as its reproduction. The tickets an element split consumes are
-// simulated from the operation rather than carried in it, and the simulation
-// advances by the number of top-level contents while the originator also
-// spends one per descendant — so a split ticket can land on an id the edit's
-// own content already holds. Fixing it changes the wire; see
-// docs/design/tree-content-identity.md.
-func TestSplitTicketCollidesWithContent(t *testing.T) {
-	t.Skip("known issue: split tickets are simulated, not carried; see docs/design/tree-content-identity.md")
-
+// TestSplitTicketDoesNotCollideWithContent covers the tickets an element split
+// consumes. They are carried by the operation rather than reconstructed from
+// it, because a reconstruction advancing by the number of top-level contents
+// cannot account for the ticket each descendant also took — so a split ticket
+// used to land on an id the edit's own content already held.
+func TestSplitTicketDoesNotCollideWithContent(t *testing.T) {
 	doc := newTreeDoc(t, "000000000000000000000001")
 
 	assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
