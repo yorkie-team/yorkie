@@ -568,25 +568,30 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNod
 	return value
 }
 
+// edit deletes the given range and, if content is non-empty, inserts it in
+// place. Besides the GC pairs for deleted nodes, it also reports those nodes
+// as restoreSpanValues (identity + value), captured in the same walk that
+// builds the GC pairs, so a caller can revive or re-remove them by identity
+// later without a second traversal over the removed nodes.
 func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
 	content V,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, error) {
+) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, []restoreSpanValue[V], error) {
 	var diff resource.DataSize
 
 	// 01. Split nodes with from and to
 	toLeft, toRight, diffTo, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, s.drainPendingGCPairs(), diff, err
+		return nil, s.drainPendingGCPairs(), diff, nil, err
 	}
 
 	fromLeft, fromRight, diffFrom, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
 		diff.Add(diffTo)
-		return nil, s.drainPendingGCPairs(), diff, err
+		return nil, s.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -613,16 +618,23 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 04. add removed node
 	var pairs []GCPair
+	var removedSpans []restoreSpanValue[V]
 	for _, removedNode := range removedNodes {
 		pairs = append(pairs, GCPair{
 			Parent: s,
 			Child:  removedNode,
 		})
+		removedSpans = append(removedSpans, restoreSpanValue[V]{
+			createdAt: removedNode.createdAt(),
+			start:     removedNode.ID().Offset(),
+			end:       removedNode.ID().Offset() + removedNode.contentLen(),
+			value:     removedNode.Value(),
+		})
 	}
 
 	pairs = append(pairs, s.drainPendingGCPairs()...)
 
-	return caretPos, pairs, diff, nil
+	return caretPos, pairs, diff, removedSpans, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {

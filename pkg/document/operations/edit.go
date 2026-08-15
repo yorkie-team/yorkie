@@ -172,7 +172,7 @@ func (e *Edit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVe
 				root.Acc(diff)
 			}
 		} else {
-			_, pairs, diff, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
+			_, pairs, diff, _, _, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
 			for _, pair := range pairs {
 				root.RegisterGCPair(pair)
 				root.AdjustDiffForGCPair(&diff, pair)

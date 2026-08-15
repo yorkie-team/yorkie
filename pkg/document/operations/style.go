@@ -93,7 +93,7 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 	if len(e.attributesToRemove) > 0 {
 		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
 	} else {
-		pairs, diff, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		pairs, diff, _, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 	}
 
 	for _, pair := range pairs {

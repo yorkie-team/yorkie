@@ -326,7 +326,12 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
-// Edit edits the given range with the given content and attributes.
+// Edit edits the given range with the given content and attributes. Besides
+// the caret position, GC pairs, and size diff, it reports the content the
+// edit removed: removedValues holds each removed node's text (parallel to
+// removedSpans), and removedSpans identifies each by its original identity
+// (createdAt, offset range) so a reverse operation can revive or re-remove
+// it by that identity rather than by copy-reinserting text.
 func (t *Text) Edit(
 	from,
 	to *RGATreeSplitNodePos,
@@ -334,19 +339,37 @@ func (t *Text) Edit(
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, error) {
+) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, []string, []RestoreSpan, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
 	}
 
-	return t.rgaTreeSplit.edit(
+	caretPos, pairs, diff, removed, err := t.rgaTreeSplit.edit(
 		from,
 		to,
 		val,
 		executedAt,
 		versionVector,
 	)
+	if err != nil {
+		return caretPos, pairs, diff, nil, nil, err
+	}
+
+	var removedValues []string
+	var removedSpans []RestoreSpan
+	for _, span := range removed {
+		removedValues = append(removedValues, span.value.String())
+		removedSpans = append(removedSpans, RestoreSpan{
+			CreatedAt:  span.createdAt,
+			Start:      span.start,
+			End:        span.end,
+			Content:    span.value.String(),
+			Attributes: span.value.Attrs().Elements(),
+		})
+	}
+
+	return caretPos, pairs, diff, removedValues, removedSpans, nil
 }
 
 // Restore revives the characters described by spans under their original
@@ -400,25 +423,38 @@ func (t *Text) RGATreeSplit() *RGATreeSplit[*TextValue] {
 	return t.rgaTreeSplit
 }
 
-// Style applies the given attributes of the given range.
+// PrevAttrs captures the value a style attribute held immediately before a
+// Style call overwrote it, or its absence, on the first node in the range
+// that Style actually visits. A reverse Style uses Existed to decide
+// whether to restore Value or remove Key outright.
+type PrevAttrs struct {
+	Key     string
+	Value   string
+	Existed bool
+}
+
+// Style applies the given attributes of the given range. Besides the GC
+// pairs and size diff, it reports, for each key in attributes, the value
+// that key held (or its absence) on the first node actually styled — see
+// PrevAttrs — so a reverse Style can restore that prior state.
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []PrevAttrs, error) {
 	var diff resource.DataSize
 
 	// 01. Split nodes with from and to
 	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
 		diff.Add(diffTo)
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -452,8 +488,22 @@ func (t *Text) Style(
 	}
 
 	var pairs []GCPair
+	var prevAttrs []PrevAttrs
+	captured := false
 	for _, node := range toBeStyled {
 		val := node.value
+
+		if !captured {
+			for key := range attributes {
+				if val.attrs.Has(key) {
+					prevAttrs = append(prevAttrs, PrevAttrs{Key: key, Value: val.attrs.Get(key), Existed: true})
+				} else {
+					prevAttrs = append(prevAttrs, PrevAttrs{Key: key, Existed: false})
+				}
+			}
+			captured = true
+		}
+
 		for key, value := range attributes {
 			if rhtNode := val.attrs.Set(key, value, executedAt); rhtNode != nil {
 				pairs = append(pairs, GCPair{
@@ -469,7 +519,7 @@ func (t *Text) Style(
 
 	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, prevAttrs, nil
 }
 
 // RemoveStyle removes the given attributes from the given range.

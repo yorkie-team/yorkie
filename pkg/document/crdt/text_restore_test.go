@@ -46,7 +46,7 @@ func seededText(t *testing.T, seed *time.Ticket) *crdt.Text {
 	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), time.InitialTicket)
 	from, to, err := text.CreateRange(0, 0)
 	assert.NoError(t, err)
-	_, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
+	_, _, _, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "0123456789", text.String())
 	return text
@@ -56,7 +56,7 @@ func seededText(t *testing.T, seed *time.Ticket) *crdt.Text {
 func deleteRange(t *testing.T, text *crdt.Text, from, to int, at *time.Ticket) {
 	f, e, err := text.CreateRange(from, to)
 	assert.NoError(t, err)
-	_, _, _, err = text.Edit(f, e, "", nil, at, nil)
+	_, _, _, _, _, err = text.Edit(f, e, "", nil, at, nil)
 	assert.NoError(t, err)
 }
 
@@ -77,9 +77,9 @@ func TestTextRestore(t *testing.T) {
 		// Compute both ranges on the original, then apply both deletes.
 		af1, af2, _ := a.CreateRange(4, 6)
 		ag1, ag2, _ := a.CreateRange(2, 8)
-		_, _, _, err := a.Edit(af1, af2, "", nil, tick(2), nil)
+		_, _, _, _, _, err := a.Edit(af1, af2, "", nil, tick(2), nil)
 		assert.NoError(t, err)
-		_, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
+		_, _, _, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "0189", a.String())
 		a.Restore(spanD1(seed), tick(4), nil)
@@ -89,9 +89,9 @@ func TestTextRestore(t *testing.T) {
 		b := seededText(t, seed)
 		bf1, bf2, _ := b.CreateRange(4, 6)
 		bg1, bg2, _ := b.CreateRange(2, 8)
-		_, _, _, err = b.Edit(bf1, bf2, "", nil, tick(2), nil)
+		_, _, _, _, _, err = b.Edit(bf1, bf2, "", nil, tick(2), nil)
 		assert.NoError(t, err)
-		_, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
+		_, _, _, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		b.Restore(spanD2(seed), tick(5), nil)
 		b.Restore(spanD1(seed), tick(4), nil)
@@ -107,8 +107,8 @@ func TestTextRestore(t *testing.T) {
 		text := seededText(t, seed)
 		f1, f2, _ := text.CreateRange(4, 6)
 		g1, g2, _ := text.CreateRange(2, 8)
-		_, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
-		_, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
+		_, _, _, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
+		_, _, _, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 
 		// Undo only d1: it clears the tombstone on the "45" nodes, so "45"
 		// reappears while "23"/"67" stay tombstoned by d2 (design doc's
@@ -125,8 +125,8 @@ func TestTextRestore(t *testing.T) {
 		text := seededText(t, seed)
 		f1, f2, _ := text.CreateRange(4, 6)
 		g1, g2, _ := text.CreateRange(2, 5)
-		_, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
-		_, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
+		_, _, _, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
+		_, _, _, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 		assert.Equal(t, "016789", text.String())
 
 		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4), nil)
@@ -175,7 +175,7 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 		from, to, err := text.CreateRange(0, 0)
 		assert.NoError(t, err)
-		_, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
+		_, _, _, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
 		assert.NoError(t, err)
 
 		root := helper.TestRoot()
@@ -336,7 +336,7 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 		charAt[i] = tick(int64(2000 + i))
 		f, e, err := text.CreateRange(i, i)
 		assert.NoError(t, err)
-		_, _, _, err = text.Edit(f, e, string(s[i]), nil, charAt[i], nil)
+		_, _, _, _, _, err = text.Edit(f, e, string(s[i]), nil, charAt[i], nil)
 		assert.NoError(t, err)
 	}
 	assert.Equal(t, s, text.String())

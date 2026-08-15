@@ -76,7 +76,7 @@ func (p *Text) Edit(
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	_, pairs, diff, err := p.Text.Edit(
+	_, pairs, diff, _, _, err := p.Text.Edit(
 		fromPos,
 		toPos,
 		content,
@@ -132,7 +132,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	pairs, diff, err := p.Text.Style(
+	pairs, diff, _, err := p.Text.Style(
 		fromPos,
 		toPos,
 		attributes,
