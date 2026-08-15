@@ -60,6 +60,15 @@ func (o *Move) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Opera
 		return nil, ErrNotApplicableDataType
 	}
 
+	// The reverse must capture the target's current predecessor before
+	// MoveAfter changes its position (move_operation.ts:80-81,110-119): it
+	// moves the target back after whatever precedes it now.
+	prevCreatedAt, err := obj.FindPrevCreatedAt(o.createdAt)
+	if err != nil {
+		return nil, err
+	}
+	reverseOp := NewMove(o.parentCreatedAt, prevCreatedAt, o.createdAt, o.executedAt)
+
 	deadNode, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 	if err != nil {
 		return nil, err
@@ -72,7 +81,7 @@ func (o *Move) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Opera
 		})
 	}
 
-	return nil, nil
+	return reverseOp, nil
 }
 
 // CreatedAt returns the creation time of the target element.

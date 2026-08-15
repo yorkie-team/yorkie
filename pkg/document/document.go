@@ -261,6 +261,17 @@ func (d *Document) Update(
 			return err
 		}
 
+		// NOTE(hackerwins): An ArraySet replaces the element at this
+		// position with a freshly ticketed value. Any other stacked reverse
+		// operation that still references the replaced element's old
+		// createdAt must be rewritten to the new one, or it will target a
+		// tombstone the next time it runs (document.ts:744-752).
+		for _, op := range executed {
+			if set, ok := op.(*operations.ArraySet); ok {
+				d.history.ReconcileCreatedAt(set.CreatedAt(), set.Value().CreatedAt())
+			}
+		}
+
 		var reverse []HistoryOperation
 		for _, op := range reverseOps {
 			reverse = append(reverse, HistoryOperation{Op: op})
@@ -361,20 +372,25 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 		ticket := ctx.IssueTimeTicket()
 		entry.Op.SetExecutedAt(ticket)
 
-		// NOTE(hackerwins): An Add reverse acts as UndoRemove, restoring a
-		// removed array element. It is given a fresh createdAt here rather
-		// than keeping its original one, or the restored (live) element and
-		// its own tombstone would collide under the same identity in the
-		// array's internal index -- letting a later GC pass purge the live
-		// element by mistake. Any other stacked operation that still
-		// references the old createdAt (as its own createdAt, or as a
-		// prevCreatedAt) is updated to the new one so it doesn't end up
-		// targeting a stale identity. ArraySet and TreeEdit need the same
-		// treatment once their reverse operations exist (document.ts:
-		// 2094-2105).
+		// NOTE(hackerwins): Both an Add reverse (acting as UndoRemove,
+		// restoring a removed array element) and an ArraySet reverse
+		// (restoring a value it replaced) give the restored value a fresh
+		// createdAt here rather than keeping its original one, or the
+		// restored (live) element and its own tombstone would collide under
+		// the same identity in the array's internal index -- letting a
+		// later GC pass purge the live element by mistake. Any other
+		// stacked operation that still references the old createdAt (as its
+		// own createdAt, or as a prevCreatedAt) is updated to the new one so
+		// it doesn't end up targeting a stale identity. TreeEdit needs the
+		// same treatment once its reverse operation exists (document.ts:
+		// 2088-2110).
 		if addOp, ok := entry.Op.(*operations.Add); ok {
 			prev := addOp.Value().CreatedAt()
 			addOp.Value().SetCreatedAt(ticket)
+			d.history.ReconcileCreatedAt(prev, ticket)
+		} else if setOp, ok := entry.Op.(*operations.ArraySet); ok {
+			prev := setOp.CreatedAt()
+			setOp.Value().SetCreatedAt(ticket)
 			d.history.ReconcileCreatedAt(prev, ticket)
 		}
 

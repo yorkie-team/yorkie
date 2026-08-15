@@ -70,7 +70,13 @@ func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operat
 	}
 
 	root.RegisterElement(value)
-	return nil, nil
+
+	// The reverse is a Remove of the just-added element, mirroring
+	// AddOperation.toReverseOperation (add_operation.ts:92-100). Its own
+	// createdAt is reissued at execution time when this reverse is later
+	// replayed as an UndoRemove (executeUndoRedo's Add branch), so the
+	// target here is always the identity the value ends up living under.
+	return NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt), nil
 }
 
 // Value returns the value of this operation.

@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestHistoryStack(t *testing.T) {
@@ -56,5 +57,141 @@ func TestHistoryStack(t *testing.T) {
 			}))
 		}
 		assert.Equal(t, document.MaxUndoRedoStackDepth, doc.UndoStackLenForTest())
+	})
+
+	t.Run("reconcile createdAt after array set test", func(t *testing.T) {
+		// A Set replaces the element, giving it a new createdAt. Reverse
+		// operations already on the stack still point at the old one and must
+		// be rewritten, or a later undo targets a dead element.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("list").AddInteger(1, 2, 3)
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("list").SetInteger(0, 9)
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
+	})
+
+	t.Run("array set undo redo survives gc test", func(t *testing.T) {
+		// ArraySet's reverse restores the replaced value under a freshly
+		// reissued createdAt (executeUndoRedo's ArraySet branch). This pins
+		// that a full undo/redo cycle leaves the document intact and that
+		// GC's view of the document -- whatever it tracks for ArraySet --
+		// does not change out from under us.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("list").AddInteger(1, 2, 3)
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("list").SetInteger(0, 9)
+			return nil
+		}))
+		assert.Equal(t, `{"list":[9,2,3]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(t, 0, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{"list":[9,2,3]}`, doc.Marshal())
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(t, 0, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, `{"list":[9,2,3]}`, doc.Marshal())
+	})
+
+	t.Run("array add undo redo survives gc test", func(t *testing.T) {
+		// Add's reverse is a Remove; undoing it deletes the added element.
+		// Redo then replays Remove's own (pre-existing) Add reverse, which
+		// restores the element under a reissued createdAt -- the same
+		// collision hazard Task 5 fixed for a plain Remove. This exercises
+		// the new Add.Execute reverse feeding back into that machinery.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("list").AddInteger(1, 2, 3)
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("list").AddInteger(4)
+			return nil
+		}))
+		assert.Equal(t, `{"list":[1,2,3,4]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{"list":[1,2,3,4]}`, doc.Marshal())
+
+		// The restored element must survive GC: redoing the Add must not
+		// leave the reissued copy registered under the tombstoned element's
+		// old identity, or a GC pass purges the live element instead of the
+		// tombstone, silently reverting the redo.
+		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(t, `{"list":[1,2,3,4]}`, doc.Marshal())
+	})
+
+	t.Run("array move undo redo test", func(t *testing.T) {
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("list").AddInteger(1, 2, 3)
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("list").MoveAfterByIndex(0, 2)
+			return nil
+		}))
+		assert.Equal(t, `{"list":[1,3,2]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{"list":[1,3,2]}`, doc.Marshal())
+	})
+
+	t.Run("reconcile createdAt after array move test", func(t *testing.T) {
+		// A Move's reverse stores both a createdAt and a prevCreatedAt. Both
+		// must be rewritten by ReconcileCreatedAt when the identity they
+		// point at is replaced -- here, by an ArraySet on the element the
+		// Move reverse anchors on.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("list").AddInteger(1, 2, 3)
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// Move "3" to the front: [3,1,2]. The reverse Move's
+			// prevCreatedAt anchors on "2", the element that preceded "3".
+			list := root.GetArray("list")
+			list.MoveFront(list.Get(2).CreatedAt())
+			return nil
+		}))
+		assert.Equal(t, `{"list":[3,1,2]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// Replace "2": its identity, which the stacked Move reverse's
+			// prevCreatedAt still anchors on, must be reconciled.
+			root.GetArray("list").SetInteger(2, 9)
+			return nil
+		}))
+		assert.Equal(t, `{"list":[3,1,9]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"list":[3,1,2]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
 	})
 }

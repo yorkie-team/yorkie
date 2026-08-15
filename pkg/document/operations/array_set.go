@@ -59,6 +59,19 @@ func (o *ArraySet) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 		return nil, ErrNotApplicableDataType
 	}
 
+	// The reverse must be built from the value currently at this position
+	// before it is overwritten below (array_set_operation.ts:75-76): it
+	// restores that value, anchored on the new value's identity so it can
+	// find it again.
+	previous := root.FindByCreatedAt(o.createdAt)
+	if previous == nil {
+		return nil, crdt.ErrChildNotFound
+	}
+	previousCopy, err := previous.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+
 	value, err := o.value.DeepCopy()
 	if err != nil {
 		return nil, err
@@ -76,7 +89,9 @@ func (o *ArraySet) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 	// TODO(junseo): GC logic is not implemented here
 	// because there is no way to distinguish between old and new element with same `createdAt`.
 	root.RegisterElement(value)
-	return nil, nil
+
+	reverseOp := NewArraySet(o.parentCreatedAt, value.CreatedAt(), previousCopy, o.executedAt)
+	return reverseOp, nil
 }
 
 // Value returns the value of this operation.
