@@ -41,9 +41,14 @@ import (
 // ReconcileOperation). That makes Cases 4-6 unreachable through real
 // document usage today; they are tested here directly so the ported
 // formula matches JS exactly regardless, and so a future change that
-// produces a wide isUndoOp range does not silently regress this logic. A
-// realistic (non-zero-width-only) exercise of Cases 1-3, the cases that
-// are reachable in practice, lives in the integration suite.
+// produces a wide isUndoOp range does not silently regress this logic.
+// TestEditReconcileOperationRealistic below exercises Case 1 against a
+// genuinely executed reverse Edit; the two-client "reconcile cases" suite
+// in test/integration exercises the same scenarios JS names Case 1-7, but
+// -- because a zero-width local range collapses several of these
+// geometrically-distinct scenarios onto the same branch here (see that
+// test's doc comment) -- asserts convergence, matching what those
+// scenarios can actually prove, rather than claiming to pin one case each.
 func TestEditReconcileOperationCases(t *testing.T) {
 	id := crdt.InitialTextNode().ID()
 	pos := func(offset int) *crdt.RGATreeSplitNodePos {

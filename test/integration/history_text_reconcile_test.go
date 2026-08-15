@@ -35,13 +35,23 @@ import (
 // cases" describe block (history_text_test.ts:437-775): two clients each
 // hold one pending undo entry (their own single edit), a concurrent remote
 // edit from the other client arrives, and both undo then redo their own
-// entry. Each case matches one branch of Edit.ReconcileOperation.
+// entry. Each case reproduces the geometric scenario JS names Case 1-7.
 //
-// These assert convergence only, matching the JS suite, for the same reason
-// documented at TestReconcileOverlappingUndoDuplicatesContent below: the
-// two overlapping-delete cases (3 and 5) are known to diverge from exact
-// original content on double-undo, a pre-existing, cross-SDK limitation of
-// the identity-preserving restore path, not something this port changes.
+// These assert convergence only, matching the JS suite -- not because a
+// weaker check was convenient, but because that is what this scenario
+// shape can actually prove. Two things it does not prove: first, per
+// Edit.ReconcileOperation's reachability note (pkg/document/operations),
+// a stacked reverse Edit's from/to are always equal (restoreSpans locates
+// content by identity), so a pure remote delete's normalized range also
+// collapses to a single point (see the same note) -- meaning several of
+// these geometrically distinct scenarios (e.g. Case 4's remote-insert-
+// inside-undo-range) do not necessarily exercise the branch their name
+// suggests; TestHistoryTextReconcilePosition and
+// TestEditReconcileOperationRealistic pin one scenario end to end,
+// including the position, where this suite only checks convergence.
+// Second, for the two overlapping-delete cases (3 and 5), content
+// correctness itself is an open question -- see
+// TestReconcileOverlappingUndoDuplicatesContent below.
 func TestHistoryTextReconcile(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
