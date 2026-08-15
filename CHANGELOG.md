@@ -7,6 +7,14 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.16] - 2026-08-15
+
+### Fixed
+
+- Keep a document loadable when two tree nodes share one ID by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1927
+- Stamp merge-bound inserts and filter style-range interlopers by @Nahee-Park in https://github.com/yorkie-team/yorkie/pull/1928
+- Stop ordinary editing from putting two nodes under one ID by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1929
+
 ## [v0.7.15] - 2026-08-13
 
 ### Changed
