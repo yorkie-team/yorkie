@@ -154,8 +154,11 @@ type TreeNode struct {
 	//it means that the node is an element node.
 	Attrs *RHT
 
-	// MergedFrom records the source parent's ID when this node was moved
-	// by a concurrent merge operation. Persisted in the snapshot
+	// MergedFrom records the parent this node logically belongs to when a
+	// merge relocated it into the merge target: either the source parent
+	// it was physically moved out of, or — for a concurrent insert whose
+	// position was declared inside a merged-away parent — that declared
+	// parent (§9.4 intended-parent stamp). Persisted in the snapshot
 	// encoding as the witness of the merge relationship.
 	MergedFrom *TreeNodeID
 
@@ -466,6 +469,8 @@ func (n *TreeNode) SplitElement(
 	}
 	split := NewTreeNode(&TreeNodeID{CreatedAt: issueTimeTicket(), Offset: 0}, n.Type(), splitAttrs)
 	split.removedAt = n.removedAt
+	split.MergedFrom = n.MergedFrom
+	split.MergedAt = n.MergedAt
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
 		return nil, diff, err
 	}
@@ -1515,6 +1520,8 @@ func (t *Tree) Edit(
 	contents = t.dropDuplicateContents(contents, editedAt)
 
 	if len(contents) != 0 {
+		intendedParent, intendedMergedAt := t.intendedMergeParent(from, fromParent)
+
 		leftInChildren := fromLeft
 
 		for _, content := range contents {
@@ -1528,6 +1535,11 @@ func (t *Tree) Edit(
 				if err != nil {
 					return append(pairs, t.drainPendingGCPairs()...), diff, err
 				}
+			}
+
+			if intendedParent != nil {
+				content.MergedFrom = intendedParent.id
+				content.MergedAt = intendedMergedAt
 			}
 
 			leftInChildren = content
@@ -1552,6 +1564,119 @@ func (t *Tree) Edit(
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
 	return pairs, diff, nil
+}
+
+// intendedMergeParent resolves the §9.4 stamp for an insert whose position
+// was declared inside a parent that a concurrent merge removed: the content
+// lands in the merge target, so stamp it as merged-from the declared parent
+// to keep it distinguishable from nodes that were never inside that parent
+// (the §9.4 filter and merge-delete propagation key on this). The merge
+// ticket comes from a sibling the merge moved, since the parent's own
+// removedAt may be overwritten by a later LWW tombstone.
+func (t *Tree) intendedMergeParent(
+	from *TreePos,
+	fromParent *TreeNode,
+) (*TreeNode, *time.Ticket) {
+	declaredFromParent, _ := t.ToTreeNodes(from)
+	if declaredFromParent == nil || declaredFromParent == fromParent ||
+		!declaredFromParent.IsRemoved() || declaredFromParent.mergedInto == nil ||
+		t.resolveMergeTarget(declaredFromParent) != fromParent {
+		return nil, nil
+	}
+	for _, child := range fromParent.Index.Children(true) {
+		if child.Value.MergedFrom != nil &&
+			child.Value.MergedFrom.Equal(declaredFromParent.id) &&
+			child.Value.MergedAt != nil {
+			return declaredFromParent, child.Value.MergedAt
+		}
+	}
+	return declaredFromParent, declaredFromParent.removedAt
+}
+
+// mergedAnchorInterloperGuard prepares the §9.4 per-node filter for a style
+// range whose end position was declared inside a parent that a merge unknown
+// to the styling client removed. The moved anchor child resolves in the
+// merge target, so the traversal covers nodes sitting between the
+// merge-source tombstone and the moved children — nodes the styling client
+// saw outside its range, after the then-live parent. The predicate skips
+// exactly those interlopers.
+func (t *Tree) mergedAnchorInterloperGuard(
+	pos *TreePos,
+	versionVector time.VersionVector,
+) func(*TreeNode) bool {
+	if len(versionVector) == 0 {
+		return nil
+	}
+	declaredParent, _ := t.ToTreeNodes(pos)
+	if declaredParent == nil || !declaredParent.IsRemoved() ||
+		declaredParent.mergedInto == nil || declaredParent.removedAt == nil ||
+		ticketKnown(versionVector, declaredParent.removedAt) {
+		return nil
+	}
+	target := t.resolveMergeTarget(declaredParent)
+	// Restricted to the shape where the tombstone sits directly under the
+	// merge target; in other shapes the resolved range already excludes
+	// the interlopers.
+	if target == declaredParent || declaredParent.Index.Parent == nil ||
+		declaredParent.Index.Parent.Value != target {
+		return nil
+	}
+	// Collect the target's children positioned after the merge-source
+	// tombstone in one pass, so the predicate is O(depth) per node.
+	afterTombstone := make(map[*TreeNode]bool)
+	seenTombstone := false
+	for _, child := range target.Index.Children(true) {
+		if child.Value == declaredParent {
+			seenTombstone = true
+			continue
+		}
+		if seenTombstone {
+			afterTombstone[child.Value] = true
+		}
+	}
+	return func(node *TreeNode) bool {
+		// Judge by the node's highest ancestor directly under the merge
+		// target, so an interloper's descendants are skipped with it.
+		top := node
+		for top.Index.Parent != nil && top.Index.Parent.Value != target {
+			top = top.Index.Parent.Value
+		}
+		if top.Index.Parent == nil || top.Index.Parent.Value != target {
+			return false
+		}
+		// Fail open for any node carrying a merge stamp: a child that
+		// arrived via an earlier merge keeps the ORIGINAL source in
+		// MergedFrom (first-move rule, Fix 20), so membership in the
+		// declared parent is unrecoverable. Only stamp-free nodes are
+		// positively identifiable as interlopers (§9.4).
+		if top.MergedFrom != nil {
+			return false
+		}
+		return afterTombstone[top]
+	}
+}
+
+// styleSkipPredicate builds the per-token skip checks shared by Style and
+// RemoveStyle: the End-token unknown-split-sibling exclusion and the §9.4
+// merged-anchor interloper filter for the range-end position.
+func (t *Tree) styleSkipPredicate(
+	to *TreePos,
+	versionVector time.VersionVector,
+) func(index.TreeToken[*TreeNode]) bool {
+	isVersionVectorEmpty := len(versionVector) == 0
+	isAnchorInterloper := t.mergedAnchorInterloperGuard(to, versionVector)
+	return func(token index.TreeToken[*TreeNode]) bool {
+		// Skip styling via End token when the node has an unknown
+		// split sibling. The End token is in the range only because
+		// a concurrent split extended the range into the sibling.
+		if token.TokenType == index.End && !isVersionVectorEmpty &&
+			t.hasUnknownSplitSibling(token.Node, versionVector) {
+			return true
+		}
+		// §9.4: the node is in the range only because an unknown merge
+		// pulled the range-end anchor past it.
+		return isAnchorInterloper != nil && isAnchorInterloper(token.Node)
+	}
 }
 
 // resolveMergeTarget follows the mergedInto forwarding chain from the given
@@ -2072,6 +2197,7 @@ func (t *Tree) Style(
 	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
+	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
 
 	var pairs []GCPair
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
@@ -2093,11 +2219,7 @@ func (t *Tree) Style(
 		}
 
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
-			// Skip styling via End token when the node has an unknown
-			// split sibling. The End token is in the range only because
-			// a concurrent split extended the range into the sibling.
-			if token.TokenType == index.End && !isVersionVectorEmpty &&
-				t.hasUnknownSplitSibling(node, versionVector) {
+			if shouldSkipToken(token) {
 				return
 			}
 
@@ -2180,6 +2302,7 @@ func (t *Tree) RemoveStyle(
 	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
+	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
 
 	var pairs []GCPair
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
@@ -2201,11 +2324,7 @@ func (t *Tree) RemoveStyle(
 		}
 
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
-			// Skip styling via End token when the node has an unknown
-			// split sibling. The End token is in the range only because
-			// a concurrent split extended the range into the sibling.
-			if token.TokenType == index.End && !isVersionVectorEmpty &&
-				t.hasUnknownSplitSibling(node, versionVector) {
+			if shouldSkipToken(token) {
 				return
 			}
 

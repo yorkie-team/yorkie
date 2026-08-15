@@ -128,6 +128,34 @@ func TestTreeNode(t *testing.T) {
 		assert.Equal(t, `<p bold="true">world</p>`, crdt.ToXML(split))
 	})
 
+	t.Run("split element should copy merge stamp", func(t *testing.T) {
+		root := crdt.NewTreeNode(dummyTreeNodeID, "r", nil)
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+		assert.NoError(t, root.Append(para))
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "helloworld")))
+
+		// The paragraph was previously moved by a merge.
+		mergedFrom := &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 7}
+		para.MergedFrom = mergedFrom
+		para.MergedAt = time.InitialTicket
+
+		left, err := para.Child(0)
+		assert.NoError(t, err)
+		_, _, err = left.SplitText(5, 0)
+		assert.NoError(t, err)
+
+		split, _, err := para.SplitElement(1, func() *time.Ticket {
+			return time.InitialTicket
+		}, nil)
+		assert.NoError(t, err)
+
+		// The split product holds the other half of the same moved node,
+		// so it must carry the same merge stamp (as SplitText does).
+		assert.NotNil(t, split.MergedFrom)
+		assert.True(t, split.MergedFrom.Equal(mergedFrom))
+		assert.Equal(t, time.InitialTicket, split.MergedAt)
+	})
+
 	t.Run("UTF-16 code unit test", func(t *testing.T) {
 		tests := []struct {
 			length int
@@ -452,6 +480,49 @@ func TestTreeEdit(t *testing.T) {
 		idx, err = tree.ToIndex(rangeParent, rangeLeft)
 		assert.NoError(t, err)
 		assert.Equal(t, 6, idx)
+	})
+
+	t.Run("stamps an insert declared inside a merged-away parent", func(t *testing.T) {
+		// 01. Create <root><p>ab</p><p>cd</p></root> and capture the
+		// leftmost position inside the second paragraph before the merge.
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+		_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		p2Node := crdt.NewTreeNode(helper.PosT(ctx), "p", nil)
+		_, _, err = tree.EditT(4, 4, []*crdt.TreeNode{p2Node}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(5, 5, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "cd"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		pos := crdt.NewTreePos(p2Node.ID(), p2Node.ID())
+
+		// 02. Merge the second paragraph into the first, then apply an
+		// insert that still declares the merged-away paragraph as parent.
+		// A later delete LWW-overwrites the tombstone first, so the merge
+		// ticket is only recoverable from the moved sibling.
+		mergeTicket := helper.TimeT(ctx)
+		_, _, err = tree.EditT(3, 5, nil, 0, mergeTicket, issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
+		p2Node.SetRemovedAt(helper.TimeT(ctx))
+		content := crdt.NewTreeNode(helper.PosT(ctx), "b", nil)
+		_, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
+			helper.TimeT(ctx), issueTicket(ctx), nil)
+		assert.NoError(t, err)
+
+		// 03. The content lands in the merge target but is stamped as
+		// merged-from the declared parent, like a merge-moved child,
+		// carrying the moved sibling's merge ticket.
+		assert.NotNil(t, content.MergedFrom)
+		assert.True(t, content.MergedFrom.Equal(p2Node.ID()))
+		assert.Equal(t, mergeTicket, content.MergedAt)
 	})
 
 	t.Run("delete nodes between element nodes in different levels test", func(t *testing.T) {
