@@ -182,26 +182,21 @@ func TestHistoryTextReconcile(t *testing.T) {
 // TestReconcileOverlappingUndoDuplicatesContent ports history_text_test.ts's
 // two `it.skip` correctness cases (:705 "Case 3 correctness" and :742 "Case
 // 5 correctness"): when two clients concurrently delete overlapping ranges
-// and each undoes its own delete, JS's comment there says the shared
-// characters can be restored twice, a limitation of the (older, JS-side)
-// deep-copy-reinsert undo mechanism.
+// and each undoes its own delete, both should converge back to the exact
+// original "0123456789".
 //
-// Kept skipped here to match JS procedurally rather than un-skipped on our
-// own judgment -- see the port's rule to reproduce JS's known defects
-// rather than diverge from them -- but flagged for the task owner: run
-// unskipped, both cases below currently PASS against this port's
-// identity-preserving restore (RestoreSpans/RetombstoneSpans, built in the
-// Edit reverse-operation work this task builds on), producing the exact
-// original "0123456789", not duplicated content. That contradicts
-// docs/design/undo-redo-go-port.md's assumption that this bug is
-// "reproduced identically" in Go. Left skipped rather than asserted as
-// passing because (a) that assumption is stated as a deliberate design
-// decision, not just an unverified guess, and un-skipping is a call this
-// task should not make unilaterally, and (b) two scenarios passing does not
-// establish the underlying mechanism no longer applies in general -- both
-// are open questions for whoever owns the "Overlapping undo content
-// duplication" non-goal to verify and decide, not something to resolve
-// inside a reconciliation task.
+// JS still skips these, but that skip is stale: it was added by JS #1222
+// (2026-04-17) against the then-current deep-copy-reinsert undo mechanism,
+// and JS #1293 "Identity-preserving restore for Text undo/redo"
+// (2026-07-23) replaced exactly that mechanism with the
+// restoreSpans/retombstoneSpans identity-addressed restore this port also
+// uses -- an ancestor of v0.7.16, the version this port targets. Nobody
+// re-ran the skipped pair after #1293 landed (`git log
+// 4b00927c..HEAD -- history_text_test.ts` in yorkie-js-sdk is empty). So Go
+// did not diverge from JS here: it inherited JS's own fix, and JS's skip is
+// a leftover from before that fix. These run live, pinning the
+// identity-preserving restore against that stale skip -- a failure here is
+// a genuine regression, not a known limitation.
 func TestReconcileOverlappingUndoDuplicatesContent(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
@@ -235,11 +230,6 @@ func TestReconcileOverlappingUndoDuplicatesContent(t *testing.T) {
 	for _, c := range cases {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
-			t.Skip("KNOWN: matches the JS SDK's own it.skip for this case " +
-				"(history_text_test.ts); kept skipped rather than asserted " +
-				"here on our own judgment even though it currently passes " +
-				"against this port -- see the doc comment above")
-
 			ctx := context.Background()
 
 			d1 := document.New(helper.TestKey(t))
@@ -352,4 +342,119 @@ func TestHistoryTextReconcilePosition(t *testing.T) {
 	assert.NoError(t, d1.Undo())
 	assert.Equal(t, "01Q456789", d1.Root().GetText("t").String(),
 		"restore should land \"45\" back next to \"Q\", not at the stale offset")
+}
+
+// TestHistoryTextReconcilePerChangeNotBatched pins that a multi-change pack
+// is reconciled one change at a time against the root as it stood right
+// after each change, not once over the whole pack -- matching
+// Document.applyChange in the JS SDK, which reconciles inside the same
+// per-change loop that executes each change (document.ts:1517 calling into
+// :1552-1566), never after a batch.
+//
+// NormalizePos sums live length over physical predecessors reachable from a
+// position's own (fixed at creation) node identity. For most positions --
+// including simple ones anchored to a text's original, never-since-split
+// node -- that sum never depends on anything happening elsewhere in the
+// same pack, so a naive scenario ("d2 inserts, d2 also deletes a prefix")
+// does not actually exercise the batched/per-change difference; both give
+// the same answer. It only shows up once a position's node identity is
+// itself downstream of an earlier split, so that its prior-predecessor
+// walk passes through content a *later* change in the pack tombstones.
+// This scenario was verified empirically (not hand-derived) against this
+// port before being written down here -- see the two NormalizePos values
+// asserted below.
+//
+// Setup: text "0123456789". Three remote changes from d2, pushed together
+// in one pack, in this order:
+//  1. Change 0: replace [1,2) ("1") with a freshly-ticketed "1" -- same
+//     content, but it splits the original node and gives the next change's
+//     anchor a non-original node identity, which is what makes this
+//     reachable through prior-predecessor traversal at all.
+//  2. Change A: insert "Z" right before the original "3".
+//  3. Change B: delete [0,2) (the original "0" and the fresh "1" from
+//     Change 0) -- content that precedes Change A's own anchor.
+//
+// d1 deletes [2,3) ("2") locally first, leaving a pending undo anchored at
+// offset 2.
+//
+// Reconciled per change (correct): Change A's own position, normalized
+// right after Change A alone executes (before Change B runs), sums "0"
+// and the fresh "1" as still-live predecessors, giving remoteFrom ==
+// remoteTo == 3 -- Case 2 against d1's anchor at 2 (remote to the right, a
+// no-op). Change B then correctly shifts the anchor left by the "01" it
+// removed, landing at offset 1.
+//
+// Reconciled in a batch (the bug this fixes): Change A's position would
+// instead be normalized after Change B has already tombstoned "0" and the
+// fresh "1", collapsing those same predecessors to zero and giving
+// remoteFrom == remoteTo == 1 instead of 3 -- Case 1 against the same
+// anchor (remote to the left), shifting it to offset 3 before Change B is
+// even considered. Change B's own (correct) shift then lands the final,
+// wrong anchor at offset 2 -- one off from the correct offset 1, and for
+// the wrong reason (a case that should not have fired).
+func TestHistoryTextReconcilePerChangeNotBatched(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+	defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("t").Edit(0, 0, "0123456789")
+		return nil
+	}, "init"))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Edit(2, 3, "")
+		return nil
+	}, "d1 delete \"2\""))
+
+	top := d1.UndoStackTopForTest()
+	assert.Len(t, top, 1)
+	edit, ok := top[0].Op.(*operations.Edit)
+	assert.True(t, ok, "d1's pending undo entry should be an Edit")
+	assert.Equal(t, 2, edit.From().RelativeOffset(), "anchor before the remote pack")
+	assert.Equal(t, 2, edit.To().RelativeOffset())
+
+	// Three separate d2 updates, pushed together in one pack: none has been
+	// synced yet, so all three are still pending when the next is made.
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Edit(1, 2, "1") // Change 0: re-ticket "1" via replace.
+		return nil
+	}, "d2 re-ticket \"1\""))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Edit(3, 3, "Z") // Change A: insert "Z" before "3".
+		return nil
+	}, "d2 insert Z"))
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Edit(0, 2, "") // Change B: delete [0,2).
+		return nil
+	}, "d2 delete prefix"))
+	assert.NoError(t, c2.Sync(ctx))
+
+	assert.NoError(t, c1.Sync(ctx))
+
+	assert.Equal(t, "Z3456789", d1.Root().GetText("t").String(),
+		"merged text: \"0\", \"1\", and \"2\" removed, \"Z\" inserted before \"3\"")
+
+	top = d1.UndoStackTopForTest()
+	assert.Len(t, top, 1)
+	edit, ok = top[0].Op.(*operations.Edit)
+	assert.True(t, ok)
+	assert.Equal(t, 1, edit.From().RelativeOffset(),
+		"anchor must be reconciled against each change's own post-change "+
+			"root, not the root after the whole pack -- a value of 2 here "+
+			"means Change A was (wrongly) normalized after Change B already "+
+			"tombstoned the content preceding A's anchor, shifting the "+
+			"anchor via the wrong ReconcileOperation case")
+	assert.Equal(t, 1, edit.To().RelativeOffset())
 }

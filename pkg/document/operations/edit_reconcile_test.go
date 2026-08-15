@@ -199,7 +199,8 @@ func TestEditReconcileOperationRealistic(t *testing.T) {
 	assert.True(t, reverseEdit.isUndoOp)
 	assert.NotEmpty(t, reverseEdit.RestoreSpans(), "delete of live content restores by identity")
 
-	from, to := reverseEdit.NormalizePos(root)
+	from, to, ok := reverseEdit.NormalizePos(root)
+	assert.True(t, ok)
 	assert.Equal(t, 4, from, "pending undo anchors at the deleted range's start")
 	assert.Equal(t, from, to, "a restore-mode reverse is always zero-width")
 
@@ -209,7 +210,8 @@ func TestEditReconcileOperationRealistic(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "01Q6789", text.String())
 
-	remoteFrom, remoteTo := remoteOp.NormalizePos(root)
+	remoteFrom, remoteTo, ok := remoteOp.NormalizePos(root)
+	assert.True(t, ok)
 	assert.Equal(t, 2, remoteFrom)
 	assert.Equal(t, 4, remoteTo)
 	assert.Equal(t, 1, remoteOp.ContentLen())

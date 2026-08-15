@@ -495,6 +495,21 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		if err := d.applyChanges(d.doc.localChanges); err != nil {
 			return err
 		}
+
+		// The changes just replayed are this client's own, not yet
+		// acknowledged, local changes -- reconciling a pending undo/redo
+		// entry against them (as the applyChanges call above just did) is
+		// meaningless, since they are the same edits that pushed those
+		// entries in the first place, not a genuinely new remote edit.
+		// Clearing here, matching JS's applySnapshot (document.ts:1467-1468,
+		// which replays then clears on the very next line), discards any
+		// such self-reconciliation along with the rest of the stacks.
+		//
+		// d.mu is already held by this method (see the top of
+		// ApplyChangePack), so this calls History directly rather than
+		// through ClearHistory, which locks d.mu itself and would deadlock.
+		d.history.ClearUndo()
+		d.history.ClearRedo()
 	}
 
 	// 03. Update the checkpoint.
@@ -518,24 +533,36 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		return err
 	}
 
+	var events []DocEvent
 	for _, c := range changes {
 		if _, _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
 			return err
 		}
-	}
 
-	events, executed, err := d.doc.ApplyChanges(changes...)
-	if err != nil {
-		return err
-	}
+		// Applied and reconciled one change at a time, not batched over the
+		// whole pack: NormalizePos sums live length over physical
+		// predecessors, so if a later change in this pack tombstones a node
+		// that precedes an earlier change's own floor node, computing both
+		// changes' positions only after the whole pack executed would give
+		// different (smaller) offsets than computing each right after its
+		// own change, as JS does (change loop at document.ts:1517, calling
+		// into the per-change reconcile at :1552-1566).
+		changeEvents, executed, err := d.doc.ApplyChanges(c)
+		if err != nil {
+			return err
+		}
+		events = append(events, changeEvents...)
 
-	// A remote change may have moved the text a pending undo/redo Edit
-	// refers to; reconcile every stacked Edit against each executed Edit,
-	// mirroring Document.applyChange in the JS SDK (document.ts:1552-1566).
-	for _, op := range executed {
-		if edit, ok := op.(*operations.Edit); ok {
-			from, to := edit.NormalizePos(d.doc.root)
-			d.history.ReconcileTextEdit(edit.ParentCreatedAt(), from, to, edit.ContentLen())
+		// A remote change may have moved the text a pending undo/redo Edit
+		// refers to; reconcile every stacked Edit against each executed Edit.
+		for _, op := range executed {
+			if edit, ok := op.(*operations.Edit); ok {
+				from, to, ok := edit.NormalizePos(d.doc.root)
+				if !ok {
+					continue
+				}
+				d.history.ReconcileTextEdit(edit.ParentCreatedAt(), from, to, edit.ContentLen())
+			}
 		}
 	}
 

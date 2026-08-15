@@ -443,31 +443,36 @@ func (e *Edit) ContentLen() int {
 
 // NormalizePos converts this Edit's from/to positions into absolute offsets
 // from the head of the parent Text's physical split chain. It mirrors
-// EditOperation.normalizePos in the JS SDK (edit_operation.ts:327-347).
+// EditOperation.normalizePos in the JS SDK (edit_operation.ts:327-347),
+// which throws on the failure paths below; Go reports them via the third
+// return value instead.
 //
 // It is only ever called on an operation that has already executed against
 // root (see the applyChanges reconciliation loop in document.go), so the
-// parent Text is guaranteed to resolve; failure here would indicate an
-// invariant violation elsewhere in the caller, not a normal condition this
-// method's signature needs to report, so it degrades to (0, 0) rather than
-// widening the signature for an unreachable path.
-func (e *Edit) NormalizePos(root *crdt.Root) (int, int) {
+// parent Text is guaranteed to resolve and failure here would indicate an
+// invariant violation elsewhere in the caller. But (0, 0) is also a
+// legitimate normalized position, so degrading to it silently on failure
+// would be indistinguishable from that legitimate case -- a caller that
+// skipped the check could reconcile every stacked entry in the document by
+// a bogus amount. The bool return makes "did not normalize" impossible to
+// mistake for "normalized to offset 0".
+func (e *Edit) NormalizePos(root *crdt.Root) (int, int, bool) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	text, ok := parent.(*crdt.Text)
 	if !ok {
-		return 0, 0
+		return 0, 0, false
 	}
 
 	fromPos, err := text.NormalizePos(e.from)
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 	toPos, err := text.NormalizePos(e.to)
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 
-	return fromPos.RelativeOffset(), toPos.RelativeOffset()
+	return fromPos.RelativeOffset(), toPos.RelativeOffset(), true
 }
 
 // ReconcileOperation adjusts this Edit's from/to positions in place so a
