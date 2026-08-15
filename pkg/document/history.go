@@ -140,3 +140,23 @@ func (h *History) ReconcileCreatedAt(prevCreatedAt, currCreatedAt *time.Ticket) 
 	replace(h.undoStack)
 	replace(h.redoStack)
 }
+
+// ReconcileTextEdit rewrites the from/to positions of any stacked Edit
+// operation targeting the given parent Text so it stays correct after a
+// remote edit on that Text executes. It mirrors History.reconcileTextEdit in
+// the JS SDK (history.ts:162-186).
+func (h *History) ReconcileTextEdit(parentCreatedAt *time.Ticket, from, to, contentLen int) {
+	replace := func(stack [][]HistoryOperation) {
+		// TODO(hackerwins): Optimize by indexing operations.
+		for _, entries := range stack {
+			for _, entry := range entries {
+				if edit, ok := entry.Op.(*operations.Edit); ok &&
+					edit.ParentCreatedAt().Key() == parentCreatedAt.Key() {
+					edit.ReconcileOperation(from, to, contentLen)
+				}
+			}
+		}
+	}
+	replace(h.undoStack)
+	replace(h.redoStack)
+}

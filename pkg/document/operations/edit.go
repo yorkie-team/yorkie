@@ -434,3 +434,113 @@ func (e *Edit) RestoreMode() crdt.RestoreMode {
 func (e *Edit) RetombstoneSpans() []*crdt.RestoreSpan {
 	return e.retombstoneSpans
 }
+
+// ContentLen returns the length of Content in UTF-16 code units, the unit
+// RGATreeSplit positions are measured in.
+func (e *Edit) ContentLen() int {
+	return len(utf16.Encode([]rune(e.content)))
+}
+
+// NormalizePos converts this Edit's from/to positions into absolute offsets
+// from the head of the parent Text's physical split chain. It mirrors
+// EditOperation.normalizePos in the JS SDK (edit_operation.ts:327-347).
+//
+// It is only ever called on an operation that has already executed against
+// root (see the applyChanges reconciliation loop in document.go), so the
+// parent Text is guaranteed to resolve; failure here would indicate an
+// invariant violation elsewhere in the caller, not a normal condition this
+// method's signature needs to report, so it degrades to (0, 0) rather than
+// widening the signature for an unreachable path.
+func (e *Edit) NormalizePos(root *crdt.Root) (int, int) {
+	parent := root.FindByCreatedAt(e.parentCreatedAt)
+	text, ok := parent.(*crdt.Text)
+	if !ok {
+		return 0, 0
+	}
+
+	fromPos, err := text.NormalizePos(e.from)
+	if err != nil {
+		return 0, 0
+	}
+	toPos, err := text.NormalizePos(e.to)
+	if err != nil {
+		return 0, 0
+	}
+
+	return fromPos.RelativeOffset(), toPos.RelativeOffset()
+}
+
+// ReconcileOperation adjusts this Edit's from/to positions in place so a
+// pending undo/redo entry stays correct after a remote edit executes on the
+// same Text. It mirrors EditOperation.reconcileOperation in the JS SDK
+// (edit_operation.ts:349-410). remoteFrom, remoteTo, and contentLen describe
+// the remote edit in the same normalized offset domain as NormalizePos.
+//
+// NOTE: restoreSpans/retombstoneSpans address content by identity
+// (createdAt + offset), so from/to are never used to locate the restored
+// range itself. But from is also the fallback anchor for when every related
+// piece has been GC'd, so it still needs to track concurrent remote edits
+// like any other undo position -- only the identity payload
+// (restoreSpans/retombstoneSpans) must stay untouched, and this method never
+// reads or writes either.
+func (e *Edit) ReconcileOperation(remoteFrom, remoteTo, contentLen int) {
+	if !e.isUndoOp {
+		return
+	}
+	if remoteFrom > remoteTo {
+		return
+	}
+
+	remoteRangeLen := remoteTo - remoteFrom
+	localFrom := e.from.RelativeOffset()
+	localTo := e.to.RelativeOffset()
+
+	apply := func(na, nb int) {
+		e.from = crdt.NewRGATreeSplitNodePos(e.from.ID(), max(0, na))
+		e.to = crdt.NewRGATreeSplitNodePos(e.to.ID(), max(0, nb))
+	}
+
+	// Case 1: remote edit is to the left of the undo range.
+	// [--remote--]  [--undo--]
+	if remoteTo <= localFrom {
+		apply(localFrom-remoteRangeLen+contentLen, localTo-remoteRangeLen+contentLen)
+		return
+	}
+
+	// Case 2: remote edit is to the right of the undo range.
+	// [--undo--]  [--remote--]
+	if localTo <= remoteFrom {
+		return
+	}
+
+	// Case 3: undo range is contained within the remote range.
+	// [-------remote-------]
+	//      [--undo--]
+	if remoteFrom <= localFrom && localTo <= remoteTo && remoteFrom != remoteTo {
+		apply(remoteFrom, remoteFrom)
+		return
+	}
+
+	// Case 4: remote range is contained within the undo range.
+	//      [--remote--]
+	// [---------undo---------]
+	if localFrom <= remoteFrom && remoteTo <= localTo && localFrom != localTo {
+		apply(localFrom, localTo-remoteRangeLen+contentLen)
+		return
+	}
+
+	// Case 5: remote range overlaps the start of the undo range.
+	// [---remote---]
+	//      [---undo---]
+	if remoteFrom < localFrom && localFrom < remoteTo && remoteTo < localTo {
+		apply(remoteFrom, remoteFrom+(localTo-remoteTo))
+		return
+	}
+
+	// Case 6: remote range overlaps the end of the undo range.
+	//      [---remote---]
+	// [---undo---]
+	if localFrom < remoteFrom && remoteFrom < localTo && localTo < remoteTo {
+		apply(localFrom, remoteFrom)
+	}
+}

@@ -180,7 +180,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 			return err
 		}
 	} else {
-		if _, err := d.ApplyChanges(pack.Changes...); err != nil {
+		if _, _, err := d.ApplyChanges(pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -301,9 +301,13 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 	return nil
 }
 
-// ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
+// ApplyChanges applies remote changes to the document. It also returns the
+// operations that actually executed, across all changes and in order, so a
+// caller with a history layer can reconcile any pending undo/redo entry
+// against them.
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, []operations.Operation, error) {
 	var events []DocEvent
+	var executedOps []operations.Operation
 	for _, c := range changes {
 		var hadPresence, wasOnline bool
 		var prevPresence presence.Data
@@ -315,9 +319,11 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			prevPresence = d.Presence(clientID)
 		}
 
-		if _, _, err := c.Execute(d.root, d.presences, operations.OpSourceRemote); err != nil {
-			return nil, err
+		executed, _, err := c.Execute(d.root, d.presences, operations.OpSourceRemote)
+		if err != nil {
+			return nil, nil, err
 		}
+		executedOps = append(executedOps, executed...)
 
 		if c.PresenceChange() != nil {
 			if c.PresenceChange().ChangeType == presence.Clear {
@@ -335,7 +341,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		}
 	}
 
-	return events, nil
+	return events, executedOps, nil
 }
 
 // MyPresence returns the presence of the actor currently editing the document.

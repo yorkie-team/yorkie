@@ -453,6 +453,15 @@ func (d *Document) UndoStackLenForTest() int {
 	return len(d.history.undoStack)
 }
 
+// UndoStackTopForTest returns the operations of the most recent entry of the
+// undo stack without popping it, for test inspection of reconciliation.
+func (d *Document) UndoStackTopForTest() []HistoryOperation {
+	if len(d.history.undoStack) == 0 {
+		return nil
+	}
+	return d.history.undoStack[len(d.history.undoStack)-1]
+}
+
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.mu.Lock()
@@ -515,9 +524,19 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		}
 	}
 
-	events, err := d.doc.ApplyChanges(changes...)
+	events, executed, err := d.doc.ApplyChanges(changes...)
 	if err != nil {
 		return err
+	}
+
+	// A remote change may have moved the text a pending undo/redo Edit
+	// refers to; reconcile every stacked Edit against each executed Edit,
+	// mirroring Document.applyChange in the JS SDK (document.ts:1552-1566).
+	for _, op := range executed {
+		if edit, ok := op.(*operations.Edit); ok {
+			from, to := edit.NormalizePos(d.doc.root)
+			d.history.ReconcileTextEdit(edit.ParentCreatedAt(), from, to, edit.ContentLen())
+		}
 	}
 
 	for _, e := range events {
