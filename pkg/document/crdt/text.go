@@ -256,7 +256,10 @@ func (t *Text) DeepCopy() (Element, error) {
 		}
 	}
 
-	return NewText(rgaTreeSplit, t.createdAt), nil
+	text := NewText(rgaTreeSplit, t.createdAt)
+	text.movedAt = t.movedAt
+	text.removedAt = t.removedAt
+	return text, nil
 }
 
 // GCPairs returns the pairs of GC.

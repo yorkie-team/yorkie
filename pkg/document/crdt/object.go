@@ -137,19 +137,18 @@ func (o *Object) Marshal() string {
 	return o.memberNodes.Marshal()
 }
 
-// DeepCopy copies itself deeply.
+// DeepCopy copies itself deeply. It copies the underlying ElementRHT
+// structurally (see ElementRHT.DeepCopy) rather than replaying Set for each
+// member, which would re-run the LWW race by each copied member's own
+// createdAt and could silently drop a member restored by undo/redo.
 func (o *Object) DeepCopy() (Element, error) {
-	members := NewElementRHT()
-
-	for _, node := range o.memberNodes.Nodes() {
-		copiedNode, err := node.elem.DeepCopy()
-		if err != nil {
-			return nil, err
-		}
-		members.Set(node.key, copiedNode)
+	members, err := o.memberNodes.DeepCopy()
+	if err != nil {
+		return nil, err
 	}
 
 	obj := NewObject(members, o.createdAt)
+	obj.movedAt = o.movedAt
 	obj.removedAt = o.removedAt
 	return obj, nil
 }

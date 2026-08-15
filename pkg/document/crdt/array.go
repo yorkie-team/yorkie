@@ -177,6 +177,7 @@ func (a *Array) DeepCopy() (Element, error) {
 	}
 
 	array := NewArray(elements, a.createdAt)
+	array.movedAt = a.movedAt
 	array.removedAt = a.removedAt
 	return array, nil
 }

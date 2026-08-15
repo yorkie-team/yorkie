@@ -1276,7 +1276,10 @@ func (t *Tree) DeepCopy() (Element, error) {
 		return nil, err
 	}
 
-	return NewTree(node, t.createdAt), nil
+	tree := NewTree(node, t.createdAt)
+	tree.movedAt = t.movedAt
+	tree.removedAt = t.removedAt
+	return tree, nil
 }
 
 // GCPairs returns the pairs of GC.

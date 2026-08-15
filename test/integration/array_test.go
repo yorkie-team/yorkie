@@ -320,7 +320,11 @@ func TestArray(t *testing.T) {
 		}))
 	})
 
-	t.Run("array remove undo/redo test", func(t *testing.T) {
+	t.Run("array remove undo test", func(t *testing.T) {
+		// NOTE: no Redo leg here. Add.Execute returns a nil reverse until
+		// the next task generates it (Add reverses to a Remove of the
+		// added element -- add_operation.ts:94-98), so redoing this Remove
+		// is not yet possible; the CanRedo() assertion below pins that.
 		ctx := context.Background()
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, doc))
@@ -341,6 +345,7 @@ func TestArray(t *testing.T) {
 
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, `{"a":[1,2,3]}`, doc.Marshal())
+		assert.False(t, doc.CanRedo())
 
 		// The restored element must survive GC: undoing a Remove must not
 		// leave the reverse Add's copy registered under the tombstoned

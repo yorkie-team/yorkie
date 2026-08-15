@@ -109,22 +109,35 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // comparison must use the operation's fresh execution ticket, not the
 // restored element's creation ticket, or the restore can never win against
 // whatever currently occupies the key. It mirrors the separate `executedAt`
-// parameter of ElementRHT.set in the JS SDK (element_rht.ts:92-114).
+// parameter of ElementRHT.set in the JS SDK (element_rht.ts:92-114) -- with
+// one deliberate divergence, described next.
 //
-// The win/lose decision and the eviction of the previous occupant must use
-// the same anchor (positionedAt). Deciding eviction from the occupant's raw
-// createdAt while deciding the winner from its positionedAt can disagree:
-// a write that only wins by createdAt but loses by positionedAt would then
-// tombstone the true (positionedAt) winner while still leaving it linked as
-// the key's value, corrupting the slot (Get would find a node whose element
-// is marked removed and incorrectly report the key as absent).
+// The win/lose decision and the eviction of the previous occupant here
+// always use the same anchor (PositionedAt). JS's eviction check instead
+// gates on the occupant's raw createdAt (element_rht.ts:99, via
+// CRDTElement.remove), independently of the positionedAt-based winner
+// check a few lines below it (element_rht.ts:105,109). Those two checks
+// can disagree there: when createdAt < executedAt < positionedAt, JS's
+// eviction check (using createdAt) still fires and tombstones the true
+// (positionedAt) winner, while its winner check (using positionedAt)
+// decides the incoming value should *not* replace it -- so the winner
+// ends up tombstoned but still linked as the key's value, and the
+// incoming value is dropped without being registered as removed either.
+// The key then spuriously reads as absent from get() on that replica.
+// This is JS's actual, shipped behavior in that case, not a hypothetical.
+//
+// Go deliberately does not reproduce this: matching it would mean
+// gating eviction on createdAt while gating the winner on PositionedAt,
+// which is corrupt by construction, not merely different. Go anchors
+// both checks on PositionedAt, so in the same case the true winner
+// simply stays in place -- correct, but not what JS's shipped code does.
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 
 	var removed Element
-	if !ok || executedAt.After(positionedAt(node.elem)) {
+	if !ok || executedAt.After(PositionedAt(node.elem)) {
 		if ok && !node.isRemoved() && node.Remove(executedAt) {
 			removed = node.elem
 		}
@@ -133,13 +146,13 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	} else if !node.isRemoved() {
 		// The new node loses the LWW conflict — mark it as removed
 		// so it doesn't appear as a duplicate during iteration.
-		v.Remove(positionedAt(node.elem))
+		v.Remove(PositionedAt(node.elem))
 	}
 
 	return removed
 }
 
-// positionedAt returns elem's last-moved ticket, or its creation ticket if
+// PositionedAt returns elem's last-moved ticket, or its creation ticket if
 // it has never moved. It mirrors CRDTElement.getPositionedAt in the JS SDK
 // (element.ts:68-74) and is the correct LWW tie-break anchor for a node
 // already occupying an ElementRHT slot: once a node has been (re-)placed at
@@ -147,12 +160,44 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 // when restoring an element under its original, older createdAt -- further
 // comparisons must use that newer ticket, or a later write with a ticket in
 // between can incorrectly win on one replica and lose on another,
-// diverging the two.
-func positionedAt(elem Element) *time.Ticket {
+// diverging the two. Exported for api/converter, which must replay an
+// already-decoded element's own positionedAt rather than its createdAt when
+// rebuilding an ElementRHT from a snapshot (converter.ts:1667).
+func PositionedAt(elem Element) *time.Ticket {
 	if movedAt := elem.MovedAt(); movedAt != nil {
 		return movedAt
 	}
 	return elem.CreatedAt()
+}
+
+// DeepCopy copies itself deeply, preserving each node's identity, key
+// mapping, and moved/removed timestamps exactly. Unlike Set, it does not
+// replay the LWW race: doing so would use each copied node's own createdAt
+// as the tie-break ticket, which can lose to a value it had already validly
+// beaten (an element restored by undo/redo keeps its original createdAt but
+// carries a newer movedAt), silently dropping a live member. It mirrors
+// ElementRHT.deepcopy in the JS SDK (element_rht.ts:214-234), which copies
+// both maps structurally for the same reason.
+func (rht *ElementRHT) DeepCopy() (*ElementRHT, error) {
+	clone := NewElementRHT()
+
+	for _, node := range rht.nodeMapByCreatedAt {
+		copied, err := node.elem.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		clone.nodeMapByCreatedAt[copied.CreatedAt().Key()] = newElementRHTNode(node.key, copied)
+	}
+
+	for key, node := range rht.nodeMapByKey {
+		clonedNode, ok := clone.nodeMapByCreatedAt[node.elem.CreatedAt().Key()]
+		if !ok {
+			return nil, fmt.Errorf("deep copy %s: %w", node.elem.CreatedAt().Key(), ErrChildNotFound)
+		}
+		clone.nodeMapByKey[key] = clonedNode
+	}
+
+	return clone, nil
 }
 
 // Delete deletes the Element of the given key.
