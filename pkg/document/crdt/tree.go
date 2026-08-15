@@ -1385,7 +1385,8 @@ func (t *Tree) EditT(
 		return nil, resource.DataSize{}, err
 	}
 
-	return t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	pairs, diff, _, _, err := t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	return pairs, diff, err
 }
 
 // FindPos finds the position of the given index in the tree.
@@ -1425,6 +1426,15 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 
 // Edit edits the tree with the given range and content.
 // If the content is undefined, the range will be removed.
+// Edit edits the given range with the given content and split level. Besides
+// the GC pairs and size diff, it reports the content this edit removed:
+// removed holds each node THIS edit itself transitioned visible ->
+// tombstoned (parent-before-child, the order Restore relies on), and
+// preTombstoned names — by IDString, mirroring the JS port's ID-string Set —
+// every descendant found already tombstoned before this edit ran. A
+// descendant in preTombstoned never appears in removed: a reverse operation
+// built from removed must not resurrect a deletion the user already made
+// independently of this edit (JS CRDTTree.edit's preTombstoned filtering).
 func (t *Tree) Edit(
 	from, to *TreePos,
 	contents []*TreeNode,
@@ -1432,19 +1442,19 @@ func (t *Tree) Edit(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []*TreeNode, map[string]struct{}, error) {
 	var diff resource.DataSize
 	var pairs []GCPair
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, nil, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -1488,24 +1498,36 @@ func (t *Tree) Edit(
 		editedAt, versionVector,
 	)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, nil, err
 	}
 
-	// Phase 5: Delete — tombstone the collected nodes.
+	// Phase 5: Delete — tombstone the collected nodes. Captured in the same
+	// pass: `remove` returns true only for a node transitioning live ->
+	// tombstoned (see TreeNode.remove), so the two branches below are exactly
+	// "newly removed by this edit" and "was already removed" — no second
+	// traversal is needed to tell them apart.
+	removed := make([]*TreeNode, 0, len(toBeRemoveds))
+	var preTombstoned map[string]struct{}
 	for _, node := range toBeRemoveds {
 		if node.remove(editedAt) {
 			pairs = append(pairs, GCPair{
 				Parent: t,
 				Child:  node,
 			})
+			removed = append(removed, node)
+			continue
 		}
+		if preTombstoned == nil {
+			preTombstoned = make(map[string]struct{})
+		}
+		preTombstoned[node.IDString()] = struct{}{}
 	}
 
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	if err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, editedAt,
 	); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
 	}
 
 	// §6.2: Propagate deletes to children moved by prior merges.
@@ -1516,7 +1538,7 @@ func (t *Tree) Edit(
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
 	}
 
 	// Phase 8: Insert — insert the given node at the given position.
@@ -1536,12 +1558,12 @@ func (t *Tree) Edit(
 			if leftInChildren == fromParent {
 				err := fromParent.InsertAt(content, 0)
 				if err != nil {
-					return append(pairs, t.drainPendingGCPairs()...), diff, err
+					return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
 				}
 			} else {
 				err := fromParent.InsertAfter(content, leftInChildren)
 				if err != nil {
-					return append(pairs, t.drainPendingGCPairs()...), diff, err
+					return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
 				}
 			}
 
@@ -1571,7 +1593,7 @@ func (t *Tree) Edit(
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, removed, preTombstoned, nil
 }
 
 // intendedMergeParent resolves the §9.4 stamp for an insert whose position
@@ -2173,26 +2195,32 @@ func (t *Tree) StyleByIndex(
 		return nil, resource.DataSize{}, err
 	}
 
-	return t.Style(fromPos, toPos, attributes, editedAt, versionVector)
+	pairs, diff, _, err := t.Style(fromPos, toPos, attributes, editedAt, versionVector)
+	return pairs, diff, err
 }
 
-// Style applies the given attributes of the given range.
+// Style applies the given attributes of the given range. Besides the GC
+// pairs and size diff, it reports, for each key in attrs, the value that key
+// held (or its absence) on the first node actually styled — see PrevAttr —
+// so a reverse Style can restore that prior state. Keys are captured in
+// sorted order so the result is deterministic regardless of Go's randomized
+// map iteration order.
 func (t *Tree) Style(
 	from, to *TreePos,
 	attrs map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []PrevAttr, error) {
 	var diff resource.DataSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
 		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -2208,6 +2236,8 @@ func (t *Tree) Style(
 	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
 
 	var pairs []GCPair
+	var prevAttrs []PrevAttr
+	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
 		actorID := node.id.CreatedAt.ActorID()
@@ -2229,6 +2259,22 @@ func (t *Tree) Style(
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
+			}
+
+			if !captured {
+				keys := make([]string, 0, len(attrs))
+				for key := range attrs {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					if node.Attrs != nil && node.Attrs.Has(key) {
+						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
+					} else {
+						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Existed: false})
+					}
+				}
+				captured = true
 			}
 
 			for key, value := range attrs {
@@ -2272,32 +2318,38 @@ func (t *Tree) Style(
 			}
 		}
 	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, nil, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, prevAttrs, nil
 }
 
-// RemoveStyle removes the given attributes of the given range.
+// RemoveStyle removes the given attributes of the given range. Besides the
+// GC pairs and size diff, it reports the value each removed key held on the
+// first node actually visited — see PrevAttr — so a reverse operation can
+// restore it. Unlike Style, a key that did not exist on that node is simply
+// omitted (no Existed: false entry): removing an already-absent attribute
+// has nothing to reverse. Keys are captured in sorted order for the same
+// determinism reason as Style.
 func (t *Tree) RemoveStyle(
 	from *TreePos,
 	to *TreePos,
 	attrs []string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []PrevAttr, error) {
 	var diff resource.DataSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
 		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -2313,6 +2365,8 @@ func (t *Tree) RemoveStyle(
 	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
 
 	var pairs []GCPair
+	var prevAttrs []PrevAttr
+	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
 		actorID := node.id.CreatedAt.ActorID()
@@ -2334,6 +2388,17 @@ func (t *Tree) RemoveStyle(
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
+			}
+
+			if !captured {
+				keys := append([]string(nil), attrs...)
+				sort.Strings(keys)
+				for _, key := range keys {
+					if node.Attrs != nil && node.Attrs.Has(key) {
+						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
+					}
+				}
+				captured = true
 			}
 
 			for _, attr := range attrs {
@@ -2371,12 +2436,12 @@ func (t *Tree) RemoveStyle(
 			}
 		}
 	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, nil, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, prevAttrs, nil
 }
 
 // PosBoundary selects how a position inside a merged-away parent resolves

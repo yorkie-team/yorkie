@@ -205,7 +205,7 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, diff, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -248,7 +248,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, diff, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -294,7 +294,7 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, diff, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -341,7 +341,7 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, diff, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -447,7 +447,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		splitTickets = append(splitTickets, issued)
 		return issued
 	}
-	pairs, diff, err := t.Tree.Edit(
+	pairs, diff, _, _, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,

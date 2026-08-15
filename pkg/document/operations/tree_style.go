@@ -91,9 +91,9 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 	var diff resource.DataSize
 	var err error
 	if len(e.attributes) > 0 {
-		pairs, diff, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		pairs, diff, _, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 	} else {
-		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
+		pairs, diff, _, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
 	}
 
 	for _, pair := range pairs {

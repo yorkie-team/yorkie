@@ -184,7 +184,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			}
 
 		}
-		pairs, diff, err := obj.Edit(
+		pairs, diff, _, _, err := obj.Edit(
 			e.from,
 			e.to,
 			contents,
