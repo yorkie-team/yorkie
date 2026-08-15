@@ -80,6 +80,14 @@ func (o *Move) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
 
+// SetCreatedAt sets the creation time of the target element. Used by
+// History.ReconcileCreatedAt when a stacked Move still targets an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Move) SetCreatedAt(createdAt *time.Ticket) {
+	o.createdAt = createdAt
+}
+
 // ParentCreatedAt returns the creation time of the Array.
 func (o *Move) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
@@ -103,4 +111,12 @@ func (o *Move) SetExecutedAt(executedAt *time.Ticket) {
 // PrevCreatedAt returns the creation time of previous element.
 func (o *Move) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
+}
+
+// SetPrevCreatedAt sets the creation time of the previous element. Used by
+// History.ReconcileCreatedAt when a stacked Move still anchors on an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Move) SetPrevCreatedAt(prevCreatedAt *time.Ticket) {
+	o.prevCreatedAt = prevCreatedAt
 }

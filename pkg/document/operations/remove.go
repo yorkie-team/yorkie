@@ -143,3 +143,11 @@ func (o *Remove) SetExecutedAt(executedAt *time.Ticket) {
 func (o *Remove) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
+
+// SetCreatedAt sets the creation time of the target element. Used by
+// History.ReconcileCreatedAt when a stacked Remove still targets an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Remove) SetCreatedAt(createdAt *time.Ticket) {
+	o.createdAt = createdAt
+}

@@ -101,4 +101,61 @@ func TestElementRHT(t *testing.T) {
 		}
 		assert.Equal(t, 1, nonRemovedCount, "should have exactly one non-removed node")
 	})
+
+	t.Run("restore via SetWithExecutedAt converges regardless of apply order", func(t *testing.T) {
+		// Regression test: SetWithExecutedAt's LWW tie-break used to compare
+		// against the current occupant's createdAt instead of its
+		// positionedAt (movedAt, falling back to createdAt). A value
+		// restored by undo/redo keeps its original createdAt but is given a
+		// fresh movedAt via its executedAt ticket; comparing createdAt let a
+		// third write with a ticket between the restored value's original
+		// createdAt and its new movedAt win on one replica but not the
+		// other, diverging the two.
+		//
+		// V1@t1 is created, then overwritten by V2@t5. V1 is then restored
+		// under its original createdAt (t1) but a fresh executedAt (t9), as
+		// undo/redo does. A concurrent write V3@t7 -- with a ticket between
+		// V1's old createdAt and its new positionedAt -- must lose to the
+		// restored V1 on both replicas, however the two events are ordered.
+		actorA := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+		actorB := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+
+		t1 := time.NewTicket(1, 0, actorA)
+		t5 := time.NewTicket(5, 0, actorA)
+		t7 := time.NewTicket(7, 0, actorB)
+		t9 := time.NewTicket(9, 0, actorA)
+
+		newReplica := func() *crdt.ElementRHT {
+			rht := crdt.NewElementRHT()
+			v1, err := crdt.NewPrimitive("v1", t1)
+			assert.NoError(t, err)
+			rht.Set("key", v1)
+			v2, err := crdt.NewPrimitive("v2", t5)
+			assert.NoError(t, err)
+			rht.Set("key", v2)
+			return rht
+		}
+
+		// Replica A: the restore (V1 under executedAt=t9) is applied before
+		// the concurrent V3@t7 write.
+		replicaA := newReplica()
+		v1RestoredA, err := crdt.NewPrimitive("v1", t1)
+		assert.NoError(t, err)
+		replicaA.SetWithExecutedAt("key", v1RestoredA, t9)
+		v3A, err := crdt.NewPrimitive("v3", t7)
+		assert.NoError(t, err)
+		replicaA.SetWithExecutedAt("key", v3A, t7)
+
+		// Replica B: the same two writes, opposite order.
+		replicaB := newReplica()
+		v3B, err := crdt.NewPrimitive("v3", t7)
+		assert.NoError(t, err)
+		replicaB.SetWithExecutedAt("key", v3B, t7)
+		v1RestoredB, err := crdt.NewPrimitive("v1", t1)
+		assert.NoError(t, err)
+		replicaB.SetWithExecutedAt("key", v1RestoredB, t9)
+
+		assert.Equal(t, `"v1"`, replicaA.Get("key").Marshal())
+		assert.Equal(t, replicaA.Get("key").Marshal(), replicaB.Get("key").Marshal())
+	})
 }

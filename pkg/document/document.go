@@ -360,9 +360,24 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 
 		ticket := ctx.IssueTimeTicket()
 		entry.Op.SetExecutedAt(ticket)
-		// ArraySet, Add, and TreeEdit need a ticket-reissue hook here once
-		// their reverse operations exist; until then every reverse is nil
-		// and no operation reaches this branch needing one.
+
+		// NOTE(hackerwins): An Add reverse acts as UndoRemove, restoring a
+		// removed array element. It is given a fresh createdAt here rather
+		// than keeping its original one, or the restored (live) element and
+		// its own tombstone would collide under the same identity in the
+		// array's internal index -- letting a later GC pass purge the live
+		// element by mistake. Any other stacked operation that still
+		// references the old createdAt (as its own createdAt, or as a
+		// prevCreatedAt) is updated to the new one so it doesn't end up
+		// targeting a stale identity. ArraySet and TreeEdit need the same
+		// treatment once their reverse operations exist (document.ts:
+		// 2094-2105).
+		if addOp, ok := entry.Op.(*operations.Add); ok {
+			prev := addOp.Value().CreatedAt()
+			addOp.Value().SetCreatedAt(ticket)
+			d.history.ReconcileCreatedAt(prev, ticket)
+		}
+
 		ctx.Push(entry.Op)
 	}
 

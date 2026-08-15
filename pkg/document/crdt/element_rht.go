@@ -110,24 +110,49 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // restored element's creation ticket, or the restore can never win against
 // whatever currently occupies the key. It mirrors the separate `executedAt`
 // parameter of ElementRHT.set in the JS SDK (element_rht.ts:92-114).
+//
+// The win/lose decision and the eviction of the previous occupant must use
+// the same anchor (positionedAt). Deciding eviction from the occupant's raw
+// createdAt while deciding the winner from its positionedAt can disagree:
+// a write that only wins by createdAt but loses by positionedAt would then
+// tombstone the true (positionedAt) winner while still leaving it linked as
+// the key's value, corrupting the slot (Get would find a node whose element
+// is marked removed and incorrectly report the key as absent).
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByKey[k]
-	var removed Element
-	if ok && !node.isRemoved() && node.Remove(executedAt) {
-		removed = node.elem
-	}
 	newNode := newElementRHTNode(k, v)
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
-	if !ok || executedAt.After(node.elem.CreatedAt()) {
+
+	var removed Element
+	if !ok || executedAt.After(positionedAt(node.elem)) {
+		if ok && !node.isRemoved() && node.Remove(executedAt) {
+			removed = node.elem
+		}
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
 	} else if !node.isRemoved() {
 		// The new node loses the LWW conflict — mark it as removed
 		// so it doesn't appear as a duplicate during iteration.
-		v.Remove(node.elem.CreatedAt())
+		v.Remove(positionedAt(node.elem))
 	}
 
 	return removed
+}
+
+// positionedAt returns elem's last-moved ticket, or its creation ticket if
+// it has never moved. It mirrors CRDTElement.getPositionedAt in the JS SDK
+// (element.ts:68-74) and is the correct LWW tie-break anchor for a node
+// already occupying an ElementRHT slot: once a node has been (re-)placed at
+// a key with a ticket newer than its own createdAt -- as undo/redo does
+// when restoring an element under its original, older createdAt -- further
+// comparisons must use that newer ticket, or a later write with a ticket in
+// between can incorrectly win on one replica and lose on another,
+// diverging the two.
+func positionedAt(elem Element) *time.Ticket {
+	if movedAt := elem.MovedAt(); movedAt != nil {
+		return movedAt
+	}
+	return elem.CreatedAt()
 }
 
 // Delete deletes the Element of the given key.

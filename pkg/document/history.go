@@ -19,6 +19,7 @@ package document
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // MaxUndoRedoStackDepth is the maximum depth of the undo/redo stacks. It
@@ -95,3 +96,47 @@ func (h *History) ClearUndo() { h.undoStack = nil }
 
 // ClearRedo empties the redo stack.
 func (h *History) ClearRedo() { h.redoStack = nil }
+
+// ReconcileCreatedAt rewrites any stacked operation's createdAt or
+// prevCreatedAt that still points at prevCreatedAt, replacing it with
+// currCreatedAt. It mirrors History.reconcileCreatedAt in the JS SDK
+// (history.ts:123-160).
+//
+// When undo/redo replaces an element under a fresh identity -- for
+// example, an Add reverse restoring a removed array element acts as an
+// UndoRemove and is given a new createdAt at execution time -- any other
+// stacked operation that still targets the old identity must be updated to
+// the new one, or it will target a tombstone (or a since-repurposed
+// identity) the next time it runs.
+func (h *History) ReconcileCreatedAt(prevCreatedAt, currCreatedAt *time.Ticket) {
+	replace := func(stack [][]HistoryOperation) {
+		// TODO(hackerwins): Optimize by indexing operations.
+		for _, entries := range stack {
+			for _, entry := range entries {
+				switch op := entry.Op.(type) {
+				case *operations.ArraySet:
+					if op.CreatedAt() != nil && op.CreatedAt().Key() == prevCreatedAt.Key() {
+						op.SetCreatedAt(currCreatedAt)
+					}
+				case *operations.Remove:
+					if op.CreatedAt() != nil && op.CreatedAt().Key() == prevCreatedAt.Key() {
+						op.SetCreatedAt(currCreatedAt)
+					}
+				case *operations.Move:
+					if op.CreatedAt() != nil && op.CreatedAt().Key() == prevCreatedAt.Key() {
+						op.SetCreatedAt(currCreatedAt)
+					}
+					if op.PrevCreatedAt() != nil && op.PrevCreatedAt().Key() == prevCreatedAt.Key() {
+						op.SetPrevCreatedAt(currCreatedAt)
+					}
+				case *operations.Add:
+					if op.PrevCreatedAt() != nil && op.PrevCreatedAt().Key() == prevCreatedAt.Key() {
+						op.SetPrevCreatedAt(currCreatedAt)
+					}
+				}
+			}
+		}
+	}
+	replace(h.undoStack)
+	replace(h.redoStack)
+}

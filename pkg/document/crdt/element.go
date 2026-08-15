@@ -51,6 +51,13 @@ type Element interface {
 	// CreatedAt returns the creation time of this element.
 	CreatedAt() *time.Ticket
 
+	// SetCreatedAt sets the creation time of this element manually. It is
+	// used when undo/redo restores a removed element under a freshly
+	// issued identity instead of its original one -- for example, an Add
+	// reverse acting as UndoRemove for an Array element -- mirroring
+	// CRDTElement.setCreatedAt in the JS SDK (element.ts:77-81).
+	SetCreatedAt(createdAt *time.Ticket)
+
 	// MovedAt returns the move time of this element.
 	MovedAt() *time.Ticket
 

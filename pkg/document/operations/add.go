@@ -102,3 +102,11 @@ func (o *Add) SetExecutedAt(executedAt *time.Ticket) {
 func (o *Add) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
 }
+
+// SetPrevCreatedAt sets the creation time of the previous element. Used by
+// History.ReconcileCreatedAt when a stacked Add still anchors on an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Add) SetPrevCreatedAt(prevCreatedAt *time.Ticket) {
+	o.prevCreatedAt = prevCreatedAt
+}

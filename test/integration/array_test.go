@@ -319,6 +319,38 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 	})
+
+	t.Run("array remove undo/redo test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+		defer func() { assert.NoError(t, c1.Detach(ctx, doc)) }()
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("a").AddInteger(1, 2, 3)
+			return nil
+		}))
+		assert.Equal(t, `{"a":[1,2,3]}`, doc.Marshal())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("a").Delete(1)
+			return nil
+		}))
+		assert.Equal(t, `{"a":[1,3]}`, doc.Marshal())
+		assert.True(t, doc.CanUndo())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"a":[1,2,3]}`, doc.Marshal())
+
+		// The restored element must survive GC: undoing a Remove must not
+		// leave the reverse Add's copy registered under the tombstoned
+		// element's old identity, or a GC pass purges the live element
+		// instead of the tombstone, silently reverting the undo.
+		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(t, `{"a":[1,2,3]}`, doc.Marshal())
+	})
 }
 
 func TestArrayConcurrency(t *testing.T) {

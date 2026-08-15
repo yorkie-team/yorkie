@@ -205,6 +205,14 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
 
+		// The restored value must survive GC: the tombstoned original
+		// element is legitimate garbage, but undoing its removal must not
+		// leave the live, restored copy also collectible under the same
+		// identity (this whole class of bug is why Task 5's Set.Execute
+		// deregisters the stale root registration before re-registering).
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
+
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, `{}`, doc.Marshal())
 	})
@@ -311,5 +319,58 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, d1.Undo())
 		assert.Equal(t, `{}`, d1.Marshal())
 		assert.False(t, d1.CanRedo())
+	})
+
+	t.Run("undo restoring a value converges with a concurrent remote set", func(t *testing.T) {
+		// End-to-end convergence coverage for undoing a Set while another
+		// peer concurrently writes the same key: two clients round-tripping
+		// through the real server must agree on a value afterward,
+		// regardless of the exact server-assigned ordering. This does not
+		// deterministically exercise any one LWW tie-break path -- for
+		// that, see TestElementRHT's "restore via SetWithExecutedAt
+		// converges regardless of apply order" in
+		// pkg/document/crdt/element_rht_test.go, which pins the exact
+		// ticket ordering that caused a real divergence (positionedAt vs.
+		// createdAt in ElementRHT's LWW comparison).
+		//
+		// c1: set color = "v1"; sync so c2 starts from "v1"
+		// c1: set color = "v2" (local only)
+		// c2: set color = "v3" (local only, concurrent with c1's v2)
+		// c1: undo (restores "v1" under a fresh tie-break ticket, local only)
+		// sync both ways: both replicas must converge on the same value,
+		// regardless of the order each applies the other's operations in.
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("color", "v1")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+
+		d2 := document.New(helper.TestKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"color":"v1"}`, d2.Marshal())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("color", "v2")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("color", "v3")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Undo())
+		assert.Equal(t, `{"color":"v1"}`, d1.Marshal())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 }

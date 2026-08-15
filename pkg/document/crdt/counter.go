@@ -180,6 +180,11 @@ func (p *Counter) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
+// SetCreatedAt sets the creation time of this counter manually.
+func (p *Counter) SetCreatedAt(createdAt *time.Ticket) {
+	p.createdAt = createdAt
+}
+
 // MovedAt returns the move time of this element.
 func (p *Counter) MovedAt() *time.Ticket {
 	return p.movedAt

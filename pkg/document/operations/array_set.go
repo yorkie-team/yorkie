@@ -108,3 +108,11 @@ func (o *ArraySet) SetExecutedAt(executedAt *time.Ticket) {
 func (o *ArraySet) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
+
+// SetCreatedAt sets the creation time of the target element. Used by
+// History.ReconcileCreatedAt when a stacked ArraySet still targets an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *ArraySet) SetCreatedAt(createdAt *time.Ticket) {
+	o.createdAt = createdAt
+}
