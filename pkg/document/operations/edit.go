@@ -17,6 +17,9 @@
 package operations
 
 import (
+	"strings"
+	"unicode/utf16"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -43,6 +46,12 @@ type Edit struct {
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
+
+	// isUndoOp marks this Edit as a reverse operation produced by Execute
+	// rather than by a user edit. It is local-only state (never on the wire):
+	// a reverse's positions were recorded against an older split chain, so
+	// they are refined onto the current one before it executes.
+	isUndoOp bool
 
 	// restoreSpans carries the removed content tagged with its original
 	// character identities, letting the server revive or re-remove it
@@ -137,6 +146,22 @@ func (e *Edit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVe
 				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
 			}
 
+			// The reverse of an identity-preserving edit keeps both span sets
+			// and only flips the direction, so undoing a restore re-removes
+			// exactly the characters it revived, still under their original
+			// identities. Copying their content into a fresh insertion here
+			// would defeat the whole point of the restore path. Built before
+			// the mutation, from state the mutation does not touch.
+			reverseOp := &Edit{
+				parentCreatedAt:  e.parentCreatedAt,
+				from:             e.from,
+				to:               e.to,
+				isUndoOp:         true,
+				restoreSpans:     e.restoreSpans,
+				restoreMode:      flipRestoreMode(e.restoreMode),
+				retombstoneSpans: e.retombstoneSpans,
+			}
+
 			// 1. Re-remove the content the reversed edit inserted (by identity).
 			if len(toRetombstone) > 0 {
 				pairs, diff := obj.Retombstone(toRetombstone, e.executedAt)
@@ -171,23 +196,129 @@ func (e *Edit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVe
 				}
 				root.Acc(diff)
 			}
-		} else {
-			_, pairs, diff, _, _, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
-			for _, pair := range pairs {
-				root.RegisterGCPair(pair)
-				root.AdjustDiffForGCPair(&diff, pair)
-			}
-			root.Acc(diff)
+
+			return reverseOp, nil
+		}
+
+		// A reverse's positions were recorded against the chain as it stood
+		// when the reverse was built; splits since then have moved them.
+		if e.isUndoOp {
+			from, err := obj.RefinePos(e.from)
 			if err != nil {
 				return nil, err
 			}
+			to, err := obj.RefinePos(e.to)
+			if err != nil {
+				return nil, err
+			}
+			e.from, e.to = from, to
 		}
+
+		_, pairs, diff, removedValues, removedSpans, err := obj.Edit(
+			e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
+		for _, pair := range pairs {
+			root.RegisterGCPair(pair)
+			root.AdjustDiffForGCPair(&diff, pair)
+		}
+		root.Acc(diff)
+		if err != nil {
+			return nil, err
+		}
+
+		// The anchor is normalized after the edit, against the chain the
+		// reverse will actually run on.
+		fromPos, err := obj.NormalizePos(e.from)
+		if err != nil {
+			return nil, err
+		}
+
+		return e.toReverseOperation(removedValues, fromPos, removedSpans), nil
 
 	default:
 		return nil, ErrNotApplicableDataType
 	}
+}
 
-	return nil, nil
+// toReverseOperation builds the operation that undoes this edit from what the
+// edit removed (removedValues, removedSpans) and what it inserted (content),
+// anchored at the normalized fromPos.
+func (e *Edit) toReverseOperation(
+	removedValues []string,
+	fromPos *crdt.RGATreeSplitNodePos,
+	removedSpans []crdt.RestoreSpan,
+) Operation {
+	if len(removedSpans) > 0 || len(e.content) > 0 {
+		// Reverse any edit by identity: revive what it removed
+		// (restoreSpans) and re-remove what it inserted (retombstoneSpans),
+		// rather than copy-reinserting or position-deleting. A fresh
+		// copy-reinserted node sorts ahead of an as-yet-unrevived neighbour
+		// and corrupts order across chained undo/redo; a position-based
+		// delete of the inserted range reconciles onto the wrong node under a
+		// concurrent remote edit. Identity addressing avoids both.
+		var restoreSpans []*crdt.RestoreSpan
+		if len(removedSpans) > 0 {
+			restoreSpans = make([]*crdt.RestoreSpan, 0, len(removedSpans))
+			for i := range removedSpans {
+				restoreSpans = append(restoreSpans, &removedSpans[i])
+			}
+		}
+
+		var insertedSpans []*crdt.RestoreSpan
+		if len(e.content) > 0 {
+			// The insertion is one run born under this edit's own ticket, so
+			// it is addressed as [0, len) of that identity. Its attributes
+			// are irrelevant: re-removing a run never reads them.
+			insertedSpans = []*crdt.RestoreSpan{{
+				CreatedAt: e.executedAt,
+				Start:     0,
+				End:       len(utf16.Encode([]rune(e.content))),
+				Content:   e.content,
+			}}
+		}
+
+		return &Edit{
+			parentCreatedAt:  e.parentCreatedAt,
+			from:             fromPos,
+			to:               fromPos,
+			isUndoOp:         true,
+			restoreSpans:     restoreSpans,
+			restoreMode:      crdt.RestoreModeRestore,
+			retombstoneSpans: insertedSpans,
+		}
+	}
+
+	// Neither removed nor inserted anything: the reverse is an ordinary
+	// no-op edit. Kept rather than dropped so an edit is always undoable,
+	// matching the JS SDK. removedValues is collected in lockstep with
+	// removedSpans, so it is necessarily empty here too and the content and
+	// attributes below always come out empty; the shape is kept as JS has it
+	// rather than collapsed, so the two stay comparable.
+	var attributes map[string]string
+	if len(removedValues) == 1 && len(removedSpans) == 1 {
+		attributes = removedSpans[0].Attributes
+	}
+
+	return &Edit{
+		parentCreatedAt: e.parentCreatedAt,
+		from:            fromPos,
+		to: crdt.NewRGATreeSplitNodePos(
+			fromPos.ID(),
+			fromPos.RelativeOffset()+len(utf16.Encode([]rune(e.content))),
+		),
+		content:     strings.Join(removedValues, ""),
+		attributes:  attributes,
+		isUndoOp:    true,
+		restoreMode: crdt.RestoreModeNone,
+	}
+}
+
+// flipRestoreMode returns the direction that undoes the given one: undoing a
+// restore re-removes, and undoing a re-removal restores.
+func flipRestoreMode(mode crdt.RestoreMode) crdt.RestoreMode {
+	if mode == crdt.RestoreModeRetombstone {
+		return crdt.RestoreModeRestore
+	}
+	return crdt.RestoreModeRetombstone
 }
 
 // validateRestoreIdentities rejects restore/retombstone spans whose node
