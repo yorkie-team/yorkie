@@ -256,8 +256,22 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if _, _, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal); err != nil {
+		executed, reverseOps, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
+		if err != nil {
 			return err
+		}
+
+		var reverse []HistoryOperation
+		for _, op := range reverseOps {
+			reverse = append(reverse, HistoryOperation{Op: op})
+		}
+		if len(reverse) > 0 {
+			d.history.PushUndo(reverse)
+		}
+
+		// NOTE(hackerwins): A new local operation invalidates the redo stack.
+		if len(executed) > 0 {
+			d.history.ClearRedo()
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
