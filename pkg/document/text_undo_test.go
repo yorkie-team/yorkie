@@ -93,6 +93,17 @@ func assertAllCharsFrom(t *testing.T, doc *document.Document, key string, seeds 
 	}
 }
 
+// textAttrs returns the live style attributes carried by the first node of
+// the text under key, as a plain map -- so a test can assert on attribute
+// state directly rather than inferring it from marshalled text.
+func textAttrs(t *testing.T, doc *document.Document, key string) map[string]string {
+	t.Helper()
+
+	nodes := textOf(t, doc, key).Nodes()
+	assert.NotEmpty(t, nodes)
+	return nodes[0].Value().Attrs().Elements()
+}
+
 // runTicket returns the identity of the node holding the given run, live or
 // tombstoned. Used to pin that a run keeps its identity across a full
 // undo/redo cycle, including one that purges and recreates it.
@@ -356,5 +367,121 @@ func TestTextUndo(t *testing.T) {
 
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "ABCD", textOf(t, doc, "t").String())
+	})
+
+	t.Run("style undo restores the previous attribute value test", func(t *testing.T) {
+		doc := newTextDoc(t)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "ABCD", map[string]string{"bold": "true"})
+			return nil
+		}))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Style(0, 4, map[string]string{"bold": "false"})
+			return nil
+		}))
+		assert.Equal(t, map[string]string{"bold": "false"}, textAttrs(t, doc, "t"))
+
+		assert.True(t, doc.CanUndo())
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, map[string]string{"bold": "true"}, textAttrs(t, doc, "t"),
+			"undo should restore the value the attribute held before the style call")
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, map[string]string{"bold": "false"}, textAttrs(t, doc, "t"))
+	})
+
+	t.Run("style undo removes an attribute that did not exist before test", func(t *testing.T) {
+		// The absent-key branch: undoing a style that added a key must
+		// remove it, not set it to the empty string.
+		doc := newTextDoc(t)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "ABCD")
+			return nil
+		}))
+		assert.Empty(t, textAttrs(t, doc, "t"))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Style(0, 4, map[string]string{"italic": "true"})
+			return nil
+		}))
+		assert.Equal(t, map[string]string{"italic": "true"}, textAttrs(t, doc, "t"))
+
+		assert.True(t, doc.CanUndo())
+		assert.NoError(t, doc.Undo())
+		attrs := textAttrs(t, doc, "t")
+		_, exists := attrs["italic"]
+		assert.False(t, exists, "undo should remove the key, not set it to \"\"")
+		assert.Empty(t, attrs)
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, map[string]string{"italic": "true"}, textAttrs(t, doc, "t"))
+	})
+
+	t.Run("style undo unions restore and removal across keys test", func(t *testing.T) {
+		// One style call touching a mix of an existing key (bold) and a new
+		// key (italic) must produce a single reverse that both restores
+		// bold and removes italic -- proving Style.Execute processes the
+		// set-attributes and remove-attributes branches independently
+		// rather than exclusively, since that combined reverse is itself
+		// executed again on redo.
+		doc := newTextDoc(t)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "ABCD", map[string]string{"bold": "true"})
+			return nil
+		}))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Style(0, 4, map[string]string{"bold": "false", "italic": "true"})
+			return nil
+		}))
+		assert.Equal(t, map[string]string{"bold": "false", "italic": "true"}, textAttrs(t, doc, "t"))
+
+		assert.NoError(t, doc.Undo())
+		attrs := textAttrs(t, doc, "t")
+		assert.Equal(t, map[string]string{"bold": "true"}, attrs,
+			"bold should be restored and italic removed by the same reverse")
+
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, map[string]string{"bold": "false", "italic": "true"}, textAttrs(t, doc, "t"))
+	})
+
+	t.Run("style undo survives a snapshot round trip test", func(t *testing.T) {
+		// Restore-only: the attribute this reverse touches held a value
+		// both before and after (true -> false -> true), so undo never
+		// tombstones an RHT node here. A scenario where undo removes a
+		// key that did not exist before would also need to survive this
+		// round trip, but a text node attribute's isRemoved flag is not
+		// carried by the snapshot encoding (pre-existing in both SDKs --
+		// see docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md),
+		// so that combination is not exercised here.
+		doc := newTextDoc(t)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "ABCD", map[string]string{"bold": "true"})
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Style(0, 4, map[string]string{"bold": "false"})
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, map[string]string{"bold": "true"}, textAttrs(t, doc, "t"))
+
+		bytes, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+		assert.NoError(t, err)
+
+		restored := document.New("d1")
+		assert.NoError(t, restored.ApplyChangePack(change.NewPack(
+			restored.Key(),
+			change.InitialCheckpoint,
+			nil,
+			helper.MaxVersionVector(restored.ActorID()),
+			bytes,
+		)))
+
+		assert.Equal(t, doc.Marshal(), restored.Marshal())
+		assert.Equal(t, map[string]string{"bold": "true"}, textAttrs(t, restored, "t"))
 	})
 }
