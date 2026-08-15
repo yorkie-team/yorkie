@@ -41,6 +41,13 @@ document breaks in production.
   undo, GC vs. undo (#664). These stay broken identically in both SDKs.
 - Emitting local change events from `Undo` / `Redo`. The Go SDK's `Update` does
   not emit local events today; that pre-existing difference is out of scope.
+- Fixing defects found while porting Task 7 (presence in the history) that
+  turned out to be pre-existing and cross-SDK: see the new rows in "Risks and
+  Mitigation" below and
+  [20260816-remote-redo-replica-divergence-todo.md](../tasks/active/20260816-remote-redo-replica-divergence-todo.md).
+  **Plainly: redo does not propagate correctly to peers in either SDK
+  today**, for any operation whose redo path reuses an original `createdAt`
+  rather than re-ticketing it.
 
 ## Design
 
@@ -284,6 +291,9 @@ Go is a gap.
 | GC purging elements the undo stack still references (#664) | Left broken identically in both SDKs |
 | Overlapping undo duplicates content | Reproduced identically. Fixing it in Go alone would widen the gap |
 | Dedup counters | No reverse operation generated |
+| A remotely-applied redo can permanently diverge a peer: a redone `Set` reuses its original `createdAt`, the `OpSourceUndoRedo`-gated stale-entry deregister at `set.go:102-104` doesn't fire under `OpSourceRemote`, and the peer's next GC pass purges the live restored element by that reused identity. Confirmed identical in JS (`set_operation.ts:99-104`), found during Task 7 | Left broken identically in both SDKs; filed as [20260816-remote-redo-replica-divergence-todo.md](../tasks/active/20260816-remote-redo-replica-divergence-todo.md). Fixing it in Go alone would widen the gap |
+| `Presence.Initialize` (attach-time presence) leaves `Document.clonePresences` stale, so a later `Update`'s `Set` on a different key drops the attach-time key. Found during Task 7; the Go twin of JS's tracked `#608` (`document.ts:2068-2069`) | Worked around in Task 7's tests rather than fixed; filed in the same document above |
+| Undoing a newly-introduced presence key: Go's `ReversePresence` sends the zero value (`""`) for a key absent from the snapshot; JS's `undefined` is dropped by `JSON.stringify` before the wire, removing the key instead. A genuine Go/JS divergence, not yet reconciled | Pinned, not fixed, by a characterization test in `pkg/document/history_test.go`; filed in the same document above |
 
 ### Design Decisions
 

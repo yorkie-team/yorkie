@@ -801,7 +801,11 @@ func TestDocPresence(t *testing.T) {
 		// "color" value is set through a plain Update rather than
 		// client.WithPresence: Presence.Initialize (which WithPresence goes
 		// through) does not keep the document's clonePresences in sync with
-		// its replaced map, a pre-existing gap unrelated to this test.
+		// its replaced map, a pre-existing gap unrelated to this test. See
+		// docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md
+		// ("Related: Presence.Initialize leaves clonePresences stale") --
+		// once fixed, restore the client.WithPresence + Set(WithHistory) +
+		// Undo combination this test currently avoids.
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -866,9 +870,12 @@ func TestDocPresence(t *testing.T) {
 		// change is correctly pushed and pulled, but the peer's remote
 		// apply of this particular restore does not take effect -- a
 		// pre-existing gap in undo/redo's operation-sync path, unrelated to
-		// presence and reproducible with no presence involved at all. The
-		// presence half of this same redo is still asserted on d2, since
-		// that path is unaffected and is what this test exists to cover.
+		// presence and reproducible with no presence involved at all. See
+		// docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md
+		// for the traced mechanism; re-tighten this assertion to d2 once
+		// fixed. The presence half of this same redo is still asserted on
+		// d2, since that path is unaffected and is what this test exists to
+		// cover.
 		assert.Equal(t, `{"count":1}`, d1.Marshal())
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
