@@ -44,8 +44,6 @@ func TestHistoryStack(t *testing.T) {
 	})
 
 	t.Run("stack depth is capped test", func(t *testing.T) {
-		t.Skip("enabled once Increase generates a reverse operation")
-
 		doc := document.New("d1")
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("c", int64(0))

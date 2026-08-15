@@ -102,4 +102,23 @@ func TestCounterDedup(t *testing.T) {
 		assert.Equal(t, `{"uv":3}`, d1.Marshal())
 		assert.Equal(t, `{"uv":3}`, d2.Marshal())
 	})
+
+	t.Run("dedup counter has no undo test", func(t *testing.T) {
+		// A dedup counter cannot be undone: HyperLogLog cannot remove an
+		// actor once added, so Increase produces no reverse operation for it.
+		ctx := context.Background()
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+		defer func() { assert.NoError(t, c1.Detach(ctx, doc)) }()
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewDedupCounter("uv").Add("user-1")
+			return nil
+		}))
+		assert.Equal(t, `{"uv":1}`, doc.Marshal())
+
+		assert.False(t, doc.CanUndo())
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"uv":1}`, doc.Marshal())
+	})
 }

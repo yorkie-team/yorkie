@@ -67,6 +67,19 @@ func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 	}
 
 	value := o.value.(*crdt.Primitive)
+
+	// Compute the reverse before mutating the counter, mirroring the JS SDK
+	// (increase_operation.ts:95-130). A dedup counter (o.actor != "")
+	// produces no reverse: HyperLogLog cannot remove an actor once added.
+	var reverseOp Operation
+	if o.actor == "" {
+		negated, err := negatePrimitive(value)
+		if err != nil {
+			return nil, err
+		}
+		reverseOp = NewIncrease(o.parentCreatedAt, negated, o.executedAt)
+	}
+
 	if cnt.IsDedup() {
 		if o.actor == "" {
 			return nil, ErrNotApplicableDataType
@@ -80,7 +93,37 @@ func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 		}
 	}
 
-	return nil, nil
+	return reverseOp, nil
+}
+
+// negatePrimitive returns a deep copy of the given primitive with its
+// numeric value negated. It mirrors the JS SDK's toReverseOperation
+// (increase_operation.ts:118-129), handling both Long (int64) and Integer
+// (int32) counter deltas.
+//
+// NOTE(hackerwins): the JS SDK never overflows here because Long deltas are
+// bigint (arbitrary precision) and Integer deltas are auto-promoted to Long
+// when they exceed the int32 range. Go's Counter has no wider type to
+// promote into, so negating math.MinInt32/math.MinInt64 wraps around to the
+// same value, consistent with the unchecked arithmetic Counter.Increase
+// already performs elsewhere in this package.
+func negatePrimitive(value *crdt.Primitive) (*crdt.Primitive, error) {
+	switch value.ValueType() {
+	case crdt.Long:
+		v, ok := value.Value().(int64)
+		if !ok {
+			return nil, ErrNotApplicableDataType
+		}
+		return crdt.NewPrimitive(-v, value.CreatedAt())
+	case crdt.Integer:
+		v, ok := value.Value().(int32)
+		if !ok {
+			return nil, ErrNotApplicableDataType
+		}
+		return crdt.NewPrimitive(-v, value.CreatedAt())
+	default:
+		return nil, ErrNotApplicableDataType
+	}
 }
 
 // Value return the value of this operation.
