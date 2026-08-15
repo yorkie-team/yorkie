@@ -52,6 +52,14 @@ type TreeEdit struct {
 	restoreSpans     []*crdt.TreeRestoreSpan
 	restoreMode      crdt.RestoreMode
 	retombstoneSpans []*crdt.TreeRestoreSpan
+
+	// splitTickets carries the tickets the originating replica issued for the
+	// nodes an element split creates, in issue order. A replica applying the
+	// operation consumes them instead of reconstructing them, so neither side
+	// depends on the other's allocation staying in step. Empty for a change
+	// written before the field existed, which falls back to the simulation
+	// that reconstructed them from executedAt and the content count.
+	splitTickets []*time.Ticket
 }
 
 // NewTreeEdit creates a new instance of TreeEdit.
@@ -182,19 +190,29 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			contents,
 			e.splitLevel,
 			e.executedAt,
-			/**
-			 * TODO(sejongk): When splitting element nodes, a new nodeID is assigned with a different timeTicket.
-			 * In the same change context, the timeTickets share the same lamport and actorID but have different delimiters,
-			 * incremented by one for each.
-			 * Therefore, it is possible to simulate later timeTickets using `editedAt` and the length of `contents`.
-			 * This logic might be unclear; consider refactoring for multi-level concurrent editing in the Tree implementation.
-			 */
+			// Splitting an element creates nodes that need tickets. The
+			// originating replica issued them and carries them here, so this
+			// hands them back in the same order.
+			//
+			// A change written before the field existed carries none, and falls
+			// back to reconstructing them from executedAt and the number of
+			// top-level contents. That reconstruction is wrong whenever content
+			// has descendants — each of those consumed a ticket too — which is
+			// why the tickets are carried now; see
+			// docs/design/tree-content-identity.md.
 			func() func() *time.Ticket {
+				issued := 0
 				delimiter := e.executedAt.Delimiter()
 				if contents != nil {
 					delimiter += uint32(len(contents))
 				}
 				return func() *time.Ticket {
+					if issued < len(e.splitTickets) {
+						ticket := e.splitTickets[issued]
+						issued++
+						return ticket
+					}
+
 					delimiter++
 					return time.NewTicket(
 						e.executedAt.Lamport(),
@@ -249,6 +267,19 @@ func (e *TreeEdit) Contents() []*crdt.TreeNode {
 // SplitLevel returns the level of the split.
 func (e *TreeEdit) SplitLevel() int {
 	return e.splitLevel
+}
+
+// SplitTickets returns the tickets issued for the nodes an element split
+// created, in issue order. Empty when the operation predates the field.
+func (e *TreeEdit) SplitTickets() []*time.Ticket {
+	return e.splitTickets
+}
+
+// SetSplitTickets records the tickets issued for the nodes an element split
+// created. The originating replica calls this after executing the edit, so
+// every other replica can use them instead of reconstructing them.
+func (e *TreeEdit) SetSplitTickets(tickets []*time.Ticket) {
+	e.splitTickets = tickets
 }
 
 // ExecutedAt returns execution time of this operation.

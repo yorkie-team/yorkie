@@ -388,17 +388,27 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 
 			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.TextNodeType, nil, value))
 		} else {
-			for _, content := range contents {
+			for i, content := range contents {
+				// Each node needs its own identity: positions anchor by id, and
+				// two nodes under one id make every position anchored there
+				// ambiguous. The first content keeps the ticket issued above so
+				// that a single-content edit — every edit made through Edit,
+				// rather than EditBulk — assigns the ids it always has.
+				nodeTicket := ticket
+				if i > 0 {
+					nodeTicket = t.context.IssueTimeTicket()
+				}
+
 				var attributes *crdt.RHT
 				if content.Attributes != nil {
 					attributes = crdt.NewRHT()
 					for key, val := range content.Attributes {
-						attributes.Set(key, val, ticket)
+						attributes.Set(key, val, nodeTicket)
 					}
 				}
 				var node *crdt.TreeNode
 
-				node = crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), content.Type, attributes, content.Value)
+				node = crdt.NewTreeNode(crdt.NewTreeNodeID(nodeTicket, 0), content.Type, attributes, content.Value)
 
 				for _, child := range content.Children {
 					if err := buildDescendants(t.context, child, node); err != nil {
@@ -426,13 +436,24 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
+	// Splitting an element creates nodes that need tickets. Record the ones
+	// issued so the operation can carry them: every other replica then uses
+	// them instead of reconstructing them from the operation, which it cannot
+	// do correctly once content has descendants. See
+	// docs/design/tree-content-identity.md.
+	var splitTickets []*time.Ticket
+	issueSplitTicket := func() *time.Ticket {
+		issued := t.context.IssueTimeTicket()
+		splitTickets = append(splitTickets, issued)
+		return issued
+	}
 	pairs, diff, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
 		splitLevel,
 		ticket,
-		t.context.IssueTimeTicket,
+		issueSplitTicket,
 		nil,
 	)
 	if err != nil {
@@ -446,14 +467,16 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 
 	t.context.Acc(diff)
 
-	t.context.Push(operations.NewTreeEdit(
+	edit := operations.NewTreeEdit(
 		t.CreatedAt(),
 		fromPos,
 		toPos,
 		nodes,
 		splitLevel,
 		ticket,
-	))
+	)
+	edit.SetSplitTickets(splitTickets)
+	t.context.Push(edit)
 
 	return true
 }

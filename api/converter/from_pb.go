@@ -769,14 +769,26 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		), nil
 	}
 
-	return operations.NewTreeEdit(
+	edit := operations.NewTreeEdit(
 		parentCreatedAt,
 		from,
 		to,
 		nodes,
 		int(pbTreeEdit.SplitLevel),
 		executedAt,
-	), nil
+	)
+
+	var splitTickets []*time.Ticket
+	for _, pbTicket := range pbTreeEdit.SplitTickets {
+		ticket, err := fromTimeTicket(pbTicket)
+		if err != nil {
+			return nil, err
+		}
+		splitTickets = append(splitTickets, ticket)
+	}
+	edit.SetSplitTickets(splitTickets)
+
+	return edit, nil
 }
 
 func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle, error) {

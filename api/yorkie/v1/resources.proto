@@ -135,6 +135,11 @@ message Operation {
     repeated TreeRestoreSpan restore_spans = 8; // identity-preserving undo/redo
     RestoreMode restore_mode = 9;
     repeated TreeRestoreSpan retombstone_spans = 10;
+    // split_tickets carries the tickets the originating replica issued for the
+    // nodes an element split creates, in issue order. Empty for a change
+    // written before this field existed, which replays through the simulation
+    // that reconstructed them from executed_at and the content count.
+    repeated TimeTicket split_tickets = 11;
   }
   message TreeStyle {
     TimeTicket parent_created_at = 1;
