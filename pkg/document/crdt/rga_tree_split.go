@@ -458,6 +458,61 @@ func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RG
 	return node, nil
 }
 
+// normalizePos converts a local position (id, relativeOffset) into a single
+// absolute offset measured from the head (0:0) of the physical chain, so the
+// position keeps meaning the same place regardless of how the chain is split
+// later.
+func (s *RGATreeSplit[V]) normalizePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
+	node := s.findFloorNode(pos.id)
+	if node == nil {
+		return nil, fmt.Errorf("the node of the given id should be found: %s", pos.ToTestString())
+	}
+
+	total := pos.relativeOffset
+	curr := node
+	for prev := node.prev; prev != nil; prev = prev.prev {
+		total += prev.Len()
+		curr = prev
+	}
+
+	return NewRGATreeSplitNodePos(curr.id, total), nil
+}
+
+// refinePos remaps the given position onto the current split chain.
+//
+//   - Traverses the physical next chain (not insNext).
+//   - Counts only live characters: removed nodes have length 0, so they are
+//     stepped over without consuming any of the offset.
+//   - If the offset exceeds the length of the current node, it moves forward
+//     through next nodes, subtracting lengths, until the offset fits.
+//   - If it runs out of nodes, it snaps to the end of the last one.
+//
+// For example, a position (1:2:0, rel=5) taken before ["12345"](1:2:0) was
+// split into ["1"](1:2:0) ["23"](1:2:1) ["45"](1:2:3) refines to (1:2:3,
+// rel=2), the same place in the text.
+func (s *RGATreeSplit[V]) refinePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
+	node := s.findFloorNode(pos.id)
+	if node == nil {
+		return nil, fmt.Errorf("the node of the given id should be found: %s", pos.ToTestString())
+	}
+
+	offsetInPart := pos.relativeOffset
+	partLen := node.contentLen()
+	for offsetInPart > partLen {
+		offsetInPart -= partLen
+
+		next := node.next
+		if next == nil {
+			return NewRGATreeSplitNodePos(node.id, partLen), nil
+		}
+
+		node = next
+		partLen = node.Len()
+	}
+
+	return NewRGATreeSplitNodePos(node.id, offsetInPart), nil
+}
+
 func (s *RGATreeSplit[V]) splitNode(
 	node *RGATreeSplitNode[V],
 	offset int,
@@ -958,9 +1013,16 @@ func (s *RGATreeSplit[V]) findRestoreAnchor(
 	if chainAnchor != nil {
 		return chainAnchor
 	}
+	// The operation's from position is normalized -- an absolute offset from
+	// the head -- so it must be remapped onto the current chain before it can
+	// name a node, exactly as JS does (findRestoreAnchor's fallbackAnchor).
+	// Without the remap, findNodeWithSplit rejects every offset past the
+	// head's own length and this rung never fires.
 	if fromPos != nil && executedAt != nil {
-		if left, _, _, err := s.findNodeWithSplit(fromPos, executedAt); err == nil && left != nil {
-			return left
+		if refined, err := s.refinePos(fromPos); err == nil {
+			if left, _, _, err := s.findNodeWithSplit(refined, executedAt); err == nil && left != nil {
+				return left
+			}
 		}
 	}
 	return s.initialHead

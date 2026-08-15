@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -239,4 +240,51 @@ func TestTextRemoveStyleReturnsPrevAttr(t *testing.T) {
 	require.Equal(t, []crdt.PrevAttr{
 		{Key: "b", Value: "1", Existed: true},
 	}, prevAttrs)
+}
+
+func TestTextNormalizeAndRefinePos(t *testing.T) {
+	// A reverse operation anchors on a normalized position -- an absolute
+	// offset from the head -- and the anchor is remapped onto whatever the
+	// chain looks like when it finally runs. Both halves are exercised here
+	// against a chain that gets split and partly tombstoned in between.
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+	fromPos, toPos, err := text.CreateRange(0, 0)
+	require.NoError(t, err)
+	seed := ctx.IssueTimeTicket()
+	_, _, _, _, _, err = text.Edit(fromPos, toPos, "0123456789", nil, seed, nil)
+	require.NoError(t, err)
+
+	// Index 4 sits inside the single run, so normalizing it yields offset 4
+	// counted from the head rather than a position relative to the run.
+	at4, _, err := text.CreateRange(4, 4)
+	require.NoError(t, err)
+	normalized, err := text.NormalizePos(at4)
+	require.NoError(t, err)
+	assert.Equal(t, 4, normalized.RelativeOffset())
+	assert.Zero(t, normalized.ID().CreatedAt().Compare(time.InitialTicket),
+		"a normalized position is anchored on the head")
+
+	// Split the run and tombstone "23": the chain is now
+	// ["01"]{"23"}["456789"], and the normalized offset 4 must still land
+	// between "3" and "4" -- removed characters do not consume offset.
+	delFrom, delTo, err := text.CreateRange(2, 4)
+	require.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(delFrom, delTo, "", nil, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+	require.Equal(t, "01456789", text.String())
+
+	refined, err := text.RefinePos(normalized)
+	require.NoError(t, err)
+	assert.Zero(t, refined.ID().CreatedAt().Compare(seed))
+	assert.Equal(t, 4, refined.ID().Offset(), "the refined position names the live run starting at \"4\"")
+	assert.Equal(t, 2, refined.RelativeOffset(), "offset 4 from the head is \"01\" plus 2 live characters")
+
+	// Refining an offset past the end of the chain snaps to the last node.
+	beyond, err := text.RefinePos(crdt.NewRGATreeSplitNodePos(normalized.ID(), 100))
+	require.NoError(t, err)
+	assert.Zero(t, beyond.ID().CreatedAt().Compare(seed))
+	assert.Equal(t, 6, beyond.RelativeOffset(), "\"456789\" is 6 characters long")
 }

@@ -430,6 +430,20 @@ func (t *Text) Retombstone(
 	return t.rgaTreeSplit.retombstone(internal, executedAt)
 }
 
+// NormalizePos converts the given position into a single absolute offset
+// measured from the head of the physical chain. A reverse operation anchors
+// on the normalized form so a later split of the chain does not move it.
+func (t *Text) NormalizePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
+	return t.rgaTreeSplit.normalizePos(pos)
+}
+
+// RefinePos remaps the given position onto the current split chain, so a
+// position recorded before the chain was split still addresses the same place
+// in the text.
+func (t *Text) RefinePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
+	return t.rgaTreeSplit.refinePos(pos)
+}
+
 // RGATreeSplit returns the underlying RGATreeSplit of this Text.
 func (t *Text) RGATreeSplit() *RGATreeSplit[*TextValue] {
 	return t.rgaTreeSplit
