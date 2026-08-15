@@ -624,6 +624,16 @@ func (s *RGATreeSplit[V]) edit(
 			Parent: s,
 			Child:  removedNode,
 		})
+		// NOTE: value aliases the live node's value rather than deep-copying
+		// it (unlike JS's rga_tree_split.ts substring(0), which copies
+		// specifically because a later split of the tombstone must not
+		// mutate already-captured content — some V.Split implementations,
+		// e.g. TextValue, mutate their receiver). Safe today only because
+		// every caller (Text.Edit) flattens each span's value into plain
+		// strings before returning, with no further split of these nodes
+		// happening in between. If a future caller holds onto this
+		// restoreSpanValue instead of flattening it immediately, it must
+		// deep-copy value first.
 		removedSpans = append(removedSpans, restoreSpanValue[V]{
 			createdAt: removedNode.createdAt(),
 			start:     removedNode.ID().Offset(),

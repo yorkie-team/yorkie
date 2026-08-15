@@ -18,6 +18,7 @@ package crdt
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf16"
 
@@ -356,16 +357,27 @@ func (t *Text) Edit(
 		return caretPos, pairs, diff, nil, nil, err
 	}
 
-	var removedValues []string
-	var removedSpans []RestoreSpan
+	// Pre-size for the common case (server replay, snapshot rebuild) where
+	// every removed node is read exactly once below; skip Attrs().Elements()
+	// (a fresh map allocation) for the common plain-text node, whose RHT is
+	// empty. Text.Restore already treats a nil Attributes map the same as an
+	// empty one (its `for k, v := range s.Attributes` is a no-op on nil).
+	removedValues := make([]string, 0, len(removed))
+	removedSpans := make([]RestoreSpan, 0, len(removed))
 	for _, span := range removed {
-		removedValues = append(removedValues, span.value.String())
+		content := span.value.String()
+		removedValues = append(removedValues, content)
+
+		var attrs map[string]string
+		if span.value.Attrs().Len() > 0 {
+			attrs = span.value.Attrs().Elements()
+		}
 		removedSpans = append(removedSpans, RestoreSpan{
 			CreatedAt:  span.createdAt,
 			Start:      span.start,
 			End:        span.end,
-			Content:    span.value.String(),
-			Attributes: span.value.Attrs().Elements(),
+			Content:    content,
+			Attributes: attrs,
 		})
 	}
 
@@ -423,11 +435,11 @@ func (t *Text) RGATreeSplit() *RGATreeSplit[*TextValue] {
 	return t.rgaTreeSplit
 }
 
-// PrevAttrs captures the value a style attribute held immediately before a
-// Style call overwrote it, or its absence, on the first node in the range
-// that Style actually visits. A reverse Style uses Existed to decide
-// whether to restore Value or remove Key outright.
-type PrevAttrs struct {
+// PrevAttr captures the value a style attribute held immediately before a
+// Style or RemoveStyle call overwrote it, or its absence, on the first node
+// in the range the call actually visits. A reverse Style uses Existed to
+// decide whether to restore Value or remove Key outright.
+type PrevAttr struct {
 	Key     string
 	Value   string
 	Existed bool
@@ -436,14 +448,17 @@ type PrevAttrs struct {
 // Style applies the given attributes of the given range. Besides the GC
 // pairs and size diff, it reports, for each key in attributes, the value
 // that key held (or its absence) on the first node actually styled — see
-// PrevAttrs — so a reverse Style can restore that prior state.
+// PrevAttr — so a reverse Style can restore that prior state. Keys are
+// captured in sorted order so the result (and anything built from it, such
+// as a reverse operation's wire encoding) is deterministic regardless of
+// Go's randomized map iteration order.
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []PrevAttrs, error) {
+) ([]GCPair, resource.DataSize, []PrevAttr, error) {
 	var diff resource.DataSize
 
 	// 01. Split nodes with from and to
@@ -488,17 +503,22 @@ func (t *Text) Style(
 	}
 
 	var pairs []GCPair
-	var prevAttrs []PrevAttrs
+	var prevAttrs []PrevAttr
 	captured := false
 	for _, node := range toBeStyled {
 		val := node.value
 
 		if !captured {
+			keys := make([]string, 0, len(attributes))
 			for key := range attributes {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
 				if val.attrs.Has(key) {
-					prevAttrs = append(prevAttrs, PrevAttrs{Key: key, Value: val.attrs.Get(key), Existed: true})
+					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: val.attrs.Get(key), Existed: true})
 				} else {
-					prevAttrs = append(prevAttrs, PrevAttrs{Key: key, Existed: false})
+					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Existed: false})
 				}
 			}
 			captured = true
@@ -522,25 +542,31 @@ func (t *Text) Style(
 	return pairs, diff, prevAttrs, nil
 }
 
-// RemoveStyle removes the given attributes from the given range.
+// RemoveStyle removes the given attributes from the given range. Besides the
+// GC pairs and size diff, it reports the value each removed key held on the
+// first node actually visited — see PrevAttr — so a reverse operation can
+// restore it. Unlike Style, a key that did not exist on that node is simply
+// omitted (no Existed: false entry), matching JS's removeStyle: removing an
+// already-absent attribute has nothing to reverse. Keys are captured in
+// sorted order for the same determinism reason as Style.
 func (t *Text) RemoveStyle(
 	from,
 	to *RGATreeSplitNodePos,
 	attributesToRemove []string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []PrevAttr, error) {
 	var diff resource.DataSize
 
 	// 01. Split nodes with from and to
 	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
 		diff.Add(diffTo)
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -573,8 +599,22 @@ func (t *Text) RemoveStyle(
 
 	// 03. remove attributes from styled nodes
 	var pairs []GCPair
+	var prevAttrs []PrevAttr
+	captured := false
 	for _, node := range toBeStyled {
 		val := node.value
+
+		if !captured {
+			keys := append([]string(nil), attributesToRemove...)
+			sort.Strings(keys)
+			for _, key := range keys {
+				if val.attrs.Has(key) {
+					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: val.attrs.Get(key), Existed: true})
+				}
+			}
+			captured = true
+		}
+
 		for _, attr := range attributesToRemove {
 			rhtNodes := val.attrs.Remove(attr, executedAt)
 			for _, rhtNode := range rhtNodes {
@@ -589,7 +629,7 @@ func (t *Text) RemoveStyle(
 
 	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, prevAttrs, nil
 }
 
 // Nodes returns the internal nodes of this Text.

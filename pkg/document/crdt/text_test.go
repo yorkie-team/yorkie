@@ -179,3 +179,64 @@ func TestTextEditReturnsRemoved(t *testing.T) {
 	assert.NotNil(t, tombstoned.RemovedAt(), "the node the span identifies must actually be tombstoned")
 	assert.Equal(t, "456", tombstoned.String(), "the identified node must hold the removed content")
 }
+
+func TestTextStyleReturnsPrevAttr(t *testing.T) {
+	// Styling a range that already carries one attribute, with a call that
+	// touches that attribute plus a brand-new one, must report the prior
+	// value for the existing key and Existed: false for the new one, sorted
+	// by key so the result is deterministic regardless of map order.
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+	fromPos, toPos, err := text.CreateRange(0, 0)
+	require.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(fromPos, toPos, "Hello", nil, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	fromPos, toPos, err = text.CreateRange(0, 5)
+	require.NoError(t, err)
+	_, _, _, err = text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	fromPos, toPos, err = text.CreateRange(0, 5)
+	require.NoError(t, err)
+	_, _, prevAttrs, err := text.Style(
+		fromPos, toPos, map[string]string{"b": "2", "i": "1"}, ctx.IssueTimeTicket(), nil,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, []crdt.PrevAttr{
+		{Key: "b", Value: "1", Existed: true},
+		{Key: "i", Existed: false},
+	}, prevAttrs)
+}
+
+func TestTextRemoveStyleReturnsPrevAttr(t *testing.T) {
+	// Removing a style attribute must report its prior value so a reverse
+	// operation can restore it; a key that never existed has nothing to
+	// reverse and must be omitted entirely (matching JS's removeStyle),
+	// not reported as Existed: false.
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+	fromPos, toPos, err := text.CreateRange(0, 0)
+	require.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(fromPos, toPos, "Hello", nil, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	fromPos, toPos, err = text.CreateRange(0, 5)
+	require.NoError(t, err)
+	_, _, _, err = text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	fromPos, toPos, err = text.CreateRange(0, 5)
+	require.NoError(t, err)
+	_, _, prevAttrs, err := text.RemoveStyle(fromPos, toPos, []string{"i", "b"}, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	require.Equal(t, []crdt.PrevAttr{
+		{Key: "b", Value: "1", Existed: true},
+	}, prevAttrs)
+}

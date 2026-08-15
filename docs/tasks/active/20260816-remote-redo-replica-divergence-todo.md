@@ -285,3 +285,79 @@ production code changes" bookkeeping pass. Filed here rather than fixed.
       string" in a `map[string]string`
 - [ ] Update the pinning test in `pkg/document/history_test.go` once the
       target behavior is decided and implemented
+
+## Related: `Text.Style`/`RemoveStyle` do not skip tombstoned nodes, unlike JS
+
+Found while building Task 9 (widening `Text.Edit`/`Text.Style`/
+`RemoveStyle`'s CRDT-layer return values,
+`docs/design/undo-redo-go-port.md`), confirmed pre-existing at base
+`9395a96a` (i.e. present before Task 9 touched this code — Task 9 only
+added new return values, it did not add or remove this filter). Not
+fixed here, for the same reason as the rest of this document: per the
+port's "port JS's known defects as-is" rule, a one-sided fix in Go alone
+would widen the gap the port exists to close, and a cross-SDK behavior
+change needs its own design decision, not a silent fix inside an
+unrelated bookkeeping task.
+
+JS's `setStyle` and `removeStyle` both skip a node entirely — neither
+applying the attribute change nor considering it for the "previous
+attribute" capture — when the node is already tombstoned:
+
+```ts
+// packages/sdk/src/document/crdt/text.ts:409 (setStyle)
+for (const node of toBeStyleds) {
+  if (node.isRemoved()) {
+    continue;
+  }
+  ...
+}
+// packages/sdk/src/document/crdt/text.ts:504 (removeStyle)
+for (const node of toBeStyleds) {
+  if (node.isRemoved()) {
+    continue;
+  }
+  ...
+}
+```
+
+Go's `Text.Style` and `Text.RemoveStyle` (`pkg/document/crdt/text.go:508`
+and `:604`) have never had this filter. Both loop over every node
+`canStyle` accepted — which, per `canStyle`'s own logic
+(`pkg/document/crdt/rga_tree_split.go`, `canStyle`), can include a node
+tombstoned *before* `editedAt` — and apply the attribute change (or
+attribute removal) to it regardless of tombstone state. So Go's `Style`/
+`RemoveStyle` can mutate a removed node's attributes where JS's would
+not.
+
+### Why Task 9 didn't adopt JS's filter for the new `PrevAttr` capture
+
+Task 9 added a `PrevAttr` capture (the value a style key held immediately
+before the call, for reverse-operation construction) to both methods. The
+capture is deliberately **not** filtered by `node.removedAt`, matching
+Go's existing (unfiltered) attribute-application loop rather than
+introducing a new, JS-only removed-node check that exists nowhere else in
+these functions. The reasoning: the capture should reflect the node the
+function's own attribute-set/remove logic actually touches first, so the
+"previous value" it reports is self-consistent with what the forward
+operation just changed on this replica — introducing a filter only for
+the capture, while leaving the surrounding attribute-application loop
+unfiltered, would make the two inconsistent with each other in a new way,
+on top of the pre-existing Go/JS inconsistency. This was a "don't make it
+worse while touching adjacent code" call, not an attempt to resolve the
+underlying divergence.
+
+### Tasks
+
+- [ ] Decide whether Go should adopt JS's tombstoned-node skip in
+      `Text.Style`/`Text.RemoveStyle`, or whether JS should drop it (JS
+      is the older behavior here, so the default assumption is Go should
+      match JS, but confirm there isn't a reason JS's skip exists that
+      would make it the one to remove)
+- [ ] Check whether `Tree.Style`/`Tree.RemoveStyle`
+      (`pkg/document/crdt/tree.go`) have the same asymmetry, since they
+      share the `canStyle`-based selection pattern
+- [ ] If Go adopts the filter, re-verify `Text.Style`/`RemoveStyle`'s
+      `PrevAttr` capture (`pkg/document/crdt/text.go:508`, `:604`) still
+      captures from the correct (now filtered) first node
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+      per this document's usual rule for cross-SDK behavior changes

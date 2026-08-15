@@ -91,7 +91,7 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 	var diff resource.DataSize
 	var err error
 	if len(e.attributesToRemove) > 0 {
-		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
+		pairs, diff, _, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
 	} else {
 		pairs, diff, _, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 	}
