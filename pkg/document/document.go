@@ -22,6 +22,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
@@ -43,6 +44,11 @@ var (
 
 	// ErrSchemaValidationFailed is returned when the document schema validation failed.
 	ErrSchemaValidationFailed = errors.InvalidArgument("schema validation failed").WithCode("ErrSchemaValidationFailed")
+
+	// ErrRefusedDuringUpdate occurs when Undo or Redo is called from inside an
+	// updater. The updater already holds the document lock, so proceeding would
+	// deadlock rather than fail.
+	ErrRefusedDuringUpdate = errors.FailedPrecond("undo/redo is not allowed during an update")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -136,6 +142,15 @@ type Document struct {
 	// is used to protect `doc.presences`.
 	clonePresences *presence.Map
 
+	// history stores the undo/redo stacks of this document.
+	history *History
+
+	// updating reports whether an updater passed to Update is currently
+	// running. It is set before d.mu is locked and read before d.mu is
+	// locked, so Undo and Redo can refuse a re-entrant call from inside an
+	// updater instead of deadlocking on the mutex the updater already holds.
+	updating atomic.Bool
+
 	// presenceDroppedOnce ensures the warn-log issued when a presenceless
 	// document drops a user-supplied presence change fires at most once
 	// per Document instance.
@@ -161,6 +176,7 @@ func New(key key.Key, opts ...Option) *Document {
 	return &Document{
 		doc:     NewInternalDocument(key),
 		options: options,
+		history: NewHistory(),
 		events:  make(chan DocEvent, 1),
 	}
 }
@@ -170,6 +186,13 @@ func (d *Document) Update(
 	updater func(root *json.Object, p *Presence) error,
 	msgAndArgs ...interface{},
 ) error {
+	// NOTE(hackerwins): This must be set before d.mu.Lock() so that a
+	// re-entrant Undo/Redo call from inside the updater observes it before
+	// blocking on the mutex this goroutine already holds; otherwise it would
+	// deadlock instead of returning ErrRefusedDuringUpdate.
+	d.updating.Store(true)
+	defer d.updating.Store(false)
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -242,6 +265,126 @@ func (d *Document) Update(
 	}
 
 	return nil
+}
+
+// CanUndo reports whether there is a change to undo.
+func (d *Document) CanUndo() bool {
+	if d.updating.Load() {
+		return false
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.history.HasUndo()
+}
+
+// CanRedo reports whether there is a change to redo.
+func (d *Document) CanRedo() bool {
+	if d.updating.Load() {
+		return false
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.history.HasRedo()
+}
+
+// Undo reverses the last local change. It is a no-op when the undo stack is
+// empty.
+func (d *Document) Undo() error {
+	return d.executeUndoRedo(true)
+}
+
+// Redo replays the last undone change. It is a no-op when the redo stack is
+// empty.
+func (d *Document) Redo() error {
+	return d.executeUndoRedo(false)
+}
+
+// ClearHistory flushes both stacks. Changes made before this call are no
+// longer reachable via undo.
+func (d *Document) ClearHistory() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.history.ClearUndo()
+	d.history.ClearRedo()
+}
+
+// executeUndoRedo pops an entry off the undo or redo stack and replays it
+// against the document, pushing the resulting reverse operations onto the
+// opposite stack. It is the port of the JS SDK's executeUndoRedo
+// (document.ts:2049-2165).
+func (d *Document) executeUndoRedo(isUndo bool) error {
+	if d.updating.Load() {
+		return ErrRefusedDuringUpdate
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var entries []HistoryOperation
+	if isUndo {
+		entries = d.history.PopUndo()
+	} else {
+		entries = d.history.PopRedo()
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	if err := d.ensureClone(); err != nil {
+		return err
+	}
+
+	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)
+	for _, entry := range entries {
+		if entry.Op == nil {
+			// Presence entries carry no operation; applying them needs
+			// presence undo support, which this type does not have yet.
+			continue
+		}
+
+		ticket := ctx.IssueTimeTicket()
+		entry.Op.SetExecutedAt(ticket)
+		// ArraySet, Add, and TreeEdit need a ticket-reissue hook here once
+		// their reverse operations exist; until then every reverse is nil
+		// and no operation reaches this branch needing one.
+		ctx.Push(entry.Op)
+	}
+
+	c := ctx.ToChange()
+	if _, _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceUndoRedo); err != nil {
+		return err
+	}
+	executed, reverseOps, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceUndoRedo)
+	if err != nil {
+		return err
+	}
+
+	var reverse []HistoryOperation
+	for _, op := range reverseOps {
+		reverse = append(reverse, HistoryOperation{Op: op})
+	}
+	if len(reverse) > 0 {
+		if isUndo {
+			d.history.PushRedo(reverse)
+		} else {
+			d.history.PushUndo(reverse)
+		}
+	}
+
+	if len(executed) == 0 && c.PresenceChange() == nil {
+		return nil
+	}
+
+	d.doc.localChanges = append(d.doc.localChanges, c)
+	d.doc.changeID = ctx.NextID()
+	return nil
+}
+
+// UndoStackLenForTest returns the undo stack depth for testing.
+func (d *Document) UndoStackLenForTest() int {
+	return len(d.history.undoStack)
 }
 
 // ApplyChangePack applies the given change pack into this document.
