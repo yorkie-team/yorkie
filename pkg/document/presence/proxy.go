@@ -79,8 +79,32 @@ func (p *Presence) Initialize(data Data) {
 	})
 }
 
-// Set sets the value of the given key.
-func (p *Presence) Set(key string, value string) {
+// SetOption configures a presence Set call.
+type SetOption func(*setConfig)
+
+// setConfig holds the options accumulated from a Set call's SetOptions.
+type setConfig struct {
+	addToHistory bool
+}
+
+// WithHistory marks the key set by this call as undoable, so the previous
+// value is recorded on the change.Context and later restored when the
+// document is undone.
+func WithHistory() SetOption {
+	return func(c *setConfig) {
+		c.addToHistory = true
+	}
+}
+
+// Set sets the value of the given key. By default the change is not
+// undoable; pass WithHistory() to push the previous value onto the undo
+// stack alongside any operation reverses from the same Update call.
+func (p *Presence) Set(key string, value string, opts ...SetOption) {
+	var cfg setConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	data := p.data
 	data.Set(key, value)
 
@@ -88,6 +112,8 @@ func (p *Presence) Set(key string, value string) {
 		ChangeType: Put,
 		Presence:   data,
 	})
+
+	p.context.SetReversePresenceKey(key, cfg.addToHistory)
 }
 
 // Clear clears the value of the given key.

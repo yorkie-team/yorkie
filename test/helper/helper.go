@@ -164,6 +164,7 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 		change.InitialID(),
 		"",
 		root,
+		nil,
 	)
 }
 

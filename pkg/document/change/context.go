@@ -35,15 +35,30 @@ type Context struct {
 	delimiter      uint32
 	root           *crdt.Root
 	presenceChange *inner.Change
+
+	// previousPresence is a snapshot of the actor's presence taken when this
+	// context was created. ReversePresence rebuilds its return value from
+	// this snapshot for any key marked undoable via presence.WithHistory.
+	previousPresence inner.Presence
+
+	// reversePresenceKeys holds the presence keys marked undoable via
+	// presence.WithHistory during this context. A key set again without
+	// WithHistory is removed, so only the last Set call for a given key
+	// decides whether it is undoable.
+	reversePresenceKeys map[string]struct{}
 }
 
-// NewContext creates a new instance of Context.
-func NewContext(prevID ID, message string, root *crdt.Root) *Context {
+// NewContext creates a new instance of Context. presenceData is a snapshot
+// of the actor's presence at the moment the context is created; it is
+// deep-copied so later mutation through the presence proxy does not corrupt
+// the baseline ReversePresence rebuilds from.
+func NewContext(prevID ID, message string, root *crdt.Root, presenceData inner.Presence) *Context {
 	return &Context{
-		prevID:  prevID,
-		nextID:  prevID.Next(),
-		message: message,
-		root:    root,
+		prevID:           prevID,
+		nextID:           prevID.Next(),
+		message:          message,
+		root:             root,
+		previousPresence: presenceData.DeepCopy(),
 	}
 }
 
@@ -140,6 +155,47 @@ func (c *Context) HasPresenceChange() bool {
 // emitted Change carries operations only.
 func (c *Context) DropPresenceChange() {
 	c.presenceChange = nil
+}
+
+// SetReversePresenceKey records or forgets a presence key for reverse
+// tracking. presence.Presence.Set calls this on every Set: when
+// addToHistory is true the key is added, so ReversePresence includes it;
+// otherwise it is removed, so a later Set of the same key without
+// presence.WithHistory opts back out.
+func (c *Context) SetReversePresenceKey(key string, addToHistory bool) {
+	if addToHistory {
+		if c.reversePresenceKeys == nil {
+			c.reversePresenceKeys = make(map[string]struct{})
+		}
+		c.reversePresenceKeys[key] = struct{}{}
+		return
+	}
+
+	delete(c.reversePresenceKeys, key)
+}
+
+// ReversePresence returns the presence values that undoing this change
+// would restore, built from the keys marked undoable via
+// presence.WithHistory and their values at context creation. It returns nil
+// when no presence key was marked undoable.
+func (c *Context) ReversePresence() inner.Presence {
+	if len(c.reversePresenceKeys) == 0 {
+		return nil
+	}
+
+	reverse := inner.New()
+	for key := range c.reversePresenceKeys {
+		reverse.Set(key, c.previousPresence[key])
+	}
+	return reverse
+}
+
+// ClearReversePresence discards any reverse-presence keys recorded during
+// this context. The client uses this alongside DropPresenceChange on
+// documents attached with disable_presence, so a dropped presence emit does
+// not push a stale undo entry onto the history stack.
+func (c *Context) ClearReversePresence() {
+	c.reversePresenceKeys = nil
 }
 
 // HasOperations reports whether this context has at least one operation.

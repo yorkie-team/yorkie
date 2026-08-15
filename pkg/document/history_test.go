@@ -194,4 +194,46 @@ func TestHistoryStack(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
 	})
+
+	t.Run("presence set with history undo redo test", func(t *testing.T) {
+		// NOTE(hackerwins): MyPresence requires StatusAttached, which a bare
+		// document.New never reaches. PresenceForTest reads the same map
+		// without that guard, matching how the other tests in this file
+		// exercise Undo/Redo without a client.
+		doc := document.New("d1")
+		myPresence := func() presence.Data {
+			return doc.PresenceForTest(doc.ActorID().String())
+		}
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("color", "red")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("color", "blue", presence.WithHistory())
+			return nil
+		}))
+		assert.Equal(t, presence.Data{"color": "blue"}, myPresence())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, presence.Data{"color": "red"}, myPresence())
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, presence.Data{"color": "blue"}, myPresence())
+	})
+
+	t.Run("disabled presence set with history leaves no undo entry test", func(t *testing.T) {
+		// A document that opted out of presence must not resurrect presence
+		// via undo: Update drops the presence change entirely, so no
+		// reverse-presence entry should reach the undo stack even when the
+		// key was marked WithHistory.
+		doc := document.New("d1", document.WithDisablePresence())
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("color", "red", presence.WithHistory())
+			return nil
+		}))
+		assert.Equal(t, 0, doc.UndoStackLenForTest())
+		assert.False(t, doc.CanUndo())
+	})
 }

@@ -91,6 +91,7 @@ func (s *clusterServer) DetachDocument(
 		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector),
 		"",
 		nil,
+		nil,
 	)
 	p := presence.New(changeCtx, presence.NewData())
 	p.Clear()

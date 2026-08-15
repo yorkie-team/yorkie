@@ -44,7 +44,7 @@ const (
 // newArray creates a json.Array with a minimal change.Context for benchmarking.
 func newArray() *json.Array {
 	root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
-	ctx := change.NewContext(change.InitialID(), "", root)
+	ctx := change.NewContext(change.InitialID(), "", root, nil)
 	return json.NewArray(ctx, crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket()))
 }
 

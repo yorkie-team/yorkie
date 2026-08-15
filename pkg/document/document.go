@@ -204,15 +204,18 @@ func (d *Document) Update(
 		return err
 	}
 
+	actorID := d.ActorID().String()
+	presenceData := d.clonePresences.LoadOrStore(actorID, presence.NewData())
 	ctx := change.NewContext(
 		d.doc.changeID,
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
+		presenceData,
 	)
 
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
-		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), presence.NewData())),
+		presence.New(ctx, presenceData),
 	); err != nil {
 		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
 		// clonePresences to prevent the user from accessing the invalid state.
@@ -226,6 +229,7 @@ func (d *Document) Update(
 	// caller wires presence into a presenceless document by mistake.
 	if d.options.DisablePresence && ctx.HasPresenceChange() {
 		ctx.DropPresenceChange()
+		ctx.ClearReversePresence()
 		d.warnPresenceDroppedOnce()
 		if !ctx.HasOperations() {
 			return nil
@@ -275,6 +279,9 @@ func (d *Document) Update(
 		var reverse []HistoryOperation
 		for _, op := range reverseOps {
 			reverse = append(reverse, HistoryOperation{Op: op})
+		}
+		if reversePresence := ctx.ReversePresence(); reversePresence != nil {
+			reverse = append(reverse, HistoryOperation{Presence: reversePresence})
 		}
 		if len(reverse) > 0 {
 			d.history.PushUndo(reverse)
@@ -361,11 +368,22 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 		return err
 	}
 
-	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)
+	actorID := d.ActorID().String()
+	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot, d.clonePresences.Load(actorID))
 	for _, entry := range entries {
 		if entry.Op == nil {
-			// Presence entries carry no operation; applying them needs
-			// presence undo support, which this type does not have yet.
+			// Presence entries carry the values undoing (or redoing) the
+			// original change should restore. Apply them WithHistory so the
+			// resulting entry is itself undoable -- otherwise undoing a
+			// presence change would leave nothing on the redo stack.
+			data := d.clonePresences.Load(actorID)
+			if data == nil {
+				data = presence.NewData()
+			}
+			p := presence.New(ctx, data.DeepCopy())
+			for key, value := range entry.Presence {
+				p.Set(key, value, presence.WithHistory())
+			}
 			continue
 		}
 
@@ -409,6 +427,9 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 	var reverse []HistoryOperation
 	for _, op := range reverseOps {
 		reverse = append(reverse, HistoryOperation{Op: op})
+	}
+	if reversePresence := ctx.ReversePresence(); reversePresence != nil {
+		reverse = append(reverse, HistoryOperation{Presence: reversePresence})
 	}
 	if len(reverse) > 0 {
 		if isUndo {
@@ -616,7 +637,7 @@ func (d *Document) Root() *json.Object {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, nil)
 	return json.NewObject(ctx, d.cloneRoot.Object())
 }
 
