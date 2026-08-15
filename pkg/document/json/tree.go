@@ -388,17 +388,27 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 
 			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.TextNodeType, nil, value))
 		} else {
-			for _, content := range contents {
+			for i, content := range contents {
+				// Each node needs its own identity: positions anchor by id, and
+				// two nodes under one id make every position anchored there
+				// ambiguous. The first content keeps the ticket issued above so
+				// that a single-content edit — every edit made through Edit,
+				// rather than EditBulk — assigns the ids it always has.
+				nodeTicket := ticket
+				if i > 0 {
+					nodeTicket = t.context.IssueTimeTicket()
+				}
+
 				var attributes *crdt.RHT
 				if content.Attributes != nil {
 					attributes = crdt.NewRHT()
 					for key, val := range content.Attributes {
-						attributes.Set(key, val, ticket)
+						attributes.Set(key, val, nodeTicket)
 					}
 				}
 				var node *crdt.TreeNode
 
-				node = crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), content.Type, attributes, content.Value)
+				node = crdt.NewTreeNode(crdt.NewTreeNodeID(nodeTicket, 0), content.Type, attributes, content.Value)
 
 				for _, child := range content.Children {
 					if err := buildDescendants(t.context, child, node); err != nil {

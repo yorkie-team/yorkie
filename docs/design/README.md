@@ -23,6 +23,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
+- [Identity of Inserted Tree Content](tree-content-identity.md): One ticket per inserted node, and what still lets two nodes share an ID
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations
 - [Counter Dedup](counter-dedup.md): Counter dedup mode using HyperLogLog for high-volume idempotent counting
 - [Array Move Convergence](array-move-convergence.md): Fix convergence bugs in concurrent array move operations
