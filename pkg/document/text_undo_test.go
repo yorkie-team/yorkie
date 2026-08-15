@@ -451,12 +451,16 @@ func TestTextUndo(t *testing.T) {
 	t.Run("style undo survives a snapshot round trip test", func(t *testing.T) {
 		// Restore-only: the attribute this reverse touches held a value
 		// both before and after (true -> false -> true), so undo never
-		// tombstones an RHT node here. A scenario where undo removes a
-		// key that did not exist before would also need to survive this
-		// round trip, but a text node attribute's isRemoved flag is not
-		// carried by the snapshot encoding (pre-existing in both SDKs --
+		// tombstones an RHT node here. The removal branch (undo removing a
+		// key that did not exist before) is covered separately, by a
+		// DeepCopy round trip rather than a snapshot one -- see
+		// TestStyle/"reverse removal of an absent-before key survives a
+		// DeepCopy round trip" in pkg/document/operations/style_test.go --
+		// because a text node attribute's isRemoved flag is not carried by
+		// the snapshot encoding specifically (pre-existing in both SDKs;
 		// see docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md),
-		// so that combination is not exercised here.
+		// so that combination would fail here for a reason unrelated to
+		// this reverse operation.
 		doc := newTextDoc(t)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("t").Edit(0, 0, "ABCD", map[string]string{"bold": "true"})

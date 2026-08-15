@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -129,6 +130,90 @@ func TestStyle(t *testing.T) {
 		)
 		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
 		assert.NoError(t, err)
-		assert.NotNil(t, reverse)
+
+		reverseStyle, ok := reverse.(*operations.Style)
+		assert.True(t, ok)
+		assert.Equal(t, map[string]string{"bold": "true"}, reverseStyle.Attributes())
+		assert.Empty(t, reverseStyle.AttributesToRemove())
+	})
+
+	t.Run("reverse of a mixed set survives a wire round trip", func(t *testing.T) {
+		// toStyle (api/converter/to_pb.go) always encodes both Attributes
+		// and AttributesToRemove, and JS's StyleOperation constructor
+		// always accepts both -- so a combined reverse (built above) must
+		// decode both fields together too. Decoding them as mutually
+		// exclusive would silently drop the restore half on every replica
+		// that receives this reverse over the wire, diverging it from the
+		// replica that executed it locally.
+		root, text := newStyleTestRoot(t, &actor)
+
+		fromPos, toPos, err := text.CreateRange(0, 2)
+		assert.NoError(t, err)
+
+		setOp := operations.NewStyle(
+			text.CreatedAt(), fromPos, toPos,
+			map[string]string{"bold": "false", "italic": "true"},
+			time.NewTicket(2, 0, actor),
+		)
+		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		pbOps, err := converter.ToOperations([]operations.Operation{reverse})
+		assert.NoError(t, err)
+		decodedOps, err := converter.FromOperations(pbOps)
+		assert.NoError(t, err)
+		assert.Len(t, decodedOps, 1)
+
+		decoded, ok := decodedOps[0].(*operations.Style)
+		assert.True(t, ok)
+		assert.Equal(t, map[string]string{"bold": "true"}, decoded.Attributes(),
+			"the restore half must survive the wire, not just the removal half")
+		assert.Equal(t, []string{"italic"}, decoded.AttributesToRemove())
+
+		decoded.SetExecutedAt(time.NewTicket(3, 0, actor))
+		_, err = decoded.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		attrs := text.Nodes()[0].Value().Attrs()
+		assert.Equal(t, "true", attrs.Get("bold"),
+			"executing the decoded reverse should restore bold, not just remove italic")
+		assert.False(t, attrs.Has("italic"))
+	})
+
+	t.Run("reverse removal of an absent-before key survives a DeepCopy round trip", func(t *testing.T) {
+		// DeepCopy, not a snapshot round trip, is the discriminating check
+		// for the removal branch: RHT.DeepCopy preserves tombstones via
+		// SetInternal(..., isRemoved), so a key undo correctly removed
+		// must still read as absent after copying. A snapshot-bytes round
+		// trip is a separate, currently broken, path for this exact case
+		// -- filed in
+		// docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md
+		// -- so it is deliberately not exercised here.
+		root, text := newStyleTestRoot(t, &actor)
+
+		fromPos, toPos, err := text.CreateRange(0, 2)
+		assert.NoError(t, err)
+
+		setOp := operations.NewStyle(
+			text.CreatedAt(), fromPos, toPos,
+			map[string]string{"italic": "true"},
+			time.NewTicket(2, 0, actor),
+		)
+		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		reverseStyle, ok := reverse.(*operations.Style)
+		assert.True(t, ok)
+		reverseStyle.SetExecutedAt(time.NewTicket(3, 0, actor))
+		_, err = reverseStyle.Execute(root, operations.OpSourceUndoRedo, time.NewVersionVector())
+		assert.NoError(t, err)
+		assert.False(t, text.Nodes()[0].Value().Attrs().Has("italic"))
+
+		copied, err := text.DeepCopy()
+		assert.NoError(t, err)
+		copiedText, ok := copied.(*crdt.Text)
+		assert.True(t, ok)
+		assert.False(t, copiedText.Nodes()[0].Value().Attrs().Has("italic"),
+			"a DeepCopy must not resurrect a key undo correctly removed")
 	})
 }

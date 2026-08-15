@@ -656,6 +656,23 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 		return nil, err
 	}
 
+	// A Style operation's wire form always carries both Attributes and
+	// AttributesToRemove (see toStyle), and JS's StyleOperation constructor
+	// always accepts both -- so decoding whichever field is non-empty is
+	// not exclusive. A reverse Style built for undo/redo can populate both
+	// at once (restore some keys, remove others that did not exist
+	// before), and decoding only one would silently drop the other.
+	if len(pbStyle.Attributes) > 0 && len(pbStyle.AttributesToRemove) > 0 {
+		return operations.NewStyleSetAndRemove(
+			parentCreatedAt,
+			from,
+			to,
+			pbStyle.Attributes,
+			pbStyle.AttributesToRemove,
+			executedAt,
+		), nil
+	}
+
 	if len(pbStyle.AttributesToRemove) > 0 {
 		return operations.NewStyleRemove(
 			parentCreatedAt,

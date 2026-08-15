@@ -78,6 +78,32 @@ func NewStyleRemove(
 	}
 }
 
+// NewStyleSetAndRemove creates a Style operation that both sets attributes
+// and removes others in the same call. NewStyle and NewStyleRemove each
+// zero out the field the other populates, so this constructor exists for
+// the shape a reverse can need: restoring some keys and removing others
+// that did not exist before, in a single op. Wire decoding must use this
+// whenever a decoded Style carries both fields non-empty, matching JS's
+// StyleOperation constructor, which always accepts both -- decoding the
+// two fields exclusively would silently drop whichever field lost.
+func NewStyleSetAndRemove(
+	parentCreatedAt *time.Ticket,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
+	attributes map[string]string,
+	attributesToRemove []string,
+	executedAt *time.Ticket,
+) *Style {
+	return &Style{
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         attributes,
+		attributesToRemove: attributesToRemove,
+		executedAt:         executedAt,
+	}
+}
+
 // Execute executes this operation on the given document(`root`). Unlike a
 // single call from the JSON package (which only ever populates one of
 // attributes or attributesToRemove), a reverse Style built by this method
@@ -153,30 +179,16 @@ func (e *Style) toReverseOperation(
 	}
 
 	if len(reversePrevAttributes) > 0 && len(reverseAttrsToRemove) > 0 {
-		return &Style{
-			parentCreatedAt:    e.parentCreatedAt,
-			from:               e.from,
-			to:                 e.to,
-			attributes:         reversePrevAttributes,
-			attributesToRemove: reverseAttrsToRemove,
-		}
+		return NewStyleSetAndRemove(
+			e.parentCreatedAt, e.from, e.to, reversePrevAttributes, reverseAttrsToRemove, nil,
+		)
 	}
 
 	if len(reverseAttrsToRemove) > 0 {
-		return &Style{
-			parentCreatedAt:    e.parentCreatedAt,
-			from:               e.from,
-			to:                 e.to,
-			attributesToRemove: reverseAttrsToRemove,
-		}
+		return NewStyleRemove(e.parentCreatedAt, e.from, e.to, reverseAttrsToRemove, nil)
 	}
 
-	return &Style{
-		parentCreatedAt: e.parentCreatedAt,
-		from:            e.from,
-		to:              e.to,
-		attributes:      reversePrevAttributes,
-	}
+	return NewStyle(e.parentCreatedAt, e.from, e.to, reversePrevAttributes, nil)
 }
 
 // From returns the start point of the editing range.
