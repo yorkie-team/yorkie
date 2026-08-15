@@ -1424,17 +1424,38 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	}, nil
 }
 
-// Edit edits the tree with the given range and content.
-// If the content is undefined, the range will be removed.
-// Edit edits the given range with the given content and split level. Besides
-// the GC pairs and size diff, it reports the content this edit removed:
-// removed holds each node THIS edit itself transitioned visible ->
-// tombstoned (parent-before-child, the order Restore relies on), and
-// preTombstoned names — by IDString, mirroring the JS port's ID-string Set —
-// every descendant found already tombstoned before this edit ran. A
-// descendant in preTombstoned never appears in removed: a reverse operation
-// built from removed must not resurrect a deletion the user already made
-// independently of this edit (JS CRDTTree.edit's preTombstoned filtering).
+// Edit edits the tree with the given range and content. If the content is
+// undefined, the range will be removed. Besides the GC pairs and size diff,
+// it reports the nodes the delete range collected (Phase 5's toBeRemoveds):
+// removed holds each of those nodes THIS edit itself transitioned visible ->
+// tombstoned, in the order that phase walked them, and preTombstoned names
+// — by IDString, mirroring the JS port's ID-string Set — every one of those
+// same collected nodes that was already tombstoned before this edit ran.
+// removed and preTombstoned partition toBeRemoveds; they say nothing about
+// nodes propagateMergeDeletes additionally tombstones, since those never
+// enter toBeRemoveds either (matching JS, whose merge propagation likewise
+// never appends to nodesToBeRemoved).
+//
+// A node in preTombstoned represents a deletion the user already made
+// independently of this edit and must not be resurrected by a reverse built
+// from removed. JS's own nodesToBeRemoved (the analogue of removed here)
+// INCLUDES pre-tombstoned nodes, unlike this method's removed — so the
+// top-level filter for a copy-reinsert reverse's contents is
+//
+//	parent == nil || (parent NOT IN removed AND parent.IDString() NOT IN preTombstoned)
+//
+// not "parent not in removed" alone: a live descendant whose immediate
+// parent is pre-tombstoned must not be promoted to top-level, exactly as JS
+// drops it too (tree_edit_operation.ts:622-627) by excluding any node whose
+// parent is in its (unfiltered) nodesToBeRemoved.
+//
+// The returned nodes are live tombstones still linked into this tree, not
+// copies. A caller that needs to keep them past this call must DeepCopy()
+// before any subsequent edit: a later SplitText mutates in place and splits
+// tombstones too, so it can truncate a captured node's value out from under
+// a caller holding onto it. Do not store the slice or map beyond the Execute
+// call that produced them — build any reverse operation's content from them
+// synchronously, the way JS does inside the same execute().
 func (t *Tree) Edit(
 	from, to *TreePos,
 	contents []*TreeNode,
@@ -1527,7 +1548,7 @@ func (t *Tree) Edit(
 	if err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, editedAt,
 	); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, nil, nil, err
 	}
 
 	// §6.2: Propagate deletes to children moved by prior merges.
@@ -1538,7 +1559,7 @@ func (t *Tree) Edit(
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, nil, nil, err
 	}
 
 	// Phase 8: Insert — insert the given node at the given position.
@@ -1558,12 +1579,12 @@ func (t *Tree) Edit(
 			if leftInChildren == fromParent {
 				err := fromParent.InsertAt(content, 0)
 				if err != nil {
-					return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
+					return append(pairs, t.drainPendingGCPairs()...), diff, nil, nil, err
 				}
 			} else {
 				err := fromParent.InsertAfter(content, leftInChildren)
 				if err != nil {
-					return append(pairs, t.drainPendingGCPairs()...), diff, removed, preTombstoned, err
+					return append(pairs, t.drainPendingGCPairs()...), diff, nil, nil, err
 				}
 			}
 
