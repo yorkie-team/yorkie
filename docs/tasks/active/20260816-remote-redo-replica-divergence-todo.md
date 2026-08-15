@@ -9,13 +9,12 @@ per the port's own rule ("Port JS's known defects as-is") a one-sided fix in
 Go alone would widen the gap the port exists to close. This document is the
 filing so it can be picked up as its own task.
 
-This document also records two smaller, related presence defects found in
-the same investigation — see "Related: `Presence.Initialize` leaves
-`clonePresences` stale" and "Related: Go's zero value vs. JS's dropped key
-on undoing a newly introduced presence key" below. They are bundled here
-rather than filed as separate pairs because all three surfaced from the same
-Task 7 investigation, are all "record and defer" rather than active fixes,
-and are individually too small to justify fragmenting the backlog.
+This document has since become the collecting point for every smaller
+"record and defer" finding the undo/redo port turns up — see the "Related:"
+sections below, contributed by Tasks 7, 9 and 10. They are bundled here
+rather than filed as separate pairs because they are all deferrals rather
+than active fixes, and are individually too small to justify fragmenting
+the backlog. Each carries its own reachability analysis and task list.
 
 ## Problem: redo does not propagate correctly to peers (replica divergence)
 
@@ -361,3 +360,116 @@ underlying divergence.
       captures from the correct (now filtered) first node
 - [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
       per this document's usual rule for cross-SDK behavior changes
+
+## Related: `validateRestoreIdentities` can reject a client's own undo
+
+Found while building Task 10 (the Text `Edit` reverse operation,
+`docs/design/undo-redo-go-port.md`) and sharpened in code review. Not
+fixed there: loosening a security control is not a decision to make
+inside a feature task.
+
+`operations.Edit.Execute` validates every restore/retombstone span's
+`createdAt` against the acting change's version vector
+(`pkg/document/operations/edit.go`, `validateRestoreIdentities` /
+`validateRestoreTickets`): the span's actor must be present in the vector
+and its lamport must not exceed the actor's known clock, or the operation
+fails with `ErrUnknownRestoreIdentity`. The guard skips only when the
+version vector is empty, which its comment describes as "the trusted local
+path (json package application)".
+
+This is **Go-only hardening**. A grep of `yorkie-js-sdk/packages` for
+`validateRestore` and `UnknownRestoreIdentity` returns zero hits, so JS
+clients never perform this check on themselves.
+
+Task 10 is what makes it live on the local undo path. Before it, Go could
+only ever *execute* restore operations that arrived from a JS client (an
+untrusted, remote input, which is what the guard was written for). Now Go
+produces them locally, and `Change.Execute` passes `c.ID().versionVector`
+— which for a local change is **not** empty (verified: a plain
+`document.New` plus two `Update`s yields `{000...000:1}` then
+`{000...000:2}`), so the guard runs against the client's own undo.
+
+### Reachability (narrower than "any pruned actor")
+
+The failure needs a version vector that is missing an actor whose content
+the client is trying to restore. Most ways a VV changes cannot produce
+that:
+
+- `VersionVector.Unset` (`pkg/document/time/version_vector.go:115`) and
+  `Filter` (`:266`) would drop entries, but neither has a non-test caller.
+- `ID.SyncClocks` (`pkg/document/change/id.go:109`) and `ID.SetClocks`
+  (`:145`) only `Max`-merge, so they never remove an actor.
+
+The reachable case is **`ID.SyncLamport`** (`pkg/document/change/id.go:131-141`),
+the GC-disabled attach mode (`docs/design/disable-gc-on-attach.md`). It
+deliberately advances the lamport *without* merging the other side's
+version vector, so such a client's VV stays at a single entry — its own
+actor. A GC-disabled client that deletes text another actor inserted and
+then calls `Undo` hits `versionVector.Get(otherActor)` returning `!ok`,
+and gets `ErrUnknownRestoreIdentity` instead of a restore.
+
+### Tasks
+
+- [ ] Reproduce with a GC-disabled attachment: two clients, client B
+      opts out of GC, B deletes text A inserted, B undoes — assert the
+      error today, then the restore once fixed
+- [ ] Decide the fix shape. The guard exists to stop a client forging a
+      node under another actor's clock, so simply dropping it is not an
+      option. Candidates: gate it on `OpSource` (remote input only,
+      leaving locally produced undo alone), or make the GC-disabled path
+      carry enough of a version vector to validate against
+- [ ] Decide whether JS should gain the equivalent check rather than Go
+      losing it — the asymmetry means a JS client can send the server a
+      restore its own SDK never examined
+- [ ] Whatever is chosen, keep `test/integration` coverage for a forged
+      identity being rejected on the remote path
+
+## Related: the no-op fallback `Edit` reverse breaks on a remote replica
+
+Also found while building Task 10, in code review. **Present identically
+in JS, so not fixed** — per this document's usual rule.
+
+`Edit.toReverseOperation` (`pkg/document/operations/edit.go`) has a
+fallback for an edit that neither removed nor inserted anything — e.g.
+`text.Edit(2, 2, "")`. Its reverse is an ordinary (non-restore) `Edit`
+anchored at the **normalized** from position: the head node's id plus an
+absolute offset from the head. The port of `edit_operation.ts:300-323`.
+
+An `Edit` carrying normalized positions is only executable after
+`RefinePos` remaps them onto the current chain, and that step is gated on
+`isUndoOp` — which is **local-only state, never serialized** (Go has no
+wire field for it; JS's `converter.ts` has zero `isUndoOp` references
+either). So:
+
+1. The undoing client executes it fine — `isUndoOp` is set in memory, the
+   positions get refined, the no-op applies.
+2. The change is appended to `localChanges` and pushed (the operation did
+   execute, so `executeUndoRedo`'s "nothing executed" early return does
+   not fire).
+3. The server and every peer decode it with `isUndoOp` absent, take no
+   refine step, and feed `(initialHead, N)` straight into
+   `findNodeWithSplit`. `getAbsoluteID()` yields `(InitialTicket, N)`,
+   whose floor is the head node, giving `relativeOffset = N` against a
+   node of length 0 — so `splitNode` returns "offset should be less than
+   or equal to length" (`pkg/document/crdt/rga_tree_split.go`) and the
+   whole change fails to apply.
+
+For any `N > 0` — i.e. any no-op edit that is not at the very start of
+the text — this is not a cosmetic problem: it fails the peer's
+`ApplyChanges`, not just the one operation.
+
+### Tasks
+
+- [ ] Confirm the peer-side failure end to end with an integration test
+      (client A does `Edit(2, 2, "")` then `Undo`, client B syncs), in
+      both SDKs
+- [ ] Decide the fix shape, then apply it to both SDKs together. Options:
+      put the fallback reverse's positions in un-normalized form; add
+      `isUndoOp` to the wire format; or drop the fallback reverse
+      entirely, since an edit that changed nothing arguably has nothing
+      to undo — note this last one changes undo-stack depth, which is
+      observable
+- [ ] Whichever is chosen, check the same question for the restore-mode
+      reverses, which also carry normalized positions but never resolve
+      them positionally (identity addressing) except in
+      `findRestoreAnchor`'s fallback rung, which does refine first
