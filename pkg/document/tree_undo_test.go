@@ -206,6 +206,31 @@ func TestTreeUndo(t *testing.T) {
 		assert.Equal(t, 1, doc.GarbageLen())
 	})
 
+	t.Run("replacing a whole element cycles without accumulating content test", func(t *testing.T) {
+		// The reverse of a replace anchors at the content the tree accepted,
+		// not at the tombstones around it — here the new element is inserted
+		// at the parent's leftmost position while the replaced one stays as a
+		// tombstone beside it. Each cycle mints a fresh copy and tombstones
+		// the previous one, so the pending-collection count grows; what must
+		// not grow is the document.
+		doc := newTreeDoc(t, "000000000000000000000001")
+		editTree(t, doc, 0, 4, &json.TreeNode{
+			Type:     "p",
+			Children: []json.TreeNode{{Type: textNodeType, Value: "Z"}},
+		})
+		assert.Equal(t, "<r><p>Z</p></r>", treeXML(t, doc))
+
+		for cycle := range 2 {
+			assert.NoError(t, doc.Undo())
+			assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc), "cycle %d undo", cycle)
+			assertNoDuplicateTreeIDs(t, doc, "after undo")
+
+			assert.NoError(t, doc.Redo())
+			assert.Equal(t, "<r><p>Z</p></r>", treeXML(t, doc), "cycle %d redo", cycle)
+			assertNoDuplicateTreeIDs(t, doc, "after redo")
+		}
+	})
+
 	t.Run("undo does not resurrect an earlier delete test", func(t *testing.T) {
 		// Typing inside a node that is later deleted, with the typing undone
 		// first: the block's own undo must not bring the typed text back. Its
