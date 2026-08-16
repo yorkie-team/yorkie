@@ -1549,14 +1549,19 @@ comment (`document.ts:2105-2110`).
 ### Task 20: Port history_tree_split_test.ts
 
 **Files:**
-- Create: `test/integration/history_tree_split_test.go` (26 tests)
+- Create: `test/integration/history_tree_split_test.go`
 
-- [ ] **Step 1: Port all 26 tests.**
-- [ ] **Step 2: Run.** Run:
+The "26 tests" this plan was written against is superseded. The ported file
+holds 27 `t.Run(` call sites, several of which are table-driven, and they
+expand to **79 runtime subtests, one of them skipped** — the audited figure,
+measured with the command in Step 2.
+
+- [x] **Step 1: Port the tests.**
+- [x] **Step 2: Run.** Run:
   `go test -tags integration ./test/integration/ -run TestHistoryTreeSplit -v`
-  Expected: 26 PASS.
-- [ ] **Step 3: Count check** — 26 `t.Run(` calls.
-- [ ] **Step 4: Commit** — `Port the Tree split history tests from the JS SDK`
+  Expected: 79 subtests, 78 PASS and 1 SKIP.
+- [x] **Step 3: Count check** — 79 runtime subtests.
+- [x] **Step 4: Commit** — `Port the Tree split history tests from the JS SDK`
 
 ---
 

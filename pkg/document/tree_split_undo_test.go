@@ -330,7 +330,7 @@ func TestTreeSplitUndo(t *testing.T) {
 		// The boundary deletion and the re-split are both pushed to peers as
 		// ordinary changes, so both have to survive protobuf encode/decode --
 		// and this is the only test where a splitLevel > 0 operation crosses
-		// it, since redoSplitLevel is local-only state that does NOT and the
+		// it. redoSplitLevel is local-only state that does NOT cross, so the
 		// re-split has to work without it. The pack goes through
 		// ToChangePack/FromChangePack rather than being handed over in memory,
 		// or the "replica" would just re-execute the originator's own operation

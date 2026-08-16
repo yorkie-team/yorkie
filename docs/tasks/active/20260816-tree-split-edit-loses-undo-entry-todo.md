@@ -38,7 +38,7 @@ There is no error and no signal. `CanUndo()` returns true throughout.
 
 Plain single-client editing on a GC-enabled document, no concurrency:
 
-```
+```text
 init:       <r><p>abcd</p></r>          undoStack=1
 after A:    <r><p>abcdZ</p></r>         undoStack=2   (insert "Z" at 5)
 after B:    <r><p>abX</p><p>cdZ</p></r> undoStack=2   (Edit(3,3,"X",splitLevel 1)

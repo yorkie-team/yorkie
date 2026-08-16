@@ -117,7 +117,7 @@ func TestTreeStyle(t *testing.T) {
 		// copying Text's independent-if execute shape from PR #1174) --
 		// preserved here rather than fixed, per this port's rule not to fix
 		// a defect the JS SDK still has. See
-		// docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
+		// docs/tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md.
 		root, tree := newTreeStyleTestRoot(t, &actor)
 
 		fromPos, err := tree.FindPos(0)
