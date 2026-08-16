@@ -679,17 +679,35 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		// A remote change may have moved the text or tree a pending
 		// undo/redo Edit or TreeEdit refers to; reconcile every stacked
 		// entry against each executed one.
-		for _, op := range executed {
-			switch op := op.(type) {
-			case *operations.Edit:
-				from, to, ok := op.NormalizePos(d.doc.root)
-				if !ok {
-					continue
+		//
+		// With both stacks empty there is no stacked entry to move, so every
+		// Reconcile* call below iterates nothing and the positions computed
+		// for it are discarded -- History.IsEmpty is exactly the condition
+		// under which that holds. Skipping is what makes the difference,
+		// because computing them is not free: Text.NormalizePos sums the live
+		// length of every physical predecessor, so the loop costs a walk of
+		// the whole split chain per executed Edit and the pack as a whole
+		// goes quadratic. That is paid on every client that never calls Undo
+		// and on every freshly attached document.
+		//
+		// JS runs the same loop unguarded (document.ts:1552-1566) over the
+		// same linear normalizePos (rga_tree_split.ts:1201-1221), so this is
+		// a cost-only divergence, not a behavioral one: with anything on
+		// either stack the guard is false and every reconcile that JS
+		// performs still happens here.
+		if !d.history.IsEmpty() {
+			for _, op := range executed {
+				switch op := op.(type) {
+				case *operations.Edit:
+					from, to, ok := op.NormalizePos(d.doc.root)
+					if !ok {
+						continue
+					}
+					d.history.ReconcileTextEdit(op.ParentCreatedAt(), from, to, op.ContentLen())
+				case *operations.TreeEdit:
+					from, to := op.NormalizePos()
+					d.history.ReconcileTreeEdit(op.ParentCreatedAt(), from, to, op.GetContentSize())
 				}
-				d.history.ReconcileTextEdit(op.ParentCreatedAt(), from, to, op.ContentLen())
-			case *operations.TreeEdit:
-				from, to := op.NormalizePos()
-				d.history.ReconcileTreeEdit(op.ParentCreatedAt(), from, to, op.GetContentSize())
 			}
 		}
 	}

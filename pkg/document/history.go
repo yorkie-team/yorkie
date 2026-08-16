@@ -59,6 +59,12 @@ func (h *History) HasUndo() bool { return len(h.undoStack) > 0 }
 // HasRedo reports whether there is anything to redo.
 func (h *History) HasRedo() bool { return len(h.redoStack) > 0 }
 
+// IsEmpty reports whether every stack a Reconcile method walks is empty, in
+// which case each of them is a no-op and a caller may skip computing the
+// arguments it would pass. It lives beside those methods so a stack added to
+// one is added here too.
+func (h *History) IsEmpty() bool { return !h.HasUndo() && !h.HasRedo() }
+
 // PushUndo pushes the reverse operations of a change onto the undo stack,
 // dropping the oldest entry when the stack is full.
 func (h *History) PushUndo(ops []HistoryOperation) {
