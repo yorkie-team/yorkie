@@ -408,11 +408,40 @@ actor. A GC-disabled client that deletes text another actor inserted and
 then calls `Undo` hits `versionVector.Get(otherActor)` returning `!ok`,
 and gets `ErrUnknownRestoreIdentity` instead of a restore.
 
+### Update: this now covers Tree undo as well, and is a pre-merge check
+
+Added while building the Tree `Edit` reverse operation. `Tree.Edit` now
+produces identity spans and `operations.TreeEdit.toReverseOperation`
+short-circuits to a restore-mode reverse whenever they are complete, so
+**the identity-preserving path is what an ordinary local Tree undo takes**,
+not a corner reached only by operations arriving from a JS client. Every
+such undo runs `validateTreeRestoreIdentities`
+(`pkg/document/operations/tree_edit.go`), which shares
+`validateRestoreTickets` with the Text path described above — so the same
+`ErrUnknownRestoreIdentity` failure now applies to `Tree` undo under the
+same conditions.
+
+This raises the severity from "note" to a check to run before this port
+merges: the exposure moved from a rarely-taken branch to the default
+behavior of Tree undo.
+
+Mitigating evidence, so the scope is not overstated: ordinary cross-actor
+identity restore is covered and passes.
+`test/integration/history_tree_test.go`'s
+`TestHistoryTreeConcurrentUndo` has client `d2` undo a deletion of tree
+content created by `d1`'s actor, and the restore succeeds — a normally
+attached client's version vector knows the other actor, so the guard does
+not fire. The residual exposure is exactly the VV-pruning case already
+described above (`ID.SyncLamport`, the GC-disabled attach mode), now
+reachable through Tree as well as Text.
+
 ### Tasks
 
 - [ ] Reproduce with a GC-disabled attachment: two clients, client B
       opts out of GC, B deletes text A inserted, B undoes — assert the
       error today, then the restore once fixed
+- [ ] Repeat the same reproduction for `Tree` (B deletes tree content A
+      inserted, B undoes), since Tree undo now takes this path by default
 - [ ] Decide the fix shape. The guard exists to stop a client forging a
       node under another actor's clock, so simply dropping it is not an
       option. Candidates: gate it on `OpSource` (remote input only,
@@ -422,7 +451,7 @@ and gets `ErrUnknownRestoreIdentity` instead of a restore.
       losing it — the asymmetry means a JS client can send the server a
       restore its own SDK never examined
 - [ ] Whatever is chosen, keep `test/integration` coverage for a forged
-      identity being rejected on the remote path
+      identity being rejected on the remote path, for both Text and Tree
 
 ## Related: the no-op fallback `Edit` reverse breaks on a remote replica
 
@@ -538,3 +567,81 @@ a removed-attribute case to surface it, which nothing before did.
       per this document's usual rule for cross-SDK behavior changes
 - [ ] Add regression coverage: style an attribute, remove it, snapshot
       round trip, assert the attribute stays absent -- in both SDKs
+
+## Related: a Tree reverse can delete live neighbours when its content was born tombstoned
+
+Found while building the Tree `Edit` reverse operation. **Present in JS
+too for the range width; Go additionally differs in where the range
+starts.** Not fixed, per this document's usual rule.
+
+`operations.TreeEdit.toReverseOperation`'s copy-reinsert fallback
+(`pkg/document/operations/tree_edit.go`) builds the reverse of an edit as
+"delete the range this edit inserted, re-insert what it removed". The
+range's width comes from `TreeEditReverseInfo.InsertedContentSize`, which
+`crdt.Tree.Edit` measures right after `dropDuplicateContents` and
+**before** the insert loop runs — mirroring `crdt/tree.ts:2194-2196`, which
+does the same and says so (`tree.ts:2188-2190`).
+
+Measuring there is deliberate and correct: `TreeNode.remove` decrements
+its *ancestors'* visible length, so a subtree inserted under an
+already-removed parent shrinks its own root to zero as its children are
+tombstoned. Reading the size back off the tree afterwards would report 0
+for content that really was inserted.
+
+The consequence is that when the insert position resolves inside a parent
+a concurrent edit removed, every inserted node is tombstoned on the way in
+(`fromParent.IsRemoved()` in `Tree.Edit`'s Phase 8), yet
+`InsertedContentSize` still counts it. The reverse's range is therefore
+`[idx, idx + size)` over content that occupies **no** visible index. JS's
+only protection is the size guard at `tree_edit_operation.ts:610-616`
+(ported as `if idx+insertedSize > tree.Root().Len() { return nil, nil }`),
+which catches this **only when the range happens to run past the end of
+the visible tree**. When there is enough live content to the right of the
+anchor, the range instead covers live neighbours, and undoing the edit
+deletes them.
+
+### Why this is only partial JS parity
+
+The *width* is JS's, verified. The *start* is not:
+
+- JS anchors at `preEditFromIdx`, the from-index `CRDTTree.edit` captured
+  before the deletion (`crdt/tree.ts:1872`).
+- Go's `crdt.Tree.Edit` does not report `preEditFromIdx`, so
+  `toReverseOperation` derives the anchor from the nodes the edit touched.
+  On this path `lastLive == nil` (all content is tombstoned), so the anchor
+  falls through to `info.Removed[0]`, or — when the edit removed nothing
+  either — to the zero-width no-op reverse at `e.from`.
+
+That second fallback is the separately-filed no-op-anchor divergence
+(see "the no-op fallback `Edit` reverse breaks on a remote replica" for
+the Text twin of the same shape). **The two defects compound here**: the
+range this path produces can be wrong in width *and* in start, and the
+size guard only reasons about the width. Any fix has to settle the anchor
+question first, or the guard will keep being evaluated against an index
+JS never intended.
+
+### Reachability
+
+Concurrency only. It needs `fromParent.IsRemoved()` at insert time — an
+insert whose declared parent another client removed concurrently — which
+also makes `SpansComplete` false (the born-removed nodes register GC pairs
+past the delete-loop snapshot), so the edit takes the copy-reinsert
+fallback rather than the identity-preserving reverse. Single-client
+editing never reaches it.
+
+### Tasks
+
+- [ ] Reproduce with two clients: A removes an element, B concurrently
+      inserts into it, B undoes — assert the live neighbour survives.
+      Do it in both SDKs, since JS shares the width defect
+- [ ] Decide the anchor question first (`preEditFromIdx` vs. the
+      node-derived anchor); it gates whether the size guard is even
+      checking the right thing. Reporting `preEditFromIdx` from
+      `crdt.Tree.Edit` is the obvious option, and would also close the
+      no-op-fallback anchor divergence filed above
+- [ ] Then decide the width fix: skip the reverse whenever the tree
+      accepted content but none of it is visible (`lastLive == nil &&
+      InsertedContentSize > 0`) is the narrow option; widening JS's guard
+      to the same condition is the cross-SDK one
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+      per this document's usual rule for cross-SDK behavior changes
