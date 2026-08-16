@@ -333,9 +333,9 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 
 		// The pre-edit visible-index range this execution affected, read
 		// straight off info rather than recomputed here: Tree.Edit captures
-		// PreEditFromIdx right after Phase 1 resolves and splits `from`,
-		// before Phase 5 tombstones anything in the range, and RemovedSize
-		// alongside it in Phase 5, before either mutates -- both at points
+		// PreEditFromIdx after Phase 3 (Range Narrowing), the latest point
+		// that still sees the tree before Phase 5 tombstones anything in the
+		// range, and RemovedSize once every phase has run -- both at points
 		// this package cannot reach from outside Tree.Edit. Reported by
 		// NormalizePos (when this op is not itself carrying reconciled
 		// indices of its own) so the applyChanges reconciliation loop can
@@ -371,23 +371,28 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 // The fallback's positions are read off the post-edit tree, mirroring
 // tree_edit_operation.ts:640-665, which computes them as
 // findPos(preEditFromIdx) and findPos(preEditFromIdx + insertedContentSize).
-// Go's Tree.Edit does not report preEditFromIdx, so the anchor is derived from
-// the nodes the edit actually touched instead: it sits immediately before the
-// content the tree accepted, or — with nothing accepted — immediately before
-// the first node this edit tombstoned, which names the same point once those
-// tombstones stop counting towards the index.
+// Go's Tree.Edit does now report the equivalent (TreeEditReverseInfo.
+// PreEditFromIdx), but outcome 3 below deliberately does NOT use it for
+// fromPos/toPos: it derives its anchor from the nodes the edit actually
+// touched instead (immediately before the content the tree accepted, or --
+// with nothing accepted -- immediately before the first node this edit
+// tombstoned). That anchor is a filed, open divergence from JS (see
+// "a Tree reverse can delete live neighbours when its content was born
+// tombstoned" in the cross-SDK defects doc) which this comment is not
+// re-litigating; preFromIdx below is passed to outcomes 1 and the no-op
+// case only, never to outcome 3.
 //
 // Only splitLevel 0 is reversed, including by outcome 1: a split's reverse is
 // a boundary deletion rather than a content re-insertion, and is not built yet
 // (JS branches on the same condition before calling this at all).
 //
 // preFromIdx is this edit's own pre-mutation visible-index anchor
-// (info.PreEditFromIdx, which Tree.Edit captures right after Phase 1 splits
-// and resolves `from`) -- unrelated to the post-edit, node-derived anchor
-// idx computed below for outcome 3's fromPos/toPos. Outcomes 1 and the
-// no-op case use it directly, as a zero-width point, mirroring how JS uses
-// its own preEditFromIdx the same way in the identical branches
-// (tree_edit_operation.ts:543-556, :610-616).
+// (info.PreEditFromIdx, which Tree.Edit captures after Phase 3, the same
+// point JS's own preEditFromIdx is captured at) -- unrelated to the
+// post-edit, node-derived anchor idx computed below for outcome 3's
+// fromPos/toPos. Outcomes 1 and the no-op case use it directly, as a
+// zero-width point, mirroring how JS uses its own preEditFromIdx the same
+// way in the identical branches (tree_edit_operation.ts:543-556, :610-616).
 func (e *TreeEdit) toReverseOperation(
 	tree *crdt.Tree,
 	inserted []*crdt.TreeNode,

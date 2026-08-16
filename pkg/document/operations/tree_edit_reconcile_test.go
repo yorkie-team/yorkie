@@ -342,4 +342,59 @@ func TestTreeEditNormalizePosForwardExecution(t *testing.T) {
 		assert.Equal(t, 5, to, "must be the pre-delete visible index of the range's end")
 		assert.Equal(t, 0, op.GetContentSize(), "nothing was inserted")
 	})
+
+	t.Run("element delete reports the removed width, not a double count", func(t *testing.T) {
+		// Reproduces a regression found in review: toBeRemoveds is
+		// parent-before-child, and a removed element's own PaddedLength is
+		// not drained by its OWN removal -- only by each of its removed
+		// CHILDREN's own remove() calls, one at a time (TreeNode.remove only
+		// adjusts its ANCESTORS' aggregate). Summing while walking the
+		// delete loop measured the <p> element at its still-full aggregate
+		// (5: 2 padding + "abc"'s 3) and then "abc" again (3), giving 8 for
+		// a deletion that only removed 5 tokens of visible width.
+		issue := ticketer()
+		root, tree := newTwoParagraphTestRoot(t, issue)
+
+		fromPos, err := tree.FindPos(0)
+		assert.NoError(t, err)
+		toPos, err := tree.FindPos(5)
+		assert.NoError(t, err)
+		op := NewTreeEdit(tree.CreatedAt(), fromPos, toPos, nil, 0, issue())
+
+		_, err = op.Execute(root, OpSourceLocal, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>xy</p></r>", tree.ToXML())
+
+		from, to := op.NormalizePos()
+		assert.Equal(t, 0, from)
+		assert.Equal(t, 5, to, "the whole first <p> (2 padding + 3 chars), not 8")
+	})
+}
+
+// newTwoParagraphTestRoot returns <r><p>abc</p><p>xy</p></r> wrapped in a
+// Root under key "t", matching the shape review used to find the RemovedSize
+// double-counting regression: deleting the whole first <p> requires summing
+// over both an element node and its own child, which is exactly the case a
+// single-text-node fixture (buildDigitTree) cannot exercise.
+func newTwoParagraphTestRoot(t *testing.T, issue func() *time.Ticket) (*crdt.Root, *crdt.Tree) {
+	t.Helper()
+
+	root := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), "r", nil)
+	p1 := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), "p", nil)
+	assert.NoError(t, p1.Append(
+		crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "abc"),
+	))
+	p2 := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), "p", nil)
+	assert.NoError(t, p2.Append(
+		crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "xy"),
+	))
+	assert.NoError(t, root.Append(p1, p2))
+
+	tree := crdt.NewTree(root, issue())
+	assert.Equal(t, "<r><p>abc</p><p>xy</p></r>", tree.ToXML())
+
+	obj := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
+	obj.Set("t", tree)
+
+	return crdt.NewRoot(obj), tree
 }

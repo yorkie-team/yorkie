@@ -1592,24 +1592,34 @@ type TreeEditReverseInfo struct {
 	Removed       []*TreeNode
 	PreTombstoned map[string]struct{}
 
-	// PreEditFromIdx is the visible index `from` occupied immediately after
-	// Phase 1 resolves and splits it, before anything below mutates the
-	// tree. Mirrors preEditFromIdx in the JS SDK (crdt/tree.ts), computed at
-	// the identical point (after text-node splits, before deletions). The
-	// operations layer reads this to report the range a forward execution
-	// affected, for undo/redo reconciliation; this package does not read it
-	// itself.
+	// PreEditFromIdx is the visible index `from` occupies after Phase 3
+	// (Range Narrowing), before Phase 5 (Delete) or anything else below
+	// mutates the tree. Mirrors preEditFromIdx in the JS SDK
+	// (crdt/tree.ts:1872), computed at the identical point: after both
+	// positions are resolved and split (findNodesAndSplitText) AND after
+	// the split-sibling advance (Phase 2), using the post-advance fromLeft
+	// -- not right after Phase 1, which would miss the padded size of any
+	// concurrent split product Phase 2 skips past. Phases 2-4 do not mutate
+	// the tree, so this is also the latest point that still sees it
+	// pre-edit. The operations layer reads this to report the range a
+	// forward execution affected, for undo/redo reconciliation; this
+	// package does not read it itself.
 	PreEditFromIdx int
 
 	// RemovedSize is the total padded size of every node Phase 5 processed
 	// -- both the ones this edit newly tombstoned and any it found already
-	// tombstoned -- measured by each node's own PaddedLength, which (see
-	// TreeNode.remove) does not change when the node itself is tombstoned;
-	// only an ancestor's aggregate does. Mirrors JS's
-	// removedNodes.reduce((sum, n) => sum + n.paddedSize(), 0)
-	// (tree_edit_operation.ts:463-466), which sums over the same set: JS's
-	// nodesToBeRemoved includes pre-tombstoned nodes the way this field
-	// does, unlike Removed above -- see Removed's own doc comment.
+	// tombstoned -- measured by each node's own PaddedLength AFTER every
+	// phase (merge, split, insert) has run, not right after Phase 5's
+	// delete loop: toBeRemoveds is parent-before-child, and a node's own
+	// removal only drains its ANCESTORS' aggregate (see TreeNode.remove),
+	// one child at a time, so measuring a removed parent element before its
+	// own children lower in toBeRemoveds have been processed would still
+	// see its full pre-removal aggregate and double-count them. Mirrors
+	// JS's removedNodes.reduce((sum, n) => sum + n.paddedSize(), 0)
+	// (tree_edit_operation.ts:463-466), computed after tree.edit() has
+	// fully returned, over the same set: JS's nodesToBeRemoved includes
+	// pre-tombstoned nodes the way this field does, unlike Removed above --
+	// see Removed's own doc comment.
 	RemovedSize int
 }
 
@@ -1633,20 +1643,6 @@ func (t *Tree) Edit(
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
-
-	// Captured immediately here, before Phase 5 (or anything else below)
-	// mutates the tree -- see PreEditFromIdx's own doc comment for why this
-	// exact point matters. fromLeft has already been through
-	// FindTreeNodesWithSplitText's text-node split, so this resolves the
-	// same visible index `from` names post-split, not the coarser one a
-	// position interior to an unsplit node would collapse to.
-	preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
-	if err != nil {
-		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, info, err
-	}
-	info.PreEditFromIdx = preEditFromIdx
-
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		diff.Add(diffFrom)
@@ -1689,6 +1685,22 @@ func (t *Tree) Edit(
 		}
 	}
 
+	// Captured here, after Phase 3 -- matching JS's own capture point
+	// exactly (crdt/tree.ts:1872, after findNodesAndSplitText(to) and the
+	// split-sibling advance, using the post-advance fromLeft). Phases 2-4 do
+	// not mutate the tree, so this is the latest point before Phase 5
+	// (delete) that still sees the pre-edit tree, and the earliest point
+	// where fromLeft has already been advanced past any concurrent split
+	// products Phase 2 skips -- a position interior to an unsplit node has
+	// already been split by FindTreeNodesWithSplitText above, so this
+	// resolves the visible index `from` names post-split, not the coarser
+	// one a non-splitting resolver would collapse it to.
+	preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
+	if err != nil {
+		return t.drainPendingGCPairs(), diff, info, err
+	}
+	info.PreEditFromIdx = preEditFromIdx
+
 	toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, err := t.collectBetween(
 		collectFromParent, collectFromLeft, toParent, toLeft,
 		editedAt, versionVector,
@@ -1713,13 +1725,7 @@ func (t *Tree) Edit(
 	removed := make([]*TreeNode, 0, len(toBeRemoveds))
 	removedSpans := make([]*TreeRestoreSpan, 0, len(toBeRemoveds))
 	var preTombstoned map[string]struct{}
-	var removedSize int
 	for _, node := range toBeRemoveds {
-		// A node's own PaddedLength does not change when the node itself is
-		// tombstoned (TreeNode.remove only adjusts its ANCESTORS' aggregate),
-		// so this is measured the same way regardless of which branch below
-		// this node falls into -- matching RemovedSize's doc comment.
-		removedSize += node.Index.PaddedLength()
 		if node.remove(editedAt) {
 			pairs = append(pairs, GCPair{
 				Parent: t,
@@ -1735,7 +1741,6 @@ func (t *Tree) Edit(
 		preTombstoned[node.IDString()] = struct{}{}
 	}
 	info.Removed, info.PreTombstoned = removed, preTombstoned
-	info.RemovedSize = removedSize
 
 	// Every pair registered from here on is one the spans do not describe:
 	// merge propagation, content born tombstoned under a removed parent, or a
@@ -1838,6 +1843,27 @@ func (t *Tree) Edit(
 		slices.Reverse(insertedSpans)
 		info.InsertedSpans = insertedSpans
 	}
+
+	// RemovedSize is summed here, last, after every phase (merge, split,
+	// insert) has run -- mirroring JS's timing exactly: JS sums
+	// removedNodes.reduce(paddedSize) after tree.edit() has fully returned
+	// (tree_edit_operation.ts:462-466), not partway through. Timing matters:
+	// toBeRemoveds is in traversal order, parent before children, and a
+	// node's own removal does not zero its own PaddedLength -- only each of
+	// its removed CHILDREN's own remove() calls drain the parent's
+	// aggregate, one child at a time (TreeNode.remove only adjusts its
+	// ancestors, never itself). Measuring a parent element right after
+	// Phase 5's delete loop, before its children lower in toBeRemoveds have
+	// been processed, would double-count: the parent's still-full aggregate
+	// plus each child's own size again. Summing only after every phase has
+	// run — by which point every node in toBeRemoveds, parent or child, has
+	// had its final say in every other node's aggregate — gives each node
+	// exactly the contribution JS's post-edit() measurement gives it.
+	var removedSize int
+	for _, node := range toBeRemoveds {
+		removedSize += node.Index.PaddedLength()
+	}
+	info.RemovedSize = removedSize
 
 	return pairs, diff, info, nil
 }
