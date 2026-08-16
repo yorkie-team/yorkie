@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -284,13 +285,15 @@ func TestTreeEditDroppedCopyDoesNotWidenReverseOperation(t *testing.T) {
 	// edit arrives, so it has to match what the tree accepted.
 	assert.Equal(t, 0, op.GetContentSize(), "an edit whose content was dropped inserted nothing")
 
-	// Redoing must not delete a neighbour that this edit never inserted.
-	if reverseOp != nil {
-		redo, ok := reverseOp.(*operations.TreeEdit)
-		assert.True(t, ok)
-		assert.True(t, redo.FromPos().Equal(redo.ToPos()),
-			"the reverse of an edit that inserted nothing spans nothing")
-	}
+	// Redoing must not delete a neighbour that this edit never inserted. The
+	// reverse is asserted non-nil rather than tested for: a regression that
+	// stopped producing one would otherwise skip the range assertion below and
+	// leave this test green.
+	require.NotNil(t, reverseOp, "a local edit that ran produces a reverse")
+	redo, ok := reverseOp.(*operations.TreeEdit)
+	require.True(t, ok)
+	assert.True(t, redo.FromPos().Equal(redo.ToPos()),
+		"the reverse of an edit that inserted nothing spans nothing")
 }
 
 // TestSplitTextRejectsOutOfRangeOffset covers the guard that keeps an
