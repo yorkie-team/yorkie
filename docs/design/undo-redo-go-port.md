@@ -255,8 +255,8 @@ A single PR, with commits stacked in this order and not squashed:
 | 0 | `OpSource`, `Operation.Execute` and `Change.Execute` signatures, `change.Context` reverse collection, `History`, `Document.Undo/Redo/CanUndo/CanRedo/ClearHistory` | every reverse is nil, **no behavior change**, existing tests green |
 | 1 | Object / Array / Counter reverse operations, presence reverse | `history_array_test.go`, object and counter undo cases |
 | 2 | Text `Edit` / `Style` reverse, `reconcileTextEdit` | `history_text_test.go` (29) |
-| 3 | Tree `TreeEdit` (`splitLevel` 0) / `TreeStyle` reverse, `reconcileTreeEdit` | `history_tree_test.go` (32), `history_tree_concurrent_test.go` (4) |
-| 4 | Tree split `splitLevel` >= 1 | `history_tree_split_test.go` (26) |
+| 3 | Tree `TreeEdit` (`splitLevel` 0) / `TreeStyle` reverse, `reconcileTreeEdit` | `history_tree_test.go` (32), `history_tree_concurrent_test.go` (4, 2 skipped) |
+| 4 | Tree split `splitLevel` >= 1 | `history_tree_split_test.go` (26, 1 skipped) |
 
 Phase 0 isolates the widest and riskiest change — the interface signatures —
 into a step that provably changes nothing.
@@ -273,13 +273,31 @@ unrelated, so there is no name collision.
 | `history_text_test.ts` | `test/integration/history_text_test.go` | 29 (2 skipped) |
 | `history_tree_test.ts` | `test/integration/history_tree_test.go` | 32 |
 | `history_tree_concurrent_test.ts` | `test/integration/history_tree_concurrent_test.go` | 4 (2 skipped) |
-| `history_tree_split_test.ts` | `test/integration/history_tree_split_test.go` | 26 |
+| `history_tree_split_test.ts` | `test/integration/history_tree_split_test.go` | 26 (1 skipped) |
 | undo cases in `object_test.ts`, `counter_test.ts` | corresponding Go files | — |
 | `undo_copy_path_test.ts`, `undo_content_identity_test.ts`, and other unit tests | under `pkg/document/` | — |
 
-The four tests JS skips are ported as `t.Skip("KNOWN: ...")` carrying the same
-reason. Test count is the divergence check: a test present in JS and absent in
-Go is a gap.
+Five tests are currently skipped in JS as of `fa6cc513` (2026-08-09), all
+carried over verbatim as `t.Skip("KNOWN: ...")` / `t.Skip("...")` with the
+same reason, not fixed in Go:
+
+- `history_text_test.ts:705`, `:742` — "Case 3/5 correctness" (overlapping
+  undo content duplication; see `undo-redo.md`'s "Analysis: Overlapping Undo
+  Content Duplication").
+- `history_tree_concurrent_test.ts:143`, `:186` — "KNOWN: delete a whole
+  `<p>` vs edit text inside it, both undo" and "KNOWN: delete two `<p>` vs
+  edit inside first, both undo (segmentation)". Confirmed still skipped as of
+  `fa6cc513` — unaffected by that commit, which fixed a different case (see
+  `undo-redo.md`'s Tree reconciliation Cases 3-6 note).
+- `history_tree_split_test.ts:800-802` — the `split-l2 → split-l2` undo
+  chain, `TODO(#1235)`: "the boundary-deletion reverse op doesn't correctly
+  restore the state when two consecutive L2 splits produce tombstoned
+  structure."
+
+**Do not un-skip any of these unilaterally when porting.** Test count is the
+divergence check: a test present in JS and absent in Go is a gap; a test
+skipped in JS and un-skipped in Go without independently confirming and
+fixing the same defect in JS first is a port that has silently diverged.
 
 ### Risks and Mitigation
 

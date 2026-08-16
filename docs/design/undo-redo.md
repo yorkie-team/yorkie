@@ -29,8 +29,21 @@ SDK is covered by [undo-redo-go-port.md](undo-redo-go-port.md).
 ### Non-Goals
 
 - Server-side undo/redo or global history browsing.
-- Overlapping range reconciliation for Tree (Cases 3–6, deferred to Phase 2).
 - Undo/redo for `TreeStyleOperation` with multi-client reconciliation (single-client undo/redo is now supported via PR #1221).
+
+> **Resolved, 2026-08-09 (`fa6cc513`):** this document originally listed
+> "overlapping range reconciliation for Tree (Cases 3–6)" as a non-goal
+> deferred to a future "Phase 2" (see "Phase 2: Overlapping Range
+> Reconciliation" below for the reasoning that was current at the time).
+> Identity-preserving restore for Tree undo/redo landed instead, and made the
+> Phase 2 index-arithmetic work unnecessary for ordinary edits: a
+> merge- and split-free edit's reverse now revives/re-removes nodes by
+> original identity rather than by the asymmetric integer positions Phase 2
+> was trying to reconcile, so `reconcileOperation`'s own guard skips index
+> reconciliation for it entirely. `fa6cc513` un-skipped Cases 3, 4, 5, and 6
+> in `history_tree_test.ts` the same day. The Phase 2 section and the "Risk:
+> Asymmetric reconciliation" note below are kept for the reasoning they
+> record, not as a description of current behavior.
 
 ## Proposal Details
 
@@ -367,7 +380,20 @@ filtering, and the test matrix.
 nodes, the recomputation must explicitly skip removed children to avoid inflating
 the parent's size when tombstoned text nodes are present in the left partition.
 
-#### Phase 2: Overlapping Range Reconciliation
+#### Phase 2: Overlapping Range Reconciliation (superseded, see note)
+
+> **This section describes the reasoning current before `fa6cc513`
+> (2026-08-09) landed identity-preserving restore for Tree undo/redo.**
+> Reconciling overlapping ranges by integer index is still exactly as
+> asymmetric as described below, but a merge- and split-free edit's reverse
+> no longer needs that reconciliation to converge: it revives/re-removes
+> nodes by original identity instead, and `reconcileOperation`'s own guard
+> skips the index arithmetic entirely for an identity-addressed op. The
+> integer-index asymmetry below only still applies to the copy-reinsert
+> fallback (an edit that merged, split, or registered a GC pair past the
+> plain delete loop — see `TreeEditReverseInfo.SpansComplete` in the Go
+> port), which is not what an ordinary single-range Tree edit produces. Kept
+> for the reasoning; not a description of current behavior for Cases 3–6.
 
 The integer-index approach for Tree is **asymmetric** across clients for
 overlapping ranges (Cases 3–6). Unlike Text, where `normalizePos()` walks the
@@ -375,7 +401,8 @@ physical RGA chain (identical on all clients), Tree's visible indices depend on
 local tombstone state, which differs between clients after concurrent deletions.
 
 This means overlapping reconciliation cases may produce divergent results. These
-cases are deferred to Phase 2, which will require either:
+cases were deferred to a "Phase 2" that never happened, which would have required
+either:
 - A tree-native `normalizePos()` that walks the CRDT node chain (analogous to
   Text's RGA chain walking), or
 - A different position representation that is symmetric across clients.
@@ -454,11 +481,15 @@ this edit actually transitioned from visible to tombstoned are resurrected
 on redo. This preserves CRDT identity and concurrent-edit semantics — the
 fix is purely in `toReverseOperation`.
 
-**Risk: Asymmetric reconciliation for overlapping Tree edits.**
-As described in Phase 2, overlapping range reconciliation for Tree uses
-asymmetric integer indices. Mitigation: Cases 3–6 are skipped in Phase 1. The
-non-overlapping cases (1, 2) and the adjacent case (7) cover the majority of
-real-world undo/redo scenarios.
+**Risk: Asymmetric reconciliation for overlapping Tree edits (superseded).**
+As described in "Phase 2: Overlapping Range Reconciliation" above, overlapping
+range reconciliation for Tree uses asymmetric integer indices. Resolved by
+identity-preserving restore (`fa6cc513`, 2026-08-09) for ordinary edits, which
+never reach this arithmetic; the asymmetry described here is still real for
+the copy-reinsert fallback (merge/split-adjacent edits), which is what
+`fa6cc513` un-skipped Cases 3–6 in `history_tree_test.ts` without needing to
+fix — those tests never exercise the fallback path either. Cases 1, 2, and 7
+(the non-overlapping and adjacent cases) never depended on this mitigation.
 
 **Risk: Stack overflow from deep undo chains.**
 The undo and redo stacks are capped at 50 entries (`MaxUndoRedoStackDepth`).
@@ -480,13 +511,13 @@ Oldest entries are evicted when the cap is reached.
 | TreeStyleOperation multi-client | ✅ | style×style (18 tests), style×edit/split (24 tests) (PR #1221) |
 | Tree redo divergence | ✅ | Fixed via CRDTTreePos-based undo execution + reconciliation disabled (branch `tree-undo-pos-normalization`) |
 | Tree reverseOp descendant filtering | ✅ | `preTombstoned` set returned from `CRDTTree.edit()` and consumed by `toReverseOperation` — drops already-tombstoned descendants from `reverseContents` so nested edits (typing inside a later-deleted parent) don't accumulate across undo/redo cycles |
+| Tree reconciliation Cases 3-6 | ✅ (2026-08-09, `fa6cc513`) | Un-skipped by identity-preserving restore, not by the index-arithmetic work this document's "Phase 2" section proposed — see the note there. Ordinary ranges never reach the arithmetic; the copy-reinsert fallback's asymmetry (still real) just isn't what these tests exercise. |
 
 #### Remaining Work
 
 | Priority | Item | Details |
 |----------|------|---------|
 | HIGH | Overlapping undo content duplication | Both Text and Tree produce duplicate content when overlapping deletes are both undone. Text converges but content is wrong; Tree diverges. See analysis below. |
-| HIGH | Tree reconciliation Cases 3-6 | Blocked by overlapping undo content duplication — same root cause. 4 tests skipped. |
 | HIGH | Array Set + Move undo | Set after Move restores value at dead position. Requires proto change. See analysis below. 4 tests skipped in JS SDK. |
 | MED | GC vs undo interaction | Issue #664. GC can purge elements still referenced by undo/redo stack. |
 | LOW | History reconciliation performance | O(n) stack scan → indexed lookup. |
