@@ -125,14 +125,22 @@ func collectGarbage(t *testing.T, doc *document.Document) int {
 	return doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 }
 
-// pushCopyReinsertReverse deletes [from, to) for real, then replaces the
-// identity-preserving reverse that delete would ordinarily push with a
-// hand-built copy-reinsert one: a TreeEdit whose Contents are the just-removed
-// nodes, deep-copied under their ORIGINAL ids via CloneForReinsert -- the
-// same shape TreeEdit.toReverseOperation's fallback produces when a merge, a
-// split, or a wire payload from an older SDK leaves SpansComplete false.
+// pushCopyReinsertReverse deletes [from, to) for real, then PUSHES A SECOND,
+// hand-built copy-reinsert reverse ON TOP of the identity-preserving one the
+// delete itself already pushed (editTree -> doc.Update -> document.go:286-288).
+// It does not replace anything: the undo stack ends up two entries deep,
+// where JS's equivalent scenario has one. Harmless for the two tests that use
+// this helper, since each calls Undo()/Redo() exactly once and only ever
+// touches the top entry -- but that means the pushed-and-immediately-shadowed
+// identity reverse underneath is never exercised by these tests, and a caller
+// adding a second Undo() here would hit that shadowed entry, not another
+// copy-reinsert cycle.
 //
-// This is Go's answer to the JS port's forceCopyPath: JS monkey-patches
+// The pushed entry is a TreeEdit whose Contents are the just-removed nodes,
+// deep-copied under their ORIGINAL ids via CloneForReinsert -- the same shape
+// TreeEdit.toReverseOperation's fallback produces when a merge, a split, or a
+// wire payload from an older SDK leaves SpansComplete false. This is Go's
+// answer to the JS port's forceCopyPath: JS monkey-patches
 // CRDTTree.prototype.edit to blank the identity spans CRDTTree.edit returns,
 // isolating "does a real Undo/Redo correctly reissue ids and restore content
 // when it takes the copy path" from the (unrelated) question of which real
@@ -141,6 +149,16 @@ func collectGarbage(t *testing.T, doc *document.Document) int {
 // operation the fallback would have built and pushing it directly onto the
 // undo stack (PushUndoForTest), then letting a real Undo() execute it through
 // the ordinary executeUndoRedo path -- ReissueContentIDs included.
+//
+// Simplified relative to the real fallback in two ways that only hold because
+// every caller here is a flat, single-level, freshly built document with no
+// pre-existing tombstones: it clones every node with a non-nil RemovedAt
+// rather than applying the real fallback's topLevelRemoved parent filter
+// (reverseContents), and it passes CloneForReinsert a nil preTombstoned set
+// rather than the real preTombstoned collected during Tree.Edit. A caller
+// reusing this helper against a document that already has tombstones before
+// the delete this helper performs would need both of those, not just the
+// span-dropping this helper actually tests.
 func pushCopyReinsertReverse(t *testing.T, doc *document.Document, from, to int) {
 	t.Helper()
 

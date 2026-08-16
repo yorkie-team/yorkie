@@ -257,7 +257,14 @@ part of Task 21 except where marked.
 - Rejecting a negative `splitLevel` (Task 19) applies new strictness
   retroactively to stored changes via the shared decode path — open
   question: does any already-persisted change carry one? Needs a
-  production data audit before merge, not a code decision.
+  production data audit before merge, not a code decision. **The Task 21
+  Critical 3 fix below (rejecting a nil attribute `updatedAt` on a Tree
+  restore span) has the identical shape and belongs in the same audit**:
+  `converter.FromOperations` is also what
+  `server/backend/database/change_info.go:119`'s `ChangeInfo.ToChange` uses
+  to decode a *stored* change, so a change persisted before this fix with a
+  nil attribute `updatedAt` would now make that document permanently
+  unloadable, the same way a stored negative `splitLevel` would.
 
 ### Text / CRDT layer
 

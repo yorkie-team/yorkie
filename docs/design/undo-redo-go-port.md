@@ -323,7 +323,16 @@ to port-as-is; it is a hardening gap to close), **fixed rather than filed**:
 id/parent/sibling checks. Pinned by a new subtest, "nil attribute
 updatedAt", in `TestTreeRestoreSpanRejectsNilCreatedAt`
 (`api/converter/converter_tree_restore_test.go`) — RED (no error returned)
-confirmed before the fix, GREEN after.
+confirmed before the fix, GREEN after. **This is not only the server's
+inbound-wire path**: `converter.FromOperations` is the same decoder
+`server/backend/database/change_info.go:119`'s `ChangeInfo.ToChange` uses
+to materialize a *stored* change, so the new strictness applies
+retroactively — a change persisted before this fix with a nil attribute
+`updatedAt` would now make that document permanently unloadable. Same
+shape as, and folded into, the negative-`splitLevel` stored-data audit
+question in the "Rejecting a negative `splitLevel`..." entry of
+[20260816-remote-redo-replica-divergence-todo.md](../tasks/active/20260816-remote-redo-replica-divergence-todo.md);
+the pre-merge audit there should cover both checks.
 
 **Counting method.** These files build many of their cases through
 parameterized loops (`for (const op of ops) { it(...) }`, nested Cartesian

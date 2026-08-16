@@ -515,6 +515,13 @@ func (d *Document) RedoStackTopForTest() []HistoryOperation {
 // property under test the way JS's tests do by monkey-patching CRDTTree.edit.
 // A subsequent Undo() call executes ops for real, through the same
 // executeUndoRedo path (ReissueContentIDs included) as any other undo.
+//
+// Unlike its ForTest neighbours above, which only read the stacks, this one
+// mutates them -- deliberately: pushing is the only way to get a fabricated
+// reverse in front of a real Undo() at all. Calling it does not pop or
+// replace whatever the document's own forward edits already pushed, so a
+// caller that wants its fabricated entry to be the *only* one Undo() can
+// reach needs to account for what else is already on the stack.
 func (d *Document) PushUndoForTest(ops []HistoryOperation) {
 	d.history.PushUndo(ops)
 }

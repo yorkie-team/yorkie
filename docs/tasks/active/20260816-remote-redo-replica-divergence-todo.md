@@ -698,6 +698,18 @@ ever have produced one — `json.Tree`'s four edit entry points now refuse it
 the caller's value through the same way Go used to — but "should never" is not
 an audit. This needs a query over stored changes before it reaches production.
 
+**Same shape, second check (Task 21):** `fromTreeRestoreSpans`
+(`api/converter/from_pb.go`) now also rejects a Tree restore span attribute
+with a nil `updatedAt` — a genuine Go-only validation gap versus JS, fixed
+rather than filed (see `docs/design/undo-redo-go-port.md`'s "Critical 3"
+note) — through the identical shared decoder
+(`converter.FromOperations` → `server/backend/database/change_info.go:119`'s
+`ChangeInfo.ToChange`). The same question applies: does any change persisted
+before this fix carry a Tree restore span with a nil attribute `updatedAt`?
+If so, that document is now permanently unloadable the same way a stored
+negative `splitLevel` would be. Roll into the same audit pass rather than
+running two.
+
 ### Blast radius if one exists
 
 Not a dropped operation — a wedged client. `FromChangePack` propagates the
@@ -711,6 +723,8 @@ every client, since the read path shares the decoder.
 - [ ] Audit stored changes for a negative `split_level` on any `TreeEdit`
       operation (both the change log and any snapshot-embedded operations),
       across every deployed backend, before this ships
+- [ ] In the same pass, audit stored changes for a Tree restore span
+      attribute with a nil `updated_at` (the Task 21 Critical 3 check)
 - [ ] If any exist, decide the remediation: a one-time migration rewriting
       them to 0, versus a read-path-only tolerance that keeps the wire path
       strict. Note that a read-path-only exception reintroduces the value into
