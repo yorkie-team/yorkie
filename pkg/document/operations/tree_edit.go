@@ -392,6 +392,11 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 // and neither builder produces that, so it gets no reverse rather than a
 // partial one.
 //
+// That last case silently loses an undo-stack entry -- Document.Update pushes
+// only when a change produced at least one reverse -- so the next Undo reverts
+// the edit before it. JS behaves identically and this is left as parity; see
+// docs/tasks/active/20260816-tree-split-edit-loses-undo-entry-todo.md.
+//
 // The purity test reads e.contents, the content this operation carries, rather
 // than the accepted copy Execute passes down -- the two have the same length
 // (Tree.Edit drops duplicates from its own copy of the slice, not from the

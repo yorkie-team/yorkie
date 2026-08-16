@@ -323,6 +323,12 @@ func (d *Document) CanRedo() bool {
 
 // Undo reverses the last local change. It is a no-op when the undo stack is
 // empty.
+//
+// Known limitation, shared with the JS SDK: a Tree edit that splits (a
+// non-zero splitLevel) AND inserts or removes in the same call produces no
+// reverse operation, so it never reaches the undo stack. Undo then reverses
+// the change before it while leaving that edit applied. See
+// docs/tasks/active/20260816-tree-split-edit-loses-undo-entry-todo.md.
 func (d *Document) Undo() error {
 	return d.executeUndoRedo(true)
 }

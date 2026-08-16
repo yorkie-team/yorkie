@@ -186,11 +186,27 @@ independent ways against the pinned JS source, is 135.
 **Grand total: 385 JS instances, 385 Go instances (7 skipped: 4 array + 2 tree
 concurrent + 1 tree split), 0 unaccounted gaps.**
 
-No file has any test present in JS with no Go counterpart, or vice versa
-beyond the two named pre-existing, non-JS-sourced Go additions
-(`TestHistoryTreeConcurrentUndo`, `TestHistoryTreeGCSymmetryAndAnchorFallback`
-— the latter is itself one of the 135 JS-matched instances, ported from JS's
-"GC symmetry and anchor fallback" `describe` block, not extra).
+No file has any test present in JS with no Go counterpart. The reverse is not
+absolute, and the earlier phrasing here ("or vice versa beyond the two named
+additions") overstated it. The Go-only tests are:
+
+- `TestHistoryTreeConcurrentUndo` (`history_tree_concurrent_test.go`) —
+  pre-existing, non-JS-sourced, 2 subtests, excluded from both totals
+- `TestHistoryClearOnAttach` (`history_array_test.go`) — Go-only, pins
+  yorkie-js-sdk #1238. Missed by the original audit because that file's 85
+  leaves were compared against its 84 JS-sourced ones as a single figure
+- `TestHistorySkippedUndo` (`history_test.go`) — Go-only, added by the
+  whole-branch review to pin that a fully skipped undo propagates nothing
+- `TestHistoryTreeGCSymmetryAndAnchorFallback` is **not** an addition: it is
+  one of the 135 JS-matched instances, ported from JS's "GC symmetry and
+  anchor fallback" `describe` block. The earlier phrasing listed it as one of
+  "two additions" and then immediately contradicted itself in the same
+  parenthesis
+
+The 385↔385 grand total is unaffected — every entry above is already excluded
+from or already counted in it. What was wrong was the claim's absoluteness,
+and the per-file leaf comparison that let a Go-only test hide inside a
+file-level count.
 
 ## Phase 0 behavior-neutrality: did it hold?
 

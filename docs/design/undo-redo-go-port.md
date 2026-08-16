@@ -57,7 +57,7 @@ port feasible:
 | | JS | Go |
 |---|---|---|
 | Proxy | applies to clone, then `ctx.push(op)` | same (`p.context.Push`) |
-| Apply | `change.execute(this.root, ...)` → `{opInfos, operations, reverseOps}` | `c.Execute(d.doc.root, ...)` → `error` |
+| Apply | `change.execute(this.root, ...)` → `{opInfos, operations, reverseOps}` | `c.Execute(d.doc.root, ...)` → `error` before this port; `(executed, reverseOps, error)` after it |
 | History | `Document.internalHistory` | **missing** |
 
 Reverse operations are produced at the same point in both: the moment a change
@@ -101,16 +101,18 @@ func (c *Change) Execute(
 ```
 
 The blast radius is small. `op.Execute` has exactly one production caller
-(`change.go:56`), and `Change.Execute` has three:
+(`Change.Execute`), and `Change.Execute` itself has these:
 
 | Caller | Role | Uses |
 |---|---|---|
-| `document.go:235` | local `Update`, real root | `reverseOps` → undo stack |
-| `document.go:303` | `applyChanges`, clone | discards both |
-| `internal_document.go:317` | remote changes, real root | `executed` → reconciliation |
+| `Document.Update` | local edit, real root | `executed` → `ReconcileCreatedAt`, `reverseOps` → undo stack |
+| `Document.executeUndoRedo` | undo/redo, clone then real root | clone call discards both; real-root call uses `executed` for the empty-change early return and `reverseOps` for the opposite stack |
+| `Document.applyChanges` | remote changes, clone | discards both |
+| `InternalDocument.ApplyChanges` | remote changes, real root | `executed` → reconciliation |
 
 Server code only calls `Change.Execute`, so the added return values are ignored
-with `_` and the added `source` argument is always `OpSourceRemote`.
+with `_` and the added `source` argument is always `OpSourceRemote`. Line
+numbers are deliberately omitted here; they went stale within the port itself.
 
 Two behaviors must match JS exactly:
 
@@ -121,6 +123,18 @@ Two behaviors must match JS exactly:
    `execute` returns `undefined` — the target element was removed while
    executing undo/redo — the operation is skipped and omitted from the executed
    list. Go must mirror this rather than propagating an error.
+
+   As shipped, `Set.Execute` and `Remove.Execute` return the sentinel
+   `operations.ErrOperationSkipped` at their skip sites and `Change.Execute`
+   drops such an operation with `continue`, exactly where JS has
+   `if (!executionResult) continue;`. A plain `(nil, nil)` return is not
+   enough: it is indistinguishable from "executed, no reverse", which leaves
+   a fully skipped undo looking like a real change. `Document.executeUndoRedo`
+   would then queue and ship it, and peers would run it under
+   `OpSourceRemote` where the skip guard does not apply — content still
+   converges, but `DocSize` diverges permanently, and `DocSize` gates
+   `MaxSizeLimit`. Pinned by
+   `TestHistorySkippedUndo` in `test/integration/history_test.go`.
 
 ### Layer 2: CRDT return values
 
@@ -147,6 +161,22 @@ need widened return values on `Edit`, `Style`, and `RemoveStyle`. These methods
 are on the server path too, but every change is an *added* return value that
 existing callers discard, so the semantic risk is low even though the mechanical
 reach is wide.
+
+The *cost* risk is not low, and the port paid it before catching it. A
+discarded return value is free; **computing** one is not. `Edit.Execute`
+normalizes its anchor with `Text.NormalizePos`, which walks the whole physical
+`prev` chain — linear per change, quadratic over a replay of a document's
+entire change history, which is precisely what
+`packs.BuildInternalDocForServerSeq` does on every snapshot, compaction and
+cache-missing push-pull. Replaying 1600 text edits went from 1.34 ms to
+22.8 ms. So the rule is stronger than "added returns are discarded safely":
+**a reverse operation must not be built at all when the source is
+`OpSourceRemote`**, since every remote caller provably discards it.
+`Edit.Execute` skips both `NormalizePos` and `toReverseOperation`;
+`TreeEdit.Execute` skips only `selectReverseOperation`, because
+`lastFromIdx`/`lastToIdx`/`insertedContentSize` are read off remote operations
+by the reconciliation loop. `BenchmarkChangeReplay` (`test/bench`) exists to
+keep this from returning silently.
 
 The reverse operation *payload* types already exist in Go — `RestoreMode`,
 `restoreSpans`, and `retombstoneSpans` on `operations.Edit` and
@@ -512,6 +542,9 @@ for whoever picks them up next.
 | Risk | Mitigation |
 |------|------------|
 | Widened CRDT return values reach server code | Every change is an added return value; servers discard with `_`. Phase 0 proves zero behavior change first |
+| **Cost**, not semantics, of the widened returns: building a reverse the server discards turned change replay from O(N) into O(N²). `Edit.Execute`'s `NormalizePos` walks the whole physical `prev` chain, so `InternalDocument.ApplyChanges` over 1600 text edits went 1.34 ms → 22.8 ms, on the path every snapshot, compaction and cache-missing push-pull takes | Reverse construction gated on `source != OpSourceRemote` in `Edit.Execute` and `TreeEdit.Execute` (`TreeEdit` still sets `lastFromIdx`/`lastToIdx`/`insertedContentSize`, which the reconciliation loop reads). Restores 1.44 ms. `BenchmarkChangeReplay` in `test/bench` guards the regression |
+| A `TreeEdit` with `splitLevel > 0` that is not a pure split gets no reverse operation at all, so `Document.Update` pushes nothing and the undo stack silently loses an entry. The next `Undo` then reverts the edit *before* it, leaving the split applied and deleting the earlier edit's content — no error, `CanUndo()` true throughout. Reachable from plain single-client editing on a GC-enabled document | Faithful port: JS's gate is identical (`tree_edit_operation.ts:470-487`, `reverseOp` left `undefined`). Left as parity and filed as [20260816-tree-split-edit-loses-undo-entry-todo.md](../tasks/active/20260816-tree-split-edit-loses-undo-entry-todo.md). A no-op sentinel push was considered and rejected: it only defers the same scrambled outcome by one `Undo` press while diverging `CanUndo`/stack depth from JS |
+| Persisted data: a combined-field `Style`/`TreeStyle` reverse stored before this port's `fromStyle` (Task 11) and `fromTreeStyle` (Task 16) decode fixes was written under an exclusive decode that silently dropped one of the two fields. A snapshot rebuilt from stored history after this deploy can therefore disagree with one cached before it, for any document that used Text or Tree style undo. JS has emitted combined ops since #1174 (2026-02-13, v0.6.49) for Text and #1221 (2026-04-17) for Tree, so "no legacy combined-field op can exist on the wire" is false | The new decode is the correct one; no migration planned. Documented under "Persisted-data note" below, and for the Tree half in [20260816-tree-style-combined-reverse-dropped-todo.md](../tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md) |
 | Calling `Undo` inside an updater deadlocks instead of erroring — `Update` holds `d.mu`, whereas JS throws `ErrRefused` | An `updating atomic.Bool` set on entry to `Update`, checked by `Undo` / `Redo` **before** acquiring the lock, returning `ErrRefusedDuringUpdate` |
 | Single PR is large (4,000+ lines of tests alone) | Commits stacked in phase order, never squashed |
 | GC purging elements the undo stack still references (#664) | Left broken identically in both SDKs |
@@ -521,12 +554,46 @@ for whoever picks them up next.
 | `Presence.Initialize` (attach-time presence) leaves `Document.clonePresences` stale, so a later `Update`'s `Set` on a different key drops the attach-time key. Found during Task 7; the Go twin of JS's tracked `#608` (`document.ts:2068-2069`) | Worked around in Task 7's tests rather than fixed; filed in the same document above |
 | Undoing a newly-introduced presence key: Go's `ReversePresence` sends the zero value (`""`) for a key absent from the snapshot; JS's `undefined` is dropped by `JSON.stringify` before the wire, removing the key instead. A genuine Go/JS divergence, not yet reconciled | Pinned, not fixed, by a characterization test in `pkg/document/history_test.go`; filed in the same document above |
 
+### Persisted-data note: combined-field Style decode
+
+Task 11 fixed `fromStyle` (`api/converter/from_pb.go`) and Task 16 fixed
+`fromTreeStyle`, both of which decoded exclusively — `AttributesToRemove` took
+priority and `Attributes` was silently dropped — where the operation really
+carries both. Both now decode combined ops via `NewStyleSetAndRemove` /
+`NewTreeStyleSetAndRemove`.
+
+Task 11's record justified the Text fix in part with "no legacy combined-field
+`Style` op can exist on the wire, so no backward-compat regression." **That
+claim is false**, and it is corrected here rather than left standing. JS's
+`toStyle` (`converter.ts:558-566`) writes both fields, and JS's Style reverse
+builder has emitted combined ops since PR #1174 (2026-02-13, released
+v0.6.49) for Text and PR #1221 (2026-04-17) for Tree. So combined-field Style
+and TreeStyle operations have been on the wire, and in stored change logs, for
+months.
+
+The consequence is the same one the Tree half already documents: a snapshot
+rebuilt from stored history **after** this deploy can disagree with one cached
+**before** it, for any document that used Text or Tree style undo — the old
+decode materialized a removal-only operation, the new decode recovers both
+fields. `api/converter/from_pb.go` is reached from `ChangeInfo.ToChange` as
+well as from the RPC path, so the new strictness is retroactive over stored
+changes, not only over new writes.
+
+The new decode is the correct one and no migration is planned. This note
+exists so it is not rediscovered as a mystery during a future compaction or
+snapshot-rebuild investigation. See
+[20260816-tree-style-combined-reverse-dropped-todo.md](../tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md)
+for the Tree half and for the separate execute-side defect that determines
+what the recovered `Attributes` field then does.
+
 ### Design Decisions
 
 | Decision | Reason |
 |----------|--------|
 | Reverse operation returned from `Execute` | Matches where JS produces it — against the real root, after the mutation. Any other seam would need the prior state captured twice |
 | `OpSource` added to `Execute` | `Set` and `Remove` genuinely behave differently under undo. Omitting it would force a hidden flag on the operation |
+| No reverse operation built under `OpSourceRemote` | Every remote caller provably discards it, and building one for `Edit` costs a full `prev`-chain walk. This is a Go-only shortcut with no wire or behavioral effect; JS has no equivalent because its clients never replay a whole document's history |
+| A skip is a sentinel error, not `(nil, nil)` | `(nil, nil)` cannot be told apart from "executed, no reverse". JS distinguishes them structurally (`undefined` result vs. `{reverseOp: undefined}`); Go needs `ErrOperationSkipped` to say the same thing |
 | `Document` methods rather than a `doc.History()` object | Idiomatic Go, and keeps mutex handling in one place. The JS shape is a JS convention, not behavior |
 | `HistoryOperation` as a nil-discriminated struct | Closest readable analogue to JS's union; an interface with two implementations adds ceremony for no gain |
 | Port JS's known defects as-is | The goal is parity. A one-sided fix widens the gap |
