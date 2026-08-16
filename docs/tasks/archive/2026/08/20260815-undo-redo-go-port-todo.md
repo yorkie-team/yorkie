@@ -1383,7 +1383,7 @@ t.Run("Case 3 correctness: both undo of overlapping deletes should restore origi
 - [x] **Step 4: Count check**
 
 Run: `grep -c "t.Run(" test/integration/history_text_test.go`
-Expected: 29 — matching `grep -c "it(" ` on the JS file.
+Expected: 29 — matching `grep -c "it("` on the JS file.
 
 - [x] **Step 5: Commit** — `Port the Text history tests from the JS SDK`
 

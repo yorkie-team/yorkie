@@ -2,21 +2,24 @@
 # job there is skipped on exactly the pull requests this check exists to
 # police. Adding a step to that workflow would look like coverage and provide
 # none.
+#
+# NO PATH FILTER, deliberately. Filtering to `**/*.md` is the obvious economy
+# and it is wrong: a link breaks when its TARGET moves, and targets are not
+# only markdown. packages/cli-style READMEs cite source files, and deleting a
+# cited `.ts` or renaming a directory breaks a link without touching a single
+# `.md`. The job installs Node and reads text — seconds — so filtering buys
+# nothing worth a hole in the one check that watches links.
 name: Docs
 
 on:
   push:
     branches: [main]
-    paths:
-      - "**/*.md"
-      - "scripts/verify-doc-links.mjs"
-      - ".github/workflows/docs.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "**/*.md"
-      - "scripts/verify-doc-links.mjs"
-      - ".github/workflows/docs.yml"
+
+# Read-only: this job needs the tree and nothing else.
+permissions:
+  contents: read
 
 jobs:
   doc-links:
@@ -25,6 +28,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # No workflow step here talks to the API, so leaving the token in
+          # .git/config would be a credential nothing needs.
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -33,3 +40,8 @@ jobs:
 
       - name: Verify documentation links
         run: node scripts/verify-doc-links.mjs
+
+      # The glob, not the directory: `node --test scripts/test/` tries to load
+      # the directory as a module and dies with MODULE_NOT_FOUND.
+      - name: Test the link checker
+        run: node --test 'scripts/test/**/*.test.mjs'
