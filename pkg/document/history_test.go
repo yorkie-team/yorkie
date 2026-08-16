@@ -17,6 +17,9 @@
 package document_test
 
 import (
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,6 +56,41 @@ func TestHistoryStack(t *testing.T) {
 			return doc.ClearHistory()
 		})
 		assert.ErrorIs(t, err, document.ErrRefusedDuringUpdate)
+	})
+
+	t.Run("concurrent updates keep the updating flag owned test", func(t *testing.T) {
+		// The updating flag must be true only while the owning goroutine
+		// holds d.mu. Raised before the lock instead, a second Update could
+		// lower it on its way out while the first is still inside its
+		// updater, and the first's re-entrant Undo would then miss the guard
+		// and block on the mutex it already holds.
+		doc := document.New("d1")
+		var wg sync.WaitGroup
+		errs := make([]error, 8)
+		for i := range errs {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				errs[idx] = doc.Update(func(root *json.Object, p *presence.Presence) error {
+					// Every updater re-enters; each must be refused rather
+					// than deadlock, however the goroutines interleave.
+					if err := doc.Undo(); !errors.Is(err, document.ErrRefusedDuringUpdate) {
+						return fmt.Errorf("undo returned %v", err)
+					}
+					if err := doc.ClearHistory(); !errors.Is(err, document.ErrRefusedDuringUpdate) {
+						return fmt.Errorf("clear history returned %v", err)
+					}
+					assert.False(t, doc.CanUndo())
+					assert.False(t, doc.CanRedo())
+					root.SetNewCounter(fmt.Sprintf("c%d", idx), int64(0))
+					return nil
+				})
+			}(i)
+		}
+		wg.Wait()
+		for _, err := range errs {
+			assert.NoError(t, err)
+		}
 	})
 
 	t.Run("stack depth is capped test", func(t *testing.T) {

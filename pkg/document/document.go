@@ -146,9 +146,11 @@ type Document struct {
 	history *History
 
 	// updating reports whether an updater passed to Update is currently
-	// running. It is set before d.mu is locked and read before d.mu is
-	// locked, so Undo and Redo can refuse a re-entrant call from inside an
-	// updater instead of deadlocking on the mutex the updater already holds.
+	// running. Update raises it only while holding d.mu and lowers it before
+	// releasing d.mu, so it is true exactly when some goroutine is inside an
+	// updater with d.mu held. Undo, Redo and ClearHistory read it without
+	// the lock and refuse rather than deadlock on the mutex that goroutine
+	// already holds.
 	updating atomic.Bool
 
 	// presenceDroppedOnce ensures the warn-log issued when a presenceless
@@ -186,15 +188,19 @@ func (d *Document) Update(
 	updater func(root *json.Object, p *Presence) error,
 	msgAndArgs ...interface{},
 ) error {
-	// NOTE(hackerwins): This must be set before d.mu.Lock() so that a
-	// re-entrant Undo/Redo call from inside the updater observes it before
-	// blocking on the mutex this goroutine already holds; otherwise it would
-	// deadlock instead of returning ErrRefusedDuringUpdate.
-	d.updating.Store(true)
-	defer d.updating.Store(false)
-
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	// NOTE(hackerwins): The flag is raised only after d.mu is acquired and,
+	// because deferred calls run last-in-first-out, lowered again before
+	// d.mu is released. It therefore means exactly "this goroutine is inside
+	// an updater and holds d.mu", which is what lets a re-entrant Undo,
+	// Redo or ClearHistory refuse instead of deadlocking. Raising it before
+	// the lock would let a second Update lower it on its way out while the
+	// first is still inside its updater, and the first's re-entrant Undo
+	// would then read false and block on the mutex it already holds.
+	d.updating.Store(true)
+	defer d.updating.Store(false)
 
 	if d.doc.status == StatusRemoved {
 		return ErrDocumentRemoved
