@@ -447,7 +447,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		splitTickets = append(splitTickets, issued)
 		return issued
 	}
-	pairs, diff, _, _, err := t.Tree.Edit(
+	pairs, diff, _, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,

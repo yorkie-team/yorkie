@@ -514,7 +514,7 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
 		p2Node.SetRemovedAt(helper.TimeT(ctx))
 		content := crdt.NewTreeNode(helper.PosT(ctx), "b", nil)
-		_, _, _, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
+		_, _, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
 			helper.TimeT(ctx), issueTicket(ctx), nil)
 		assert.NoError(t, err)
 
@@ -1067,13 +1067,13 @@ func TestTreeEditReturnsRemoved(t *testing.T) {
 	require.NoError(t, err)
 	toBC, err := tree.FindPos(4)
 	require.NoError(t, err)
-	_, _, bcRemoved, bcPreTombstoned, err := tree.Edit(
+	_, _, bcInfo, err := tree.Edit(
 		fromBC, toBC, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil,
 	)
 	require.NoError(t, err)
-	require.Empty(t, bcPreTombstoned)
-	require.Len(t, bcRemoved, 1)
-	bcNode := bcRemoved[0]
+	require.Empty(t, bcInfo.PreTombstoned)
+	require.Len(t, bcInfo.Removed, 1)
+	bcNode := bcInfo.Removed[0]
 	require.Equal(t, "bc", bcNode.String())
 	require.Equal(t, "<r><p>ade</p></r>", tree.ToXML())
 
@@ -1086,9 +1086,10 @@ func TestTreeEditReturnsRemoved(t *testing.T) {
 	toP, err := tree.FindPos(5)
 	require.NoError(t, err)
 	outerAt := helper.TimeT(ctx)
-	_, _, removed, preTombstoned, err := tree.Edit(
+	_, _, info, err := tree.Edit(
 		fromP, toP, nil, 0, outerAt, issueTicket(ctx), nil,
 	)
+	removed, preTombstoned := info.Removed, info.PreTombstoned
 	require.NoError(t, err)
 	require.Equal(t, "<r></r>", tree.ToXML())
 

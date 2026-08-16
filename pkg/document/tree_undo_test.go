@@ -95,6 +95,24 @@ func editTree(t *testing.T, doc *document.Document, from, to int, node *json.Tre
 	}))
 }
 
+// newTwoParagraphDoc returns a document holding <r><p>ab</p><p>cd</p></r>,
+// the shape a merge needs: a range covering </p><p> moves the second
+// paragraph's children into the first.
+func newTwoParagraphDoc(t *testing.T) *document.Document {
+	t.Helper()
+
+	doc := document.New("doc")
+	assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: textNodeType, Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: textNodeType, Value: "cd"}}},
+		}})
+		return nil
+	}))
+
+	return doc
+}
+
 // textNode builds a text content node.
 func textNode(value string) *json.TreeNode {
 	return &json.TreeNode{Type: textNodeType, Value: value}
@@ -131,13 +149,15 @@ func TestTreeUndo(t *testing.T) {
 		assertNoDuplicateTreeIDs(t, doc, "after redo")
 	})
 
-	t.Run("delete undo re-inserts without reusing the tombstone id test", func(t *testing.T) {
-		// The re-inserted copy must not carry the id its tombstone still
-		// holds. Two nodes under one id make a position anchored there
-		// resolve differently on different replicas, and the tree refuses
-		// content whose id it already holds -- so a copy that kept its id is
-		// dropped outright and the undo restores nothing.
+	t.Run("delete undo revives by identity and survives gc test", func(t *testing.T) {
+		// The reverse of a delete revives the removed nodes under their
+		// ORIGINAL identity rather than re-inserting copies. Two things must
+		// hold afterwards: the tree gains no new node ids at all, and the
+		// tombstone is no longer pending collection -- otherwise a GC pass
+		// purges live content.
 		doc := newTreeDoc(t, "000000000000000000000001")
+		before := treeNodeIDs(t, doc.RootObject())
+
 		editTree(t, doc, 1, 3, nil)
 		assert.Equal(t, "<r><p></p></r>", treeXML(t, doc))
 		assert.Equal(t, 1, doc.GarbageLen())
@@ -145,26 +165,33 @@ func TestTreeUndo(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
 		assertNoDuplicateTreeIDs(t, doc, "after undo of a delete")
-		assert.Equal(t, 1, doc.GarbageLen(), "the original run is still tombstoned")
-
-		// The tombstone the copy came from is collected; the live copy must
-		// survive that pass untouched.
-		assert.Equal(t, 1, collectGarbage(t, doc))
+		assert.Equal(t, before, treeNodeIDs(t, doc.RootObject()),
+			"the revived run keeps the id it was inserted under; a copy would add one")
+		assert.Equal(t, 0, doc.GarbageLen(), "the revived node is no longer pending collection")
+		assert.Equal(t, 0, collectGarbage(t, doc))
 		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
-		assert.Equal(t, 0, doc.GarbageLen())
-		assertNoDuplicateTreeIDs(t, doc, "after gc")
 
 		assert.True(t, doc.CanRedo())
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "<r><p></p></r>", treeXML(t, doc))
 		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, before, treeNodeIDs(t, doc.RootObject()))
 		assertNoDuplicateTreeIDs(t, doc, "after redo")
+
+		// The redo re-removed by identity, so the pass collects exactly the
+		// node the original delete did -- no copy accumulated across the cycle.
+		assert.Equal(t, 1, collectGarbage(t, doc))
+		assert.Equal(t, "<r><p></p></r>", treeXML(t, doc))
+		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
 	t.Run("delete element undo redo survives gc test", func(t *testing.T) {
 		// Deleting an element tombstones its whole subtree, so the reverse
-		// carries one top-level node whose descendants come with it.
+		// carries one span per node -- parent before child, which is the order
+		// a restore needs to re-anchor a purged subtree top-down.
 		doc := newTreeDoc(t, "000000000000000000000001")
+		before := treeNodeIDs(t, doc.RootObject())
+
 		editTree(t, doc, 0, 4, nil)
 		assert.Equal(t, "<r></r>", treeXML(t, doc))
 		assert.Equal(t, 2, doc.GarbageLen(), "the <p> and its text")
@@ -172,16 +199,28 @@ func TestTreeUndo(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
 		assertNoDuplicateTreeIDs(t, doc, "after undo of an element delete")
-		assert.Equal(t, 2, doc.GarbageLen())
-		assert.Equal(t, 2, collectGarbage(t, doc))
-		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
+		assert.Equal(t, before, treeNodeIDs(t, doc.RootObject()),
+			"the whole subtree comes back under the ids it had")
 		assert.Equal(t, 0, doc.GarbageLen())
-		assertNoDuplicateTreeIDs(t, doc, "after gc")
+		assert.Equal(t, 0, collectGarbage(t, doc))
+		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
 
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "<r></r>", treeXML(t, doc))
 		assert.Equal(t, 2, doc.GarbageLen())
 		assertNoDuplicateTreeIDs(t, doc, "after redo")
+
+		// Purging the subtree and undoing again is the harder direction: the
+		// nodes are physically gone, so the restore has to recreate them from
+		// the spans and re-anchor them under their original identities.
+		assert.Equal(t, 2, collectGarbage(t, doc))
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
+		assert.Equal(t, before, treeNodeIDs(t, doc.RootObject()),
+			"a recreated subtree keeps the identities the spans carried")
+		assert.Equal(t, 0, doc.GarbageLen())
+		assertNoDuplicateTreeIDs(t, doc, "after undoing a purged delete")
 	})
 
 	t.Run("replace undo redo survives gc test", func(t *testing.T) {
@@ -192,27 +231,40 @@ func TestTreeUndo(t *testing.T) {
 		assert.Equal(t, "<r><p>xy</p></r>", treeXML(t, doc))
 		assert.Equal(t, 1, doc.GarbageLen())
 
+		inserted := treeNodeIDs(t, doc.RootObject())
+
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
 		assertNoDuplicateTreeIDs(t, doc, "after undo of a replace")
-		assert.Equal(t, 2, doc.GarbageLen(), `the original "ab" and the "xy" the undo removed`)
-		assert.Equal(t, 2, collectGarbage(t, doc))
+		assert.Equal(t, inserted, treeNodeIDs(t, doc.RootObject()),
+			`nothing is minted: "ab" is revived and "xy" re-removed, both by identity`)
+		assert.Equal(t, 1, doc.GarbageLen(), `only the "xy" the undo removed is pending`)
+		assert.Equal(t, 1, collectGarbage(t, doc))
 		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc))
+		assert.Equal(t, 0, doc.GarbageLen())
 		assertNoDuplicateTreeIDs(t, doc, "after gc")
 
+		// The redo has to work against a chain the GC pass changed underneath
+		// it: recreate the purged "xy" and re-remove "ab", both under the
+		// identities they were born with.
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "<r><p>xy</p></r>", treeXML(t, doc))
 		assertNoDuplicateTreeIDs(t, doc, "after redo")
+		assert.Equal(t, inserted, treeNodeIDs(t, doc.RootObject()),
+			"the recreated insertion keeps its original identity")
 		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 1, collectGarbage(t, doc))
+		assert.Equal(t, "<r><p>xy</p></r>", treeXML(t, doc))
+		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
 	t.Run("replacing a whole element cycles without accumulating content test", func(t *testing.T) {
-		// The reverse of a replace anchors at the content the tree accepted,
-		// not at the tombstones around it — here the new element is inserted
-		// at the parent's leftmost position while the replaced one stays as a
-		// tombstone beside it. Each cycle mints a fresh copy and tombstones
-		// the previous one, so the pending-collection count grows; what must
-		// not grow is the document.
+		// The replacement is inserted at the parent's leftmost position while
+		// the replaced element stays as a tombstone beside it. Reversing that
+		// by identity means the pending-collection count is the SAME on every
+		// cycle: nothing new is minted. A copy-reinserting reverse produces
+		// the same XML while that count climbs every cycle, which is why the
+		// number is asserted rather than described.
 		doc := newTreeDoc(t, "000000000000000000000001")
 		editTree(t, doc, 0, 4, &json.TreeNode{
 			Type:     "p",
@@ -224,19 +276,23 @@ func TestTreeUndo(t *testing.T) {
 			assert.NoError(t, doc.Undo())
 			assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc), "cycle %d undo", cycle)
 			assertNoDuplicateTreeIDs(t, doc, "after undo")
+			assert.Equal(t, 2, doc.GarbageLen(), "cycle %d: pending stays constant", cycle)
 
 			assert.NoError(t, doc.Redo())
 			assert.Equal(t, "<r><p>Z</p></r>", treeXML(t, doc), "cycle %d redo", cycle)
 			assertNoDuplicateTreeIDs(t, doc, "after redo")
+			assert.Equal(t, 2, doc.GarbageLen(), "cycle %d: pending stays constant", cycle)
 		}
 	})
 
 	t.Run("undo does not resurrect an earlier delete test", func(t *testing.T) {
 		// Typing inside a node that is later deleted, with the typing undone
-		// first: the block's own undo must not bring the typed text back. Its
-		// reverse copies the removed subtree, and the text is already a
-		// tombstone in there -- copying it too would resurrect a delete the
-		// user made independently, and accumulate it across every cycle.
+		// first: the block's own undo must not bring the typed text back. The
+		// identity path gets this by construction -- it only names nodes the
+		// edit itself tombstoned -- and the copy-reinsert fallback gets it
+		// from the pre-tombstoned filter (see reverseContents' own tests).
+		// Either way, resurrecting the text would accumulate it every cycle,
+		// so the pending count is asserted alongside the content.
 		doc := newTreeDoc(t, "000000000000000000000001")
 		editTree(t, doc, 4, 4, &json.TreeNode{Type: "p"})
 		assert.Equal(t, "<r><p>ab</p><p></p></r>", treeXML(t, doc))
@@ -253,18 +309,21 @@ func TestTreeUndo(t *testing.T) {
 			assert.Equal(t, "<r><p>ab</p><p></p></r>", treeXML(t, doc),
 				"cycle %d: the redone block must not carry the typed text back", cycle)
 			assertNoDuplicateTreeIDs(t, doc, "after redo")
+			assert.Equal(t, 1, doc.GarbageLen(), "cycle %d: only the typed text stays pending", cycle)
 
 			assert.NoError(t, doc.Undo())
 			assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, doc), "cycle %d: undo again", cycle)
 			assertNoDuplicateTreeIDs(t, doc, "after undo")
+			assert.Equal(t, 2, doc.GarbageLen(), "cycle %d: the typed text and the block", cycle)
 		}
 	})
 
-	t.Run("re-inserted copy drops the split chain and merge lineage test", func(t *testing.T) {
-		// The copy came from a node the deletion removed, which carries that
-		// node's split chain. Left in place, the copy is spliced into a chain
-		// it never belonged to, and purging that chain unlinks the real
-		// tombstone from it.
+	t.Run("undoing a split-range delete mints no new node test", func(t *testing.T) {
+		// Deleting the middle of a run splits it, so the removed node sits in
+		// a split chain. Reviving it by identity puts it back into that chain
+		// in place; a copy would be spliced into a chain it never belonged to,
+		// and purging the chain would unlink the real tombstone from it. The
+		// id set is the direct evidence of which happened.
 		doc := document.New("doc")
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewTree("t", json.TreeNode{
@@ -278,31 +337,35 @@ func TestTreeUndo(t *testing.T) {
 		}))
 
 		// Deleting the middle of the run splits it, so the removed node has
-		// both an InsPrevID and an InsNextID to carry into the copy.
+		// both an InsPrevID and an InsNextID.
 		editTree(t, doc, 3, 6, nil)
 		assert.Equal(t, "<r><p>abf</p></r>", treeXML(t, doc))
-
-		before := map[string]struct{}{}
-		for _, node := range treeCRDT(t, doc).Nodes() {
-			before[node.IDString()] = struct{}{}
-		}
+		before := treeNodeIDs(t, doc.RootObject())
+		assert.Equal(t, 1, doc.GarbageLen())
 
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, "<r><p>abcdef</p></r>", treeXML(t, doc))
 		assertNoDuplicateTreeIDs(t, doc, "after undo")
+		assert.Equal(t, before, treeNodeIDs(t, doc.RootObject()),
+			"the revived piece rejoins its own split chain rather than arriving as a copy")
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(t, 0, collectGarbage(t, doc))
+		assert.Equal(t, "<r><p>abcdef</p></r>", treeXML(t, doc))
+	})
 
-		var inserted []string
-		for _, node := range treeCRDT(t, doc).Nodes() {
-			if _, ok := before[node.IDString()]; ok {
-				continue
-			}
-			inserted = append(inserted, node.IDString())
-			assert.Nil(t, node.InsPrevID, "%s kept a split chain", node.IDString())
-			assert.Nil(t, node.InsNextID, "%s kept a split chain", node.IDString())
-			assert.Nil(t, node.MergedFrom, "%s kept a merge lineage", node.IDString())
-			assert.Nil(t, node.MergedAt, "%s kept a merge lineage", node.IDString())
-		}
-		assert.NotEmpty(t, inserted, "the undo re-inserted the removed content")
+	t.Run("a merging edit produces no reverse yet test", func(t *testing.T) {
+		// Backspace at the start of the second paragraph: the range covers
+		// </p><p>, so its children move into the first paragraph and the
+		// emptied element is tombstoned. Re-inserting that tombstone would put
+		// back an empty shell — its children live in the first paragraph now —
+		// which is why a merge's reverse is a split, not a content
+		// re-insertion. That split reverse does not exist yet, so a merging
+		// edit produces no reverse at all rather than a wrong one.
+		doc := newTwoParagraphDoc(t)
+		editTree(t, doc, 3, 5, nil)
+		assert.Equal(t, "<r><p>abcd</p></r>", treeXML(t, doc))
+		assert.Equal(t, 1, doc.UndoStackLenForTest(),
+			"only the SetNewTree change is undoable; a merge has no reverse yet")
 	})
 
 	t.Run("a splitting edit produces no reverse yet test", func(t *testing.T) {
@@ -389,12 +452,12 @@ func TestTreeUndo(t *testing.T) {
 		assertNoDuplicateTreeIDs(t, restored, "after a snapshot round trip")
 		assert.Equal(t, treeNodeIDs(t, doc.RootObject()), treeNodeIDs(t, restored.RootObject()))
 
-		// The tombstones the copy was made from were all written by doc's
-		// actor, so collecting them takes doc's clock, not the restored
-		// document's own.
+		// The undo revived the subtree in place, so nothing is pending
+		// collection on either side. A restore that left a stale registration
+		// behind would show up as a purge here, taking out live content.
 		assert.Equal(t, doc.GarbageLen(), restored.GarbageLen())
-		assert.Equal(t, 2, restored.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
-		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, restored))
 		assert.Equal(t, 0, restored.GarbageLen())
+		assert.Equal(t, 0, restored.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, "<r><p>ab</p></r>", treeXML(t, restored))
 	})
 }

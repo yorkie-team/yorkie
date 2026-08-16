@@ -206,7 +206,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			}
 
 		}
-		pairs, diff, removed, preTombstoned, err := obj.Edit(
+		pairs, diff, info, err := obj.Edit(
 			e.from,
 			e.to,
 			contents,
@@ -254,25 +254,30 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			return nil, err
 		}
 
-		// removed and preTombstoned name live tombstones still linked into
-		// obj, not copies, so the reverse operation's content is deep-copied
-		// here — synchronously, inside the call that produced them, the way JS
-		// does inside the same execute(). A later SplitText mutates in place
-		// and splits tombstones too, so holding onto them past this point
-		// would let a subsequent edit truncate the captured content.
-		return e.toReverseOperation(obj, contents, removed, preTombstoned)
+		// info.Removed and info.PreTombstoned name live tombstones still
+		// linked into obj, not copies, so the reverse operation's content is
+		// deep-copied inside this call — the way JS does inside the same
+		// execute(). A later SplitText mutates in place and splits tombstones
+		// too, so holding onto them past this point would let a subsequent
+		// edit truncate the captured content.
+		return e.toReverseOperation(obj, contents, info)
 
 	default:
 		return nil, ErrNotApplicableDataType
 	}
 }
 
-// toReverseOperation builds the operation that undoes this edit: it deletes
-// the range this edit inserted and re-inserts a copy of what this edit
-// removed. Reversing a deletion by copy rather than by identity is what makes
-// ReissueContentIDs necessary — see there.
+// toReverseOperation builds the operation that undoes this edit. It has three
+// outcomes, in the order tree_edit_operation.ts:526-665 takes them:
 //
-// Positions are read off the post-edit tree, mirroring
+//  1. Ordinarily, an identity-preserving reverse: revive the nodes this edit
+//     removed and re-remove the ones it inserted, both by original identity.
+//  2. For a merge, no reverse at all — the reverse of a merge is a split.
+//  3. Otherwise, the copy-reinsert fallback: delete the range this edit
+//     inserted and re-insert a copy of what it removed. Reversing by copy is
+//     what makes ReissueContentIDs necessary — see there.
+//
+// The fallback's positions are read off the post-edit tree, mirroring
 // tree_edit_operation.ts:640-665, which computes them as
 // findPos(preEditFromIdx) and findPos(preEditFromIdx + insertedContentSize).
 // Go's Tree.Edit does not report preEditFromIdx, so the anchor is derived from
@@ -281,33 +286,67 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 // the first node this edit tombstoned, which names the same point once those
 // tombstones stop counting towards the index.
 //
-// Only splitLevel 0 is reversed. A split's reverse is a boundary deletion
-// rather than a content re-insertion, and is not built yet.
+// Only splitLevel 0 is reversed, including by outcome 1: a split's reverse is
+// a boundary deletion rather than a content re-insertion, and is not built yet
+// (JS branches on the same condition before calling this at all).
 func (e *TreeEdit) toReverseOperation(
 	tree *crdt.Tree,
 	inserted []*crdt.TreeNode,
-	removed []*crdt.TreeNode,
-	preTombstoned map[string]struct{},
+	info crdt.TreeEditReverseInfo,
 ) (Operation, error) {
 	if e.splitLevel != 0 {
 		return nil, nil
 	}
 
+	// Reverse this edit by identity: revive the nodes it removed
+	// (restoreSpans) and re-remove the nodes it inserted (retombstoneSpans),
+	// both under their ORIGINAL identities instead of copy-reinserting. That
+	// is what makes two clients concurrently undoing one deletion converge:
+	// reviving a node already revived is a no-op, while two copy-reinserting
+	// reverses each mint their own nodes and both survive.
+	//
+	// Tree.Edit only fills these spans when they fully describe the edit
+	// (SpansComplete), so this never fires for the merge and
+	// born-tombstoned cases handled below. JS additionally excludes an op
+	// tagged with redoSplitLevel here; Go builds no split reverses yet, so it
+	// has no such op to exclude.
+	if len(info.RemovedSpans) > 0 || len(info.InsertedSpans) > 0 {
+		return &TreeEdit{
+			parentCreatedAt:  e.parentCreatedAt,
+			from:             e.from,
+			to:               e.to,
+			restoreSpans:     info.RemovedSpans,
+			restoreMode:      crdt.RestoreModeRestore,
+			retombstoneSpans: info.InsertedSpans,
+		}, nil
+	}
+
+	// A merge deletes element boundaries and moves their children into the
+	// merge target, so its reverse is a split, not a content re-insertion:
+	// re-inserting the emptied elements would restore shells whose children
+	// now live elsewhere. Building that split reverse needs the split
+	// machinery a splitting edit's own reverse needs, which does not exist
+	// yet, so a merging edit produces no reverse rather than a wrong one.
+	if info.MergeLevel > 0 {
+		return nil, nil
+	}
+
 	// Only the content the tree accepted counts. Content reusing an ID the
-	// tree already holds is dropped on the way in, and content inserted under
-	// a concurrently removed parent is tombstoned on the way in; a reverse
-	// range covering either would delete a neighbour on redo.
+	// tree already holds is dropped on the way in, so a reverse range covering
+	// it would delete a neighbour on redo. Content tombstoned on the way into
+	// a removed parent still counts towards the size (Tree.Edit measures it
+	// while the content is detached, as JS does) but cannot anchor the range,
+	// since it has no position in the visible tree.
 	var lastLive *crdt.TreeNode
-	insertedSize := 0
+	insertedSize := info.InsertedContentSize
 	for _, content := range inserted {
 		if content.Index.Parent == nil || content.IsRemoved() {
 			continue
 		}
 		lastLive = content
-		insertedSize += content.Index.PaddedLength()
 	}
 
-	contents, err := reverseContents(removed, preTombstoned)
+	contents, err := reverseContents(info.Removed, info.PreTombstoned)
 	if err != nil {
 		return nil, err
 	}
@@ -316,11 +355,11 @@ func (e *TreeEdit) toReverseOperation(
 	switch {
 	case lastLive != nil:
 		anchor = lastLive
-	case len(removed) > 0:
+	case len(info.Removed) > 0:
 		// The first newly tombstoned node in document order. Its own parent
 		// may be a tombstone too, in which case ToIndex resolves the position
 		// of the topmost removed ancestor — the same anchor.
-		anchor = removed[0]
+		anchor = info.Removed[0]
 	default:
 		// This edit neither removed nor inserted anything: the reverse is an
 		// ordinary no-op edit anchored where this one ran. Kept rather than
@@ -354,6 +393,16 @@ func (e *TreeEdit) toReverseOperation(
 	}
 	if lastLive != nil {
 		idx -= insertedSize
+	}
+
+	// The size above was measured while the content was still detached, so it
+	// counts content the tree tombstoned on the way into a concurrently
+	// removed parent. That content is nowhere in the visible tree, so the
+	// range runs past the end of it — which is how JS recognizes an edit that
+	// had no visible effect and skips its reverse
+	// (tree_edit_operation.ts:610-616).
+	if idx+insertedSize > tree.Root().Len() {
+		return nil, nil
 	}
 
 	fromPos, err := tree.FindPos(idx)
