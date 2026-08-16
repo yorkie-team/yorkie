@@ -8,8 +8,8 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Layout
 
-- Active tasks: `docs/tasks/active/`
-- Archived tasks: `docs/tasks/archive/YYYY/MM/`
+- Active tasks: [`docs/tasks/active/`](./active/README.md)
+- Archived tasks: [`docs/tasks/archive/YYYY/MM/`](./archive/README.md)
 
 ## Naming
 
