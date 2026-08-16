@@ -734,3 +734,87 @@ every client, since the read path shares the decoder.
       numeric protobuf fields the decoder currently accepts unvalidated
 - [ ] Decide whether `yorkie-js-sdk` should gain the equivalent producer-side
       guard, so the two SDKs cannot mint values the shared server refuses
+
+## Related: `ElementRHT` eviction — JS drops a key Go keeps
+
+Found in Task 5's review, verified again before the port's PR. Unlike every
+other entry in this document, **Go is not the side that should change**: the
+Go behavior is the correct one and is kept. What is filed here is the JS half,
+plus the fact that this branch is what makes the disagreement reachable at all.
+
+### Mechanism
+
+`ElementRHT.set` in the JS SDK gates two decisions on two different anchors:
+
+1. **Eviction** of the key's current occupant goes through
+   `CRDTElement.remove` (`element_rht.ts:99`), which returns true only when
+   `removedAt.after(this.createdAt)` (`element.ts:105-110`) — the occupant's
+   *raw* creation ticket.
+2. **The winner check** a few lines below (`element_rht.ts:105,109`) compares
+   against `getPositionedAt()` — the occupant's `movedAt` if it has one, its
+   `createdAt` otherwise.
+
+They agree as long as `movedAt == createdAt`. They stop agreeing in the window
+
+```
+createdAt < executedAt < positionedAt
+```
+
+where JS's eviction check fires (executedAt is after createdAt) and tombstones
+the occupant, while its winner check decides the incoming value must *not*
+replace it. The result is a key whose value is a tombstone, and an incoming
+value that was never registered as removed either: `get()` reports the key as
+**absent**.
+
+Go (`ElementRHT.SetWithExecutedAt`, `pkg/document/crdt/element_rht.go`) anchors
+both decisions on `PositionedAt`. In the same window the true winner simply
+stays in place and the key reads **present**.
+
+### Why this branch is what opens the window
+
+`movedAt` is set on an element in an `ElementRHT` slot only when something
+(re-)places it there with a ticket newer than its own `createdAt`. Before the
+undo/redo port nothing did, so `positionedAt == createdAt` held everywhere and
+the two anchors could not disagree. Restoring an element under its **original,
+older** `createdAt` — which is precisely what an undo of a `Remove`, or a redo
+of a `Set`, does — is what introduces `createdAt < positionedAt`, and with it
+the window.
+
+So this is not a latent JS defect the port merely noticed. The port makes it
+reachable, and inside it a Go replica and a JS replica hold different content
+for the same key.
+
+### Reachability
+
+Needs three things in order: an element placed at a key, undo/redo restoring it
+under its original `createdAt` (giving it `movedAt > createdAt`), and a further
+`Set` on the same key whose `executedAt` falls strictly between the two. The
+third is ordinary concurrency — a peer's `Set` that was issued before the
+restore's ticket but lands after it. Single-client editing without undo does
+not reach it.
+
+### Why Go is not being changed to match
+
+Reproducing JS here would mean gating eviction on `createdAt` while gating the
+winner on `positionedAt` — not a different-but-consistent rule, but two rules
+that contradict each other, producing a state (tombstoned occupant still linked
+as the key's value, incoming value dropped and unregistered) that no replica
+should ever hold. The port's "reproduce JS's defects" rule stops short of
+reproducing state corruption; see the code comment on `SetWithExecutedAt` for
+the same reasoning at the call site.
+
+### Tasks
+
+- [ ] Raise it with the JS SDK: `element_rht.ts:99` should gate eviction on
+      `getPositionedAt()`, the same anchor as the winner check below it. Task
+      5's report already flagged it as "worth a note to the JS team"; this is
+      that note
+- [ ] Write the cross-SDK reproduction first: one Go replica and one JS
+      replica, a restored element, and a concurrent `Set` ticketed into the
+      window. Assert the key's presence on both — it should be the failing
+      test that motivates the JS change
+- [ ] Until JS changes, treat a key that reads absent on a JS client but
+      present on Go (or on the server's rebuilt document) as this bug, not as
+      a lost write
+- [ ] Once JS is fixed, drop the "deliberate divergence" half of the comment
+      on `SetWithExecutedAt` and keep only the anchor rationale

@@ -72,3 +72,27 @@ the right call per the port's own rule: a one-sided Go fix widens the
 JS/Go gap this whole port exists to close. A traced, well-documented,
 unfixed bug is a better outcome this round than an untested one-line fix
 landed by the wrong task.
+
+## A port can *open* a window two SDKs only agreed in by accident
+
+`ElementRHT`'s eviction and winner checks read two different anchors in JS
+(`createdAt` vs `getPositionedAt()`). That had never mattered, because nothing
+ever set `movedAt` to anything but `createdAt` — the two anchors were the same
+value in every reachable state, so the inconsistency was invisible and
+harmless. Undo/redo restoring an element under its *original*, older
+`createdAt` is what first makes them differ, and the moment they differ the two
+SDKs hold different content for the same key.
+
+The lesson is about how to read "this code is identical to JS's": identical
+code is not identical behavior once the port widens the set of reachable
+states. Whenever a port introduces a new value for a field (`movedAt` here),
+it is worth asking which existing branches read that field, which read
+something that used to equal it, and whether any pair of them now disagrees —
+before a divergence report arrives from production instead.
+
+Corollary, learned the harder way: a divergence found this way needs a filing,
+not just a code comment. This one had an accurate comment on
+`SetWithExecutedAt` and a line in a task report saying it was "worth a note to
+the JS team" — and stayed unfiled through six other cross-SDK findings that
+each got one, purely because Go's side was already correct. "We behave
+correctly" is not a reason to skip the filing when the other SDK does not.

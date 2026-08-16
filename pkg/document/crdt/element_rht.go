@@ -131,6 +131,11 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // which is corrupt by construction, not merely different. Go anchors
 // both checks on PositionedAt, so in the same case the true winner
 // simply stays in place -- correct, but not what JS's shipped code does.
+//
+// Note that undo/redo is what makes the window reachable at all: before
+// it, movedAt always equaled createdAt and the two anchors could not
+// disagree. The JS half is filed in
+// docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
