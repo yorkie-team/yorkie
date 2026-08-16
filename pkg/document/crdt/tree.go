@@ -1476,7 +1476,9 @@ func (t *Tree) EditT(
 		return nil, resource.DataSize{}, err
 	}
 
-	pairs, diff, _, err := t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	// Asks for the reverse info even though it discards it: this stands in for
+	// a local edit in tests, and a local edit computes it.
+	pairs, diff, _, err := t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil, true)
 	return pairs, diff, err
 }
 
@@ -1536,7 +1538,10 @@ type TreeEditReverseInfo struct {
 	InsertedSpans []*TreeRestoreSpan
 
 	// SpansComplete reports whether RemovedSpans and InsertedSpans fully
-	// describe what this edit did. They do not when the edit merged nodes, or
+	// describe what this edit did. It is false whenever the caller asked Edit
+	// for no reverse info at all, so "spans empty" never reads as "nothing was
+	// removed or inserted". Otherwise they do not describe the edit when it
+	// merged nodes, or
 	// when anything beyond the plain delete loop registered a GC pair (merge
 	// propagation, content born tombstoned under a removed parent, or a piece
 	// split off an already-tombstoned node). A caller must fall back to a
@@ -1603,7 +1608,8 @@ type TreeEditReverseInfo struct {
 	// the tree, so this is also the latest point that still sees it
 	// pre-edit. The operations layer reads this to report the range a
 	// forward execution affected, for undo/redo reconciliation; this
-	// package does not read it itself.
+	// package does not read it itself, and leaves it at 0 when the caller asked
+	// for no reverse info.
 	PreEditFromIdx int
 
 	// RemovedSize is the total padded size of every node Phase 5 processed
@@ -1626,6 +1632,14 @@ type TreeEditReverseInfo struct {
 // Edit edits the tree with the given range and content. If the content is
 // undefined, the range will be removed. Besides the GC pairs and the size
 // diff, it reports what a reverse operation needs; see TreeEditReverseInfo.
+//
+// needsReverseInfo selects whether that reverse info is computed at all. It is
+// pure bookkeeping — nothing this method reads back, and nothing that reaches
+// the tree's own state — so a caller that discards it can and should ask for
+// none: the server's change replay does, and computing it there costs a
+// visible-index resolution plus one sibling scan per touched node, on a path
+// that runs over every change a document ever accumulated. The rest of the
+// info (sizes, removed nodes, merge level) is cheap and always reported.
 func (t *Tree) Edit(
 	from, to *TreePos,
 	contents []*TreeNode,
@@ -1633,6 +1647,7 @@ func (t *Tree) Edit(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
+	needsReverseInfo bool,
 ) ([]GCPair, resource.DataSize, TreeEditReverseInfo, error) {
 	var diff resource.DataSize
 	var pairs []GCPair
@@ -1695,11 +1710,16 @@ func (t *Tree) Edit(
 	// already been split by FindTreeNodesWithSplitText above, so this
 	// resolves the visible index `from` names post-split, not the coarser
 	// one a non-splitting resolver would collapse it to.
-	preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
-	if err != nil {
-		return t.drainPendingGCPairs(), diff, info, err
+	//
+	// Gated, not moved: the capture point stays exactly here for every caller
+	// that does need it. Only the caller that reads nothing back skips it.
+	if needsReverseInfo {
+		preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
+		if err != nil {
+			return t.drainPendingGCPairs(), diff, info, err
+		}
+		info.PreEditFromIdx = preEditFromIdx
 	}
-	info.PreEditFromIdx = preEditFromIdx
 
 	toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, err := t.collectBetween(
 		collectFromParent, collectFromLeft, toParent, toLeft,
@@ -1715,31 +1735,11 @@ func (t *Tree) Edit(
 	// reverse instead.
 	info.MergeLevel = len(toBeMergedNodes)
 
-	// Phase 5: Delete — tombstone the collected nodes. Captured in the same
-	// pass: `remove` returns true only for a node transitioning live ->
-	// tombstoned (see TreeNode.remove), so the two branches below are exactly
-	// "newly removed by this edit" and "was already removed" — no second
-	// traversal is needed to tell them apart. That is also exactly the set
-	// worth an identity span: pre-tombstoned nodes and LWW overwrites are
-	// excluded automatically.
-	removed := make([]*TreeNode, 0, len(toBeRemoveds))
-	removedSpans := make([]*TreeRestoreSpan, 0, len(toBeRemoveds))
-	var preTombstoned map[string]struct{}
-	for _, node := range toBeRemoveds {
-		if node.remove(editedAt) {
-			pairs = append(pairs, GCPair{
-				Parent: t,
-				Child:  node,
-			})
-			removed = append(removed, node)
-			removedSpans = append(removedSpans, restoreSpanOf(node))
-			continue
-		}
-		if preTombstoned == nil {
-			preTombstoned = make(map[string]struct{})
-		}
-		preTombstoned[node.IDString()] = struct{}{}
-	}
+	// Phase 5: Delete — tombstone the collected nodes.
+	deletePairs, removed, removedSpans, preTombstoned := t.tombstoneCollected(
+		toBeRemoveds, editedAt, needsReverseInfo,
+	)
+	pairs = append(pairs, deletePairs...)
 	info.Removed, info.PreTombstoned = removed, preTombstoned
 
 	// Every pair registered from here on is one the spans do not describe:
@@ -1822,7 +1822,9 @@ func (t *Tree) Edit(
 
 				// Capture this inserted node's identity span so an undo
 				// re-removes it by identity rather than by index.
-				insertedSpans = append(insertedSpans, restoreSpanOf(node.Value))
+				insertedSpans = appendRestoreSpan(
+					insertedSpans, node.Value, needsReverseInfo,
+				)
 			})
 		}
 	}
@@ -1833,7 +1835,8 @@ func (t *Tree) Edit(
 	// merged nodes, or anything past the delete loop registered a GC pair, the
 	// spans are an incomplete account of it and the caller has to fall back to
 	// the copy-reinsert reverse.
-	info.SpansComplete = info.MergeLevel == 0 && len(pairs) == deletePairCount
+	info.SpansComplete = needsReverseInfo &&
+		info.MergeLevel == 0 && len(pairs) == deletePairCount
 	if info.SpansComplete {
 		info.RemovedSpans = removedSpans
 		// TraverseNode is post-order (children before parent), so reverse to
@@ -1866,6 +1869,64 @@ func (t *Tree) Edit(
 	info.RemovedSize = removedSize
 
 	return pairs, diff, info, nil
+}
+
+// tombstoneCollected runs Edit's Phase 5 (Delete) over the nodes collected for
+// removal. It reports the GC pairs to register, the nodes THIS call newly
+// tombstoned, their identity spans, and — by IDString, mirroring the JS port's
+// ID-string Set — the collected nodes it found already tombstoned.
+//
+// Everything is captured in the single pass: `remove` returns true only for a
+// node transitioning live -> tombstoned (see TreeNode.remove), so the two
+// branches below are exactly "newly removed by this edit" and "was already
+// removed" — no second traversal is needed to tell them apart. That is also
+// exactly the set worth an identity span: pre-tombstoned nodes and LWW
+// overwrites are excluded automatically.
+//
+// The spans are captured only when needsReverseInfo is set; see Edit.
+func (t *Tree) tombstoneCollected(
+	toBeRemoveds []*TreeNode,
+	editedAt *time.Ticket,
+	needsReverseInfo bool,
+) ([]GCPair, []*TreeNode, []*TreeRestoreSpan, map[string]struct{}) {
+	pairs := make([]GCPair, 0, len(toBeRemoveds))
+	removed := make([]*TreeNode, 0, len(toBeRemoveds))
+	var removedSpans []*TreeRestoreSpan
+	var preTombstoned map[string]struct{}
+
+	for _, node := range toBeRemoveds {
+		if node.remove(editedAt) {
+			pairs = append(pairs, GCPair{
+				Parent: t,
+				Child:  node,
+			})
+			removed = append(removed, node)
+			removedSpans = appendRestoreSpan(removedSpans, node, needsReverseInfo)
+			continue
+		}
+		if preTombstoned == nil {
+			preTombstoned = make(map[string]struct{})
+		}
+		preTombstoned[node.IDString()] = struct{}{}
+	}
+
+	return pairs, removed, removedSpans, preTombstoned
+}
+
+// appendRestoreSpan appends node's identity span to spans when the caller asked
+// for reverse info, and returns spans untouched when it did not. Capturing a
+// span walks node's siblings, so skipping it is the point rather than an
+// optimization detail; see Edit's needsReverseInfo.
+func appendRestoreSpan(
+	spans []*TreeRestoreSpan,
+	node *TreeNode,
+	needsReverseInfo bool,
+) []*TreeRestoreSpan {
+	if !needsReverseInfo {
+		return spans
+	}
+
+	return append(spans, restoreSpanOf(node))
 }
 
 // restoreSpanOf captures node's identity and where it sits among its siblings,

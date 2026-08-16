@@ -330,6 +330,12 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 				}
 			}(),
 			versionVector,
+			// A replay keeps nothing this call reports beyond the mutation
+			// itself, so the tree is told not to compute it: no identity span
+			// per touched node, no pre-edit index resolution. Every other
+			// source needs at least one of the two -- a remote change on a
+			// CLIENT still feeds the reconciliation loop below.
+			source != OpSourceReplay,
 		)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
@@ -355,9 +361,18 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 		// indices of its own) so the applyChanges reconciliation loop can
 		// adjust OTHER stacked entries against the range this execution
 		// just affected.
-		lastFromIdx := info.PreEditFromIdx
-		lastToIdx := info.PreEditFromIdx + info.RemovedSize
-		e.lastFromIdx, e.lastToIdx = &lastFromIdx, &lastToIdx
+		//
+		// Left nil on a replay, whose PreEditFromIdx was never resolved:
+		// NormalizePos then falls back to (0, 0) -- the same fallback JS uses
+		// for an operation that has never executed -- rather than reporting a
+		// range built from a zero this execution did not measure. Nothing
+		// reads it on that path; the fallback is what keeps a stray reader
+		// honest.
+		if source != OpSourceReplay {
+			lastFromIdx := info.PreEditFromIdx
+			lastToIdx := info.PreEditFromIdx + info.RemovedSize
+			e.lastFromIdx, e.lastToIdx = &lastFromIdx, &lastToIdx
+		}
 
 		// info.Removed and info.PreTombstoned name live tombstones still
 		// linked into obj, not copies, so the reverse operation's content is
@@ -367,12 +382,12 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 		// edit truncate the captured content.
 		//
 		// Only the reverse is skipped for a remote change -- every caller
-		// that runs this under OpSourceRemote discards it, and building it
-		// deep-copies the removed subtrees for nothing. lastFromIdx,
-		// lastToIdx and insertedContentSize above must still be set: the
-		// applyChanges reconciliation loop reads them off remote operations
-		// to adjust stacked undo/redo entries.
-		if source == OpSourceRemote {
+		// that runs this remotely discards it, and building it deep-copies
+		// the removed subtrees for nothing. On a client's remote path
+		// lastFromIdx, lastToIdx and insertedContentSize above must still be
+		// set: the applyChanges reconciliation loop reads them off remote
+		// operations to adjust stacked undo/redo entries.
+		if !source.NeedsReverse() {
 			return nil, nil
 		}
 

@@ -64,7 +64,31 @@ const (
 
 	// OpSourceUndoRedo is an operation replayed from the undo/redo stack.
 	OpSourceUndoRedo
+
+	// OpSourceReplay is a stored change replayed into a document whose caller
+	// keeps nothing the execution reports: the server rebuilding a document
+	// from its change log (InternalDocument.ApplyChangePack, reached from
+	// BuildInternalDocForServerSeq on every snapshot, compaction and
+	// cache-missing push-pull). It resolves conflicts exactly as
+	// OpSourceRemote does; the only difference is that bookkeeping which only
+	// an undo/redo history reads -- the reverse operation, and the pre-edit
+	// visible-index range TreeEdit.NormalizePos reports -- is skipped rather
+	// than computed and thrown away, which is what keeps the replay linear in
+	// the change count.
+	//
+	// A client applying remote changes must NOT use this: Document.applyChanges
+	// reconciles its stacked undo/redo entries against exactly that index
+	// range, so it keeps OpSourceRemote.
+	OpSourceReplay
 )
+
+// NeedsReverse reports whether an operation executed from this source has to
+// build the reverse operation that undoes it. Only a local edit and an
+// undo/redo replay can themselves be undone; both remote sources discard the
+// reverse, so building one is pure cost.
+func (s OpSource) NeedsReverse() bool {
+	return s == OpSourceLocal || s == OpSourceUndoRedo
+}
 
 // isRemovedOrOrphaned reports whether elem, or any of its ancestors up to
 // the document root, has been removed. During undo/redo an operation

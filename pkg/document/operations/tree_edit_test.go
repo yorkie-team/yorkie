@@ -224,7 +224,7 @@ func editAt(
 	toPos, err := tree.FindPos(to)
 	assert.NoError(t, err)
 
-	_, _, info, err := tree.Edit(fromPos, toPos, contents, 0, issue(), issue, nil)
+	_, _, info, err := tree.Edit(fromPos, toPos, contents, 0, issue(), issue, nil, true)
 	assert.NoError(t, err)
 
 	return info
@@ -241,7 +241,7 @@ func splitAt(
 	pos, err := tree.FindPos(idx)
 	assert.NoError(t, err)
 
-	_, _, info, err := tree.Edit(pos, pos, nil, splitLevel, issue(), issue, nil)
+	_, _, info, err := tree.Edit(pos, pos, nil, splitLevel, issue(), issue, nil, true)
 	assert.NoError(t, err)
 
 	return info

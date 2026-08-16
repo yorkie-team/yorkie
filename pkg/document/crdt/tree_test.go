@@ -515,7 +515,7 @@ func TestTreeEdit(t *testing.T) {
 		p2Node.SetRemovedAt(helper.TimeT(ctx))
 		content := crdt.NewTreeNode(helper.PosT(ctx), "b", nil)
 		_, _, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
-			helper.TimeT(ctx), issueTicket(ctx), nil)
+			helper.TimeT(ctx), issueTicket(ctx), nil, true)
 		assert.NoError(t, err)
 
 		// 03. The content lands in the merge target but is stamped as
@@ -1068,7 +1068,7 @@ func TestTreeEditReturnsRemoved(t *testing.T) {
 	toBC, err := tree.FindPos(4)
 	require.NoError(t, err)
 	_, _, bcInfo, err := tree.Edit(
-		fromBC, toBC, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil,
+		fromBC, toBC, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil, true,
 	)
 	require.NoError(t, err)
 	require.Empty(t, bcInfo.PreTombstoned)
@@ -1087,7 +1087,7 @@ func TestTreeEditReturnsRemoved(t *testing.T) {
 	require.NoError(t, err)
 	outerAt := helper.TimeT(ctx)
 	_, _, info, err := tree.Edit(
-		fromP, toP, nil, 0, outerAt, issueTicket(ctx), nil,
+		fromP, toP, nil, 0, outerAt, issueTicket(ctx), nil, true,
 	)
 	removed, preTombstoned := info.Removed, info.PreTombstoned
 	require.NoError(t, err)

@@ -79,6 +79,11 @@ const (
 	OpSourceLocal OpSource = iota
 	OpSourceRemote
 	OpSourceUndoRedo
+
+	// Added later, for cost rather than semantics: a stored change replayed
+	// by the server, whose caller keeps nothing the execution reports. See
+	// the "Cost" row under Risks and Mitigation.
+	OpSourceReplay
 )
 
 type Operation interface {
@@ -108,11 +113,14 @@ The blast radius is small. `op.Execute` has exactly one production caller
 | `Document.Update` | local edit, real root | `executed` → `ReconcileCreatedAt`, `reverseOps` → undo stack |
 | `Document.executeUndoRedo` | undo/redo, clone then real root | clone call discards both; real-root call uses `executed` for the empty-change early return and `reverseOps` for the opposite stack |
 | `Document.applyChanges` | remote changes, clone | discards both |
-| `InternalDocument.ApplyChanges` | remote changes, real root | `executed` → reconciliation |
+| `InternalDocument.ApplyChanges` | remote changes, real root | `executed` → reconciliation, on a client |
+| `InternalDocument.ApplyChangePack` | the server's change replay, real root | discards both; runs under `OpSourceReplay` |
 
 Server code only calls `Change.Execute`, so the added return values are ignored
-with `_` and the added `source` argument is always `OpSourceRemote`. Line
-numbers are deliberately omitted here; they went stale within the port itself.
+with `_` and the added `source` argument is always remote — `OpSourceReplay` on
+the rebuild path, which is exactly the "ignored with `_`" case made explicit so
+the operations below it can skip work nobody reads. Line numbers are
+deliberately omitted here; they went stale within the port itself.
 
 Two behaviors must match JS exactly:
 
@@ -542,7 +550,7 @@ for whoever picks them up next.
 | Risk | Mitigation |
 |------|------------|
 | Widened CRDT return values reach server code | Every change is an added return value; servers discard with `_`. Phase 0 proves zero behavior change first |
-| **Cost**, not semantics, of the widened returns: building a reverse the server discards turned change replay from O(N) into O(N²). `Edit.Execute`'s `NormalizePos` walks the whole physical `prev` chain, so `InternalDocument.ApplyChanges` over 1600 text edits went 1.34 ms → 22.8 ms, on the path every snapshot, compaction and cache-missing push-pull takes | Reverse construction gated on `source != OpSourceRemote` in `Edit.Execute` and `TreeEdit.Execute` (`TreeEdit` still sets `lastFromIdx`/`lastToIdx`/`insertedContentSize`, which the reconciliation loop reads). Restores 1.44 ms. `BenchmarkChangeReplay` in `test/bench` guards the regression |
+| **Cost**, not semantics, of the widened returns: computing what a reverse needs, on a path that discards it, turned change replay from O(N) into O(N²) — the path every snapshot, compaction and cache-missing push-pull takes. Two halves. **Text**: `Edit.Execute`'s `NormalizePos` walks the whole physical `prev` chain, so 1600 text edits went 1.34 ms → 22.8 ms. **Tree**: `crdt.Tree.Edit` resolves `PreEditFromIdx` with a `ToIndex` and captures an identity span per removed and per inserted node, each a fresh `Index.Children(true)` slice over every sibling *including tombstones* plus a linear scan; 1600 tree insertions went 25.6 ms → 46.1 ms (+80 %), with the multiplier growing in document size | Reverse construction gated on `NeedsReverse()` in `Edit.Execute` and `TreeEdit.Execute`; the Tree half additionally threads a `needsReverseInfo` flag into `crdt.Tree.Edit`, since the cost is inside the CRDT call, not above it. The two are gated on different things and must be: a reverse is needed only locally, but `lastFromIdx`/`lastToIdx`/`insertedContentSize` are read by a **client's** reconciliation loop off *remote* operations too. The distinction is the new `OpSourceReplay`, used only by `InternalDocument.ApplyChangePack` — the server's rebuild, the one caller that discards executed operations entirely. Restores the Tree path to 26.9 ms, the Text path unchanged. `BenchmarkChangeReplay` in `test/bench` guards it across both types and both directions (insert and delete) |
 | A `TreeEdit` with `splitLevel > 0` that is not a pure split gets no reverse operation at all, so `Document.Update` pushes nothing and the undo stack silently loses an entry. The next `Undo` then reverts the edit *before* it, leaving the split applied and deleting the earlier edit's content — no error, `CanUndo()` true throughout. Reachable from plain single-client editing on a GC-enabled document | Faithful port: JS's gate is identical (`tree_edit_operation.ts:470-487`, `reverseOp` left `undefined`). Left as parity and filed as [20260816-tree-split-edit-loses-undo-entry-todo.md](../tasks/active/20260816-tree-split-edit-loses-undo-entry-todo.md). A no-op sentinel push was considered and rejected: it only defers the same scrambled outcome by one `Undo` press while diverging `CanUndo`/stack depth from JS |
 | Persisted data: a combined-field `Style`/`TreeStyle` reverse stored before this port's `fromStyle` (Task 11) and `fromTreeStyle` (Task 16) decode fixes was written under an exclusive decode that silently dropped one of the two fields. A snapshot rebuilt from stored history after this deploy can therefore disagree with one cached before it, for any document that used Text or Tree style undo. JS has emitted combined ops since #1174 (2026-02-13, v0.6.49) for Text and #1221 (2026-04-17) for Tree, so "no legacy combined-field op can exist on the wire" is false | The new decode is the correct one; no migration planned. Documented under "Persisted-data note" below, and for the Tree half in [20260816-tree-style-combined-reverse-dropped-todo.md](../tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md) |
 | Calling `Undo` inside an updater deadlocks instead of erroring — `Update` holds `d.mu`, whereas JS throws `ErrRefused` | An `updating atomic.Bool` set on entry to `Update`, checked by `Undo` / `Redo` **before** acquiring the lock, returning `ErrRefusedDuringUpdate` |
@@ -554,7 +562,7 @@ for whoever picks them up next.
 | `Presence.Initialize` (attach-time presence) leaves `Document.clonePresences` stale, so a later `Update`'s `Set` on a different key drops the attach-time key. Found during Task 7; the Go twin of JS's tracked `#608` (`document.ts:2068-2069`) | Worked around in Task 7's tests rather than fixed; filed in the same document above |
 | Undoing a newly-introduced presence key: Go's `ReversePresence` sends the zero value (`""`) for a key absent from the snapshot; JS's `undefined` is dropped by `JSON.stringify` before the wire, removing the key instead. A genuine Go/JS divergence, not yet reconciled | Pinned, not fixed, by a characterization test in `pkg/document/history_test.go`; filed in the same document above |
 | A *partially* skipped undo/redo still ships the skipped operation. Both SDKs filter only the `executed` list before deciding whether to propagate (`len(executed) == 0` in `Document.executeUndoRedo`; `!opInfos.length` in `document.ts`) — but the `Change` pushed to `localChanges` (`document.go:487`; `document.ts:2149`) carries every operation `ctx.Push`/`ctx.push` added, skipped or not. A 3-op undo where op #2 hits `ErrOperationSkipped` still ships intact; peers execute op #2 under `OpSourceRemote`, where the skip guard (`isRemovedOrOrphaned`) never runs. JS-identical, so correct as a port — but Critical 1's fix and `TestHistorySkippedUndo` only close the *fully*-skipped case (`len(executed) == 0`), not this partial one | Not fixed, not filed as its own task. Currently written down only here |
-| The client's own remote-apply path is still quadratic in the shape the server's was before Critical 2. `Document.applyChanges`'s reconcile loop (`document.go:637-649`) calls `op.NormalizePos(root)` for every executed remote `Edit`, unconditionally — two full `Text.NormalizePos` physical-chain walks each (`Edit.NormalizePos`, `edit.go:474`) — even when both undo and redo stacks are empty and there is nothing to reconcile. Same O(N) walk Critical 2 gated on the server side; here it is exact JS parity (`document.ts`'s equivalent loop has no such gate either) and out of this branch's remit | Not fixed, not benchmarked — `BenchmarkChangeReplay` only exercises the server path (`InternalDocument.ApplyChanges`), not `Document.applyChanges` |
+| The client's own remote-apply path is still quadratic in the shape the server's was before Critical 2. `Document.applyChanges`'s reconcile loop (`document.go:637-649`) calls `op.NormalizePos(root)` for every executed remote `Edit`, unconditionally — two full `Text.NormalizePos` physical-chain walks each (`Edit.NormalizePos`, `edit.go:474`) — even when both undo and redo stacks are empty and there is nothing to reconcile. Same O(N) walk Critical 2 gated on the server side; here it is exact JS parity (`document.ts`'s equivalent loop has no such gate either) and out of this branch's remit | Not fixed, not benchmarked — `BenchmarkChangeReplay` only exercises the server path (`InternalDocument.ApplyChangePack`), not `Document.applyChanges` |
 
 ### Persisted-data note: combined-field Style decode
 

@@ -180,7 +180,12 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 			return err
 		}
 	} else {
-		if _, _, err := d.ApplyChanges(pack.Changes...); err != nil {
+		// OpSourceReplay, not OpSourceRemote: this is the server's rebuild
+		// path (BuildInternalDocForServerSeq and everything above it), which
+		// discards the executed operations returned here. A client applying a
+		// remote pack goes through Document.ApplyChangePack instead, which
+		// keeps them.
+		if _, _, err := d.applyChanges(operations.OpSourceReplay, pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -306,6 +311,19 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 // caller with a history layer can reconcile any pending undo/redo entry
 // against them.
 func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, []operations.Operation, error) {
+	return d.applyChanges(operations.OpSourceRemote, changes...)
+}
+
+// applyChanges applies the given changes under the given source. Callers that
+// keep the executed operations -- Document.applyChanges, whose history layer
+// reconciles stacked undo/redo entries against them -- must use
+// OpSourceRemote; the change replay behind ApplyChangePack uses
+// OpSourceReplay, which skips the per-operation bookkeeping only such a
+// history reads. See OpSourceReplay.
+func (d *InternalDocument) applyChanges(
+	source operations.OpSource,
+	changes ...*change.Change,
+) ([]DocEvent, []operations.Operation, error) {
 	var events []DocEvent
 	var executedOps []operations.Operation
 	for _, c := range changes {
@@ -319,7 +337,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			prevPresence = d.Presence(clientID)
 		}
 
-		executed, _, err := c.Execute(d.root, d.presences, operations.OpSourceRemote)
+		executed, _, err := c.Execute(d.root, d.presences, source)
 		if err != nil {
 			return nil, nil, err
 		}

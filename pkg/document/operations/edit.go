@@ -226,7 +226,7 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		}
 
 		// A remote change is replayed, never undone: every caller that runs
-		// this under OpSourceRemote discards the reverse operation
+		// this remotely discards the reverse operation
 		// (Document.applyChanges, InternalDocument.ApplyChanges). Building
 		// one anyway costs a NormalizePos, which walks the entire physical
 		// `prev` chain -- linear per change, quadratic over a replay of the
@@ -236,7 +236,7 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		// This is a Go-only shortcut with no wire or behavioral effect: the
 		// value is provably discarded. JS has no equivalent because its
 		// clients never replay a whole document's history.
-		if source == OpSourceRemote {
+		if !source.NeedsReverse() {
 			return nil, nil
 		}
 

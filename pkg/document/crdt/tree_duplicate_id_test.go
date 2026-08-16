@@ -353,7 +353,7 @@ func TestTreeEditAfterSnapshotRebuildAppliesAtDuplicatedID(t *testing.T) {
 	from := crdt.NewTreePos(parentID, crdt.NewTreeNodeID(textID.CreatedAt, 5))
 	to := crdt.NewTreePos(parentID, crdt.NewTreeNodeID(textID.CreatedAt, 6))
 	assert.NotPanics(t, func() {
-		_, _, _, err := rebuilt.Edit(from, to, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil)
+		_, _, _, err := rebuilt.Edit(from, to, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil, true)
 		assert.NoError(t, err)
 	})
 }

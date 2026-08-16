@@ -516,7 +516,7 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 	}
 
 	applyD := func(tree *crdt.Tree, ctx *change.Context, from, to *crdt.TreePos) {
-		_, _, _, err := tree.Edit(from, to, nil, 0, tD, issueTicket(ctx), vv)
+		_, _, _, err := tree.Edit(from, to, nil, 0, tD, issueTicket(ctx), vv, true)
 		assert.NoError(t, err)
 	}
 	applyU := func(tree *crdt.Tree, span *crdt.TreeRestoreSpan) {

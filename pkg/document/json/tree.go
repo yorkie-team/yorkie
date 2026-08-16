@@ -475,6 +475,11 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		ticket,
 		issueSplitTicket,
 		nil,
+		// This runs on the clone and discards the reverse info; the reverse
+		// itself is built when the operation executes on the real root under
+		// OpSourceLocal. Asked for anyway, so the clone and the root take the
+		// same path through Edit -- including the same error cases.
+		true,
 	)
 	if err != nil {
 		panic(err)
