@@ -457,6 +457,20 @@ func (a *RGATreeList) PosCreatedAt(elemCreatedAt *time.Ticket) (*time.Ticket, er
 	return entry.positionNode.createdAt, nil
 }
 
+// GetByID returns the node holding the element of the given creation time,
+// or nil when this list does not hold it. It mirrors RGATreeList.getByID
+// (rga_tree_list.ts:495-501): elementMapByCreatedAt first, so a moved element
+// resolves through its current position node, then nodeMapByCreatedAt.
+//
+// Unlike Root.FindByCreatedAt this is scoped to one list, so it cannot report
+// an element that lives in some other container.
+func (a *RGATreeList) GetByID(createdAt *time.Ticket) *RGATreeListNode {
+	if entry, ok := a.elementMapByCreatedAt[createdAt.Key()]; ok {
+		return entry.positionNode
+	}
+	return a.nodeMapByCreatedAt[createdAt.Key()]
+}
+
 // Purge physically removes a dead position node from the list (GCParent).
 func (a *RGATreeList) Purge(child GCChild) error {
 	node, ok := child.(*RGATreeListNode)

@@ -62,6 +62,17 @@ func (a *Array) Get(idx int) (Element, error) {
 	return node.Element(), nil
 }
 
+// GetByID returns the element of the given creation time held by this array,
+// or nil when this array does not hold it. It mirrors CRDTArray.getByID
+// (array.ts:106-109).
+func (a *Array) GetByID(createdAt *time.Ticket) Element {
+	node := a.elements.GetByID(createdAt)
+	if node == nil {
+		return nil
+	}
+	return node.Element()
+}
+
 // FindPrevCreatedAt returns the creation time of the previous element of the
 // given element.
 func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) {

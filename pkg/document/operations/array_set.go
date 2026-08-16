@@ -63,13 +63,21 @@ func (o *ArraySet) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 	// before it is overwritten below (array_set_operation.ts:75-76): it
 	// restores that value, anchored on the new value's identity so it can
 	// find it again.
-	previous := root.FindByCreatedAt(o.createdAt)
-	if previous == nil {
-		return nil, crdt.ErrChildNotFound
-	}
-	previousCopy, err := previous.DeepCopy()
-	if err != nil {
-		return nil, err
+	//
+	// The lookup is scoped to this array, as JS's
+	// `parentObject.getByID(this.createdAt)` is, rather than global to the
+	// root: a root-wide lookup would happily report an element that lives in
+	// some other container. When the array does not hold it there is no
+	// reverse to build; the InsertAfter below then fails with the same
+	// ErrChildNotFound it failed with before this operation grew a reverse,
+	// since it resolves prevCreatedAt through the very same two maps.
+	var previousCopy crdt.Element
+	if previous := obj.GetByID(o.createdAt); previous != nil {
+		copied, err := previous.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		previousCopy = copied
 	}
 
 	value, err := o.value.DeepCopy()
@@ -90,6 +98,9 @@ func (o *ArraySet) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 	// because there is no way to distinguish between old and new element with same `createdAt`.
 	root.RegisterElement(value)
 
+	if previousCopy == nil {
+		return nil, nil
+	}
 	reverseOp := NewArraySet(o.parentCreatedAt, value.CreatedAt(), previousCopy, o.executedAt)
 	return reverseOp, nil
 }
