@@ -68,9 +68,19 @@ func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector)
 	// Both toReverseOperation and DeleteByCreatedAt look up the target
 	// element by the same createdAt, so the reverse must be built before
 	// DeleteByCreatedAt removes it (remove_operation.ts:94-99).
-	reverseOp, err := o.toReverseOperation(parent, target)
-	if err != nil {
-		return nil, err
+	//
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse,
+	// and the same gate in Edit.Execute): on a remote apply or a server
+	// replay the DeepCopy and the FindPrevCreatedAt scan are pure cost, and
+	// their error paths could abort a change that applied fine before this
+	// operation grew a reverse. The delete and its bookkeeping below stay
+	// unconditional.
+	var reverseOp Operation
+	if source.NeedsReverse() {
+		var err error
+		if reverseOp, err = o.toReverseOperation(parent, target); err != nil {
+			return nil, err
+		}
 	}
 
 	elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)

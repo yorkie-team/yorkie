@@ -52,7 +52,7 @@ func NewArraySet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *ArraySet) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
+func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
@@ -71,13 +71,22 @@ func (o *ArraySet) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 	// reverse to build; the InsertAfter below then fails with the same
 	// ErrChildNotFound it failed with before this operation grew a reverse,
 	// since it resolves prevCreatedAt through the very same two maps.
+	//
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse,
+	// and the same gate in Edit.Execute): on a remote apply or a server
+	// replay the lookup and the DeepCopy are pure cost, and the copy's error
+	// path could abort a change that applied fine before this operation grew
+	// a reverse. The insert, the delete and the registration below stay
+	// unconditional.
 	var previousCopy crdt.Element
-	if previous := obj.GetByID(o.createdAt); previous != nil {
-		copied, err := previous.DeepCopy()
-		if err != nil {
-			return nil, err
+	if source.NeedsReverse() {
+		if previous := obj.GetByID(o.createdAt); previous != nil {
+			copied, err := previous.DeepCopy()
+			if err != nil {
+				return nil, err
+			}
+			previousCopy = copied
 		}
-		previousCopy = copied
 	}
 
 	value, err := o.value.DeepCopy()

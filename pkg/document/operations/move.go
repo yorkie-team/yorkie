@@ -52,7 +52,7 @@ func NewMove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Move) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
@@ -63,11 +63,20 @@ func (o *Move) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Opera
 	// The reverse must capture the target's current predecessor before
 	// MoveAfter changes its position (move_operation.ts:80-81,110-119): it
 	// moves the target back after whatever precedes it now.
-	prevCreatedAt, err := obj.FindPrevCreatedAt(o.createdAt)
-	if err != nil {
-		return nil, err
+	//
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse,
+	// and the same gate in Edit.Execute): on a remote apply or a server
+	// replay the FindPrevCreatedAt lookup is pure cost, and its error path
+	// could abort a change that applied fine before this operation grew a
+	// reverse. The move and its GC bookkeeping below stay unconditional.
+	var reverseOp Operation
+	if source.NeedsReverse() {
+		prevCreatedAt, err := obj.FindPrevCreatedAt(o.createdAt)
+		if err != nil {
+			return nil, err
+		}
+		reverseOp = NewMove(o.parentCreatedAt, prevCreatedAt, o.createdAt, o.executedAt)
 	}
-	reverseOp := NewMove(o.parentCreatedAt, prevCreatedAt, o.createdAt, o.executedAt)
 
 	deadNode, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 	if err != nil {

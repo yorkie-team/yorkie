@@ -70,16 +70,24 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (O
 	// The reverse must be built from the value at this key before it is
 	// overwritten below (set_operation.ts:91-92): it restores the previous
 	// value, or removes the key entirely when there was none.
-	previous := obj.Get(o.key)
+	//
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse,
+	// and the same gate in Edit.Execute): on a remote apply or a server
+	// replay the DeepCopy is pure cost, and its error path could abort a
+	// change that applied fine before this operation grew a reverse. The
+	// forward mutation and every size/GC bookkeeping below stay unconditional.
 	var reverseOp Operation
-	if previous != nil && previous.RemovedAt() == nil {
-		copied, err := previous.DeepCopy()
-		if err != nil {
-			return nil, err
+	if source.NeedsReverse() {
+		previous := obj.Get(o.key)
+		if previous != nil && previous.RemovedAt() == nil {
+			copied, err := previous.DeepCopy()
+			if err != nil {
+				return nil, err
+			}
+			reverseOp = NewSet(o.parentCreatedAt, o.key, copied, o.executedAt)
+		} else {
+			reverseOp = NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt)
 		}
-		reverseOp = NewSet(o.parentCreatedAt, o.key, copied, o.executedAt)
-	} else {
-		reverseOp = NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt)
 	}
 
 	value, err := o.value.DeepCopy()
