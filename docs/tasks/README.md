@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Tree Style: combined reverse's removal half dropped on execute (2026-08-16) | [20260816-tree-style-combined-reverse-dropped-todo.md](./active/20260816-tree-style-combined-reverse-dropped-todo.md) | [20260816-tree-style-combined-reverse-dropped-lessons.md](./active/20260816-tree-style-combined-reverse-dropped-lessons.md) |
 | Remote redo of a restored key can delete it on a peer (2026-08-16) | [20260816-remote-redo-replica-divergence-todo.md](./active/20260816-remote-redo-replica-divergence-todo.md) | [20260816-remote-redo-replica-divergence-lessons.md](./active/20260816-remote-redo-replica-divergence-lessons.md) |
 | Undo/Redo Go SDK Port Implementation Plan (2026-08-15) | [20260815-undo-redo-go-port-todo.md](./active/20260815-undo-redo-go-port-todo.md) | [20260815-undo-redo-go-port-lessons.md](./active/20260815-undo-redo-go-port-lessons.md) |
 | Tree: survive two nodes sharing one TreeNodeID (2026-08-14) | [20260814-duplicate-tree-node-id-todo.md](./active/20260814-duplicate-tree-node-id-todo.md) | [20260814-duplicate-tree-node-id-lessons.md](./active/20260814-duplicate-tree-node-id-lessons.md) |
