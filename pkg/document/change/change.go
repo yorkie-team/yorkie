@@ -20,6 +20,7 @@ package change
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -95,13 +96,18 @@ func (c *Change) Execute(
 		result.Executed = append(result.Executed, op)
 		result.Observable = result.Observable || opResult.Observable
 
-		// NOTE(hackerwins): Reverse operations are accumulated in reverse
-		// order so that undoing a change replays its operations backwards.
 		if opResult.Reverse != nil {
-			result.ReverseOps = append(
-				[]operations.Operation{opResult.Reverse}, result.ReverseOps...)
+			result.ReverseOps = append(result.ReverseOps, opResult.Reverse)
 		}
 	}
+
+	// NOTE(hackerwins): Reverse operations are returned in reverse order so
+	// that undoing a change replays its operations backwards. They are
+	// collected in execution order above and reversed once here rather than
+	// prepended one at a time: a prepend copies everything gathered so far,
+	// which makes building the slice quadratic in the number of operations a
+	// single change carries.
+	slices.Reverse(result.ReverseOps)
 
 	if c.presenceChange != nil {
 		c.presenceChange.Execute(c.id.actorID, presences)
