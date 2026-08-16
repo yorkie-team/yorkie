@@ -195,6 +195,31 @@ func TestTreeRestoreSpanRejectsNilCreatedAt(t *testing.T) {
 		_, err := converter.FromOperations(pbOps)
 		assert.Error(t, err)
 	})
+
+	// An element span also carries an attribute snapshot, and fromRHT hides a
+	// missing timestamp the same way fromTreeNodeID hid a missing created_at:
+	// fromTimeTicket returns (nil, nil) for a nil ticket, so an unvalidated
+	// path would plant an RHT node with a nil updatedAt that panics on its
+	// first comparison, deep inside the restore path. Reject it here instead
+	// (parity with the JS converter's fromPbTreeRestoreSpan, which checks
+	// `Object.values(pbSpan.attributes).some((attr) => !attr.updatedAt)`).
+	t.Run("nil attribute updatedAt", func(t *testing.T) {
+		elemAttrs := crdt.NewRHT()
+		elemAttrs.Set("bold", "true", seed)
+		op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+			[]*crdt.TreeRestoreSpan{{
+				ID:         crdt.NewTreeNodeID(seed, 2),
+				NodeType:   "p",
+				IsText:     false,
+				Attributes: elemAttrs,
+				ParentID:   crdt.NewTreeNodeID(seed, 0),
+			}}, crdt.RestoreModeRestore, nil)
+		pbOps, err := converter.ToOperations([]operations.Operation{op})
+		assert.NoError(t, err)
+		pbOps[0].GetTreeEdit().RestoreSpans[0].Attributes["bold"].UpdatedAt = nil
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
 }
 
 // TestTreeRestoreSpanRejectsBadTextLength guards the recreate slicing path: a

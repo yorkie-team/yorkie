@@ -517,3 +517,69 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 	assert.True(t, textA.RGATreeSplit().CheckWeight())
 	assert.True(t, textB.RGATreeSplit().CheckWeight())
 }
+
+// TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle ports
+// text_restore_convergence_test.ts's "reverses GC accounting exactly across
+// delete/undo/redo/undo" (found missing in the Task 21 parity re-audit).
+// unregisterGCPair (revive) must reverse registerGCPair (tombstone) bit for
+// bit, including the TimeTicketSize meta term, or docSize drifts across
+// undo/redo cycles -- distinct from TestTextRestoreDocSizeAccounting above,
+// which checks docSize.GC reaches zero after a physical purge; this checks
+// the tombstone/revive bookkeeping is exactly reversible with no purge
+// involved at all, across two full cycles.
+func TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle(t *testing.T) {
+	seed := tick(4000)
+	textTicket := tick(1)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
+	root := helper.TestRoot()
+	root.RegisterElement(text)
+
+	f, e, err := text.CreateRange(0, 0)
+	assert.NoError(t, err)
+	insertOp := operations.NewEdit(textTicket, f, e, "0123456789", nil, seed)
+	_, err = insertOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+
+	// Delete "45" -> tombstone -> registerGCPair.
+	f, e, err = text.CreateRange(4, 6)
+	assert.NoError(t, err)
+	deleteOp := operations.NewEdit(textTicket, f, e, "", nil, tick(4001))
+	_, err = deleteOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "01236789", text.String())
+	deleted := root.DocSize()
+	assert.NotEqual(t, resource.DataSize{}, deleted.GC, "delete registers GC")
+
+	span := []*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}
+
+	// Undo: revive -> unregisterGCPair.
+	restoreOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(4002),
+		span, crdt.RestoreModeRestore, nil)
+	_, err = restoreOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "0123456789", text.String())
+	revived := root.DocSize()
+	assert.Equal(t, resource.DataSize{}, revived.GC,
+		"revive must drain the tombstoned size out of GC, including the meta term")
+
+	// Redo: re-tombstone -> registerGCPair again. RestoreModeRetombstone
+	// swaps the role of the two span fields (Edit.Execute), so the span to
+	// retombstone is passed as restoreSpans here, mirroring how a real
+	// TreeEdit/Edit redo reverse is built from the undo's own span set.
+	retombstoneOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(4003),
+		span, crdt.RestoreModeRetombstone, nil)
+	_, err = retombstoneOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "01236789", text.String())
+	assert.Equal(t, deleted, root.DocSize(),
+		"redo must reproduce the tombstoned docSize exactly, including meta")
+
+	// Undo again: revive once more.
+	restoreOp2 := operations.NewRestoreEdit(textTicket, nil, nil, tick(4004),
+		span, crdt.RestoreModeRestore, nil)
+	_, err = restoreOp2.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "0123456789", text.String())
+	assert.Equal(t, revived, root.DocSize(),
+		"the revived docSize is bit-identical across cycles, including meta")
+}

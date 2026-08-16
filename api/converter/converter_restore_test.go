@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -90,6 +91,82 @@ func TestRestoreSpanRoundTrip(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRestoreSpanRoundTripsRetombstoneCompanion ports restore_converter_test.ts's
+// "round-trips the companion retombstone_spans of a replace reverse" (found
+// missing in the Task 21 parity re-audit). The reverse of a replace revives
+// the removed content (RestoreSpans) and re-removes the inserted content
+// (RetombstoneSpans) in the same operation; both sets must survive the wire
+// independently or a peer/server diverges on one half of the replace.
+func TestRestoreSpanRoundTripsRetombstoneCompanion(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(seed, 0), 0)
+
+	restoreSpans := []*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 4, Content: "CD"}}
+	retombstoneSpans := []*crdt.RestoreSpan{{CreatedAt: seed, Start: 0, End: 2, Content: "12"}}
+	op := operations.NewRestoreEdit(seed, pos, pos, executedAt,
+		restoreSpans, crdt.RestoreModeRestore, retombstoneSpans)
+
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+	ops, err := converter.FromOperations(pbOps)
+	assert.NoError(t, err)
+	assert.Len(t, ops, 1)
+
+	got, ok := ops[0].(*operations.Edit)
+	assert.True(t, ok)
+	assert.Equal(t, crdt.RestoreModeRestore, got.RestoreMode())
+	assert.Len(t, got.RestoreSpans(), 1)
+	assert.Equal(t, "CD", got.RestoreSpans()[0].Content)
+	assert.Len(t, got.RetombstoneSpans(), 1)
+	assert.Equal(t, "12", got.RetombstoneSpans()[0].Content)
+	assert.True(t, seed.Compare(got.RetombstoneSpans()[0].CreatedAt) == 0)
+}
+
+// TestRestoreSpanBaseEditCarriesNoInlineContent ports
+// restore_converter_test.ts's "decodes to a harmless no-op for peers that
+// ignore restore fields" (found missing in the Task 21 parity re-audit).
+//
+// Mixed-version interop contract: a restore/undo op carries its content only
+// in RestoreSpans; its base Edit fields are a zero-width, empty-content edit
+// (From === To, Content === ""). A peer or server without restore support
+// drops the unknown restore fields and applies just the base edit -- which
+// inserts nothing and deletes nothing. So a restore op reaching an old node
+// cannot duplicate or corrupt content; at worst the old node skips the
+// restore and stays diverged until upgraded. This pins that wire contract so
+// a future change can't quietly start emitting inline content on the restore
+// path.
+func TestRestoreSpanBaseEditCarriesNoInlineContent(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(seed, 0), 0)
+
+	op := operations.NewRestoreEdit(seed, pos, pos, executedAt,
+		[]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}},
+		crdt.RestoreModeRestore, nil)
+
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+	pbEdit := pbOps[0].GetEdit()
+	assert.Equal(t, "", pbEdit.Content,
+		"restore ops carry no inline content for an old peer to re-insert")
+	assert.True(t, proto.Equal(pbEdit.From, pbEdit.To),
+		"restore ops are zero-width, so an old peer deletes nothing either")
+
+	// A new peer still receives the full identity payload.
+	ops, err := converter.FromOperations(pbOps)
+	assert.NoError(t, err)
+	got, ok := ops[0].(*operations.Edit)
+	assert.True(t, ok)
+	assert.Equal(t, "", got.Content())
+	assert.Equal(t, crdt.RestoreModeRestore, got.RestoreMode())
+	assert.Len(t, got.RestoreSpans(), 1)
 }
 
 // TestRestoreSpanRejectsNilCreatedAt guards the wire boundary: a span with no

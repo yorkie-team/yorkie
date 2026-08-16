@@ -1134,6 +1134,18 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 		}
 		var attrs *crdt.RHT
 		if len(pbSpan.Attributes) > 0 {
+			// An attribute snapshot is malformed without an updatedAt: fromRHT
+			// stores whatever fromTimeTicket returns, which is nil for a nil
+			// ticket rather than an error, so a crafted nil here would reach
+			// the RHT with a nil updatedAt and panic on the first comparison
+			// deep inside the restore path. Reject it here instead (parity
+			// with the id/parent/sibling created_at checks below, and with
+			// the JS converter's fromPbTreeRestoreSpan).
+			for _, attr := range pbSpan.Attributes {
+				if attr == nil || attr.UpdatedAt == nil {
+					return nil, ErrInvalidRestoreSpan
+				}
+			}
 			attrs, err = fromRHT(pbSpan.Attributes)
 			if err != nil {
 				return nil, err

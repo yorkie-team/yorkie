@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -245,6 +246,51 @@ func TestTreePurgeKeepsLiveNodeResolvable(t *testing.T) {
 	_, resolved := tree.NodeMapByID.Floor(id)
 	assert.Equal(t, live, resolved, "the live node keeps the id after its tombstone is collected")
 	assert.Equal(t, "<r><p>0123456789</p></r>", tree.ToXML())
+}
+
+// TestTreeEditDroppedCopyDoesNotWidenReverseOperation ports
+// tree_duplicate_id_test.ts's "does not let a dropped copy widen the reverse
+// operation" (found missing in the Task 21 parity re-audit). It is the one
+// case in this file exercised at the operations layer (operations.TreeEdit
+// via Execute), not crdt.Tree.EditT directly, because the property under
+// test -- GetContentSize() and the produced reverse's own range -- lives on
+// the operation, not the CRDT tree: if a dropped copy still counted toward
+// the accepted content size, the undo stack's stored range would widen by
+// that amount, and reconciling it against a later remote edit would shift a
+// position that never moved, or a redo of the reverse would delete a live
+// neighbour the original edit never inserted.
+func TestTreeEditDroppedCopyDoesNotWidenReverseOperation(t *testing.T) {
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+	tree, textID := createDigitTree(t, ctx, root)
+
+	_, _, err := tree.EditT(6, 7, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML())
+
+	// The undo of that deletion, as the copy-reinsert path builds it: one
+	// content node carrying the id of the piece just tombstoned.
+	undoAt := time.NewTicket(helper.TimeT(ctx).Lamport()+1, 1, time.InitialActorID)
+	pos, err := tree.FindPos(6)
+	assert.NoError(t, err)
+	content := crdt.NewTreeNode(crdt.NewTreeNodeID(textID.CreatedAt, 5), "text", nil, "5")
+
+	op := operations.NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{content}, 0, undoAt)
+	reverseOp, err := op.Execute(root, operations.OpSourceLocal, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML(), "the copy is not inserted")
+
+	// The undo stack shifts its stored indices by this size when a remote
+	// edit arrives, so it has to match what the tree accepted.
+	assert.Equal(t, 0, op.GetContentSize(), "an edit whose content was dropped inserted nothing")
+
+	// Redoing must not delete a neighbour that this edit never inserted.
+	if reverseOp != nil {
+		redo, ok := reverseOp.(*operations.TreeEdit)
+		assert.True(t, ok)
+		assert.True(t, redo.FromPos().Equal(redo.ToPos()),
+			"the reverse of an edit that inserted nothing spans nothing")
+	}
 }
 
 // TestSplitTextRejectsOutOfRangeOffset covers the guard that keeps an

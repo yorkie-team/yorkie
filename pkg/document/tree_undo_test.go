@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -122,6 +123,46 @@ func textNode(value string) *json.TreeNode {
 func collectGarbage(t *testing.T, doc *document.Document) int {
 	t.Helper()
 	return doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+}
+
+// pushCopyReinsertReverse deletes [from, to) for real, then replaces the
+// identity-preserving reverse that delete would ordinarily push with a
+// hand-built copy-reinsert one: a TreeEdit whose Contents are the just-removed
+// nodes, deep-copied under their ORIGINAL ids via CloneForReinsert -- the
+// same shape TreeEdit.toReverseOperation's fallback produces when a merge, a
+// split, or a wire payload from an older SDK leaves SpansComplete false.
+//
+// This is Go's answer to the JS port's forceCopyPath: JS monkey-patches
+// CRDTTree.prototype.edit to blank the identity spans CRDTTree.edit returns,
+// isolating "does a real Undo/Redo correctly reissue ids and restore content
+// when it takes the copy path" from the (unrelated) question of which real
+// edits happen to take that path. Go has no equivalent to overriding a method
+// at runtime, so this achieves the same isolation by constructing the reverse
+// operation the fallback would have built and pushing it directly onto the
+// undo stack (PushUndoForTest), then letting a real Undo() execute it through
+// the ordinary executeUndoRedo path -- ReissueContentIDs included.
+func pushCopyReinsertReverse(t *testing.T, doc *document.Document, from, to int) {
+	t.Helper()
+
+	editTree(t, doc, from, to, nil)
+	tree := treeCRDT(t, doc)
+
+	var contents []*crdt.TreeNode
+	for _, node := range tree.Nodes() {
+		if node.RemovedAt() == nil {
+			continue
+		}
+		clone, err := node.CloneForReinsert(nil)
+		assert.NoError(t, err)
+		contents = append(contents, clone)
+	}
+	assert.NotEmpty(t, contents, "the delete must have removed something to copy back")
+
+	pos, err := tree.FindPos(from)
+	assert.NoError(t, err)
+
+	reverse := operations.NewTreeEdit(tree.CreatedAt(), pos, pos, contents, 0, nil)
+	doc.PushUndoForTest([]document.HistoryOperation{{Op: reverse}})
 }
 
 func TestTreeUndo(t *testing.T) {
@@ -351,6 +392,60 @@ func TestTreeUndo(t *testing.T) {
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(t, 0, collectGarbage(t, doc))
 		assert.Equal(t, "<r><p>abcdef</p></r>", treeXML(t, doc))
+	})
+
+	// Ports undo_copy_path_test.ts's "restores the text without duplicating an
+	// id" (JS it #1). Drives a real Undo() through the copy-reinsert reverse
+	// and asserts both what JS asserts: content restored, and no id names two
+	// nodes -- the re-inserted copy must not collide with the tombstone it
+	// came from.
+	t.Run("undo through the copy-reinsert reverse restores content without duplicating an id test", func(t *testing.T) {
+		doc := document.New("doc")
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewTree("t", json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: textNodeType, Value: "abcdef"}},
+				}},
+			})
+			return nil
+		}))
+		before := treeXML(t, doc)
+
+		pushCopyReinsertReverse(t, doc, 2, 5)
+		assert.Equal(t, "<r><p>aef</p></r>", treeXML(t, doc))
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, before, treeXML(t, doc), "the undo restores the text")
+		assertNoDuplicateTreeIDs(t, doc,
+			"the re-inserted copy must not reuse the tombstone it came from")
+	})
+
+	// Ports undo_copy_path_test.ts's "returns to the deleted state on redo"
+	// (JS it #3). The redo of a copy-reinsert undo re-derives its own reverse
+	// from TreeEdit.Execute the ordinary way (this test pushes only the undo
+	// entry), so this also pins that a hand-built reverse redoes cleanly.
+	t.Run("undo through the copy-reinsert reverse returns to the deleted state on redo test", func(t *testing.T) {
+		doc := document.New("doc")
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewTree("t", json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: textNodeType, Value: "abcdef"}},
+				}},
+			})
+			return nil
+		}))
+
+		pushCopyReinsertReverse(t, doc, 2, 5)
+		deleted := treeXML(t, doc)
+
+		assert.NoError(t, doc.Undo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, deleted, treeXML(t, doc))
+		assertNoDuplicateTreeIDs(t, doc, "after redo")
 	})
 
 	t.Run("a merging edit pushes a reverse test", func(t *testing.T) {

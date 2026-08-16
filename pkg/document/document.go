@@ -507,6 +507,18 @@ func (d *Document) RedoStackTopForTest() []HistoryOperation {
 	return d.history.redoStack[len(d.history.redoStack)-1]
 }
 
+// PushUndoForTest pushes a fabricated entry directly onto the undo stack,
+// for tests that need Undo to execute a specific reverse operation the
+// normal forward-edit path would not produce on its own -- e.g. a
+// copy-reinsert Tree reverse, which Go can only reach today via a merge, a
+// split, or a wire payload from an older SDK, none of which isolate the
+// property under test the way JS's tests do by monkey-patching CRDTTree.edit.
+// A subsequent Undo() call executes ops for real, through the same
+// executeUndoRedo path (ReissueContentIDs included) as any other undo.
+func (d *Document) PushUndoForTest(ops []HistoryOperation) {
+	d.history.PushUndo(ops)
+}
+
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.mu.Lock()

@@ -275,26 +275,55 @@ unrelated, so there is no name collision.
 | `history_tree_concurrent_test.ts` | `test/integration/history_tree_concurrent_test.go` | 14 (2 skipped) |
 | `history_tree_split_test.ts` | `test/integration/history_tree_split_test.go` | 79 (1 skipped) — **corrected, see below**; this table originally estimated 26 before any file existed |
 | undo cases in `object_test.ts`, `counter_test.ts` | corresponding Go files | — |
-| `undo_copy_path_test.ts`, `undo_content_identity_test.ts` | ported: `pkg/document/tree_undo_test.go`'s "re-inserted copy drops the split chain and merge lineage test", `pkg/document/operations/tree_edit_test.go`'s `TestTreeEditReissueContentIDs` (Task 15) | — |
-| `text_restore_after_gc_test.ts`, `text_restore_convergence_test.ts` | already covered: `pkg/document/crdt/text_restore_test.go` (`TestTextRestoreExecuteAfterGC`, `TestTextRestoreAfterGCKeepsOrderAcrossInsertions`, `TestTextRestoreTwoReplicaPurgedInsertion`) — pre-port infrastructure from PRs #1875/#1913, not written by this port | — |
-| `restore_converter_test.ts`, `tree_restore_converter_test.ts` | already covered: `api/converter/converter_restore_test.go`, `api/converter/converter_tree_restore_test.go` — pre-port infrastructure from PRs #1875/#1893 | — |
-| `tree_duplicate_id_test.ts` | already covered: `pkg/document/crdt/tree_duplicate_id_test.go` — pre-port infrastructure from PR #1927 | — |
+| `undo_copy_path_test.ts` (3 `it`s: JS #1 "restores the text without duplicating an id", #2 "does not splice the copy into the chain it came from", #3 "returns to the deleted state on redo") | JS #2 already ported (Task 15): `pkg/document/operations/tree_edit_test.go:66-95`, `TestTreeEditReissueContentIDs`'s "gives copied content a fresh identity test". JS #1 and #3 had no Go equivalent (Task 15's test builds the reverse and asserts on it directly, never executing it through a real `Document.Undo()`/`Redo()`) — ported in Task 21 as `pkg/document/tree_undo_test.go`'s "undo through the copy-reinsert reverse restores content without duplicating an id test" and "...returns to the deleted state on redo test", using a new `Document.PushUndoForTest` test seam in place of JS's `CRDTTree.prototype.edit` monkey-patch, which Go has no equivalent of | — |
+| `undo_content_identity_test.ts` | ported: `pkg/document/operations/tree_edit_test.go`'s `TestTreeEditReissueContentIDs` (Task 15) | — |
+| `text_restore_after_gc_test.ts` | already covered: `pkg/document/crdt/text_restore_test.go` (`TestTextRestoreExecuteAfterGC`, `TestTextRestoreAfterGCKeepsOrderAcrossInsertions`) — pre-port infrastructure from PRs #1875/#1913 | — |
+| `text_restore_convergence_test.ts` (4 `it`s) | its first 3 (convergence regardless of undo order, docSize.gc drained symmetrically) correspond to `pkg/document/crdt/text_restore_test.go`'s `TestTextRestore`'s "overlapping undo converges in both restore orders" — a CRDT-layer test of the same property, not the two-`Document`-with-cross-sync shape JS uses. JS #4 ("reverses GC accounting exactly across delete/undo/redo/undo", asserting `DocSize` bit-identical including the meta term) had no Go equivalent anywhere — ported in Task 21 as `TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle` in the same file | — |
+| `restore_converter_test.ts` (5 `it`s) | 3 already covered by `api/converter/converter_restore_test.go`'s `TestRestoreSpanRoundTrip` (restore + retombstone + ordinary-edit cases) — pre-port infrastructure from PR #1875. 2 missing — "round-trips the companion retombstone_spans of a replace reverse" and "decodes to a harmless no-op for peers that ignore restore fields" (the mixed-version wire contract: a restore op's base `Edit` carries empty content and a zero-width range) — ported in Task 21 as `TestRestoreSpanRoundTripsRetombstoneCompanion` and `TestRestoreSpanBaseEditCarriesNoInlineContent` in the same file | — |
+| `tree_restore_converter_test.ts` | already covered: `api/converter/converter_tree_restore_test.go` — pre-port infrastructure from PR #1893, **plus a genuine Go-only gap found in Task 21 review: see Critical 3 below** | — |
+| `tree_duplicate_id_test.ts` (9 `it`s) | 8 already covered by `pkg/document/crdt/tree_duplicate_id_test.go` — pre-port infrastructure from PR #1927. "does not let a dropped copy widen the reverse operation" was missing (this one is exercised at the operations layer via `TreeEdit.Execute`, not `crdt.Tree.EditT` directly, since the property under test — `GetContentSize()` and the reverse's own range — lives on the operation) — ported in Task 21 as `TestTreeEditDroppedCopyDoesNotWidenReverseOperation` in the same file | — |
 
-**Unit-test audit (Task 21).** Of the seven JS unit-test files named in this
-port's plan, none needed new porting work: two (`undo_copy_path_test.ts`,
-`undo_content_identity_test.ts`) were already ported during Task 15 as part of
-building the Tree `Edit` reverse operation, and the remaining five are
-properties of the wire format and CRDT restore mechanics that the *server-side*
-restore work (#1875, #1893, #1913, #1927 — all merged to `main` before this
-port's branch point) already covers with Go tests of its own, under different
-names than the JS files. This is exactly the port's own framing in the
-"Problem" section above: the server-side half of undo/redo predates this port,
-and its test coverage predates it too. No JS source tree was available in this
-workspace to diff test-by-test against; the judgment above is based on each
-Go test's asserted properties (round-trip validation, GC-survival ordering,
-two-replica convergence, duplicate-ID rejection) matching the property each JS
-file's name describes, cross-checked against the task reports that reference
-them (Tasks 10, 14, 15).
+**Unit-test audit (Task 21, corrected after review).** A `yorkie-js-sdk`
+checkout pinned at this port's exact target commit (`28a5a42e`, v0.7.16) is
+available in this workspace at `../yorkie-js-sdk` — an initial pass wrongly
+stated otherwise and audited these seven files by matching Go test names
+against task-report descriptions instead of reading the JS bodies. Redone
+against the actual JS source: of the seven files, one JS `it` maps to a
+genuine Go-only defect (Critical 3 — see below, not a porting gap), and six
+JS `it`s across four files had no Go equivalent and are now ported (Task 21):
+2 in `undo_copy_path_test.ts`, 1 in `text_restore_convergence_test.ts`, 2 in
+`restore_converter_test.ts`, 1 in `tree_duplicate_id_test.ts`. The rest were
+already covered, either by this port's own Task 15 or by the pre-port
+server-side restore infrastructure (#1875, #1893, #1913, #1927 — all merged
+to `main` before this port's branch point), under different names than the
+JS files — consistent with the port's own framing in the "Problem" section
+above, that the server-side half of undo/redo, and its test coverage,
+predate this port.
+
+**Critical 3 (Task 21 review): Go accepted a wire payload JS rejects.**
+`tree_restore_converter_test.ts:203`'s `it('on an attribute updatedAt')`
+has no Go counterpart, and unlike every other gap on this page, **the reason
+is that Go did not implement the check** — this is not a porting gap but a
+Go-only correctness bug on the server's untrusted-input path. Trace:
+`api/converter/from_pb.go`'s `fromTreeRestoreSpans` validates every span's
+id/parent/left-sibling/right-sibling `created_at`, but decoded the
+attribute snapshot via the shared `fromRHT` without checking `updatedAt` on
+each attribute first. `fromRHT` → `fromTimeTicket` returns `(nil, nil)` for
+a nil ticket rather than an error, so a crafted payload planted an `RHT`
+node with a nil `updatedAt`, which panics on its first `Ticket.Compare`
+call deep inside the restore path (`pkg/document/time/ticket.go`'s own doc
+comment: "If the receiver or argument is nil, it would panic at runtime").
+JS's `fromPbTreeRestoreSpan` validates this up front
+(`Object.values(pbSpan.attributes).some((attr) => !attr.updatedAt)`) and
+rejects the whole span before any decoder runs. Per the port's own ruling
+mechanism (a Go-only gap where JS already validates is not a shared defect
+to port-as-is; it is a hardening gap to close), **fixed rather than filed**:
+`fromTreeRestoreSpans` (`api/converter/from_pb.go`) now rejects a nil
+`UpdatedAt` on any span attribute before decoding, mirroring the existing
+id/parent/sibling checks. Pinned by a new subtest, "nil attribute
+updatedAt", in `TestTreeRestoreSpanRejectsNilCreatedAt`
+(`api/converter/converter_tree_restore_test.go`) — RED (no error returned)
+confirmed before the fix, GREEN after.
 
 **Counting method.** These files build many of their cases through
 parameterized loops (`for (const op of ops) { it(...) }`, nested Cartesian
@@ -304,7 +333,13 @@ runtime instances; `history_tree_test.ts` is 32 by the same grep but 135.
 The counts above are **runtime instance counts**: derived by reading each
 loop's structure and multiplying it out, then confirmed against the actual
 `go test -v` output of the ported Go suite, which reports one
-`--- PASS`/`--- SKIP` line per instance. `history_array_test.ts` and
+`--- PASS`/`--- SKIP` line per instance — **except** for a Go test ported as
+a bare `func Test...(t *testing.T)` with no `t.Run` calls inside it (one JS
+`it` needing no parameterization, e.g. `TestHistoryTreeUndoPastInitialRoot`):
+that emits one unindented, slash-free top-level line, invisible to a naive
+"count indented `/`-bearing lines" pass, and has to be added back by hand,
+function by function (found in Task 21's review round; see the lessons
+file's "Parity audit" section for the full accounting). `history_array_test.ts` and
 `history_text_test.ts` were verified this way while porting them (Tasks 8
 and 13, `.superpowers/sdd/20260815-undo-redo-go-port-todo/task-8-report.md`
 and `task-13-report.md`); `history_tree_test.ts` and
@@ -377,11 +412,14 @@ during implementation is richer than a bare tuple would allow:
   `TreeEditReverseInfo` (same file) carries `RemovedSpans`/`InsertedSpans`
   (identity-addressed, for the restore-mode reverse), `SpansComplete` (whether
   those spans are trustworthy or the edit must fall back to copy-reinsert),
-  `MergeLevel`, `InsertedContentSize`, `Removed`, and `PreTombstoned` — eight
-  fields where a plain 2-tuple would have forced the copy-reinsert fallback's
-  quite different needs (raw removed nodes, a pre-tombstoned ID set) to be
-  threaded through the same two return slots as the restore-mode path's
-  identity spans. A named struct was the only way to keep both reverse
+  `MergeLevel`, `InsertedContentSize`, `Removed`, `PreTombstoned`,
+  `PreEditFromIdx` (the reconciliation anchor Lesson 4 above is about — the
+  index `from` occupies right after Phase 3, before any mutation), and
+  `RemovedSize` — nine fields where a plain 2-tuple would have forced the
+  copy-reinsert fallback's quite different needs (raw removed nodes, a
+  pre-tombstoned ID set, the pre-mutation anchor and size) to be threaded
+  through the same two return slots as the restore-mode path's identity
+  spans. A named struct was the only way to keep both reverse
   strategies (identity-preserving and copy-reinsert) expressible from one
   `Edit` call without a second, parallel return path.
 - **`Text.Edit` and `Text.Style`/`RemoveStyle` widened by one and two return
@@ -407,26 +445,35 @@ Go source side by side at a level of detail nobody previously had reason to.
 Not fixed here, per this document's own rule against one-sided fixes; filed
 for whoever picks them up next.
 
-1. **Tree's Phase 3 range-narrowing guard is one-sided.** JS's `CRDTTree.edit`
-   narrows the collection range on *both* sides — `if (fromLeft !== fromParent
-   && fromParent !== toParent)` and a matching `if (toLeft !== toParent)`
-   guard (`crdt/tree.ts:1859-1866`) — when a concurrent element split has put
-   `fromLeft`/`toLeft` in a different parent than `fromParent`/`toParent`. Go's
-   `Tree.Edit` (`pkg/document/crdt/tree.go:1664-1686`, "Phase 3: Range
-   Narrowing") only narrows the `from` side (`collectFromParent`,
-   `collectFromLeft`); there is no corresponding `to`-side narrowing. This
-   affects which nodes `toBeRemoveds` collects when a concurrent split has
-   occurred on the `to` boundary specifically. Not reached by any test in this
-   port's suite — the scenario needs a concurrent element split positioned at
-   the *to* boundary of a Tree edit, which none of the ported multi-client
-   cases construct.
+1. **Go's Phase 3 range-narrowing is missing a suppression guard, not a
+   `to`-side narrowing step — corrected in Task 21's review, the initial
+   audit had this backwards.** JS's `CRDTTree.edit` narrows the collection
+   range when a concurrent element split has put `fromLeft` in a different
+   parent than `fromParent` (`if (fromLeft !== fromParent && fromParent !==
+   toParent)`), then, having found a split sibling in `toParent`,
+   deliberately **skips** applying that narrowing in one specific case:
+   `if (toLeft !== toParent)` (`crdt/tree.ts:1859-1866`). JS's own comment
+   says why — "Skip narrowing when toLeft === toParent (leftmost child
+   position, offset 0). The narrowed collectFromLeft would be a child at
+   offset >= 1, producing a backwards range that suppresses the intended
+   merge." Go's `Tree.Edit` (`pkg/document/crdt/tree.go:1664-1686`, "Phase 3:
+   Range Narrowing") performs the same narrowing but has no corresponding
+   suppression check — it narrows unconditionally whenever it finds a split
+   sibling in `toParent`, including the `toLeft === toParent` case JS
+   deliberately excludes. So the divergence is not "Go narrows less than JS"
+   but the reverse: **Go narrows in a case JS deliberately does not**, and by
+   JS's own reasoning the symptom is a backwards range that suppresses an
+   intended merge. Not reached by any test in this port's suite — the
+   scenario needs a concurrent element split positioned at the `to` boundary
+   of a Tree edit with `toLeft === toParent` specifically, which none of the
+   ported multi-client cases construct.
 2. **The snapshot-branch replay uses the wrong `OpSource`.** After
    `ApplyChangePack` applies a snapshot, it replays the client's own pending
    local changes via `d.applyChanges(d.doc.localChanges)`
    (`pkg/document/document.go:540`), which executes each change with
    `operations.OpSourceRemote` (`document.go:583`, the same source
    `applyChanges` always uses). JS's equivalent replay
-   (`document.ts:1465`) uses `OpSource.Local`. Since `Set` and `Remove`
+   (`document.ts:1466`) uses `OpSource.Local`. Since `Set` and `Remove`
    genuinely branch on `OpSource` (this document's Layer 1 section, and the
    `OpSourceUndoRedo`-gated deregister step described in
    [20260816-remote-redo-replica-divergence-todo.md](../tasks/active/20260816-remote-redo-replica-divergence-todo.md)),
