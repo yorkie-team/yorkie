@@ -508,10 +508,10 @@ for whoever picks them up next.
    ported multi-client cases construct.
 2. **The snapshot-branch replay uses the wrong `OpSource`.** After
    `ApplyChangePack` applies a snapshot, it replays the client's own pending
-   local changes via `d.applyChanges(d.doc.localChanges)`
-   (`pkg/document/document.go:540`), which executes each change with
-   `operations.OpSourceRemote` (`document.go:583`, the same source
-   `applyChanges` always uses). JS's equivalent replay
+   local changes via `d.applyChanges(d.doc.localChanges)`, in
+   `ApplyChangePack`'s post-snapshot replay step, which executes each change
+   with `operations.OpSourceRemote` inside `Document.applyChanges` (the same
+   source that function always uses). JS's equivalent replay
    (`document.ts:1466`) uses `OpSource.Local`. Since `Set` and `Remove`
    genuinely branch on `OpSource` (this document's Layer 1 section, and the
    `OpSourceUndoRedo`-gated deregister step described in
@@ -525,8 +525,8 @@ for whoever picks them up next.
    surface, since no test in this port distinguishes `OpSourceLocal` from
    `OpSourceRemote` specifically on the snapshot-replay path.
 3. **Go emits no `Snapshot` event after `applySnapshot`.** `ApplyChangePack`'s
-   snapshot branch (`pkg/document/document.go:518-523`) calls
-   `d.doc.applySnapshot` directly and constructs no `DocEvent`, unlike the
+   snapshot branch (the `hasSnapshot` block at the top of `ApplyChangePack`)
+   calls `d.doc.applySnapshot` directly and constructs no `DocEvent`, unlike the
    non-snapshot branch (`applyChanges`, same file), which collects
    `changeEvents` and delivers them over `d.events`. JS emits a
    `DocEventType.Snapshot` event at the equivalent point so subscribers can
