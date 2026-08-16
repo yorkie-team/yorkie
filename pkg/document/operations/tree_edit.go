@@ -164,7 +164,7 @@ func NewRestoreTreeEdit(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
+func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -365,6 +365,17 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 		// execute(). A later SplitText mutates in place and splits tombstones
 		// too, so holding onto them past this point would let a subsequent
 		// edit truncate the captured content.
+		//
+		// Only the reverse is skipped for a remote change -- every caller
+		// that runs this under OpSourceRemote discards it, and building it
+		// deep-copies the removed subtrees for nothing. lastFromIdx,
+		// lastToIdx and insertedContentSize above must still be set: the
+		// applyChanges reconciliation loop reads them off remote operations
+		// to adjust stacked undo/redo entries.
+		if source == OpSourceRemote {
+			return nil, nil
+		}
+
 		return e.selectReverseOperation(obj, contents, info)
 
 	default:

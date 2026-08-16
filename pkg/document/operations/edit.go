@@ -116,7 +116,7 @@ func NewRestoreEdit(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Edit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
+func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -223,6 +223,21 @@ func (e *Edit) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVe
 		root.Acc(diff)
 		if err != nil {
 			return nil, err
+		}
+
+		// A remote change is replayed, never undone: every caller that runs
+		// this under OpSourceRemote discards the reverse operation
+		// (Document.applyChanges, InternalDocument.ApplyChanges). Building
+		// one anyway costs a NormalizePos, which walks the entire physical
+		// `prev` chain -- linear per change, quadratic over a replay of the
+		// whole change history, which is exactly what the server does on
+		// every snapshot, compaction and cache-missing push-pull. Skip it.
+		//
+		// This is a Go-only shortcut with no wire or behavioral effect: the
+		// value is provably discarded. JS has no equivalent because its
+		// clients never replay a whole document's history.
+		if source == OpSourceRemote {
+			return nil, nil
 		}
 
 		// The anchor is normalized after the edit, against the chain the
