@@ -105,6 +105,13 @@ type Operation interface {
 	// Execute executes this operation on the given document(`root`) and
 	// returns the reverse operation that undoes it. The reverse is nil when
 	// this operation has none.
+	//
+	// An implementation that cannot apply because its target no longer
+	// exists must return ErrOperationSkipped instead of a nil error. That
+	// binds every implementer: Change.Execute treats ErrOperationSkipped as
+	// "skipped, not applied" and excludes the operation from both the
+	// executed list and the reverse operations it returns, rather than
+	// treating it as a no-op execution.
 	Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error)
 
 	// ExecutedAt returns execution time of this operation.
