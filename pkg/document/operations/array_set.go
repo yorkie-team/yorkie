@@ -52,11 +52,11 @@ func NewArraySet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
+func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	// The reverse must be built from the value currently at this position
@@ -83,7 +83,7 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		if previous := obj.GetByID(o.createdAt); previous != nil {
 			copied, err := previous.DeepCopy()
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			previousCopy = copied
 		}
@@ -91,16 +91,16 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
 	if err := obj.InsertAfter(o.createdAt, value, o.executedAt); err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
 	_, err = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
 	// TODO(junseo): GC logic is not implemented here
@@ -108,10 +108,10 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 	root.RegisterElement(value)
 
 	if previousCopy == nil {
-		return nil, nil
+		return ExecutionResult{Observable: true}, nil
 	}
 	reverseOp := NewArraySet(o.parentCreatedAt, value.CreatedAt(), previousCopy, o.executedAt)
-	return reverseOp, nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // Value returns the value of this operation.

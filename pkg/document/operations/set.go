@@ -53,18 +53,18 @@ func NewSet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Object)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	// During undo/redo, skip rather than execute when obj or any of its
 	// ancestors has been concurrently removed (set_operation.ts:81-89).
 	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, obj) {
-		return nil, ErrOperationSkipped
+		return ExecutionResult{}, ErrOperationSkipped
 	}
 
 	// The reverse must be built from the value at this key before it is
@@ -82,7 +82,7 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (O
 		if previous != nil && previous.RemovedAt() == nil {
 			copied, err := previous.DeepCopy()
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			reverseOp = NewSet(o.parentCreatedAt, o.key, copied, o.executedAt)
 		} else {
@@ -92,7 +92,7 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (O
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 	// SetWithExecutedAt uses o.executedAt (rather than value's own createdAt)
 	// as the LWW tie-break ticket. For local and remote Sets these are
@@ -117,7 +117,7 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (O
 	if value.RemovedAt() != nil {
 		root.RegisterRemovedElementPair(obj, value)
 	}
-	return reverseOp, nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // ParentCreatedAt returns the creation time of the Object.

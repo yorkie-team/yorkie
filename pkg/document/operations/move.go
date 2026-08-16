@@ -52,12 +52,12 @@ func NewMove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	// The reverse must capture the target's current predecessor before
@@ -73,14 +73,14 @@ func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (
 	if source.NeedsReverse() {
 		prevCreatedAt, err := obj.FindPrevCreatedAt(o.createdAt)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 		reverseOp = NewMove(o.parentCreatedAt, prevCreatedAt, o.createdAt, o.executedAt)
 	}
 
 	deadNode, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
 	if deadNode != nil {
@@ -90,7 +90,7 @@ func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (
 		})
 	}
 
-	return reverseOp, nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // CreatedAt returns the creation time of the target element.

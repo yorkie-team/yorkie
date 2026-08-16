@@ -48,12 +48,12 @@ func NewRemove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
 	parent, ok := parentElem.(crdt.Container)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	target := root.FindByCreatedAt(o.createdAt)
@@ -62,7 +62,7 @@ func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector)
 	// its ancestors has been concurrently removed (remove_operation.ts:
 	// 84-92).
 	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, target) {
-		return nil, ErrOperationSkipped
+		return ExecutionResult{}, ErrOperationSkipped
 	}
 
 	// Both toReverseOperation and DeleteByCreatedAt look up the target
@@ -79,18 +79,18 @@ func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector)
 	if source.NeedsReverse() {
 		var err error
 		if reverseOp, err = o.toReverseOperation(parent, target); err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 	}
 
 	elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 	if elem != nil {
 		root.RegisterRemovedElementPair(parent, elem)
 	}
-	return reverseOp, nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // toReverseOperation returns the reverse operation of this Remove, or nil

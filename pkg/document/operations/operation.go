@@ -124,11 +124,39 @@ func isRemovedOrOrphaned(root *crdt.Root, elem crdt.Element) bool {
 	return false
 }
 
+// ExecutionResult is what an operation reports after executing. It is the
+// port of the JS SDK's ExecutionResult (operation.ts:190-193), minus the
+// OpInfo list Go does not materialize.
+type ExecutionResult struct {
+	// Reverse is the operation that undoes this execution. It is nil when
+	// the operation has no reverse, and also when the source discards it
+	// (see OpSource.NeedsReverse).
+	Reverse Operation
+
+	// Observable reports whether this execution changed anything a peer or
+	// an editor binding would see. It stands in for JS's `opInfos.length >
+	// 0` (change.ts:176): JS emits one OpInfo per observable effect, and
+	// Document gates both the redo-stack clear (document.ts:768) and the
+	// undo/redo propagation (document.ts:2145) on that list being non-empty.
+	//
+	// Reporting true when JS would emit nothing costs a redundant change on
+	// the wire; reporting false when JS would emit something silently drops
+	// a real edit. So an operation that cannot decide reports true, which is
+	// what Go did for every operation before this field existed. Today only
+	// Edit decides: its JS counterpart derives OpInfos from the change list
+	// text.edit returns, which is non-empty exactly when content was
+	// inserted (rga_tree_split.ts:665) or a live node was removed
+	// (rga_tree_split.ts:1564). Style, TreeEdit and TreeStyle derive their
+	// OpInfos the same way in JS, but the Go CRDT layer does not report the
+	// per-node change list they would need, so they stay conservative.
+	Observable bool
+}
+
 // Operation represents an operation to be executed on a document.
 type Operation interface {
 	// Execute executes this operation on the given document(`root`) and
-	// returns the reverse operation that undoes it. The reverse is nil when
-	// this operation has none.
+	// reports the reverse operation that undoes it, along with whether the
+	// execution was observable. See ExecutionResult.
 	//
 	// An implementation that cannot apply because its target no longer
 	// exists must return ErrOperationSkipped instead of a nil error. That
@@ -136,7 +164,7 @@ type Operation interface {
 	// "skipped, not applied" and excludes the operation from both the
 	// executed list and the reverse operations it returns, rather than
 	// treating it as a no-op execution.
-	Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error)
+	Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (ExecutionResult, error)
 
 	// ExecutedAt returns execution time of this operation.
 	ExecutedAt() *time.Ticket

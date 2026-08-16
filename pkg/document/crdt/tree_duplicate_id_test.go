@@ -277,7 +277,8 @@ func TestTreeEditDroppedCopyDoesNotWidenReverseOperation(t *testing.T) {
 	content := crdt.NewTreeNode(crdt.NewTreeNodeID(textID.CreatedAt, 5), "text", nil, "5")
 
 	op := operations.NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{content}, 0, undoAt)
-	reverseOp, err := op.Execute(root, operations.OpSourceLocal, nil)
+	reverseRes, err := op.Execute(root, operations.OpSourceLocal, nil)
+	reverseOp := reverseRes.Reverse
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>012346789</p></r>", tree.ToXML(), "the copy is not inserted")
 

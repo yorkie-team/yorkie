@@ -187,7 +187,8 @@ func TestTreeRestoreReverseFlipsDirection(t *testing.T) {
 		parent, from, to, helper.TimeT(ctx),
 		spans, crdt.RestoreModeRestore, nil,
 	)
-	reverse, err := restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	reverseRes, err := restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	reverse := reverseRes.Reverse
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 
@@ -201,7 +202,8 @@ func TestTreeRestoreReverseFlipsDirection(t *testing.T) {
 	// Executing it re-removes exactly what the restore revived, and its own
 	// reverse flips the direction back.
 	reverseEdit.SetExecutedAt(helper.TimeT(ctx))
-	redo, err := reverseEdit.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	redoRes, err := reverseEdit.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	redo := redoRes.Reverse
 	assert.NoError(t, err)
 	assert.Equal(t, "<r></r>", tree.ToXML())
 

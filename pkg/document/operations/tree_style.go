@@ -119,11 +119,11 @@ func NewTreeStyleSetAndRemove(
 // combined-reverse constructor without also copying Text's independent-if
 // execute shape from PR #1174), preserved here rather than fixed --
 // see docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
-func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
+func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Tree)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	reversePrevAttributes := make(map[string]string)
@@ -163,10 +163,19 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 	}
 	root.Acc(diff)
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
-	return e.toReverseOperation(reversePrevAttributes, reverseAttrsToRemove), nil
+	// JS derives this operation's OpInfos from the change list tree.style
+	// and tree.removeStyle return (tree_style_operation.ts:196), which is
+	// empty only when the range covered no styleable node. Tree.Style does
+	// not report that list, so this stays conservative: see
+	// ExecutionResult.Observable on why an operation that cannot decide
+	// reports true.
+	return ExecutionResult{
+		Reverse:    e.toReverseOperation(reversePrevAttributes, reverseAttrsToRemove),
+		Observable: true,
+	}, nil
 }
 
 // toReverseOperation builds the operation that undoes this TreeStyle from

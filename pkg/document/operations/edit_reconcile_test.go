@@ -191,7 +191,8 @@ func TestEditReconcileOperationRealistic(t *testing.T) {
 	assert.NoError(t, err)
 
 	deleteOp := NewEdit(text.CreatedAt(), fromPos, toPos, "", nil, time.NewTicket(2, 0, actor))
-	reverse, err := deleteOp.Execute(root, OpSourceLocal, time.NewVersionVector())
+	reverseRes, err := deleteOp.Execute(root, OpSourceLocal, time.NewVersionVector())
+	reverse := reverseRes.Reverse
 	assert.NoError(t, err)
 
 	reverseEdit, ok := reverse.(*Edit)

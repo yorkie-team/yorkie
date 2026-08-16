@@ -164,7 +164,11 @@ func NewRestoreTreeEdit(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error) {
+func (e *TreeEdit) Execute(
+	root *crdt.Root,
+	source OpSource,
+	versionVector time.VersionVector,
+) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -176,10 +180,10 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 		// state, so reject any the acting change could not causally observe.
 		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
 			if err := validateTreeRestoreIdentities(e.restoreSpans, versionVector); err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			if err := validateTreeRestoreIdentities(e.retombstoneSpans, versionVector); err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 
 			// This op is already an identity-preserving reverse being
@@ -218,7 +222,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 			// piece splits it (live-split overhead accounted to diff).
 			retombstonePairs, retombstoneDiff, err := obj.Retombstone(toRetombstone, e.executedAt)
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			diff.Add(retombstoneDiff)
 			for _, pair := range retombstonePairs {
@@ -236,7 +240,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 			// addition, plus any live-split overhead. Mirrors Text restore.
 			untombstoned, recreated, restorePairs, restoreDiff, err := obj.Restore(toRestore)
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			for _, pair := range restorePairs {
 				root.RegisterGCPair(pair)
@@ -250,7 +254,14 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 				diff.Add(node.DataSize())
 			}
 			root.Acc(diff)
-			return reverseOp, nil
+
+			// JS forces this path's OpInfos to exactly one entry rather than
+			// deriving them from the restore/retombstone change lists, because
+			// an empty list would make Document.executeUndoRedo drop the undo
+			// change before it reaches localChanges (tree_edit_operation.ts:
+			// 351-354). Reporting observable unconditionally is that same
+			// decision.
+			return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 		}
 
 		// A reverse being (re-)executed may have had its fromIdx/toIdx
@@ -263,7 +274,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 		if e.isUndoOp && e.fromIdx != nil && e.toIdx != nil {
 			fromPos, err := obj.FindPos(*e.fromIdx)
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			e.from = fromPos
 			if *e.fromIdx == *e.toIdx {
@@ -271,7 +282,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 			} else {
 				toPos, err := obj.FindPos(*e.toIdx)
 				if err != nil {
-					return nil, err
+					return ExecutionResult{}, err
 				}
 				e.to = toPos
 			}
@@ -285,7 +296,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 
 				clone, err = content.DeepCopy()
 				if err != nil {
-					return nil, err
+					return ExecutionResult{}, err
 				}
 
 				contents = append(contents, clone)
@@ -343,7 +354,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 		}
 		root.Acc(diff)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 
 		// Mirrors JS's `this.insertedContentSize = insertedContentSize`:
@@ -388,13 +399,24 @@ func (e *TreeEdit) Execute(root *crdt.Root, source OpSource, versionVector time.
 		// set: the applyChanges reconciliation loop reads them off remote
 		// operations to adjust stacked undo/redo entries.
 		if !source.NeedsReverse() {
-			return nil, nil
+			return ExecutionResult{Observable: true}, nil
 		}
 
-		return e.selectReverseOperation(obj, contents, info)
+		reverseOp, err := e.selectReverseOperation(obj, contents, info)
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+
+		// JS derives this path's OpInfos from the change list tree.edit
+		// returns (tree_edit_operation.ts:496), which is empty only when the
+		// edit inserted nothing, split nothing and found nothing live to
+		// remove. Tree.Edit does not report that list, so this stays
+		// conservative: see ExecutionResult.Observable on why an operation
+		// that cannot decide reports true.
+		return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 
 	default:
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 }
 

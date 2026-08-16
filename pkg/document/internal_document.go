@@ -352,11 +352,11 @@ func (d *InternalDocument) applyChanges(
 			prevPresence = d.Presence(clientID)
 		}
 
-		executed, _, err := c.Execute(d.root, d.presences, source)
+		result, err := c.Execute(d.root, d.presences, source)
 		if err != nil {
 			return nil, nil, err
 		}
-		executedOps = append(executedOps, executed...)
+		executedOps = append(executedOps, result.Executed...)
 
 		if c.PresenceChange() != nil {
 			if c.PresenceChange().ChangeType == presence.Clear {

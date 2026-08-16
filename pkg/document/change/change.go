@@ -52,19 +52,35 @@ func New(id ID, message string, operations []operations.Operation, pc *inner.Cha
 	}
 }
 
-// Execute applies this change to the given JSON root. It returns the
-// operations that actually executed and the reverse operations that undo
-// them, in reverse order.
+// ExecutionResult is what executing a Change reports to its caller. It is
+// the port of what JS's Change.execute returns (change.ts:196), minus the
+// OpInfo list Go does not materialize.
+type ExecutionResult struct {
+	// Executed lists the operations that actually applied, in the order they
+	// ran. An operation that declined to execute is not among them.
+	Executed []operations.Operation
+
+	// Observable reports whether any executed operation changed something a
+	// peer or an editor binding would see. It stands in for JS's
+	// `opInfos.length > 0`; see operations.ExecutionResult.Observable for
+	// what each operation counts.
+	Observable bool
+
+	// ReverseOps holds the operations that undo this change, in reverse
+	// order, so replaying them walks the change backwards.
+	ReverseOps []operations.Operation
+}
+
+// Execute applies this change to the given JSON root.
 func (c *Change) Execute(
 	root *crdt.Root,
 	presences *inner.Map,
 	source operations.OpSource,
-) ([]operations.Operation, []operations.Operation, error) {
-	var executed []operations.Operation
-	var reverseOps []operations.Operation
+) (ExecutionResult, error) {
+	var result ExecutionResult
 
 	for _, op := range c.operations {
-		reverseOp, err := op.Execute(root, source, c.ID().versionVector)
+		opResult, err := op.Execute(root, source, c.ID().versionVector)
 		if err != nil {
 			// NOTE(hackerwins): An operation whose target was concurrently
 			// removed declines to execute during undo/redo. It is dropped
@@ -74,14 +90,16 @@ func (c *Change) Execute(
 			if errors.Is(err, operations.ErrOperationSkipped) {
 				continue
 			}
-			return nil, nil, err
+			return ExecutionResult{}, err
 		}
-		executed = append(executed, op)
+		result.Executed = append(result.Executed, op)
+		result.Observable = result.Observable || opResult.Observable
 
 		// NOTE(hackerwins): Reverse operations are accumulated in reverse
 		// order so that undoing a change replays its operations backwards.
-		if reverseOp != nil {
-			reverseOps = append([]operations.Operation{reverseOp}, reverseOps...)
+		if opResult.Reverse != nil {
+			result.ReverseOps = append(
+				[]operations.Operation{opResult.Reverse}, result.ReverseOps...)
 		}
 	}
 
@@ -89,7 +107,7 @@ func (c *Change) Execute(
 		c.presenceChange.Execute(c.id.actorID, presences)
 	}
 
-	return executed, reverseOps, nil
+	return result, nil
 }
 
 // ID returns the ID of this change.

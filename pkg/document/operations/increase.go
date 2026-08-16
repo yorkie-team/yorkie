@@ -59,11 +59,11 @@ func NewIncreaseWithActor(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	value := o.value.(*crdt.Primitive)
@@ -75,25 +75,25 @@ func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (O
 	if o.actor == "" {
 		negated, err := negatePrimitive(value)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 		reverseOp = NewIncrease(o.parentCreatedAt, negated, o.executedAt)
 	}
 
 	if cnt.IsDedup() {
 		if o.actor == "" {
-			return nil, ErrNotApplicableDataType
+			return ExecutionResult{}, ErrNotApplicableDataType
 		}
 		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 	} else {
 		if _, err := cnt.Increase(value); err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 	}
 
-	return reverseOp, nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // negatePrimitive returns a deep copy of the given primitive with its

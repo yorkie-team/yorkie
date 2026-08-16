@@ -110,11 +110,11 @@ func NewStyleSetAndRemove(
 // can carry both at once -- see toReverseOperation -- so both branches run
 // independently here, mirroring style_operation.ts's execute (:125-169),
 // rather than the two being mutually exclusive.
-func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
+func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Text)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	reversePrevAttributes := make(map[string]string)
@@ -132,7 +132,7 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 		}
 		root.Acc(diff)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 		for _, prevAttr := range prevAttrs {
 			reversePrevAttributes[prevAttr.Key] = prevAttr.Value
@@ -150,7 +150,7 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 		}
 		root.Acc(diff)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 		for _, prevAttr := range prevAttrs {
 			if prevAttr.Existed {
@@ -161,7 +161,16 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 		}
 	}
 
-	return e.toReverseOperation(reversePrevAttributes, reverseAttrsToRemove), nil
+	// JS derives this operation's OpInfos from the change list text.setStyle
+	// and text.removeStyle return (style_operation.ts:205), which is empty
+	// only when the range covered no styleable node. Text.Style does not
+	// report that list, so this stays conservative: see
+	// ExecutionResult.Observable on why an operation that cannot decide
+	// reports true.
+	return ExecutionResult{
+		Reverse:    e.toReverseOperation(reversePrevAttributes, reverseAttrsToRemove),
+		Observable: true,
+	}, nil
 }
 
 // toReverseOperation builds the operation that undoes this Style from the

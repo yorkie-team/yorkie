@@ -60,7 +60,8 @@ func TestStyle(t *testing.T) {
 		removeOp := operations.NewStyleRemove(
 			text.CreatedAt(), fromPos, toPos, []string{"bold"}, time.NewTicket(2, 0, actor),
 		)
-		reverse, err := removeOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := removeOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 		assert.False(t, text.Nodes()[0].Value().Attrs().Has("bold"),
 			"forward RemoveStyle should have removed the attribute")
@@ -92,7 +93,8 @@ func TestStyle(t *testing.T) {
 			map[string]string{"bold": "false", "italic": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		attrs := text.Nodes()[0].Value().Attrs()
@@ -128,7 +130,8 @@ func TestStyle(t *testing.T) {
 			map[string]string{"bold": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		reverseStyle, ok := reverse.(*operations.Style)
@@ -155,7 +158,8 @@ func TestStyle(t *testing.T) {
 			map[string]string{"bold": "false", "italic": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		pbOps, err := converter.ToOperations([]operations.Operation{reverse})
@@ -199,7 +203,8 @@ func TestStyle(t *testing.T) {
 			map[string]string{"italic": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		reverseStyle, ok := reverse.(*operations.Style)

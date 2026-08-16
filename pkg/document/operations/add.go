@@ -52,21 +52,21 @@ func NewAdd(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operation, error) {
+func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
 	if err = obj.InsertAfter(o.prevCreatedAt, value, o.executedAt); err != nil {
-		return nil, err
+		return ExecutionResult{}, err
 	}
 
 	root.RegisterElement(value)
@@ -76,7 +76,10 @@ func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operat
 	// createdAt is reissued at execution time when this reverse is later
 	// replayed as an UndoRemove (executeUndoRedo's Add branch), so the
 	// target here is always the identity the value ends up living under.
-	return NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt), nil
+	return ExecutionResult{
+		Reverse:    NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt),
+		Observable: true,
+	}, nil
 }
 
 // Value returns the value of this operation.

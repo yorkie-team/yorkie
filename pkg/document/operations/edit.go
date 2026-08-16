@@ -116,7 +116,7 @@ func NewRestoreEdit(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (Operation, error) {
+func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -127,10 +127,10 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		// observed, so a client cannot forge a node under another actor's
 		// clock or advance it. See validateRestoreIdentities.
 		if err := validateRestoreIdentities(e.restoreSpans, versionVector); err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 		if err := validateRestoreIdentities(e.retombstoneSpans, versionVector); err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 
 		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
@@ -162,9 +162,20 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				retombstoneSpans: e.retombstoneSpans,
 			}
 
+			// Whether anything was actually re-removed or revived below. JS
+			// builds this path's OpInfos from the change lists retombstone and
+			// restore return (edit_operation.ts:175,199): retombstone reports a
+			// change per live piece it tombstones, and restore one per node it
+			// un-tombstones or recreates. Both are empty when the spans name
+			// content that is already in the state they ask for -- the paths
+			// are idempotent -- and JS then treats the execution as producing
+			// nothing.
+			observable := false
+
 			// 1. Re-remove the content the reversed edit inserted (by identity).
 			if len(toRetombstone) > 0 {
 				pairs, diff := obj.Retombstone(toRetombstone, e.executedAt)
+				observable = observable || len(pairs) > 0
 				for _, pair := range pairs {
 					root.RegisterGCPair(pair)
 					root.AdjustDiffForGCPair(&diff, pair)
@@ -176,6 +187,7 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			if len(toRestore) > 0 {
 				untombstoned, recreated, stillTombstoned := obj.Restore(
 					toRestore, e.executedAt, e.from)
+				observable = observable || len(untombstoned) > 0 || len(recreated) > 0
 
 				// Register the still-tombstoned split remainders (which include
 				// any split-born target) BEFORE un-registering the
@@ -197,7 +209,7 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				root.Acc(diff)
 			}
 
-			return reverseOp, nil
+			return ExecutionResult{Reverse: reverseOp, Observable: observable}, nil
 		}
 
 		// A reverse's positions were recorded against the chain as it stood
@@ -205,11 +217,11 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		if e.isUndoOp {
 			from, err := obj.RefinePos(e.from)
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			to, err := obj.RefinePos(e.to)
 			if err != nil {
-				return nil, err
+				return ExecutionResult{}, err
 			}
 			e.from, e.to = from, to
 		}
@@ -222,8 +234,18 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		}
 		root.Acc(diff)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
+
+		// JS builds this path's OpInfos from the change list text.edit
+		// returns (edit_operation.ts:247), which carries one entry per
+		// inserted run (rga_tree_split.ts:665, `if (value)`) and one per
+		// contiguous span of live nodes the edit deleted (rga_tree_split.ts:
+		// 1564, `fromIdx < toIdx`). An edit that inserts nothing and finds
+		// nothing live to delete produces an empty list, so JS treats it as
+		// having changed nothing observable -- it neither clears the redo
+		// stack nor propagates the undo of it.
+		observable := len(e.content) > 0 || len(removedSpans) > 0
 
 		// A remote change is replayed, never undone: every caller that runs
 		// this remotely discards the reverse operation
@@ -237,20 +259,23 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		// value is provably discarded. JS has no equivalent because its
 		// clients never replay a whole document's history.
 		if !source.NeedsReverse() {
-			return nil, nil
+			return ExecutionResult{Observable: observable}, nil
 		}
 
 		// The anchor is normalized after the edit, against the chain the
 		// reverse will actually run on.
 		fromPos, err := obj.NormalizePos(e.from)
 		if err != nil {
-			return nil, err
+			return ExecutionResult{}, err
 		}
 
-		return e.toReverseOperation(removedValues, fromPos, removedSpans), nil
+		return ExecutionResult{
+			Reverse:    e.toReverseOperation(removedValues, fromPos, removedSpans),
+			Observable: observable,
+		}, nil
 
 	default:
-		return nil, ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 }
 

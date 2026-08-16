@@ -39,6 +39,52 @@ func TestHistoryStack(t *testing.T) {
 		assert.NoError(t, doc.Redo())
 	})
 
+	t.Run("a no-op edit keeps the redo stack test", func(t *testing.T) {
+		// Both gates that JS puts on `opInfos.length` -- "did this change
+		// produce anything observable" -- must ask the same question in Go,
+		// not "did any operation run". An edit that neither inserts nor
+		// removes runs and produces nothing, so JS leaves the redo stack
+		// alone (document.ts:768).
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("t")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "hi")
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.True(t, doc.CanRedo())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "")
+			return nil
+		}))
+		assert.True(t, doc.CanRedo())
+	})
+
+	t.Run("undoing a no-op edit queues no change test", func(t *testing.T) {
+		// The reverse of a no-op edit is itself a no-op, so undoing it
+		// changes nothing any peer could observe. JS returns early before
+		// localChanges.push (document.ts:2145); Go must not spend a clientSeq
+		// and a change-log row on it either.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("t")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("t").Edit(0, 0, "")
+			return nil
+		}))
+
+		before := len(doc.CreateChangePack().Changes)
+		assert.True(t, doc.CanUndo())
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, before, len(doc.CreateChangePack().Changes))
+	})
+
 	t.Run("undo inside an updater is refused test", func(t *testing.T) {
 		doc := document.New("d1")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {

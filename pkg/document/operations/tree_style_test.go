@@ -84,7 +84,8 @@ func TestTreeStyle(t *testing.T) {
 		removeOp := operations.NewTreeStyleRemove(
 			tree.CreatedAt(), fromPos, toPos, []string{"bold"}, time.NewTicket(2, 0, actor),
 		)
-		reverse, err := removeOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := removeOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 		assert.False(t, pNode(t, tree).Attrs.Has("bold"),
 			"forward RemoveStyle should have removed the attribute")
@@ -129,7 +130,8 @@ func TestTreeStyle(t *testing.T) {
 			map[string]string{"bold": "false", "italic": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		attrs := pNode(t, tree).Attrs
@@ -169,7 +171,8 @@ func TestTreeStyle(t *testing.T) {
 			map[string]string{"bold": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		reverseStyle, ok := reverse.(*operations.TreeStyle)
@@ -198,7 +201,8 @@ func TestTreeStyle(t *testing.T) {
 			map[string]string{"bold": "false", "italic": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		pbOps, err := converter.ToOperations([]operations.Operation{reverse})
@@ -249,7 +253,8 @@ func TestTreeStyle(t *testing.T) {
 			map[string]string{"italic": "true"},
 			time.NewTicket(2, 0, actor),
 		)
-		reverse, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverseRes, err := setOp.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
 		reverseStyle, ok := reverse.(*operations.TreeStyle)

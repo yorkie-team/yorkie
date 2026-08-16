@@ -266,7 +266,7 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		executed, reverseOps, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
+		result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
 		if err != nil {
 			return err
 		}
@@ -276,14 +276,14 @@ func (d *Document) Update(
 		// operation that still references the replaced element's old
 		// createdAt must be rewritten to the new one, or it will target a
 		// tombstone the next time it runs (document.ts:744-752).
-		for _, op := range executed {
+		for _, op := range result.Executed {
 			if set, ok := op.(*operations.ArraySet); ok {
 				d.history.ReconcileCreatedAt(set.CreatedAt(), set.Value().CreatedAt())
 			}
 		}
 
 		var reverse []HistoryOperation
-		for _, op := range reverseOps {
+		for _, op := range result.ReverseOps {
 			reverse = append(reverse, HistoryOperation{Op: op})
 		}
 		if reversePresence := ctx.ReversePresence(); reversePresence != nil {
@@ -293,8 +293,12 @@ func (d *Document) Update(
 			d.history.PushUndo(reverse)
 		}
 
-		// NOTE(hackerwins): A new local operation invalidates the redo stack.
-		if len(executed) > 0 {
+		// NOTE(hackerwins): A new local operation invalidates the redo stack,
+		// but only one that changed something observable: JS gates this on
+		// opInfos, not on the operations that ran (document.ts:768). An edit
+		// that neither inserted nor removed anything leaves the redo stack
+		// alone on both SDKs.
+		if result.Observable {
 			d.history.ClearRedo()
 		}
 
@@ -475,16 +479,16 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 	}
 
 	c := ctx.ToChange()
-	if _, _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceUndoRedo); err != nil {
+	if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceUndoRedo); err != nil {
 		return err
 	}
-	executed, reverseOps, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceUndoRedo)
+	result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceUndoRedo)
 	if err != nil {
 		return err
 	}
 
 	var reverse []HistoryOperation
-	for _, op := range reverseOps {
+	for _, op := range result.ReverseOps {
 		reverse = append(reverse, HistoryOperation{Op: op})
 	}
 	if reversePresence := ctx.ReversePresence(); reversePresence != nil {
@@ -498,7 +502,12 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 		}
 	}
 
-	if len(executed) == 0 && c.PresenceChange() == nil {
+	// NOTE(chacha912): An undo or redo that changed nothing observable and
+	// carries no presence change is not propagated. JS gates this on opInfos
+	// rather than on the operations that ran (document.ts:2145), so reversing
+	// an edit that inserted and removed nothing costs neither a clientSeq nor
+	// a change-log row on either SDK.
+	if !result.Observable && c.PresenceChange() == nil {
 		return nil
 	}
 
@@ -631,7 +640,7 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 
 	var events []DocEvent
 	for _, c := range changes {
-		if _, _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
+		if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
 			return err
 		}
 
