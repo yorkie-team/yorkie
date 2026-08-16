@@ -859,3 +859,99 @@ history path on both.
       position between a Go and a JS replica
 - [ ] Land the change in both SDKs in the same release, since a
       one-sided change moves where the undo lands
+
+## Related: `Style`, `TreeStyle` and ordinary `TreeEdit` over-report `Observable`
+
+Found while widening `Operation.Execute` to return `ExecutionResult{Reverse,
+Observable}` so `Document.Update` and `Document.executeUndoRedo` could gate
+the redo-stack clear and undo/redo propagation on JS's `opInfos.length`
+rather than on `len(executed)` (see `docs/design/undo-redo-go-port.md`'s
+parity table, the `ExecutionResult`/`Observable` row). Not fixed here, per
+this document's usual rule: closing it needs a CRDT-layer API change, not a
+local one. Filed here because every other left-open divergence on this
+branch gets this treatment.
+
+### Mechanism
+
+`Edit` derives `Observable` exactly, from what the CRDT layer itself
+reports changed: content inserted, or a live node newly tombstoned by this
+edit (`RGATreeSplit.deleteNodes`/`RGATreeSplitNode.Remove`). Every other
+operation reports `Observable: true` unconditionally — what Go did for
+every operation before the field existed (`ExecutionResult.Observable`'s
+doc comment, `pkg/document/operations/operation.go:143-168`). For most of
+those operations that unconditional `true` is exact: `Add`, `Remove`,
+`Move` and the rest always change something observable when they succeed.
+Three operations are not exact: their JS counterparts derive `opInfos`
+from a per-node change list the underlying CRDT call returns, and the Go
+CRDT layer does not return that list, so Go cannot compute the JS-exact
+value and stays conservative instead.
+
+### The three operations and the exact conditions where JS and Go differ
+
+1. **`Style`** (`pkg/document/operations/style.go:164-173`). JS derives
+   `opInfos` from the change lists `text.setStyle`/`text.removeStyle`
+   return (`style_operation.ts:205`), empty only when the range covered no
+   styleable node — every node in `[from, to)` was tombstoned before
+   `editedAt` (rejected by `canStyle`, `rga_tree_split.go`), or the range
+   is empty. Go's `Text.Style`/`Text.RemoveStyle` do not report that list,
+   so `Style.Execute` reports `Observable: true` even when nothing was
+   actually styled.
+2. **`TreeStyle`** (`pkg/document/operations/tree_style.go:169-178`). Same
+   shape as `Style`, over `Tree.Style`/`Tree.RemoveStyle` instead of
+   `Text`'s: JS's `opInfos` are empty only when the range covered no
+   styleable tree node; Go reports `true` unconditionally.
+3. **Ordinary (non-identity-preserving) `TreeEdit`**
+   (`pkg/document/operations/tree_edit.go:410-416`, and its remote-skip
+   counterpart at `:401-402`). JS derives `opInfos` from the change list
+   `tree.edit` returns (`tree_edit_operation.ts:496`), empty only when the
+   edit inserted nothing, split nothing, and found nothing live to remove.
+   Go's `Tree.Edit` does not report that list, so this path reports `true`
+   unconditionally too.
+
+   The identity-preserving `TreeEdit` restore/retombstone path
+   (`tree_edit.go:258-264`) is **not** part of this divergence — JS itself
+   forces that path's `opInfos` to exactly one entry regardless of what
+   restore/retombstone actually touched (`tree_edit_operation.ts:351-354`),
+   specifically so `Document.executeUndoRedo` never drops the undo change.
+   Go's unconditional `true` there is exact parity, not a conservative
+   fallback.
+
+### Why the conservative direction was chosen
+
+Reporting `true` where JS would report nothing costs a redundant change on
+the wire and an unnecessary redo-stack clear. Reporting `false` where JS
+would report something silently drops a real edit's undo and can diverge
+replicas — the exact failure mode this port exists to close. Between the
+two, over-reporting is strictly the safer direction, so it is the one Go
+took. This is a decision already made, not an oversight — **do not change
+the behavior**.
+
+### What closing it would require
+
+Go's `Text.Style`, `Text.RemoveStyle`, `Tree.Style`, `Tree.RemoveStyle` and
+`Tree.Edit` would need to return the same per-node change list their JS
+counterparts do — a widening of the CRDT-layer return values, the same
+shape of change the `Style`/`RemoveStyle` `PrevAttr` capture already made
+(see "`Text.Style`/`RemoveStyle` do not skip tombstoned nodes" above for
+that precedent) and `TreeEditReverseInfo` already made for the reverse-op
+path. Each `Execute` call would then derive `Observable` from that list
+instead of reporting `true` unconditionally, matching how `Edit` already
+does it. This is a CRDT-layer API change touching four call sites plus
+their JS-parity verification, not a local fix.
+
+### Tasks
+
+- [ ] Decide whether closing this is worth the CRDT-layer API churn, given
+      the failure mode it fixes is "one redundant change plus one spurious
+      redo-stack clear," not replica divergence
+- [ ] If closing it: widen `Text.Style`/`Text.RemoveStyle` to return a
+      per-node change list (mirroring `canStyle`'s existing node-selection
+      logic), and the same for `Tree.Style`/`Tree.RemoveStyle` and
+      `Tree.Edit`
+- [ ] Add regression coverage pinning the exact JS-empty cases:
+      `Style`/`RemoveStyle` over a range with no styleable node, and a
+      `TreeEdit` that inserts nothing, splits nothing and removes nothing —
+      assert `Observable == false` and that the redo stack survives / no
+      undo change ships, matching JS
+- [ ] No JS-side change needed — JS already computes this exactly; only
+      Go's conservative fallback would move
