@@ -41,6 +41,13 @@ import (
 // cases live (not skipped -- see that file's doc comment for why the JS
 // skip is stale). Nothing from that describe block is duplicated here.
 
+// NOTE(hackerwins): applyTextOp1/applyTextOp2 and the few subtests that
+// compute their own bounds derive indices from len(txt.String()), which is a
+// byte count. Text indices are UTF-16 code units, so the two agree only for
+// ASCII -- which every fixture in this file is. The first non-ASCII fixture
+// added here must switch to a UTF-16 length, or it will silently address the
+// wrong position rather than fail loudly.
+
 // applyTextOp1 applies the given operation to the "t" text using the JS
 // test's applyTextOp1 index pattern (history_text_test.ts).
 func applyTextOp1(t *testing.T, doc *document.Document, op string) {
