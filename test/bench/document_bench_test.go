@@ -491,6 +491,36 @@ func BenchmarkDocument(b *testing.B) {
 	})
 }
 
+// BenchmarkPresenceUpdate measures a presence-only Update on a document that
+// already carries a handful of presence keys. It is the shape a client runs
+// once per watch event -- cursor and selection updates -- so it is the hottest
+// Update in the SDK and the one least able to absorb per-call overhead.
+//
+// Undo/redo needs the value a presence key held before the change, but only
+// for the keys a caller marked undoable with presence.WithHistory, which most
+// of these calls mark none of. Anything this benchmark pays for the reverse
+// bookkeeping is therefore paid on behalf of a reverse entry that is never
+// built.
+func BenchmarkPresenceUpdate(b *testing.B) {
+	doc := document.New("d1")
+	assert.NoError(b, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		for i := range 5 {
+			p.Set(fmt.Sprintf("key-%d", i), "value")
+		}
+		return nil
+	}))
+	b.ResetTimer()
+
+	for b.Loop() {
+		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("key-0", "moved")
+			return nil
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // Benchmark for deletion operations of text and tree types
 func BenchmarkDocumentDeletion(b *testing.B) {
 	// A single client inserts 10,000 characters (text) and deletes everything at once

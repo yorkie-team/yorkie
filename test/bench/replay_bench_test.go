@@ -78,6 +78,75 @@ func BenchmarkChangeReplay(b *testing.B) {
 	}
 }
 
+// BenchmarkRemoteApply measures the client counterpart of BenchmarkChangeReplay:
+// a Document applying a pack of remote changes through Document.ApplyChangePack
+// with nothing on either history stack, which is every client that never calls
+// Undo and every document freshly attached.
+//
+// The reconcile loop in Document.applyChanges normalizes the position of every
+// executed Edit and TreeEdit so any stacked undo/redo entry stays anchored.
+// Text.NormalizePos walks the whole physical `prev` chain, so the loop is
+// linear per change and quadratic over a pack -- a cost the empty-history case
+// can never read back, since every Reconcile* call walks two empty stacks.
+//
+// The cases mirror the replay benchmark for the same reason it covers all four:
+// the guard has to hold for both data types and both directions. The numbers
+// must stay close to linear in the edit count.
+func BenchmarkRemoteApply(b *testing.B) {
+	for _, tc := range []struct {
+		name    string
+		changes func(*testing.B, int) []*change.Change
+	}{
+		{"text-insert", textInsertChanges},
+		{"text-delete", textDeleteChanges},
+		{"tree-insert", treeInsertChanges},
+		{"tree-delete", treeDeleteChanges},
+	} {
+		for _, cnt := range []int{400, 1600} {
+			b.Run(fmt.Sprintf("%s-%d-edits", tc.name, cnt), func(b *testing.B) {
+				// GC is disabled so the measurement covers applying the pack
+				// and reconciling against it, not a collection pass whose cost
+				// depends on the version vector the pack happens to carry.
+				pack := change.NewPack("d1", change.InitialCheckpoint, tc.changes(b, cnt), nil, nil)
+				b.ResetTimer()
+
+				for range b.N {
+					b.StopTimer()
+					doc := document.New("d1", document.WithDisableGC())
+					done := drainEvents(doc)
+					b.StartTimer()
+
+					if err := doc.ApplyChangePack(pack); err != nil {
+						b.Fatal(err)
+					}
+
+					b.StopTimer()
+					close(done)
+					b.StartTimer()
+				}
+			})
+		}
+	}
+}
+
+// drainEvents consumes the document's event channel until the returned channel
+// is closed. Document.applyChanges sends every event it produces while holding
+// the document lock over a channel of capacity one, so an undrained document
+// deadlocks on the second event of a pack.
+func drainEvents(doc *document.Document) chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-doc.Events():
+			case <-done:
+				return
+			}
+		}
+	}()
+	return done
+}
+
 // textInsertChanges builds cnt appending Text edits as a client would and
 // returns the resulting changes, ready to be replayed. Replaying leaves the
 // operations untouched, so the same slice can be replayed repeatedly.
