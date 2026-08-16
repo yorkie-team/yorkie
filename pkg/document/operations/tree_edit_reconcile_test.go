@@ -138,11 +138,27 @@ func TestTreeEditReconcileOperationCases(t *testing.T) {
 		assertRange(t, e, 10, 15)
 	})
 
-	t.Run("case 7: an adjacent remote insert behaves as case 1 (left)", func(t *testing.T) {
-		// [--remote--)[--undo--]  remote inserts right at the undo range's start
+	// Case 7 in history_tree_test.ts ("adjacent") is a remote insert sitting
+	// exactly at one of the undo range's own boundaries -- not a distinct
+	// formula, but the edge between two of the cases above, so both edges are
+	// pinned here: a remote insert at the undo range's start boundary is
+	// still entirely "to the left" (Case 1's remoteTo <= localFrom uses <=,
+	// not <), and one at its end boundary is still entirely "to the right"
+	// (Case 2's localTo <= remoteFrom, same). Ties resolve toward "no
+	// overlap" on both edges, so an insert exactly at either boundary lands
+	// unambiguously on one side, never straddling into Cases 3-6.
+	t.Run("case 7 (adjacent, start edge): a remote insert at the undo range's start is case 1", func(t *testing.T) {
+		// [--remote--)[--undo--]
 		e := newUndoTreeEdit(10, 20)
 		e.ReconcileOperation(10, 10, 2)
 		assertRange(t, e, 12, 22)
+	})
+
+	t.Run("case 7 (adjacent, end edge): a remote insert at the undo range's end is case 2", func(t *testing.T) {
+		// [--undo--][--remote--)
+		e := newUndoTreeEdit(10, 20)
+		e.ReconcileOperation(20, 20, 2)
+		assertRange(t, e, 10, 20)
 	})
 
 	t.Run("never touches restoreSpans or retombstoneSpans", func(t *testing.T) {
