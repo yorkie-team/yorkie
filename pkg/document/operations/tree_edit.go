@@ -17,10 +17,17 @@
 package operations
 
 import (
+	"errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// ErrCannotReissueSplittingEdit occurs when ReissueContentIDs is asked to
+// re-identify the content of an edit that also splits. The tickets it takes
+// would collide with the ones the split itself consumes; see the method.
+var ErrCannotReissueSplittingEdit = errors.New("cannot reissue content ids on a splitting edit")
 
 // TreeEdit is an operation representing Tree editing.
 type TreeEdit struct {
@@ -129,6 +136,21 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
 			}
 
+			// The reverse of an identity-preserving edit keeps both span sets
+			// and only flips the direction, so undoing a restore re-removes
+			// exactly the nodes it revived, still under their original
+			// identities. Copying their content into a fresh insertion here
+			// would defeat the whole point of the restore path. Built before
+			// the mutation, from state the mutation does not touch.
+			reverseOp := &TreeEdit{
+				parentCreatedAt:  e.parentCreatedAt,
+				from:             e.from,
+				to:               e.to,
+				restoreSpans:     e.restoreSpans,
+				restoreMode:      flipRestoreMode(e.restoreMode),
+				retombstoneSpans: e.retombstoneSpans,
+			}
+
 			var diff resource.DataSize
 			// 1. Re-remove (retombstone) by identity. Isolating a straddling
 			// piece splits it (live-split overhead accounted to diff).
@@ -166,7 +188,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 				diff.Add(node.DataSize())
 			}
 			root.Acc(diff)
-			return nil, nil
+			return reverseOp, nil
 		}
 
 		var contents []*crdt.TreeNode
@@ -184,7 +206,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			}
 
 		}
-		pairs, diff, _, _, err := obj.Edit(
+		pairs, diff, removed, preTombstoned, err := obj.Edit(
 			e.from,
 			e.to,
 			contents,
@@ -232,11 +254,226 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			return nil, err
 		}
 
+		// removed and preTombstoned name live tombstones still linked into
+		// obj, not copies, so the reverse operation's content is deep-copied
+		// here — synchronously, inside the call that produced them, the way JS
+		// does inside the same execute(). A later SplitText mutates in place
+		// and splits tombstones too, so holding onto them past this point
+		// would let a subsequent edit truncate the captured content.
+		return e.toReverseOperation(obj, contents, removed, preTombstoned)
+
 	default:
 		return nil, ErrNotApplicableDataType
 	}
+}
 
-	return nil, nil
+// toReverseOperation builds the operation that undoes this edit: it deletes
+// the range this edit inserted and re-inserts a copy of what this edit
+// removed. Reversing a deletion by copy rather than by identity is what makes
+// ReissueContentIDs necessary — see there.
+//
+// Positions are read off the post-edit tree, mirroring
+// tree_edit_operation.ts:640-665, which computes them as
+// findPos(preEditFromIdx) and findPos(preEditFromIdx + insertedContentSize).
+// Go's Tree.Edit does not report preEditFromIdx, so the anchor is derived from
+// the nodes the edit actually touched instead: it sits immediately before the
+// content the tree accepted, or — with nothing accepted — immediately before
+// the first node this edit tombstoned, which names the same point once those
+// tombstones stop counting towards the index.
+//
+// Only splitLevel 0 is reversed. A split's reverse is a boundary deletion
+// rather than a content re-insertion, and is not built yet.
+func (e *TreeEdit) toReverseOperation(
+	tree *crdt.Tree,
+	inserted []*crdt.TreeNode,
+	removed []*crdt.TreeNode,
+	preTombstoned map[string]struct{},
+) (Operation, error) {
+	if e.splitLevel != 0 {
+		return nil, nil
+	}
+
+	// Only the content the tree accepted counts. Content reusing an ID the
+	// tree already holds is dropped on the way in, and content inserted under
+	// a concurrently removed parent is tombstoned on the way in; a reverse
+	// range covering either would delete a neighbour on redo.
+	var lastLive *crdt.TreeNode
+	insertedSize := 0
+	for _, content := range inserted {
+		if content.Index.Parent == nil || content.IsRemoved() {
+			continue
+		}
+		lastLive = content
+		insertedSize += content.Index.PaddedLength()
+	}
+
+	contents, err := reverseContents(removed, preTombstoned)
+	if err != nil {
+		return nil, err
+	}
+
+	var anchor *crdt.TreeNode
+	switch {
+	case lastLive != nil:
+		anchor = lastLive
+	case len(removed) > 0:
+		// The first newly tombstoned node in document order. Its own parent
+		// may be a tombstone too, in which case ToIndex resolves the position
+		// of the topmost removed ancestor — the same anchor.
+		anchor = removed[0]
+	default:
+		// This edit neither removed nor inserted anything: the reverse is an
+		// ordinary no-op edit anchored where this one ran. Kept rather than
+		// dropped so an edit is always undoable, matching the JS SDK, which
+		// collapses to the same zero-width range here.
+		//
+		// The range has to be zero-width, not this edit's own: reaching here
+		// with a wide range means everything it covered was already tombstoned
+		// or its content was refused, and undoing by deleting that range again
+		// would take out whatever is live inside it.
+		return &TreeEdit{
+			parentCreatedAt: e.parentCreatedAt,
+			from:            e.from,
+			to:              e.from,
+			restoreMode:     crdt.RestoreModeNone,
+		}, nil
+	}
+
+	if anchor.Index.Parent == nil {
+		return nil, nil
+	}
+	// ToIndex reports the index just after a live node and just before a
+	// tombstoned one, which is why the live case subtracts the inserted size
+	// and the tombstoned case does not.
+	idx, err := tree.ToIndex(anchor.Index.Parent.Value, anchor)
+	if err != nil {
+		return nil, err
+	}
+	if idx < 0 {
+		return nil, nil
+	}
+	if lastLive != nil {
+		idx -= insertedSize
+	}
+
+	fromPos, err := tree.FindPos(idx)
+	if err != nil {
+		return nil, err
+	}
+	toPos := fromPos
+	if insertedSize > 0 {
+		if toPos, err = tree.FindPos(idx + insertedSize); err != nil {
+			return nil, err
+		}
+	}
+
+	return &TreeEdit{
+		parentCreatedAt: e.parentCreatedAt,
+		from:            fromPos,
+		to:              toPos,
+		contents:        contents,
+		restoreMode:     crdt.RestoreModeNone,
+	}, nil
+}
+
+// reverseContents deep-copies the nodes a copy-reinserting reverse should
+// carry: the top-level ones among those the edit removed, each stripped of the
+// descendants that were already tombstoned before the edit ran. Without that
+// filter, undoing a parent delete resurrects the user's earlier independent
+// deletes, which accumulate across undo/redo cycles.
+func reverseContents(
+	removed []*crdt.TreeNode,
+	preTombstoned map[string]struct{},
+) ([]*crdt.TreeNode, error) {
+	topLevel := topLevelRemoved(removed, preTombstoned)
+	if len(topLevel) == 0 {
+		return nil, nil
+	}
+
+	contents := make([]*crdt.TreeNode, 0, len(topLevel))
+	for _, node := range topLevel {
+		clone, err := node.CloneForReinsert(preTombstoned)
+		if err != nil {
+			return nil, err
+		}
+		contents = append(contents, clone)
+	}
+
+	return contents, nil
+}
+
+// topLevelRemoved filters removed down to the nodes whose parent this edit did
+// not also tombstone; the rest come along as descendants of those.
+//
+// Parent membership is tested against the UNION of removed and preTombstoned.
+// JS's nodesToBeRemoved (tree_edit_operation.ts:622-627) includes
+// pre-tombstoned nodes, while Tree.Edit's removed excludes them, so testing
+// against removed alone would promote a live descendant of an already
+// tombstoned parent to top level — and undo would resurrect it at the wrong
+// depth. removed itself never holds a pre-tombstoned node, so no such check is
+// needed on the node itself.
+func topLevelRemoved(
+	removed []*crdt.TreeNode,
+	preTombstoned map[string]struct{},
+) []*crdt.TreeNode {
+	inRemoved := make(map[*crdt.TreeNode]struct{}, len(removed))
+	for _, node := range removed {
+		inRemoved[node] = struct{}{}
+	}
+
+	var topLevel []*crdt.TreeNode
+	for _, node := range removed {
+		if node.Index.Parent == nil {
+			topLevel = append(topLevel, node)
+			continue
+		}
+
+		parent := node.Index.Parent.Value
+		if _, ok := inRemoved[parent]; ok {
+			continue
+		}
+		if _, ok := preTombstoned[parent.IDString()]; ok {
+			continue
+		}
+		topLevel = append(topLevel, node)
+	}
+
+	return topLevel
+}
+
+// ReissueContentIDs gives every node this operation inserts a fresh identity.
+//
+// A reverse operation that reverses a deletion by re-inserting a copy of the
+// removed nodes carries their original IDs, so executing it would put two
+// nodes under one ID — the ambiguity that makes a position anchored there
+// resolve differently on different replicas. Undo already re-identifies a
+// restored value elsewhere: Add and ArraySet both take the fresh ticket in
+// executeUndoRedo. This is the tree's counterpart, called from the same place
+// so the IDs come from the change the undo creates.
+//
+// A restore-mode reverse is left alone: it revives nodes under their original
+// identity by design, which is what makes concurrent undos of one deletion
+// converge rather than duplicate.
+func (e *TreeEdit) ReissueContentIDs(issueTimeTicket func() *time.Ticket) error {
+	if len(e.contents) == 0 || e.restoreMode != crdt.RestoreModeNone {
+		return nil
+	}
+
+	// The tickets taken here start at executedAt.Delimiter() + 1 and run one
+	// per node, while Execute simulates the tickets an element split consumes
+	// starting at executedAt.Delimiter() + len(contents) + 1. The two ranges
+	// overlap as soon as content has descendants, so this only holds while no
+	// content-bearing reverse splits — which is every reverse
+	// toReverseOperation builds, all of them splitLevel 0.
+	if e.splitLevel != 0 {
+		return ErrCannotReissueSplittingEdit
+	}
+
+	for _, content := range e.contents {
+		content.ReissueIDs(issueTimeTicket)
+	}
+
+	return nil
 }
 
 // FromPos returns the start point of the editing range.

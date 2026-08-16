@@ -399,9 +399,10 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 		// later GC pass purge the live element by mistake. Any other
 		// stacked operation that still references the old createdAt (as its
 		// own createdAt, or as a prevCreatedAt) is updated to the new one so
-		// it doesn't end up targeting a stale identity. TreeEdit needs the
-		// same treatment once its reverse operation exists (document.ts:
-		// 2088-2110).
+		// it doesn't end up targeting a stale identity. A TreeEdit reverse
+		// that re-inserts a copy of removed nodes has the same problem in the
+		// tree's own id space and is re-identified the same way, below
+		// (document.ts:2088-2110).
 		if addOp, ok := entry.Op.(*operations.Add); ok {
 			prev := addOp.Value().CreatedAt()
 			addOp.Value().SetCreatedAt(ticket)
@@ -410,6 +411,13 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 			prev := setOp.CreatedAt()
 			setOp.Value().SetCreatedAt(ticket)
 			d.history.ReconcileCreatedAt(prev, ticket)
+		} else if treeOp, ok := entry.Op.(*operations.TreeEdit); ok {
+			// A reverse that re-inserts a copy of removed nodes carries their
+			// original ids; inserting them again would leave two nodes under
+			// one id. Restore-mode reverses revive by identity and keep theirs.
+			if err := treeOp.ReissueContentIDs(ctx.IssueTimeTicket); err != nil {
+				return err
+			}
 		}
 
 		ctx.Push(entry.Op)

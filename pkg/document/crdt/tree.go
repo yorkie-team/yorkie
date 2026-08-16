@@ -690,6 +690,97 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
+// ReissueIDs gives this node and every one of its descendants a fresh
+// identity, taking one ticket per node in post-order.
+//
+// A reverse operation that reverses a deletion by re-inserting a copy of the
+// removed nodes carries their original ids, so executing it would put two
+// nodes under one id — the ambiguity that makes a position anchored there
+// resolve differently on different replicas, and that makes the tree refuse
+// the copy outright as content it already holds.
+//
+// A fresh identity has to be fresh in every field that names a node. The copy
+// came from DeepCopy, which carries the split chain and the merge lineage of
+// the node it copied: left in place they would splice this node into a chain
+// it never belonged to, and Purge relinking that chain would unlink the real
+// tombstone from it.
+func (n *TreeNode) ReissueIDs(issueTimeTicket func() *time.Ticket) {
+	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
+		value := node.Value
+		value.id = NewTreeNodeID(issueTimeTicket(), 0)
+		value.InsPrevID = nil
+		value.InsNextID = nil
+		value.MergedFrom = nil
+		value.MergedAt = nil
+		value.mergedInto = nil
+	})
+}
+
+// CloneForReinsert deep-copies this node for a reverse operation to re-insert
+// and drops every descendant whose ID is in preTombstoned — i.e. descendants
+// that were already tombstoned before the edit that removed this node ran.
+// Those descendants represent the user's earlier delete intent and must not be
+// resurrected by undoing that edit.
+//
+// The tombstone is cleared on every node the clone keeps, so the re-insertion
+// brings them back live.
+func (n *TreeNode) CloneForReinsert(preTombstoned map[string]struct{}) (*TreeNode, error) {
+	clone, err := n.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dropPreTombstoned(clone, preTombstoned); err != nil {
+		return nil, err
+	}
+
+	// Post-order: clear the tombstone on every survivor and recompute its size
+	// from its (already-resized) children. DeepCopy carried the original
+	// node's size; after the drop above, that size is stale and has to be
+	// rebuilt bottom-up. Element nodes derive their size from their children's
+	// padded lengths, text nodes from their own value.
+	index.TraverseNode(clone.Index, func(node *index.Node[*TreeNode], _ int) {
+		node.Value.removedAt = nil
+		if node.IsText() {
+			node.VisibleLength = node.Value.Length()
+			node.TotalLength = node.Value.Length()
+			return
+		}
+
+		size := 0
+		for _, child := range node.Children(true) {
+			size += child.PaddedLength()
+		}
+		node.VisibleLength = size
+		node.TotalLength = size
+	})
+
+	return clone, nil
+}
+
+// dropPreTombstoned drops every descendant of node whose ID is in
+// preTombstoned, so a clone keeps only the nodes the edit itself transitioned
+// from visible to tombstoned.
+func dropPreTombstoned(node *TreeNode, preTombstoned map[string]struct{}) error {
+	if node.IsText() {
+		return nil
+	}
+
+	children := node.Index.Children(true)
+	kept := make([]*index.Node[*TreeNode], 0, len(children))
+	for _, child := range children {
+		if _, ok := preTombstoned[child.Value.IDString()]; ok {
+			continue
+		}
+		if err := dropPreTombstoned(child.Value, preTombstoned); err != nil {
+			return err
+		}
+		kept = append(kept, child)
+	}
+
+	return node.Index.SetChildren(kept)
+}
+
 // InsertAfter inserts the given node after the given leftSibling.
 func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 	return n.Index.InsertAfter(content.Index, children.Index)

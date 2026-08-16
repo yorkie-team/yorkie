@@ -158,6 +158,59 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 	assert.Equal(t, 0, root.GarbageLen(), "restore leaves nothing registered for GC")
 }
 
+// TestTreeRestoreReverseFlipsDirection verifies that the reverse of an
+// identity-preserving Tree edit keeps both span sets and only flips the
+// direction. Undoing a restore must re-remove exactly the nodes it revived,
+// still under their original identities; copying their content into a fresh
+// insertion would defeat the whole point of the restore path.
+func TestTreeRestoreReverseFlipsDirection(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	root.RegisterElement(tree)
+	parent := tree.CreatedAt()
+
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+
+	from, err := tree.FindPos(0)
+	assert.NoError(t, err)
+	to, err := tree.FindPos(7)
+	assert.NoError(t, err)
+	delOp := operations.NewTreeEdit(parent, from, to, nil, 0, helper.TimeT(ctx))
+	_, err = delOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r></r>", tree.ToXML())
+
+	restoreOp := operations.NewRestoreTreeEdit(
+		parent, from, to, helper.TimeT(ctx),
+		spans, crdt.RestoreModeRestore, nil,
+	)
+	reverse, err := restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+	reverseEdit, ok := reverse.(*operations.TreeEdit)
+	assert.True(t, ok, "the reverse of a restore is a TreeEdit")
+	assert.Equal(t, crdt.RestoreModeRetombstone, reverseEdit.RestoreMode())
+	assert.Equal(t, spans, reverseEdit.RestoreSpans(), "the span sets are carried through unchanged")
+	assert.Empty(t, reverseEdit.RetombstoneSpans())
+	assert.Empty(t, reverseEdit.Contents(), "a restore reverse never copy-reinserts")
+
+	// Executing it re-removes exactly what the restore revived, and its own
+	// reverse flips the direction back.
+	reverseEdit.SetExecutedAt(helper.TimeT(ctx))
+	redo, err := reverseEdit.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
+	assert.Equal(t, "<r></r>", tree.ToXML())
+
+	redoEdit, ok := redo.(*operations.TreeEdit)
+	assert.True(t, ok)
+	assert.Equal(t, crdt.RestoreModeRestore, redoEdit.RestoreMode())
+	assert.Equal(t, spans, redoEdit.RestoreSpans())
+}
+
 // TestTreeRestoreParentGoneSkip verifies the B1 rule: if a recreated node's
 // parent is genuinely absent (purged and not part of this restore's spans),
 // the node is skipped rather than mis-attached or panicking. Skipping is
