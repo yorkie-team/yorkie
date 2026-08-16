@@ -497,6 +497,16 @@ func (d *Document) UndoStackTopForTest() []HistoryOperation {
 	return d.history.undoStack[len(d.history.undoStack)-1]
 }
 
+// RedoStackTopForTest returns the operations of the most recent entry of the
+// redo stack without popping it, for test inspection of the reverse
+// operation an upcoming Redo would execute.
+func (d *Document) RedoStackTopForTest() []HistoryOperation {
+	if len(d.history.redoStack) == 0 {
+		return nil
+	}
+	return d.history.redoStack[len(d.history.redoStack)-1]
+}
+
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.mu.Lock()
