@@ -495,32 +495,39 @@ fix — those tests never exercise the fallback path either. Cases 1, 2, and 7
 The undo and redo stacks are capped at 50 entries (`MaxUndoRedoStackDepth`).
 Oldest entries are evicted when the cap is reached.
 
-### Current Status (as of 2026-04-20)
+### Current Status (as of 2026-08-16)
 
 #### Completed
 
-| Area | Status | Notes |
-|------|--------|-------|
-| Text single-client | ✅ | insert, delete, replace, style |
-| Text multi-client reconciliation | ✅ | Convergence passes for all 7 cases (but see content correctness below) |
-| Array undo | ✅ | add, remove, move, set |
-| Tree single-client (splitLevel=0) | ✅ | All op types + chained ops |
-| Tree split undo/redo (L1 + L2) | ✅ | Boundary-deletion reverse ops. See [tree-split-undo-redo.md](tree-split-undo-redo.md). |
-| Tree multi-client (non-overlapping) | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
-| TreeStyleOperation single-client | ✅ | setStyle, removeStyle undo/redo (PR #1221) |
-| TreeStyleOperation multi-client | ✅ | style×style (18 tests), style×edit/split (24 tests) (PR #1221) |
-| Tree redo divergence | ✅ | Fixed via CRDTTreePos-based undo execution + reconciliation disabled (branch `tree-undo-pos-normalization`) |
-| Tree reverseOp descendant filtering | ✅ | `preTombstoned` set returned from `CRDTTree.edit()` and consumed by `toReverseOperation` — drops already-tombstoned descendants from `reverseContents` so nested edits (typing inside a later-deleted parent) don't accumulate across undo/redo cycles |
-| Tree reconciliation Cases 3-6 | ✅ (2026-08-09, `fa6cc513`) | Un-skipped by identity-preserving restore, not by the index-arithmetic work this document's "Phase 2" section proposed — see the note there. Ordinary ranges never reach the arithmetic; the copy-reinsert fallback's asymmetry (still real) just isn't what these tests exercise. |
+| Area | JS | Go | Notes |
+|------|----|----|-------|
+| Text single-client | ✅ | ✅ | insert, delete, replace, style. Go: `test/integration/history_text_test.go` (64 runtime instances) |
+| Text multi-client reconciliation | ✅ | ✅ | Convergence passes for all 7 cases (but see content correctness below). Go: `test/integration/history_text_reconcile_test.go` (9) |
+| Array undo | ✅ | ✅ | add, remove, move, set. Go: `test/integration/history_array_test.go` (84, 4 skipped — Array Set+Move, see below) |
+| Tree single-client (splitLevel=0) | ✅ | ✅ | All op types + chained ops |
+| Tree split undo/redo (L1 + L2) | ✅ | ✅ | Boundary-deletion reverse ops. See [tree-split-undo-redo.md](tree-split-undo-redo.md). Go: `test/integration/history_tree_split_test.go` (79, 1 skipped — `split-l2 → split-l2`, confirmed real in both SDKs) |
+| Tree multi-client (non-overlapping) | ✅ | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
+| TreeStyleOperation single-client | ✅ | ✅ | setStyle, removeStyle undo/redo (PR #1221) |
+| TreeStyleOperation multi-client | ✅ | ✅ | style×style (18 tests), style×edit/split (24 tests) (PR #1221). Go: `test/integration/history_tree_test.go` |
+| Tree redo divergence | ✅ | ✅ | Fixed via CRDTTreePos-based undo execution + reconciliation disabled (branch `tree-undo-pos-normalization`) |
+| Tree reverseOp descendant filtering | ✅ | ✅ | `preTombstoned` set returned from `CRDTTree.edit()` and consumed by `toReverseOperation` — drops already-tombstoned descendants from `reverseContents` so nested edits (typing inside a later-deleted parent) don't accumulate across undo/redo cycles |
+| Tree reconciliation Cases 3-6 | ✅ (2026-08-09, `fa6cc513`) | ✅ | Un-skipped by identity-preserving restore, not by the index-arithmetic work this document's "Phase 2" section proposed — see the note there. Ordinary ranges never reach the arithmetic; the copy-reinsert fallback's asymmetry (still real) just isn't what these tests exercise. |
+| History layer, reverse-op generation, reconciliation | ✅ | ✅ (2026-08-16) | Full Go SDK port. See [undo-redo-go-port.md](undo-redo-go-port.md) for the port's design, what shipped versus what it predicted, and the parity audit. |
+
+Go's port target is v0.7.16; it deliberately reproduces every JS behavior in
+this table, including the known defects documented below (Overlapping undo
+content duplication, Array Set + Move, GC vs undo) and the "Analysis" sections
+that follow. A JS-only fix would widen, not close, the SDK gap — see
+[undo-redo-go-port.md](undo-redo-go-port.md)'s Non-Goals.
 
 #### Remaining Work
 
 | Priority | Item | Details |
 |----------|------|---------|
-| HIGH | Overlapping undo content duplication | Both Text and Tree produce duplicate content when overlapping deletes are both undone. Text converges but content is wrong; Tree diverges. See analysis below. |
-| HIGH | Array Set + Move undo | Set after Move restores value at dead position. Requires proto change. See analysis below. 4 tests skipped in JS SDK. |
-| MED | GC vs undo interaction | Issue #664. GC can purge elements still referenced by undo/redo stack. |
-| LOW | History reconciliation performance | O(n) stack scan → indexed lookup. |
+| HIGH | Overlapping undo content duplication | Both Text and Tree produce duplicate content when overlapping deletes are both undone. Text converges but content is wrong; Tree diverges. See analysis below. **Update:** identity-preserving restore has since fixed the Text case (see the "Overlapping Undo Content Duplication" analysis note below) — the two `it.skip` correctness tests were stale in JS and pass, un-skipped, in Go's port (`test/integration/history_text_reconcile_test.go`'s `TestReconcileOverlappingUndoDuplicatesContent`). The Tree case remains open for the copy-reinsert fallback path. |
+| HIGH | Array Set + Move undo | Set after Move restores value at dead position. Requires proto change. See analysis below. 4 tests skipped in JS SDK, ported as 4 identical skips in Go (`test/integration/history_array_test.go`). |
+| MED | GC vs undo interaction | Issue #664. GC can purge elements still referenced by undo/redo stack. Identical in Go — see [undo-redo-go-port.md](undo-redo-go-port.md)'s Risks table. |
+| LOW | History reconciliation performance | O(n) stack scan → indexed lookup. Same in Go. |
 
 ### Analysis: Overlapping Undo Content Duplication
 
