@@ -485,12 +485,16 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 
 // UndoStackLenForTest returns the undo stack depth for testing.
 func (d *Document) UndoStackLenForTest() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	return len(d.history.undoStack)
 }
 
 // UndoStackTopForTest returns the operations of the most recent entry of the
 // undo stack without popping it, for test inspection of reconciliation.
 func (d *Document) UndoStackTopForTest() []HistoryOperation {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if len(d.history.undoStack) == 0 {
 		return nil
 	}
@@ -501,6 +505,8 @@ func (d *Document) UndoStackTopForTest() []HistoryOperation {
 // redo stack without popping it, for test inspection of the reverse
 // operation an upcoming Redo would execute.
 func (d *Document) RedoStackTopForTest() []HistoryOperation {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if len(d.history.redoStack) == 0 {
 		return nil
 	}
@@ -523,6 +529,8 @@ func (d *Document) RedoStackTopForTest() []HistoryOperation {
 // caller that wants its fabricated entry to be the *only* one Undo() can
 // reach needs to account for what else is already on the stack.
 func (d *Document) PushUndoForTest(ops []HistoryOperation) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.history.PushUndo(ops)
 }
 
