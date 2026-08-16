@@ -346,11 +346,6 @@ func (e *TreeEdit) toReverseOperation(
 		lastLive = content
 	}
 
-	contents, err := reverseContents(info.Removed, info.PreTombstoned)
-	if err != nil {
-		return nil, err
-	}
-
 	var anchor *crdt.TreeNode
 	switch {
 	case lastLive != nil:
@@ -400,9 +395,16 @@ func (e *TreeEdit) toReverseOperation(
 	// removed parent. That content is nowhere in the visible tree, so the
 	// range runs past the end of it — which is how JS recognizes an edit that
 	// had no visible effect and skips its reverse
-	// (tree_edit_operation.ts:610-616).
+	// (tree_edit_operation.ts:610-616). It sits ahead of the copy below for
+	// the same reason JS puts it there: the skip case does no DeepCopy, and a
+	// copy failing cannot turn a skip into a failed Execute.
 	if idx+insertedSize > tree.Root().Len() {
 		return nil, nil
+	}
+
+	contents, err := reverseContents(info.Removed, info.PreTombstoned)
+	if err != nil {
+		return nil, err
 	}
 
 	fromPos, err := tree.FindPos(idx)
