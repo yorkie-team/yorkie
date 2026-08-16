@@ -188,10 +188,12 @@ func TestHistoryTreeConcurrentOverlappingUndoAfterGC(t *testing.T) {
 	// converges but internal text-node segmentation can differ (one replica
 	// un-tombstones the concurrent edit's finer split, the other recreates
 	// the run monolithically from the element's span), so Marshal mismatches.
-	// Tracked: docs/design/undo-redo-go-port.md:283-288, which names this
-	// case by file and line and notes it is still skipped as of fa6cc513.
+	// Tracked: docs/design/undo-redo-go-port.md's "Testing" section, the
+	// "Five tests are currently skipped in JS" list (the
+	// history_tree_concurrent_test.ts entry), which names this case by
+	// file and line and notes it is still skipped as of fa6cc513.
 	t.Run("KNOWN: delete a whole <p> vs edit text inside it, both undo", func(t *testing.T) {
-		t.Skip("KNOWN: when a whole element is deleted concurrently with a text edit inside it and both undo after GC, visible content converges but internal text-node segmentation can differ, so Marshal mismatches (tracked: docs/design/undo-redo-go-port.md:283-288)")
+		t.Skip("KNOWN: when a whole element is deleted concurrently with a text edit inside it and both undo after GC, visible content converges but internal text-node segmentation can differ, so Marshal mismatches (tracked: docs/design/undo-redo-go-port.md's Testing section, the \"Five tests are currently skipped in JS\" list)")
 
 		ctx := context.Background()
 
@@ -233,11 +235,12 @@ func TestHistoryTreeConcurrentOverlappingUndoAfterGC(t *testing.T) {
 	// KNOWN (tracked): deleting MULTIPLE elements concurrently with an edit
 	// inside one of them, then both undo after GC, converges on visible
 	// content but NOT on internal text-node segmentation -- so Marshal
-	// differs. Tracked: docs/design/undo-redo-go-port.md:283-288, which
-	// names this case by file and line and notes it is still skipped as of
-	// fa6cc513.
+	// differs. Tracked: docs/design/undo-redo-go-port.md's "Testing"
+	// section, the "Five tests are currently skipped in JS" list (the
+	// history_tree_concurrent_test.ts entry), which names this case by
+	// file and line and notes it is still skipped as of fa6cc513.
 	t.Run("KNOWN: delete two <p> vs edit inside first, both undo (segmentation)", func(t *testing.T) {
-		t.Skip("KNOWN: deleting multiple elements concurrently with an edit inside one of them, then both undo after GC, converges on visible content but not on internal text-node segmentation, so Marshal differs (tracked: docs/design/undo-redo-go-port.md:283-288)")
+		t.Skip("KNOWN: deleting multiple elements concurrently with an edit inside one of them, then both undo after GC, converges on visible content but not on internal text-node segmentation, so Marshal differs (tracked: docs/design/undo-redo-go-port.md's Testing section, the \"Five tests are currently skipped in JS\" list)")
 
 		ctx := context.Background()
 
