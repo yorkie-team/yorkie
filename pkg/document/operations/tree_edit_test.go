@@ -266,7 +266,7 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 
 		op := NewTreeEdit(issue(), nil, nil, nil, 0, issue())
-		reverse, err := op.toReverseOperation(tree, nil, dropSpans(info))
+		reverse, err := op.toReverseOperation(tree, nil, dropSpans(info), 1)
 		assert.NoError(t, err)
 
 		edit, ok := reverse.(*TreeEdit)
@@ -294,7 +294,7 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		assert.Len(t, info.PreTombstoned, 1, `the "a" piece was already tombstoned`)
 
 		op := NewTreeEdit(issue(), nil, nil, nil, 0, issue())
-		reverse, err := op.toReverseOperation(tree, nil, dropSpans(info))
+		reverse, err := op.toReverseOperation(tree, nil, dropSpans(info), 0)
 		assert.NoError(t, err)
 
 		contents := reverse.(*TreeEdit).Contents()
@@ -313,7 +313,7 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		assert.Equal(t, "<r><p>abXY</p></r>", tree.ToXML())
 
 		op := NewTreeEdit(issue(), nil, nil, nil, 0, issue())
-		reverse, err := op.toReverseOperation(tree, []*crdt.TreeNode{content}, dropSpans(info))
+		reverse, err := op.toReverseOperation(tree, []*crdt.TreeNode{content}, dropSpans(info), 3)
 		assert.NoError(t, err)
 
 		edit := reverse.(*TreeEdit)
@@ -342,7 +342,7 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		assert.False(t, info.SpansComplete, "a merge's spans do not describe it")
 
 		op := NewTreeEdit(issue(), nil, nil, nil, 0, issue())
-		reverse, err := op.toReverseOperation(tree, nil, info)
+		reverse, err := op.toReverseOperation(tree, nil, info, 3)
 		assert.NoError(t, err)
 		assert.Nil(t, reverse, "no reverse at all is better than one that restores a shell")
 	})

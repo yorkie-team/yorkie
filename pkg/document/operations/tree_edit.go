@@ -67,6 +67,43 @@ type TreeEdit struct {
 	// written before the field existed, which falls back to the simulation
 	// that reconstructed them from executedAt and the content count.
 	splitTickets []*time.Ticket
+
+	// isUndoOp marks this TreeEdit as a reverse operation produced by Execute
+	// rather than by a user edit. It is local-only state (never on the wire),
+	// mirroring Edit.isUndoOp: it gates both ReconcileOperation (only a
+	// pending undo/redo entry is reconciled) and the fromIdx/toIdx -> from/to
+	// conversion below (a reverse's indices may have been reconciled since
+	// this op was built, so its positions are re-derived from them right
+	// before executing).
+	isUndoOp bool
+
+	// fromIdx/toIdx are this op's own visible-index range, tracked
+	// separately from from/to (*crdt.TreePos) because TreePos is
+	// identity-based and has no arithmetic: ReconcileOperation shifts a
+	// pending undo/redo entry by adjusting these integers, and Execute
+	// converts them back into from/to via Tree.FindPos immediately before
+	// running, so a remote edit that lands in between is honored. nil for an
+	// op that was never built as a reverse (an ordinary forward edit) or
+	// whose reverse could not resolve a range (degrades to (0, 0) in
+	// NormalizePos, mirroring the JS SDK's undefined case there).
+	fromIdx, toIdx *int
+
+	// lastFromIdx/lastToIdx are the visible-index range THIS execution's own
+	// forward Tree.Edit call affected, captured immediately before the
+	// mutation runs (so tombstoning has not yet collapsed the range). Read by
+	// NormalizePos to report the range this op just affected, for reconciling
+	// OTHER stacked entries -- e.g. when this op is a genuinely fresh local or
+	// remote edit, or a copy-reinsert reverse being replayed. Left nil by the
+	// identity-preserving path, which returns before any Tree.Edit call runs.
+	lastFromIdx, lastToIdx *int
+
+	// insertedContentSize is the visible-index size of the content THIS
+	// execution's forward Tree.Edit call accepted (info.InsertedContentSize),
+	// mirroring TreeEditOperation.insertedContentSize in the JS SDK. Read by
+	// GetContentSize to report to reconciliation. Zero (Go's zero value) for
+	// an op that took the identity-preserving path, which never sets it --
+	// the same value JS's own contents-less fallback there returns.
+	insertedContentSize int
 }
 
 // NewTreeEdit creates a new instance of TreeEdit.
@@ -131,6 +168,14 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 				return nil, err
 			}
 
+			// This op is already an identity-preserving reverse being
+			// (re-)executed -- e.g. a redo of an earlier undo. Its own
+			// fromIdx/toIdx (if any) are carried into the reverse this
+			// execution produces unchanged: they name the range the ORIGINAL
+			// forward edit affected, which restoreSpans/retombstoneSpans
+			// still address by identity regardless of how far reconciliation
+			// has since moved them, mirroring TreeEditOperation.execute's
+			// inline identity branch in the JS SDK.
 			toRestore, toRetombstone := e.restoreSpans, e.retombstoneSpans
 			if e.restoreMode == crdt.RestoreModeRetombstone {
 				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
@@ -149,6 +194,9 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 				restoreSpans:     e.restoreSpans,
 				restoreMode:      flipRestoreMode(e.restoreMode),
 				retombstoneSpans: e.retombstoneSpans,
+				isUndoOp:         true,
+				fromIdx:          e.fromIdx,
+				toIdx:            e.toIdx,
 			}
 
 			var diff resource.DataSize
@@ -190,6 +238,44 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			root.Acc(diff)
 			return reverseOp, nil
 		}
+
+		// A reverse being (re-)executed may have had its fromIdx/toIdx
+		// reconciled since it was built (a remote edit landed while it sat
+		// on a history stack). Re-derive from/to from them now, immediately
+		// before the mutation, so the reconciled range -- not the stale
+		// positions this op was constructed with -- is what actually runs.
+		// Mirrors TreeEditOperation.execute's "for undo ops: convert stored
+		// integer indices to CRDTTreePos" step in the JS SDK.
+		if e.isUndoOp && e.fromIdx != nil && e.toIdx != nil {
+			fromPos, err := obj.FindPos(*e.fromIdx)
+			if err != nil {
+				return nil, err
+			}
+			e.from = fromPos
+			if *e.fromIdx == *e.toIdx {
+				e.to = fromPos
+			} else {
+				toPos, err := obj.FindPos(*e.toIdx)
+				if err != nil {
+					return nil, err
+				}
+				e.to = toPos
+			}
+		}
+
+		// The pre-edit visible-index range this edit's own from/to name,
+		// captured before the mutation below tombstones anything in it.
+		// Reported by NormalizePos (when this op is not itself carrying
+		// reconciled indices of its own) so the applyChanges reconciliation
+		// loop can adjust OTHER stacked entries against the range this
+		// execution just affected, and threaded into toReverseOperation as
+		// the anchor for whatever reverse this edit produces.
+		preFromIdx, _ := treeVisibleIndex(obj, e.from)
+		preToIdx, toOK := treeVisibleIndex(obj, e.to)
+		if !toOK {
+			preToIdx = preFromIdx
+		}
+		e.lastFromIdx, e.lastToIdx = &preFromIdx, &preToIdx
 
 		var contents []*crdt.TreeNode
 		var err error
@@ -254,13 +340,18 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			return nil, err
 		}
 
+		// Mirrors JS's `this.insertedContentSize = insertedContentSize`:
+		// reassigned on every execution that reaches here, reported via
+		// GetContentSize for the applyChanges reconciliation loop.
+		e.insertedContentSize = info.InsertedContentSize
+
 		// info.Removed and info.PreTombstoned name live tombstones still
 		// linked into obj, not copies, so the reverse operation's content is
 		// deep-copied inside this call — the way JS does inside the same
 		// execute(). A later SplitText mutates in place and splits tombstones
 		// too, so holding onto them past this point would let a subsequent
 		// edit truncate the captured content.
-		return e.toReverseOperation(obj, contents, info)
+		return e.toReverseOperation(obj, contents, info, preFromIdx)
 
 	default:
 		return nil, ErrNotApplicableDataType
@@ -289,10 +380,19 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 // Only splitLevel 0 is reversed, including by outcome 1: a split's reverse is
 // a boundary deletion rather than a content re-insertion, and is not built yet
 // (JS branches on the same condition before calling this at all).
+//
+// preFromIdx is this edit's own pre-mutation visible-index anchor (Execute's
+// treeVisibleIndex(obj, e.from), captured before the mutation ran) --
+// unrelated to the post-edit, node-derived anchor idx computed below for
+// outcome 3's fromPos/toPos. Outcomes 1 and the no-op case use it directly,
+// as a zero-width point, mirroring how JS uses its own preEditFromIdx the
+// same way in the identical branches (tree_edit_operation.ts:543-556,
+// :610-616).
 func (e *TreeEdit) toReverseOperation(
 	tree *crdt.Tree,
 	inserted []*crdt.TreeNode,
 	info crdt.TreeEditReverseInfo,
+	preFromIdx int,
 ) (Operation, error) {
 	if e.splitLevel != 0 {
 		return nil, nil
@@ -311,6 +411,7 @@ func (e *TreeEdit) toReverseOperation(
 	// tagged with redoSplitLevel here; Go builds no split reverses yet, so it
 	// has no such op to exclude.
 	if len(info.RemovedSpans) > 0 || len(info.InsertedSpans) > 0 {
+		fromIdx, toIdx := preFromIdx, preFromIdx
 		return &TreeEdit{
 			parentCreatedAt:  e.parentCreatedAt,
 			from:             e.from,
@@ -318,6 +419,9 @@ func (e *TreeEdit) toReverseOperation(
 			restoreSpans:     info.RemovedSpans,
 			restoreMode:      crdt.RestoreModeRestore,
 			retombstoneSpans: info.InsertedSpans,
+			isUndoOp:         true,
+			fromIdx:          &fromIdx,
+			toIdx:            &toIdx,
 		}, nil
 	}
 
@@ -365,11 +469,15 @@ func (e *TreeEdit) toReverseOperation(
 		// with a wide range means everything it covered was already tombstoned
 		// or its content was refused, and undoing by deleting that range again
 		// would take out whatever is live inside it.
+		fromIdx, toIdx := preFromIdx, preFromIdx
 		return &TreeEdit{
 			parentCreatedAt: e.parentCreatedAt,
 			from:            e.from,
 			to:              e.from,
 			restoreMode:     crdt.RestoreModeNone,
+			isUndoOp:        true,
+			fromIdx:         &fromIdx,
+			toIdx:           &toIdx,
 		}, nil
 	}
 
@@ -418,12 +526,23 @@ func (e *TreeEdit) toReverseOperation(
 		}
 	}
 
+	// The reverse's own reconciliation anchor is this SAME node-derived idx,
+	// not preFromIdx: fromPos/toPos above are built from it too, and Execute
+	// re-derives from/to from fromIdx/toIdx on every future (re-)execution
+	// (see the "convert stored integer indices" step there). Using a
+	// different value here would make this op's position and its
+	// reconciliation index disagree about where it points -- reconciliation
+	// would silently stop tracking the range Execute actually operates on.
+	fromIdx, toIdx := idx, idx+insertedSize
 	return &TreeEdit{
 		parentCreatedAt: e.parentCreatedAt,
 		from:            fromPos,
 		to:              toPos,
 		contents:        contents,
 		restoreMode:     crdt.RestoreModeNone,
+		isUndoOp:        true,
+		fromIdx:         &fromIdx,
+		toIdx:           &toIdx,
 	}, nil
 }
 
@@ -593,6 +712,148 @@ func (e *TreeEdit) RestoreMode() crdt.RestoreMode {
 // RetombstoneSpans returns the companion span set, if any.
 func (e *TreeEdit) RetombstoneSpans() []*crdt.TreeRestoreSpan {
 	return e.retombstoneSpans
+}
+
+// NormalizePos returns the visible-index range of this operation, mirroring
+// TreeEditOperation.normalizePos in the JS SDK (tree_edit_operation.ts:
+// 715-733). For an undo/redo entry carrying its own (possibly reconciled)
+// fromIdx/toIdx, that range is returned as-is. Otherwise the range this
+// operation's own most recent forward execution affected (lastFromIdx/
+// lastToIdx) is returned. Neither is available for an operation that has
+// never executed, or whose reverse took the identity-preserving path (which
+// returns before either is captured) -- (0, 0) is returned then, matching
+// the JS SDK's own fallback. That degenerate case is harmless: GetContentSize
+// degrades to 0 in lockstep (see there), so every ReconcileOperation case
+// below computes a net-zero shift from it.
+func (e *TreeEdit) NormalizePos() (int, int) {
+	if e.isUndoOp && e.fromIdx != nil && e.toIdx != nil {
+		return *e.fromIdx, *e.toIdx
+	}
+	if e.lastFromIdx != nil && e.lastToIdx != nil {
+		return *e.lastFromIdx, *e.lastToIdx
+	}
+	return 0, 0
+}
+
+// GetContentSize returns the visible-index size of the content this
+// operation's own most recent forward execution accepted, mirroring
+// TreeEditOperation.getContentSize in the JS SDK (tree_edit_operation.ts:
+// 826-836). JS falls back to summing this.contents' padded sizes when
+// insertedContentSize was never captured; that fallback is not ported here
+// because it is unreachable through Go's own call site (applyChanges calls
+// this only on an operation from Execute's executed list, which has always
+// already run -- either through the identity-preserving path, whose
+// insertedContentSize stays at Go's zero value and whose contents is always
+// nil, or through the path that sets insertedContentSize unconditionally,
+// even to 0). Keeping the dead branch out avoids asserting a size Go can
+// never actually compute from -- e.Contents() is *crdt.TreeNode, not the
+// padded-length-bearing type JS's fallback reduces over.
+func (e *TreeEdit) GetContentSize() int {
+	return e.insertedContentSize
+}
+
+// ReconcileOperation adjusts this TreeEdit's fromIdx/toIdx in place so a
+// pending undo/redo entry stays correct after a remote edit executes on the
+// same Tree. It mirrors TreeEditOperation.reconcileOperation in the JS SDK
+// (tree_edit_operation.ts:735-822), the same six-case overlap logic
+// Edit.ReconcileOperation implements for Text, over integer indices instead
+// of RGATreeSplitNodePos offsets. remoteFrom, remoteTo, and contentSize
+// describe the remote edit in the same visible-index domain as NormalizePos.
+//
+// Identity-addressed restore/retombstone ops (restoreSpans/retombstoneSpans
+// set) locate their nodes by TreeNodeID, never by fromIdx/toIdx, so index
+// reconciliation must not touch them -- mirrors Edit.ReconcileOperation's
+// identical guard for Text. This method never reads or writes either span
+// field.
+func (e *TreeEdit) ReconcileOperation(remoteFrom, remoteTo, contentSize int) {
+	if !e.isUndoOp {
+		return
+	}
+	if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
+		return
+	}
+	if e.fromIdx == nil || e.toIdx == nil {
+		return
+	}
+	if remoteFrom > remoteTo {
+		return
+	}
+
+	remoteRangeLen := remoteTo - remoteFrom
+	localFrom := *e.fromIdx
+	localTo := *e.toIdx
+
+	apply := func(na, nb int) {
+		na, nb = max(0, na), max(0, nb)
+		e.fromIdx, e.toIdx = &na, &nb
+	}
+
+	// Case 1: remote edit is to the left of the undo range.
+	// [--remote--]  [--undo--]
+	if remoteTo <= localFrom {
+		apply(localFrom-remoteRangeLen+contentSize, localTo-remoteRangeLen+contentSize)
+		return
+	}
+
+	// Case 2: remote edit is to the right of the undo range.
+	// [--undo--]  [--remote--]
+	if localTo <= remoteFrom {
+		return
+	}
+
+	// Case 3: undo range is contained within the remote range.
+	// [-------remote-------]
+	//      [--undo--]
+	if remoteFrom <= localFrom && localTo <= remoteTo && remoteFrom != remoteTo {
+		apply(remoteFrom, remoteFrom)
+		return
+	}
+
+	// Case 4: remote range is contained within the undo range.
+	//      [--remote--]
+	// [---------undo---------]
+	if localFrom <= remoteFrom && remoteTo <= localTo && localFrom != localTo {
+		apply(localFrom, localTo-remoteRangeLen+contentSize)
+		return
+	}
+
+	// Case 5: remote range overlaps the start of the undo range.
+	// [---remote---]
+	//      [---undo---]
+	if remoteFrom < localFrom && localFrom < remoteTo && remoteTo < localTo {
+		apply(remoteFrom, remoteFrom+(localTo-remoteTo))
+		return
+	}
+
+	// Case 6: remote range overlaps the end of the undo range.
+	//      [---remote---]
+	// [---undo---]
+	if localFrom < remoteFrom && remoteFrom < localTo && localTo < remoteTo {
+		apply(localFrom, remoteFrom)
+	}
+}
+
+// treeVisibleIndex resolves pos to its current visible index in tree, or
+// (0, false) when pos is nil or does not resolve to a node the tree still
+// holds. Used to capture the pre-edit index of an operation's own from/to
+// positions immediately before a mutation runs -- mirroring preEditFromIdx,
+// which CRDTTree.edit computes and reports directly in the JS SDK
+// (crdt/tree.ts). Go's Tree.Edit does not report it, so this recomputes the
+// same value from the position itself, called before Tree.Edit mutates
+// anything.
+func treeVisibleIndex(tree *crdt.Tree, pos *crdt.TreePos) (int, bool) {
+	if pos == nil {
+		return 0, false
+	}
+	parent, left := tree.ToTreeNodes(pos)
+	if parent == nil || left == nil {
+		return 0, false
+	}
+	idx, err := tree.ToIndex(parent, left)
+	if err != nil || idx < 0 {
+		return 0, false
+	}
+	return idx, true
 }
 
 // validateTreeRestoreIdentities rejects any restore span whose node identity

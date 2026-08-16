@@ -561,15 +561,20 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		}
 		events = append(events, changeEvents...)
 
-		// A remote change may have moved the text a pending undo/redo Edit
-		// refers to; reconcile every stacked Edit against each executed Edit.
+		// A remote change may have moved the text or tree a pending
+		// undo/redo Edit or TreeEdit refers to; reconcile every stacked
+		// entry against each executed one.
 		for _, op := range executed {
-			if edit, ok := op.(*operations.Edit); ok {
-				from, to, ok := edit.NormalizePos(d.doc.root)
+			switch op := op.(type) {
+			case *operations.Edit:
+				from, to, ok := op.NormalizePos(d.doc.root)
 				if !ok {
 					continue
 				}
-				d.history.ReconcileTextEdit(edit.ParentCreatedAt(), from, to, edit.ContentLen())
+				d.history.ReconcileTextEdit(op.ParentCreatedAt(), from, to, op.ContentLen())
+			case *operations.TreeEdit:
+				from, to := op.NormalizePos()
+				d.history.ReconcileTreeEdit(op.ParentCreatedAt(), from, to, op.GetContentSize())
 			}
 		}
 	}

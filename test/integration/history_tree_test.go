@@ -138,3 +138,143 @@ func TestHistoryTreeConcurrentUndo(t *testing.T) {
 		assert.Equal(t, "<r><p>cd</p></r>", d2.Root().GetTree("t").ToXML())
 	})
 }
+
+// initDigitTreeDoc seeds the given document with <r><p>0123456789</p></r>,
+// the fixture history_tree_test.ts's "reconcile cases" section uses.
+func initDigitTreeDoc(t *testing.T, doc *document.Document) {
+	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{{
+			Type:     "p",
+			Children: []json.TreeNode{{Type: "text", Value: "0123456789"}},
+		}}})
+		return nil
+	}, "init"))
+}
+
+// TestHistoryTreeReconcileCases ports history_tree_test.ts's "Tree History -
+// reconcile cases" describe block: two clients each delete or insert a
+// range of <r><p>0123456789</p></r>, without seeing the other's edit, so
+// both carry a pending undo entry that a remote change must reconcile
+// against. All seven of JS's overlap cases are covered individually, not
+// just the non-overlapping ones (1, 2, 7) -- see the doc comment below for
+// why cases 3-6 are included despite docs/design/undo-redo.md calling them
+// "known broken, deferred to Phase 2".
+//
+// Every one of these seven scenarios is a plain single-range delete or
+// insert on each side, which -- per TestTreeEditReconcileOperationCases'
+// "guard: an identity-preserving op is never index-reconciled" case --
+// always takes the identity-preserving reverse path and is therefore never
+// touched by ReconcileOperation's index arithmetic at all: convergence here
+// comes entirely from reviving/re-removing by identity, the same mechanism
+// TestHistoryTreeConcurrentUndo above exercises. That arithmetic is pinned
+// directly, against a genuinely non-identity reverse, by
+// TestTreeEditReconcileOperationCases and
+// TestTreeEditReconcileOperationRealistic in pkg/document/operations. This
+// test proves the two-client, sync-then-undo-then-redo scenario JS names
+// "Case 1" through "Case 7" converges in Go too -- which is what the JS
+// suite's own (non-skipped) Cases 3-6 tests actually prove about JS, despite
+// the design doc's older "known broken" note. That note describes an
+// earlier version of the reconciliation design (the design doc's own
+// "Since identity-preserving restore landed" section says as much); it
+// predates the identity-preserving reverse and was never updated after JS's
+// own Cases 3-6 tests were un-skipped once that landed.
+func TestHistoryTreeReconcileCases(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	cases := []struct {
+		name   string
+		d1Edit func(root *json.Object)
+		d2Edit func(root *json.Object)
+	}{
+		{
+			name:   "Case 1 (left): remote edit LEFT of undo should shift position",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(7, 9, nil, 0) },
+			d2Edit: func(root *json.Object) {
+				root.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "text", Value: "XX"}, 0)
+			},
+		},
+		{
+			name:   "Case 2 (right): remote edit RIGHT of undo should not affect",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(3, 5, nil, 0) },
+			d2Edit: func(root *json.Object) {
+				root.GetTree("t").Edit(9, 9, &json.TreeNode{Type: "text", Value: "YY"}, 0)
+			},
+		},
+		{
+			name:   "Case 3 (contained_by): undo range contained by remote should collapse",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(5, 7, nil, 0) },
+			d2Edit: func(root *json.Object) { root.GetTree("t").Edit(3, 9, nil, 0) },
+		},
+		{
+			name:   "Case 4 (contains): remote range contained by undo should adjust",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(3, 9, nil, 0) },
+			d2Edit: func(root *json.Object) {
+				root.GetTree("t").Edit(6, 6, &json.TreeNode{Type: "text", Value: "ZZ"}, 0)
+			},
+		},
+		{
+			name:   "Case 5 (overlap_start): remote overlaps start of undo range",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(5, 9, nil, 0) },
+			d2Edit: func(root *json.Object) { root.GetTree("t").Edit(3, 7, nil, 0) },
+		},
+		{
+			name:   "Case 6 (overlap_end): remote overlaps end of undo range",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(3, 7, nil, 0) },
+			d2Edit: func(root *json.Object) { root.GetTree("t").Edit(5, 9, nil, 0) },
+		},
+		{
+			name:   "Case 7 (adjacent): adjacent edits at boundary",
+			d1Edit: func(root *json.Object) { root.GetTree("t").Edit(5, 7, nil, 0) },
+			d2Edit: func(root *json.Object) {
+				root.GetTree("t").Edit(7, 7, &json.TreeNode{Type: "text", Value: "AA"}, 0)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			d1 := document.New(helper.TestKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+			defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+			d2 := document.New(helper.TestKey(t))
+			assert.NoError(t, c2.Attach(ctx, d2))
+			defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+
+			initDigitTreeDoc(t, d1)
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				tc.d1Edit(root)
+				return nil
+			}, "d1 edit"))
+			assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+				tc.d2Edit(root)
+				return nil
+			}, "d2 edit"))
+
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.NoError(t, c1.Sync(ctx))
+			assert.Equal(t, d1.Marshal(), d2.Marshal(), "after concurrent edits")
+
+			assert.NoError(t, d1.Undo())
+			assert.NoError(t, d2.Undo())
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.NoError(t, c1.Sync(ctx))
+			assert.Equal(t, d1.Marshal(), d2.Marshal(), "after undo")
+
+			assert.NoError(t, d1.Redo())
+			assert.NoError(t, d2.Redo())
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.NoError(t, c1.Sync(ctx))
+			assert.Equal(t, d1.Marshal(), d2.Marshal(), "after redo")
+		})
+	}
+}

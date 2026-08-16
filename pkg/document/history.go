@@ -160,3 +160,23 @@ func (h *History) ReconcileTextEdit(parentCreatedAt *time.Ticket, from, to, cont
 	replace(h.undoStack)
 	replace(h.redoStack)
 }
+
+// ReconcileTreeEdit rewrites the fromIdx/toIdx of any stacked TreeEdit
+// operation targeting the given parent Tree so it stays correct after a
+// remote edit on that Tree executes. It mirrors History.reconcileTreeEdit in
+// the JS SDK (history.ts:188-215).
+func (h *History) ReconcileTreeEdit(parentCreatedAt *time.Ticket, from, to, contentSize int) {
+	replace := func(stack [][]HistoryOperation) {
+		// TODO(hackerwins): Optimize by indexing operations.
+		for _, entries := range stack {
+			for _, entry := range entries {
+				if edit, ok := entry.Op.(*operations.TreeEdit); ok &&
+					edit.ParentCreatedAt().Key() == parentCreatedAt.Key() {
+					edit.ReconcileOperation(from, to, contentSize)
+				}
+			}
+		}
+	}
+	replace(h.undoStack)
+	replace(h.redoStack)
+}
