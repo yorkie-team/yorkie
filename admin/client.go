@@ -509,7 +509,13 @@ func (c *Client) ListChangeSummaries(
 	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
-		if _, _, err := newDoc.ApplyChanges(c); err != nil {
+		// This replays a stored change into a snapshot-seeded document and
+		// keeps neither return value -- exactly OpSourceReplay's own
+		// definition -- so it uses ApplyChangesForReplay, not ApplyChanges,
+		// to skip the reverse-operation and pre-edit-index bookkeeping that
+		// only an undo/redo history reads. Cost-only: the doc.Marshal call
+		// below, once per change, already dominates this loop.
+		if _, _, err := newDoc.ApplyChangesForReplay(c); err != nil {
 			return nil, err
 		}
 

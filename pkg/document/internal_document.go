@@ -314,12 +314,27 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 	return d.applyChanges(operations.OpSourceRemote, changes...)
 }
 
+// ApplyChangesForReplay applies stored changes to the document exactly like
+// ApplyChangePack's non-snapshot branch does: under OpSourceReplay, so the
+// reverse-operation and pre-edit-index bookkeeping that only an undo/redo
+// history reads is skipped rather than computed and thrown away. Use this,
+// not ApplyChanges, for a caller that replays a document's own change log
+// into a snapshot-seeded InternalDocument one change at a time outside
+// ApplyChangePack itself -- admin.Client.ListChangeSummaries is the one
+// production caller today. See OpSourceReplay.
+func (d *InternalDocument) ApplyChangesForReplay(
+	changes ...*change.Change,
+) ([]DocEvent, []operations.Operation, error) {
+	return d.applyChanges(operations.OpSourceReplay, changes...)
+}
+
 // applyChanges applies the given changes under the given source. Callers that
 // keep the executed operations -- Document.applyChanges, whose history layer
 // reconciles stacked undo/redo entries against them -- must use
-// OpSourceRemote; the change replay behind ApplyChangePack uses
-// OpSourceReplay, which skips the per-operation bookkeeping only such a
-// history reads. See OpSourceReplay.
+// OpSourceRemote; a caller that replays stored changes and reads neither
+// return value -- ApplyChangePack's non-snapshot branch, and
+// ApplyChangesForReplay -- uses OpSourceReplay, which skips the
+// per-operation bookkeeping only such a history reads. See OpSourceReplay.
 func (d *InternalDocument) applyChanges(
 	source operations.OpSource,
 	changes ...*change.Change,
