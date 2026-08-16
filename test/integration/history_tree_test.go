@@ -1082,19 +1082,11 @@ func TestHistoryTreeMultiClientStyleUndoConvergence(t *testing.T) {
 // block (:1200-1384): 24 runtime instances, localOps(3) x remoteOps(4) x 2
 // directions.
 //
-// 3 of the 24 -- the reverse-direction case where the LOCAL op is
-// remoteOp == "split-l1" (a splitLevel > 0 edit) and d1 undoes it -- are
-// skipped: Go's TreeEdit.toReverseOperation returns no reverse at all for a
-// splitLevel > 0 edit yet. This is not a filed defect but scheduled,
-// not-yet-implemented work -- Phase 4 Task 19 ("Split-aware reverse
-// operations") in docs/tasks/active/20260815-undo-redo-go-port-todo.md,
-// summarized in docs/design/undo-redo-go-port.md's "Layer 2: CRDT return
-// values" table (the "TreeEdit (splitLevel >= 1)" row) and "Sequencing"
-// table (the Phase 4 row). With nothing pushed for that edit, d1.Undo()
-// would pop and undo a different, unrelated undo-stack entry instead --
-// not a JS-equivalent scenario, so it is skipped rather than adapted. The
-// forward-direction case (remote does the split, d1 undoes its own
-// unrelated style op) does not touch this gap and is not skipped.
+// The reverse-direction cases where the LOCAL op is remoteOp == "split-l1"
+// exercise the boundary-deletion reverse of a splitLevel > 0 edit, reconciled
+// against a concurrent remote style: the undo has to land on the boundary the
+// split created, not on wherever the split's own pre-edit index pointed before
+// the remote change moved it.
 func TestHistoryTreeMultiClientStyleVsEditConvergence(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
@@ -1183,10 +1175,6 @@ func TestHistoryTreeMultiClientStyleVsEditConvergence(t *testing.T) {
 
 			// Reverse direction: local edit, remote style, undo edit.
 			t.Run(fmt.Sprintf("should converge: local edit(%s) + remote style(%s)", remoteOp, localOp), func(t *testing.T) {
-				if remoteOp == "split-l1" {
-					t.Skip("a splitLevel > 0 Tree.Edit produces no reverse operation in Go yet, so undoing this local split here would incorrectly pop and undo a different, unrelated undo-stack entry (scheduled, not yet implemented: Phase 4 Task 19 in docs/tasks/active/20260815-undo-redo-go-port-todo.md, summarized in docs/design/undo-redo-go-port.md's Layer 2 and Sequencing tables)")
-				}
-
 				ctx := context.Background()
 
 				d1 := document.New(helper.TestKey(t))

@@ -353,33 +353,33 @@ func TestTreeUndo(t *testing.T) {
 		assert.Equal(t, "<r><p>abcdef</p></r>", treeXML(t, doc))
 	})
 
-	t.Run("a merging edit produces no reverse yet test", func(t *testing.T) {
+	t.Run("a merging edit pushes a reverse test", func(t *testing.T) {
 		// Backspace at the start of the second paragraph: the range covers
 		// </p><p>, so its children move into the first paragraph and the
 		// emptied element is tombstoned. Re-inserting that tombstone would put
 		// back an empty shell — its children live in the first paragraph now —
-		// which is why a merge's reverse is a split, not a content
-		// re-insertion. That split reverse does not exist yet, so a merging
-		// edit produces no reverse at all rather than a wrong one.
+		// which is why a merge's reverse is a split. Pinned at the stack level
+		// here; the behavior of the cycle is in tree_split_undo_test.go.
 		doc := newTwoParagraphDoc(t)
 		editTree(t, doc, 3, 5, nil)
 		assert.Equal(t, "<r><p>abcd</p></r>", treeXML(t, doc))
-		assert.Equal(t, 1, doc.UndoStackLenForTest(),
-			"only the SetNewTree change is undoable; a merge has no reverse yet")
+		assert.Equal(t, 2, doc.UndoStackLenForTest(),
+			"the SetNewTree change and the merge's split reverse")
 	})
 
-	t.Run("a splitting edit produces no reverse yet test", func(t *testing.T) {
-		// A split's reverse is a boundary deletion rather than a content
-		// re-insertion, and is not built yet. Pinned here so the gap is
-		// explicit: the split stays on the document and the undo stack still
-		// holds only the change that created the tree.
+	t.Run("a splitting edit pushes a reverse test", func(t *testing.T) {
+		// A split's reverse is a boundary deletion — a splitLevel 0 edit over
+		// the tokens the split created — rather than a content re-insertion.
+		// Pinned at the stack level here; the behavior of the cycle is in
+		// tree_split_undo_test.go.
 		doc := newTreeDoc(t, "000000000000000000000001")
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.GetTree("t").Edit(2, 2, nil, 1)
 			return nil
 		}))
 		assert.Equal(t, "<r><p>a</p><p>b</p></r>", treeXML(t, doc))
-		assert.Equal(t, 1, doc.UndoStackLenForTest(), "only the SetNewTree change is undoable")
+		assert.Equal(t, 2, doc.UndoStackLenForTest(),
+			"the SetNewTree change and the split's boundary-deletion reverse")
 	})
 
 	t.Run("an edit that changes nothing is undoable as a no-op test", func(t *testing.T) {

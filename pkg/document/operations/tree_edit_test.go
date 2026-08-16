@@ -230,6 +230,23 @@ func editAt(
 	return info
 }
 
+// splitAt runs a zero-width Tree.Edit at the given visible index that splits
+// the enclosing elements to the given level and carries no content — the pure
+// split that toSplitReverseOperation reverses.
+func splitAt(
+	t *testing.T, tree *crdt.Tree, idx, splitLevel int, issue func() *time.Ticket,
+) crdt.TreeEditReverseInfo {
+	t.Helper()
+
+	pos, err := tree.FindPos(idx)
+	assert.NoError(t, err)
+
+	_, _, info, err := tree.Edit(pos, pos, nil, splitLevel, issue(), issue, nil)
+	assert.NoError(t, err)
+
+	return info
+}
+
 // indexOfPos converts a TreePos back to a visible index, so a reverse
 // operation's range can be asserted in the units the test states it in.
 func indexOfPos(t *testing.T, tree *crdt.Tree, pos *crdt.TreePos) int {
@@ -322,9 +339,12 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		assert.Equal(t, 5, indexOfPos(t, tree, edit.ToPos()), "the range covers the inserted content")
 	})
 
-	t.Run("skips a merging edit test", func(t *testing.T) {
+	t.Run("reverses a merging edit with a split test", func(t *testing.T) {
 		// A merge's reverse is a split; re-inserting the emptied element would
-		// restore a shell whose children now live in the merge target.
+		// restore a shell whose children now live in the merge target. One
+		// split level per boundary the merge consumed, anchored as a zero-width
+		// point at the pre-edit from index — where the merge left the joined
+		// content.
 		issue := ticketer()
 		root := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), "r", nil)
 		for _, value := range []string{"ab", "cd"} {
@@ -344,7 +364,55 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		op := NewTreeEdit(issue(), nil, nil, nil, 0, issue())
 		reverse, err := op.toReverseOperation(tree, nil, info, 3)
 		assert.NoError(t, err)
-		assert.Nil(t, reverse, "no reverse at all is better than one that restores a shell")
+
+		edit := reverse.(*TreeEdit)
+		assert.Equal(t, info.MergeLevel, edit.SplitLevel(),
+			"one split level per boundary the merge consumed")
+		assert.Empty(t, edit.Contents(), "a split creates boundaries, it inserts nothing")
+		assert.True(t, edit.isUndoOp, "reconciliation only tracks an op marked as a reverse")
+		assert.Equal(t, 3, *edit.fromIdx)
+		assert.Equal(t, 3, *edit.toIdx, "the split reverse is a zero-width point")
+		assert.Equal(t, 3, indexOfPos(t, tree, edit.FromPos()))
+	})
+
+	t.Run("reverses a split with a boundary deletion test", func(t *testing.T) {
+		// A split adds one close tag plus one open tag per level and removes
+		// nothing, so its reverse deletes exactly those 2*splitLevel tokens,
+		// starting at the index the split ran at.
+		issue := ticketer()
+		tree := buildTree(t, issue)
+		info := splitAt(t, tree, 2, 1, issue)
+		assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+
+		op := NewTreeEdit(issue(), nil, nil, nil, 1, issue())
+		reverse, err := op.toSplitReverseOperation(tree, info.PreEditFromIdx)
+		assert.NoError(t, err)
+
+		edit := reverse.(*TreeEdit)
+		assert.Equal(t, 0, edit.SplitLevel(), "the boundary deletion is a plain edit")
+		assert.Empty(t, edit.Contents(), "it deletes; it re-inserts nothing")
+		assert.True(t, edit.isUndoOp)
+		assert.Equal(t, 2, *edit.fromIdx)
+		assert.Equal(t, 4, *edit.toIdx, "2*splitLevel boundary tokens")
+		assert.Equal(t, 1, edit.redoSplitLevel,
+			"the redo of this deletion has to re-split, not revive the boundary nodes")
+		assert.Equal(t, 2, indexOfPos(t, tree, edit.FromPos()))
+		assert.Equal(t, 4, indexOfPos(t, tree, edit.ToPos()))
+	})
+
+	t.Run("skips a split whose boundary is not visible test", func(t *testing.T) {
+		// The guard JS keeps at tree_edit_operation.ts:690: when the boundary
+		// range runs past the end of the visible tree the split had no visible
+		// effect, and deleting the range anyway would take out live content.
+		issue := ticketer()
+		tree := buildTree(t, issue)
+		info := splitAt(t, tree, 2, 1, issue)
+
+		op := NewTreeEdit(issue(), nil, nil, nil, 1, issue())
+		reverse, err := op.toSplitReverseOperation(tree, tree.Root().Len()-1)
+		assert.NoError(t, err)
+		assert.Nil(t, reverse, "a reverse is skipped, never an error")
+		assert.Equal(t, 2, info.PreEditFromIdx)
 	})
 }
 

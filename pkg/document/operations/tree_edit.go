@@ -97,6 +97,20 @@ type TreeEdit struct {
 	// identity-preserving path, which returns before any Tree.Edit call runs.
 	lastFromIdx, lastToIdx *int
 
+	// redoSplitLevel is set on the boundary-deletion reverse that undoes a
+	// split, and names the level of the split it undoes. It keeps that
+	// boundary deletion off both of the paths an ordinary deletion takes when
+	// its OWN reverse (the redo) is built: instead of reviving the boundary
+	// nodes it tombstoned -- by identity or by copy -- the redo re-splits at
+	// the merged position. Local-only state, never on the wire, mirroring
+	// TreeEditOperation.redoSplitLevel in the JS SDK.
+	//
+	// JS distinguishes `undefined` (not a split's undo) from a number; Go uses
+	// the zero value for the same distinction, which is exact here because the
+	// only producer, toSplitReverseOperation, is reached only for splitLevel >
+	// 0 and so never stores a 0.
+	redoSplitLevel int
+
 	// insertedContentSize is the visible-index size of the content THIS
 	// execution's forward Tree.Edit call accepted (info.InsertedContentSize),
 	// mirroring TreeEditOperation.insertedContentSize in the JS SDK. Read by
@@ -351,20 +365,58 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 		// execute(). A later SplitText mutates in place and splits tombstones
 		// too, so holding onto them past this point would let a subsequent
 		// edit truncate the captured content.
-		return e.toReverseOperation(obj, contents, info, info.PreEditFromIdx)
+		return e.selectReverseOperation(obj, contents, info)
 
 	default:
 		return nil, ErrNotApplicableDataType
 	}
 }
 
-// toReverseOperation builds the operation that undoes this edit. It has three
+// selectReverseOperation picks which builder reverses the edit that just ran,
+// mirroring tree_edit_operation.ts:470-487.
+//
+// A splitLevel 0 edit goes to toReverseOperation. A splitting edit is reversed
+// by a boundary deletion, but only when the split is all it did: an edit that
+// also inserted or removed would need its reverse to undo both halves at once,
+// and neither builder produces that, so it gets no reverse rather than a
+// partial one.
+//
+// The purity test reads e.contents, the content this operation carries, rather
+// than the accepted copy Execute passes down -- the two have the same length
+// (Tree.Edit drops duplicates from its own copy of the slice, not from the
+// caller's) and e.contents is what JS's `this.contents` names. info.Removed and
+// info.PreTombstoned partition the set JS calls removedNodes, which includes
+// pre-tombstoned nodes while info.Removed alone does not, so both are checked
+// to test the same emptiness JS tests.
+func (e *TreeEdit) selectReverseOperation(
+	tree *crdt.Tree,
+	inserted []*crdt.TreeNode,
+	info crdt.TreeEditReverseInfo,
+) (Operation, error) {
+	if e.splitLevel == 0 {
+		return e.toReverseOperation(tree, inserted, info, info.PreEditFromIdx)
+	}
+
+	isPureSplit := len(e.contents) == 0 &&
+		len(info.Removed) == 0 &&
+		len(info.PreTombstoned) == 0
+	if !isPureSplit {
+		return nil, nil
+	}
+
+	return e.toSplitReverseOperation(tree, info.PreEditFromIdx)
+}
+
+// toReverseOperation builds the operation that undoes this edit. It has four
 // outcomes, in the order tree_edit_operation.ts:526-665 takes them:
 //
 //  1. Ordinarily, an identity-preserving reverse: revive the nodes this edit
 //     removed and re-remove the ones it inserted, both by original identity.
-//  2. For a merge, no reverse at all — the reverse of a merge is a split.
-//  3. Otherwise, the copy-reinsert fallback: delete the range this edit
+//  2. For the boundary deletion that undid a split (redoSplitLevel set), a
+//     re-split at the merged position — the redo of that split.
+//  3. For a merge, a split at the merge position: a merge deletes element
+//     boundaries, so re-creating them is what undoes it.
+//  4. Otherwise, the copy-reinsert fallback: delete the range this edit
 //     inserted and re-insert a copy of what it removed. Reversing by copy is
 //     what makes ReissueContentIDs necessary — see there.
 //
@@ -372,37 +424,33 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 // tree_edit_operation.ts:640-665, which computes them as
 // findPos(preEditFromIdx) and findPos(preEditFromIdx + insertedContentSize).
 // Go's Tree.Edit does now report the equivalent (TreeEditReverseInfo.
-// PreEditFromIdx), but outcome 3 below deliberately does NOT use it for
+// PreEditFromIdx), but outcome 4 below deliberately does NOT use it for
 // fromPos/toPos: it derives its anchor from the nodes the edit actually
 // touched instead (immediately before the content the tree accepted, or --
 // with nothing accepted -- immediately before the first node this edit
 // tombstoned). That anchor is a filed, open divergence from JS (see
 // "a Tree reverse can delete live neighbours when its content was born
 // tombstoned" in the cross-SDK defects doc) which this comment is not
-// re-litigating; preFromIdx below is passed to outcomes 1 and the no-op
-// case only, never to outcome 3.
+// re-litigating; preFromIdx below is passed to outcomes 1-3 and the no-op
+// case only, never to outcome 4.
 //
-// Only splitLevel 0 is reversed, including by outcome 1: a split's reverse is
-// a boundary deletion rather than a content re-insertion, and is not built yet
-// (JS branches on the same condition before calling this at all).
+// Only a splitLevel 0 edit reaches here at all: Execute sends a splitting one
+// to toSplitReverseOperation instead, branching on the same condition JS
+// branches on before calling this (tree_edit_operation.ts:475-487).
 //
 // preFromIdx is this edit's own pre-mutation visible-index anchor
 // (info.PreEditFromIdx, which Tree.Edit captures after Phase 3, the same
 // point JS's own preEditFromIdx is captured at) -- unrelated to the
-// post-edit, node-derived anchor idx computed below for outcome 3's
-// fromPos/toPos. Outcomes 1 and the no-op case use it directly, as a
+// post-edit, node-derived anchor idx computed below for outcome 4's
+// fromPos/toPos. Outcomes 1-3 and the no-op case use it directly, as a
 // zero-width point, mirroring how JS uses its own preEditFromIdx the same
-// way in the identical branches (tree_edit_operation.ts:543-556, :610-616).
+// way in the identical branches (tree_edit_operation.ts:543-598, :610-616).
 func (e *TreeEdit) toReverseOperation(
 	tree *crdt.Tree,
 	inserted []*crdt.TreeNode,
 	info crdt.TreeEditReverseInfo,
 	preFromIdx int,
 ) (Operation, error) {
-	if e.splitLevel != 0 {
-		return nil, nil
-	}
-
 	// Reverse this edit by identity: revive the nodes it removed
 	// (restoreSpans) and re-remove the nodes it inserted (retombstoneSpans),
 	// both under their ORIGINAL identities instead of copy-reinserting. That
@@ -411,11 +459,13 @@ func (e *TreeEdit) toReverseOperation(
 	// reverses each mint their own nodes and both survive.
 	//
 	// Tree.Edit only fills these spans when they fully describe the edit
-	// (SpansComplete), so this never fires for the merge and
-	// born-tombstoned cases handled below. JS additionally excludes an op
-	// tagged with redoSplitLevel here; Go builds no split reverses yet, so it
-	// has no such op to exclude.
-	if len(info.RemovedSpans) > 0 || len(info.InsertedSpans) > 0 {
+	// (SpansComplete), so this never fires for the merge and born-tombstoned
+	// cases handled below. The redoSplitLevel guard is what keeps a split's own
+	// boundary-deletion undo off this path: that deletion is an ordinary one as
+	// far as Tree.Edit is concerned, so it could fill the spans here, and
+	// reviving the boundary nodes it tombstoned is not the redo of a split --
+	// re-splitting is (outcome 2).
+	if e.redoSplitLevel == 0 && (len(info.RemovedSpans) > 0 || len(info.InsertedSpans) > 0) {
 		fromIdx, toIdx := preFromIdx, preFromIdx
 		return &TreeEdit{
 			parentCreatedAt:  e.parentCreatedAt,
@@ -430,14 +480,23 @@ func (e *TreeEdit) toReverseOperation(
 		}, nil
 	}
 
+	// This edit IS the boundary deletion that undid a split, so its own reverse
+	// -- the redo -- re-splits at the position the deletion merged, rather than
+	// re-inserting the boundary nodes it tombstoned. Mirrors
+	// tree_edit_operation.ts:564-580. The split it produces is itself a pure
+	// split, so Execute reverses it through toSplitReverseOperation again and
+	// the undo/redo cycle closes.
+	if e.redoSplitLevel > 0 {
+		return e.splitReverseAt(tree, preFromIdx, e.redoSplitLevel)
+	}
+
 	// A merge deletes element boundaries and moves their children into the
 	// merge target, so its reverse is a split, not a content re-insertion:
-	// re-inserting the emptied elements would restore shells whose children
-	// now live elsewhere. Building that split reverse needs the split
-	// machinery a splitting edit's own reverse needs, which does not exist
-	// yet, so a merging edit produces no reverse rather than a wrong one.
+	// re-inserting the emptied elements would restore shells whose children now
+	// live elsewhere. One split level per boundary the merge consumed. Mirrors
+	// tree_edit_operation.ts:585-598.
 	if info.MergeLevel > 0 {
-		return nil, nil
+		return e.splitReverseAt(tree, preFromIdx, info.MergeLevel)
 	}
 
 	// Only the content the tree accepted counts. Content reusing an ID the
@@ -544,6 +603,94 @@ func (e *TreeEdit) toReverseOperation(
 		from:            fromPos,
 		to:              toPos,
 		contents:        contents,
+		restoreMode:     crdt.RestoreModeNone,
+		isUndoOp:        true,
+		fromIdx:         &fromIdx,
+		toIdx:           &toIdx,
+	}, nil
+}
+
+// toSplitReverseOperation builds the operation that undoes THIS split, a
+// boundary deletion. Ported from tree_edit_operation.ts:680-712.
+//
+// A split creates element boundaries without removing anything: one close tag
+// plus one open tag per level, so 2*splitLevel tree-index tokens. Deleting
+// exactly those tokens merges the split elements back together, which is why
+// the reverse is an ordinary splitLevel 0 edit rather than a new operation
+// kind — every existing reconciliation and redo path applies to it unchanged.
+// See docs/design/tree-split-undo-redo.md.
+//
+// preFromIdx is info.PreEditFromIdx, captured inside Tree.Edit after Phase 3
+// and so naming the position in the PRE-split tree that the split ran at.
+// That is the same index the boundary tokens start at in the POST-split tree
+// (a split inserts its boundary at the split point and shifts nothing to its
+// left), which is what lets one index serve both as the anchor read off the
+// post-edit tree here and as the reconciliation anchor stored on the reverse.
+// JS captures and uses it at exactly this point too.
+func (e *TreeEdit) toSplitReverseOperation(tree *crdt.Tree, preFromIdx int) (Operation, error) {
+	fromIdx := preFromIdx
+	toIdx := preFromIdx + 2*e.splitLevel
+
+	// The split had no visible effect — e.g. a concurrent deletion tombstoned
+	// the element it split, so the boundary it created occupies no visible
+	// index. Deleting the range anyway would take out live content to the
+	// right of it.
+	if toIdx > tree.Root().Len() {
+		return nil, nil
+	}
+
+	fromPos, err := tree.FindPos(fromIdx)
+	if err != nil {
+		return nil, err
+	}
+	toPos, err := tree.FindPos(toIdx)
+	if err != nil {
+		return nil, err
+	}
+
+	// redoSplitLevel is what keeps this op's OWN reverse on the re-split path
+	// rather than reviving the boundary nodes it is about to tombstone; see
+	// toReverseOperation's outcome 2.
+	return &TreeEdit{
+		parentCreatedAt: e.parentCreatedAt,
+		from:            fromPos,
+		to:              toPos,
+		restoreMode:     crdt.RestoreModeNone,
+		isUndoOp:        true,
+		fromIdx:         &fromIdx,
+		toIdx:           &toIdx,
+		redoSplitLevel:  e.splitLevel,
+	}, nil
+}
+
+// splitReverseAt builds a zero-width split of the given level at preFromIdx, the
+// shape both branches of toReverseOperation that reverse a merge produce: the
+// redo of a split whose undo merged its boundary away (redoSplitLevel), and the
+// undo of a user-initiated merge (MergeLevel). JS writes the two out separately
+// (tree_edit_operation.ts:564-580 and :585-598) but they differ only in which
+// level they carry.
+//
+// The op carries no content — a split creates boundaries rather than inserting
+// nodes — and its range is the single point preFromIdx, which is where the
+// merge this reverses left the joined content. Both indices are that point, so
+// Execute's fromIdx/toIdx conversion resolves a zero-width range, and
+// reconciliation moves the point rather than resizing a range.
+func (e *TreeEdit) splitReverseAt(
+	tree *crdt.Tree,
+	preFromIdx int,
+	splitLevel int,
+) (Operation, error) {
+	pos, err := tree.FindPos(preFromIdx)
+	if err != nil {
+		return nil, err
+	}
+
+	fromIdx, toIdx := preFromIdx, preFromIdx
+	return &TreeEdit{
+		parentCreatedAt: e.parentCreatedAt,
+		from:            pos,
+		to:              pos,
+		splitLevel:      splitLevel,
 		restoreMode:     crdt.RestoreModeNone,
 		isUndoOp:        true,
 		fromIdx:         &fromIdx,
