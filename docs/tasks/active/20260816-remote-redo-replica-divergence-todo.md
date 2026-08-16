@@ -688,7 +688,27 @@ instead would silently rewrite a peer's operation, and would diverge any
 replica that had already decoded the original value — trading a loud failure
 for silent divergence. But that choice is only safe if no such change exists.
 
-### The open question
+### The open question — RESOLVED in code, no audit needed
+
+**Resolution (2026-08-16).** Both checks are now normalized on the stored
+path by `converter.NormalizeStoredOperations`, called from
+`ChangeInfo.ToChange`; the client-facing path stays strict. The audit below
+was the wrong instrument twice over: operations are persisted as opaque
+protobuf blobs (`ChangeInfo.Operations [][]byte`), so the population cannot
+be queried at all — only found by decode-scanning every stored change — and
+even a clean scan would describe the cluster only at scan time, binding
+neither a lagging replica, nor a backup restored later, nor a change written
+between the scan and the deploy. Normalizing dominates: it costs nothing if
+the population is empty, and if it is not, the document loads exactly as it
+did before the validation existed.
+
+Note the remediation caveat below — "a read-path-only exception reintroduces
+the value into `toSplitReverseOperation`, so it needs a matching guard
+there" — does not apply: the repair **clamps** a negative `splitLevel` to
+`0` rather than tolerating it, and `toSplitReverseOperation` is reached only
+for `splitLevel > 0` (`tree_edit.go:110`). No extra guard is needed.
+
+The original reasoning is kept below for the record.
 
 **Does any stored change carry a negative `splitLevel`?** No client should
 ever have produced one — `json.Tree`'s four edit entry points now refuse it
@@ -718,18 +738,18 @@ every client, since the read path shares the decoder.
 
 ### Tasks
 
-- [ ] Audit stored changes for a negative `split_level` on any `TreeEdit`
-      operation (both the change log and any snapshot-embedded operations),
-      across every deployed backend, before this ships
-- [ ] In the same pass, audit stored changes for a Tree restore span
-      attribute with a nil `updated_at` (the Task 21 Critical 3 check)
-- [ ] If any exist, decide the remediation: a one-time migration rewriting
-      them to 0, versus a read-path-only tolerance that keeps the wire path
-      strict. Note that a read-path-only exception reintroduces the value into
-      `toSplitReverseOperation`, so it needs a matching guard there
-- [ ] If none exist, record the audit result here so the question is not
-      reopened, and consider whether the same reasoning applies to other
-      numeric protobuf fields the decoder currently accepts unvalidated
+- [x] ~~Audit stored changes for a negative `split_level`~~ — superseded by
+      `converter.NormalizeStoredOperations`; see the resolution above
+- [x] ~~In the same pass, audit stored changes for a Tree restore span
+      attribute with a nil `updated_at`~~ — same fix, same commit
+- [x] Remediation decided: read-path normalization (clamp to `0`, drop the
+      undated attribute) with the wire path left strict, over a one-time
+      migration. Pinned by
+      `TestChangeInfoDecodesOperationsRejectedOnTheWire`
+- [ ] Consider whether the same reasoning applies to other numeric protobuf
+      fields the decoder currently accepts unvalidated — any future check
+      added to `FromOperations` is retroactive over stored changes and needs
+      the same stored-path treatment
 - [ ] Decide whether `yorkie-js-sdk` should gain the equivalent producer-side
       guard, so the two SDKs cannot mint values the shared server refuses
 

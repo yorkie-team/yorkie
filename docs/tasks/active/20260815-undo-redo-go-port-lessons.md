@@ -270,17 +270,34 @@ part of Task 21 except where marked.
   single-client editing. Must not be fixed in Go alone: Go is also the
   server, so a one-sided fix would turn a uniform bug into permanent
   server-vs-client divergence.
-- Rejecting a negative `splitLevel` (Task 19) applies new strictness
-  retroactively to stored changes via the shared decode path — open
-  question: does any already-persisted change carry one? Needs a
-  production data audit before merge, not a code decision. **The Task 21
-  Critical 3 fix below (rejecting a nil attribute `updatedAt` on a Tree
-  restore span) has the identical shape and belongs in the same audit**:
+- **Resolved in code, no audit needed.** Rejecting a negative `splitLevel`
+  (Task 19) applied new strictness retroactively to stored changes via the
+  shared decode path, and the Task 21 Critical 3 fix (rejecting a nil
+  attribute `updatedAt` on a Tree restore span) had the identical shape:
   `converter.FromOperations` is also what
-  `server/backend/database/change_info.go:119`'s `ChangeInfo.ToChange` uses
-  to decode a *stored* change, so a change persisted before this fix with a
-  nil attribute `updatedAt` would now make that document permanently
-  unloadable, the same way a stored negative `splitLevel` would.
+  `server/backend/database/change_info.go`'s `ChangeInfo.ToChange` uses to
+  decode a *stored* change, so a change persisted before either fix would
+  have made that document permanently unloadable.
+
+  This was first written up as needing a production data audit before
+  merge. That turned out to be the wrong instrument twice over: operations
+  are persisted as opaque protobuf blobs, so the population cannot be
+  queried at all, only found by decode-scanning every stored change — and
+  even a clean scan only says "empty today", which does not bind a replica
+  that is behind, a backup being restored, or a change written between the
+  scan and the deploy.
+
+  `converter.NormalizeStoredOperations` repairs both shapes on the stored
+  path only, leaving the client-facing path strict. It dominates the audit:
+  it costs nothing if the population is empty, and if it is not, the
+  document loads exactly as it did before the validation existed. The two
+  halves are pinned together by
+  `TestChangeInfoDecodesOperationsRejectedOnTheWire` — each case asserts the
+  wire path still rejects *and* the stored path still loads.
+
+  The general lesson: validation added at a boundary is retroactive when
+  that boundary is shared with a read path over already-persisted data.
+  Normalize what you read, reject what you accept.
 
 ### Text / CRDT layer
 

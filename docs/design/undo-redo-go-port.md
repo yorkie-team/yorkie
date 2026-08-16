@@ -374,11 +374,11 @@ inbound-wire path**: `converter.FromOperations` is the same decoder
 `server/backend/database/change_info.go:119`'s `ChangeInfo.ToChange` uses
 to materialize a *stored* change, so the new strictness applies
 retroactively — a change persisted before this fix with a nil attribute
-`updatedAt` would now make that document permanently unloadable. Same
-shape as, and folded into, the negative-`splitLevel` stored-data audit
-question in the "Rejecting a negative `splitLevel`..." entry of
-[20260816-remote-redo-replica-divergence-todo.md](../tasks/active/20260816-remote-redo-replica-divergence-todo.md);
-the pre-merge audit there should cover both checks.
+`updatedAt` would make that document permanently unloadable. Same shape as
+the negative-`splitLevel` check, and resolved together with it by
+`converter.NormalizeStoredOperations`: the stored path repairs both shapes
+before decoding, the client-facing path keeps rejecting them. See
+"Retroactive validation on the stored decode path" below.
 
 **Counting method.** These files build many of their cases through
 parameterized loops (`for (const op of ops) { it(...) }`, nested Cartesian
@@ -605,6 +605,51 @@ snapshot-rebuild investigation. See
 [20260816-tree-style-combined-reverse-dropped-todo.md](../tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md)
 for the Tree half and for the separate execute-side defect that determines
 what the recovered `Attributes` field then does.
+
+### Retroactive validation on the stored decode path
+
+Two checks this port added to `converter.FromOperations` reject an operation
+outright rather than reinterpret it: a negative `TreeEdit.splitLevel` (Task
+19) and a Tree restore-span attribute carrying no `updatedAt` (Task 21's
+Critical 3). Both are right at the boundary where a client's bytes enter the
+server. Neither is right at the other boundary that decoder serves:
+`ChangeInfo.ToChange` reads changes already written to storage, and there a
+rejection does not bounce a bad request — it makes every document containing
+that change permanently unloadable, including through snapshot rebuild and
+compaction.
+
+The first plan was a production data audit before merge: does any stored
+change actually carry one of these shapes? That instrument does not fit the
+question. Operations are persisted as opaque protobuf blobs
+(`ChangeInfo.Operations [][]byte`), so the population cannot be queried —
+only found by decode-scanning every stored change. And a clean scan would
+still only describe the cluster at scan time, saying nothing about a lagging
+replica, a backup restored later, or a change written between the scan and
+the deploy.
+
+`converter.NormalizeStoredOperations` repairs both shapes in place, called
+only from `ChangeInfo.ToChange`:
+
+- a negative `splitLevel` clamps to `0`, which is what it already meant —
+  nothing read it beyond the split loop, which does nothing for a
+  non-positive level;
+- a restore-span attribute with no `updatedAt` is dropped. This one
+  deliberately does *not* restore the prior behavior, because the prior
+  behavior was to reach the RHT with a nil `updatedAt` and panic on the
+  first comparison. An attribute with no `updatedAt` cannot take part in
+  last-writer-wins resolution anyway.
+
+This dominates the audit rather than deferring it: it costs nothing if the
+population is empty, and if it is not, the document loads exactly as it did
+before the validation existed.
+`TestChangeInfoDecodesOperationsRejectedOnTheWire` pins both halves of the
+asymmetry per case — the wire path still rejects, the stored path still
+loads.
+
+The generalization is worth stating, because the same decoder is still
+shared: **validation added at a boundary becomes retroactive whenever that
+boundary is also a read path over already-persisted data.** Normalize what
+is read; reject what is accepted.
 
 ### Design Decisions
 
