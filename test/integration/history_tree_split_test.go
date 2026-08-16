@@ -110,9 +110,10 @@ func treeNodeIDString(id *crdt.TreeNodeID) string {
 	return id.CreatedAt.Key() + ":" + strconv.Itoa(id.Offset)
 }
 
-// topRedoTreeEdit returns the last *operations.TreeEdit in the top entry of
-// the redo stack, mirroring history_tree_split_test.ts's topRedoTreeEdit.
-func topRedoTreeEdit(doc *document.Document) *operations.TreeEdit {
+// splitTestTopRedoTreeEdit returns the last *operations.TreeEdit in the top
+// entry of the redo stack, mirroring history_tree_split_test.ts's
+// topRedoTreeEdit.
+func splitTestTopRedoTreeEdit(doc *document.Document) *operations.TreeEdit {
 	top := doc.RedoStackTopForTest()
 	for i := len(top) - 1; i >= 0; i-- {
 		if te, ok := top[i].Op.(*operations.TreeEdit); ok {
@@ -122,11 +123,11 @@ func topRedoTreeEdit(doc *document.Document) *operations.TreeEdit {
 	return nil
 }
 
-// treeEditReversePayload concatenates whichever span set a reverse
+// splitTestReversePayload concatenates whichever span set a reverse
 // TreeEdit carries -- an undo of an insert fills RetombstoneSpans, an undo
 // of a delete fills RestoreSpans -- mirroring history_tree_split_test.ts's
 // reversePayload.
-func treeEditReversePayload(op *operations.TreeEdit) []*crdt.TreeRestoreSpan {
+func splitTestReversePayload(op *operations.TreeEdit) []*crdt.TreeRestoreSpan {
 	if op == nil {
 		return nil
 	}
@@ -136,15 +137,15 @@ func treeEditReversePayload(op *operations.TreeEdit) []*crdt.TreeRestoreSpan {
 	return spans
 }
 
-// treeEditFingerprint builds an ordered, identity-bearing description of a
+// splitTestFingerprint builds an ordered, identity-bearing description of a
 // reverse payload, mirroring history_tree_split_test.ts's fingerprint.
 // Comparing sizes alone would not notice a return to copy-reinsert, which
 // can emit the same number of spans while minting a fresh identity every
 // cycle -- exactly the regression identity-preserving restore exists to
 // prevent.
-func treeEditFingerprint(op *operations.TreeEdit) []string {
+func splitTestFingerprint(op *operations.TreeEdit) []string {
 	var out []string
-	for _, s := range treeEditReversePayload(op) {
+	for _, s := range splitTestReversePayload(op) {
 		out = append(out, fmt.Sprintf("%s/%s/%s/%d/%s",
 			treeNodeIDString(s.ID), treeNodeIDString(s.ParentID), s.NodeType, s.Length, s.Value))
 	}
@@ -1132,8 +1133,8 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 			// is what goes over the wire in production.
 			assert.NoError(t, doc.Undo())
 
-			redoTop := topRedoTreeEdit(doc)
-			fingerprints = append(fingerprints, treeEditFingerprint(redoTop))
+			redoTop := splitTestTopRedoTreeEdit(doc)
+			fingerprints = append(fingerprints, splitTestFingerprint(redoTop))
 
 			// Now actually redo for the next cycle's setup.
 			assert.NoError(t, doc.Redo())
@@ -1160,9 +1161,9 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 		}
 		assert.NoError(t, doc.Undo())
 
-		redoTop := topRedoTreeEdit(doc)
+		redoTop := splitTestTopRedoTreeEdit(doc)
 		assert.NotNil(t, redoTop)
-		spans := treeEditReversePayload(redoTop)
+		spans := splitTestReversePayload(redoTop)
 		assert.Greater(t, len(spans), 0)
 
 		// The reversed edit inserted <p><inline></inline></p> and nothing
@@ -1212,10 +1213,11 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 			}
 
 			// Length is recorded in UTF-16 code units, and restore()/
-			// retombstone() use it as a string index boundary.
+			// retombstone() use it as a string index boundary: byte length
+			// would disagree on anything outside the BMP.
 			expected := 0
 			if span.IsText {
-				expected = len(span.Value)
+				expected = len(utf16.Encode([]rune(span.Value)))
 			}
 			if span.Length != expected {
 				violations = append(violations, fmt.Sprintf("%s: length=%d expected=%d", span.NodeType, span.Length, expected))
@@ -1245,7 +1247,7 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 		}, "type-astral"))
 		assert.NoError(t, doc.Undo())
 
-		spans := treeEditReversePayload(topRedoTreeEdit(doc))
+		spans := splitTestReversePayload(splitTestTopRedoTreeEdit(doc))
 		var textSpans []*crdt.TreeRestoreSpan
 		for _, s := range spans {
 			if s.IsText {
