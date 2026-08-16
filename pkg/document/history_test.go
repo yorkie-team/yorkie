@@ -44,6 +44,17 @@ func TestHistoryStack(t *testing.T) {
 		assert.ErrorIs(t, err, document.ErrRefusedDuringUpdate)
 	})
 
+	t.Run("clear history inside an updater is refused test", func(t *testing.T) {
+		// ClearHistory takes d.mu, which the updater already holds. Without
+		// the same guard Undo and Redo use, this call would block forever on
+		// its own goroutine's lock.
+		doc := document.New("d1")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			return doc.ClearHistory()
+		})
+		assert.ErrorIs(t, err, document.ErrRefusedDuringUpdate)
+	})
+
 	t.Run("stack depth is capped test", func(t *testing.T) {
 		doc := document.New("d1")
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {

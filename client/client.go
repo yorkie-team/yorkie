@@ -587,7 +587,9 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 
 	// 06. Clear the undo/redo stacks so that pre-attach changes, including
 	// the initial root setup above, are not reachable via undo.
-	d.ClearHistory()
+	if err := d.ClearHistory(); err != nil {
+		return err
+	}
 
 	return nil
 }

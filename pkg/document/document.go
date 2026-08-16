@@ -341,11 +341,23 @@ func (d *Document) Redo() error {
 
 // ClearHistory flushes both stacks. Changes made before this call are no
 // longer reachable via undo.
-func (d *Document) ClearHistory() {
+//
+// It refuses with ErrRefusedDuringUpdate when called from inside an updater,
+// exactly as Undo and Redo do: the updater already holds d.mu, so taking it
+// again would deadlock, and clearing without it would race that goroutine's
+// stack writes. JS's clearHistory (document.ts:1489) needs no such guard
+// because it has no mutex to deadlock on; the refusal is what the same call
+// costs to stay safe from any goroutine.
+func (d *Document) ClearHistory() error {
+	if d.updating.Load() {
+		return ErrRefusedDuringUpdate
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.history.ClearUndo()
 	d.history.ClearRedo()
+	return nil
 }
 
 // executeUndoRedo pops an entry off the undo or redo stack and replays it
