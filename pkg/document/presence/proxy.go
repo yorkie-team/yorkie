@@ -68,6 +68,17 @@ func New(ctx *change.Context, data Data) *Presence {
 
 // Initialize initializes the presence.
 func (p *Presence) Initialize(data Data) {
+	// Recorded before the swap, for the same reason Clear records: what undo
+	// restores for a key is the value it held when the Update began, and
+	// after the swap that value is no longer readable. The keys the incoming
+	// data introduces are recorded too -- as absent, which is what they were.
+	for key := range p.data {
+		p.recordPrevious(key)
+	}
+	for key := range data {
+		p.recordPrevious(key)
+	}
+
 	p.data = data
 	if p.data == nil {
 		p.data = NewData()
@@ -106,6 +117,7 @@ func (p *Presence) Set(key string, value string, opts ...SetOption) {
 	}
 
 	data := p.data
+	p.recordPrevious(key)
 	data.Set(key, value)
 
 	p.context.SetPresenceChange(Change{
@@ -131,6 +143,7 @@ func (p *Presence) Delete(key string, opts ...SetOption) {
 	}
 
 	data := p.data
+	p.recordPrevious(key)
 	data.Remove(key)
 
 	p.context.SetPresenceChange(Change{
@@ -144,9 +157,29 @@ func (p *Presence) Delete(key string, opts ...SetOption) {
 // Clear clears the value of the given key.
 func (p *Presence) Clear() {
 	data := p.data
+
+	// Every key this wipes is recorded first, for the same reason Set records
+	// the key it overwrites: a Set marked WithHistory *after* this call has
+	// to undo to the value its key held when the Update began, not to the
+	// absence left behind here. JS reaches the same result by rebinding its
+	// proxy to a fresh object and leaving its up-front snapshot untouched
+	// (presence.ts:57-64).
+	for key := range data {
+		p.recordPrevious(key)
+	}
+
 	data.Clear()
 
 	p.context.SetPresenceChange(Change{
 		ChangeType: Clear,
 	})
+}
+
+// recordPrevious reports the value the given key holds right now to the
+// change context, which keeps only the first report per key -- the value as
+// of the moment the context was created, since the proxy is the only writer
+// of the presence for as long as the context is open.
+func (p *Presence) recordPrevious(key string) {
+	value, exists := p.data[key]
+	p.context.RecordPreviousPresence(key, value, exists)
 }

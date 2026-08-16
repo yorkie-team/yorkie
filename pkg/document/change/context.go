@@ -26,6 +26,16 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// prevPresence is the value a presence key held when a Context was created,
+// recorded by the presence proxy the first time it mutates that key. exists
+// distinguishes a key that held the empty string from one that held nothing:
+// undo restores the former and removes the latter.
+type prevPresence struct {
+	key    string
+	value  string
+	exists bool
+}
+
 // Context is used to record the context of modification when editing a document.
 // Each time we add an operation, a new time ticket is issued.
 // Finally, returns a Change after the modification has been completed.
@@ -38,10 +48,23 @@ type Context struct {
 	root           *crdt.Root
 	presenceChange *inner.Change
 
-	// previousPresence is a snapshot of the actor's presence taken when this
-	// context was created. ReversePresence rebuilds its return value from
-	// this snapshot for any key marked undoable via presence.WithHistory.
-	previousPresence inner.Presence
+	// previousPresence holds, for each presence key this context has
+	// mutated, the value that key held when the context was created.
+	// ReversePresence rebuilds its return value from it for any key marked
+	// undoable via presence.WithHistory.
+	//
+	// JS deep-copies the actor's whole presence up front (context.ts:69).
+	// Recording it a key at a time, on the first mutation the presence proxy
+	// makes to that key, yields the same values -- the proxy is the only
+	// writer of the presence while an Update runs, so a key's first mutation
+	// through it is that key's first mutation at all -- while costing
+	// nothing on the Updates that mutate no presence, which is most of them.
+	//
+	// A slice rather than a map because it holds one entry per presence key
+	// the Update actually touched, which is one or two in practice; the
+	// linear scans below are cheaper than hashing, and an untouched presence
+	// costs no allocation at all.
+	previousPresence []prevPresence
 
 	// reversePresenceKeys holds the presence keys marked undoable via
 	// presence.WithHistory during this context. A key set again without
@@ -50,17 +73,16 @@ type Context struct {
 	reversePresenceKeys map[string]struct{}
 }
 
-// NewContext creates a new instance of Context. presenceData is a snapshot
-// of the actor's presence at the moment the context is created; it is
-// deep-copied so later mutation through the presence proxy does not corrupt
-// the baseline ReversePresence rebuilds from.
-func NewContext(prevID ID, message string, root *crdt.Root, presenceData inner.Presence) *Context {
+// NewContext creates a new instance of Context. The baseline ReversePresence
+// rebuilds from is not captured here: the presence proxy reports each key's
+// prior value through RecordPreviousPresence as it mutates it. See the
+// previousPresence field.
+func NewContext(prevID ID, message string, root *crdt.Root) *Context {
 	return &Context{
-		prevID:           prevID,
-		nextID:           prevID.Next(),
-		message:          message,
-		root:             root,
-		previousPresence: presenceData.DeepCopy(),
+		prevID:  prevID,
+		nextID:  prevID.Next(),
+		message: message,
+		root:    root,
 	}
 }
 
@@ -159,6 +181,37 @@ func (c *Context) DropPresenceChange() {
 	c.presenceChange = nil
 }
 
+// RecordPreviousPresence records the value key held before this context
+// mutated it. Only the first call for a given key has any effect, so what is
+// recorded is the value as of context creation however many times the key is
+// set afterwards -- which is what JS's up-front snapshot of the whole
+// presence means. Every presence mutation calls it, including the ones that
+// are not marked undoable: a plain Set followed by one with
+// presence.WithHistory has to undo to the value the plain Set overwrote, not
+// to the one it wrote.
+func (c *Context) RecordPreviousPresence(key, value string, exists bool) {
+	if _, ok := c.lookupPreviousPresence(key); ok {
+		return
+	}
+
+	c.previousPresence = append(c.previousPresence, prevPresence{
+		key:    key,
+		value:  value,
+		exists: exists,
+	})
+}
+
+// lookupPreviousPresence returns what RecordPreviousPresence recorded for the
+// given key, and whether anything was recorded for it at all.
+func (c *Context) lookupPreviousPresence(key string) (prevPresence, bool) {
+	for _, prev := range c.previousPresence {
+		if prev.key == key {
+			return prev, true
+		}
+	}
+	return prevPresence{}, false
+}
+
 // SetReversePresenceKey records or forgets a presence key for reverse
 // tracking. presence.Presence.Set calls this on every Set: when
 // addToHistory is true the key is added, so ReversePresence includes it;
@@ -181,12 +234,11 @@ func (c *Context) SetReversePresenceKey(key string, addToHistory bool) {
 // context creation, plus the keys that held nothing then, which undo has to
 // remove rather than restore.
 //
-// The split exists because a key absent from the snapshot has no value to
-// restore. Indexing the snapshot map for it yields "", and setting that back
-// would leave the key present with an empty value. JS reads `undefined` for
-// the same key and its JSON-based deep copy drops it from the Put entirely
-// (context.ts:212-219), removing the key -- which is what the absent list
-// reproduces here.
+// The split exists because a key that held nothing has no value to restore.
+// Reporting it as the empty string and setting that back would leave the key
+// present with an empty value. JS reads `undefined` for the same key and its
+// JSON-based deep copy drops it from the Put entirely (context.ts:212-219),
+// removing the key -- which is what the absent list reproduces here.
 //
 // Both results are empty when no presence key was marked undoable.
 func (c *Context) ReversePresence() (values inner.Presence, absentKeys []string) {
@@ -195,15 +247,20 @@ func (c *Context) ReversePresence() (values inner.Presence, absentKeys []string)
 	}
 
 	for key := range c.reversePresenceKeys {
-		value, ok := c.previousPresence[key]
-		if !ok {
+		// A key reaches reversePresenceKeys only through a proxy mutation,
+		// and every mutation records first, so the lookup finding nothing
+		// means the key was never mutated -- which cannot happen. Treating it
+		// as absent is the conservative reading either way: nothing was
+		// recorded for the key, so there is nothing to restore.
+		prev, ok := c.lookupPreviousPresence(key)
+		if !ok || !prev.exists {
 			absentKeys = append(absentKeys, key)
 			continue
 		}
 		if values == nil {
 			values = inner.New()
 		}
-		values.Set(key, value)
+		values.Set(key, prev.value)
 	}
 
 	// Map iteration order is randomized; sort so the reverse entry, and

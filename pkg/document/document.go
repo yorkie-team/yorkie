@@ -216,7 +216,6 @@ func (d *Document) Update(
 		d.doc.changeID,
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
-		presenceData,
 	)
 
 	if err := updater(
@@ -405,7 +404,7 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 	}
 
 	actorID := d.ActorID().String()
-	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot, d.clonePresences.Load(actorID))
+	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)
 	for _, entry := range entries {
 		if entry.Op == nil {
 			// Presence entries carry the values undoing (or redoing) the
@@ -829,7 +828,7 @@ func (d *Document) Root() *json.Object {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, nil)
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
 	return json.NewObject(ctx, d.cloneRoot.Object())
 }
 
