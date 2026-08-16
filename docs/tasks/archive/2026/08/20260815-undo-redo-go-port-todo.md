@@ -2,7 +2,7 @@
 
 **Created**: 2026-08-15
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use Markdown checkbox syntax for tracking.
 
 **Goal:** Port the JS SDK's undo/redo history layer to the Go SDK so both SDKs
 produce identical reverse operations and converge identically.
@@ -99,7 +99,7 @@ change-history API. It is unrelated — do not touch it.
   `Change.Execute(root, presences, source) ([]operations.Operation, []operations.Operation, error)`
   returning `(executed, reverseOps, err)`.
 
-- [ ] **Step 1: Add `OpSource` and change the interface**
+- [x] **Step 1: Add `OpSource` and change the interface**
 
 In `pkg/document/operations/operation.go`:
 
@@ -139,7 +139,7 @@ type Operation interface {
 }
 ```
 
-- [ ] **Step 2: Update all ten operations to the new signature, returning `nil` reverse**
+- [x] **Step 2: Update all ten operations to the new signature, returning `nil` reverse**
 
 Mechanical. For each file, change the receiver method and every `return`. Example
 for `pkg/document/operations/set.go:56`:
@@ -172,7 +172,7 @@ func (o *Set) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Operat
 Do not add any reverse generation in this task. Every operation returns
 `nil` for the reverse.
 
-- [ ] **Step 3: Update `Change.Execute`**
+- [x] **Step 3: Update `Change.Execute`**
 
 In `pkg/document/change/change.go`:
 
@@ -210,7 +210,7 @@ func (c *Change) Execute(
 }
 ```
 
-- [ ] **Step 4: Update the three callers**
+- [x] **Step 4: Update the three callers**
 
 `pkg/document/document.go:235` (local `Update`, real root) — discard for now,
 Task 3 wires it:
@@ -237,7 +237,7 @@ if _, _, err := c.Execute(d.root, d.presences, operations.OpSourceRemote); err !
 }
 ```
 
-- [ ] **Step 5: Fix the test files that call `op.Execute` directly**
+- [x] **Step 5: Fix the test files that call `op.Execute` directly**
 
 `pkg/document/crdt/text_restore_test.go` (lines 190, 197, 283, 342, 407, 421,
 440, 483) and `pkg/document/crdt/tree_restore_test.go:212` call `op.Execute`
@@ -255,7 +255,7 @@ _, err := op.Execute(root, operations.OpSourceRemote, vv)
 assert.ErrorIs(t, err, operations.ErrUnknownRestoreIdentity)
 ```
 
-- [ ] **Step 6: Verify no behavior changed**
+- [x] **Step 6: Verify no behavior changed**
 
 Run: `go test ./...`
 Expected: PASS — every test that passed before still passes.
@@ -269,7 +269,7 @@ Expected: PASS.
 
 This is the whole point of Phase 0: the signature moved, nothing else did.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pkg/document/operations pkg/document/change pkg/document/document.go \
@@ -297,7 +297,7 @@ this commit is behavior-neutral by construction.
   `(*Document).Undo() error`, `.Redo() error`, `.CanUndo() bool`,
   `.CanRedo() bool`, `.ClearHistory()`; `document.ErrRefusedDuringUpdate`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `pkg/document/history_test.go`:
 
@@ -339,12 +339,12 @@ func TestHistoryStack(t *testing.T) {
 The third test only passes once Task 4 generates `Increase` reverses. Mark it
 `t.Skip("enabled in Task 4")` for now and remove the skip in Task 4.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test ./pkg/document/ -run TestHistoryStack -v`
 Expected: FAIL — `doc.CanUndo` undefined.
 
-- [ ] **Step 3: Write `pkg/document/history.go`**
+- [x] **Step 3: Write `pkg/document/history.go`**
 
 ```go
 // MaxUndoRedoStackDepth is the maximum depth of the undo/redo stacks. It
@@ -410,7 +410,7 @@ func (h *History) ClearRedo() { h.redoStack = nil }
 Write `PushRedo` and `PopRedo` out in full — the comment above is shorthand for
 this plan only, not for the source file.
 
-- [ ] **Step 4: Add the Document API**
+- [x] **Step 4: Add the Document API**
 
 In `pkg/document/document.go`, add `history *History` and
 `updating atomic.Bool` to `Document`, initialize `history` in `New`, and set
@@ -538,7 +538,7 @@ Add a test-only accessor:
 func (d *Document) UndoStackLenForTest() int { return len(d.history.undoStack) }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `go test ./pkg/document/ -run TestHistoryStack -v`
 Expected: PASS (third subtest skipped).
@@ -546,7 +546,7 @@ Expected: PASS (third subtest skipped).
 Run: `go test ./...` and `make lint`
 Expected: PASS, clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add pkg/document/history.go pkg/document/history_test.go pkg/document/document.go
@@ -564,7 +564,7 @@ git commit -m "Add the undo/redo history layer to the Go SDK"
 **Interfaces:**
 - Consumes: `Change.Execute` reverse return from Task 1; `History` from Task 2.
 
-- [ ] **Step 1: Wire the local `Update` path**
+- [x] **Step 1: Wire the local `Update` path**
 
 Replace the discard from Task 1 Step 4:
 
@@ -588,12 +588,12 @@ if len(executed) > 0 {
 }
 ```
 
-- [ ] **Step 2: Verify nothing regressed**
+- [x] **Step 2: Verify nothing regressed**
 
 Run: `go test ./...` and `make lint`
 Expected: PASS, clean. No reverses exist yet, so both stacks stay empty.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add pkg/document/document.go
@@ -617,7 +617,7 @@ git commit -m "Push reverse operations of a local update onto the undo stack"
 - Produces: the first non-nil reverse operation, which proves the Task 2 and
   Task 3 plumbing end to end.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `test/integration/counter_test.go`, inside the existing test function:
 
@@ -646,12 +646,12 @@ t.Run("counter undo/redo test", func(t *testing.T) {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test -tags integration ./test/integration/ -run TestCounter -v`
 Expected: FAIL — undo leaves the value at 15.
 
-- [ ] **Step 3: Generate the reverse**
+- [x] **Step 3: Generate the reverse**
 
 In `pkg/document/operations/increase.go`, negate the value. Mirror JS exactly:
 a dedup counter produces **no** reverse, because HyperLogLog cannot remove an
@@ -694,19 +694,19 @@ If `Increase` has no `actor` field in Go, use whatever field marks the dedup
 path (`IntegerDedupCnt` / `LongDedupCnt` counter type is the equivalent signal);
 read `crdt.Counter` to confirm before writing the condition.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `go test -tags integration ./test/integration/ -run TestCounter -v`
 Expected: PASS.
 
-- [ ] **Step 5: Enable the capped-stack test**
+- [x] **Step 5: Enable the capped-stack test**
 
 Remove the `t.Skip("enabled in Task 4")` from `pkg/document/history_test.go`.
 
 Run: `go test ./pkg/document/ -run TestHistoryStack -v`
 Expected: PASS.
 
-- [ ] **Step 6: Add a dedup-counter guard test**
+- [x] **Step 6: Add a dedup-counter guard test**
 
 ```go
 t.Run("dedup counter has no undo test", func(t *testing.T) {
@@ -718,7 +718,7 @@ t.Run("dedup counter has no undo test", func(t *testing.T) {
 Write the body against the existing dedup counter tests in
 `test/integration/counter_dedup_test.go` for the correct constructor.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pkg/document/operations/increase.go pkg/document/history_test.go \
@@ -740,7 +740,7 @@ git commit -m "Generate the reverse operation for Counter.Increase"
 - Produces: reverse `Set` / `Remove` / `Add`; the removed-ancestor guard used by
   every later undo path.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `test/integration/object_test.go`, port the undo cases from
 `packages/sdk/test/integration/object_test.ts` — set over an existing key, set
@@ -748,12 +748,12 @@ over a new key, remove and undo, and undo after the parent was removed
 concurrently. Use the JS assertions verbatim, translated to `doc.Marshal()`
 comparisons.
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `go test -tags integration ./test/integration/ -run TestObject -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the removed-ancestor guard**
+- [x] **Step 3: Implement the removed-ancestor guard**
 
 Both operations skip execution during undo/redo when the target or any ancestor
 is tombstoned (`set_operation.ts:81-89`, `remove_operation.ts:84-92`). Skipping
@@ -781,7 +781,7 @@ func isRemovedOrOrphaned(root *crdt.Root, elem crdt.Element) bool {
 Confirm the accessor names against `pkg/document/crdt/root.go` before writing —
 `FindElementPairByCreatedAt` may be spelled differently in Go.
 
-- [ ] **Step 4: Generate the `Set` reverse**
+- [x] **Step 4: Generate the `Set` reverse**
 
 Capture the previous value **before** mutating (`set_operation.ts:91-92`):
 
@@ -822,7 +822,7 @@ already exists in the root under its `createdAt`, deregister it before
 re-registering. Go is garbage-collected, but the root's element index still
 needs the deregister.
 
-- [ ] **Step 5: Generate the `Remove` reverse**
+- [x] **Step 5: Generate the `Remove` reverse**
 
 Port `remove_operation.ts:125-` (`toReverseOperation`). For an Array parent the
 reverse is an `Add` carrying the deleted element and the `prevCreatedAt`
@@ -830,7 +830,7 @@ returned by `Array.FindPrevCreatedAt`; for an Object parent it is a `Set`
 carrying the deleted element under its key. Build it **before** `container.Delete`,
 since both look the element up by `createdAt`.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `go test -tags integration ./test/integration/ -run TestObject -v`
 Expected: PASS.
@@ -838,7 +838,7 @@ Expected: PASS.
 Run: `go test ./...` and `make lint`
 Expected: PASS, clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pkg/document/operations/set.go pkg/document/operations/remove.go \
@@ -863,7 +863,7 @@ and `document.ts:2088-2104`
 **Interfaces:**
 - Produces: `(*History).ReconcileCreatedAt(prev, curr *time.Ticket)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `pkg/document/history_test.go`:
 
@@ -886,12 +886,12 @@ t.Run("reconcile createdAt after array set test", func(t *testing.T) {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test ./pkg/document/ -run TestHistoryStack -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Add `ReconcileCreatedAt`**
+- [x] **Step 3: Add `ReconcileCreatedAt`**
 
 Port `history.ts:123-160`. Scan both stacks; rewrite `createdAt` on `ArraySet`,
 `Remove` and `Move`, and `prevCreatedAt` on `Add` and `Move`:
@@ -937,7 +937,7 @@ func (h *History) ReconcileCreatedAt(prev, curr *time.Ticket) {
 
 Add the `SetCreatedAt` / `SetPrevCreatedAt` setters the switch needs.
 
-- [ ] **Step 4: Generate the three reverses**
+- [x] **Step 4: Generate the three reverses**
 
 - `Add` → `Remove` of the added element (`add_operation.ts:94-98`)
 - `Move` → `Move` back to the previous position, read via `Array.PosCreatedAt`
@@ -945,7 +945,7 @@ Add the `SetCreatedAt` / `SetPrevCreatedAt` setters the switch needs.
 - `ArraySet` → `ArraySet` restoring the previous value
   (`array_set_operation.ts:104-109`)
 
-- [ ] **Step 5: Call `ReconcileCreatedAt` from both paths**
+- [x] **Step 5: Call `ReconcileCreatedAt` from both paths**
 
 In `Update`, after executing the change, for every executed `ArraySet`
 (`document.ts:744-752`):
@@ -961,12 +961,12 @@ for _, op := range executed {
 In `executeUndoRedo`, when issuing a ticket for a stacked `ArraySet` or `Add`,
 reissue the value's `createdAt` and reconcile (`document.ts:2088-2104`).
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `go test ./pkg/document/ -v` and `go test ./...`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pkg/document/operations/add.go pkg/document/operations/move.go \
@@ -991,18 +991,18 @@ git commit -m "Generate Array reverse operations and reconcile createdAt"
 - Produces: `presence.WithHistory()` option;
   `(*change.Context).ReversePresence() presence.Data`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Port the presence undo case from the JS suite: set a presence key with history
 enabled, undo, assert the previous value is restored and that other clients see
 it.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test -tags integration ./test/integration/ -run TestPresence -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Add the variadic option**
+- [x] **Step 3: Add the variadic option**
 
 ```go
 // SetOption configures a presence Set.
@@ -1025,7 +1025,7 @@ func (p *Presence) Set(key, value string, opts ...SetOption) {
 
 Variadic keeps every existing caller compiling unchanged.
 
-- [ ] **Step 4: Track the previous presence on the context**
+- [x] **Step 4: Track the previous presence on the context**
 
 Add `previousPresence presence.Data` and `reversePresenceKeys map[string]struct{}`
 to `change.Context`, populated from the clone's presence at context creation,
@@ -1049,19 +1049,19 @@ func (c *Context) ReversePresence() presence.Data {
 `change.NewContext` gains a presence argument; update its callers in
 `document.go`.
 
-- [ ] **Step 5: Push and apply presence entries**
+- [x] **Step 5: Push and apply presence entries**
 
 In `Update` and in `executeUndoRedo`, append
 `HistoryOperation{Presence: ctx.ReversePresence()}` to the reverse entries when
 non-nil. In `executeUndoRedo`, replace the `entry.Op == nil` skip with applying
 the presence via the context, marked `WithHistory()` so redo works.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `go test -tags integration ./test/integration/ -run TestPresence -v`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pkg/document/presence pkg/document/change/context.go \
@@ -1079,26 +1079,26 @@ git commit -m "Support undoing presence changes"
 
 **Port source:** `packages/sdk/test/integration/history_array_test.ts` (2 tests)
 
-- [ ] **Step 1: Port both tests**
+- [x] **Step 1: Port both tests**
 
 Translate the two tests verbatim — same document contents, same operation
 sequence, same assertions. Use the file header and client setup from an
 existing integration test such as `test/integration/array_test.go`, including
 the `//go:build integration` tag.
 
-- [ ] **Step 2: Run to verify they pass or fail honestly**
+- [x] **Step 2: Run to verify they pass or fail honestly**
 
 Run: `go test -tags integration ./test/integration/ -run TestHistoryArray -v`
 Expected: PASS. A failure here is a genuine Phase 1 gap — fix the operation, not
 the test.
 
-- [ ] **Step 3: Clear history on attach**
+- [x] **Step 3: Clear history on attach**
 
 `document.ts:1468` calls `clearHistory()` on attach so pre-attach changes are
 not reachable via undo (#1238). Add the same call in `client.Attach`, after the
 document reaches attached status.
 
-- [ ] **Step 4: Write the attach test**
+- [x] **Step 4: Write the attach test**
 
 ```go
 t.Run("history is cleared on attach test", func(t *testing.T) {
@@ -1115,12 +1115,12 @@ t.Run("history is cleared on attach test", func(t *testing.T) {
 })
 ```
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `go test ./...`, `make lint`, `make test`
 Expected: PASS, clean, PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add test/integration/history_array_test.go client/client.go
@@ -1167,7 +1167,7 @@ Use the existing span type from the restore work in `text.go` rather than
 inventing a new one — read `Text.Restore` first and reuse its span type. If it
 is unexported, export it or add a small exported alias.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 func TestTextEditReturnsRemoved(t *testing.T) {
@@ -1179,23 +1179,23 @@ func TestTextEditReturnsRemoved(t *testing.T) {
 Assert that deleting `"456"` from `"0123456789"` reports the removed value and a
 span whose identity matches the tombstoned node.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test ./pkg/document/crdt/ -run TestTextEditReturnsRemoved -v`
 Expected: FAIL — `Edit` returns four values.
 
-- [ ] **Step 3: Widen the return values**
+- [x] **Step 3: Widen the return values**
 
 Thread the removed values and spans out of `rgaTreeSplit.edit`, which already
 walks the removed nodes to build GC pairs. Update every caller to absorb the new
 values with `_` where unused.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `go test ./pkg/document/...` and `make lint`
 Expected: PASS, clean. Still no behavior change — only return values moved.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pkg/document/crdt pkg/document/json pkg/document/operations
@@ -1213,18 +1213,18 @@ git commit -m "Return removed values and spans from Text.Edit"
 **Port source:** `edit_operation.ts:180-330` — both the restore-mode branch
 (`:207-219`) and the ordinary branch (`:235-256`)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Single-client insert, delete, and replace, each undone and redone, asserting the
 text and its node identities. Port the identity assertions from
 `packages/sdk/test/unit/document/undo_content_identity_test.ts`.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test ./pkg/document/ -run TestTextUndo -v`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the restore-mode branch**
+- [x] **Step 3: Implement the restore-mode branch**
 
 The reverse of a restore-mode edit **keeps the same span sets and flips the
 direction** — it does not copy content (`edit_operation.ts:207-219`):
@@ -1245,7 +1245,7 @@ reverseOp := NewEdit(
 
 Match the existing `NewEdit` signature in `edit.go` rather than the shape above.
 
-- [ ] **Step 4: Implement the ordinary branch**
+- [x] **Step 4: Implement the ordinary branch**
 
 Build the reverse from `removedValues` and `removedSpans` returned by Task 9,
 anchored at `text.NormalizePos(e.from)` (`edit_operation.ts:235-239`). When the
@@ -1259,12 +1259,12 @@ if e.isUndoOp {
 }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `go test ./pkg/document/... -v` and `make lint`
 Expected: PASS, clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add pkg/document/operations/edit.go pkg/document/text_undo_test.go
@@ -1281,16 +1281,16 @@ git commit -m "Generate the reverse operation for Text.Edit"
 
 **Port source:** `style_operation.ts:170-215`
 
-- [ ] **Step 1: Write the failing test** — style a range, undo, assert the
+- [x] **Step 1: Write the failing test** — style a range, undo, assert the
   previous attributes return; style over an unstyled range, undo, assert the
   attribute is removed.
-- [ ] **Step 2: Run to verify it fails.** Run:
+- [x] **Step 2: Run to verify it fails.** Run:
   `go test ./pkg/document/ -run TestTextUndo -v`
-- [ ] **Step 3: Implement.** JS branches three ways: restore previous
+- [x] **Step 3: Implement.** JS branches three ways: restore previous
   attributes, remove an attribute that did not exist before, or set it back.
   Use the previous attributes returned by Task 9.
-- [ ] **Step 4: Run the tests.** Expected: PASS.
-- [ ] **Step 5: Commit** — `Generate the reverse operation for Text.Style`
+- [x] **Step 4: Run the tests.** Expected: PASS.
+- [x] **Step 5: Commit** — `Generate the reverse operation for Text.Style`
 
 ---
 
@@ -1311,28 +1311,28 @@ git commit -m "Generate the reverse operation for Text.Edit"
   `(*operations.Edit).ReconcileOperation(remoteFrom, remoteTo, contentLen int)`;
   `(*InternalDocument).ApplyChanges(...) ([]DocEvent, []operations.Operation, error)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 The worked example from `edit_operation.ts:363-367`: text `"0123456789"`, a
 pending undo range of `[4,6)`, a remote edit deleting `[2,4)` and inserting
 `"XY"`, after which the undo range must read `[2,4)`.
 
-- [ ] **Step 2: Run to verify it fails.** Run:
+- [x] **Step 2: Run to verify it fails.** Run:
   `go test -tags integration ./test/integration/ -run TestHistoryText -v`
 
-- [ ] **Step 3: Port `ReconcileOperation`**
+- [x] **Step 3: Port `ReconcileOperation`**
 
 All six overlap cases from `edit_operation.ts:366-`. Return early when
 `!e.isUndoOp` and when `remoteFrom > remoteTo`. Note the comment at `:371-379`:
 `restoreSpans` addresses content by identity, so the span payload is never
 rewritten — only `fromPos` / `toPos`, which still serve as the fallback anchor.
 
-- [ ] **Step 4: Thread executed operations out of `ApplyChanges`**
+- [x] **Step 4: Thread executed operations out of `ApplyChanges`**
 
 `InternalDocument.ApplyChanges` currently returns `([]DocEvent, error)`. Add the
 executed operations as a second return and update its callers.
 
-- [ ] **Step 5: Call the reconciliation from `applyChanges`**
+- [x] **Step 5: Call the reconciliation from `applyChanges`**
 
 ```go
 events, executed, err := d.doc.ApplyChanges(changes...)
@@ -1348,8 +1348,8 @@ for _, op := range executed {
 }
 ```
 
-- [ ] **Step 6: Run the tests.** Expected: PASS.
-- [ ] **Step 7: Commit** — `Reconcile stacked Text undo positions with remote edits`
+- [x] **Step 6: Run the tests.** Expected: PASS.
+- [x] **Step 7: Commit** — `Reconcile stacked Text undo positions with remote edits`
 
 ---
 
@@ -1362,11 +1362,11 @@ for _, op := range executed {
 tests, of which two are skipped (`:705` Case 3 correctness, `:742` Case 5
 correctness)
 
-- [ ] **Step 1: Port all 29 tests**
+- [x] **Step 1: Port all 29 tests**
 
 One `t.Run` per JS `it`, same names. Two clients where the JS test uses two.
 
-- [ ] **Step 2: Port the two skips**
+- [x] **Step 2: Port the two skips**
 
 ```go
 t.Run("Case 3 correctness: both undo of overlapping deletes should restore original test", func(t *testing.T) {
@@ -1375,17 +1375,17 @@ t.Run("Case 3 correctness: both undo of overlapping deletes should restore origi
 })
 ```
 
-- [ ] **Step 3: Run.** Run:
+- [x] **Step 3: Run.** Run:
   `go test -tags integration ./test/integration/ -run TestHistoryText -v`
   Expected: 27 PASS, 2 SKIP. Any other failure is a real Phase 2 gap — fix the
   implementation, never the assertion.
 
-- [ ] **Step 4: Count check**
+- [x] **Step 4: Count check**
 
 Run: `grep -c "t.Run(" test/integration/history_text_test.go`
 Expected: 29 — matching `grep -c "it(" ` on the JS file.
 
-- [ ] **Step 5: Commit** — `Port the Text history tests from the JS SDK`
+- [x] **Step 5: Commit** — `Port the Text history tests from the JS SDK`
 
 ---
 
@@ -1416,14 +1416,14 @@ func (t *Tree) Edit(
 
 returning removed contents and the pre-tombstoned node IDs.
 
-- [ ] **Step 1: Write the failing test** — deleting a subtree reports the removed
+- [x] **Step 1: Write the failing test** — deleting a subtree reports the removed
   contents, and descendants already tombstoned before the edit appear in the
   pre-tombstoned set rather than in the removed contents.
-- [ ] **Step 2: Run to verify it fails.** Run: `go test ./pkg/document/crdt/ -v`
-- [ ] **Step 3: Widen the return values,** absorbing with `_` at every caller.
-- [ ] **Step 4: Run `go test ./...` and `make lint`.** Expected: PASS, clean —
+- [x] **Step 2: Run to verify it fails.** Run: `go test ./pkg/document/crdt/ -v`
+- [x] **Step 3: Widen the return values,** absorbing with `_` at every caller.
+- [x] **Step 4: Run `go test ./...` and `make lint`.** Expected: PASS, clean —
   no behavior change.
-- [ ] **Step 5: Commit** — `Return removed contents and pre-tombstoned nodes from Tree.Edit`
+- [x] **Step 5: Commit** — `Return removed contents and pre-tombstoned nodes from Tree.Edit`
 
 ---
 
@@ -1439,17 +1439,17 @@ returning removed contents and the pre-tombstoned node IDs.
 **Interfaces:**
 - Produces: `(*operations.TreeEdit).ReissueContentIDs(issue func() *time.Ticket)`.
 
-- [ ] **Step 1: Write the failing test** — insert, delete, and replace on a tree,
+- [x] **Step 1: Write the failing test** — insert, delete, and replace on a tree,
   each undone and redone; plus the nested case from #1239 (typing inside a node
   that is later deleted, then undo/redo cycled twice) which must not accumulate
   duplicated content.
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement the restore branch** — same span sets, flipped
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement the restore branch** — same span sets, flipped
   direction, exactly as Task 10 did for Text.
-- [ ] **Step 4: Implement the ordinary branch** — build `reverseContents` from
+- [x] **Step 4: Implement the ordinary branch** — build `reverseContents` from
   the removed contents returned by Task 14, dropping any node in the
   pre-tombstoned set (`tree_edit_operation.ts:87`).
-- [ ] **Step 5: Implement `ReissueContentIDs`**
+- [x] **Step 5: Implement `ReissueContentIDs`**
 
 A copy-reinserting reverse carries the original node IDs; inserting them again
 puts two nodes under one ID (#1319). Restore-mode reverses revive by identity
@@ -1457,8 +1457,8 @@ and must keep theirs, so only the copy-reinsert path reissues. Call it from
 `executeUndoRedo` before pushing the operation, replacing the Task 2 placeholder
 comment (`document.ts:2105-2110`).
 
-- [ ] **Step 6: Run the tests.** Expected: PASS.
-- [ ] **Step 7: Commit** — `Generate the reverse operation for Tree.Edit`
+- [x] **Step 6: Run the tests.** Expected: PASS.
+- [x] **Step 7: Commit** — `Generate the reverse operation for Tree.Edit`
 
 ---
 
@@ -1469,13 +1469,13 @@ comment (`document.ts:2105-2110`).
 
 **Port source:** `tree_style_operation.ts:160-210` (PR #1221)
 
-- [ ] **Step 1: Write the failing test** — `setStyle` and `removeStyle`, each
+- [x] **Step 1: Write the failing test** — `setStyle` and `removeStyle`, each
   undone and redone.
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement** the same three-way branch as Task 11, using the
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement** the same three-way branch as Task 11, using the
   previous attributes from Task 14.
-- [ ] **Step 4: Run the tests.** Expected: PASS.
-- [ ] **Step 5: Commit** — `Generate the reverse operation for Tree.Style`
+- [x] **Step 4: Run the tests.** Expected: PASS.
+- [x] **Step 5: Commit** — `Generate the reverse operation for Tree.Style`
 
 ---
 
@@ -1492,16 +1492,16 @@ comment (`document.ts:2105-2110`).
 **Interfaces:**
 - Produces: `(*History).ReconcileTreeEdit(parent *time.Ticket, from, to, contentSize int)`.
 
-- [ ] **Step 1: Write the failing test** — the non-overlapping concurrent cases
+- [x] **Step 1: Write the failing test** — the non-overlapping concurrent cases
   (1, 2, 7: remote edit left of, right of, and adjacent to the pending undo
   range).
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement** — same overlap logic as `Edit.ReconcileOperation`,
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement** — same overlap logic as `Edit.ReconcileOperation`,
   over integer indices.
-- [ ] **Step 4: Extend the `applyChanges` loop** from Task 12 with a
+- [x] **Step 4: Extend the `applyChanges` loop** from Task 12 with a
   `*operations.TreeEdit` branch.
-- [ ] **Step 5: Run the tests.** Expected: PASS.
-- [ ] **Step 6: Commit** — `Reconcile stacked Tree undo positions with remote edits`
+- [x] **Step 5: Run the tests.** Expected: PASS.
+- [x] **Step 6: Commit** — `Reconcile stacked Tree undo positions with remote edits`
 
 ---
 
@@ -1514,13 +1514,13 @@ comment (`document.ts:2105-2110`).
 **Port source:** the two JS files of the same name. The skips are at
 `history_tree_concurrent_test.ts:143` and `:186`.
 
-- [ ] **Step 1: Port all 32 single-client and 4 concurrent tests.**
-- [ ] **Step 2: Port the two skips** with their `KNOWN:` reasons intact.
-- [ ] **Step 3: Run.** Run:
+- [x] **Step 1: Port all 32 single-client and 4 concurrent tests.**
+- [x] **Step 2: Port the two skips** with their `KNOWN:` reasons intact.
+- [x] **Step 3: Run.** Run:
   `go test -tags integration ./test/integration/ -run 'TestHistoryTree' -v`
   Expected: 34 PASS, 2 SKIP.
-- [ ] **Step 4: Count check** — 32 and 4 `t.Run(` calls respectively.
-- [ ] **Step 5: Commit** — `Port the Tree history tests from the JS SDK`
+- [x] **Step 4: Count check** — 32 and 4 `t.Run(` calls respectively.
+- [x] **Step 5: Commit** — `Port the Tree history tests from the JS SDK`
 
 ---
 
@@ -1534,15 +1534,15 @@ comment (`document.ts:2105-2110`).
 **Port source:** `tree_edit_operation.ts:486` (`toSplitReverseOperation`) and
 `docs/design/tree-split-undo-redo.md`
 
-- [ ] **Step 1: Write the failing test** — `splitLevel` 1 and 2 edits, each
+- [x] **Step 1: Write the failing test** — `splitLevel` 1 and 2 edits, each
   undone and redone, asserting the tree structure round-trips.
-- [ ] **Step 2: Run to verify it fails.**
-- [ ] **Step 3: Implement `toSplitReverseOperation`** — a boundary-deletion
+- [x] **Step 2: Run to verify it fails.**
+- [x] **Step 3: Implement `toSplitReverseOperation`** — a boundary-deletion
   reverse built from `preEditFromIdx`, captured before the edit. Read
   `docs/design/tree-split-undo-redo.md` before writing; the boundary rules are
   documented there and not re-derivable from the JS code alone.
-- [ ] **Step 4: Run the tests.** Expected: PASS.
-- [ ] **Step 5: Commit** — `Generate boundary-deletion reverse ops for tree splits`
+- [x] **Step 4: Run the tests.** Expected: PASS.
+- [x] **Step 5: Commit** — `Generate boundary-deletion reverse ops for tree splits`
 
 ---
 
@@ -1574,13 +1574,13 @@ measured with the command in Step 2.
 - Modify: `docs/design/undo-redo-go-port.md`
 - Create: `docs/tasks/active/20260815-undo-redo-go-port-lessons.md`
 
-- [ ] **Step 1: Audit test-count parity**
+- [x] **Step 1: Audit test-count parity**
 
 For each JS history test file, compare the `it(` count against the `t.Run(`
 count in its Go counterpart. Any JS test with no Go counterpart is a gap — port
 it. Record the final counts in the lessons file.
 
-- [ ] **Step 2: Audit the unit tests**
+- [x] **Step 2: Audit the unit tests**
 
 `undo_copy_path_test.ts`, `undo_content_identity_test.ts`,
 `text_restore_after_gc_test.ts`, `text_restore_convergence_test.ts`,
@@ -1588,19 +1588,19 @@ it. Record the final counts in the lessons file.
 `tree_duplicate_id_test.ts`. Some already have Go counterparts under
 `pkg/document/crdt/`. Port the ones that do not.
 
-- [ ] **Step 3: Update the design docs**
+- [x] **Step 3: Update the design docs**
 
 Add a Go column to the Current Status table in `docs/design/undo-redo.md`, and
 record in `undo-redo-go-port.md` what actually shipped versus what this plan
 predicted — particularly any signature that differs from the plan.
 
-- [ ] **Step 4: Write the lessons file**
+- [x] **Step 4: Write the lessons file**
 
 Capture, at minimum: whether the Phase 0 behavior-neutrality claim held, which
 JS behaviors were not obvious from the code and needed a test to discover, and
 any place where Go's semantics forced a divergence from JS.
 
-- [ ] **Step 5: Full verification**
+- [x] **Step 5: Full verification**
 
 Run: `go test ./...`
 Run: `make lint`
@@ -1608,13 +1608,13 @@ Run: `make test`
 Run: `make test-complex`
 Expected: all PASS, lint clean.
 
-- [ ] **Step 6: Self review**
+- [x] **Step 6: Self review**
 
 Dispatch `superpowers:requesting-code-review` (or `/code-review`) over the full
 branch diff. Apply blocking findings; record non-blocking ones as known
 limitations in the lessons file.
 
-- [ ] **Step 7: Commit and open the PR**
+- [x] **Step 7: Commit and open the PR**
 
 ```bash
 git add docs/
@@ -1630,4 +1630,24 @@ behavior-neutrality is only auditable as its own commit.
 
 ## Review
 
-(Fill in after implementation.)
+Shipped as #1932, `Port the JS SDK's undo/redo history layer to the Go SDK`.
+All seven planned files exist on `main` (`pkg/document/history.go`, its unit
+test, and the five `test/integration/history_*_test.go` ports), and the
+wrap-up deliverables Task 21 asked for landed with it:
+
+- Parity audit: `docs/design/undo-redo-go-port.md` §"What Shipped vs. What
+  This Plan Predicted (Task 21)".
+- Lessons: `20260815-undo-redo-go-port-lessons.md`, including the Phase 0
+  behavior-neutrality verdict and the deferred-findings roll-up.
+- `docs/design/undo-redo.md` updated for the two-SDK story.
+
+Four defects the port surfaced were split out rather than fixed here, and
+stay open as their own tasks:
+
+- `20260816-remote-redo-replica-divergence`
+- `20260816-root-docsize-nested-container-gc`
+- `20260816-tree-split-edit-loses-undo-entry`
+- `20260816-tree-style-combined-reverse-dropped`
+
+The per-step boxes above were closed in bulk at archive time — the plan was
+executed through the PR, not ticked step by step while it ran.

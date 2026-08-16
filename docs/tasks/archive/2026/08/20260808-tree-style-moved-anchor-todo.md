@@ -57,7 +57,9 @@ causally known but positionally excluded.
 - [x] Design doc §9.4 + Fix 22; known-limitations list
 - [x] `golangci-lint run ./...` 0 issues; unit/complex/integration
       tree lanes green
-- [ ] Mirror in yorkie-js-sdk 
+- [x] Mirror in yorkie-js-sdk — merged as yorkie-js-sdk#1317, `Stamp
+      merge-bound inserts and filter style-range interlopers` (Go side
+      landed as #1928 with the same subject)
 
 ## Out of scope
 
