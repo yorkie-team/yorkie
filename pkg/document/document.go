@@ -357,8 +357,13 @@ func (d *Document) Redo() error {
 //
 // It refuses with ErrRefusedDuringUpdate when called from inside an updater,
 // exactly as Undo and Redo do: the updater already holds d.mu, so taking it
-// again would deadlock, and clearing without it would race that goroutine's
-// stack writes. JS's clearHistory (document.ts:1489) needs no such guard
+// again would deadlock. The guard cannot tell "this goroutine holds d.mu"
+// apart from "some goroutine holds d.mu", so it also refuses a ClearHistory
+// from a different goroutine that merely races a concurrent Update -- that
+// call would otherwise just block on d.mu.Lock() and succeed once Update
+// releases it. This over-triggering is not new: Undo, Redo, CanUndo and
+// CanRedo already have the same property, so this extends it rather than
+// introducing it. JS's clearHistory (document.ts:1489) needs no such guard
 // because it has no mutex to deadlock on; the refusal is what the same call
 // costs to stay safe from any goroutine.
 func (d *Document) ClearHistory() error {

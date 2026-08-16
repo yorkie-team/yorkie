@@ -245,6 +245,15 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		// nothing live to delete produces an empty list, so JS treats it as
 		// having changed nothing observable -- it neither clears the redo
 		// stack nor propagates the undo of it.
+		//
+		// removedSpans is not that list: it is one entry per split node this
+		// edit's RGATreeSplit.deleteNodes call transitions from live to
+		// tombstoned (RGATreeSplitNode.Remove returns true only when the
+		// node had no prior tombstone), not one per contiguous span. A node
+		// already tombstoned before this call never enters it -- Remove
+		// returns false unconditionally once removedAt is set -- so the two
+		// still agree on len() == 0: both are empty exactly when this edit
+		// inserts nothing and tombstones no previously-live node.
 		observable := len(e.content) > 0 || len(removedSpans) > 0
 
 		// A remote change is replayed, never undone: every caller that runs

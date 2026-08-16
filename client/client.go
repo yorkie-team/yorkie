@@ -587,6 +587,16 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 
 	// 06. Clear the undo/redo stacks so that pre-attach changes, including
 	// the initial root setup above, are not reachable via undo.
+	//
+	// By this point SetStatus(StatusAttached) has run, the attachment is
+	// registered in c.attachments, and (for a realtime doc) runWatchLoop is
+	// already running. ClearHistory can now return ErrRefusedDuringUpdate,
+	// so a concurrent doc.Update landing at this instant makes Attach
+	// return an error while leaving a live, attached document with a
+	// running watch stream. The window needs a concurrent Update during
+	// Attach on a not-yet-shared document, so it is narrow -- and step 05's
+	// d.Update above already has this same partial-attach property, so this
+	// widens an existing hole rather than opening a new one.
 	if err := d.ClearHistory(); err != nil {
 		return err
 	}
