@@ -64,7 +64,7 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (O
 	// During undo/redo, skip rather than execute when obj or any of its
 	// ancestors has been concurrently removed (set_operation.ts:81-89).
 	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, obj) {
-		return nil, nil
+		return nil, ErrOperationSkipped
 	}
 
 	// The reverse must be built from the value at this key before it is

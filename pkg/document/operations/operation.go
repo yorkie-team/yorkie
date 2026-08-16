@@ -34,6 +34,20 @@ var (
 	// a node identity the acting change could not causally have observed. It
 	// guards the server-executed restore path against forged identities.
 	ErrUnknownRestoreIdentity = errors.New("restore span identity is not causally known")
+
+	// ErrOperationSkipped signals that an operation declined to execute
+	// because its target no longer exists -- a concurrently removed element
+	// during undo/redo. It is not a failure: the caller must drop the
+	// operation and keep going, exactly as JS's Change.execute does with an
+	// undefined execution result (change.ts:174).
+	//
+	// A skipped operation must not appear in Change.Execute's executed list.
+	// The distinction matters because "executed with no reverse" and
+	// "skipped" are otherwise indistinguishable when both return a nil
+	// reverse, and reporting a skip as executed makes a fully skipped undo
+	// look like a real change -- one that peers would then apply under
+	// OpSourceRemote, where the skip guard does not run.
+	ErrOperationSkipped = errors.New("operation skipped")
 )
 
 // OpSource represents the source of an operation execution. Some operations

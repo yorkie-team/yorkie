@@ -62,7 +62,7 @@ func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector)
 	// its ancestors has been concurrently removed (remove_operation.ts:
 	// 84-92).
 	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, target) {
-		return nil, nil
+		return nil, ErrOperationSkipped
 	}
 
 	// Both toReverseOperation and DeleteByCreatedAt look up the target

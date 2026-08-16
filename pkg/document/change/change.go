@@ -19,6 +19,8 @@
 package change
 
 import (
+	"errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence/inner"
@@ -64,6 +66,14 @@ func (c *Change) Execute(
 	for _, op := range c.operations {
 		reverseOp, err := op.Execute(root, source, c.ID().versionVector)
 		if err != nil {
+			// NOTE(hackerwins): An operation whose target was concurrently
+			// removed declines to execute during undo/redo. It is dropped
+			// before it can reach the executed list, so a change whose
+			// every operation is skipped ends up empty and the caller can
+			// refuse to propagate it (change.ts:172-175).
+			if errors.Is(err, operations.ErrOperationSkipped) {
+				continue
+			}
 			return nil, nil, err
 		}
 		executed = append(executed, op)
