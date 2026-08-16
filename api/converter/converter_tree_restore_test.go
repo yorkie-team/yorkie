@@ -195,6 +195,31 @@ func TestTreeRestoreSpanRejectsNilCreatedAt(t *testing.T) {
 		_, err := converter.FromOperations(pbOps)
 		assert.Error(t, err)
 	})
+
+	// An element span also carries an attribute snapshot, and fromRHT hides a
+	// missing timestamp the same way fromTreeNodeID hid a missing created_at:
+	// fromTimeTicket returns (nil, nil) for a nil ticket, so an unvalidated
+	// path would plant an RHT node with a nil updatedAt that panics on its
+	// first comparison, deep inside the restore path. Reject it here instead
+	// (parity with the JS converter's fromPbTreeRestoreSpan, which checks
+	// `Object.values(pbSpan.attributes).some((attr) => !attr.updatedAt)`).
+	t.Run("nil attribute updatedAt", func(t *testing.T) {
+		elemAttrs := crdt.NewRHT()
+		elemAttrs.Set("bold", "true", seed)
+		op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+			[]*crdt.TreeRestoreSpan{{
+				ID:         crdt.NewTreeNodeID(seed, 2),
+				NodeType:   "p",
+				IsText:     false,
+				Attributes: elemAttrs,
+				ParentID:   crdt.NewTreeNodeID(seed, 0),
+			}}, crdt.RestoreModeRestore, nil)
+		pbOps, err := converter.ToOperations([]operations.Operation{op})
+		assert.NoError(t, err)
+		pbOps[0].GetTreeEdit().RestoreSpans[0].Attributes["bold"].UpdatedAt = nil
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
 }
 
 // TestTreeRestoreSpanRejectsBadTextLength guards the recreate slicing path: a
@@ -332,6 +357,39 @@ func TestTreeRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
 	ops, err := converter.FromOperations(pbOps)
 	assert.NoError(t, err)
 	assert.Len(t, ops, 1)
+}
+
+// TestTreeEditRejectsNegativeSplitLevel guards a field that only became live
+// with the split-aware reverse operations. A split level counts the element
+// boundaries an edit creates; a negative one used to be inert, since the split
+// loop does nothing for a non-positive level and nothing else read it. It now
+// also sizes the boundary-deletion reverse (2*splitLevel), where a negative
+// would build a reverse whose range runs backwards. Only a malformed or
+// hostile peer sends one, so it is rejected at decode rather than reasoned
+// about downstream.
+func TestTreeEditRejectsNegativeSplitLevel(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	op := operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+
+	pbOps[0].GetTreeEdit().SplitLevel = -1
+	_, err = converter.FromOperations(pbOps)
+	assert.ErrorIs(t, err, converter.ErrInvalidSplitLevel)
+
+	// Zero and positive levels still decode.
+	for _, level := range []int32{0, 1, 2} {
+		pbOps[0].GetTreeEdit().SplitLevel = level
+		ops, err := converter.FromOperations(pbOps)
+		assert.NoError(t, err, "split level %d", level)
+		assert.Len(t, ops, 1)
+		assert.Equal(t, int(level), ops[0].(*operations.TreeEdit).SplitLevel())
+	}
 }
 
 // TestRestoreSpanRejectsModeWithoutSpans is the Text counterpart: the same

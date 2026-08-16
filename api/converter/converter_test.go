@@ -35,6 +35,35 @@ import (
 )
 
 func TestConverter(t *testing.T) {
+	t.Run("snapshot preserves a key restored by undo", func(t *testing.T) {
+		// Regression test: fromObject used to rebuild the RHT by replaying
+		// members.Set(key, elem), which uses elem's own createdAt as the LWW
+		// tie-break ticket instead of its already-decoded positionedAt
+		// (movedAt, falling back to createdAt). A key restored by undo keeps
+		// its original (older) createdAt but has a newer movedAt; replaying
+		// with executedAt=createdAt loses the LWW race the key had already
+		// won, so decoding a snapshot silently drops it -- any object key
+		// restored by undo would be deleted at the next snapshot round-trip.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("key", "v1")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("key", "v2")
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"key":"v1"}`, doc.Marshal())
+
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+
+		obj, err := converter.BytesToObject(bytes)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"key":"v1"}`, obj.Marshal())
+	})
+
 	t.Run("snapshot simple test", func(t *testing.T) {
 		doc := document.New("d1")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {

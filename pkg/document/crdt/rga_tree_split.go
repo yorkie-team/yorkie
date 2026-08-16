@@ -458,6 +458,69 @@ func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RG
 	return node, nil
 }
 
+// normalizePos converts a local position (id, relativeOffset) into a single
+// absolute offset measured from the head (0:0) of the physical chain, so the
+// position keeps meaning the same place regardless of how the chain is split
+// later.
+func (s *RGATreeSplit[V]) normalizePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
+	node := s.findFloorNode(pos.id)
+	if node == nil {
+		return nil, fmt.Errorf("the node of the given id should be found: %s", pos.ToTestString())
+	}
+
+	total := pos.relativeOffset
+	curr := node
+	for prev := node.prev; prev != nil; prev = prev.prev {
+		total += prev.Len()
+		curr = prev
+	}
+
+	return NewRGATreeSplitNodePos(curr.id, total), nil
+}
+
+// refinePos remaps the given position onto the current split chain.
+//
+//   - Traverses the physical next chain (not insNext).
+//   - Counts only live characters: removed nodes have length 0, so they are
+//     stepped over without consuming any of the offset.
+//   - If the offset exceeds the length of the current node, it moves forward
+//     through next nodes, subtracting lengths, until the offset fits.
+//   - If it runs out of nodes, it snaps to the end of the last one.
+//
+// For example, a position (1:2:0, rel=5) taken before ["12345"](1:2:0) was
+// split into ["1"](1:2:0) ["23"](1:2:1) ["45"](1:2:3) refines to (1:2:3,
+// rel=2), the same place in the text.
+//
+// A pure split preserves the place, as above; a deletion does not. The offset
+// itself is preserved -- it is only reinterpreted against the live text -- and
+// removed runs contribute zero length, so they are skipped without consuming
+// any of it. The position therefore ends up naming a character further along
+// than the one it originally sat beside. For example, in ["01"]{"23"}["456789"]
+// offset 4 named the boundary after "3" before "23" was removed, and names the
+// boundary after "5" now.
+func (s *RGATreeSplit[V]) refinePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
+	node := s.findFloorNode(pos.id)
+	if node == nil {
+		return nil, fmt.Errorf("the node of the given id should be found: %s", pos.ToTestString())
+	}
+
+	offsetInPart := pos.relativeOffset
+	partLen := node.contentLen()
+	for offsetInPart > partLen {
+		offsetInPart -= partLen
+
+		next := node.next
+		if next == nil {
+			return NewRGATreeSplitNodePos(node.id, partLen), nil
+		}
+
+		node = next
+		partLen = node.Len()
+	}
+
+	return NewRGATreeSplitNodePos(node.id, offsetInPart), nil
+}
+
 func (s *RGATreeSplit[V]) splitNode(
 	node *RGATreeSplitNode[V],
 	offset int,
@@ -568,25 +631,30 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNod
 	return value
 }
 
+// edit deletes the given range and, if content is non-empty, inserts it in
+// place. Besides the GC pairs for deleted nodes, it also reports those nodes
+// as restoreSpanValues (identity + value), captured in the same walk that
+// builds the GC pairs, so a caller can revive or re-remove them by identity
+// later without a second traversal over the removed nodes.
 func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
 	content V,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, error) {
+) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, []restoreSpanValue[V], error) {
 	var diff resource.DataSize
 
 	// 01. Split nodes with from and to
 	toLeft, toRight, diffTo, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, s.drainPendingGCPairs(), diff, err
+		return nil, s.drainPendingGCPairs(), diff, nil, err
 	}
 
 	fromLeft, fromRight, diffFrom, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
 		diff.Add(diffTo)
-		return nil, s.drainPendingGCPairs(), diff, err
+		return nil, s.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -613,16 +681,33 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 04. add removed node
 	var pairs []GCPair
+	var removedSpans []restoreSpanValue[V]
 	for _, removedNode := range removedNodes {
 		pairs = append(pairs, GCPair{
 			Parent: s,
 			Child:  removedNode,
 		})
+		// NOTE: value aliases the live node's value rather than deep-copying
+		// it (unlike JS's rga_tree_split.ts substring(0), which copies
+		// specifically because a later split of the tombstone must not
+		// mutate already-captured content — some V.Split implementations,
+		// e.g. TextValue, mutate their receiver). Safe today only because
+		// every caller (Text.Edit) flattens each span's value into plain
+		// strings before returning, with no further split of these nodes
+		// happening in between. If a future caller holds onto this
+		// restoreSpanValue instead of flattening it immediately, it must
+		// deep-copy value first.
+		removedSpans = append(removedSpans, restoreSpanValue[V]{
+			createdAt: removedNode.createdAt(),
+			start:     removedNode.ID().Offset(),
+			end:       removedNode.ID().Offset() + removedNode.contentLen(),
+			value:     removedNode.Value(),
+		})
 	}
 
 	pairs = append(pairs, s.drainPendingGCPairs()...)
 
-	return caretPos, pairs, diff, nil
+	return caretPos, pairs, diff, removedSpans, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
@@ -936,9 +1021,16 @@ func (s *RGATreeSplit[V]) findRestoreAnchor(
 	if chainAnchor != nil {
 		return chainAnchor
 	}
+	// The operation's from position is normalized -- an absolute offset from
+	// the head -- so it must be remapped onto the current chain before it can
+	// name a node, exactly as JS does (findRestoreAnchor's fallbackAnchor).
+	// Without the remap, findNodeWithSplit rejects every offset past the
+	// head's own length and this rung never fires.
 	if fromPos != nil && executedAt != nil {
-		if left, _, _, err := s.findNodeWithSplit(fromPos, executedAt); err == nil && left != nil {
-			return left
+		if refined, err := s.refinePos(fromPos); err == nil {
+			if left, _, _, err := s.findNodeWithSplit(refined, executedAt); err == nil && left != nil {
+				return left
+			}
 		}
 	}
 	return s.initialHead

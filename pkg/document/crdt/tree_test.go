@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -513,8 +514,8 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
 		p2Node.SetRemovedAt(helper.TimeT(ctx))
 		content := crdt.NewTreeNode(helper.PosT(ctx), "b", nil)
-		_, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
-			helper.TimeT(ctx), issueTicket(ctx), nil)
+		_, _, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0,
+			helper.TimeT(ctx), issueTicket(ctx), nil, true)
 		assert.NoError(t, err)
 
 		// 03. The content lands in the merge target but is stamped as
@@ -1037,4 +1038,162 @@ func issueTicket(change *change.Context) func() *time.Ticket {
 	return func() *time.Ticket {
 		return helper.TimeT(change)
 	}
+}
+
+func TestTreeEditReturnsRemoved(t *testing.T) {
+	// Deleting a subtree must report the nodes it newly tombstoned, and a
+	// descendant that was ALREADY tombstoned before this edit must land only
+	// in the pre-tombstoned set — never in the removed contents — so a
+	// later undo never resurrects a deletion the user already made
+	// independently of this edit.
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+
+	_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+	_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "abcde"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+	require.Equal(t, "<r><p>abcde</p></r>", tree.ToXML())
+
+	// Delete "bc" on its own first: this is the pre-existing tombstone the
+	// later whole-subtree delete must not resurrect. Call Edit directly (not
+	// EditT) so the "bc" node can be identified from its own return value,
+	// rather than reached through package-internal lookups.
+	fromBC, err := tree.FindPos(2)
+	require.NoError(t, err)
+	toBC, err := tree.FindPos(4)
+	require.NoError(t, err)
+	_, _, bcInfo, err := tree.Edit(
+		fromBC, toBC, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil, true,
+	)
+	require.NoError(t, err)
+	require.Empty(t, bcInfo.PreTombstoned)
+	require.Len(t, bcInfo.Removed, 1)
+	bcNode := bcInfo.Removed[0]
+	require.Equal(t, "bc", bcNode.String())
+	require.Equal(t, "<r><p>ade</p></r>", tree.ToXML())
+
+	// Now delete the whole <p> subtree: the live "a" and "de" pieces plus
+	// the element boundary are newly tombstoned by THIS edit; the
+	// already-tombstoned "bc" piece must be excluded from removed and
+	// appear only in preTombstoned.
+	fromP, err := tree.FindPos(0)
+	require.NoError(t, err)
+	toP, err := tree.FindPos(5)
+	require.NoError(t, err)
+	outerAt := helper.TimeT(ctx)
+	_, _, info, err := tree.Edit(
+		fromP, toP, nil, 0, outerAt, issueTicket(ctx), nil, true,
+	)
+	removed, preTombstoned := info.Removed, info.PreTombstoned
+	require.NoError(t, err)
+	require.Equal(t, "<r></r>", tree.ToXML())
+
+	// preTombstoned names exactly the pre-existing "bc" tombstone.
+	require.Len(t, preTombstoned, 1)
+	_, ok := preTombstoned[bcNode.IDString()]
+	require.True(t, ok, "the pre-existing tombstone must be recorded by identity")
+
+	// removed names exactly the <p> element and the two live text pieces
+	// this edit itself transitioned to tombstoned — assert identity, not
+	// just count: every entry must actually be tombstoned by outerAt, and
+	// none may be the pre-existing "bc" tombstone.
+	require.Len(t, removed, 3)
+	var sawP, sawA, sawDE bool
+	for _, node := range removed {
+		require.NotEqual(t, bcNode.IDString(), node.IDString(),
+			"an already-tombstoned descendant must not appear in removed")
+		require.NotNil(t, node.RemovedAt())
+		require.Zero(t, node.RemovedAt().Compare(outerAt),
+			"every removed entry must be tombstoned by this edit's own ticket")
+		switch {
+		case node.Type() == "p":
+			sawP = true
+		case node.String() == "a":
+			sawA = true
+		case node.String() == "de":
+			sawDE = true
+		}
+	}
+	assert.True(t, sawP, "removed must name the <p> element")
+	assert.True(t, sawA, "removed must name the live \"a\" text piece")
+	assert.True(t, sawDE, "removed must name the live \"de\" text piece")
+}
+
+func TestTreeStyleReturnsPrevAttr(t *testing.T) {
+	// Styling a range that already carries one attribute, with a call that
+	// touches that attribute plus a brand-new one, must report the prior
+	// value for the existing key and Existed: false for the new one, sorted
+	// by key so the result is deterministic regardless of map order.
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+	_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+	_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+
+	fromPos, err := tree.FindPos(0)
+	require.NoError(t, err)
+	toPos, err := tree.FindPos(1)
+	require.NoError(t, err)
+
+	_, _, _, err = tree.Style(fromPos, toPos, map[string]string{"bold": "1"}, helper.TimeT(ctx), nil)
+	require.NoError(t, err)
+
+	_, _, prevAttrs, err := tree.Style(
+		fromPos, toPos, map[string]string{"bold": "2", "italic": "1"}, helper.TimeT(ctx), nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []crdt.PrevAttr{
+		{Key: "bold", Value: "1", Existed: true},
+		{Key: "italic", Existed: false},
+	}, prevAttrs)
+
+	// Assert identity: the captured "before" value must match what the
+	// element actually held immediately before this call, and the element's
+	// current state must match what this call just set.
+	pNode := tree.Root().Children()[0]
+	require.Equal(t, "2", pNode.Attrs.Get("bold"))
+	require.Equal(t, "1", pNode.Attrs.Get("italic"))
+}
+
+func TestTreeRemoveStyleReturnsPrevAttr(t *testing.T) {
+	// RemoveStyle must report the value each removed key held immediately
+	// before the call, omitting any key that was already absent, sorted by
+	// key regardless of the order attributesToRemove was given in.
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+	_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+	_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+
+	fromPos, err := tree.FindPos(0)
+	require.NoError(t, err)
+	toPos, err := tree.FindPos(1)
+	require.NoError(t, err)
+
+	_, _, _, err = tree.Style(fromPos, toPos, map[string]string{"bold": "1"}, helper.TimeT(ctx), nil)
+	require.NoError(t, err)
+
+	_, _, prevAttrs, err := tree.RemoveStyle(fromPos, toPos, []string{"italic", "bold"}, helper.TimeT(ctx), nil)
+	require.NoError(t, err)
+	require.Equal(t, []crdt.PrevAttr{
+		{Key: "bold", Value: "1", Existed: true},
+	}, prevAttrs)
+
+	pNode := tree.Root().Children()[0]
+	require.False(t, pNode.Attrs.Has("bold"), "the removed key must actually be gone")
 }

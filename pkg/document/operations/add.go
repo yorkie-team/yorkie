@@ -52,25 +52,34 @@ func NewAdd(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Add) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return err
+		return ExecutionResult{}, err
 	}
 
 	if err = obj.InsertAfter(o.prevCreatedAt, value, o.executedAt); err != nil {
-		return err
+		return ExecutionResult{}, err
 	}
 
 	root.RegisterElement(value)
-	return nil
+
+	// The reverse is a Remove of the just-added element, mirroring
+	// AddOperation.toReverseOperation (add_operation.ts:92-100). Its own
+	// createdAt is reissued at execution time when this reverse is later
+	// replayed as an UndoRemove (executeUndoRedo's Add branch), so the
+	// target here is always the identity the value ends up living under.
+	return ExecutionResult{
+		Reverse:    NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt),
+		Observable: true,
+	}, nil
 }
 
 // Value returns the value of this operation.
@@ -93,7 +102,20 @@ func (o *Add) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Add) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
+}
+
 // PrevCreatedAt returns the creation time of previous element.
 func (o *Add) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
+}
+
+// SetPrevCreatedAt sets the creation time of the previous element. Used by
+// History.ReconcileCreatedAt when a stacked Add still anchors on an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Add) SetPrevCreatedAt(prevCreatedAt *time.Ticket) {
+	o.prevCreatedAt = prevCreatedAt
 }

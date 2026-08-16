@@ -16,6 +16,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 
 - [Undo/Redo](undo-redo.md): Per-client undo/redo with reverse operations and position reconciliation
 - [Tree Split Undo/Redo](tree-split-undo-redo.md): Boundary-deletion reverse ops for `Tree.Edit` with `splitLevel >= 1` plus pre-tombstoned descendant filtering
+- [Undo/Redo Port to the Go SDK](undo-redo-go-port.md): Porting the JS SDK history layer to Go to close the behavioral gap between the two SDKs
 - [VersionVector](version-vector.md): VersionVector for GC and Resolving conflicts in CRDT
 - [VV Cleanup](vv-cleanup.md): Remove detached client's lamport from version vectors
 - [Disable GC on Attach](disable-gc-on-attach.md): Per-attachment opt-out from VV exchange and `minVV` tracking for GC-free workloads

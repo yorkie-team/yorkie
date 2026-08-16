@@ -1,0 +1,977 @@
+# Remote redo of a restored key can delete it on a peer
+
+**Created**: 2026-08-16
+
+Found while building Task 7 (presence in the undo/redo history port,
+`docs/design/undo-redo-go-port.md`) and confirmed in code review. Not fixed
+here: it is a pre-existing defect in both `yorkie` and `yorkie-js-sdk`, and
+per the port's own rule ("Port JS's known defects as-is") a one-sided fix in
+Go alone would widen the gap the port exists to close. This document is the
+filing so it can be picked up as its own task.
+
+This document has since become the collecting point for every smaller
+"record and defer" finding the undo/redo port turns up — see the "Related:"
+sections below, contributed by Tasks 7, 9 and 10. They are bundled here
+rather than filed as separate pairs because they are all deferrals rather
+than active fixes, and are individually too small to justify fragmenting
+the backlog. Each carries its own reachability analysis and task list.
+
+## Problem: redo does not propagate correctly to peers (replica divergence)
+
+**Severity: this is replica divergence, not a display bug.** A garbage
+collection pass on a peer can delete a key that is still live on the
+client that redid it, and the two replicas never reconverge on their own.
+
+### Mechanism
+
+1. A `Set` operation creates an element under a fresh `createdAt` ticket
+   (call it `T1`) — e.g. `root.SetInteger("count", 1)`.
+2. `Undo` replays the operation's reverse, a `Remove` targeting `T1`. On
+   both the local replica and any peer that later applies the same
+   `Remove` remotely, the element is tombstoned and registered for GC:
+   `root.RegisterRemovedElementPair` populates `Root.gcElementPairMap[T1]`
+   (`pkg/document/crdt/root.go:156-168`).
+3. `Redo` replays `Remove.Execute`'s own reverse
+   (`pkg/document/operations/remove.go:91-120`,
+   `toReverseOperation`/`case *crdt.Object`) — a `Set` built from
+   `NewSet(o.parentCreatedAt, key, copied, o.executedAt)`. `copied` is a
+   deep copy of the *original* removed element, so it keeps the original
+   `createdAt` (`T1`). This is the asymmetry the review flagged: `Add` and
+   `ArraySet` reverses are re-ticketed with a fresh `createdAt` before
+   redo replays them (`pkg/document/document.go:405-413`,
+   `executeUndoRedo`'s `*operations.Add` / `*operations.ArraySet`
+   branches), but a plain `Set`'s reverse is not — it is pushed back onto
+   the context unchanged, still carrying `T1`.
+4. `Set.Execute` (`pkg/document/operations/set.go:56-113`) applies the
+   restore. `obj.SetWithExecutedAt(o.key, value, o.executedAt)` (line 95)
+   makes the object's key resolve to the new, live element again. Then,
+   **only when `source == OpSourceUndoRedo`** (lines 102-104):
+   ```go
+   if source == OpSourceUndoRedo && root.FindByCreatedAt(value.CreatedAt()) != nil {
+       root.DeregisterElement(value)
+   }
+   root.RegisterElement(value)
+   ```
+   `DeregisterElement` (`root.go:122-154`) drops the stale entries for
+   `T1` from both `Root.elementMap` and `Root.gcElementPairMap` before
+   `RegisterElement` re-adds the live element under `T1`. On the client
+   that performed the redo (`source == OpSourceUndoRedo`), this correctly
+   clears the pending-GC entry for the identity being reused.
+5. The redo `Change` is pushed to the server and pulled by a peer exactly
+   as pushed — confirmed by direct inspection, the peer receives a
+   `Change` with the operation intact. The peer applies it via
+   `InternalDocument.ApplyChanges` (`pkg/document/internal_document.go:318`)
+   with `source = OpSourceRemote`. The `source == OpSourceUndoRedo` guard
+   at `set.go:102-104` does **not** fire, so `DeregisterElement` is never
+   called on the peer. `Root.gcElementPairMap[T1]` on the peer still holds
+   the *old*, tombstoned pair from step 2, even though the object's key
+   now resolves to the live, restored element.
+6. `Document.ApplyChangePack` runs GC automatically on every non-snapshot
+   pull (`pkg/document/document.go`, the `if !d.options.DisableGC &&
+   !hasSnapshot { d.GarbageCollect(...) }` step), so this is not a latent
+   risk waiting for an explicit GC call — it fires on the very pull that
+   receives the redo. `Root.GarbageCollect` (`root.go:184-211`) iterates
+   `gcElementPairMap`, and for the stale `T1` entry calls
+   `pair.parent.Purge(pair.elem)` followed by
+   `r.deregisterElement(pair.elem)` — which deletes `elementMap[T1]`
+   **by key**, regardless of which element (live or tombstoned) currently
+   occupies that slot. The peer's live, just-restored key is deleted.
+7. The two replicas now disagree permanently: the client that redid the
+   change keeps the key; every peer that pulled the redo loses it on
+   their next GC pass. Nothing in the protocol re-converges this — it is
+   not a transient display bug.
+
+This generalizes beyond `Object.Set`: any operation whose redo path
+reuses an original `createdAt` instead of re-ticketing it is exposed to
+the same asymmetry, since the `OpSourceUndoRedo`-gated deregister step
+exists specifically to reconcile a *reused* identity, and remote
+application always uses `OpSourceRemote`.
+
+### Cross-SDK note
+
+**JS has the identical gate.** `set_operation.ts:99-104` in
+`yorkie-js-sdk` guards the same deregister call with `source ===
+OpSource.UndoRedo` only — so this is not a Go-only bug, and Go's current
+behavior is faithful parity with JS, not a regression. **A fix must land
+in both `yorkie` and `yorkie-js-sdk`**, or one SDK's redo becomes silently
+unsafe to sync to a peer running the other. Do not fix Go alone.
+
+### Two fix directions (named in review, not evaluated further here)
+
+1. **Make the deregister source-independent.** Drop the `source ==
+   OpSourceUndoRedo` condition at `set.go:102-104` (and the JS
+   equivalent) so any application — local undo/redo or remote — clears a
+   stale entry for a reused `createdAt` before re-registering it. Needs
+   checking whether this is safe for ordinary (non-undo/redo) `Set`
+   operations that happen to collide with a tombstoned `createdAt` for
+   unrelated reasons, and whether other operations (`Remove`, `Add`,
+   `Move`) that touch `root.FindByCreatedAt`/`DeregisterElement` have the
+   same gap.
+2. **Re-ticket `Remove`'s reverse `Set` the way `Add`/`ArraySet` are.**
+   In `executeUndoRedo` (`document.go:405-413` today), add a
+   `*operations.Set` branch that issues a fresh ticket for the reverse
+   before pushing it, mirroring the `Add`/`ArraySet` treatment, and call
+   `History.ReconcileCreatedAt` for any other stacked operation that
+   still points at the old identity. This avoids ever reusing a
+   `createdAt` for a live element during redo, so `OpSourceRemote` never
+   needs to know about the reuse at all. Needs the JS-side equivalent in
+   `set_operation.ts`/`document.ts` (see the `TreeEdit` `reissueContentIDs`
+   precedent, which already re-tickets on the `TreeEdit` redo path for a
+   related reason).
+
+Either direction needs the identical decision applied in
+`yorkie-js-sdk`.
+
+### Reproduction sketch
+
+Two clients, plain `Object.Set`, no presence involved (confirms the bug
+is not presence-specific — it was found while testing presence undo, but
+reproduces without it):
+
+```go
+d1 := document.New(key)
+c1.Attach(ctx, d1)
+d2 := document.New(key)
+c2.Attach(ctx, d2)
+
+d1.Update(func(root *json.Object, p *presence.Presence) error {
+    root.SetInteger("count", 1)
+    return nil
+})
+c1.Sync(ctx); c2.Sync(ctx)
+// d2.Marshal() == `{"count":1}` -- fine so far.
+
+d1.Undo()
+c1.Sync(ctx); c2.Sync(ctx)
+// d2.Marshal() == `{}` -- undo's own Remove syncs correctly; this
+// direction is not the bug.
+
+d1.Redo()
+// d1.Marshal() == `{"count":1}` locally, immediately, before any sync.
+c1.Sync(ctx); c2.Sync(ctx)
+// d2.Marshal() == `{}` -- the peer's key is gone, even though the pulled
+// Change was confirmed (via ad hoc logging of InternalDocument.ApplyChanges)
+// to carry the operation intact. d1 and d2 have now permanently diverged.
+```
+
+Extending this into a full regression test should additionally assert
+`doc.GarbageLen()` / `Root.GCElementPairMap()` on both replicas after the
+redo+sync to pin the stale-entry mechanism directly, not just the
+end-state key loss.
+
+## Tasks
+
+- [ ] Reproduce with an explicit integration test in `yorkie` (both the
+      end-state divergence and, ideally, the intermediate
+      `gcElementPairMap` state) before attempting a fix
+- [ ] Decide between the two fix directions above (or find a better one)
+      for both SDKs — this needs its own design discussion, since
+      direction 1 has an open safety question and direction 2 needs the
+      equivalent JS change designed alongside it
+- [ ] Check whether `Remove`'s `*crdt.Array` reverse (`Add`) and `Move`'s
+      reverse have the same `OpSourceUndoRedo`-gated special-casing that
+      would need the identical treatment (`remove.go`, `move.go`)
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together; land both before
+      either ships, or add a version gate
+- [ ] Add the regression test from the reproduction sketch to both SDKs'
+      undo/redo integration suites
+- [ ] Re-tighten `test/integration/doc_presence_test.go`'s mixed
+      op+presence redo assertion back to asserting on the peer (`d2`)
+      instead of locally (`d1`) once fixed — see the comment referencing
+      this document at that call site
+
+## Related: `Presence.Initialize` leaves `clonePresences` stale
+
+Also found while building Task 7, also pre-existing, also not fixed here.
+
+`Presence.Initialize` (`pkg/document/presence/proxy.go`, used only via
+`client.WithPresence` at attach) does `p.data = data` — a pointer
+reassignment — instead of mutating the map already referenced by
+`Document.clonePresences`, the way `Presence.Set` does (`data := p.data;
+data.Set(key, value)`, mutating in place). A later `Update` call's `Set`
+on an unrelated key then silently drops the attach-time key from both
+`clonePresences` and, once that change executes,
+`InternalDocument.presences`.
+
+Reproduction:
+
+```go
+d1 := document.New(key)
+c1.Attach(ctx, d1, client.WithPresence(presence.Data{"color": "red"}))
+// d1.MyPresence() == {"color":"red"}
+
+d1.Update(func(root *json.Object, p *presence.Presence) error {
+    p.Set("other", "x")
+    return nil
+})
+// d1.MyPresence() == {"other":"x"} -- "color" is gone.
+```
+
+This is the Go twin of a JS issue already tracked upstream: JS has a
+`TODO(chacha912)` at `document.ts:2068-2069` reading "After resolving the
+presence initialization issue, remove default presence.(#608)" — the
+same root shape (an `{}`-seeded presence entry that a later real value
+doesn't fully merge into) surfacing on the undo/redo context-construction
+path. Fixing this in Go should be coordinated with resolving #608
+upstream rather than treated as Go-only.
+
+Worked around, not fixed: Task 7's integration tests seed presence
+baselines through a plain `Update` + `Set` call instead of
+`client.WithPresence`, so this defect is never exercised — see the
+comment referencing this document in
+`test/integration/doc_presence_test.go` at the test setup. This leaves
+the combination `client.WithPresence` + `Set(..., WithHistory())` +
+`Undo` entirely untested.
+
+### Tasks
+
+- [ ] Decide the fix shape: either make `Initialize` mutate `p.data` in
+      place (matching `Set`'s pattern) or make `Document.Update` refresh
+      `clonePresences` from the just-applied change's presence value
+      rather than trusting the pre-call snapshot
+- [ ] Coordinate with #608 in `yorkie-js-sdk` so the fix shape matches
+      whatever resolves the upstream TODO
+- [ ] Add `TestDocPresence`/`TestPresencelessDocument`-style coverage for
+      `client.WithPresence` followed by a later `Update` that sets an
+      unrelated key, asserting the original key survives
+- [ ] Once fixed, restore the `client.WithPresence` + `Set(WithHistory)` +
+      `Undo` combination Task 7 skipped, in
+      `test/integration/doc_presence_test.go`
+
+## Resolved: undoing a newly introduced presence key — Go now removes it
+
+Found while adding a test to pin this behavior (Task 7 follow-up, Item
+4), first left unfixed as a "deliberate divergence", then **fixed** in
+CodeRabbit review of PR #1932. The earlier call was wrong: the port's
+rule is that a defect JS *shares* is reproduced, but a divergence *from*
+JS is a defect. This one was wire-visible, so it had to be closed.
+
+`change.Context.ReversePresence()` built the reverse from
+`c.previousPresence[key]` for every key marked `WithHistory`
+(`pkg/document/change/context.go`). When the key did not exist in
+`previousPresence` — i.e., the presence-history entry undoes a key that
+was *introduced* by the tracked `Set`, not merely changed — Go's map
+indexing yielded the zero value, the empty string, so the key survived
+undo with value `""` instead of being removed.
+
+JS's equivalent, `getReversePresence()` (`context.ts:210-220`), assigns
+`this.previousPresence[key]` too, which is `undefined` for a key that
+didn't exist. That `undefined` reaches `Channel.set`'s
+`deepcopy(this.presence)` call (`presence.ts:36-47`), and
+`yorkie-js-sdk`'s `deepcopy` is `JSON.parse(JSON.stringify(object))`
+(`util/object.ts:22-29`) — `JSON.stringify` omits object properties whose
+value is `undefined`. So the key is dropped from the Put change's
+`presence` payload entirely, and since a presence Put replaces the whole
+map for the actor, the key is effectively *removed* on undo in JS.
+
+### What changed
+
+- `Context.ReversePresence()` now returns `(values, absentKeys)`:
+  keys that held a value at context creation, and keys that held
+  nothing. `absentKeys` is sorted, so the entry is deterministic
+  regardless of Go's map iteration order.
+- `document.HistoryOperation` carries `PresenceAbsentKeys` alongside
+  `Presence`.
+- `presence.Presence.Delete(key, opts...)` removes a key and emits the
+  resulting Put. It is how Go spells JS's `set({key: undefined})`: Go's
+  `map[string]string` has no `undefined` to assign, so the key is
+  removed outright, which is the same observable result.
+- `Document.executeUndoRedo` applies a `Delete` for every absent key.
+
+Pinned by `presence undo of a newly introduced key removes it test` and
+`presence undo removes only the newly introduced keys test` in
+`pkg/document/history_test.go`, which replace the characterization test
+that pinned the old `""`.
+
+## Related: `Text.Style`/`RemoveStyle` do not skip tombstoned nodes, unlike JS
+
+Found while building Task 9 (widening `Text.Edit`/`Text.Style`/
+`RemoveStyle`'s CRDT-layer return values,
+`docs/design/undo-redo-go-port.md`), confirmed pre-existing at base
+`9395a96a` (i.e. present before Task 9 touched this code — Task 9 only
+added new return values, it did not add or remove this filter). Not
+fixed here, for the same reason as the rest of this document: per the
+port's "port JS's known defects as-is" rule, a one-sided fix in Go alone
+would widen the gap the port exists to close, and a cross-SDK behavior
+change needs its own design decision, not a silent fix inside an
+unrelated bookkeeping task.
+
+JS's `setStyle` and `removeStyle` both skip a node entirely — neither
+applying the attribute change nor considering it for the "previous
+attribute" capture — when the node is already tombstoned:
+
+```ts
+// packages/sdk/src/document/crdt/text.ts:409 (setStyle)
+for (const node of toBeStyleds) {
+  if (node.isRemoved()) {
+    continue;
+  }
+  ...
+}
+// packages/sdk/src/document/crdt/text.ts:504 (removeStyle)
+for (const node of toBeStyleds) {
+  if (node.isRemoved()) {
+    continue;
+  }
+  ...
+}
+```
+
+Go's `Text.Style` and `Text.RemoveStyle` (`pkg/document/crdt/text.go:508`
+and `:604`) have never had this filter. Both loop over every node
+`canStyle` accepted — which, per `canStyle`'s own logic
+(`pkg/document/crdt/rga_tree_split.go`, `canStyle`), can include a node
+tombstoned *before* `editedAt` — and apply the attribute change (or
+attribute removal) to it regardless of tombstone state. So Go's `Style`/
+`RemoveStyle` can mutate a removed node's attributes where JS's would
+not.
+
+### Why Task 9 didn't adopt JS's filter for the new `PrevAttr` capture
+
+Task 9 added a `PrevAttr` capture (the value a style key held immediately
+before the call, for reverse-operation construction) to both methods. The
+capture is deliberately **not** filtered by `node.removedAt`, matching
+Go's existing (unfiltered) attribute-application loop rather than
+introducing a new, JS-only removed-node check that exists nowhere else in
+these functions. The reasoning: the capture should reflect the node the
+function's own attribute-set/remove logic actually touches first, so the
+"previous value" it reports is self-consistent with what the forward
+operation just changed on this replica — introducing a filter only for
+the capture, while leaving the surrounding attribute-application loop
+unfiltered, would make the two inconsistent with each other in a new way,
+on top of the pre-existing Go/JS inconsistency. This was a "don't make it
+worse while touching adjacent code" call, not an attempt to resolve the
+underlying divergence.
+
+### Tasks
+
+- [ ] Decide whether Go should adopt JS's tombstoned-node skip in
+      `Text.Style`/`Text.RemoveStyle`, or whether JS should drop it (JS
+      is the older behavior here, so the default assumption is Go should
+      match JS, but confirm there isn't a reason JS's skip exists that
+      would make it the one to remove)
+- [ ] Check whether `Tree.Style`/`Tree.RemoveStyle`
+      (`pkg/document/crdt/tree.go`) have the same asymmetry, since they
+      share the `canStyle`-based selection pattern
+- [ ] If Go adopts the filter, re-verify `Text.Style`/`RemoveStyle`'s
+      `PrevAttr` capture (`pkg/document/crdt/text.go:508`, `:604`) still
+      captures from the correct (now filtered) first node
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+      per this document's usual rule for cross-SDK behavior changes
+
+## Related: `validateRestoreIdentities` can reject a client's own undo
+
+Found while building Task 10 (the Text `Edit` reverse operation,
+`docs/design/undo-redo-go-port.md`) and sharpened in code review. Not
+fixed there: loosening a security control is not a decision to make
+inside a feature task.
+
+`operations.Edit.Execute` validates every restore/retombstone span's
+`createdAt` against the acting change's version vector
+(`pkg/document/operations/edit.go`, `validateRestoreIdentities` /
+`validateRestoreTickets`): the span's actor must be present in the vector
+and its lamport must not exceed the actor's known clock, or the operation
+fails with `ErrUnknownRestoreIdentity`. The guard skips only when the
+version vector is empty, which its comment describes as "the trusted local
+path (json package application)".
+
+This is **Go-only hardening**. A grep of `yorkie-js-sdk/packages` for
+`validateRestore` and `UnknownRestoreIdentity` returns zero hits, so JS
+clients never perform this check on themselves.
+
+Task 10 is what makes it live on the local undo path. Before it, Go could
+only ever *execute* restore operations that arrived from a JS client (an
+untrusted, remote input, which is what the guard was written for). Now Go
+produces them locally, and `Change.Execute` passes `c.ID().versionVector`
+— which for a local change is **not** empty (verified: a plain
+`document.New` plus two `Update`s yields `{000...000:1}` then
+`{000...000:2}`), so the guard runs against the client's own undo.
+
+### Reachability (narrower than "any pruned actor")
+
+The failure needs a version vector that is missing an actor whose content
+the client is trying to restore. Most ways a VV changes cannot produce
+that:
+
+- `VersionVector.Unset` (`pkg/document/time/version_vector.go:115`) and
+  `Filter` (`:266`) would drop entries, but neither has a non-test caller.
+- `ID.SyncClocks` (`pkg/document/change/id.go:109`) and `ID.SetClocks`
+  (`:145`) only `Max`-merge, so they never remove an actor.
+
+The reachable case is **`ID.SyncLamport`** (`pkg/document/change/id.go:131-141`),
+the GC-disabled attach mode (`docs/design/disable-gc-on-attach.md`). It
+deliberately advances the lamport *without* merging the other side's
+version vector, so such a client's VV stays at a single entry — its own
+actor. A GC-disabled client that deletes text another actor inserted and
+then calls `Undo` hits `versionVector.Get(otherActor)` returning `!ok`,
+and gets `ErrUnknownRestoreIdentity` instead of a restore.
+
+### Update: this now covers Tree undo as well, and is a pre-merge check
+
+Added while building the Tree `Edit` reverse operation. `Tree.Edit` now
+produces identity spans and `operations.TreeEdit.toReverseOperation`
+short-circuits to a restore-mode reverse whenever they are complete, so
+**the identity-preserving path is what an ordinary local Tree undo takes**,
+not a corner reached only by operations arriving from a JS client. Every
+such undo runs `validateTreeRestoreIdentities`
+(`pkg/document/operations/tree_edit.go`), which shares
+`validateRestoreTickets` with the Text path described above — so the same
+`ErrUnknownRestoreIdentity` failure now applies to `Tree` undo under the
+same conditions.
+
+This raises the severity from "note" to a check to run before this port
+merges: the exposure moved from a rarely-taken branch to the default
+behavior of Tree undo.
+
+Mitigating evidence, so the scope is not overstated: ordinary cross-actor
+identity restore is covered and passes.
+`test/integration/history_tree_test.go`'s
+`TestHistoryTreeConcurrentUndo` has client `d2` undo a deletion of tree
+content created by `d1`'s actor, and the restore succeeds — a normally
+attached client's version vector knows the other actor, so the guard does
+not fire. The residual exposure is exactly the VV-pruning case already
+described above (`ID.SyncLamport`, the GC-disabled attach mode), now
+reachable through Tree as well as Text.
+
+### Tasks
+
+- [ ] Reproduce with a GC-disabled attachment: two clients, client B
+      opts out of GC, B deletes text A inserted, B undoes — assert the
+      error today, then the restore once fixed
+- [ ] Repeat the same reproduction for `Tree` (B deletes tree content A
+      inserted, B undoes), since Tree undo now takes this path by default
+- [ ] Decide the fix shape. The guard exists to stop a client forging a
+      node under another actor's clock, so simply dropping it is not an
+      option. Candidates: gate it on `OpSource` (remote input only,
+      leaving locally produced undo alone), or make the GC-disabled path
+      carry enough of a version vector to validate against
+- [ ] Decide whether JS should gain the equivalent check rather than Go
+      losing it — the asymmetry means a JS client can send the server a
+      restore its own SDK never examined
+- [ ] Whatever is chosen, keep `test/integration` coverage for a forged
+      identity being rejected on the remote path, for both Text and Tree
+
+## Related: the no-op fallback `Edit` reverse breaks on a remote replica
+
+Also found while building Task 10, in code review. **Present identically
+in JS, so not fixed** — per this document's usual rule.
+
+`Edit.toReverseOperation` (`pkg/document/operations/edit.go`) has a
+fallback for an edit that neither removed nor inserted anything — e.g.
+`text.Edit(2, 2, "")`. Its reverse is an ordinary (non-restore) `Edit`
+anchored at the **normalized** from position: the head node's id plus an
+absolute offset from the head. The port of `edit_operation.ts:300-323`.
+
+An `Edit` carrying normalized positions is only executable after
+`RefinePos` remaps them onto the current chain, and that step is gated on
+`isUndoOp` — which is **local-only state, never serialized** (Go has no
+wire field for it; JS's `converter.ts` has zero `isUndoOp` references
+either). So:
+
+1. The undoing client executes it fine — `isUndoOp` is set in memory, the
+   positions get refined, the no-op applies.
+2. The change is appended to `localChanges` and pushed (the operation did
+   execute, so `executeUndoRedo`'s "nothing executed" early return does
+   not fire).
+3. The server and every peer decode it with `isUndoOp` absent, take no
+   refine step, and feed `(initialHead, N)` straight into
+   `findNodeWithSplit`. `getAbsoluteID()` yields `(InitialTicket, N)`,
+   whose floor is the head node, giving `relativeOffset = N` against a
+   node of length 0 — so `splitNode` returns "offset should be less than
+   or equal to length" (`pkg/document/crdt/rga_tree_split.go`) and the
+   whole change fails to apply.
+
+For any `N > 0` — i.e. any no-op edit that is not at the very start of
+the text — this is not a cosmetic problem: it fails the peer's
+`ApplyChanges`, not just the one operation.
+
+### Tasks
+
+- [ ] Confirm the peer-side failure end to end with an integration test
+      (client A does `Edit(2, 2, "")` then `Undo`, client B syncs), in
+      both SDKs
+- [ ] Decide the fix shape, then apply it to both SDKs together. Options:
+      put the fallback reverse's positions in un-normalized form; add
+      `isUndoOp` to the wire format; or drop the fallback reverse
+      entirely, since an edit that changed nothing arguably has nothing
+      to undo — note this last one changes undo-stack depth, which is
+      observable
+- [ ] Whichever is chosen, check the same question for the restore-mode
+      reverses, which also carry normalized positions but never resolve
+      them positionally (identity addressing) except in
+      `findRestoreAnchor`'s fallback rung, which does refine first
+
+## Related: a text node's tombstoned attribute is resurrected by a snapshot round trip
+
+Found while building the Text `Style` reverse operation (the reverse of a
+`Style` call that added a key which did not exist before removes that key
+via `RHT.Remove`, tombstoning it), while adding the round-trip coverage
+this document's usual pattern calls for. **Present identically in JS, so
+not fixed** — per this document's usual rule.
+
+A text node's per-character style attributes are an `RHT` (Go:
+`pkg/document/crdt/text.go`'s `TextValue.attrs`; JS:
+`CRDTTextValue`'s `attrs`), the same structure used for object keys and
+tree node attributes. Snapshot encoding writes every attribute node
+regardless of tombstone state (Go: `toTextNodes`,
+`api/converter/to_bytes.go:246-259`, iterating
+`value.Attrs().Nodes()` unfiltered; JS: `toTextNodes`,
+`packages/sdk/src/api/converter.ts:756-780`, iterating the RHT's
+unfiltered `Symbol.iterator`), but for text nodes specifically — unlike
+the sibling `toRHT`/object-and-tree path (Go has no equivalent generic
+helper here; JS's `toRHT`, `converter.ts:803-816`) — the encoder never
+sets the wire's `is_removed` field on `NodeAttr` (Go:
+`api.NodeAttr.IsRemoved`, `api/yorkie/v1/resources.pb.go:1232`; JS:
+`PbNodeAttr.isRemoved`). The decoder matches this gap symmetrically: Go's
+`fromTextNode` (`api/converter/from_bytes.go:382-415`) calls
+`attrs.Set(key, pbAttr.Value, updatedAt)` unconditionally, and JS's
+`fromTextNode` (`converter.ts:1278-1290`) calls
+`textValue.setAttr(key, value.value, ...)` unconditionally — both always
+construct a live node, regardless of what the tombstone state was before
+encoding.
+
+So: style an attribute, remove it (directly, or as this port's `Style`
+undo removing a newly added key), snapshot-encode, decode. The decoded
+replica has the attribute back, live, at whatever value it held at the
+moment of removal — even though the pre-snapshot replica correctly showed
+it absent. This is not observable through the ordinary wire protocol
+(`toRHT`/`fromRHT`, used for individual `Style`/`RemoveStyle` operations
+and for object/tree attributes, carries `is_removed` correctly) — only
+the snapshot path for `Text` specifically is affected, since that is the
+one place a text node's full current attribute state, tombstones
+included, has to survive being written out and read back rather than
+being replayed as a sequence of operations.
+
+Confirmed pre-existing and unrelated to this port: `toTextNodes` and
+`fromTextNode` predate this branch by years on both sides (Go:
+`git blame` on `to_bytes.go`'s `toTextNodes` shows the attribute-copying
+loop from 2020, untouched by this port's commits; the `attrs :=
+make(map[string]*api.NodeAttr)` line is from 2023, also unrelated). The
+port's own `Style`/`RemoveStyle` `PrevAttr` capture (introduced widening
+the CRDT-layer return values) does not touch encoding at all, so this bug
+was reachable before this port started — the round-trip test just needed
+a removed-attribute case to surface it, which nothing before did.
+
+### Tasks
+
+- [ ] Confirm the same gap for `RGATreeSplitNode`-adjacent tombstoned
+      attributes doesn't already have separate handling elsewhere (e.g.
+      GC purge of the RHT node itself, which removes it from the map
+      entirely and would sidestep this — check whether that GC pass runs
+      before every snapshot or is best-effort)
+- [ ] Decide the fix: add `is_removed` to the text-node attribute
+      encode/decode path on both sides, mirroring `toRHT`/`fromRHT`
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+      per this document's usual rule for cross-SDK behavior changes
+- [ ] Add regression coverage: style an attribute, remove it, snapshot
+      round trip, assert the attribute stays absent -- in both SDKs
+
+## Related: a Tree reverse can delete live neighbours when its content was born tombstoned
+
+Found while building the Tree `Edit` reverse operation. **Present in JS
+too for the range width; Go additionally differs in where the range
+starts.** Not fixed, per this document's usual rule.
+
+`operations.TreeEdit.toReverseOperation`'s copy-reinsert fallback
+(`pkg/document/operations/tree_edit.go`) builds the reverse of an edit as
+"delete the range this edit inserted, re-insert what it removed". The
+range's width comes from `TreeEditReverseInfo.InsertedContentSize`, which
+`crdt.Tree.Edit` measures right after `dropDuplicateContents` and
+**before** the insert loop runs — mirroring `crdt/tree.ts:2194-2196`, which
+does the same and says so (`tree.ts:2188-2190`).
+
+Measuring there is deliberate and correct: `TreeNode.remove` decrements
+its *ancestors'* visible length, so a subtree inserted under an
+already-removed parent shrinks its own root to zero as its children are
+tombstoned. Reading the size back off the tree afterwards would report 0
+for content that really was inserted.
+
+The consequence is that when the insert position resolves inside a parent
+a concurrent edit removed, every inserted node is tombstoned on the way in
+(`fromParent.IsRemoved()` in `Tree.Edit`'s Phase 8), yet
+`InsertedContentSize` still counts it. The reverse's range is therefore
+`[idx, idx + size)` over content that occupies **no** visible index. JS's
+only protection is the size guard at `tree_edit_operation.ts:610-616`
+(ported as `if idx+insertedSize > tree.Root().Len() { return nil, nil }`),
+which catches this **only when the range happens to run past the end of
+the visible tree**. When there is enough live content to the right of the
+anchor, the range instead covers live neighbours, and undoing the edit
+deletes them.
+
+### Why this is only partial JS parity
+
+The *width* is JS's, verified. The *start* is not:
+
+- JS anchors at `preEditFromIdx`, the from-index `CRDTTree.edit` captured
+  before the deletion (`crdt/tree.ts:1872`).
+- Go's `crdt.Tree.Edit` does not report `preEditFromIdx`, so
+  `toReverseOperation` derives the anchor from the nodes the edit touched.
+  On this path `lastLive == nil` (all content is tombstoned), so the anchor
+  falls through to `info.Removed[0]`, or — when the edit removed nothing
+  either — to the zero-width no-op reverse at `e.from`.
+
+That second fallback is the separately-filed no-op-anchor divergence
+(see "the no-op fallback `Edit` reverse breaks on a remote replica" for
+the Text twin of the same shape). **The two defects compound here**: the
+range this path produces can be wrong in width *and* in start, and the
+size guard only reasons about the width. Any fix has to settle the anchor
+question first, or the guard will keep being evaluated against an index
+JS never intended.
+
+### Reachability
+
+Concurrency only. It needs `fromParent.IsRemoved()` at insert time — an
+insert whose declared parent another client removed concurrently — which
+also makes `SpansComplete` false (the born-removed nodes register GC pairs
+past the delete-loop snapshot), so the edit takes the copy-reinsert
+fallback rather than the identity-preserving reverse. Single-client
+editing never reaches it.
+
+### Tasks
+
+- [ ] Reproduce with two clients: A removes an element, B concurrently
+      inserts into it, B undoes — assert the live neighbour survives.
+      Do it in both SDKs, since JS shares the width defect
+- [ ] Decide the anchor question first (`preEditFromIdx` vs. the
+      node-derived anchor); it gates whether the size guard is even
+      checking the right thing. Reporting `preEditFromIdx` from
+      `crdt.Tree.Edit` is the obvious option, and would also close the
+      no-op-fallback anchor divergence filed above
+- [ ] Then decide the width fix: skip the reverse whenever the tree
+      accepted content but none of it is visible (`lastLive == nil &&
+      InsertedContentSize > 0`) is the narrow option; widening JS's guard
+      to the same condition is the cross-SDK one
+- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+      per this document's usual rule for cross-SDK behavior changes
+
+## Related: a combined Tree `Style` reverse only restores, never removes, on execute
+
+Refiled to its own task, since it is convergent (every replica drops the
+removal identically) rather than divergent like this document's other
+entries: see
+`docs/tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md`.
+
+## Related: rejecting a negative `splitLevel` applies new strictness to stored history
+
+Found in review of the Tree split/merge reverse operations
+(`docs/design/undo-redo-go-port.md`, Task 19). The rejection itself shipped
+with that task; what is deferred here is a data question it raises, which
+needs an audit rather than a code change.
+
+Filed in this collecting document rather than as its own todo/lessons pair
+for the reason stated at the top: it is a deferral with a single concrete
+audit task attached, not an active fix, and a dedicated pair would fragment
+the backlog for one question. (Contrast the tree-style entry, which was
+refiled out because it had a genuinely different failure shape — convergent
+rather than divergent — and was being mislabeled by sitting here. There is no
+such mislabeling risk here.)
+
+### What changed
+
+`api/converter/from_pb.go`'s `fromTreeEdit` now returns the new
+`converter.ErrInvalidSplitLevel` for a negative `SplitLevel`. A split level
+counts the element boundaries an edit creates. It used to be inert going
+forward — `Tree.split` does nothing for a non-positive level, and nothing else
+read the field — but it now also sizes the boundary-deletion reverse
+(`operations.TreeEdit.toSplitReverseOperation`, `2*splitLevel`), where a
+negative builds a reverse whose range runs backwards.
+
+### Why this is not purely an inbound-traffic change
+
+`converter.FromOperations` is shared between the wire path and the **stored
+change read path**: `server/backend/database/change_info.go:119` calls it when
+materializing a persisted change. So the new rejection applies retroactively
+to history that was written before it existed.
+
+Keeping the rejection was the deliberate choice. Clamping a negative to zero
+instead would silently rewrite a peer's operation, and would diverge any
+replica that had already decoded the original value — trading a loud failure
+for silent divergence. But that choice is only safe if no such change exists.
+
+### The open question — RESOLVED in code, no audit needed
+
+**Resolution (2026-08-16).** Both checks are now normalized on the stored
+path by `converter.NormalizeStoredOperations`, called from
+`ChangeInfo.ToChange`; the client-facing path stays strict. The audit below
+was the wrong instrument twice over: operations are persisted as opaque
+protobuf blobs (`ChangeInfo.Operations [][]byte`), so the population cannot
+be queried at all — only found by decode-scanning every stored change — and
+even a clean scan would describe the cluster only at scan time, binding
+neither a lagging replica, nor a backup restored later, nor a change written
+between the scan and the deploy. Normalizing dominates: it costs nothing if
+the population is empty, and if it is not, the document loads exactly as it
+did before the validation existed.
+
+Note the remediation caveat below — "a read-path-only exception reintroduces
+the value into `toSplitReverseOperation`, so it needs a matching guard
+there" — does not apply: the repair **clamps** a negative `splitLevel` to
+`0` rather than tolerating it, and `toSplitReverseOperation` is reached only
+for `splitLevel > 0` (`tree_edit.go:110`). No extra guard is needed.
+
+The original reasoning is kept below for the record.
+
+**Does any stored change carry a negative `splitLevel`?** No client should
+ever have produced one — `json.Tree`'s four edit entry points now refuse it
+(`pkg/document/json/tree.go`, `ErrInvalidSplitLevel`), and the JS SDK passes
+the caller's value through the same way Go used to — but "should never" is not
+an audit. This needs a query over stored changes before it reaches production.
+
+**Same shape, second check (Task 21):** `fromTreeRestoreSpans`
+(`api/converter/from_pb.go`) now also rejects a Tree restore span attribute
+with a nil `updatedAt` — a genuine Go-only validation gap versus JS, fixed
+rather than filed (see `docs/design/undo-redo-go-port.md`'s "Critical 3"
+note) — through the identical shared decoder
+(`converter.FromOperations` → `server/backend/database/change_info.go:119`'s
+`ChangeInfo.ToChange`). The same question applies: does any change persisted
+before this fix carry a Tree restore span with a nil attribute `updatedAt`?
+If so, that document is now permanently unloadable the same way a stored
+negative `splitLevel` would be. Roll into the same audit pass rather than
+running two.
+
+### Blast radius if one exists
+
+Not a dropped operation — a wedged client. `FromChangePack` propagates the
+error unfiltered, so `server/rpc/yorkie_server.go:175` rejects the **entire**
+PushPull with `InvalidArgument`, and the client retries the identical pack
+indefinitely. A document containing such a change would also fail to load for
+every client, since the read path shares the decoder.
+
+### Tasks
+
+- [x] ~~Audit stored changes for a negative `split_level`~~ — superseded by
+      `converter.NormalizeStoredOperations`; see the resolution above
+- [x] ~~In the same pass, audit stored changes for a Tree restore span
+      attribute with a nil `updated_at`~~ — same fix, same commit
+- [x] Remediation decided: read-path normalization (clamp to `0`, drop the
+      undated attribute) with the wire path left strict, over a one-time
+      migration. Pinned by
+      `TestChangeInfoDecodesOperationsRejectedOnTheWire`
+- [ ] Consider whether the same reasoning applies to other numeric protobuf
+      fields the decoder currently accepts unvalidated — any future check
+      added to `FromOperations` is retroactive over stored changes and needs
+      the same stored-path treatment
+- [ ] Decide whether `yorkie-js-sdk` should gain the equivalent producer-side
+      guard, so the two SDKs cannot mint values the shared server refuses
+
+## Related: `ElementRHT` eviction — JS drops a key Go keeps
+
+Found in Task 5's review, verified again before the port's PR. Unlike every
+other entry in this document, **Go is not the side that should change**: the
+Go behavior is the correct one and is kept. What is filed here is the JS half,
+plus the fact that this branch is what makes the disagreement reachable at all.
+
+### Mechanism
+
+`ElementRHT.set` in the JS SDK gates two decisions on two different anchors:
+
+1. **Eviction** of the key's current occupant goes through
+   `CRDTElement.remove` (`element_rht.ts:99`), which returns true only when
+   `removedAt.after(this.createdAt)` (`element.ts:105-110`) — the occupant's
+   *raw* creation ticket.
+2. **The winner check** a few lines below (`element_rht.ts:105,109`) compares
+   against `getPositionedAt()` — the occupant's `movedAt` if it has one, its
+   `createdAt` otherwise.
+
+They agree as long as `movedAt == createdAt`. They stop agreeing in the window
+
+```
+createdAt < executedAt < positionedAt
+```
+
+where JS's eviction check fires (executedAt is after createdAt) and tombstones
+the occupant, while its winner check decides the incoming value must *not*
+replace it. The result is a key whose value is a tombstone, and an incoming
+value that was never registered as removed either: `get()` reports the key as
+**absent**.
+
+Go (`ElementRHT.SetWithExecutedAt`, `pkg/document/crdt/element_rht.go`) anchors
+both decisions on `PositionedAt`. In the same window the true winner simply
+stays in place and the key reads **present**.
+
+### Why this branch is what opens the window
+
+`movedAt` is set on an element in an `ElementRHT` slot only when something
+(re-)places it there with a ticket newer than its own `createdAt`. Before the
+undo/redo port nothing did, so `positionedAt == createdAt` held everywhere and
+the two anchors could not disagree. Restoring an element under its **original,
+older** `createdAt` — which is precisely what an undo of a `Remove`, or a redo
+of a `Set`, does — is what introduces `createdAt < positionedAt`, and with it
+the window.
+
+So this is not a latent JS defect the port merely noticed. The port makes it
+reachable, and inside it a Go replica and a JS replica hold different content
+for the same key.
+
+### Reachability
+
+Needs three things in order: an element placed at a key, undo/redo restoring it
+under its original `createdAt` (giving it `movedAt > createdAt`), and a further
+`Set` on the same key whose `executedAt` falls strictly between the two. The
+third is ordinary concurrency — a peer's `Set` that was issued before the
+restore's ticket but lands after it. Single-client editing without undo does
+not reach it.
+
+### Why Go is not being changed to match
+
+Reproducing JS here would mean gating eviction on `createdAt` while gating the
+winner on `positionedAt` — not a different-but-consistent rule, but two rules
+that contradict each other, producing a state (tombstoned occupant still linked
+as the key's value, incoming value dropped and unregistered) that no replica
+should ever hold. The port's "reproduce JS's defects" rule stops short of
+reproducing state corruption; see the code comment on `SetWithExecutedAt` for
+the same reasoning at the call site.
+
+### Tasks
+
+- [ ] Raise it with the JS SDK: `element_rht.ts:99` should gate eviction on
+      `getPositionedAt()`, the same anchor as the winner check below it. Task
+      5's report already flagged it as "worth a note to the JS team"; this is
+      that note
+- [ ] Write the cross-SDK reproduction first: one Go replica and one JS
+      replica, a restored element, and a concurrent `Set` ticketed into the
+      window. Assert the key's presence on both — it should be the failing
+      test that motivates the JS change
+- [ ] Until JS changes, treat a key that reads absent on a JS client but
+      present on Go (or on the server's rebuilt document) as this bug, not as
+      a lost write
+- [ ] Once JS is fixed, drop the "deliberate divergence" half of the comment
+      on `SetWithExecutedAt` and keep only the anchor rationale
+
+## Related: `refinePos` mixes `contentLen()` and `Len()` — a defect Go shares with JS
+
+Raised by CodeRabbit on PR #1932 against
+`pkg/document/crdt/rga_tree_split.go:508,518`. **Not a Go defect, and not
+fixed in the Go port**: the JS SDK does exactly the same thing, so the Go
+code is a line-for-line faithful port and changing it alone would open a
+convergence gap between the two SDKs.
+
+`refinePos` walks the physical `next` chain, subtracting each node's
+length from the offset until the remainder fits. It measures the *first*
+node with one function and every *subsequent* node with another:
+
+| | first node | subsequent nodes |
+|---|---|---|
+| Go | `node.contentLen()` (`rga_tree_split.go:508`) | `node.Len()` (`rga_tree_split.go:518`) |
+| JS | `node.getContentLength()` (`rga_tree_split.ts:1253`) | `node.getLength()` (`rga_tree_split.ts:1264`) |
+
+The two differ on a tombstoned node: `contentLen()`/`getContentLength()`
+report the raw character count, while `Len()`/`getLength()` report 0 for
+a removed node (`rga_tree_split.go:242-247`). So a position anchored on
+a node that has since been tombstoned is refined against that node's
+*pre-removal* length, while every node walked past afterwards counts as
+0 if removed. The doc comment on the JS side ("Counts only live
+characters: removed nodes are treated as length 0",
+`rga_tree_split.ts:1227`) describes the loop, not the first iteration.
+
+Both SDKs reach `refinePos` only from an undo/redo reverse `Edit`
+re-anchoring itself (`Edit.Execute`'s `isUndoOp` branch;
+`edit_operation.ts:222-225`), so the asymmetry is confined to the
+history path on both.
+
+### Tasks
+
+- [ ] Decide, cross-SDK, which measure the first node should use.
+      `Len()` on both sides is the reading the JS doc comment already
+      claims; `contentLen()` on both sides is the current behavior made
+      consistent. Either way both SDKs must change together
+- [ ] Write the reproduction first: anchor a reverse `Edit` inside a node,
+      tombstone that node remotely, then undo, and compare the refined
+      position between a Go and a JS replica
+- [ ] Land the change in both SDKs in the same release, since a
+      one-sided change moves where the undo lands
+
+## Related: `Style`, `TreeStyle` and ordinary `TreeEdit` over-report `Observable`
+
+Found while widening `Operation.Execute` to return `ExecutionResult{Reverse,
+Observable}` so `Document.Update` and `Document.executeUndoRedo` could gate
+the redo-stack clear and undo/redo propagation on JS's `opInfos.length`
+rather than on `len(executed)` (see `docs/design/undo-redo-go-port.md`'s
+parity table, the `ExecutionResult`/`Observable` row). Not fixed here, per
+this document's usual rule: closing it needs a CRDT-layer API change, not a
+local one. Filed here because every other left-open divergence on this
+branch gets this treatment.
+
+### Mechanism
+
+`Edit` derives `Observable` exactly, from what the CRDT layer itself
+reports changed: content inserted, or a live node newly tombstoned by this
+edit (`RGATreeSplit.deleteNodes`/`RGATreeSplitNode.Remove`). Every other
+operation reports `Observable: true` unconditionally — what Go did for
+every operation before the field existed (`ExecutionResult.Observable`'s
+doc comment, `pkg/document/operations/operation.go:143-168`). For most of
+those operations that unconditional `true` is exact: `Add`, `Remove`,
+`Move` and the rest always change something observable when they succeed.
+Three operations are not exact: their JS counterparts derive `opInfos`
+from a per-node change list the underlying CRDT call returns, and the Go
+CRDT layer does not return that list, so Go cannot compute the JS-exact
+value and stays conservative instead.
+
+### The three operations and the exact conditions where JS and Go differ
+
+1. **`Style`** (`pkg/document/operations/style.go:164-173`). JS derives
+   `opInfos` from the change lists `text.setStyle`/`text.removeStyle`
+   return (`style_operation.ts:205`), empty only when the range covered no
+   styleable node — every node in `[from, to)` was tombstoned before
+   `editedAt` (rejected by `canStyle`, `rga_tree_split.go`), or the range
+   is empty. Go's `Text.Style`/`Text.RemoveStyle` do not report that list,
+   so `Style.Execute` reports `Observable: true` even when nothing was
+   actually styled.
+2. **`TreeStyle`** (`pkg/document/operations/tree_style.go:169-178`). Same
+   shape as `Style`, over `Tree.Style`/`Tree.RemoveStyle` instead of
+   `Text`'s: JS's `opInfos` are empty only when the range covered no
+   styleable tree node; Go reports `true` unconditionally.
+3. **Ordinary (non-identity-preserving) `TreeEdit`**
+   (`pkg/document/operations/tree_edit.go:410-416`, and its remote-skip
+   counterpart at `:401-402`). JS derives `opInfos` from the change list
+   `tree.edit` returns (`tree_edit_operation.ts:496`), empty only when the
+   edit inserted nothing, split nothing, and found nothing live to remove.
+   Go's `Tree.Edit` does not report that list, so this path reports `true`
+   unconditionally too.
+
+   The identity-preserving `TreeEdit` restore/retombstone path
+   (`tree_edit.go:258-264`) is **not** part of this divergence — JS itself
+   forces that path's `opInfos` to exactly one entry regardless of what
+   restore/retombstone actually touched (`tree_edit_operation.ts:351-354`),
+   specifically so `Document.executeUndoRedo` never drops the undo change.
+   Go's unconditional `true` there is exact parity, not a conservative
+   fallback.
+
+### Why the conservative direction was chosen
+
+Reporting `true` where JS would report nothing costs a redundant change on
+the wire and an unnecessary redo-stack clear. Reporting `false` where JS
+would report something silently drops a real edit's undo and can diverge
+replicas — the exact failure mode this port exists to close. Between the
+two, over-reporting is strictly the safer direction, so it is the one Go
+took. This is a decision already made, not an oversight — **do not change
+the behavior**.
+
+### What closing it would require
+
+Go's `Text.Style`, `Text.RemoveStyle`, `Tree.Style`, `Tree.RemoveStyle` and
+`Tree.Edit` would need to return the same per-node change list their JS
+counterparts do — a widening of the CRDT-layer return values, the same
+shape of change the `Style`/`RemoveStyle` `PrevAttr` capture already made
+(see "`Text.Style`/`RemoveStyle` do not skip tombstoned nodes" above for
+that precedent) and `TreeEditReverseInfo` already made for the reverse-op
+path. Each `Execute` call would then derive `Observable` from that list
+instead of reporting `true` unconditionally, matching how `Edit` already
+does it. This is a CRDT-layer API change touching four call sites plus
+their JS-parity verification, not a local fix.
+
+### Tasks
+
+- [ ] Decide whether closing this is worth the CRDT-layer API churn, given
+      the failure mode it fixes is "one redundant change plus one spurious
+      redo-stack clear," not replica divergence
+- [ ] If closing it: widen `Text.Style`/`Text.RemoveStyle` to return a
+      per-node change list (mirroring `canStyle`'s existing node-selection
+      logic), and the same for `Tree.Style`/`Tree.RemoveStyle` and
+      `Tree.Edit`
+- [ ] Add regression coverage pinning the exact JS-empty cases:
+      `Style`/`RemoveStyle` over a range with no styleable node, and a
+      `TreeEdit` that inserts nothing, splits nothing and removes nothing —
+      assert `Observable == false` and that the redo stack survives / no
+      undo change ships, matching JS
+- [ ] No JS-side change needed — JS already computes this exactly; only
+      Go's conservative fallback would move

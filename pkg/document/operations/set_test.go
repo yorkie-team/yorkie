@@ -42,7 +42,7 @@ func TestSet(t *testing.T) {
 		valueA, err := crdt.NewPrimitive(1, ticketA)
 		assert.NoError(t, err)
 		setA := operations.NewSet(time.InitialTicket, "key", valueA, ticketA)
-		err = setA.Execute(root, time.NewVersionVector())
+		_, err = setA.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 0, root.GarbageLen())
 
@@ -50,7 +50,7 @@ func TestSet(t *testing.T) {
 		valueB, err := crdt.NewPrimitive(2, ticketB)
 		assert.NoError(t, err)
 		setB := operations.NewSet(time.InitialTicket, "key", valueB, ticketB)
-		err = setB.Execute(root, time.NewVersionVector())
+		_, err = setB.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
 		assert.NoError(t, err)
 		// valueA should be registered as garbage (it was removed by the winner).
 		assert.Equal(t, 1, root.GarbageLen())
@@ -61,7 +61,7 @@ func TestSet(t *testing.T) {
 		valueA2, err := crdt.NewPrimitive(3, ticketA2)
 		assert.NoError(t, err)
 		setA2 := operations.NewSet(time.InitialTicket, "key", valueA2, ticketA2)
-		err = setA2.Execute(root, time.NewVersionVector())
+		_, err = setA2.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
 		assert.NoError(t, err)
 		// valueA2 should also be registered as garbage (it lost LWW to valueB).
 		// Before the fix, this was 1 because the LWW loser was not registered.

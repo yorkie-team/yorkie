@@ -305,6 +305,30 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 	return p
 }
 
+// InsertStringAfter inserts the given string after the given previous
+// element.
+func (p *Array) InsertStringAfter(index int, v string) *Array {
+	prev := p.Get(index)
+	if prev == nil {
+		panic("index out of bound")
+	}
+
+	// Convert element identity to position identity for the anchor.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prev.CreatedAt())
+	if err != nil {
+		prevPosCreatedAt = prev.CreatedAt()
+	}
+	p.insertAfterInternal(prevPosCreatedAt, func(ticket *time.Ticket) crdt.Element {
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
+	})
+
+	return p
+}
+
 // Get element of the given index.
 func (p *Array) Get(idx int) crdt.Element {
 	if idx < 0 || p.Len() <= idx {
@@ -409,6 +433,23 @@ func (p *Array) GetTree(idx int) *Tree {
 
 // SetInteger sets element of the given index.
 func (p *Array) SetInteger(idx int, value int) *Array {
+	target := p.Get(idx)
+	if target == nil {
+		panic("index out of bound")
+	}
+
+	p.setByIndexInternal(target.CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+		primitive, err := crdt.NewPrimitive(value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
+	})
+	return p
+}
+
+// SetString sets element of the given index.
+func (p *Array) SetString(idx int, value string) *Array {
 	target := p.Get(idx)
 	if target == nil {
 		panic("index out of bound")

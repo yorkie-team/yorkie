@@ -52,17 +52,35 @@ func NewMove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Move) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
+	}
+
+	// The reverse must capture the target's current predecessor before
+	// MoveAfter changes its position (move_operation.ts:80-81,110-119): it
+	// moves the target back after whatever precedes it now.
+	//
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse,
+	// and the same gate in Edit.Execute): on a remote apply or a server
+	// replay the FindPrevCreatedAt lookup is pure cost, and its error path
+	// could abort a change that applied fine before this operation grew a
+	// reverse. The move and its GC bookkeeping below stay unconditional.
+	var reverseOp Operation
+	if source.NeedsReverse() {
+		prevCreatedAt, err := obj.FindPrevCreatedAt(o.createdAt)
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+		reverseOp = NewMove(o.parentCreatedAt, prevCreatedAt, o.createdAt, o.executedAt)
 	}
 
 	deadNode, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 	if err != nil {
-		return err
+		return ExecutionResult{}, err
 	}
 
 	if deadNode != nil {
@@ -72,12 +90,20 @@ func (o *Move) Execute(root *crdt.Root, _ time.VersionVector) error {
 		})
 	}
 
-	return nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // CreatedAt returns the creation time of the target element.
 func (o *Move) CreatedAt() *time.Ticket {
 	return o.createdAt
+}
+
+// SetCreatedAt sets the creation time of the target element. Used by
+// History.ReconcileCreatedAt when a stacked Move still targets an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Move) SetCreatedAt(createdAt *time.Ticket) {
+	o.createdAt = createdAt
 }
 
 // ParentCreatedAt returns the creation time of the Array.
@@ -95,7 +121,20 @@ func (o *Move) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Move) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
+}
+
 // PrevCreatedAt returns the creation time of previous element.
 func (o *Move) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
+}
+
+// SetPrevCreatedAt sets the creation time of the previous element. Used by
+// History.ReconcileCreatedAt when a stacked Move still anchors on an
+// element's previous createdAt after undo/redo replaced it with a fresh
+// one.
+func (o *Move) SetPrevCreatedAt(prevCreatedAt *time.Ticket) {
+	o.prevCreatedAt = prevCreatedAt
 }

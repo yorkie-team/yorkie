@@ -21,6 +21,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -179,7 +180,12 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 			return err
 		}
 	} else {
-		if _, err := d.ApplyChanges(pack.Changes...); err != nil {
+		// OpSourceReplay, not OpSourceRemote: this is the server's rebuild
+		// path (BuildInternalDocForServerSeq and everything above it), which
+		// discards the executed operations returned here. A client applying a
+		// remote pack goes through Document.ApplyChangePack instead, which
+		// keeps them.
+		if _, _, err := d.applyChanges(operations.OpSourceReplay, pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -300,9 +306,41 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 	return nil
 }
 
-// ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
+// ApplyChanges applies remote changes to the document. It also returns the
+// operations that actually executed, across all changes and in order, so a
+// caller with a history layer can reconcile any pending undo/redo entry
+// against them.
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, []operations.Operation, error) {
+	return d.applyChanges(operations.OpSourceRemote, changes...)
+}
+
+// ApplyChangesForReplay applies stored changes to the document exactly like
+// ApplyChangePack's non-snapshot branch does: under OpSourceReplay, so the
+// reverse-operation and pre-edit-index bookkeeping that only an undo/redo
+// history reads is skipped rather than computed and thrown away. Use this,
+// not ApplyChanges, for a caller that replays a document's own change log
+// into a snapshot-seeded InternalDocument one change at a time outside
+// ApplyChangePack itself -- admin.Client.ListChangeSummaries is the one
+// production caller today. See OpSourceReplay.
+func (d *InternalDocument) ApplyChangesForReplay(
+	changes ...*change.Change,
+) ([]DocEvent, []operations.Operation, error) {
+	return d.applyChanges(operations.OpSourceReplay, changes...)
+}
+
+// applyChanges applies the given changes under the given source. Callers that
+// keep the executed operations -- Document.applyChanges, whose history layer
+// reconciles stacked undo/redo entries against them -- must use
+// OpSourceRemote; a caller that replays stored changes and reads neither
+// return value -- ApplyChangePack's non-snapshot branch, and
+// ApplyChangesForReplay -- uses OpSourceReplay, which skips the
+// per-operation bookkeeping only such a history reads. See OpSourceReplay.
+func (d *InternalDocument) applyChanges(
+	source operations.OpSource,
+	changes ...*change.Change,
+) ([]DocEvent, []operations.Operation, error) {
 	var events []DocEvent
+	var executedOps []operations.Operation
 	for _, c := range changes {
 		var hadPresence, wasOnline bool
 		var prevPresence presence.Data
@@ -314,9 +352,11 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			prevPresence = d.Presence(clientID)
 		}
 
-		if err := c.Execute(d.root, d.presences); err != nil {
-			return nil, err
+		result, err := c.Execute(d.root, d.presences, source)
+		if err != nil {
+			return nil, nil, err
 		}
+		executedOps = append(executedOps, result.Executed...)
 
 		if c.PresenceChange() != nil {
 			if c.PresenceChange().ChangeType == presence.Clear {
@@ -334,7 +374,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		}
 	}
 
-	return events, nil
+	return events, executedOps, nil
 }
 
 // MyPresence returns the presence of the actor currently editing the document.

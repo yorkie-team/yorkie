@@ -19,6 +19,9 @@
 package change
 
 import (
+	"errors"
+	"slices"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence/inner"
@@ -50,19 +53,67 @@ func New(id ID, message string, operations []operations.Operation, pc *inner.Cha
 	}
 }
 
+// ExecutionResult is what executing a Change reports to its caller. It is
+// the port of what JS's Change.execute returns (change.ts:196), minus the
+// OpInfo list Go does not materialize.
+type ExecutionResult struct {
+	// Executed lists the operations that actually applied, in the order they
+	// ran. An operation that declined to execute is not among them.
+	Executed []operations.Operation
+
+	// Observable reports whether any executed operation changed something a
+	// peer or an editor binding would see. It stands in for JS's
+	// `opInfos.length > 0`; see operations.ExecutionResult.Observable for
+	// what each operation counts.
+	Observable bool
+
+	// ReverseOps holds the operations that undo this change, in reverse
+	// order, so replaying them walks the change backwards.
+	ReverseOps []operations.Operation
+}
+
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root, presences *inner.Map) error {
+func (c *Change) Execute(
+	root *crdt.Root,
+	presences *inner.Map,
+	source operations.OpSource,
+) (ExecutionResult, error) {
+	var result ExecutionResult
+
 	for _, op := range c.operations {
-		if err := op.Execute(root, c.ID().versionVector); err != nil {
-			return err
+		opResult, err := op.Execute(root, source, c.ID().versionVector)
+		if err != nil {
+			// NOTE(hackerwins): An operation whose target was concurrently
+			// removed declines to execute during undo/redo. It is dropped
+			// before it can reach the executed list, so a change whose
+			// every operation is skipped ends up empty and the caller can
+			// refuse to propagate it (change.ts:172-175).
+			if errors.Is(err, operations.ErrOperationSkipped) {
+				continue
+			}
+			return ExecutionResult{}, err
+		}
+		result.Executed = append(result.Executed, op)
+		result.Observable = result.Observable || opResult.Observable
+
+		if opResult.Reverse != nil {
+			result.ReverseOps = append(result.ReverseOps, opResult.Reverse)
 		}
 	}
+
+	// NOTE(hackerwins): Reverse operations are returned in reverse order so
+	// that undoing a change replays its operations backwards. They are
+	// collected in execution order above and reversed once here rather than
+	// prepended one at a time: a prepend copies everything gathered so far,
+	// which makes building the slice quadratic in the number of operations a
+	// single change carries.
+	slices.Reverse(result.ReverseOps)
 
 	if c.presenceChange != nil {
 		c.presenceChange.Execute(c.id.actorID, presences)
 	}
 
-	return nil
+	return result, nil
 }
 
 // ID returns the ID of this change.

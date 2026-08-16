@@ -116,6 +116,13 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		pbOps = append(pbOps, &pbOp)
 	}
 
+	// These operations were written under whatever rules held when they were
+	// stored, so validation added to FromOperations since then would reject
+	// them here and leave this document permanently unloadable. Repair the
+	// shapes that applies to before decoding; the client-facing decode path
+	// keeps rejecting them.
+	converter.NormalizeStoredOperations(pbOps)
+
 	ops, err := converter.FromOperations(pbOps)
 	if err != nil {
 		return nil, err

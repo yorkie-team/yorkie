@@ -656,6 +656,23 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 		return nil, err
 	}
 
+	// A Style operation's wire form always carries both Attributes and
+	// AttributesToRemove (see toStyle), and JS's StyleOperation constructor
+	// always accepts both -- so decoding whichever field is non-empty is
+	// not exclusive. A reverse Style built for undo/redo can populate both
+	// at once (restore some keys, remove others that did not exist
+	// before), and decoding only one would silently drop the other.
+	if len(pbStyle.Attributes) > 0 && len(pbStyle.AttributesToRemove) > 0 {
+		return operations.NewStyleSetAndRemove(
+			parentCreatedAt,
+			from,
+			to,
+			pbStyle.Attributes,
+			pbStyle.AttributesToRemove,
+			executedAt,
+		), nil
+	}
+
 	if len(pbStyle.AttributesToRemove) > 0 {
 		return operations.NewStyleRemove(
 			parentCreatedAt,
@@ -769,6 +786,16 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		), nil
 	}
 
+	// A split level counts the element boundaries the edit creates, so a
+	// negative one is meaningless. It used to be inert -- nothing read it
+	// beyond the split loop, which does nothing for a non-positive level --
+	// but it now also sizes the boundary-deletion reverse
+	// (operations.TreeEdit.toSplitReverseOperation), where a negative would
+	// build an inverted range. Rejected at the boundary instead.
+	if pbTreeEdit.SplitLevel < 0 {
+		return nil, ErrInvalidSplitLevel
+	}
+
 	edit := operations.NewTreeEdit(
 		parentCreatedAt,
 		from,
@@ -814,6 +841,24 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 	to, err := fromTreePos(pbTreeStyle.To)
 	if err != nil {
 		return nil, err
+	}
+
+	// A TreeStyle operation's wire form always carries both Attributes and
+	// AttributesToRemove (see toTreeStyle), and JS's TreeStyleOperation
+	// constructor always accepts both -- so decoding whichever field is
+	// non-empty is not exclusive. A reverse TreeStyle built for undo/redo
+	// can populate both at once (restore some keys, remove others that did
+	// not exist before), and decoding only one would silently drop the
+	// other.
+	if len(pbTreeStyle.Attributes) > 0 && len(pbTreeStyle.AttributesToRemove) > 0 {
+		return operations.NewTreeStyleSetAndRemove(
+			parentCreatedAt,
+			from,
+			to,
+			pbTreeStyle.Attributes,
+			pbTreeStyle.AttributesToRemove,
+			executedAt,
+		), nil
 	}
 
 	if len(pbTreeStyle.AttributesToRemove) > 0 {
@@ -1089,6 +1134,18 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 		}
 		var attrs *crdt.RHT
 		if len(pbSpan.Attributes) > 0 {
+			// An attribute snapshot is malformed without an updatedAt: fromRHT
+			// stores whatever fromTimeTicket returns, which is nil for a nil
+			// ticket rather than an error, so a crafted nil here would reach
+			// the RHT with a nil updatedAt and panic on the first comparison
+			// deep inside the restore path. Reject it here instead (parity
+			// with the id/parent/sibling created_at checks below, and with
+			// the JS converter's fromPbTreeRestoreSpan).
+			for _, attr := range pbSpan.Attributes {
+				if attr == nil || attr.UpdatedAt == nil {
+					return nil, ErrInvalidRestoreSpan
+				}
+			}
 			attrs, err = fromRHT(pbSpan.Attributes)
 			if err != nil {
 				return nil, err

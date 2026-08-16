@@ -147,7 +147,15 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 		if elem.CreatedAt() == nil {
 			return nil, fmt.Errorf("json object member has nil createdAt")
 		}
-		members.Set(pbNode.Key, elem)
+		// NOTE: elem already carries its own decoded movedAt/removedAt, so
+		// the LWW tie-break for re-inserting it into the RHT must use its
+		// own positionedAt (movedAt falling back to createdAt), not its
+		// createdAt -- otherwise a member restored by undo/redo (whose
+		// createdAt predates its movedAt) can lose the LWW race here and be
+		// silently dropped from the decoded object. Mirrors fromObject in
+		// the JS SDK (converter.ts:1667), which passes
+		// value.getPositionedAt() to rht.set.
+		members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem))
 	}
 
 	createdAt, err := fromTimeTicket(pbObj.CreatedAt)

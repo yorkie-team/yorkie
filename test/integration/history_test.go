@@ -77,3 +77,63 @@ func TestHistory(t *testing.T) {
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, changes[0].Snapshot)
 	})
 }
+
+func TestHistorySkippedUndo(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("fully skipped undo propagates nothing test", func(t *testing.T) {
+		// An undo whose every operation is skipped -- because a peer
+		// concurrently removed the target -- must not become a change at
+		// all. JS's Change.execute drops a skipped operation before it can
+		// reach `changeOperations` (change.ts:174), so document.ts's
+		// `!opInfos.length` early return fires and nothing is queued.
+		//
+		// If Go instead reports the skipped operation as executed, the
+		// change is appended to localChanges and shipped. Peers then run it
+		// under OpSourceRemote, where the skip guard does not apply, so
+		// every replica executes an operation the originator skipped. The
+		// content still converges -- but DocSize does not, and DocSize is
+		// what gates MaxSizeLimit.
+		ctx := context.Background()
+
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("k")
+			return nil
+		}))
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("k").SetString("a", "1")
+			return nil
+		}))
+		assert.Equal(t, `{"k":{"a":"1"}}`, d1.Marshal())
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// d2 removes the object the stacked undo targets, then d1 learns of
+		// it. d1's undo now has nothing left to act on.
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, `{}`, d1.Marshal())
+		assert.False(t, d1.HasLocalChanges())
+
+		assert.True(t, d1.CanUndo())
+		assert.NoError(t, d1.Undo())
+		assert.Equal(t, `{}`, d1.Marshal())
+		assert.False(t, d1.HasLocalChanges(), "a fully skipped undo must queue no change")
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, d1.DocSize(), d2.DocSize(), "DocSize must agree across replicas")
+	})
+}

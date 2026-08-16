@@ -690,6 +690,97 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
+// ReissueIDs gives this node and every one of its descendants a fresh
+// identity, taking one ticket per node in post-order.
+//
+// A reverse operation that reverses a deletion by re-inserting a copy of the
+// removed nodes carries their original ids, so executing it would put two
+// nodes under one id — the ambiguity that makes a position anchored there
+// resolve differently on different replicas, and that makes the tree refuse
+// the copy outright as content it already holds.
+//
+// A fresh identity has to be fresh in every field that names a node. The copy
+// came from DeepCopy, which carries the split chain and the merge lineage of
+// the node it copied: left in place they would splice this node into a chain
+// it never belonged to, and Purge relinking that chain would unlink the real
+// tombstone from it.
+func (n *TreeNode) ReissueIDs(issueTimeTicket func() *time.Ticket) {
+	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
+		value := node.Value
+		value.id = NewTreeNodeID(issueTimeTicket(), 0)
+		value.InsPrevID = nil
+		value.InsNextID = nil
+		value.MergedFrom = nil
+		value.MergedAt = nil
+		value.mergedInto = nil
+	})
+}
+
+// CloneForReinsert deep-copies this node for a reverse operation to re-insert
+// and drops every descendant whose ID is in preTombstoned — i.e. descendants
+// that were already tombstoned before the edit that removed this node ran.
+// Those descendants represent the user's earlier delete intent and must not be
+// resurrected by undoing that edit.
+//
+// The tombstone is cleared on every node the clone keeps, so the re-insertion
+// brings them back live.
+func (n *TreeNode) CloneForReinsert(preTombstoned map[string]struct{}) (*TreeNode, error) {
+	clone, err := n.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dropPreTombstoned(clone, preTombstoned); err != nil {
+		return nil, err
+	}
+
+	// Post-order: clear the tombstone on every survivor and recompute its size
+	// from its (already-resized) children. DeepCopy carried the original
+	// node's size; after the drop above, that size is stale and has to be
+	// rebuilt bottom-up. Element nodes derive their size from their children's
+	// padded lengths, text nodes from their own value.
+	index.TraverseNode(clone.Index, func(node *index.Node[*TreeNode], _ int) {
+		node.Value.removedAt = nil
+		if node.IsText() {
+			node.VisibleLength = node.Value.Length()
+			node.TotalLength = node.Value.Length()
+			return
+		}
+
+		size := 0
+		for _, child := range node.Children(true) {
+			size += child.PaddedLength()
+		}
+		node.VisibleLength = size
+		node.TotalLength = size
+	})
+
+	return clone, nil
+}
+
+// dropPreTombstoned drops every descendant of node whose ID is in
+// preTombstoned, so a clone keeps only the nodes the edit itself transitioned
+// from visible to tombstoned.
+func dropPreTombstoned(node *TreeNode, preTombstoned map[string]struct{}) error {
+	if node.IsText() {
+		return nil
+	}
+
+	children := node.Index.Children(true)
+	kept := make([]*index.Node[*TreeNode], 0, len(children))
+	for _, child := range children {
+		if _, ok := preTombstoned[child.Value.IDString()]; ok {
+			continue
+		}
+		if err := dropPreTombstoned(child.Value, preTombstoned); err != nil {
+			return err
+		}
+		kept = append(kept, child)
+	}
+
+	return node.Index.SetChildren(kept)
+}
+
 // InsertAfter inserts the given node after the given leftSibling.
 func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 	return n.Index.InsertAfter(content.Index, children.Index)
@@ -1276,7 +1367,10 @@ func (t *Tree) DeepCopy() (Element, error) {
 		return nil, err
 	}
 
-	return NewTree(node, t.createdAt), nil
+	tree := NewTree(node, t.createdAt)
+	tree.movedAt = t.movedAt
+	tree.removedAt = t.removedAt
+	return tree, nil
 }
 
 // GCPairs returns the pairs of GC.
@@ -1302,6 +1396,11 @@ func (t *Tree) GCPairs() []GCPair {
 // CreatedAt returns the creation time of this Tree.
 func (t *Tree) CreatedAt() *time.Ticket {
 	return t.createdAt
+}
+
+// SetCreatedAt sets the creation time of this Tree manually.
+func (t *Tree) SetCreatedAt(createdAt *time.Ticket) {
+	t.createdAt = createdAt
 }
 
 // RemovedAt returns the removal time of this Tree.
@@ -1377,7 +1476,10 @@ func (t *Tree) EditT(
 		return nil, resource.DataSize{}, err
 	}
 
-	return t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	// Asks for the reverse info even though it discards it: this stands in for
+	// a local edit in tests, and a local edit computes it.
+	pairs, diff, _, err := t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil, true)
+	return pairs, diff, err
 }
 
 // FindPos finds the position of the given index in the tree.
@@ -1415,8 +1517,129 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	}, nil
 }
 
-// Edit edits the tree with the given range and content.
-// If the content is undefined, the range will be removed.
+// TreeEditReverseInfo is everything Edit reports for building the operation
+// that reverses it. It is returned by value; the slices and the map inside are
+// still owned by the tree — see the field comments.
+type TreeEditReverseInfo struct {
+	// RemovedSpans describes, by original identity, each node THIS edit
+	// transitioned visible -> tombstoned, in traversal order (parents before
+	// children, which Restore relies on when recreating a purged subtree).
+	// A reverse built from these revives the nodes in place rather than
+	// re-inserting copies, which is what makes concurrent undos of one
+	// deletion converge instead of duplicating content.
+	//
+	// Empty when SpansComplete is false — see there.
+	RemovedSpans []*TreeRestoreSpan
+
+	// InsertedSpans describes, by original identity, every node this edit
+	// inserted, in parent-before-child order. A reverse re-removes them by
+	// identity rather than by index, which a concurrent restore would
+	// otherwise clobber. Empty when SpansComplete is false.
+	InsertedSpans []*TreeRestoreSpan
+
+	// SpansComplete reports whether RemovedSpans and InsertedSpans fully
+	// describe what this edit did. It is false whenever the caller asked Edit
+	// for no reverse info at all, so "spans empty" never reads as "nothing was
+	// removed or inserted". Otherwise they do not describe the edit when it
+	// merged nodes, or
+	// when anything beyond the plain delete loop registered a GC pair (merge
+	// propagation, content born tombstoned under a removed parent, or a piece
+	// split off an already-tombstoned node). A caller must fall back to a
+	// copy-reinsert reverse in that case; Removed and PreTombstoned below are
+	// what it builds from.
+	SpansComplete bool
+
+	// MergeLevel is the number of element boundaries this edit merged away.
+	// Non-zero means the reverse is a split — re-inserting the emptied
+	// elements would restore shells whose children now live in the merge
+	// target.
+	MergeLevel int
+
+	// InsertedContentSize is the tree-index size of the content the tree
+	// accepted, measured while it was still detached: content reusing an ID
+	// the tree already holds is dropped before this is measured, but content
+	// tombstoned on the way into a removed parent is still counted, because
+	// the reverse range is expressed against the pre-edit tree. Reading the
+	// size back off the tree afterwards would shrink it and make the reverse
+	// range cover a neighbour.
+	InsertedContentSize int
+
+	// Removed holds each node of Phase 5's toBeRemoveds that THIS edit
+	// transitioned visible -> tombstoned, in the order that phase walked them.
+	// PreTombstoned names — by IDString, mirroring the JS port's ID-string Set
+	// — every one of those same collected nodes that was already tombstoned
+	// before this edit ran. The two partition toBeRemoveds; they say nothing
+	// about nodes propagateMergeDeletes additionally tombstones, since those
+	// never enter toBeRemoveds either (matching JS, whose merge propagation
+	// likewise never appends to nodesToBeRemoved).
+	//
+	// A node in PreTombstoned represents a deletion the user already made
+	// independently of this edit and must not be resurrected by a reverse
+	// built from Removed. JS's own nodesToBeRemoved (the analogue of Removed
+	// here) INCLUDES pre-tombstoned nodes, unlike this field — so the
+	// top-level filter for a copy-reinsert reverse's contents is
+	//
+	//	parent == nil || (parent NOT IN Removed AND parent.IDString() NOT IN PreTombstoned)
+	//
+	// not "parent not in Removed" alone: a live descendant whose immediate
+	// parent is pre-tombstoned must not be promoted to top-level, exactly as
+	// JS drops it too (tree_edit_operation.ts:622-627) by excluding any node
+	// whose parent is in its (unfiltered) nodesToBeRemoved.
+	//
+	// These nodes are live tombstones still linked into the tree, not copies.
+	// A caller that needs to keep them past the Edit call must DeepCopy()
+	// before any subsequent edit: a later SplitText mutates in place and
+	// splits tombstones too, so it can truncate a captured node's value out
+	// from under a caller holding onto it. Do not store the slice or the map
+	// beyond the Execute call that produced them — build any reverse
+	// operation's content from them synchronously, the way JS does inside the
+	// same execute().
+	Removed       []*TreeNode
+	PreTombstoned map[string]struct{}
+
+	// PreEditFromIdx is the visible index `from` occupies after Phase 3
+	// (Range Narrowing), before Phase 5 (Delete) or anything else below
+	// mutates the tree. Mirrors preEditFromIdx in the JS SDK
+	// (crdt/tree.ts:1872), computed at the identical point: after both
+	// positions are resolved and split (findNodesAndSplitText) AND after
+	// the split-sibling advance (Phase 2), using the post-advance fromLeft
+	// -- not right after Phase 1, which would miss the padded size of any
+	// concurrent split product Phase 2 skips past. Phases 2-4 do not mutate
+	// the tree, so this is also the latest point that still sees it
+	// pre-edit. The operations layer reads this to report the range a
+	// forward execution affected, for undo/redo reconciliation; this
+	// package does not read it itself, and leaves it at 0 when the caller asked
+	// for no reverse info.
+	PreEditFromIdx int
+
+	// RemovedSize is the total padded size of every node Phase 5 processed
+	// -- both the ones this edit newly tombstoned and any it found already
+	// tombstoned -- measured by each node's own PaddedLength AFTER every
+	// phase (merge, split, insert) has run, not right after Phase 5's
+	// delete loop: toBeRemoveds is parent-before-child, and a node's own
+	// removal only drains its ANCESTORS' aggregate (see TreeNode.remove),
+	// one child at a time, so measuring a removed parent element before its
+	// own children lower in toBeRemoveds have been processed would still
+	// see its full pre-removal aggregate and double-count them. Mirrors
+	// JS's removedNodes.reduce((sum, n) => sum + n.paddedSize(), 0)
+	// (tree_edit_operation.ts:463-466), computed after tree.edit() has
+	// fully returned, over the same set: JS's nodesToBeRemoved includes
+	// pre-tombstoned nodes the way this field does, unlike Removed above --
+	// see Removed's own doc comment.
+	RemovedSize int
+}
+
+// Edit edits the tree with the given range and content. If the content is
+// undefined, the range will be removed. Besides the GC pairs and the size
+// diff, it reports what a reverse operation needs; see TreeEditReverseInfo.
+//
+// needsReverseInfo selects whether that reverse info is computed at all. It is
+// pure bookkeeping — nothing this method reads back, and nothing that reaches
+// the tree's own state — so a caller that discards it can and should ask for
+// none: the server's change replay does, and computing it there costs a
+// visible-index resolution plus one sibling scan per touched node, on a path
+// that runs over every change a document ever accumulated. The rest of the
+// info (sizes, removed nodes, merge level) is cheap and always reported.
 func (t *Tree) Edit(
 	from, to *TreePos,
 	contents []*TreeNode,
@@ -1424,19 +1647,21 @@ func (t *Tree) Edit(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+	needsReverseInfo bool,
+) ([]GCPair, resource.DataSize, TreeEditReverseInfo, error) {
 	var diff resource.DataSize
 	var pairs []GCPair
+	var info TreeEditReverseInfo
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, info, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, info, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -1475,29 +1700,59 @@ func (t *Tree) Edit(
 		}
 	}
 
+	// Captured here, after Phase 3 -- matching JS's own capture point
+	// exactly (crdt/tree.ts:1872, after findNodesAndSplitText(to) and the
+	// split-sibling advance, using the post-advance fromLeft). Phases 2-4 do
+	// not mutate the tree, so this is the latest point before Phase 5
+	// (delete) that still sees the pre-edit tree, and the earliest point
+	// where fromLeft has already been advanced past any concurrent split
+	// products Phase 2 skips -- a position interior to an unsplit node has
+	// already been split by FindTreeNodesWithSplitText above, so this
+	// resolves the visible index `from` names post-split, not the coarser
+	// one a non-splitting resolver would collapse it to.
+	//
+	// Gated, not moved: the capture point stays exactly here for every caller
+	// that does need it. Only the caller that reads nothing back skips it.
+	if needsReverseInfo {
+		preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
+		if err != nil {
+			return t.drainPendingGCPairs(), diff, info, err
+		}
+		info.PreEditFromIdx = preEditFromIdx
+	}
+
 	toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, err := t.collectBetween(
 		collectFromParent, collectFromLeft, toParent, toLeft,
 		editedAt, versionVector,
 	)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, info, err
 	}
 
+	// Phase 4: Count the boundaries this edit merges away, BEFORE Phase 6
+	// moves their children. A reverse built after the move would re-insert
+	// empty shells, so the count is what tells the caller to build a split
+	// reverse instead.
+	info.MergeLevel = len(toBeMergedNodes)
+
 	// Phase 5: Delete — tombstone the collected nodes.
-	for _, node := range toBeRemoveds {
-		if node.remove(editedAt) {
-			pairs = append(pairs, GCPair{
-				Parent: t,
-				Child:  node,
-			})
-		}
-	}
+	deletePairs, removed, removedSpans, preTombstoned := t.tombstoneCollected(
+		toBeRemoveds, editedAt, needsReverseInfo,
+	)
+	pairs = append(pairs, deletePairs...)
+	info.Removed, info.PreTombstoned = removed, preTombstoned
+
+	// Every pair registered from here on is one the spans do not describe:
+	// merge propagation, content born tombstoned under a removed parent, or a
+	// piece split off an already-tombstoned node. Comparing the count at the
+	// end is how SpansComplete detects all three at once.
+	deletePairCount := len(pairs)
 
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	if err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, editedAt,
 	); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
 	// §6.2: Propagate deletes to children moved by prior merges.
@@ -1508,7 +1763,7 @@ func (t *Tree) Edit(
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
 	// Phase 8: Insert — insert the given node at the given position.
@@ -1519,6 +1774,13 @@ func (t *Tree) Edit(
 	// two nodes under one ID.
 	contents = t.dropDuplicateContents(contents, editedAt)
 
+	// Measured now, while the content is still detached: inserting under a
+	// removed parent tombstones it, which shrinks what its size reads back as.
+	for _, content := range contents {
+		info.InsertedContentSize += content.Index.PaddedLength()
+	}
+
+	var insertedSpans []*TreeRestoreSpan
 	if len(contents) != 0 {
 		intendedParent, intendedMergedAt := t.intendedMergeParent(from, fromParent)
 
@@ -1528,12 +1790,12 @@ func (t *Tree) Edit(
 			if leftInChildren == fromParent {
 				err := fromParent.InsertAt(content, 0)
 				if err != nil {
-					return append(pairs, t.drainPendingGCPairs()...), diff, err
+					return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 				}
 			} else {
 				err := fromParent.InsertAfter(content, leftInChildren)
 				if err != nil {
-					return append(pairs, t.drainPendingGCPairs()...), diff, err
+					return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 				}
 			}
 
@@ -1557,13 +1819,166 @@ func (t *Tree) Edit(
 				}
 
 				t.putNode(node.Value)
+
+				// Capture this inserted node's identity span so an undo
+				// re-removes it by identity rather than by index.
+				insertedSpans = appendRestoreSpan(
+					insertedSpans, node.Value, needsReverseInfo,
+				)
 			})
 		}
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	// Identity-preserving restore only describes a plain edit. If this one
+	// merged nodes, or anything past the delete loop registered a GC pair, the
+	// spans are an incomplete account of it and the caller has to fall back to
+	// the copy-reinsert reverse.
+	info.SpansComplete = needsReverseInfo &&
+		info.MergeLevel == 0 && len(pairs) == deletePairCount
+	if info.SpansComplete {
+		info.RemovedSpans = removedSpans
+		// TraverseNode is post-order (children before parent), so reverse to
+		// get parent-before-child — the order Restore needs to recreate a
+		// purged subtree top-down, since a child resolves its parent by
+		// identity.
+		slices.Reverse(insertedSpans)
+		info.InsertedSpans = insertedSpans
+	}
+
+	// RemovedSize is summed here, last, after every phase (merge, split,
+	// insert) has run -- mirroring JS's timing exactly: JS sums
+	// removedNodes.reduce(paddedSize) after tree.edit() has fully returned
+	// (tree_edit_operation.ts:462-466), not partway through. Timing matters:
+	// toBeRemoveds is in traversal order, parent before children, and a
+	// node's own removal does not zero its own PaddedLength -- only each of
+	// its removed CHILDREN's own remove() calls drain the parent's
+	// aggregate, one child at a time (TreeNode.remove only adjusts its
+	// ancestors, never itself). Measuring a parent element right after
+	// Phase 5's delete loop, before its children lower in toBeRemoveds have
+	// been processed, would double-count: the parent's still-full aggregate
+	// plus each child's own size again. Summing only after every phase has
+	// run — by which point every node in toBeRemoveds, parent or child, has
+	// had its final say in every other node's aggregate — gives each node
+	// exactly the contribution JS's post-edit() measurement gives it.
+	var removedSize int
+	for _, node := range toBeRemoveds {
+		removedSize += node.Index.PaddedLength()
+	}
+	info.RemovedSize = removedSize
+
+	return pairs, diff, info, nil
+}
+
+// tombstoneCollected runs Edit's Phase 5 (Delete) over the nodes collected for
+// removal. It reports the GC pairs to register, the nodes THIS call newly
+// tombstoned, their identity spans, and — by IDString, mirroring the JS port's
+// ID-string Set — the collected nodes it found already tombstoned.
+//
+// Everything is captured in the single pass: `remove` returns true only for a
+// node transitioning live -> tombstoned (see TreeNode.remove), so the two
+// branches below are exactly "newly removed by this edit" and "was already
+// removed" — no second traversal is needed to tell them apart. That is also
+// exactly the set worth an identity span: pre-tombstoned nodes and LWW
+// overwrites are excluded automatically.
+//
+// The spans are captured only when needsReverseInfo is set; see Edit.
+func (t *Tree) tombstoneCollected(
+	toBeRemoveds []*TreeNode,
+	editedAt *time.Ticket,
+	needsReverseInfo bool,
+) ([]GCPair, []*TreeNode, []*TreeRestoreSpan, map[string]struct{}) {
+	pairs := make([]GCPair, 0, len(toBeRemoveds))
+	removed := make([]*TreeNode, 0, len(toBeRemoveds))
+	var removedSpans []*TreeRestoreSpan
+	var preTombstoned map[string]struct{}
+
+	for _, node := range toBeRemoveds {
+		if node.remove(editedAt) {
+			pairs = append(pairs, GCPair{
+				Parent: t,
+				Child:  node,
+			})
+			removed = append(removed, node)
+			removedSpans = appendRestoreSpan(removedSpans, node, needsReverseInfo)
+			continue
+		}
+		if preTombstoned == nil {
+			preTombstoned = make(map[string]struct{})
+		}
+		preTombstoned[node.IDString()] = struct{}{}
+	}
+
+	return pairs, removed, removedSpans, preTombstoned
+}
+
+// appendRestoreSpan appends node's identity span to spans when the caller asked
+// for reverse info, and returns spans untouched when it did not. Capturing a
+// span walks node's siblings, so skipping it is the point rather than an
+// optimization detail; see Edit's needsReverseInfo.
+func appendRestoreSpan(
+	spans []*TreeRestoreSpan,
+	node *TreeNode,
+	needsReverseInfo bool,
+) []*TreeRestoreSpan {
+	if !needsReverseInfo {
+		return spans
+	}
+
+	return append(spans, restoreSpanOf(node))
+}
+
+// restoreSpanOf captures node's identity and where it sits among its siblings,
+// so a reverse operation can revive or re-remove it under that identity rather
+// than by index. Read at the moment of capture: for a removed node that is
+// right after remove() tombstoned it, and for an inserted one right after it
+// was linked in.
+func restoreSpanOf(node *TreeNode) *TreeRestoreSpan {
+	span := &TreeRestoreSpan{
+		ID:       node.id,
+		NodeType: node.Type(),
+		IsText:   node.IsText(),
+	}
+	if node.IsText() {
+		span.Length = node.Length()
+		span.Value = node.Value
+	}
+	if node.Attrs != nil {
+		span.Attributes = node.Attrs.DeepCopy()
+	}
+
+	if node.Index.Parent == nil {
+		return span
+	}
+
+	parent := node.Index.Parent.Value
+	span.ParentID = parent.id
+	siblings := parent.Index.Children(true)
+	idx := slices.Index(siblings, node.Index)
+	if idx > 0 {
+		span.LeftSiblingID = leftAnchorID(siblings[idx-1].Value)
+	}
+	if idx >= 0 && idx < len(siblings)-1 {
+		span.RightSiblingID = siblings[idx+1].Value.id
+	}
+
+	return span
+}
+
+// leftAnchorID returns the ID to store as a restore span's left-sibling
+// anchor. For a text node the anchor is its LAST character's offset, not its
+// start: a concurrent delete may later split the left neighbor, and only the
+// last-char offset floor-resolves to the rightmost fragment (the true left
+// neighbor of the restored node). For elements (never split by offset) the
+// node's own ID is exact. Right-sibling anchors always use the start offset,
+// which floor-resolves to the leftmost fragment — the true right neighbor.
+func leftAnchorID(sibling *TreeNode) *TreeNodeID {
+	if !sibling.IsText() {
+		return sibling.id
+	}
+
+	return NewTreeNodeID(sibling.id.CreatedAt, sibling.id.Offset+sibling.Length()-1)
 }
 
 // intendedMergeParent resolves the §9.4 stamp for an insert whose position
@@ -2165,26 +2580,32 @@ func (t *Tree) StyleByIndex(
 		return nil, resource.DataSize{}, err
 	}
 
-	return t.Style(fromPos, toPos, attributes, editedAt, versionVector)
+	pairs, diff, _, err := t.Style(fromPos, toPos, attributes, editedAt, versionVector)
+	return pairs, diff, err
 }
 
-// Style applies the given attributes of the given range.
+// Style applies the given attributes of the given range. Besides the GC
+// pairs and size diff, it reports, for each key in attrs, the value that key
+// held (or its absence) on the first node actually styled — see PrevAttr —
+// so a reverse Style can restore that prior state. Keys are captured in
+// sorted order so the result is deterministic regardless of Go's randomized
+// map iteration order.
 func (t *Tree) Style(
 	from, to *TreePos,
 	attrs map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []PrevAttr, error) {
 	var diff resource.DataSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
 		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -2200,6 +2621,8 @@ func (t *Tree) Style(
 	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
 
 	var pairs []GCPair
+	var prevAttrs []PrevAttr
+	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
 		actorID := node.id.CreatedAt.ActorID()
@@ -2221,6 +2644,22 @@ func (t *Tree) Style(
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
+			}
+
+			if !captured {
+				keys := make([]string, 0, len(attrs))
+				for key := range attrs {
+					keys = append(keys, key)
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					if node.Attrs != nil && node.Attrs.Has(key) {
+						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
+					} else {
+						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Existed: false})
+					}
+				}
+				captured = true
 			}
 
 			for key, value := range attrs {
@@ -2264,32 +2703,38 @@ func (t *Tree) Style(
 			}
 		}
 	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, nil, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, prevAttrs, nil
 }
 
-// RemoveStyle removes the given attributes of the given range.
+// RemoveStyle removes the given attributes of the given range. Besides the
+// GC pairs and size diff, it reports the value each removed key held on the
+// first node actually visited — see PrevAttr — so a reverse operation can
+// restore it. Unlike Style, a key that did not exist on that node is simply
+// omitted (no Existed: false entry): removing an already-absent attribute
+// has nothing to reverse. Keys are captured in sorted order for the same
+// determinism reason as Style.
 func (t *Tree) RemoveStyle(
 	from *TreePos,
 	to *TreePos,
 	attrs []string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []PrevAttr, error) {
 	var diff resource.DataSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
 		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, err
+		return t.drainPendingGCPairs(), diff, nil, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -2305,6 +2750,8 @@ func (t *Tree) RemoveStyle(
 	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
 
 	var pairs []GCPair
+	var prevAttrs []PrevAttr
+	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
 		actorID := node.id.CreatedAt.ActorID()
@@ -2326,6 +2773,17 @@ func (t *Tree) RemoveStyle(
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
+			}
+
+			if !captured {
+				keys := append([]string(nil), attrs...)
+				sort.Strings(keys)
+				for _, key := range keys {
+					if node.Attrs != nil && node.Attrs.Has(key) {
+						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
+					}
+				}
+				captured = true
 			}
 
 			for _, attr := range attrs {
@@ -2363,12 +2821,12 @@ func (t *Tree) RemoveStyle(
 			}
 		}
 	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, err
+		return append(pairs, t.drainPendingGCPairs()...), diff, nil, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, nil
+	return pairs, diff, prevAttrs, nil
 }
 
 // PosBoundary selects how a position inside a merged-away parent resolves

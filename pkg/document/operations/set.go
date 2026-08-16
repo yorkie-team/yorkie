@@ -53,19 +53,63 @@ func NewSet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Set) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Object)
 	if !ok {
-		return ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
+	}
+
+	// During undo/redo, skip rather than execute when obj or any of its
+	// ancestors has been concurrently removed (set_operation.ts:81-89).
+	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, obj) {
+		return ExecutionResult{}, ErrOperationSkipped
+	}
+
+	// The reverse must be built from the value at this key before it is
+	// overwritten below (set_operation.ts:91-92): it restores the previous
+	// value, or removes the key entirely when there was none.
+	//
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse,
+	// and the same gate in Edit.Execute): on a remote apply or a server
+	// replay the DeepCopy is pure cost, and its error path could abort a
+	// change that applied fine before this operation grew a reverse. The
+	// forward mutation and every size/GC bookkeeping below stay unconditional.
+	var reverseOp Operation
+	if source.NeedsReverse() {
+		previous := obj.Get(o.key)
+		if previous != nil && previous.RemovedAt() == nil {
+			copied, err := previous.DeepCopy()
+			if err != nil {
+				return ExecutionResult{}, err
+			}
+			reverseOp = NewSet(o.parentCreatedAt, o.key, copied, o.executedAt)
+		} else {
+			reverseOp = NewRemove(o.parentCreatedAt, o.value.CreatedAt(), o.executedAt)
+		}
 	}
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return err
+		return ExecutionResult{}, err
 	}
-	removed := obj.Set(o.key, value)
+	// SetWithExecutedAt uses o.executedAt (rather than value's own createdAt)
+	// as the LWW tie-break ticket. For local and remote Sets these are
+	// always equal (the json layer issues one fresh ticket for both), so
+	// this is behavior-preserving there; for undo/redo restoring an older
+	// value under its original createdAt, it is required for the restore to
+	// win the LWW comparison at all.
+	removed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
+
+	// NOTE(hackerwins): During undo/redo, this Set may restore an element
+	// under a createdAt that is already registered (set_operation.ts:98-104)
+	// -- for example, undoing a Remove re-inserts the removed element under
+	// its original identity. The stale entry must be deregistered before the
+	// restored element is registered again.
+	if source == OpSourceUndoRedo && root.FindByCreatedAt(value.CreatedAt()) != nil {
+		root.DeregisterElement(value)
+	}
 	root.RegisterElement(value)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
@@ -73,7 +117,7 @@ func (o *Set) Execute(root *crdt.Root, _ time.VersionVector) error {
 	if value.RemovedAt() != nil {
 		root.RegisterRemovedElementPair(obj, value)
 	}
-	return nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 
 // ParentCreatedAt returns the creation time of the Object.
@@ -89,6 +133,11 @@ func (o *Set) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (o *Set) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Set) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
 }
 
 // Key returns the key of this operation.

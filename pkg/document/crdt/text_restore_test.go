@@ -46,7 +46,7 @@ func seededText(t *testing.T, seed *time.Ticket) *crdt.Text {
 	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), time.InitialTicket)
 	from, to, err := text.CreateRange(0, 0)
 	assert.NoError(t, err)
-	_, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
+	_, _, _, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "0123456789", text.String())
 	return text
@@ -56,7 +56,7 @@ func seededText(t *testing.T, seed *time.Ticket) *crdt.Text {
 func deleteRange(t *testing.T, text *crdt.Text, from, to int, at *time.Ticket) {
 	f, e, err := text.CreateRange(from, to)
 	assert.NoError(t, err)
-	_, _, _, err = text.Edit(f, e, "", nil, at, nil)
+	_, _, _, _, _, err = text.Edit(f, e, "", nil, at, nil)
 	assert.NoError(t, err)
 }
 
@@ -77,9 +77,9 @@ func TestTextRestore(t *testing.T) {
 		// Compute both ranges on the original, then apply both deletes.
 		af1, af2, _ := a.CreateRange(4, 6)
 		ag1, ag2, _ := a.CreateRange(2, 8)
-		_, _, _, err := a.Edit(af1, af2, "", nil, tick(2), nil)
+		_, _, _, _, _, err := a.Edit(af1, af2, "", nil, tick(2), nil)
 		assert.NoError(t, err)
-		_, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
+		_, _, _, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "0189", a.String())
 		a.Restore(spanD1(seed), tick(4), nil)
@@ -89,9 +89,9 @@ func TestTextRestore(t *testing.T) {
 		b := seededText(t, seed)
 		bf1, bf2, _ := b.CreateRange(4, 6)
 		bg1, bg2, _ := b.CreateRange(2, 8)
-		_, _, _, err = b.Edit(bf1, bf2, "", nil, tick(2), nil)
+		_, _, _, _, _, err = b.Edit(bf1, bf2, "", nil, tick(2), nil)
 		assert.NoError(t, err)
-		_, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
+		_, _, _, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		b.Restore(spanD2(seed), tick(5), nil)
 		b.Restore(spanD1(seed), tick(4), nil)
@@ -107,8 +107,8 @@ func TestTextRestore(t *testing.T) {
 		text := seededText(t, seed)
 		f1, f2, _ := text.CreateRange(4, 6)
 		g1, g2, _ := text.CreateRange(2, 8)
-		_, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
-		_, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
+		_, _, _, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
+		_, _, _, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 
 		// Undo only d1: it clears the tombstone on the "45" nodes, so "45"
 		// reappears while "23"/"67" stay tombstoned by d2 (design doc's
@@ -125,8 +125,8 @@ func TestTextRestore(t *testing.T) {
 		text := seededText(t, seed)
 		f1, f2, _ := text.CreateRange(4, 6)
 		g1, g2, _ := text.CreateRange(2, 5)
-		_, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
-		_, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
+		_, _, _, _, _, _ = text.Edit(f1, f2, "", nil, tick(2), nil)
+		_, _, _, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 		assert.Equal(t, "016789", text.String())
 
 		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4), nil)
@@ -175,7 +175,7 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 		from, to, err := text.CreateRange(0, 0)
 		assert.NoError(t, err)
-		_, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
+		_, _, _, _, _, err = text.Edit(from, to, "0123456789", nil, seed, nil)
 		assert.NoError(t, err)
 
 		root := helper.TestRoot()
@@ -187,14 +187,16 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		f, e, err := text.CreateRange(from, to)
 		assert.NoError(t, err)
 		op := operations.NewEdit(parent, f, e, "", nil, at)
-		assert.NoError(t, op.Execute(root, nil))
+		_, err = op.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 	}
 
 	restore := func(t *testing.T, root *crdt.Root, parent *time.Ticket, spans []*crdt.RestoreSpan, at *time.Ticket) {
 		// A restore op is identity-addressed; its from/to positions are
 		// unused by the restore path except as a recreation fallback anchor.
 		op := operations.NewRestoreEdit(parent, nil, nil, at, spans, crdt.RestoreModeRestore, nil)
-		assert.NoError(t, op.Execute(root, nil))
+		_, err := op.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 	}
 
 	spanD1 := func(seed *time.Ticket) []*crdt.RestoreSpan {
@@ -214,8 +216,10 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		f2, e2, _ := text.CreateRange(2, 8)
 		op1 := operations.NewEdit(parent, f1, e1, "", nil, tick(1001))
 		op2 := operations.NewEdit(parent, f2, e2, "", nil, tick(1002))
-		assert.NoError(t, op1.Execute(root, nil))
-		assert.NoError(t, op2.Execute(root, nil))
+		_, err := op1.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
+		_, err = op2.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 		assert.Equal(t, "0189", text.String())
 
 		// Purge tombstones: the "234567" run is physically removed.
@@ -280,7 +284,8 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 		f, e, err := text.CreateRange(from, to)
 		assert.NoError(t, err)
 		op := operations.NewEdit(textTicket, f, e, content, nil, at)
-		assert.NoError(t, op.Execute(root, nil))
+		_, err = op.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 	}
 
 	exec(0, 0, "0123456789", seed) // seed through Execute so docSize tracks it
@@ -292,12 +297,13 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 	restoreOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(2002),
 		[]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}},
 		crdt.RestoreModeRestore, nil)
-	assert.NoError(t, restoreOp.Execute(root, nil))
+	_, err := restoreOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "014589", text.String())
 
 	// Purge the two remaining tombstones [2,4) and [6,8). If the target's
 	// pair accounting leaked, docSize.GC would retain the "45" size here.
-	_, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+	_, err = root.GarbageCollect(helper.MaxVersionVector(restoreActor))
 	assert.NoError(t, err)
 	assert.Equal(t, 0, root.GarbageLen())
 
@@ -330,7 +336,7 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 		charAt[i] = tick(int64(2000 + i))
 		f, e, err := text.CreateRange(i, i)
 		assert.NoError(t, err)
-		_, _, _, err = text.Edit(f, e, string(s[i]), nil, charAt[i], nil)
+		_, _, _, _, _, err = text.Edit(f, e, string(s[i]), nil, charAt[i], nil)
 		assert.NoError(t, err)
 	}
 	assert.Equal(t, s, text.String())
@@ -339,7 +345,8 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 	f, e, err := text.CreateRange(6, 13)
 	assert.NoError(t, err)
 	op := operations.NewEdit(textTicket, f, e, "", nil, tick(3000))
-	assert.NoError(t, op.Execute(root, nil))
+	_, err = op.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "hello  is", text.String())
 
 	// Purge the tombstones so restore must recreate rather than un-tombstone.
@@ -363,7 +370,8 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 	}
 	restoreOp := operations.NewRestoreEdit(textTicket, restoreFrom, nil, tick(3001),
 		spans, crdt.RestoreModeRestore, nil)
-	assert.NoError(t, restoreOp.Execute(root, helper.MaxVersionVector(restoreActor)))
+	_, err = restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector(restoreActor))
+	assert.NoError(t, err)
 
 	assert.Equal(t, s, text.String(),
 		"a purged multi-insertion run must be recreated in document order, not reversed")
@@ -390,7 +398,8 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 		f, e, err := text.CreateRange(0, 0)
 		assert.NoError(t, err)
 		ins := operations.NewEdit(textTicket, f, e, "0123456789", nil, tick(1000))
-		assert.NoError(t, ins.Execute(root, nil))
+		_, err = ins.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 		return root, text, textTicket
 	}
 
@@ -404,7 +413,8 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 			forged(time.NewTicket(3, 0, victimActor)), crdt.RestoreModeRestore, nil)
 		// The acting change knows only restoreActor, never victimActor.
 		vv := helper.VersionVectorOf(map[time.ActorID]int64{restoreActor: time.MaxLamport})
-		assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
+		_, err := op.Execute(root, operations.OpSourceRemote, vv)
+		assert.ErrorIs(t, err, operations.ErrUnknownRestoreIdentity)
 		assert.Equal(t, "0123456789", text.String(), "state must be untouched on rejection")
 	})
 
@@ -418,7 +428,8 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 			restoreActor: time.MaxLamport,
 			victimActor:  5,
 		})
-		assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
+		_, err := op.Execute(root, operations.OpSourceRemote, vv)
+		assert.ErrorIs(t, err, operations.ErrUnknownRestoreIdentity)
 		assert.Equal(t, "0123456789", text.String(), "state must be untouched on rejection")
 	})
 
@@ -429,7 +440,8 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 		f, e, err := text.CreateRange(4, 6)
 		assert.NoError(t, err)
 		del := operations.NewEdit(parent, f, e, "", nil, tick(1001))
-		assert.NoError(t, del.Execute(root, vv))
+		_, err = del.Execute(root, operations.OpSourceRemote, vv)
+		assert.NoError(t, err)
 		assert.Equal(t, "01236789", text.String())
 
 		// The span revives the seed insertion (restoreActor, lamport 1000),
@@ -437,7 +449,8 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 		op := operations.NewRestoreEdit(parent, nil, nil, tick(1002),
 			[]*crdt.RestoreSpan{{CreatedAt: tick(1000), Start: 4, End: 6, Content: "45"}},
 			crdt.RestoreModeRestore, nil)
-		assert.NoError(t, op.Execute(root, vv))
+		_, err = op.Execute(root, operations.OpSourceRemote, vv)
+		assert.NoError(t, err)
 		assert.Equal(t, "0123456789", text.String())
 	})
 }
@@ -463,12 +476,14 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 		f, e, err := text.CreateRange(0, 0)
 		assert.NoError(t, err)
 		ins := operations.NewEdit(textTicket, f, e, "0123456789", nil, seed)
-		assert.NoError(t, ins.Execute(root, nil))
+		_, err = ins.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 
 		f, e, err = text.CreateRange(0, 10)
 		assert.NoError(t, err)
 		del := operations.NewEdit(textTicket, f, e, "", nil, tick(3001))
-		assert.NoError(t, del.Execute(root, nil))
+		_, err = del.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 		assert.Equal(t, "", text.String())
 
 		n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
@@ -480,7 +495,8 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 	restore := func(root *crdt.Root, parent *time.Ticket, span *crdt.RestoreSpan, at *time.Ticket) {
 		op := operations.NewRestoreEdit(parent, nil, nil, at,
 			[]*crdt.RestoreSpan{span}, crdt.RestoreModeRestore, nil)
-		assert.NoError(t, op.Execute(root, nil))
+		_, err := op.Execute(root, operations.OpSourceRemote, nil)
+		assert.NoError(t, err)
 	}
 
 	left := &crdt.RestoreSpan{CreatedAt: seed, Start: 0, End: 5, Content: "01234"}
@@ -500,4 +516,70 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 		"replicas must converge regardless of restore arrival order")
 	assert.True(t, textA.RGATreeSplit().CheckWeight())
 	assert.True(t, textB.RGATreeSplit().CheckWeight())
+}
+
+// TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle ports
+// text_restore_convergence_test.ts's "reverses GC accounting exactly across
+// delete/undo/redo/undo" (found missing in the Task 21 parity re-audit).
+// unregisterGCPair (revive) must reverse registerGCPair (tombstone) bit for
+// bit, including the TimeTicketSize meta term, or docSize drifts across
+// undo/redo cycles -- distinct from TestTextRestoreDocSizeAccounting above,
+// which checks docSize.GC reaches zero after a physical purge; this checks
+// the tombstone/revive bookkeeping is exactly reversible with no purge
+// involved at all, across two full cycles.
+func TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle(t *testing.T) {
+	seed := tick(4000)
+	textTicket := tick(1)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
+	root := helper.TestRoot()
+	root.RegisterElement(text)
+
+	f, e, err := text.CreateRange(0, 0)
+	assert.NoError(t, err)
+	insertOp := operations.NewEdit(textTicket, f, e, "0123456789", nil, seed)
+	_, err = insertOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+
+	// Delete "45" -> tombstone -> registerGCPair.
+	f, e, err = text.CreateRange(4, 6)
+	assert.NoError(t, err)
+	deleteOp := operations.NewEdit(textTicket, f, e, "", nil, tick(4001))
+	_, err = deleteOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "01236789", text.String())
+	deleted := root.DocSize()
+	assert.NotEqual(t, resource.DataSize{}, deleted.GC, "delete registers GC")
+
+	span := []*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}
+
+	// Undo: revive -> unregisterGCPair.
+	restoreOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(4002),
+		span, crdt.RestoreModeRestore, nil)
+	_, err = restoreOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "0123456789", text.String())
+	revived := root.DocSize()
+	assert.Equal(t, resource.DataSize{}, revived.GC,
+		"revive must drain the tombstoned size out of GC, including the meta term")
+
+	// Redo: re-tombstone -> registerGCPair again. RestoreModeRetombstone
+	// swaps the role of the two span fields (Edit.Execute), so the span to
+	// retombstone is passed as restoreSpans here, mirroring how a real
+	// TreeEdit/Edit redo reverse is built from the undo's own span set.
+	retombstoneOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(4003),
+		span, crdt.RestoreModeRetombstone, nil)
+	_, err = retombstoneOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "01236789", text.String())
+	assert.Equal(t, deleted, root.DocSize(),
+		"redo must reproduce the tombstoned docSize exactly, including meta")
+
+	// Undo again: revive once more.
+	restoreOp2 := operations.NewRestoreEdit(textTicket, nil, nil, tick(4004),
+		span, crdt.RestoreModeRestore, nil)
+	_, err = restoreOp2.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "0123456789", text.String())
+	assert.Equal(t, revived, root.DocSize(),
+		"the revived docSize is bit-identical across cycles, including meta")
 }

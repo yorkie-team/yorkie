@@ -18,7 +18,6 @@ package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -79,33 +78,126 @@ func NewStyleRemove(
 	}
 }
 
-// Execute executes this operation on the given document(`root`).
-func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error {
+// NewStyleSetAndRemove creates a Style operation that both sets attributes
+// and removes others in the same call. NewStyle and NewStyleRemove each
+// zero out the field the other populates, so this constructor exists for
+// the shape a reverse can need: restoring some keys and removing others
+// that did not exist before, in a single op. Wire decoding must use this
+// whenever a decoded Style carries both fields non-empty, matching JS's
+// StyleOperation constructor, which always accepts both -- decoding the
+// two fields exclusively would silently drop whichever field lost.
+func NewStyleSetAndRemove(
+	parentCreatedAt *time.Ticket,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
+	attributes map[string]string,
+	attributesToRemove []string,
+	executedAt *time.Ticket,
+) *Style {
+	return &Style{
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         attributes,
+		attributesToRemove: attributesToRemove,
+		executedAt:         executedAt,
+	}
+}
+
+// Execute executes this operation on the given document(`root`). Unlike a
+// single call from the JSON package (which only ever populates one of
+// attributes or attributesToRemove), a reverse Style built by this method
+// can carry both at once -- see toReverseOperation -- so both branches run
+// independently here, mirroring style_operation.ts's execute (:125-169),
+// rather than the two being mutually exclusive.
+func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Text)
 	if !ok {
-		return ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
-	var pairs []crdt.GCPair
-	var diff resource.DataSize
-	var err error
+	reversePrevAttributes := make(map[string]string)
+	var reverseAttrsToRemove []string
+
+	// 01. Handle attributesToRemove (remove style attributes). RemoveStyle
+	// only reports keys that existed, so every entry restores a value.
 	if len(e.attributesToRemove) > 0 {
-		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
-	} else {
-		pairs, diff, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		pairs, diff, prevAttrs, err := obj.RemoveStyle(
+			e.from, e.to, e.attributesToRemove, e.executedAt, versionVector,
+		)
+		for _, pair := range pairs {
+			root.RegisterGCPair(pair)
+			root.AdjustDiffForGCPair(&diff, pair)
+		}
+		root.Acc(diff)
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+		for _, prevAttr := range prevAttrs {
+			reversePrevAttributes[prevAttr.Key] = prevAttr.Value
+		}
 	}
 
-	for _, pair := range pairs {
-		root.RegisterGCPair(pair)
-		root.AdjustDiffForGCPair(&diff, pair)
-	}
-	root.Acc(diff)
-	if err != nil {
-		return err
+	// 02. Handle attributes (set style attributes). A key that already held
+	// a value restores it; a key that did not exist is queued for removal
+	// instead of being set back to the empty string.
+	if len(e.attributes) > 0 {
+		pairs, diff, prevAttrs, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		for _, pair := range pairs {
+			root.RegisterGCPair(pair)
+			root.AdjustDiffForGCPair(&diff, pair)
+		}
+		root.Acc(diff)
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+		for _, prevAttr := range prevAttrs {
+			if prevAttr.Existed {
+				reversePrevAttributes[prevAttr.Key] = prevAttr.Value
+			} else {
+				reverseAttrsToRemove = append(reverseAttrsToRemove, prevAttr.Key)
+			}
+		}
 	}
 
-	return nil
+	// JS derives this operation's OpInfos from the change list text.setStyle
+	// and text.removeStyle return (style_operation.ts:205), which is empty
+	// only when the range covered no styleable node. Text.Style does not
+	// report that list, so this stays conservative: see
+	// ExecutionResult.Observable on why an operation that cannot decide
+	// reports true.
+	return ExecutionResult{
+		Reverse:    e.toReverseOperation(reversePrevAttributes, reverseAttrsToRemove),
+		Observable: true,
+	}, nil
+}
+
+// toReverseOperation builds the operation that undoes this Style from the
+// prior attribute state captured during Execute: reversePrevAttributes
+// restores keys that held a value immediately before this operation ran
+// (whichever branch reported them), and reverseAttrsToRemove removes keys
+// the set-attributes branch added where none existed before. Ports
+// style_operation.ts's reverse builder (:177-201).
+func (e *Style) toReverseOperation(
+	reversePrevAttributes map[string]string,
+	reverseAttrsToRemove []string,
+) Operation {
+	if len(reversePrevAttributes) == 0 && len(reverseAttrsToRemove) == 0 {
+		return nil
+	}
+
+	if len(reversePrevAttributes) > 0 && len(reverseAttrsToRemove) > 0 {
+		return NewStyleSetAndRemove(
+			e.parentCreatedAt, e.from, e.to, reversePrevAttributes, reverseAttrsToRemove, nil,
+		)
+	}
+
+	if len(reverseAttrsToRemove) > 0 {
+		return NewStyleRemove(e.parentCreatedAt, e.from, e.to, reverseAttrsToRemove, nil)
+	}
+
+	return NewStyle(e.parentCreatedAt, e.from, e.to, reversePrevAttributes, nil)
 }
 
 // From returns the start point of the editing range.
@@ -126,6 +218,11 @@ func (e *Style) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (e *Style) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (e *Style) SetExecutedAt(executedAt *time.Ticket) {
+	e.executedAt = executedAt
 }
 
 // ParentCreatedAt returns the creation time of the Text.

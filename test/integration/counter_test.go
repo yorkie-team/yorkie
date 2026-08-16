@@ -106,4 +106,27 @@ func TestCounter(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
+
+	t.Run("counter undo/redo test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+		defer func() { assert.NoError(t, c1.Detach(ctx, doc)) }()
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("age", int64(10))
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("age").Increase(5)
+			return nil
+		}))
+		assert.Equal(t, `{"age":15}`, doc.Marshal())
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"age":10}`, doc.Marshal())
+
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, `{"age":15}`, doc.Marshal())
+	})
 }

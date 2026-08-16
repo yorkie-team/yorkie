@@ -59,28 +59,71 @@ func NewIncreaseWithActor(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
-		return ErrNotApplicableDataType
+		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
 	value := o.value.(*crdt.Primitive)
+
+	// Compute the reverse before mutating the counter, mirroring the JS SDK
+	// (increase_operation.ts:95-130). A dedup counter (o.actor != "")
+	// produces no reverse: HyperLogLog cannot remove an actor once added.
+	var reverseOp Operation
+	if o.actor == "" {
+		negated, err := negatePrimitive(value)
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+		reverseOp = NewIncrease(o.parentCreatedAt, negated, o.executedAt)
+	}
+
 	if cnt.IsDedup() {
 		if o.actor == "" {
-			return ErrNotApplicableDataType
+			return ExecutionResult{}, ErrNotApplicableDataType
 		}
 		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
-			return err
+			return ExecutionResult{}, err
 		}
 	} else {
 		if _, err := cnt.Increase(value); err != nil {
-			return err
+			return ExecutionResult{}, err
 		}
 	}
 
-	return nil
+	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
+}
+
+// negatePrimitive returns a deep copy of the given primitive with its
+// numeric value negated. It mirrors the JS SDK's toReverseOperation
+// (increase_operation.ts:118-129), handling both Long (int64) and Integer
+// (int32) counter deltas.
+//
+// NOTE(hackerwins): the JS SDK never overflows here because Long deltas are
+// bigint (arbitrary precision) and Integer deltas are auto-promoted to Long
+// when they exceed the int32 range. Go's Counter has no wider type to
+// promote into, so negating math.MinInt32/math.MinInt64 wraps around to the
+// same value, consistent with the unchecked arithmetic Counter.Increase
+// already performs elsewhere in this package.
+func negatePrimitive(value *crdt.Primitive) (*crdt.Primitive, error) {
+	switch value.ValueType() {
+	case crdt.Long:
+		v, ok := value.Value().(int64)
+		if !ok {
+			return nil, ErrNotApplicableDataType
+		}
+		return crdt.NewPrimitive(-v, value.CreatedAt())
+	case crdt.Integer:
+		v, ok := value.Value().(int32)
+		if !ok {
+			return nil, ErrNotApplicableDataType
+		}
+		return crdt.NewPrimitive(-v, value.CreatedAt())
+	default:
+		return nil, ErrNotApplicableDataType
+	}
 }
 
 // Value return the value of this operation.
@@ -101,6 +144,11 @@ func (o *Increase) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (o *Increase) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
+// SetExecutedAt sets the given execution time to this operation.
+func (o *Increase) SetExecutedAt(executedAt *time.Ticket) {
+	o.executedAt = executedAt
 }
 
 // Actor returns the actor for dedup mode. Empty string means normal mode.

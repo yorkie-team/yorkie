@@ -133,7 +133,8 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 	to, err := tree.FindPos(7)
 	assert.NoError(t, err)
 	delOp := operations.NewTreeEdit(parent, from, to, nil, 0, helper.TimeT(ctx))
-	assert.NoError(t, delOp.Execute(root, nil))
+	_, err = delOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "<r></r>", tree.ToXML())
 
 	// Purge: the tombstones are physically removed, so restore cannot
@@ -149,11 +150,67 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 		parent, nil, nil, helper.TimeT(ctx),
 		spans, crdt.RestoreModeRestore, nil,
 	)
-	assert.NoError(t, restoreOp.Execute(root, helper.MaxVersionVector()))
+	_, err = restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(),
 		"the purged subtree is recreated under its original identity")
 	assert.Equal(t, 0, root.GarbageLen(), "restore leaves nothing registered for GC")
+}
+
+// TestTreeRestoreReverseFlipsDirection verifies that the reverse of an
+// identity-preserving Tree edit keeps both span sets and only flips the
+// direction. Undoing a restore must re-remove exactly the nodes it revived,
+// still under their original identities; copying their content into a fresh
+// insertion would defeat the whole point of the restore path.
+func TestTreeRestoreReverseFlipsDirection(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	root := helper.TestRoot()
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	root.RegisterElement(tree)
+	parent := tree.CreatedAt()
+
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+
+	from, err := tree.FindPos(0)
+	assert.NoError(t, err)
+	to, err := tree.FindPos(7)
+	assert.NoError(t, err)
+	delOp := operations.NewTreeEdit(parent, from, to, nil, 0, helper.TimeT(ctx))
+	_, err = delOp.Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r></r>", tree.ToXML())
+
+	restoreOp := operations.NewRestoreTreeEdit(
+		parent, from, to, helper.TimeT(ctx),
+		spans, crdt.RestoreModeRestore, nil,
+	)
+	reverseRes, err := restoreOp.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	reverse := reverseRes.Reverse
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+	reverseEdit, ok := reverse.(*operations.TreeEdit)
+	assert.True(t, ok, "the reverse of a restore is a TreeEdit")
+	assert.Equal(t, crdt.RestoreModeRetombstone, reverseEdit.RestoreMode())
+	assert.Equal(t, spans, reverseEdit.RestoreSpans(), "the span sets are carried through unchanged")
+	assert.Empty(t, reverseEdit.RetombstoneSpans())
+	assert.Empty(t, reverseEdit.Contents(), "a restore reverse never copy-reinserts")
+
+	// Executing it re-removes exactly what the restore revived, and its own
+	// reverse flips the direction back.
+	reverseEdit.SetExecutedAt(helper.TimeT(ctx))
+	redoRes, err := reverseEdit.Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	redo := redoRes.Reverse
+	assert.NoError(t, err)
+	assert.Equal(t, "<r></r>", tree.ToXML())
+
+	redoEdit, ok := redo.(*operations.TreeEdit)
+	assert.True(t, ok)
+	assert.Equal(t, crdt.RestoreModeRestore, redoEdit.RestoreMode())
+	assert.Equal(t, spans, redoEdit.RestoreSpans())
 }
 
 // TestTreeRestoreParentGoneSkip verifies the B1 rule: if a recreated node's
@@ -209,7 +266,8 @@ func TestTreeRestoreRejectsForgedIdentity(t *testing.T) {
 	// The acting change knows only restoreActor, never victimActor, so the
 	// forged identity is uncausal and must be rejected.
 	vv := helper.VersionVectorOf(map[time.ActorID]int64{restoreActor: time.MaxLamport})
-	assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
+	_, err := op.Execute(root, operations.OpSourceRemote, vv)
+	assert.ErrorIs(t, err, operations.ErrUnknownRestoreIdentity)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "state untouched on rejection")
 }
 
@@ -358,15 +416,17 @@ func TestTreeRestoreRecreateKeepsTreeEditable(t *testing.T) {
 	assert.NoError(t, err)
 	to, err := tree.FindPos(7)
 	assert.NoError(t, err)
-	assert.NoError(t, operations.NewTreeEdit(parent, from, to, nil, 0,
-		helper.TimeT(ctx)).Execute(root, nil))
+	_, err = operations.NewTreeEdit(parent, from, to, nil, 0,
+		helper.TimeT(ctx)).Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	n, err := root.GarbageCollect(helper.MaxVersionVector())
 	assert.NoError(t, err)
 	assert.Positive(t, n, "the deleted subtree should be purged")
 
-	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+	_, err = operations.NewRestoreTreeEdit(parent, nil, nil,
 		helper.TimeT(ctx), spans, crdt.RestoreModeRestore, nil).
-		Execute(root, helper.MaxVersionVector()))
+		Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 	assertLengthCacheSound(t, tree, "after recreate")
 
@@ -403,23 +463,26 @@ func TestTreeRestoreDocSizeSymmetry(t *testing.T) {
 	assert.NoError(t, err)
 	to, err := tree.FindPos(7)
 	assert.NoError(t, err)
-	assert.NoError(t, operations.NewTreeEdit(parent, from, to, nil, 0,
-		helper.TimeT(ctx)).Execute(root, nil))
+	_, err = operations.NewTreeEdit(parent, from, to, nil, 0,
+		helper.TimeT(ctx)).Execute(root, operations.OpSourceRemote, nil)
+	assert.NoError(t, err)
 	afterDelete := root.DocSize()
 	assert.NotEqual(t, baseline, afterDelete, "the delete must move size Live->GC")
 
 	// Undo: every byte comes back to Live and GC empties out.
-	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+	_, err = operations.NewRestoreTreeEdit(parent, nil, nil,
 		helper.TimeT(ctx), spans, crdt.RestoreModeRestore, nil).
-		Execute(root, helper.MaxVersionVector()))
+		Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 	assert.Equal(t, baseline, root.DocSize(), "restore returns docSize to baseline")
 
 	// Redo: RestoreModeRetombstone swaps the span sets, so the spans in the
 	// restore slot are the ones re-tombstoned.
-	assert.NoError(t, operations.NewRestoreTreeEdit(parent, nil, nil,
+	_, err = operations.NewRestoreTreeEdit(parent, nil, nil,
 		helper.TimeT(ctx), spans, crdt.RestoreModeRetombstone, nil).
-		Execute(root, helper.MaxVersionVector()))
+		Execute(root, operations.OpSourceRemote, helper.MaxVersionVector())
+	assert.NoError(t, err)
 	assert.Equal(t, "<r></r>", tree.ToXML())
 	assert.Equal(t, afterDelete, root.DocSize(), "redo returns docSize to the post-delete state")
 }
@@ -455,7 +518,7 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 	}
 
 	applyD := func(tree *crdt.Tree, ctx *change.Context, from, to *crdt.TreePos) {
-		_, _, err := tree.Edit(from, to, nil, 0, tD, issueTicket(ctx), vv)
+		_, _, _, err := tree.Edit(from, to, nil, 0, tD, issueTicket(ctx), vv, true)
 		assert.NoError(t, err)
 	}
 	applyU := func(tree *crdt.Tree, span *crdt.TreeRestoreSpan) {

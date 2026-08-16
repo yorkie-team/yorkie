@@ -22,12 +22,14 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -42,6 +44,11 @@ var (
 
 	// ErrSchemaValidationFailed is returned when the document schema validation failed.
 	ErrSchemaValidationFailed = errors.InvalidArgument("schema validation failed").WithCode("ErrSchemaValidationFailed")
+
+	// ErrRefusedDuringUpdate occurs when Undo or Redo is called from inside an
+	// updater. The updater already holds the document lock, so proceeding would
+	// deadlock rather than fail.
+	ErrRefusedDuringUpdate = errors.FailedPrecond("undo/redo is not allowed during an update")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -135,6 +142,17 @@ type Document struct {
 	// is used to protect `doc.presences`.
 	clonePresences *presence.Map
 
+	// history stores the undo/redo stacks of this document.
+	history *History
+
+	// updating reports whether an updater passed to Update is currently
+	// running. Update raises it only while holding d.mu and lowers it before
+	// releasing d.mu, so it is true exactly when some goroutine is inside an
+	// updater with d.mu held. Undo, Redo and ClearHistory read it without
+	// the lock and refuse rather than deadlock on the mutex that goroutine
+	// already holds.
+	updating atomic.Bool
+
 	// presenceDroppedOnce ensures the warn-log issued when a presenceless
 	// document drops a user-supplied presence change fires at most once
 	// per Document instance.
@@ -160,6 +178,7 @@ func New(key key.Key, opts ...Option) *Document {
 	return &Document{
 		doc:     NewInternalDocument(key),
 		options: options,
+		history: NewHistory(),
 		events:  make(chan DocEvent, 1),
 	}
 }
@@ -172,6 +191,17 @@ func (d *Document) Update(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	// NOTE(hackerwins): The flag is raised only after d.mu is acquired and,
+	// because deferred calls run last-in-first-out, lowered again before
+	// d.mu is released. It therefore means exactly "this goroutine is inside
+	// an updater and holds d.mu", which is what lets a re-entrant Undo,
+	// Redo or ClearHistory refuse instead of deadlocking. Raising it before
+	// the lock would let a second Update lower it on its way out while the
+	// first is still inside its updater, and the first's re-entrant Undo
+	// would then read false and block on the mutex it already holds.
+	d.updating.Store(true)
+	defer d.updating.Store(false)
+
 	if d.doc.status == StatusRemoved {
 		return ErrDocumentRemoved
 	}
@@ -180,6 +210,8 @@ func (d *Document) Update(
 		return err
 	}
 
+	actorID := d.ActorID().String()
+	presenceData := d.clonePresences.LoadOrStore(actorID, presence.NewData())
 	ctx := change.NewContext(
 		d.doc.changeID,
 		messageFromMsgAndArgs(msgAndArgs...),
@@ -188,7 +220,7 @@ func (d *Document) Update(
 
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
-		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), presence.NewData())),
+		presence.New(ctx, presenceData),
 	); err != nil {
 		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
 		// clonePresences to prevent the user from accessing the invalid state.
@@ -202,6 +234,7 @@ func (d *Document) Update(
 	// caller wires presence into a presenceless document by mistake.
 	if d.options.DisablePresence && ctx.HasPresenceChange() {
 		ctx.DropPresenceChange()
+		ctx.ClearReversePresence()
 		d.warnPresenceDroppedOnce()
 		if !ctx.HasOperations() {
 			return nil
@@ -232,8 +265,43 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
+		result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
+		if err != nil {
 			return err
+		}
+
+		// NOTE(hackerwins): An ArraySet replaces the element at this
+		// position with a freshly ticketed value. Any other stacked reverse
+		// operation that still references the replaced element's old
+		// createdAt must be rewritten to the new one, or it will target a
+		// tombstone the next time it runs (document.ts:744-752).
+		for _, op := range result.Executed {
+			if set, ok := op.(*operations.ArraySet); ok {
+				d.history.ReconcileCreatedAt(set.CreatedAt(), set.Value().CreatedAt())
+			}
+		}
+
+		var reverse []HistoryOperation
+		for _, op := range result.ReverseOps {
+			reverse = append(reverse, HistoryOperation{Op: op})
+		}
+		if values, absent := ctx.ReversePresence(); len(values) > 0 || len(absent) > 0 {
+			reverse = append(reverse, HistoryOperation{
+				Presence:           values,
+				PresenceAbsentKeys: absent,
+			})
+		}
+		if len(reverse) > 0 {
+			d.history.PushUndo(reverse)
+		}
+
+		// NOTE(hackerwins): A new local operation invalidates the redo stack,
+		// but only one that changed something observable: JS gates this on
+		// opInfos, not on the operations that ran (document.ts:768). An edit
+		// that neither inserted nor removed anything leaves the redo stack
+		// alone on both SDKs.
+		if result.Observable {
+			d.history.ClearRedo()
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
@@ -241,6 +309,279 @@ func (d *Document) Update(
 	}
 
 	return nil
+}
+
+// CanUndo reports whether there is a change to undo.
+func (d *Document) CanUndo() bool {
+	if d.updating.Load() {
+		return false
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.history.HasUndo()
+}
+
+// CanRedo reports whether there is a change to redo.
+func (d *Document) CanRedo() bool {
+	if d.updating.Load() {
+		return false
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.history.HasRedo()
+}
+
+// Undo reverses the last local change. It is a no-op when the undo stack is
+// empty.
+//
+// Known limitation, shared with the JS SDK: a Tree edit that splits (a
+// non-zero splitLevel) AND inserts or removes in the same call produces no
+// reverse operation, so it never reaches the undo stack. Undo then reverses
+// the change before it while leaving that edit applied. See
+// docs/tasks/active/20260816-tree-split-edit-loses-undo-entry-todo.md.
+func (d *Document) Undo() error {
+	return d.executeUndoRedo(true)
+}
+
+// Redo replays the last undone change. It is a no-op when the redo stack is
+// empty.
+func (d *Document) Redo() error {
+	return d.executeUndoRedo(false)
+}
+
+// ClearHistory flushes both stacks. Changes made before this call are no
+// longer reachable via undo.
+//
+// It refuses with ErrRefusedDuringUpdate when called from inside an updater,
+// exactly as Undo and Redo do: the updater already holds d.mu, so taking it
+// again would deadlock. The guard cannot tell "this goroutine holds d.mu"
+// apart from "some goroutine holds d.mu", so it also refuses a ClearHistory
+// from a different goroutine that merely races a concurrent Update -- that
+// call would otherwise just block on d.mu.Lock() and succeed once Update
+// releases it. This over-triggering is not new: Undo, Redo, CanUndo and
+// CanRedo already have the same property, so this extends it rather than
+// introducing it. JS's clearHistory (document.ts:1489) needs no such guard
+// because it has no mutex to deadlock on; the refusal is what the same call
+// costs to stay safe from any goroutine.
+func (d *Document) ClearHistory() error {
+	if d.updating.Load() {
+		return ErrRefusedDuringUpdate
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.history.ClearUndo()
+	d.history.ClearRedo()
+	return nil
+}
+
+// executeUndoRedo pops an entry off the undo or redo stack and replays it
+// against the document, pushing the resulting reverse operations onto the
+// opposite stack. It is the port of the JS SDK's executeUndoRedo
+// (document.ts:2049-2165).
+func (d *Document) executeUndoRedo(isUndo bool) error {
+	if d.updating.Load() {
+		return ErrRefusedDuringUpdate
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	var entries []HistoryOperation
+	if isUndo {
+		entries = d.history.PopUndo()
+	} else {
+		entries = d.history.PopRedo()
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	if err := d.ensureClone(); err != nil {
+		return err
+	}
+
+	actorID := d.ActorID().String()
+	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)
+	for _, entry := range entries {
+		if entry.Op == nil {
+			// Presence entries carry the values undoing (or redoing) the
+			// original change should restore. Apply them WithHistory so the
+			// resulting entry is itself undoable -- otherwise undoing a
+			// presence change would leave nothing on the redo stack.
+			data := d.clonePresences.Load(actorID)
+			if data == nil {
+				data = presence.NewData()
+			}
+			p := presence.New(ctx, data.DeepCopy())
+			for key, value := range entry.Presence {
+				p.Set(key, value, presence.WithHistory())
+			}
+			// A key the reversed change introduced had no value to restore,
+			// so it is removed rather than set to the empty string. JS gets
+			// there by assigning undefined and letting its deep copy drop the
+			// key (context.ts:212-219, presence.ts:35-47).
+			for _, key := range entry.PresenceAbsentKeys {
+				p.Delete(key, presence.WithHistory())
+			}
+			continue
+		}
+
+		ticket := ctx.IssueTimeTicket()
+		entry.Op.SetExecutedAt(ticket)
+
+		// NOTE(hackerwins): Both an Add reverse (acting as UndoRemove,
+		// restoring a removed array element) and an ArraySet reverse
+		// (restoring a value it replaced) give the restored value a fresh
+		// createdAt here rather than keeping its original one, or the
+		// restored (live) element and its own tombstone would collide under
+		// the same identity in the array's internal index -- letting a
+		// later GC pass purge the live element by mistake. Any other
+		// stacked operation that still references the old createdAt (as its
+		// own createdAt, or as a prevCreatedAt) is updated to the new one so
+		// it doesn't end up targeting a stale identity. A TreeEdit reverse
+		// that re-inserts a copy of removed nodes has the same problem in the
+		// tree's own id space and is re-identified the same way, below
+		// (document.ts:2088-2110).
+		if addOp, ok := entry.Op.(*operations.Add); ok {
+			prev := addOp.Value().CreatedAt()
+			addOp.Value().SetCreatedAt(ticket)
+			d.history.ReconcileCreatedAt(prev, ticket)
+		} else if setOp, ok := entry.Op.(*operations.ArraySet); ok {
+			prev := setOp.CreatedAt()
+			setOp.Value().SetCreatedAt(ticket)
+			d.history.ReconcileCreatedAt(prev, ticket)
+		} else if treeOp, ok := entry.Op.(*operations.TreeEdit); ok {
+			// A reverse that re-inserts a copy of removed nodes carries their
+			// original ids; inserting them again would leave two nodes under
+			// one id. Restore-mode reverses revive by identity and keep theirs.
+			if err := treeOp.ReissueContentIDs(ctx.IssueTimeTicket); err != nil {
+				return err
+			}
+
+			// A split reverse -- the undo of a merge, or the redo of a split --
+			// mints one element per split level, and each needs a ticket the
+			// loop above did not issue: it issues exactly one per operation.
+			// Left without them, TreeEdit.Execute falls back to reconstructing
+			// them by counting delimiters up from its own executedAt, which
+			// runs straight over the ticket the NEXT operation in this same
+			// entry was issued -- landing two LIVE elements under one
+			// TreeNodeID, on every replica and on the server, since the change
+			// carries both operations. Issuing them here keeps every identity
+			// in the change distinct, and recording them on the operation is
+			// what stops any other replica reconstructing them either. That is
+			// the reason splitTickets exists; see
+			// docs/design/tree-content-identity.md.
+			//
+			// One per level is an upper bound, not an exact count: Tree.split
+			// stops early when it reaches the root, and SplitElement takes
+			// exactly one ticket per level it does run. Issuing the bound is
+			// deliberate -- a ticket nobody consumes only advances the
+			// delimiter, while one short would silently reopen the fallback.
+			if level := treeOp.SplitLevel(); level > 0 {
+				tickets := make([]*time.Ticket, 0, level)
+				for range level {
+					tickets = append(tickets, ctx.IssueTimeTicket())
+				}
+				treeOp.SetSplitTickets(tickets)
+			}
+		}
+
+		ctx.Push(entry.Op)
+	}
+
+	c := ctx.ToChange()
+	if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceUndoRedo); err != nil {
+		return err
+	}
+	result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceUndoRedo)
+	if err != nil {
+		return err
+	}
+
+	var reverse []HistoryOperation
+	for _, op := range result.ReverseOps {
+		reverse = append(reverse, HistoryOperation{Op: op})
+	}
+	if values, absent := ctx.ReversePresence(); len(values) > 0 || len(absent) > 0 {
+		reverse = append(reverse, HistoryOperation{
+			Presence:           values,
+			PresenceAbsentKeys: absent,
+		})
+	}
+	if len(reverse) > 0 {
+		if isUndo {
+			d.history.PushRedo(reverse)
+		} else {
+			d.history.PushUndo(reverse)
+		}
+	}
+
+	// NOTE(chacha912): An undo or redo that changed nothing observable and
+	// carries no presence change is not propagated. JS gates this on opInfos
+	// rather than on the operations that ran (document.ts:2145), so reversing
+	// an edit that inserted and removed nothing costs neither a clientSeq nor
+	// a change-log row on either SDK.
+	if !result.Observable && c.PresenceChange() == nil {
+		return nil
+	}
+
+	d.doc.localChanges = append(d.doc.localChanges, c)
+	d.doc.changeID = ctx.NextID()
+	return nil
+}
+
+// UndoStackLenForTest returns the undo stack depth for testing.
+func (d *Document) UndoStackLenForTest() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.history.undoStack)
+}
+
+// UndoStackTopForTest returns the operations of the most recent entry of the
+// undo stack without popping it, for test inspection of reconciliation.
+func (d *Document) UndoStackTopForTest() []HistoryOperation {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.history.undoStack) == 0 {
+		return nil
+	}
+	return d.history.undoStack[len(d.history.undoStack)-1]
+}
+
+// RedoStackTopForTest returns the operations of the most recent entry of the
+// redo stack without popping it, for test inspection of the reverse
+// operation an upcoming Redo would execute.
+func (d *Document) RedoStackTopForTest() []HistoryOperation {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.history.redoStack) == 0 {
+		return nil
+	}
+	return d.history.redoStack[len(d.history.redoStack)-1]
+}
+
+// PushUndoForTest pushes a fabricated entry directly onto the undo stack,
+// for tests that need Undo to execute a specific reverse operation the
+// normal forward-edit path would not produce on its own -- e.g. a
+// copy-reinsert Tree reverse, which Go can only reach today via a merge, a
+// split, or a wire payload from an older SDK, none of which isolate the
+// property under test the way JS's tests do by monkey-patching CRDTTree.edit.
+// A subsequent Undo() call executes ops for real, through the same
+// executeUndoRedo path (ReissueContentIDs included) as any other undo.
+//
+// Unlike its ForTest neighbours above, which only read the stacks, this one
+// mutates them -- deliberately: pushing is the only way to get a fabricated
+// reverse in front of a real Undo() at all. Calling it does not pop or
+// replace whatever the document's own forward edits already pushed, so a
+// caller that wants its fabricated entry to be the *only* one Undo() can
+// reach needs to account for what else is already on the stack.
+func (d *Document) PushUndoForTest(ops []HistoryOperation) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.history.PushUndo(ops)
 }
 
 // ApplyChangePack applies the given change pack into this document.
@@ -276,6 +617,21 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		if err := d.applyChanges(d.doc.localChanges); err != nil {
 			return err
 		}
+
+		// The changes just replayed are this client's own, not yet
+		// acknowledged, local changes -- reconciling a pending undo/redo
+		// entry against them (as the applyChanges call above just did) is
+		// meaningless, since they are the same edits that pushed those
+		// entries in the first place, not a genuinely new remote edit.
+		// Clearing here, matching JS's applySnapshot (document.ts:1467-1468,
+		// which replays then clears on the very next line), discards any
+		// such self-reconciliation along with the rest of the stacks.
+		//
+		// d.mu is already held by this method (see the top of
+		// ApplyChangePack), so this calls History directly rather than
+		// through ClearHistory, which locks d.mu itself and would deadlock.
+		d.history.ClearUndo()
+		d.history.ClearRedo()
 	}
 
 	// 03. Update the checkpoint.
@@ -299,15 +655,60 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		return err
 	}
 
+	var events []DocEvent
 	for _, c := range changes {
-		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
+		if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
 			return err
 		}
-	}
 
-	events, err := d.doc.ApplyChanges(changes...)
-	if err != nil {
-		return err
+		// Applied and reconciled one change at a time, not batched over the
+		// whole pack: NormalizePos sums live length over physical
+		// predecessors, so if a later change in this pack tombstones a node
+		// that precedes an earlier change's own floor node, computing both
+		// changes' positions only after the whole pack executed would give
+		// different (smaller) offsets than computing each right after its
+		// own change, as JS does (change loop at document.ts:1517, calling
+		// into the per-change reconcile at :1552-1566).
+		changeEvents, executed, err := d.doc.ApplyChanges(c)
+		if err != nil {
+			return err
+		}
+		events = append(events, changeEvents...)
+
+		// A remote change may have moved the text or tree a pending
+		// undo/redo Edit or TreeEdit refers to; reconcile every stacked
+		// entry against each executed one.
+		//
+		// With both stacks empty there is no stacked entry to move, so every
+		// Reconcile* call below iterates nothing and the positions computed
+		// for it are discarded -- History.IsEmpty is exactly the condition
+		// under which that holds. Skipping is what makes the difference,
+		// because computing them is not free: Text.NormalizePos sums the live
+		// length of every physical predecessor, so the loop costs a walk of
+		// the whole split chain per executed Edit and the pack as a whole
+		// goes quadratic. That is paid on every client that never calls Undo
+		// and on every freshly attached document.
+		//
+		// JS runs the same loop unguarded (document.ts:1552-1566) over the
+		// same linear normalizePos (rga_tree_split.ts:1201-1221), so this is
+		// a cost-only divergence, not a behavioral one: with anything on
+		// either stack the guard is false and every reconcile that JS
+		// performs still happens here.
+		if !d.history.IsEmpty() {
+			for _, op := range executed {
+				switch op := op.(type) {
+				case *operations.Edit:
+					from, to, ok := op.NormalizePos(d.doc.root)
+					if !ok {
+						continue
+					}
+					d.history.ReconcileTextEdit(op.ParentCreatedAt(), from, to, op.ContentLen())
+				case *operations.TreeEdit:
+					from, to := op.NormalizePos()
+					d.history.ReconcileTreeEdit(op.ParentCreatedAt(), from, to, op.GetContentSize())
+				}
+			}
+		}
 	}
 
 	for _, e := range events {
