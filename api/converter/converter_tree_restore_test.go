@@ -334,6 +334,39 @@ func TestTreeRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
 	assert.Len(t, ops, 1)
 }
 
+// TestTreeEditRejectsNegativeSplitLevel guards a field that only became live
+// with the split-aware reverse operations. A split level counts the element
+// boundaries an edit creates; a negative one used to be inert, since the split
+// loop does nothing for a non-positive level and nothing else read it. It now
+// also sizes the boundary-deletion reverse (2*splitLevel), where a negative
+// would build a reverse whose range runs backwards. Only a malformed or
+// hostile peer sends one, so it is rejected at decode rather than reasoned
+// about downstream.
+func TestTreeEditRejectsNegativeSplitLevel(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	op := operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+
+	pbOps[0].GetTreeEdit().SplitLevel = -1
+	_, err = converter.FromOperations(pbOps)
+	assert.ErrorIs(t, err, converter.ErrInvalidSplitLevel)
+
+	// Zero and positive levels still decode.
+	for _, level := range []int32{0, 1, 2} {
+		pbOps[0].GetTreeEdit().SplitLevel = level
+		ops, err := converter.FromOperations(pbOps)
+		assert.NoError(t, err, "split level %d", level)
+		assert.Len(t, ops, 1)
+		assert.Equal(t, int(level), ops[0].(*operations.TreeEdit).SplitLevel())
+	}
+}
+
 // TestRestoreSpanRejectsModeWithoutSpans is the Text counterpart: the same
 // mismatch reaches Edit.Execute, which also keys off span presence.
 func TestRestoreSpanRejectsModeWithoutSpans(t *testing.T) {

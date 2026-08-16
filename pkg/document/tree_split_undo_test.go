@@ -114,7 +114,71 @@ func newNestedSplitDoc(t *testing.T, hexActor string) *document.Document {
 	return doc
 }
 
+// newThreeBlockDoc returns a document holding
+// <r><d><p>ab</p></d><d><p>cd</p></d><d><p>ef</p></d></r>, the shape two
+// successive L2 merges need — and so the shape that puts two splitLevel 2
+// reverses into a single undo entry.
+func newThreeBlockDoc(t *testing.T) *document.Document {
+	t.Helper()
+
+	doc := document.New("doc")
+	var blocks []json.TreeNode
+	for _, value := range []string{"ab", "cd", "ef"} {
+		blocks = append(blocks, json.TreeNode{
+			Type: "d",
+			Children: []json.TreeNode{{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: textNodeType, Value: value}},
+			}},
+		})
+	}
+
+	assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetNewTree("t", json.TreeNode{Type: "r", Children: blocks})
+		return nil
+	}))
+
+	return doc
+}
+
 func TestTreeSplitUndo(t *testing.T) {
+	t.Run("a multi op undo entry gives each split reverse its own tickets test", func(t *testing.T) {
+		// executeUndoRedo issues ONE ticket per operation, but a splitLevel N
+		// edit consumes N more for the elements it mints. Left to reconstruct
+		// those from its own executedAt, a level 2 split reverse walks two
+		// delimiters past the one it was issued -- straight over the ticket the
+		// NEXT operation in the same undo entry was issued, and over the
+		// delimiter that one goes on to simulate from. Both replicas and the
+		// server replay the resulting change, so the two elements that land
+		// under one TreeNodeID are live everywhere, which is what makes a
+		// document permanently unloadable.
+		//
+		// Two L2 merges in ONE change is the smallest shape that reaches it:
+		// one undo entry, two splitLevel 2 reverses. A single-op undo entry
+		// cannot collide with anything, which is why every other test here
+		// misses this.
+		doc := newThreeBlockDoc(t)
+		assert.Equal(t,
+			"<r><d><p>ab</p></d><d><p>cd</p></d><d><p>ef</p></d></r>",
+			treeXML(t, doc))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetTree("t").Edit(4, 8, nil, 0)
+			r.GetTree("t").Edit(6, 10, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<r><d><p>abcdef</p></d></r>", treeXML(t, doc))
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t,
+			"<r><d><p>ab</p></d><d><p>cd</p></d><d><p>ef</p></d></r>",
+			treeXML(t, doc))
+
+		ids := treeNodeIDs(t, doc.RootObject())
+		assert.Empty(t, duplicatedTreeIDs(ids),
+			"each element a split reverse mints needs its own id, got %v", ids)
+	})
+
 	t.Run("l1 split undo redo undo cycle test", func(t *testing.T) {
 		// The full cycle the design doc names: split -> undo (boundary
 		// deletion) -> redo (re-split) -> undo (boundary deletion again).
@@ -222,18 +286,26 @@ func TestTreeSplitUndo(t *testing.T) {
 		assertNoDuplicateTreeIDs(t, doc, "after the second l2 split undo")
 	})
 
-	t.Run("split undo applies on a replica test", func(t *testing.T) {
+	t.Run("split undo applies on a replica across the wire test", func(t *testing.T) {
 		// The boundary deletion and the re-split are both pushed to peers as
-		// ordinary changes. The re-split in particular mints element nodes on
-		// every replica from tickets it does not carry on the wire, so the
-		// replica has to reconstruct exactly the ids the originator issued.
+		// ordinary changes, so both have to survive protobuf encode/decode --
+		// and this is the only test where a splitLevel > 0 operation crosses
+		// it, since redoSplitLevel is local-only state that does NOT and the
+		// re-split has to work without it. The pack goes through
+		// ToChangePack/FromChangePack rather than being handed over in memory,
+		// or the "replica" would just re-execute the originator's own operation
+		// pointers and never exercise decode at all.
 		doc := newSplitDoc(t, "000000000000000000000001")
 		splitTree(t, doc, 3, 1)
 		assert.NoError(t, doc.Undo())
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", treeXML(t, doc))
 
-		pack := doc.CreateChangePack()
+		pbPack, err := converter.ToChangePack(doc.CreateChangePack())
+		assert.NoError(t, err)
+		pack, err := converter.FromChangePack(pbPack)
+		assert.NoError(t, err)
+
 		replica := document.New("doc")
 		actorB, err := time.ActorIDFromHex("000000000000000000000002")
 		assert.NoError(t, err)
@@ -244,6 +316,37 @@ func TestTreeSplitUndo(t *testing.T) {
 		assert.Equal(t, treeXML(t, doc), treeXML(t, replica))
 		assert.Equal(t, liveTreeNodeIDs(t, doc), liveTreeNodeIDs(t, replica),
 			"the replica must give the re-split element the id the redo issued")
+		assertNoDuplicateTreeIDs(t, replica, "on the replica")
+	})
+
+	t.Run("a multi op undo entry applies on a replica across the wire test", func(t *testing.T) {
+		// The identity collision two split reverses in one entry used to
+		// produce was never local: the change carries both operations, so every
+		// replica and the server replayed it. Pinned here across a real decode,
+		// where the split tickets have to arrive on the wire rather than being
+		// reconstructed.
+		doc := newThreeBlockDoc(t)
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetTree("t").Edit(4, 8, nil, 0)
+			r.GetTree("t").Edit(6, 10, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+
+		pbPack, err := converter.ToChangePack(doc.CreateChangePack())
+		assert.NoError(t, err)
+		pack, err := converter.FromChangePack(pbPack)
+		assert.NoError(t, err)
+
+		replica := document.New("doc")
+		actorB, err := time.ActorIDFromHex("000000000000000000000002")
+		assert.NoError(t, err)
+		replica.SetActor(actorB)
+		pack.VersionVector.Set(replica.ActorID(), replica.VersionVector().VersionOf(replica.ActorID()))
+		assert.NoError(t, replica.ApplyChangePack(pack))
+
+		assert.Equal(t, treeXML(t, doc), treeXML(t, replica))
+		assert.Equal(t, liveTreeNodeIDs(t, doc), liveTreeNodeIDs(t, replica))
 		assertNoDuplicateTreeIDs(t, replica, "on the replica")
 	})
 

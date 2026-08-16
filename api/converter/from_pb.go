@@ -786,6 +786,16 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		), nil
 	}
 
+	// A split level counts the element boundaries the edit creates, so a
+	// negative one is meaningless. It used to be inert -- nothing read it
+	// beyond the split loop, which does nothing for a non-positive level --
+	// but it now also sizes the boundary-deletion reverse
+	// (operations.TreeEdit.toSplitReverseOperation), where a negative would
+	// build an inverted range. Rejected at the boundary instead.
+	if pbTreeEdit.SplitLevel < 0 {
+		return nil, ErrInvalidSplitLevel
+	}
+
 	edit := operations.NewTreeEdit(
 		parentCreatedAt,
 		from,

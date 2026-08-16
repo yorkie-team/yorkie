@@ -781,12 +781,24 @@ func (e *TreeEdit) ReissueContentIDs(issueTimeTicket func() *time.Ticket) error 
 		return nil
 	}
 
-	// The tickets taken here start at executedAt.Delimiter() + 1 and run one
-	// per node, while Execute simulates the tickets an element split consumes
-	// starting at executedAt.Delimiter() + len(contents) + 1. The two ranges
-	// overlap as soon as content has descendants, so this only holds while no
-	// content-bearing reverse splits — which is every reverse
-	// toReverseOperation builds, all of them splitLevel 0.
+	// Refused rather than handled, because the two ticket ranges would
+	// overlap: the ones taken here start at executedAt.Delimiter() + 1 and run
+	// one per node, while the tickets an element split consumes are counted
+	// from executedAt.Delimiter() + len(contents) + 1 whenever the operation
+	// does not carry its own splitTickets. Content with descendants pushes the
+	// first range into the second.
+	//
+	// Unreachable through the reverses built today, but not because none of
+	// them split -- toReverseOperation does build splitLevel > 0 reverses (the
+	// undo of a merge, and the redo of a split's boundary deletion). It is
+	// because none of them carries content: a split creates boundaries rather
+	// than inserting nodes, so those reverses return at the check above before
+	// reaching this one. The combination this refuses is an edit that both
+	// carries content and splits, which no reverse builder produces.
+	//
+	// executeUndoRedo issues a split reverse's tickets from the undo change's
+	// own context and records them with SetSplitTickets, so those reverses do
+	// not depend on the delimiter counting described above at all.
 	if e.splitLevel != 0 {
 		return ErrCannotReissueSplittingEdit
 	}

@@ -418,6 +418,33 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 			if err := treeOp.ReissueContentIDs(ctx.IssueTimeTicket); err != nil {
 				return err
 			}
+
+			// A split reverse -- the undo of a merge, or the redo of a split --
+			// mints one element per split level, and each needs a ticket the
+			// loop above did not issue: it issues exactly one per operation.
+			// Left without them, TreeEdit.Execute falls back to reconstructing
+			// them by counting delimiters up from its own executedAt, which
+			// runs straight over the ticket the NEXT operation in this same
+			// entry was issued -- landing two LIVE elements under one
+			// TreeNodeID, on every replica and on the server, since the change
+			// carries both operations. Issuing them here keeps every identity
+			// in the change distinct, and recording them on the operation is
+			// what stops any other replica reconstructing them either. That is
+			// the reason splitTickets exists; see
+			// docs/design/tree-content-identity.md.
+			//
+			// One per level is an upper bound, not an exact count: Tree.split
+			// stops early when it reaches the root, and SplitElement takes
+			// exactly one ticket per level it does run. Issuing the bound is
+			// deliberate -- a ticket nobody consumes only advances the
+			// delimiter, while one short would silently reopen the fallback.
+			if level := treeOp.SplitLevel(); level > 0 {
+				tickets := make([]*time.Ticket, 0, level)
+				for range level {
+					tickets = append(tickets, ctx.IssueTimeTicket())
+				}
+				treeOp.SetSplitTickets(tickets)
+			}
 		}
 
 		ctx.Push(entry.Op)

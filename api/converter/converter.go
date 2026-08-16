@@ -54,4 +54,9 @@ var (
 	// a nil entry, a negative or inverted Start/End offset, or a range
 	// whose length doesn't match its Content.
 	ErrInvalidRestoreSpan = errors.InvalidArgument("invalid restore span").WithCode("ErrInvalidRestoreSpan")
+
+	// ErrInvalidSplitLevel is returned when a TreeEdit's split level is
+	// negative. A split level counts element boundaries to create, so it has
+	// no meaning below zero.
+	ErrInvalidSplitLevel = errors.InvalidArgument("invalid split level").WithCode("ErrInvalidSplitLevel")
 )
