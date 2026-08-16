@@ -81,6 +81,17 @@ func TestTreeEditReconcileOperationCases(t *testing.T) {
 		assertRange(t, e, 10, 20)
 	})
 
+	t.Run("guard: an undo op with no captured range does not panic", func(t *testing.T) {
+		// The zero-value case: an undo/redo entry whose fromIdx/toIdx were
+		// never captured (e.g. NormalizePos degraded to (0, 0) upstream, see
+		// its own doc comment). fromIdx/toIdx must stay nil, not get
+		// dereferenced.
+		e := &TreeEdit{isUndoOp: true}
+		e.ReconcileOperation(0, 100, 5)
+		assert.Nil(t, e.fromIdx)
+		assert.Nil(t, e.toIdx)
+	})
+
 	t.Run("case 1: remote edit left of the undo range shifts it", func(t *testing.T) {
 		// [--remote--]  [--undo--]
 		e := newUndoTreeEdit(10, 20)
