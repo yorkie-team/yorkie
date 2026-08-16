@@ -833,6 +833,24 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		return nil, err
 	}
 
+	// A TreeStyle operation's wire form always carries both Attributes and
+	// AttributesToRemove (see toTreeStyle), and JS's TreeStyleOperation
+	// constructor always accepts both -- so decoding whichever field is
+	// non-empty is not exclusive. A reverse TreeStyle built for undo/redo
+	// can populate both at once (restore some keys, remove others that did
+	// not exist before), and decoding only one would silently drop the
+	// other.
+	if len(pbTreeStyle.Attributes) > 0 && len(pbTreeStyle.AttributesToRemove) > 0 {
+		return operations.NewTreeStyleSetAndRemove(
+			parentCreatedAt,
+			from,
+			to,
+			pbTreeStyle.Attributes,
+			pbTreeStyle.AttributesToRemove,
+			executedAt,
+		), nil
+	}
+
 	if len(pbTreeStyle.AttributesToRemove) > 0 {
 		return operations.NewTreeStyleRemove(
 			parentCreatedAt,

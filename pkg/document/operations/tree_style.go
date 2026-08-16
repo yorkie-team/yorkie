@@ -79,7 +79,46 @@ func NewTreeStyleRemove(
 	}
 }
 
-// Execute executes this operation on the given `CRDTRoot`.
+// NewTreeStyleSetAndRemove creates a TreeStyle operation that both sets
+// attributes and removes others in the same call. NewTreeStyle and
+// NewTreeStyleRemove each zero out the field the other populates, so this
+// constructor exists for the shape a reverse can need: restoring some keys
+// and removing others that did not exist before, in a single op. Wire
+// decoding must use this whenever a decoded TreeStyle carries both fields
+// non-empty, matching JS's TreeStyleOperation constructor, which always
+// accepts both -- decoding the two fields exclusively would silently drop
+// whichever field lost.
+func NewTreeStyleSetAndRemove(
+	parentCreatedAt *time.Ticket,
+	from *crdt.TreePos,
+	to *crdt.TreePos,
+	attributes map[string]string,
+	attributesToRemove []string,
+	executedAt *time.Ticket,
+) *TreeStyle {
+	return &TreeStyle{
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         attributes,
+		attributesToRemove: attributesToRemove,
+		executedAt:         executedAt,
+	}
+}
+
+// Execute executes this operation on the given document(`root`). Ports
+// tree_style_operation.ts's execute (:127-158) exactly, including its
+// if/else shape: unlike Style.Execute (the Text twin), which runs its
+// attributes and attributesToRemove branches independently, TreeStyle
+// only ever runs one branch per call, attributes taking priority. A
+// forward call from the JSON package is always single-branch already (see
+// json/tree.go's Tree.Style and Tree.RemoveStyle), so this only matters
+// when Execute runs a combined reverse (built by toReverseOperation) that
+// carries both fields -- and there, matching JS, the attributesToRemove
+// half is not applied. This is a known JS defect (PR #1221 copied Text's
+// combined-reverse constructor without also copying Text's independent-if
+// execute shape from PR #1174), preserved here rather than fixed --
+// see docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
 func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (Operation, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Tree)
@@ -87,13 +126,35 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 		return nil, ErrNotApplicableDataType
 	}
 
+	reversePrevAttributes := make(map[string]string)
+	var reverseAttrsToRemove []string
+
 	var pairs []crdt.GCPair
 	var diff resource.DataSize
 	var err error
 	if len(e.attributes) > 0 {
-		pairs, diff, _, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		// A key that already held a value restores it; a key that did not
+		// exist is queued for removal instead of being set back to the
+		// empty string.
+		var prevAttrs []crdt.PrevAttr
+		pairs, diff, prevAttrs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		for _, prevAttr := range prevAttrs {
+			if prevAttr.Existed {
+				reversePrevAttributes[prevAttr.Key] = prevAttr.Value
+			} else {
+				reverseAttrsToRemove = append(reverseAttrsToRemove, prevAttr.Key)
+			}
+		}
 	} else {
-		pairs, diff, _, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
+		// RemoveStyle only reports keys that existed, so every entry
+		// restores a value.
+		var prevAttrs []crdt.PrevAttr
+		pairs, diff, prevAttrs, err = obj.RemoveStyle(
+			e.from, e.to, e.attributesToRemove, e.executedAt, versionVector,
+		)
+		for _, prevAttr := range prevAttrs {
+			reversePrevAttributes[prevAttr.Key] = prevAttr.Value
+		}
 	}
 
 	for _, pair := range pairs {
@@ -105,7 +166,34 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 		return nil, err
 	}
 
-	return nil, nil
+	return e.toReverseOperation(reversePrevAttributes, reverseAttrsToRemove), nil
+}
+
+// toReverseOperation builds the operation that undoes this TreeStyle from
+// the prior attribute state captured during Execute: reversePrevAttributes
+// restores keys that held a value immediately before this operation ran
+// (whichever branch reported them), and reverseAttrsToRemove removes keys
+// the set-attributes branch added where none existed before. Ports
+// tree_style_operation.ts's reverse builder (:166-193).
+func (e *TreeStyle) toReverseOperation(
+	reversePrevAttributes map[string]string,
+	reverseAttrsToRemove []string,
+) Operation {
+	if len(reversePrevAttributes) == 0 && len(reverseAttrsToRemove) == 0 {
+		return nil
+	}
+
+	if len(reversePrevAttributes) > 0 && len(reverseAttrsToRemove) > 0 {
+		return NewTreeStyleSetAndRemove(
+			e.parentCreatedAt, e.from, e.to, reversePrevAttributes, reverseAttrsToRemove, nil,
+		)
+	}
+
+	if len(reverseAttrsToRemove) > 0 {
+		return NewTreeStyleRemove(e.parentCreatedAt, e.from, e.to, reverseAttrsToRemove, nil)
+	}
+
+	return NewTreeStyle(e.parentCreatedAt, e.from, e.to, reversePrevAttributes, nil)
 }
 
 // FromPos returns the start point of the editing range.
