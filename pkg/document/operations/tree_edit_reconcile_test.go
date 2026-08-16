@@ -282,3 +282,64 @@ func TestTreeEditReconcileOperationRealistic(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>01XX23456789</p></r>", tree.ToXML())
 }
+
+// TestTreeEditNormalizePosForwardExecution exercises NormalizePos on a
+// genuinely executed FORWARD TreeEdit -- neither an undo/redo entry (whose
+// fromIdx/toIdx TestTreeEditReconcileOperationCases already pins as
+// literals) nor a hand-built reverse (whose preFromIdx
+// TestTreeEditReconcileOperationRealistic passes in directly). This is the
+// applyChanges reconciliation loop's OTHER input: for every op in a change's
+// executed list, NormalizePos reports the range that op's own execution just
+// affected, so OTHER stacked entries can be reconciled against it (see the
+// case *operations.TreeEdit branch in Document.applyChanges).
+//
+// Both cases below start from a FRESH, unsplit text node, matching the
+// scenario found in review: a position interior to a node that
+// FindTreeNodesWithSplitText has not yet split. lastFromIdx/lastToIdx must
+// read as the visible index the position actually names, not the coarser
+// value a non-splitting resolver (Tree.ToTreeNodes, which the prior
+// implementation used) collapses an interior position to -- that resolver
+// documents itself as returning "the node that CONTAINS the position", which
+// for an unsplit 10-character node is the same node regardless of where
+// inside it the position sits, and ToIndex then reports that whole node's
+// end.
+func TestTreeEditNormalizePosForwardExecution(t *testing.T) {
+	t.Run("insert reports the visible index it inserted at", func(t *testing.T) {
+		issue := ticketer()
+		root, tree := newTreeReconcileTestRoot(t, issue)
+
+		pos, err := tree.FindPos(3)
+		assert.NoError(t, err)
+		content := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "XX")
+		op := NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{content}, 0, issue())
+
+		_, err = op.Execute(root, OpSourceLocal, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>01XX23456789</p></r>", tree.ToXML())
+
+		from, to := op.NormalizePos()
+		assert.Equal(t, 3, from, "must be the pre-edit visible index of the insertion point")
+		assert.Equal(t, 3, to)
+		assert.Equal(t, 2, op.GetContentSize())
+	})
+
+	t.Run("delete reports the visible range it removed", func(t *testing.T) {
+		issue := ticketer()
+		root, tree := newTreeReconcileTestRoot(t, issue)
+
+		fromPos, err := tree.FindPos(3)
+		assert.NoError(t, err)
+		toPos, err := tree.FindPos(5)
+		assert.NoError(t, err)
+		op := NewTreeEdit(tree.CreatedAt(), fromPos, toPos, nil, 0, issue())
+
+		_, err = op.Execute(root, OpSourceLocal, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>01456789</p></r>", tree.ToXML())
+
+		from, to := op.NormalizePos()
+		assert.Equal(t, 3, from, "must be the pre-delete visible index of the range's start")
+		assert.Equal(t, 5, to, "must be the pre-delete visible index of the range's end")
+		assert.Equal(t, 0, op.GetContentSize(), "nothing was inserted")
+	})
+}

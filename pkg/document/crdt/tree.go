@@ -1591,6 +1591,26 @@ type TreeEditReverseInfo struct {
 	// same execute().
 	Removed       []*TreeNode
 	PreTombstoned map[string]struct{}
+
+	// PreEditFromIdx is the visible index `from` occupied immediately after
+	// Phase 1 resolves and splits it, before anything below mutates the
+	// tree. Mirrors preEditFromIdx in the JS SDK (crdt/tree.ts), computed at
+	// the identical point (after text-node splits, before deletions). The
+	// operations layer reads this to report the range a forward execution
+	// affected, for undo/redo reconciliation; this package does not read it
+	// itself.
+	PreEditFromIdx int
+
+	// RemovedSize is the total padded size of every node Phase 5 processed
+	// -- both the ones this edit newly tombstoned and any it found already
+	// tombstoned -- measured by each node's own PaddedLength, which (see
+	// TreeNode.remove) does not change when the node itself is tombstoned;
+	// only an ancestor's aggregate does. Mirrors JS's
+	// removedNodes.reduce((sum, n) => sum + n.paddedSize(), 0)
+	// (tree_edit_operation.ts:463-466), which sums over the same set: JS's
+	// nodesToBeRemoved includes pre-tombstoned nodes the way this field
+	// does, unlike Removed above -- see Removed's own doc comment.
+	RemovedSize int
 }
 
 // Edit edits the tree with the given range and content. If the content is
@@ -1613,6 +1633,20 @@ func (t *Tree) Edit(
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
+
+	// Captured immediately here, before Phase 5 (or anything else below)
+	// mutates the tree -- see PreEditFromIdx's own doc comment for why this
+	// exact point matters. fromLeft has already been through
+	// FindTreeNodesWithSplitText's text-node split, so this resolves the
+	// same visible index `from` names post-split, not the coarser one a
+	// position interior to an unsplit node would collapse to.
+	preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
+	if err != nil {
+		diff.Add(diffFrom)
+		return t.drainPendingGCPairs(), diff, info, err
+	}
+	info.PreEditFromIdx = preEditFromIdx
+
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		diff.Add(diffFrom)
@@ -1679,7 +1713,13 @@ func (t *Tree) Edit(
 	removed := make([]*TreeNode, 0, len(toBeRemoveds))
 	removedSpans := make([]*TreeRestoreSpan, 0, len(toBeRemoveds))
 	var preTombstoned map[string]struct{}
+	var removedSize int
 	for _, node := range toBeRemoveds {
+		// A node's own PaddedLength does not change when the node itself is
+		// tombstoned (TreeNode.remove only adjusts its ANCESTORS' aggregate),
+		// so this is measured the same way regardless of which branch below
+		// this node falls into -- matching RemovedSize's doc comment.
+		removedSize += node.Index.PaddedLength()
 		if node.remove(editedAt) {
 			pairs = append(pairs, GCPair{
 				Parent: t,
@@ -1695,6 +1735,7 @@ func (t *Tree) Edit(
 		preTombstoned[node.IDString()] = struct{}{}
 	}
 	info.Removed, info.PreTombstoned = removed, preTombstoned
+	info.RemovedSize = removedSize
 
 	// Every pair registered from here on is one the spans do not describe:
 	// merge propagation, content born tombstoned under a removed parent, or a

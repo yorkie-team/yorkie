@@ -263,20 +263,6 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 			}
 		}
 
-		// The pre-edit visible-index range this edit's own from/to name,
-		// captured before the mutation below tombstones anything in it.
-		// Reported by NormalizePos (when this op is not itself carrying
-		// reconciled indices of its own) so the applyChanges reconciliation
-		// loop can adjust OTHER stacked entries against the range this
-		// execution just affected, and threaded into toReverseOperation as
-		// the anchor for whatever reverse this edit produces.
-		preFromIdx, _ := treeVisibleIndex(obj, e.from)
-		preToIdx, toOK := treeVisibleIndex(obj, e.to)
-		if !toOK {
-			preToIdx = preFromIdx
-		}
-		e.lastFromIdx, e.lastToIdx = &preFromIdx, &preToIdx
-
 		var contents []*crdt.TreeNode
 		var err error
 		if len(e.Contents()) != 0 {
@@ -345,13 +331,27 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 		// GetContentSize for the applyChanges reconciliation loop.
 		e.insertedContentSize = info.InsertedContentSize
 
+		// The pre-edit visible-index range this execution affected, read
+		// straight off info rather than recomputed here: Tree.Edit captures
+		// PreEditFromIdx right after Phase 1 resolves and splits `from`,
+		// before Phase 5 tombstones anything in the range, and RemovedSize
+		// alongside it in Phase 5, before either mutates -- both at points
+		// this package cannot reach from outside Tree.Edit. Reported by
+		// NormalizePos (when this op is not itself carrying reconciled
+		// indices of its own) so the applyChanges reconciliation loop can
+		// adjust OTHER stacked entries against the range this execution
+		// just affected.
+		lastFromIdx := info.PreEditFromIdx
+		lastToIdx := info.PreEditFromIdx + info.RemovedSize
+		e.lastFromIdx, e.lastToIdx = &lastFromIdx, &lastToIdx
+
 		// info.Removed and info.PreTombstoned name live tombstones still
 		// linked into obj, not copies, so the reverse operation's content is
 		// deep-copied inside this call — the way JS does inside the same
 		// execute(). A later SplitText mutates in place and splits tombstones
 		// too, so holding onto them past this point would let a subsequent
 		// edit truncate the captured content.
-		return e.toReverseOperation(obj, contents, info, preFromIdx)
+		return e.toReverseOperation(obj, contents, info, info.PreEditFromIdx)
 
 	default:
 		return nil, ErrNotApplicableDataType
@@ -381,13 +381,13 @@ func (e *TreeEdit) Execute(root *crdt.Root, _ OpSource, versionVector time.Versi
 // a boundary deletion rather than a content re-insertion, and is not built yet
 // (JS branches on the same condition before calling this at all).
 //
-// preFromIdx is this edit's own pre-mutation visible-index anchor (Execute's
-// treeVisibleIndex(obj, e.from), captured before the mutation ran) --
-// unrelated to the post-edit, node-derived anchor idx computed below for
-// outcome 3's fromPos/toPos. Outcomes 1 and the no-op case use it directly,
-// as a zero-width point, mirroring how JS uses its own preEditFromIdx the
-// same way in the identical branches (tree_edit_operation.ts:543-556,
-// :610-616).
+// preFromIdx is this edit's own pre-mutation visible-index anchor
+// (info.PreEditFromIdx, which Tree.Edit captures right after Phase 1 splits
+// and resolves `from`) -- unrelated to the post-edit, node-derived anchor
+// idx computed below for outcome 3's fromPos/toPos. Outcomes 1 and the
+// no-op case use it directly, as a zero-width point, mirroring how JS uses
+// its own preEditFromIdx the same way in the identical branches
+// (tree_edit_operation.ts:543-556, :610-616).
 func (e *TreeEdit) toReverseOperation(
 	tree *crdt.Tree,
 	inserted []*crdt.TreeNode,
@@ -831,29 +831,6 @@ func (e *TreeEdit) ReconcileOperation(remoteFrom, remoteTo, contentSize int) {
 	if localFrom < remoteFrom && remoteFrom < localTo && localTo < remoteTo {
 		apply(localFrom, remoteFrom)
 	}
-}
-
-// treeVisibleIndex resolves pos to its current visible index in tree, or
-// (0, false) when pos is nil or does not resolve to a node the tree still
-// holds. Used to capture the pre-edit index of an operation's own from/to
-// positions immediately before a mutation runs -- mirroring preEditFromIdx,
-// which CRDTTree.edit computes and reports directly in the JS SDK
-// (crdt/tree.ts). Go's Tree.Edit does not report it, so this recomputes the
-// same value from the position itself, called before Tree.Edit mutates
-// anything.
-func treeVisibleIndex(tree *crdt.Tree, pos *crdt.TreePos) (int, bool) {
-	if pos == nil {
-		return 0, false
-	}
-	parent, left := tree.ToTreeNodes(pos)
-	if parent == nil || left == nil {
-		return 0, false
-	}
-	idx, err := tree.ToIndex(parent, left)
-	if err != nil || idx < 0 {
-		return 0, false
-	}
-	return idx, true
 }
 
 // validateTreeRestoreIdentities rejects any restore span whose node identity
