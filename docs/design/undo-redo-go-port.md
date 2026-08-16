@@ -254,8 +254,8 @@ A single PR, with commits stacked in this order and not squashed:
 |---|---|---|
 | 0 | `OpSource`, `Operation.Execute` and `Change.Execute` signatures, `change.Context` reverse collection, `History`, `Document.Undo/Redo/CanUndo/CanRedo/ClearHistory` | every reverse is nil, **no behavior change**, existing tests green |
 | 1 | Object / Array / Counter reverse operations, presence reverse | `history_array_test.go`, object and counter undo cases |
-| 2 | Text `Edit` / `Style` reverse, `reconcileTextEdit` | `history_text_test.go` (29) |
-| 3 | Tree `TreeEdit` (`splitLevel` 0) / `TreeStyle` reverse, `reconcileTreeEdit` | `history_tree_test.go` (32), `history_tree_concurrent_test.go` (4, 2 skipped) |
+| 2 | Text `Edit` / `Style` reverse, `reconcileTextEdit` | `history_text_test.go` (73 runtime instances) |
+| 3 | Tree `TreeEdit` (`splitLevel` 0) / `TreeStyle` reverse, `reconcileTreeEdit` | `history_tree_test.go` (135 runtime instances), `history_tree_concurrent_test.go` (14 runtime instances, 2 skipped) |
 | 4 | Tree split `splitLevel` >= 1 | `history_tree_split_test.go` (26, 1 skipped) |
 
 Phase 0 isolates the widest and riskiest change — the interface signatures —
@@ -267,15 +267,32 @@ The JS suite ports file for file. The existing
 `test/integration/history_test.go` covers the admin change-history API and is
 unrelated, so there is no name collision.
 
-| JS | Go | Tests |
+| JS | Go | Runtime instances |
 |---|---|---|
-| `history_array_test.ts` | `test/integration/history_array_test.go` | 2 |
-| `history_text_test.ts` | `test/integration/history_text_test.go` | 29 (2 skipped) |
-| `history_tree_test.ts` | `test/integration/history_tree_test.go` | 32 |
-| `history_tree_concurrent_test.ts` | `test/integration/history_tree_concurrent_test.go` | 4 (2 skipped) |
+| `history_array_test.ts` | `test/integration/history_array_test.go` | 84 (4 skipped) |
+| `history_text_test.ts` | `test/integration/history_text_test.go` | 73 |
+| `history_tree_test.ts` | `test/integration/history_tree_test.go` | 135 |
+| `history_tree_concurrent_test.ts` | `test/integration/history_tree_concurrent_test.go` | 14 (2 skipped) |
 | `history_tree_split_test.ts` | `test/integration/history_tree_split_test.go` | 26 (1 skipped) |
 | undo cases in `object_test.ts`, `counter_test.ts` | corresponding Go files | — |
 | `undo_copy_path_test.ts`, `undo_content_identity_test.ts`, and other unit tests | under `pkg/document/` | — |
+
+**Counting method.** These files build many of their cases through
+parameterized loops (`for (const op of ops) { it(...) }`, nested Cartesian
+products), so a source-level count of `it(` calls badly understates what
+actually runs — e.g. `history_array_test.ts` is 2 `it(` call sites but 84
+runtime instances; `history_tree_test.ts` is 32 by the same grep but 135.
+The counts above are **runtime instance counts**: derived by reading each
+loop's structure and multiplying it out, then confirmed against the actual
+`go test -v` output of the ported Go suite, which reports one
+`--- PASS`/`--- SKIP` line per instance. `history_array_test.ts` and
+`history_text_test.ts` were verified this way while porting them (Tasks 8
+and 13, `.superpowers/sdd/20260815-undo-redo-go-port-todo/task-8-report.md`
+and `task-13-report.md`); `history_tree_test.ts` and
+`history_tree_concurrent_test.ts` while porting them (Task 18,
+`task-18-report.md`). This is the third task in this port where a
+grep-derived `it(` count misled the task brief — treat any count in this
+document that was not independently re-derived as suspect until it is.
 
 Five tests are currently skipped in JS as of `fa6cc513` (2026-08-09), all
 carried over verbatim as `t.Skip("KNOWN: ...")` / `t.Skip("...")` with the

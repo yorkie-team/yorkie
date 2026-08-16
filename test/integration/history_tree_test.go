@@ -1085,13 +1085,15 @@ func TestHistoryTreeMultiClientStyleUndoConvergence(t *testing.T) {
 // 3 of the 24 -- the reverse-direction case where the LOCAL op is
 // remoteOp == "split-l1" (a splitLevel > 0 edit) and d1 undoes it -- are
 // skipped: Go's TreeEdit.toReverseOperation returns no reverse at all for a
-// splitLevel > 0 edit yet (filed: the "splitLevel > 0 produces no reverse"
-// gap in docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md).
-// With nothing pushed for that edit, d1.Undo() would pop and undo a
-// different, unrelated undo-stack entry instead -- not a JS-equivalent
-// scenario, so it is skipped rather than adapted. The forward-direction case
-// (remote does the split, d1 undoes its own unrelated style op) does not
-// touch this gap and is not skipped.
+// splitLevel > 0 edit yet. This is not a filed defect but scheduled, not-yet-
+// implemented work -- Phase 4 Task 19 ("Split-aware reverse operations") in
+// docs/tasks/active/20260815-undo-redo-go-port-todo.md, summarized in
+// docs/design/undo-redo-go-port.md:142 and :259. With nothing pushed for
+// that edit, d1.Undo() would pop and undo a different, unrelated undo-stack
+// entry instead -- not a JS-equivalent scenario, so it is skipped rather
+// than adapted. The forward-direction case (remote does the split, d1
+// undoes its own unrelated style op) does not touch this gap and is not
+// skipped.
 func TestHistoryTreeMultiClientStyleVsEditConvergence(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
@@ -1181,7 +1183,7 @@ func TestHistoryTreeMultiClientStyleVsEditConvergence(t *testing.T) {
 			// Reverse direction: local edit, remote style, undo edit.
 			t.Run(fmt.Sprintf("should converge: local edit(%s) + remote style(%s)", remoteOp, localOp), func(t *testing.T) {
 				if remoteOp == "split-l1" {
-					t.Skip("a splitLevel > 0 Tree.Edit produces no reverse operation in Go yet, so undoing this local split here would incorrectly pop and undo a different, unrelated undo-stack entry (filed: docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md)")
+					t.Skip("a splitLevel > 0 Tree.Edit produces no reverse operation in Go yet, so undoing this local split here would incorrectly pop and undo a different, unrelated undo-stack entry (scheduled, not yet implemented: Phase 4 Task 19 in docs/tasks/active/20260815-undo-redo-go-port-todo.md, docs/design/undo-redo-go-port.md:142,:259)")
 				}
 
 				ctx := context.Background()
