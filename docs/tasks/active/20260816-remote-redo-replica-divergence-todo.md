@@ -652,3 +652,71 @@ Refiled to its own task, since it is convergent (every replica drops the
 removal identically) rather than divergent like this document's other
 entries: see
 `docs/tasks/active/20260816-tree-style-combined-reverse-dropped-todo.md`.
+
+## Related: rejecting a negative `splitLevel` applies new strictness to stored history
+
+Found in review of the Tree split/merge reverse operations
+(`docs/design/undo-redo-go-port.md`, Task 19). The rejection itself shipped
+with that task; what is deferred here is a data question it raises, which
+needs an audit rather than a code change.
+
+Filed in this collecting document rather than as its own todo/lessons pair
+for the reason stated at the top: it is a deferral with a single concrete
+audit task attached, not an active fix, and a dedicated pair would fragment
+the backlog for one question. (Contrast the tree-style entry, which was
+refiled out because it had a genuinely different failure shape — convergent
+rather than divergent — and was being mislabeled by sitting here. There is no
+such mislabeling risk here.)
+
+### What changed
+
+`api/converter/from_pb.go`'s `fromTreeEdit` now returns the new
+`converter.ErrInvalidSplitLevel` for a negative `SplitLevel`. A split level
+counts the element boundaries an edit creates. It used to be inert going
+forward — `Tree.split` does nothing for a non-positive level, and nothing else
+read the field — but it now also sizes the boundary-deletion reverse
+(`operations.TreeEdit.toSplitReverseOperation`, `2*splitLevel`), where a
+negative builds a reverse whose range runs backwards.
+
+### Why this is not purely an inbound-traffic change
+
+`converter.FromOperations` is shared between the wire path and the **stored
+change read path**: `server/backend/database/change_info.go:119` calls it when
+materializing a persisted change. So the new rejection applies retroactively
+to history that was written before it existed.
+
+Keeping the rejection was the deliberate choice. Clamping a negative to zero
+instead would silently rewrite a peer's operation, and would diverge any
+replica that had already decoded the original value — trading a loud failure
+for silent divergence. But that choice is only safe if no such change exists.
+
+### The open question
+
+**Does any stored change carry a negative `splitLevel`?** No client should
+ever have produced one — `json.Tree`'s four edit entry points now refuse it
+(`pkg/document/json/tree.go`, `ErrInvalidSplitLevel`), and the JS SDK passes
+the caller's value through the same way Go used to — but "should never" is not
+an audit. This needs a query over stored changes before it reaches production.
+
+### Blast radius if one exists
+
+Not a dropped operation — a wedged client. `FromChangePack` propagates the
+error unfiltered, so `server/rpc/yorkie_server.go:175` rejects the **entire**
+PushPull with `InvalidArgument`, and the client retries the identical pack
+indefinitely. A document containing such a change would also fail to load for
+every client, since the read path shares the decoder.
+
+### Tasks
+
+- [ ] Audit stored changes for a negative `split_level` on any `TreeEdit`
+      operation (both the change log and any snapshot-embedded operations),
+      across every deployed backend, before this ships
+- [ ] If any exist, decide the remediation: a one-time migration rewriting
+      them to 0, versus a read-path-only tolerance that keeps the wire path
+      strict. Note that a read-path-only exception reintroduces the value into
+      `toSplitReverseOperation`, so it needs a matching guard there
+- [ ] If none exist, record the audit result here so the question is not
+      reopened, and consider whether the same reasoning applies to other
+      numeric protobuf fields the decoder currently accepts unvalidated
+- [ ] Decide whether `yorkie-js-sdk` should gain the equivalent producer-side
+      guard, so the two SDKs cannot mint values the shared server refuses

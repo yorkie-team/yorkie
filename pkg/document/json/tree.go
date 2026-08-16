@@ -41,6 +41,11 @@ var (
 
 	// ErrEmptyPath is returned when there's empty path
 	ErrEmptyPath = errors.InvalidArgument("path should not be empty")
+
+	// ErrInvalidSplitLevel is returned when a negative split level is given.
+	// A split level counts the element boundaries the edit creates, so it has
+	// no meaning below zero.
+	ErrInvalidSplitLevel = errors.InvalidArgument("split level should not be negative")
 )
 
 // TreeNode is a node of Tree.
@@ -370,6 +375,21 @@ func (t *Tree) Len() int {
 
 // edit edits the tree with the given nodes.
 func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLevel int) bool {
+	// Refused here rather than in each of Edit/EditBulk/EditByPath/
+	// EditBulkByPath: this is the single funnel all four reach, and the only
+	// place a TreeEdit carrying a split level is constructed, so a fifth entry
+	// point cannot bypass it. Ahead of IssueTimeTicket so a refused edit
+	// consumes no delimiter.
+	//
+	// A negative level is inert on the forward path (the split loop does
+	// nothing for a non-positive level), but it sizes the boundary-deletion
+	// reverse as 2*splitLevel, which would run backwards. The decoder rejects
+	// one arriving from a peer; this stops well-behaved code minting one the
+	// server would then refuse.
+	if splitLevel < 0 {
+		panic(ErrInvalidSplitLevel)
+	}
+
 	ticket := t.context.IssueTimeTicket()
 
 	var nodes []*crdt.TreeNode

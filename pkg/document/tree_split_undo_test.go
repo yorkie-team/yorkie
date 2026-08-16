@@ -141,6 +141,46 @@ func newThreeBlockDoc(t *testing.T) *document.Document {
 	return doc
 }
 
+// TestTreeEditRejectsNegativeSplitLevel covers the producer side of the same
+// invariant api/converter enforces on decode. A negative split level is inert
+// going forward -- the split loop does nothing for a non-positive level -- but
+// it sizes the boundary-deletion reverse as 2*splitLevel, which would run
+// backwards. The decoder now refuses one arriving from a peer, and that
+// decoder is shared with the stored-change read path, so it is worth never
+// minting one locally either.
+func TestTreeEditRejectsNegativeSplitLevel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		edit func(tree *json.Tree)
+	}{
+		{"Edit", func(tr *json.Tree) { tr.Edit(1, 1, nil, -1) }},
+		{"EditBulk", func(tr *json.Tree) { tr.EditBulk(1, 1, nil, -1) }},
+		{"EditByPath", func(tr *json.Tree) { tr.EditByPath([]int{0, 0}, []int{0, 0}, nil, -1) }},
+		{"EditBulkByPath", func(tr *json.Tree) { tr.EditBulkByPath([]int{0, 0}, []int{0, 0}, nil, -1) }},
+	} {
+		t.Run(tc.name+" refuses a negative split level test", func(t *testing.T) {
+			doc := newSplitDoc(t, "000000000000000000000001")
+
+			err := doc.Update(func(r *json.Object, p *presence.Presence) error {
+				assert.PanicsWithError(t, json.ErrInvalidSplitLevel.Error(), func() {
+					tc.edit(r.GetTree("t"))
+				})
+				return nil
+			})
+			assert.NoError(t, err)
+
+			// The refusal left the tree untouched.
+			assert.Equal(t, "<r><p>abcd</p></r>", treeXML(t, doc))
+		})
+	}
+
+	t.Run("a zero split level is still accepted test", func(t *testing.T) {
+		doc := newSplitDoc(t, "000000000000000000000001")
+		editTree(t, doc, 3, 3, textNode("X"))
+		assert.Equal(t, "<r><p>abXcd</p></r>", treeXML(t, doc))
+	})
+}
+
 func TestTreeSplitUndo(t *testing.T) {
 	t.Run("a multi op undo entry gives each split reverse its own tickets test", func(t *testing.T) {
 		// executeUndoRedo issues ONE ticket per operation, but a splitLevel N
