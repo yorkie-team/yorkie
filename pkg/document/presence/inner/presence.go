@@ -156,6 +156,11 @@ func (p Presence) Set(key string, value string) {
 	p[key] = value
 }
 
+// Remove removes the given key. A key that is not present is left alone.
+func (p Presence) Remove(key string) {
+	delete(p, key)
+}
+
 // Clear clears the presence.
 func (p *Presence) Clear() {
 	*p = make(map[string]string)

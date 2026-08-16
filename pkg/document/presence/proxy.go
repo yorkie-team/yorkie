@@ -116,6 +116,31 @@ func (p *Presence) Set(key string, value string, opts ...SetOption) {
 	p.context.SetReversePresenceKey(key, cfg.addToHistory)
 }
 
+// Delete removes the given key from the presence. It is how Go spells JS's
+// `presence.set({key: undefined})` (presence.ts:35-47): JS assigns undefined
+// and its JSON-based deep copy drops the key before the Put reaches the
+// wire. Go's presence data is a map of strings with no undefined to assign,
+// so the key is removed outright, which is the same observable result.
+//
+// Like Set, the change is not undoable by default; pass WithHistory() to
+// record the key so undoing this change restores whatever value it held.
+func (p *Presence) Delete(key string, opts ...SetOption) {
+	var cfg setConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	data := p.data
+	data.Remove(key)
+
+	p.context.SetPresenceChange(Change{
+		ChangeType: Put,
+		Presence:   data,
+	})
+
+	p.context.SetReversePresenceKey(key, cfg.addToHistory)
+}
+
 // Clear clears the value of the given key.
 func (p *Presence) Clear() {
 	data := p.data

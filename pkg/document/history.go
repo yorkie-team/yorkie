@@ -29,8 +29,16 @@ const MaxUndoRedoStackDepth = 50
 // HistoryOperation is a single entry in an undo/redo stack. Op is nil when
 // this entry carries a presence change instead of an operation.
 type HistoryOperation struct {
-	Op       operations.Operation
+	Op operations.Operation
+
+	// Presence holds the values undo restores, keyed by presence key.
 	Presence presence.Data
+
+	// PresenceAbsentKeys names the presence keys the reversed change
+	// introduced. They held nothing before it, so undo removes them rather
+	// than setting them to the empty string. See change.Context's
+	// ReversePresence.
+	PresenceAbsentKeys []string
 }
 
 // History stores the undo/redo stacks of a document. Each entry is the set of

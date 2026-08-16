@@ -17,6 +17,8 @@
 package change
 
 import (
+	"sort"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence/inner"
@@ -174,20 +176,40 @@ func (c *Context) SetReversePresenceKey(key string, addToHistory bool) {
 	delete(c.reversePresenceKeys, key)
 }
 
-// ReversePresence returns the presence values that undoing this change
-// would restore, built from the keys marked undoable via
-// presence.WithHistory and their values at context creation. It returns nil
-// when no presence key was marked undoable.
-func (c *Context) ReversePresence() inner.Presence {
+// ReversePresence returns what undoing this change would restore for the
+// keys marked undoable via presence.WithHistory: the values they held at
+// context creation, plus the keys that held nothing then, which undo has to
+// remove rather than restore.
+//
+// The split exists because a key absent from the snapshot has no value to
+// restore. Indexing the snapshot map for it yields "", and setting that back
+// would leave the key present with an empty value. JS reads `undefined` for
+// the same key and its JSON-based deep copy drops it from the Put entirely
+// (context.ts:212-219), removing the key -- which is what the absent list
+// reproduces here.
+//
+// Both results are empty when no presence key was marked undoable.
+func (c *Context) ReversePresence() (values inner.Presence, absentKeys []string) {
 	if len(c.reversePresenceKeys) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	reverse := inner.New()
 	for key := range c.reversePresenceKeys {
-		reverse.Set(key, c.previousPresence[key])
+		value, ok := c.previousPresence[key]
+		if !ok {
+			absentKeys = append(absentKeys, key)
+			continue
+		}
+		if values == nil {
+			values = inner.New()
+		}
+		values.Set(key, value)
 	}
-	return reverse
+
+	// Map iteration order is randomized; sort so the reverse entry, and
+	// anything built from it, is the same on every run.
+	sort.Strings(absentKeys)
+	return values, absentKeys
 }
 
 // ClearReversePresence discards any reverse-presence keys recorded during

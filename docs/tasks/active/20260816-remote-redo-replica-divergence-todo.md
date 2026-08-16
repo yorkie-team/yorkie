@@ -238,23 +238,21 @@ the combination `client.WithPresence` + `Set(..., WithHistory())` +
       `Undo` combination Task 7 skipped, in
       `test/integration/doc_presence_test.go`
 
-## Related: undoing a newly introduced presence key — Go keeps `""`, JS drops the key
+## Resolved: undoing a newly introduced presence key — Go now removes it
 
-Found while adding a test to pin this exact behavior (Task 7 follow-up,
-Item 4). **Confirmed to differ between the two SDKs; deliberately left
-unfixed** — see `pkg/document/history_test.go`,
-"presence undo of a newly introduced key restores the zero value test",
-which pins Go's current (divergent) behavior. Do not change Go's
-behavior to "fix" this without also deciding what the wire format should
-be, since this affects what gets sent to peers, not just local state.
+Found while adding a test to pin this behavior (Task 7 follow-up, Item
+4), first left unfixed as a "deliberate divergence", then **fixed** in
+CodeRabbit review of PR #1932. The earlier call was wrong: the port's
+rule is that a defect JS *shares* is reproduced, but a divergence *from*
+JS is a defect. This one was wire-visible, so it had to be closed.
 
-`change.Context.ReversePresence()` builds the reverse from
+`change.Context.ReversePresence()` built the reverse from
 `c.previousPresence[key]` for every key marked `WithHistory`
 (`pkg/document/change/context.go`). When the key did not exist in
-`previousPresence` — i.e., the presence-history entry is undoing a key
-that was *introduced* by the tracked `Set`, not merely changed — Go's map
-indexing yields the zero value, the empty string, so the key survives
-with value `""` instead of being removed.
+`previousPresence` — i.e., the presence-history entry undoes a key that
+was *introduced* by the tracked `Set`, not merely changed — Go's map
+indexing yielded the zero value, the empty string, so the key survived
+undo with value `""` instead of being removed.
 
 JS's equivalent, `getReversePresence()` (`context.ts:210-220`), assigns
 `this.previousPresence[key]` too, which is `undefined` for a key that
@@ -266,24 +264,24 @@ value is `undefined`. So the key is dropped from the Put change's
 `presence` payload entirely, and since a presence Put replaces the whole
 map for the actor, the key is effectively *removed* on undo in JS.
 
-Go's `presence.Data` (`map[string]string`) has no representation for "no
-value" short of not being a key in the map at all, so matching JS exactly
-would mean `ReversePresence` deciding, per key, whether to `Set` or
-*omit* — a real behavior change, not something to do inside a "no
-production code changes" bookkeeping pass. Filed here rather than fixed.
+### What changed
 
-### Tasks
+- `Context.ReversePresence()` now returns `(values, absentKeys)`:
+  keys that held a value at context creation, and keys that held
+  nothing. `absentKeys` is sorted, so the entry is deterministic
+  regardless of Go's map iteration order.
+- `document.HistoryOperation` carries `PresenceAbsentKeys` alongside
+  `Presence`.
+- `presence.Presence.Delete(key, opts...)` removes a key and emits the
+  resulting Put. It is how Go spells JS's `set({key: undefined})`: Go's
+  `map[string]string` has no `undefined` to assign, so the key is
+  removed outright, which is the same observable result.
+- `Document.executeUndoRedo` applies a `Delete` for every absent key.
 
-- [ ] Decide the target Go behavior: omit the key (matching JS's
-      wire-level effect) vs. keep sending `""` (current). Confirm what
-      `yorkie-js-sdk` actually sends on the wire for this case (a Put
-      with the key absent) so the two SDKs choose the same behavior for
-      parity, not just each independently "fixing" it
-- [ ] If the target is "omit", design how `ReversePresence`/`SetOption`
-      distinguish "no reverse value" from "reverse value is the empty
-      string" in a `map[string]string`
-- [ ] Update the pinning test in `pkg/document/history_test.go` once the
-      target behavior is decided and implemented
+Pinned by `presence undo of a newly introduced key removes it test` and
+`presence undo removes only the newly introduced keys test` in
+`pkg/document/history_test.go`, which replace the characterization test
+that pinned the old `""`.
 
 ## Related: `Text.Style`/`RemoveStyle` do not skip tombstoned nodes, unlike JS
 

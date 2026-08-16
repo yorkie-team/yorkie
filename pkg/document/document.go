@@ -286,8 +286,11 @@ func (d *Document) Update(
 		for _, op := range result.ReverseOps {
 			reverse = append(reverse, HistoryOperation{Op: op})
 		}
-		if reversePresence := ctx.ReversePresence(); reversePresence != nil {
-			reverse = append(reverse, HistoryOperation{Presence: reversePresence})
+		if values, absent := ctx.ReversePresence(); len(values) > 0 || len(absent) > 0 {
+			reverse = append(reverse, HistoryOperation{
+				Presence:           values,
+				PresenceAbsentKeys: absent,
+			})
 		}
 		if len(reverse) > 0 {
 			d.history.PushUndo(reverse)
@@ -412,6 +415,13 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 			for key, value := range entry.Presence {
 				p.Set(key, value, presence.WithHistory())
 			}
+			// A key the reversed change introduced had no value to restore,
+			// so it is removed rather than set to the empty string. JS gets
+			// there by assigning undefined and letting its deep copy drop the
+			// key (context.ts:212-219, presence.ts:35-47).
+			for _, key := range entry.PresenceAbsentKeys {
+				p.Delete(key, presence.WithHistory())
+			}
 			continue
 		}
 
@@ -491,8 +501,11 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 	for _, op := range result.ReverseOps {
 		reverse = append(reverse, HistoryOperation{Op: op})
 	}
-	if reversePresence := ctx.ReversePresence(); reversePresence != nil {
-		reverse = append(reverse, HistoryOperation{Presence: reversePresence})
+	if values, absent := ctx.ReversePresence(); len(values) > 0 || len(absent) > 0 {
+		reverse = append(reverse, HistoryOperation{
+			Presence:           values,
+			PresenceAbsentKeys: absent,
+		})
 	}
 	if len(reverse) > 0 {
 		if isUndo {
