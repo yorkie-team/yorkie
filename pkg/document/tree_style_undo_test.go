@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -65,6 +66,29 @@ func treePAttrs(t *testing.T, doc *document.Document) map[string]string {
 		return nil
 	}
 	return children[0].Attrs.Elements()
+}
+
+// treePAttrRHTNode returns the RHT node for the given key on the tree's "p"
+// node under key "t", live or tombstoned, or nil if the key was never set at
+// all. Unlike treePAttrs (which reads Elements(), filtered to live keys), this
+// distinguishes "the key was removed" (a tombstoned node still present in the
+// map) from "the key was never recorded" (no node at all) -- a distinction
+// Elements() alone cannot make, since both cases read as absent through it.
+func treePAttrRHTNode(t *testing.T, doc *document.Document, key string) *crdt.RHTNode {
+	t.Helper()
+
+	tree := treeCRDT(t, doc)
+	children := tree.Root().Children()
+	assert.NotEmpty(t, children)
+	if children[0].Attrs == nil {
+		return nil
+	}
+	for _, node := range children[0].Attrs.Nodes() {
+		if node.Key() == key {
+			return node
+		}
+	}
+	return nil
 }
 
 func TestTreeStyleUndo(t *testing.T) {
@@ -177,6 +201,18 @@ func TestTreeStyleUndo(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 		assert.Empty(t, treePAttrs(t, doc))
 
+		// Elements() alone cannot tell "removed" (a tombstoned RHT node,
+		// which should stay findable by future concurrent styling of the
+		// same key) apart from "the node itself vanished" (a snapshot that
+		// dropped the tombstone entirely, which would also read as absent
+		// through Elements() but would let a later, older-ticket concurrent
+		// style of "italic" wrongly win, since there would be no tombstone
+		// to lose an LWW comparison against). Assert on the RHT node map
+		// directly to rule that out.
+		before := treePAttrRHTNode(t, doc, "italic")
+		assert.NotNil(t, before, "the removed key's node must still exist, tombstoned")
+		assert.True(t, before.IsRemoved())
+
 		bytes, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 		assert.NoError(t, err)
 
@@ -192,5 +228,13 @@ func TestTreeStyleUndo(t *testing.T) {
 		assert.Equal(t, doc.Marshal(), restored.Marshal())
 		assert.Empty(t, treePAttrs(t, restored),
 			"a removed-before-restore key must not be resurrected by the snapshot round trip")
+
+		after := treePAttrRHTNode(t, restored, "italic")
+		assert.NotNil(t, after,
+			"the tombstoned node must survive the snapshot, not merely vanish from the map")
+		assert.True(t, after.IsRemoved())
+		assert.Zero(t, after.RemovedAt().Compare(before.RemovedAt()),
+			"the tombstone must keep its original ticket, not a fresh one, so a later "+
+				"concurrent style of the same key still resolves against it correctly")
 	})
 }
