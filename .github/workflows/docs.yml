@@ -1,0 +1,35 @@
+# A workflow of its own, because ci.yml sets `paths-ignore: "**/*.md"` — every
+# job there is skipped on exactly the pull requests this check exists to
+# police. Adding a step to that workflow would look like coverage and provide
+# none.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "scripts/verify-doc-links.mjs"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - "scripts/verify-doc-links.mjs"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  doc-links:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify documentation links
+        run: node scripts/verify-doc-links.mjs

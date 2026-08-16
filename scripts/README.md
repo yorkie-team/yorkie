@@ -13,6 +13,12 @@ CI helpers. None of it is part of the Go module — these run by hand, from
 
 Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
+## Verification
+
+| Script | Invoked as | Role |
+|---|---|---|
+| `verify-doc-links.mjs` | `node scripts/verify-doc-links.mjs` | Walks the documentation graph from `CLAUDE.md`, `AGENTS.md`, and `README.md`, and fails on a link that resolves to nothing. Archived task records are reached but not walked — a finished task's citations are a record of what was true then. Run by the `Docs` workflow, which exists separately from `ci.yml` because that one ignores `**/*.md`. |
+
 ## Setup
 
 | Script | Invoked as | Role |
