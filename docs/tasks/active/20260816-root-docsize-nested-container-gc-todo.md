@@ -155,6 +155,50 @@ asserts `GC` stays non-negative.
   value came from this bug. The report has been corrected alongside this
   filing.
 
+## Second manifestation: `DeregisterElement(value)` books the wrong element
+
+Raised by CodeRabbit on PR #1932 against `pkg/document/crdt/root.go:129`
+and its only caller, `Set.Execute` (`pkg/document/operations/set.go`).
+**Same root cause as above — `deregisterElement` subtracting a size that
+was never added — reached by a different route, so it is folded in here
+rather than filed separately.** Both the call site and
+`deregisterElement` are faithful ports: JS's `set_operation.ts:98-104`
+calls `root.deregisterElement(value)` with the same incoming value, and
+JS's `deregisterElement` subtracts `element.getDataSize()` the same way
+(`root.ts:232-248`).
+
+During undo/redo a `Set` may restore an element under a `createdAt` that
+is already registered — undoing a `Remove` re-inserts the removed element
+under its original identity. `Set.Execute` clears the stale entry first:
+
+```go
+if source == OpSourceUndoRedo && root.FindByCreatedAt(value.CreatedAt()) != nil {
+	root.DeregisterElement(value)
+}
+root.RegisterElement(value)
+```
+
+`value` here is the freshly deep-copied element the operation is about to
+install, **not** the tombstoned element currently registered under that
+`createdAt`. `deregisterElement` then does two things with the wrong
+object:
+
+- `r.docSize.GC.Sub(elem.DataSize())` charges the *incoming* element's
+  size against `GC`, where the size that entered `GC` was the
+  *tombstoned* element's. They are equal only when the two happen to
+  hold identical content.
+- The descendant walk (`element.Descendants(...)`) enumerates the
+  *incoming* element's children. A descendant the tombstone had but the
+  copy does not stays registered in `elementMap` and `gcElementPairMap`
+  forever; a descendant the copy has but the tombstone did not is
+  subtracted from `GC` having never been added to it.
+
+The second bullet is the same add/subtract asymmetry as the top of this
+document, which is why the fix has to be decided once, for both. Looking
+up the registered element (`root.FindByCreatedAt(value.CreatedAt())`) and
+deregistering *that* is the obvious repair for this call site, but it
+only makes sense alongside whichever symmetry the tasks below settle on.
+
 ## Tasks
 
 - [ ] Decide the fix shape: either make `RegisterRemovedElementPair` walk
@@ -168,6 +212,10 @@ asserts `GC` stays non-negative.
       never go negative, and that `DocSize().Total()` returns to the
       pre-mutation baseline after a full add-then-remove-then-GC cycle of a
       non-empty container (object, array, or tree with children).
+- [ ] Fix `Set.Execute`'s `DeregisterElement(value)` to deregister the
+      element actually registered under that `createdAt`, not the
+      incoming copy — and raise the same correction with the JS SDK,
+      since `set_operation.ts:98-104` has it too.
 - [ ] Audit whether the same asymmetry exists for `Array`, `Tree`, and other
       `Container` implementations, not just `Object` — the reproduction
       above only exercises `Object`.

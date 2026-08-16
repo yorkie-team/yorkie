@@ -816,3 +816,46 @@ the same reasoning at the call site.
       a lost write
 - [ ] Once JS is fixed, drop the "deliberate divergence" half of the comment
       on `SetWithExecutedAt` and keep only the anchor rationale
+
+## Related: `refinePos` mixes `contentLen()` and `Len()` — a defect Go shares with JS
+
+Raised by CodeRabbit on PR #1932 against
+`pkg/document/crdt/rga_tree_split.go:508,518`. **Not a Go defect, and not
+fixed in the Go port**: the JS SDK does exactly the same thing, so the Go
+code is a line-for-line faithful port and changing it alone would open a
+convergence gap between the two SDKs.
+
+`refinePos` walks the physical `next` chain, subtracting each node's
+length from the offset until the remainder fits. It measures the *first*
+node with one function and every *subsequent* node with another:
+
+| | first node | subsequent nodes |
+|---|---|---|
+| Go | `node.contentLen()` (`rga_tree_split.go:508`) | `node.Len()` (`rga_tree_split.go:518`) |
+| JS | `node.getContentLength()` (`rga_tree_split.ts:1253`) | `node.getLength()` (`rga_tree_split.ts:1264`) |
+
+The two differ on a tombstoned node: `contentLen()`/`getContentLength()`
+report the raw character count, while `Len()`/`getLength()` report 0 for
+a removed node (`rga_tree_split.go:242-247`). So a position anchored on
+a node that has since been tombstoned is refined against that node's
+*pre-removal* length, while every node walked past afterwards counts as
+0 if removed. The doc comment on the JS side ("Counts only live
+characters: removed nodes are treated as length 0",
+`rga_tree_split.ts:1227`) describes the loop, not the first iteration.
+
+Both SDKs reach `refinePos` only from an undo/redo reverse `Edit`
+re-anchoring itself (`Edit.Execute`'s `isUndoOp` branch;
+`edit_operation.ts:222-225`), so the asymmetry is confined to the
+history path on both.
+
+### Tasks
+
+- [ ] Decide, cross-SDK, which measure the first node should use.
+      `Len()` on both sides is the reading the JS doc comment already
+      claims; `contentLen()` on both sides is the current behavior made
+      consistent. Either way both SDKs must change together
+- [ ] Write the reproduction first: anchor a reverse `Edit` inside a node,
+      tombstone that node remotely, then undo, and compare the refined
+      position between a Go and a JS replica
+- [ ] Land the change in both SDKs in the same release, since a
+      one-sided change moves where the undo lands
