@@ -100,6 +100,22 @@ func (s OpSource) NeedsReverse() bool {
 // already marked removed). The ancestor chain is instead recovered by
 // walking the document tree from the root once per call. This only runs on
 // the undo/redo path, not on every local or remote edit.
+//
+// The walk is O(document size) where JS's lookup is O(1), and an undo entry
+// of N operations pays it 2N times (once against the clone, once against the
+// real root). Two ways out were considered and both rejected for now:
+//
+//   - Caching the map per Change.Execute call is not sound. The operations
+//     in one entry mutate the very structure the map describes -- a Set that
+//     restores an element changes what the next operation's ancestor walk
+//     should find -- so a map built once per change can answer a later
+//     operation with pre-change parentage.
+//   - Maintaining a live parent index means Root.RegisterElement taking the
+//     parent, as JS's registerElement does, and every call site supplying
+//     it. That is a structural change to Root, and it overlaps the
+//     DeregisterElement accounting already filed in
+//     docs/tasks/active/20260816-root-docsize-nested-container-gc-todo.md,
+//     so it belongs with that decision rather than ahead of it.
 func isRemovedOrOrphaned(root *crdt.Root, elem crdt.Element) bool {
 	if elem == nil {
 		return false
