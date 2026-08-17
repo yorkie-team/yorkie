@@ -26,5 +26,5 @@ appeared because the concurrent scenario was executed on both.
 ## See Also
 
 - `docs/tasks/active/20260817-docsize-js-sdk-parity-todo.md` — the port plan
-- `docs/tasks/active/20260816-root-docsize-nested-container-gc-lessons.md` —
+- `docs/tasks/archive/2026/08/20260816-root-docsize-nested-container-gc-lessons.md` —
   the Go fix's lessons, including the parity-evidence one above

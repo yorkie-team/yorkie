@@ -112,5 +112,5 @@ on both.
 
 ## See Also
 
-- `docs/tasks/active/20260816-root-docsize-nested-container-gc-todo.md` —
+- `docs/tasks/archive/2026/08/20260816-root-docsize-nested-container-gc-todo.md` —
   the paired todo with full mechanism and reproduction

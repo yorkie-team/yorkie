@@ -46,28 +46,31 @@ is there.
 
 ## Tasks
 
-- [ ] Port the invariant, not just the descendant walk: every registered
+Done in yorkie-team/yorkie-js-sdk#1322, which carries its own task pair
+(`docs/tasks/archive/2026/08/20260817-docsize-container-gc-symmetry-{todo,lessons}.md`
+in that repo). This entry stays open until that PR lands.
+
+- [x] Port the invariant, not just the descendant walk: every registered
       element's size counted in exactly one of `live`/`gc`, with a map
-      recording which and how much. JS's `gcElementSetByCreatedAt` is a `Set`
-      today and needs to become a map of charged `DataSize`, for the same
-      reason Go's does — `getDataSize()` grows by a ticket when `removedAt` is
-      set, which can happen after the size has moved.
-- [ ] Fix `set_operation.ts:98-104` to deregister
+      recording which and how much. Note the correction found while porting:
+      `gcElementSetByCreatedAt` is **not** the JS twin of Go's `sizeInGC` — it
+      is the twin of `gcElementPairMap`, driving `garbageCollect`,
+      `getGarbageElementSetSize` and `getGCElementPairs`. Reusing it would have
+      broken all three, so the port adds a separate `sizeInGC` map and leaves
+      the set alone.
+- [x] Fix `set_operation.ts:98-104` to deregister
       `root.findByCreatedAt(value.getCreatedAt())`, not `value`.
-- [ ] Port the six regression tests from Go's
-      `pkg/document/size_test.go` (`TestDocumentSize`): removing a non-empty
-      container (object/array/nested), a container holding an earlier
-      tombstone, concurrent removal of the same container, removing a member
-      inside an already removed container, restoring a container over a
-      diverged tombstone, and undoing the removal of an array container.
-      `packages/sdk/test/unit/document/document_size_test.ts` is the home, and
-      `gc_split_leak_test.ts` already has the `crossSync`/two-replica helper
-      the concurrent cases need.
-- [ ] Cross-link the resulting `yorkie-js-sdk` PR back to the Go PR.
+- [x] Port the six regression tests into
+      `packages/sdk/test/unit/document/document_size_test.ts`, with a local
+      `crossSync`/`newReplicas` pair modelled on `gc_split_leak_test.ts`. All
+      six fail without the source change and pass with it; the ten
+      pre-existing `Document Size` tests are unaffected.
+- [x] Cross-link the resulting `yorkie-js-sdk` PR back to the Go PR.
+- [ ] Land yorkie-team/yorkie-js-sdk#1322.
 
 ## See Also
 
-- `docs/tasks/active/20260816-root-docsize-nested-container-gc-todo.md` —
+- `docs/tasks/archive/2026/08/20260816-root-docsize-nested-container-gc-todo.md` —
   the Go fix this ports
 - `docs/tasks/active/20260817-docsize-snapshot-rebuild-drift-todo.md` — the
   adjacent rebuild drift, which JS shares too

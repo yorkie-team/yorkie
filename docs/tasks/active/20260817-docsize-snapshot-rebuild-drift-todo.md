@@ -87,7 +87,7 @@ server-side size check sees the rebuilt figure too.
 
 ## See Also
 
-- `docs/tasks/active/20260816-root-docsize-nested-container-gc-todo.md` —
+- `docs/tasks/archive/2026/08/20260816-root-docsize-nested-container-gc-todo.md` —
   the fix whose measurement surfaced this
 - `docs/design/snapshot-overflow.md` — the other place snapshot size and
   live size are reasoned about together

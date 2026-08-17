@@ -114,7 +114,7 @@ func (s OpSource) NeedsReverse() bool {
 //     parent, as JS's registerElement does, and every call site supplying
 //     it. That is a structural change to Root, and it overlaps the
 //     DeregisterElement accounting already filed in
-//     docs/tasks/active/20260816-root-docsize-nested-container-gc-todo.md,
+//     docs/tasks/archive/2026/08/20260816-root-docsize-nested-container-gc-todo.md,
 //     so it belongs with that decision rather than ahead of it.
 func isRemovedOrOrphaned(root *crdt.Root, elem crdt.Element) bool {
 	if elem == nil {
