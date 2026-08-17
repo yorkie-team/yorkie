@@ -193,9 +193,16 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 
 	// NOTE(hackerwins): When an element is removed, parent sets the removedAt
 	// to mark the child as removed. That ticket is part of the size charged to
-	// GC just now, but it was never part of what Live held, so Live gets it
-	// back. Only on the move that carried it: a size already in GC, or one
-	// moved as a descendant while its own removedAt is still unset, did not.
+	// GC just now, but it was not part of what Live held -- RegisterElement ran
+	// before the removal -- so Live gets it back. Only on the move that carried
+	// it: a size already in GC, or one moved as a descendant while its own
+	// removedAt is still unset, did not.
+	//
+	// This holds for the incremental path. NewRoot instead registers an
+	// already-tombstoned element at its post-removal size, so Live did hold the
+	// ticket and the refund over-credits it by one per tombstone. That drift is
+	// pre-existing and unchanged here; see the follow-up task
+	// docs/tasks/active/20260817-docsize-snapshot-rebuild-drift-todo.md.
 	if moved && elem.RemovedAt() != nil {
 		r.docSize.Live.Meta += time.TicketSize
 	}
