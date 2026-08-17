@@ -1,5 +1,5 @@
 ---
-updated: 2026-08-16
+updated: 2026-08-17
 ---
 
 # Tasks Archive
@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 27
+Total archived tasks: 28
 
-## 2026/08 (7 tasks)
+## 2026/08 (8 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| CRDT: removing a non-empty container corrupts DocSize's GC total (2026-08-16) | [20260816-root-docsize-nested-container-gc-todo.md](./2026/08/20260816-root-docsize-nested-container-gc-todo.md) | [20260816-root-docsize-nested-container-gc-lessons.md](./2026/08/20260816-root-docsize-nested-container-gc-lessons.md) |
 | Undo/Redo Go SDK Port Implementation Plan (2026-08-15) | [20260815-undo-redo-go-port-todo.md](./2026/08/20260815-undo-redo-go-port-todo.md) | [20260815-undo-redo-go-port-lessons.md](./2026/08/20260815-undo-redo-go-port-lessons.md) |
 | Tree: survive two nodes sharing one TreeNodeID (2026-08-14) | [20260814-duplicate-tree-node-id-todo.md](./2026/08/20260814-duplicate-tree-node-id-todo.md) | [20260814-duplicate-tree-node-id-lessons.md](./2026/08/20260814-duplicate-tree-node-id-lessons.md) |
 | RPC: bind the listener before Start returns (2026-08-13) | [20260813-rpc-start-bind-sync-todo.md](./2026/08/20260813-rpc-start-bind-sync-todo.md) | [20260813-rpc-start-bind-sync-lessons.md](./2026/08/20260813-rpc-start-bind-sync-lessons.md) |
