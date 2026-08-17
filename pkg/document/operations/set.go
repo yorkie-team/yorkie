@@ -106,9 +106,15 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// under a createdAt that is already registered (set_operation.ts:98-104)
 	// -- for example, undoing a Remove re-inserts the removed element under
 	// its original identity. The stale entry must be deregistered before the
-	// restored element is registered again.
-	if source == OpSourceUndoRedo && root.FindByCreatedAt(value.CreatedAt()) != nil {
-		root.DeregisterElement(value)
+	// restored element is registered again. It has to be the registered
+	// element that is deregistered, not the incoming copy: the copy's size and
+	// descendants are the ones about to be registered, so passing it would
+	// charge the wrong size against GC and leave the stale element's own
+	// descendants registered forever.
+	if source == OpSourceUndoRedo {
+		if registered := root.FindByCreatedAt(value.CreatedAt()); registered != nil {
+			root.DeregisterElement(registered)
+		}
 	}
 	root.RegisterElement(value)
 	if removed != nil {
