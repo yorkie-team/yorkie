@@ -356,11 +356,30 @@ the same `MaxSizeLimit` divergence in a different disguise. Fixing it means
 changing the compensation's contract, which changes the reported size of
 every snapshot-rebuilt document, so it wants its own task.
 
-The figures above are from `main`. This change reduces the drift to a
-constant `TicketSize` instead of one per removed element (measured on the
-same document: `+24` after one removal and after two, where `main` gave
-`+24` and `+48`), because the idempotent `moveSizeToGC` stops the rebuild's
-per-tombstone pass from compensating more than once. It does not remove it.
+The drift is one `TicketSize` per uncollected tombstone, and this change
+neither improves nor worsens it. Removing four sibling members one at a
+time and taking a `DeepCopy` after each:
+
+| tombstones | drift on `main` | drift after this change |
+|---|---|---|
+| 1 | +24 | +24 |
+| 2 | +48 | +48 |
+| 3 | +72 | +72 |
+| 4 | +96 | +96 |
+
+(An earlier measurement here used *nested* removals, where the inner
+element's size had already been charged by the outer removal, and wrongly
+concluded the drift was constant. Independent siblings show it is linear.)
+
+This matters more than "a server reports a different number": `Document.Update`
+gates `MaxSizeLimit` on `d.cloneRoot.DocSize()` (`document.go:257-258`), and
+`cloneRoot` comes from `ensureClone` → `Root.DeepCopy` → `NewRoot`
+(`document.go:861-868`). So the size that is actually *enforced* is the
+rebuilt one, while `Document.DocSize()` reports the incremental one. The
+enforced figure over-reports by a ticket per tombstone — conservative, never
+under-billing, but it is the enforced path and it drifts from the reported
+path. Tracked as its own task rather than fixed here, since the repair
+changes the reported size of every snapshot-rebuilt document.
 
 ## See Also
 
