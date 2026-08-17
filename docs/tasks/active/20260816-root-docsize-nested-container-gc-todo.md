@@ -199,30 +199,168 @@ up the registered element (`root.FindByCreatedAt(value.CreatedAt())`) and
 deregistering *that* is the obvious repair for this call site, but it
 only makes sense alongside whichever symmetry the tasks below settle on.
 
+## Third manifestation: a concurrent remove books the same element twice
+
+Found while fixing the above, and more severe than either: it is **replica
+divergence**, not just a local miscount. `ElementRHTNode.Remove`
+(`pkg/document/crdt/element_rht.go:41-48`) returns true again whenever a
+later ticket wins the LWW comparison against the `removedAt` already set,
+so `Remove.Execute` calls `RegisterRemovedElementPair` a second time for an
+element whose size is already in `GC`. Nothing subtracts the surplus.
+
+Two replicas that remove the same container concurrently converge on
+content and **disagree on size**, because whether the second registration
+happens depends on which ticket each replica saw first. Measured on `main`
+before the fix, after both removes and a full GC:
+
+```text
+d1: {Live:{Data:2 Meta:24} GC:{Data:-2 Meta:24}}   ({} on both)
+d2: {Live:{Data:2 Meta:72} GC:{Data:-2 Meta:-48}}
+```
+
+`DocSize` gates `MaxSizeLimit`, so one replica can accept an update the
+other rejects, permanently. Pinned by `TestDocumentSize/concurrently
+removing the same container test`.
+
+Note the SDKs differ here: Go's `DeleteByCreatedAt` returns nil when the
+remove loses LWW and `Remove.Execute` skips the registration, while JS's
+`ElementRHT.delete` (`element_rht.ts:119-130`) ignores `node.remove`'s
+return value and `remove_operation.ts:100` registers unconditionally. That
+is why the pre-fix Go replicas diverged from each other while the JS ones
+were uniformly wrong. Making the registration idempotent removes the
+dependence on that difference entirely.
+
+## Fourth manifestation: an element born inside a tombstone is never in GC
+
+A remote `Set` can land inside a container that is already removed on this
+replica — d1 removes `k` while d2 concurrently writes `k.b`. `Set.Execute`
+calls `RegisterElement(b)`, which books `b` into **Live**, and nothing ever
+moves it: `b` has no `removedAt` of its own and its container's removal has
+already happened. When the tombstone is finally collected,
+`deregisterElement` subtracts `b` from **GC**, which never held it. `GC`
+goes negative by `b`'s size and `Live` keeps it forever.
+
+This one is not fixed by walking descendants at removal time — the element
+does not exist yet when the walk runs — which is what made the first two
+attempts at this fix insufficient.
+
+## The fix: name the invariant, then keep it
+
+The three add/subtract sites were each individually plausible and jointly
+inconsistent, so the fix is to state what they are collectively maintaining
+and make each site honour it:
+
+> Every registered element's `DataSize` is counted in exactly one of
+> `Live` or `GC`, and `Root.sizeInGC` records which — and, for GC, the
+> exact amount charged.
+
+- `moveSizeToGC(elem)` is the only way a size enters `GC`. It is idempotent:
+  a size already there is not moved again, which covers both the repeated
+  concurrent remove and the descendant whose container is removed after it
+  was individually removed.
+- `RegisterRemovedElementPair` calls it for the element and, when the
+  element is a `Container`, for every descendant — the descendants are in
+  `Live` because `RegisterElement` put them there.
+- `deregisterElement` subtracts from `GC` only what `sizeInGC` says was
+  charged, and subtracts from `Live` anything not listed there (the fourth
+  manifestation).
+
+`sizeInGC` stores the charged `DataSize` rather than a flag because
+`DataSize()` is **not stable over an element's lifetime**: it grows by one
+ticket the moment `removedAt` is set, and that can happen *after* the size
+moved (a member removed remotely inside an already-removed container).
+Recording the amount makes the two sides symmetric without depending on
+when each side happens to read `DataSize()`; `moveSizeToGC` tops up the
+difference when it sees an already-charged element whose size has grown.
+
+The alternative from the original filing — shrinking `deregisterElement` to
+the container's own size — was rejected: `Live` is populated by the
+descendant-walking `RegisterElement`, so descendants have to leave `Live`
+somewhere, and dropping them from the subtract side would strand them there
+permanently instead.
+
 ## Tasks
 
-- [ ] Decide the fix shape: either make `RegisterRemovedElementPair` walk
-      descendants the same way `deregisterElement` does (add each
-      descendant's `DataSize()` to `GC` / subtract from `Live` at removal
-      time, not just the container), or make `deregisterElement` subtract
-      only the container's own size and rely on some other bookkeeping for
-      descendants. The two functions must become symmetric one way or the
-      other.
-- [ ] Add a regression test asserting `DocSize().GC` and `DocSize().Live`
-      never go negative, and that `DocSize().Total()` returns to the
-      pre-mutation baseline after a full add-then-remove-then-GC cycle of a
-      non-empty container (object, array, or tree with children).
-- [ ] Fix `Set.Execute`'s `DeregisterElement(value)` to deregister the
+- [x] Decide the fix shape — see "The fix" above.
+- [x] Add regression tests, all five RED on `main` and GREEN with the fix,
+      each asserting the document's size returns to the empty-document
+      baseline after remove-then-GC (and, where two replicas are involved,
+      that they agree):
+      `TestDocumentSize/removing a non-empty container test` (object, array,
+      nested object), `.../removing a container holding an earlier tombstone
+      test`, `.../concurrently removing the same container test`,
+      `.../removing a member inside an already removed container test`,
+      `.../restoring a container over a diverged tombstone test`.
+- [x] Fix `Set.Execute`'s `DeregisterElement(value)` to deregister the
       element actually registered under that `createdAt`, not the
-      incoming copy — and raise the same correction with the JS SDK,
-      since `set_operation.ts:98-104` has it too.
-- [ ] Audit whether the same asymmetry exists for `Array`, `Tree`, and other
-      `Container` implementations, not just `Object` — the reproduction
-      above only exercises `Object`.
-- [ ] Once fixed, re-check whether `TestHistorySkippedUndo`
-      (`test/integration/history_test.go`, added by the undo/redo port) can
-      have its expected `DocSize` values simplified now that the negative-GC
-      artifact is gone.
+      incoming copy. The same correction is owed to JS's
+      `set_operation.ts:98-104`. Covered by the "restoring a container over
+      a diverged tombstone" test, which is the case where the tombstone and
+      the incoming copy actually differ.
+- [x] Audit the other `Container` implementations: `Object` and `Array` are
+      the only two (`Text` and `Tree` are leaf `Element`s whose `DataSize()`
+      already covers their whole structure, so they were never affected —
+      verified empirically alongside the object/array cases).
+- [x] Re-check `TestHistorySkippedUndo` (`test/integration/history_test.go`):
+      nothing to simplify. It asserts `d1.DocSize() == d2.DocSize()` rather
+      than hardcoding the negative-GC figures, so it needed no edit and
+      still passes.
+
+## Confirmed in the JS SDK
+
+`registerRemovedElement` (`packages/sdk/src/document/crdt/root.ts:257`) has
+the identical shape — no descendant walk, no idempotence — and
+`deregisterElement` (`root.ts:232-253`) walks descendants exactly like Go's.
+Running the same four scenarios through the JS SDK produced figures
+identical to Go's pre-fix output:
+
+| scenario | JS `gc` after collection | Go on `main` |
+|---|---|---|
+| object with one member | `{data:-2, meta:-48}` | `{Data:-2 Meta:-48}` |
+| array with one element | `{data:-2, meta:-24}` | `{Data:-2 Meta:-24}` |
+| nested object | `{data:-2, meta:-96}` | `{Data:-2 Meta:-96}` |
+| text | `{data:0, meta:0}` | `{Data:0 Meta:0}` |
+
+`set_operation.ts:98-104` has the wrong-element `deregisterElement(value)`
+too. The one place the SDKs differ: Go's `DeleteByCreatedAt` returns nil
+when a remove loses the LWW comparison and `Remove.Execute` skips the
+registration, while JS's `ElementRHT.delete` (`element_rht.ts:119-130`)
+ignores `node.remove`'s return value and `remove_operation.ts:100`
+registers unconditionally. That difference is why the pre-fix Go replicas
+diverged from *each other* on the concurrent remove while the JS ones were
+uniformly wrong; making the registration idempotent removes the dependence
+on it.
+
+The JS fix is not in this change and needs its own PR.
+
+## Follow-up found while fixing: snapshot rebuild adds one ticket per removal
+
+Not fixed here, and **not** introduced by this change — the drift is
+identical before and after it. `NewRoot` (`root.go:53-93`) calls
+`RegisterElement(root)` on a tree whose tombstones already carry
+`removedAt`, so that ticket is counted into `Live`; then each removed
+element goes through `RegisterRemovedElementPair`, whose
+`Live.Meta += time.TicketSize` compensation exists for the incremental path
+where the ticket was *not* yet counted at registration time. The rebuild
+therefore over-reports `Live.Meta` by exactly one `TicketSize` per removed
+element:
+
+```text
+one element removed:  live {Data:0 Meta:72}   rebuilt {Data:0 Meta:96}
+two elements removed: live {Data:0 Meta:24}   rebuilt {Data:0 Meta:72}
+```
+
+A server rebuilding a document from a snapshot therefore reports a larger
+`DocSize` than a client holding the same document incrementally, which is
+the same `MaxSizeLimit` divergence in a different disguise. Fixing it means
+changing the compensation's contract, which changes the reported size of
+every snapshot-rebuilt document, so it wants its own task.
+
+The figures above are from `main`. This change reduces the drift to a
+constant `TicketSize` instead of one per removed element (measured on the
+same document: `+24` after one removal and after two, where `main` gave
+`+24` and `+48`), because the idempotent `moveSizeToGC` stops the rebuild's
+per-tombstone pass from compensating more than once. It does not remove it.
 
 ## See Also
 
