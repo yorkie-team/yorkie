@@ -8,7 +8,19 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 20
+Total archived tasks: 27
+
+## 2026/08 (7 tasks)
+
+| Task | Todo | Lessons |
+|---|---|---|
+| Undo/Redo Go SDK Port Implementation Plan (2026-08-15) | [20260815-undo-redo-go-port-todo.md](./2026/08/20260815-undo-redo-go-port-todo.md) | [20260815-undo-redo-go-port-lessons.md](./2026/08/20260815-undo-redo-go-port-lessons.md) |
+| Tree: survive two nodes sharing one TreeNodeID (2026-08-14) | [20260814-duplicate-tree-node-id-todo.md](./2026/08/20260814-duplicate-tree-node-id-todo.md) | [20260814-duplicate-tree-node-id-lessons.md](./2026/08/20260814-duplicate-tree-node-id-lessons.md) |
+| RPC: bind the listener before Start returns (2026-08-13) | [20260813-rpc-start-bind-sync-todo.md](./2026/08/20260813-rpc-start-bind-sync-todo.md) | [20260813-rpc-start-bind-sync-lessons.md](./2026/08/20260813-rpc-start-bind-sync-lessons.md) |
+| Tree: converge style ranges ending after a merge-moved child (2026-08-08) | [20260808-tree-style-moved-anchor-todo.md](./2026/08/20260808-tree-style-moved-anchor-todo.md) | [20260808-tree-style-moved-anchor-lessons.md](./2026/08/20260808-tree-style-moved-anchor-lessons.md) |
+| Tree: keep style ranges from crossing a concurrent merge anchor (2026-08-03) | [20260803-tree-style-merge-anchor-todo.md](./2026/08/20260803-tree-style-merge-anchor-todo.md) | [20260803-tree-style-merge-anchor-lessons.md](./2026/08/20260803-tree-style-merge-anchor-lessons.md) |
+| Tree: converge concurrent insert anchored in a chained merge (2026-08-03) | [20260803-tree-chained-merge-convergence-todo.md](./2026/08/20260803-tree-chained-merge-convergence-todo.md) | [20260803-tree-chained-merge-convergence-lessons.md](./2026/08/20260803-tree-chained-merge-convergence-lessons.md) |
+| Tree: converge concurrent insert into a merged (removed) parent (2026-08-02) | [20260802-tree-insert-into-merged-parent-todo.md](./2026/08/20260802-tree-insert-into-merged-parent-todo.md) | [20260802-tree-insert-into-merged-parent-lessons.md](./2026/08/20260802-tree-insert-into-merged-parent-lessons.md) |
 
 ## 2026/07 (2 tasks)
 

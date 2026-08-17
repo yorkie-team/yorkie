@@ -50,8 +50,10 @@ before step 04's RGA `CreatedAt` tie-break.
 - [x] Regression: full tree concurrency matrix (1599), integration
   Tree/GC/Snapshot (169), whole-repo `go test ./...`, crdt unit incl.
   new element-tombstone accounting test, `gofmt`, `golangci-lint`
-- [ ] Open PR
-- [ ] Port the same fix to yorkie-js-sdk (`packages/sdk/src/document/crdt/tree.ts`)
+- [x] Open PR — merged as #1905, `Move tombstones with merge to preserve
+      tree RGA anchors`
+- [x] Port the same fix to yorkie-js-sdk (`packages/sdk/src/document/crdt/tree.ts`)
+      — merged as yorkie-js-sdk#1303, same subject
 
 ## Notes
 

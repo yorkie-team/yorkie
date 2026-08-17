@@ -84,8 +84,10 @@ archive_count=${#archive_files[@]}
   echo ""
   echo "## Layout"
   echo ""
-  echo "- Active tasks: \`docs/tasks/active/\`"
-  echo "- Archived tasks: \`docs/tasks/archive/YYYY/MM/\`"
+  # Linked, not just named: active/README.md documents the convention and is
+  # hand-written, so nothing else would ever point a reader at it.
+  echo "- Active tasks: [\`docs/tasks/active/\`](./active/README.md)"
+  echo "- Archived tasks: [\`docs/tasks/archive/YYYY/MM/\`](./archive/README.md)"
   echo ""
   echo "## Naming"
   echo ""

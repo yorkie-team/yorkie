@@ -11,6 +11,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Data Structure](data-structure.md): Data structures for root in document
 - [DocPresence](doc-presence.md): Data structure for presence in document
 - [Presence](presence.md): Dedicated presence for real-time user tracking
+- [Presenceless Document Option](disable-presence.md): Document-scoped `disable_presence` that permanently turns off presence storage and propagation for documents that never use it
 
 ### CRDT
 

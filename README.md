@@ -53,8 +53,8 @@ Full, comprehensive [documentation](https://yorkie.dev/docs) is available on the
 
 ## Project Documentation
 
-- [docs/design/](docs/design/README.md) — Architectural design documents
-- [docs/tasks/](docs/tasks/README.md) — Task tracking (active and archived)
+- [docs/](docs/README.md) — Architectural design documents and task tracking
+- [scripts/](scripts/README.md) — Task-doc tooling, clone setup, and CI helpers
 - [test/k6/](test/k6/README.md) — Load testing setup
 - [build/charts/](build/charts/README.md) — Helm charts (cluster, monitoring, analytics)
 - [build/docker/](build/docker/README.md) — Docker Compose files for local dev
