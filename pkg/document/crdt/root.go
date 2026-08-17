@@ -47,6 +47,17 @@ type Root struct {
 	gcElementPairMap map[string]ElementPair
 	gcNodePairMap    map[string]GCPair
 	docSize          resource.DocSize
+
+	// sizeInGC maps the creation time of every registered element whose size
+	// counts toward docSize.GC rather than docSize.Live, to the exact amount
+	// charged. Each element's size belongs to exactly one of the two, and an
+	// element reaches GC by more routes than it has removals: it can be
+	// removed itself, or be a descendant of a removed container. Recording
+	// the amount rather than a flag keeps the two sides symmetric even though
+	// DataSize is not stable over an element's lifetime -- it grows by a
+	// ticket the moment removedAt is set, which can happen after the size has
+	// already moved.
+	sizeInGC map[string]resource.DataSize
 }
 
 // NewRoot creates a new instance of Root.
@@ -55,6 +66,7 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[string]GCPair),
+		sizeInGC:         make(map[string]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
 				Data: 0,
@@ -134,7 +146,17 @@ func (r *Root) deregisterElement(element Element) int {
 
 	deregister := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
-		r.docSize.GC.Sub(elem.DataSize())
+		// Subtract the size from wherever it is actually counted, and by the
+		// amount actually charged. A descendant created inside an
+		// already-removed container never passed through a removal, so it
+		// still sits in Live; subtracting it from GC would push GC below zero
+		// and leave its cost in Live forever.
+		if charged, ok := r.sizeInGC[createdAt]; ok {
+			r.docSize.GC.Sub(charged)
+			delete(r.sizeInGC, createdAt)
+		} else {
+			r.docSize.Live.Sub(elem.DataSize())
+		}
 
 		delete(r.elementMap, createdAt)
 		delete(r.gcElementPairMap, createdAt)
@@ -155,16 +177,57 @@ func (r *Root) deregisterElement(element Element) int {
 
 // RegisterRemovedElementPair register the given element pair to hash table.
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
-	r.docSize.GC.Add(elem.DataSize())
-	r.docSize.Live.Sub(elem.DataSize())
+	moved := r.moveSizeToGC(elem)
+
+	// NOTE(hackerwins): RegisterElement books a container and every descendant
+	// into Live, and deregisterElement subtracts both when the tombstone is
+	// collected. Removing a container therefore has to move its descendants as
+	// well: booking only the container itself would strand their size in Live
+	// forever and drive GC negative once the collection subtracted them.
+	if container, ok := elem.(Container); ok {
+		container.Descendants(func(e Element, _ Container) bool {
+			r.moveSizeToGC(e)
+			return false
+		})
+	}
+
 	// NOTE(hackerwins): When an element is removed, parent sets the removedAt
-	// to mark the child as removed.
-	r.docSize.Live.Meta += time.TicketSize
+	// to mark the child as removed. That ticket is part of the size charged to
+	// GC just now, but it was never part of what Live held, so Live gets it
+	// back. Only on the move that carried it: a size already in GC, or one
+	// moved as a descendant while its own removedAt is still unset, did not.
+	if moved && elem.RemovedAt() != nil {
+		r.docSize.Live.Meta += time.TicketSize
+	}
 
 	r.gcElementPairMap[elem.CreatedAt().Key()] = ElementPair{
 		parent,
 		elem,
 	}
+}
+
+// moveSizeToGC moves the size of the given element from Live to GC, and
+// reports whether it moved a size Live was holding. A size already in GC --
+// because the element was removed before, or because a container above it was
+// -- only has its charge topped up: DataSize grows by a ticket when removedAt
+// is set, which can happen after the move.
+func (r *Root) moveSizeToGC(elem Element) bool {
+	createdAt := elem.CreatedAt().Key()
+	size := elem.DataSize()
+
+	charged, ok := r.sizeInGC[createdAt]
+	if ok {
+		diff := size
+		diff.Sub(charged)
+		r.docSize.GC.Add(diff)
+		r.sizeInGC[createdAt] = size
+		return false
+	}
+
+	r.docSize.GC.Add(size)
+	r.docSize.Live.Sub(size)
+	r.sizeInGC[createdAt] = size
+	return true
 }
 
 // DocSize returns the size of the document.

@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 var (
@@ -321,6 +322,213 @@ func TestDocumentSize(t *testing.T) {
 		}))
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 72}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 4, Meta: 72}, doc.DocSize().GC)
+	})
+
+	t.Run("removing a non-empty container test", func(t *testing.T) {
+		// Removing a container has to move its descendants into GC as well.
+		// Booking only the container itself stranded their size in Live and
+		// drove GC negative once the collection subtracted them.
+		for _, tc := range []struct {
+			name  string
+			build func(root *json.Object)
+			built resource.DataSize
+		}{{
+			name:  "object",
+			build: func(root *json.Object) { root.SetNewObject("k").SetString("a", "1") },
+			built: resource.DataSize{Data: 2, Meta: 120},
+		}, {
+			name:  "array",
+			build: func(root *json.Object) { root.SetNewArray("k").AddString("a") },
+			built: resource.DataSize{Data: 2, Meta: 96},
+		}, {
+			name: "nested object",
+			build: func(root *json.Object) {
+				root.SetNewObject("k").SetNewObject("inner").SetString("a", "1")
+			},
+			built: resource.DataSize{Data: 2, Meta: 168},
+		}} {
+			t.Run(tc.name, func(t *testing.T) {
+				doc := document.New("doc")
+				empty := doc.DocSize()
+				assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, empty.Live)
+
+				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+					tc.build(root)
+					return nil
+				}))
+				assert.Equal(t, tc.built, doc.DocSize().Live)
+				assert.Equal(t, resource.DataSize{Data: 0, Meta: 0}, doc.DocSize().GC)
+
+				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+					root.Delete("k")
+					return nil
+				}))
+				// Every descendant left Live with the container, so Live is back
+				// to the empty document and the whole subtree now sits in GC.
+				assert.Equal(t, empty.Live, doc.DocSize().Live)
+				assert.Equal(t, tc.built.Data, doc.DocSize().GC.Data)
+				assert.Positive(t, doc.DocSize().GC.Meta)
+
+				doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+				assert.Equal(t, empty, doc.DocSize())
+			})
+		}
+	})
+
+	t.Run("removing a container holding an earlier tombstone test", func(t *testing.T) {
+		// A descendant removed on its own already moved into GC through its own
+		// pair. Removing its container must not book that subtree a second time.
+		doc := document.New("doc")
+		empty := doc.DocSize()
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("k").SetNewObject("inner").SetString("a", "1")
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 2, Meta: 168}, doc.DocSize().Live)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("k").Delete("inner")
+			return nil
+		}))
+		inner := doc.DocSize().GC
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		assert.Equal(t, empty.Live, doc.DocSize().Live)
+		// "k" contributes only its own size on top of the subtree already in GC.
+		assert.Equal(t, inner.Data, doc.DocSize().GC.Data)
+
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.Equal(t, empty, doc.DocSize())
+	})
+
+	t.Run("concurrently removing the same container test", func(t *testing.T) {
+		// A concurrent remove reports the element as removed once more when its
+		// ticket wins the LWW comparison. Moving the size into GC again left the
+		// two replicas reporting different sizes for the same document, and
+		// DocSize is what gates MaxSizeLimit.
+		d1, d2, a1, a2 := newReplicas(t)
+		empty := d1.DocSize()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("k").SetString("a", "1")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		assert.Equal(t, d1.DocSize(), d2.DocSize())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "{}", d1.Marshal())
+		assert.Equal(t, "{}", d2.Marshal())
+		assert.Equal(t, d1.DocSize(), d2.DocSize(), "DocSize must agree across replicas")
+
+		vector := helper.MaxVersionVector(a1, a2)
+		d1.GarbageCollect(vector)
+		d2.GarbageCollect(vector)
+		assert.Equal(t, empty, d1.DocSize())
+		assert.Equal(t, empty, d2.DocSize())
+	})
+
+	t.Run("removing a member inside an already removed container test", func(t *testing.T) {
+		// d1 removes the container, d2 concurrently removes a member inside it,
+		// so both removals report that member's size. It must move to GC once,
+		// and the ticket its removedAt adds afterwards has to be charged too --
+		// the collection subtracts the size including that ticket.
+		d1, d2, a1, a2 := newReplicas(t)
+		empty := d1.DocSize()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			k := root.SetNewObject("k")
+			k.SetString("a", "1")
+			k.SetString("b", "2")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("k").Delete("a")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		assert.Equal(t, d1.DocSize(), d2.DocSize(), "DocSize must agree across replicas")
+
+		vector := helper.MaxVersionVector(a1, a2)
+		d1.GarbageCollect(vector)
+		d2.GarbageCollect(vector)
+		assert.Equal(t, empty, d1.DocSize())
+		assert.Equal(t, empty, d2.DocSize())
+	})
+
+	t.Run("restoring a container over a diverged tombstone test", func(t *testing.T) {
+		// An undo restores the copy its reverse captured, while the tombstone
+		// registered under that createdAt has meanwhile grown a member from a
+		// peer. Deregistering the copy rather than the tombstone would leave
+		// that member registered forever and charge the wrong size to GC.
+		d1, d2, _, _ := newReplicas(t)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("k").SetString("a", "1")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		built := d1.DocSize()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("k").SetString("b", "2")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		assert.True(t, d1.CanUndo())
+		assert.NoError(t, d1.Undo())
+		assert.Equal(t, `{"k":{"a":"1"}}`, d1.Marshal())
+		// The restored document is exactly the one that was built, so it costs
+		// exactly what it cost then, with nothing left over in GC.
+		assert.Equal(t, built, d1.DocSize())
+	})
+
+	t.Run("undoing the removal of an array container test", func(t *testing.T) {
+		// Single client, no concurrency: remove a container out of an array,
+		// undo, collect. The document is the one that was built, so it has to
+		// cost what it cost then.
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k").AddNewObject().SetString("a", "1")
+			return nil
+		}))
+		built := doc.DocSize()
+		assert.Equal(t, resource.DataSize{Data: 2, Meta: 144}, built.Live)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").Delete(0)
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"k":[{"a":"1"}]}`, doc.Marshal())
+
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.Equal(t, built, doc.DocSize())
 	})
 
 	t.Run("deep copy test", func(t *testing.T) {
