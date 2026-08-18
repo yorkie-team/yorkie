@@ -126,6 +126,47 @@ someone migrates them — create the table under a new name, `INSERT INTO ...
 SELECT`, then swap with `ALTER TABLE ... RENAME`. Nothing breaks in the
 meantime; the queries stay correct and still hit the view.
 
+### Day boundaries
+
+The views bucket by `DATE(timestamp)`, and that day is a **UTC** day. The server
+writes event timestamps with `time.Now()` from a container running on UTC, and a
+StarRocks `DATETIME` is timezone-naive — it stores the wall clock it was given
+and converts nothing on read, so `DATE()` simply truncates. A chart point
+labelled `2026-08-18` therefore covers 09:00 KST that day to 09:00 KST the next.
+
+This is not new: the pre-view queries grouped by the same expression, so the
+numbers are unchanged. What is new is that the view **freezes the boundary at
+ingest**. The bucket is materialized, so it cannot be reinterpreted later by
+changing a session variable or wrapping the column at query time.
+
+Two measurements shape what a locale-aware version would cost:
+
+- A finer view does not serve a coarser query. An hourly rollup
+  (`date_trunc('hour', timestamp)`) answers hourly queries from 96 summary rows
+  but sends the daily query to a 31,616-row base scan. HLL sketches compose
+  losslessly, so 24 hourly sketches *are* a day mathematically — the optimizer
+  just does not make that leap. Matching is on the expression, not its meaning.
+- A converted day is materializable.
+  `DATE(CONVERT_TZ(timestamp,'UTC','Asia/Seoul'))` is accepted in a synchronous
+  view, and a KST-day query then reads 22 rows instead of the base table, with
+  values identical to an exact count over the same window.
+
+So each day boundary needs its own view, and every view on a table is written on
+every load. **The decision is to keep UTC buckets** and let the dashboard say so,
+rather than double the ingest cost for a requirement nobody has raised.
+
+If per-project local days are needed later, the cheaper path is to stop deriving
+the day in the warehouse: have the server compute the project's local date when
+it emits the event, carry it as a column, and key the view on that. One view,
+any per-project timezone, no `CONVERT_TZ`. It fixes the boundary at write time,
+so changing a project's timezone would not restate its history.
+
+A viewer-chosen timezone is a different problem and this design does not reach
+it. That needs sketches finer than the finest boundary — hourly, or 15 minutes
+to cover offsets like +05:30 and +05:45 — unioned per request with
+`HLL_UNION_AGG`, which means a view the server can name and query. The automatic
+rewrite would be given up in the process.
+
 ### Deployment sequencing
 
 Views without the code change mean no rewrite — harmless. The code change
@@ -174,6 +215,7 @@ Events ingested after the views were built are reflected without any rebuild.
 | Aggregate rollups produce frequent small writes under continuous ingest, and compaction on the internal cluster has deadlocked before | Summary volume is tiny next to the base table, and the compaction score stayed at zero on the public cluster — but public ingest is a trickle, so this has to be re-measured under production ingest before rollout there. |
 | Expressions in synchronous views need StarRocks 3.1 or newer | The chart pins `3.3-latest` and the local stack pins 3.3.9. Check the version before creating the views in any other environment. |
 | The init hook re-runs on every chart upgrade and `CREATE MATERIALIZED VIEW IF NOT EXISTS` still errors when the view exists | The init script runs the view DDL with `mysql --force` and then polls `desc <table> all` for each index. |
+| The event tables hold UTC, but StarRocks defaults its `time_zone` to `Asia/Shanghai`, so anything written against `NOW()` is eight hours off the data | These queries pass explicit date strings from Go and never ask the server what time it is. Ad-hoc queries should not: either set the FE `time_zone` to UTC or use `UTC_TIMESTAMP()`. |
 
 ### Design Decisions
 
@@ -185,6 +227,7 @@ Events ingested after the views were built are reflected without any rebuild.
 | `event_type` in the client view only | Its query is the only one that filters on `event_type`. Adding the column elsewhere would push `dt` out of the key prefix for no gain. |
 | Channel key in the session view | One view serves both the sessions metric and peak sessions per channel, instead of two views over the same table. |
 | Realign `user_events` in the DDL, without an automatic migration | New installs get the good layout at no cost. Rewriting a live event table is a separate operation with its own risk, and the old layout still works. |
+| UTC day buckets, with an ingest-time local date as the reserved path | Every additional day boundary is another view written on every load. Nobody has asked for local days yet, and if they do, computing the date at write time costs one column instead of one view per timezone. |
 
 ## Alternatives Considered
 
@@ -196,6 +239,8 @@ Events ingested after the views were built are reflected without any rebuild.
 | Cache the warehouse results in MongoDB, as `stats_clients_count` does | A second staleness budget for numbers the warehouse can produce fresh in tens of milliseconds. |
 | Partition the event tables by day and rely on partition pruning alone | Helps the scan, but the request still counts distinct values over every event in the window. Pruning and pre-aggregation are complementary; pre-aggregation is what removes the O(rows) term. |
 | Raise the dashboard timeout | Moves the failure rather than removing it. |
+| One view per supported timezone, keyed on `DATE(CONVERT_TZ(...))` | It works — a converted day materializes and rewrites correctly — but each view is written on every load, so the ingest cost scales with the number of locales supported. Reserved for the day a specific market needs it. |
+| One hourly view, composed into whichever local day is asked for | The rewrite matches the grouping expression, not its meaning, so an hourly view leaves daily queries on a base scan. Composing sketches per request means querying a view by name, which a synchronous view does not allow. |
 
 ## Tasks
 
