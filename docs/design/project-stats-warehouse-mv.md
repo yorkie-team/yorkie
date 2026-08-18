@@ -10,8 +10,9 @@ target-version: 0.7.17
 `GetProjectStats` renders six warehouse-backed metrics — active users, active
 documents, active clients, active channels, sessions, and peak sessions per
 channel — each as a daily series plus a total. That is 12 queries against the
-event tables in `server/backend/warehouse/starrocks.go`, and every one of them
-is a distinct count over a whole event table.
+event tables the [OLAP stack](olap-stack.md) fills, issued from
+`server/backend/warehouse/starrocks.go`, and every one of them is a distinct
+count over a whole event table.
 
 [Project Stats Cache](project-stats-cache.md) fixed the MongoDB half of the same
 endpoint and explicitly left the warehouse alone, on the grounds that StarRocks
