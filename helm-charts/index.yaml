@@ -2,6 +2,41 @@ apiVersion: v1
 entries:
   yorkie-analytics:
   - apiVersion: v2
+    appVersion: 0.7.17
+    created: "2026-08-18T10:39:13.999672732Z"
+    dependencies:
+    - condition: yorkie-analytics.kafka.enabled
+      name: kafka
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 31.3.1
+    - condition: yorkie-analytics.starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: 1.9.10
+    description: yorkie-analytics provides analytics system with kafka and starrocks
+      for analyzing usage of yorkie cluster
+    digest: 0e2fd8f799c16423b37c6a5797ebaf809d9dbaae5aad957e6266a76b2b1c2eec
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - kafka
+    - starrocks
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-analytics
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-analytics-0.7.17/yorkie-analytics-0.7.17.tgz
+    version: 0.7.17
+  - apiVersion: v2
     appVersion: 0.6.45
     created: "2026-01-23T08:41:50.379831326Z"
     dependencies:
@@ -5598,4 +5633,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2026-08-15T13:04:21.961578869Z"
+generated: "2026-08-18T10:39:13.999973654Z"
