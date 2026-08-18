@@ -30,6 +30,12 @@ import (
 )
 
 // StarRocks is a warehouse that stores data in StarRocks.
+//
+// NOTE(hackerwins): The queries below filter on DATE(timestamp) instead of the
+// raw timestamp. StarRocks rewrites an APPROX_COUNT_DISTINCT query onto a
+// synchronous materialized view grouped by DATE(timestamp) only when the query
+// uses the same expression in its predicate. With a raw timestamp predicate the
+// query silently falls back to a full scan of the base event table.
 type StarRocks struct {
 	conf   *Config
 	driver *sql.DB
@@ -71,8 +77,8 @@ func (r *StarRocks) GetActiveUsers(
 	    user_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s'
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s'
 	GROUP BY 
 	    event_date
 	ORDER BY 
@@ -106,8 +112,8 @@ func (r *StarRocks) GetActiveUsersCount(
 	    user_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s';
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	count, err := r.queryCount(ctx, query)
@@ -138,8 +144,8 @@ func (r *StarRocks) GetActiveDocuments(
 	    document_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s'
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s'
 	GROUP BY 
 	    event_date
 	ORDER BY 
@@ -173,8 +179,8 @@ func (r *StarRocks) GetActiveDocumentsCount(
 		document_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s';
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	count, err := r.queryCount(ctx, query)
@@ -206,8 +212,8 @@ func (r *StarRocks) GetActiveClients(
 	WHERE
 		project_id = '%s'
 		AND event_type = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s'
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s'
 	GROUP BY
 	    event_date
 	ORDER BY
@@ -242,8 +248,8 @@ func (r *StarRocks) GetActiveClientsCount(
 	WHERE
 		project_id = '%s'
 		AND event_type = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s';
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s';
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	count, err := r.queryCount(ctx, query)
@@ -274,8 +280,8 @@ func (r *StarRocks) GetActiveChannels(
 	    channel_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s'
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s'
 	GROUP BY 
 	    event_date
 	ORDER BY 
@@ -309,8 +315,8 @@ func (r *StarRocks) GetActiveChannelsCount(
 	    channel_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s';
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	count, err := r.queryCount(ctx, query)
@@ -341,8 +347,8 @@ func (r *StarRocks) GetSessions(
 	    session_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s'
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s'
 	GROUP BY 
 	    event_date
 	ORDER BY 
@@ -376,8 +382,8 @@ func (r *StarRocks) GetSessionsCount(
 	    session_events
 	WHERE
 		project_id = '%s'
-		AND timestamp >= '%s'
-		AND timestamp < '%s';
+		AND DATE(timestamp) >= '%s'
+		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	count, err := r.queryCount(ctx, query)
@@ -413,8 +419,8 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 	        session_events
 	    WHERE
 	        project_id = '%s'
-	        AND timestamp >= '%s'
-	        AND timestamp < '%s'
+	        AND DATE(timestamp) >= '%s'
+	        AND DATE(timestamp) < '%s'
 	    GROUP BY 
 	        event_date, channel_key
 	) AS channel_sessions
@@ -456,8 +462,8 @@ func (r *StarRocks) GetPeakSessionsPerChannelCount(
 	        session_events
 	    WHERE
 	        project_id = '%s'
-	        AND timestamp >= '%s'
-	        AND timestamp < '%s'
+	        AND DATE(timestamp) >= '%s'
+	        AND DATE(timestamp) < '%s'
 	    GROUP BY 
 	        event_date, channel_key
 	) AS channel_sessions;

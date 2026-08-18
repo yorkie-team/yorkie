@@ -29,8 +29,12 @@ docker compose -f build/docker/analytics/docker-compose.yml down
 The files used are as follows:
 
 - docker-compose.yml: Defines the StarRocks and Kafka services
-- init-user-events-db.sql: Creates the Yorkie database and tables
-- init-routine-load.sql: Sets up Kafka routine load jobs
+- init-create-table.sql: Creates the Yorkie database and tables
+- init-create-mv.sql: Creates the daily HLL materialized views the project stats
+  queries are rewritten onto
+- init-create-routine-load.sql: Sets up Kafka routine load jobs
+- init-kafka-topics.sh: Creates the Kafka topics
+- init-starrocks-database.sh: Runs the SQL files above and reports what was created
 
 Key services:
 
@@ -44,7 +48,17 @@ The initialization services will:
 - Start the StarRocks FE/BE nodes
 - Create the required Kafka topics
 - Initialize the StarRocks database and tables
+- Create the daily HLL materialized views on the event tables
 - Configure the routine load from Kafka to StarRocks
+
+Creating the materialized views is best effort: initialization logs whether each
+one became ready and carries on either way. Without a view, the project stats
+queries fall back to scanning the base table — slower, but still correct.
+
+> Table creation fails with `No alive nodes` when the host disk is more than 85%
+> full: StarRocks drops a backend out of the tablet allocation candidates at that
+> point, even though `SHOW BACKENDS` still reports it alive. Free up disk space
+> rather than raising the watermark.
 
 ## For Setup Kafka Cluster Mode
 

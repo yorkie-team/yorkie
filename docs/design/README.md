@@ -45,12 +45,13 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Housekeeping](housekeeping.md): Background tasks for cleaning up documents and tombstones
 - [Document Epoch](document-epoch.md): Epoch-based detection and recovery for clients stale after compaction
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
-- [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
+- [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
 - [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 - [Project Stats Cache](project-stats-cache.md): Asynchronously refreshed cache for `ClientsCount` and `DocumentsCount` to keep `GetProjectStats` fast at large scale
+- [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md): Daily HLL rollups that make the warehouse-backed `GetProjectStats` metrics independent of event volume
 - [Per-Project Channel Session TTL](per-project-channel-session-ttl.md): Per-project override for `ChannelSessionTTL` to tune the presence-count "feels occupied" effect
 
 ## Maintaining the Document

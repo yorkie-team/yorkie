@@ -34,7 +34,9 @@ index entry.
   cluster nodes, has no DB scan, and reflects currently-connected state.
   Caching it would obscure live behavior without saving meaningful work.
 - Caching warehouse-backed stats (`ActiveUsers`, `Sessions`, etc.). The
-  warehouse (StarRocks) is already OLAP-optimized.
+  warehouse (StarRocks) is already OLAP-optimized. (This holds only up to a
+  point — see [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md),
+  which pre-aggregates those queries inside StarRocks instead of caching them.)
 - Fixing the upstream growth that produced 83M activated clients. Tracked
   separately as housekeeping efficiency work.
 
