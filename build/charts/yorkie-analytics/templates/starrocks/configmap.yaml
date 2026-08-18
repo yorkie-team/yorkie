@@ -78,6 +78,51 @@ data:
     );
 
 
+  init-create-mv.sql: |
+    USE yorkie;
+
+    -- Synchronous materialized views holding one HLL sketch per (project, day).
+    -- StarRocks maintains them at ingest time and rewrites the dashboard's
+    -- APPROX_COUNT_DISTINCT queries onto them, so GetProjectStats reads a few
+    -- summary rows instead of full-scanning the event tables. The rewrite only
+    -- happens when the query filters on DATE(timestamp), which is why the
+    -- warehouse queries in server/backend/warehouse/starrocks.go use that
+    -- expression. See docs/design/project-stats-warehouse-mv.md.
+    --
+    -- Only the client view carries event_type, because its query filters on it.
+    -- The others omit it so that GROUP BY DATE(timestamp) maps to a clean key
+    -- prefix.
+
+    CREATE MATERIALIZED VIEW mv_user_hll_daily AS
+        SELECT project_id, DATE(timestamp) AS dt,
+               HLL_UNION(HLL_HASH(user_id)) AS user_hll
+        FROM user_events
+        GROUP BY project_id, DATE(timestamp);
+
+    CREATE MATERIALIZED VIEW mv_document_hll_daily AS
+        SELECT project_id, DATE(timestamp) AS dt,
+               HLL_UNION(HLL_HASH(document_key)) AS document_hll
+        FROM document_events
+        GROUP BY project_id, DATE(timestamp);
+
+    CREATE MATERIALIZED VIEW mv_channel_hll_daily AS
+        SELECT project_id, DATE(timestamp) AS dt,
+               HLL_UNION(HLL_HASH(channel_key)) AS channel_hll
+        FROM channel_events
+        GROUP BY project_id, DATE(timestamp);
+
+    CREATE MATERIALIZED VIEW mv_session_hll_daily_ch AS
+        SELECT project_id, DATE(timestamp) AS dt, channel_key,
+               HLL_UNION(HLL_HASH(session_id)) AS session_hll
+        FROM session_events
+        GROUP BY project_id, DATE(timestamp), channel_key;
+
+    CREATE MATERIALIZED VIEW mv_client_hll_daily AS
+        SELECT project_id, event_type, DATE(timestamp) AS dt,
+               HLL_UNION(HLL_HASH(client_id)) AS client_hll
+        FROM client_events
+        GROUP BY project_id, event_type, DATE(timestamp);
+
   init-create-routine-load.sql: |
     CREATE ROUTINE LOAD yorkie.user_events ON user_events
     PROPERTIES
@@ -170,6 +215,32 @@ data:
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: session_events' || echo -e 'session_events table not found'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: client_events' || echo -e 'client_events table not found'
 
+
+    echo -e 'Creating materialized views'
+    # A synchronous materialized view has no working IF NOT EXISTS guard: the
+    # clause parses but still errors once the view exists. This hook re-runs on
+    # every upgrade, so --force is what keeps a second run from failing.
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root --force < /etc/config/init-create-mv.sql \
+      || echo -e 'Could not run the materialized view script, continuing...'
+
+    echo -e 'Checking materialized views'
+    # The rollup build runs asynchronously, so the index only shows up in `desc
+    # ... all` once it finishes. Poll instead of checking straight after CREATE.
+    mvs=(user_events:mv_user_hll_daily document_events:mv_document_hll_daily channel_events:mv_channel_hll_daily session_events:mv_session_hll_daily_ch client_events:mv_client_hll_daily)
+    for mv in ${mvs[@]}; do
+      table=${mv%%:*}
+      index=${mv##*:}
+      attempt=0
+      until mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e "desc yorkie.$table all\G" 2>/dev/null | grep -q "IndexName: $index"; do
+        attempt=$((attempt + 1))
+        if [ $attempt -ge 30 ]; then
+          echo -e "$index not found on $table"
+          break
+        fi
+        sleep 2s
+      done
+      [ $attempt -lt 30 ] && echo -e "$index is ready on $table"
+    done
 
     sleep 5s
     echo -e 'Creating routine load'

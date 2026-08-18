@@ -27,6 +27,32 @@ mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tab
 mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: client_events' || echo -e 'client_events table not found'
 
 
+echo -e 'Creating materialized views'
+# A synchronous materialized view has no working IF NOT EXISTS guard: the clause
+# parses but still errors once the view exists. --force is what keeps a re-run
+# of this script from failing.
+mysql -h starrocks-fe -P 9030 -u root --force < /init-create-mv.sql \
+  || echo -e 'Could not run the materialized view script, continuing...'
+
+echo -e 'Checking materialized views'
+# The rollup build runs asynchronously, so the index only shows up in `desc ...
+# all` once it finishes. Poll instead of checking straight after the CREATE.
+mvs=(user_events:mv_user_hll_daily document_events:mv_document_hll_daily channel_events:mv_channel_hll_daily session_events:mv_session_hll_daily_ch client_events:mv_client_hll_daily)
+for mv in "${mvs[@]}"; do
+  table=${mv%%:*}
+  index=${mv##*:}
+  attempt=0
+  until mysql -h starrocks-fe -P 9030 -u root -e "desc yorkie.$table all\G" 2>/dev/null | grep -q "IndexName: $index"; do
+    attempt=$((attempt + 1))
+    if [ $attempt -ge 30 ]; then
+      echo -e "$index not found on $table"
+      break
+    fi
+    sleep 2s
+  done
+  [ $attempt -lt 30 ] && echo -e "$index is ready on $table"
+done
+
 sleep 5s
 echo -e 'Creating routine load'
 if mysql -h starrocks-fe -P 9030 -u root < /init-create-routine-load.sql 2>/dev/null; then
