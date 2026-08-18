@@ -1,6 +1,6 @@
 services:
   starrocks-fe:
-    image: starrocks/fe-ubuntu:2.5.4
+    image: starrocks/fe-ubuntu:3.3.9
     hostname: starrocks-fe
     container_name: starrocks-fe
     user: root
@@ -20,7 +20,7 @@ services:
       - ./starrocks/fe/log:/opt/starrocks/fe/log
 
   starrocks-be:
-    image: starrocks/be-ubuntu:2.5.4
+    image: starrocks/be-ubuntu:3.3.9
     hostname: starrocks-be
     container_name: starrocks-be
     user: root
@@ -94,7 +94,7 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
 
   init-starrocks-database:
-    image: starrocks/fe-ubuntu:2.5.4
+    image: starrocks/fe-ubuntu:3.3.9
     depends_on:
       starrocks-fe:
         condition: service_healthy

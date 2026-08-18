@@ -46,6 +46,11 @@ The initialization services will:
 - Initialize the StarRocks database and tables
 - Configure the routine load from Kafka to StarRocks
 
+> Table creation fails with `No alive nodes` when the host disk is more than 85%
+> full: StarRocks drops a backend out of the tablet allocation candidates at that
+> point, even though `SHOW BACKENDS` still reports it alive. Free up disk space
+> rather than raising the watermark.
+
 ## For Setup Kafka Cluster Mode
 
 To set up Kafka in cluster mode, refer to the [Docker Hub Apache Kafka](https://hub.docker.com/r/apache/kafka) for detailed instructions on setting up Kafka in cluster mode using Docker Compose.
