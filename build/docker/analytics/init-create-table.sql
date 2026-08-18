@@ -3,15 +3,15 @@ CREATE DATABASE IF NOT EXISTS yorkie;
 USE yorkie;
 
 CREATE TABLE IF NOT EXISTS user_events (
-    user_id VARCHAR(64),
-    timestamp DATETIME, 
-    event_type VARCHAR(32),
     project_id VARCHAR(64),
+    user_id VARCHAR(64),
+    timestamp DATETIME,
+    event_type VARCHAR(32),
     user_agent VARCHAR(32)
-) ENGINE = OLAP  
-DUPLICATE KEY(user_id)  
-DISTRIBUTED BY HASH(user_id) BUCKETS 10
-PROPERTIES (  
+) ENGINE = OLAP
+DUPLICATE KEY(project_id, user_id, timestamp)
+DISTRIBUTED BY HASH(project_id) BUCKETS 16
+PROPERTIES (
     "replication_num" = "1"
 );
 
