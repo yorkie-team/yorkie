@@ -51,6 +51,10 @@ The initialization services will:
 - Create the daily HLL materialized views on the event tables
 - Configure the routine load from Kafka to StarRocks
 
+Creating the materialized views is best effort: initialization logs whether each
+one became ready and carries on either way. Without a view, the project stats
+queries fall back to scanning the base table — slower, but still correct.
+
 > Table creation fails with `No alive nodes` when the host disk is more than 85%
 > full: StarRocks drops a backend out of the tablet allocation candidates at that
 > point, even though `SHOW BACKENDS` still reports it alive. Free up disk space
