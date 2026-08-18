@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.17] - 2026-08-18
+
+### Added
+
+- Port the JS SDK's undo/redo history layer to the Go SDK by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1932
+
+### Changed
+
+- Read project stats from daily HLL materialized views by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1939
+
+### Fixed
+
+- Count a removed container's descendants in the GC total by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1934
+
 ## [v0.7.16] - 2026-08-15
 
 ### Fixed
