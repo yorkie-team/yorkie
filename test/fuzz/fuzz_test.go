@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -156,6 +157,34 @@ func FuzzParseKeyPath(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, str string) {
 		_, _ = channel.ParseKeyPath(key.Key(str))
+	})
+}
+
+func FuzzYSONUnmarshal(f *testing.F) {
+	// typeSelector chooses which YSON Element type the data is decoded into.
+	f.Add(byte(0), `{"key":"value"}`)                    // Object
+	f.Add(byte(1), `[1,2,3]`)                            // Array
+	f.Add(byte(2), `{"value":{"type":"root"}}`)          // Tree
+	f.Add(byte(3), `{"value":[{"val":"hello"}]}`)        // Text
+	f.Add(byte(4), `{"value":{"type":"Int","value":1}}`) // Counter
+	f.Add(byte(0), "")
+	f.Add(byte(0), `{"n":Int(1),"c":Counter(Int(1))}`) // YSON constructor syntax
+
+	f.Fuzz(func(t *testing.T, typeSelector byte, data string) {
+		var elem yson.Element
+		switch typeSelector % 5 {
+		case 0:
+			elem = &yson.Object{}
+		case 1:
+			elem = &yson.Array{}
+		case 2:
+			elem = &yson.Tree{}
+		case 3:
+			elem = &yson.Text{}
+		case 4:
+			elem = &yson.Counter{}
+		}
+		_ = yson.Unmarshal(data, elem)
 	})
 }
 

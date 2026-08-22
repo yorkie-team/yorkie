@@ -351,18 +351,34 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 
 	switch t {
 	case counterTypeInt:
-		return int32(raw["value"].(float64)), nil
+		v, ok := raw["value"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("parse int value: %w", ErrInvalidYSON)
+		}
+		return int32(v), nil
 	case counterTypeLong:
-		return int64(raw["value"].(float64)), nil
+		v, ok := raw["value"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("parse long value: %w", ErrInvalidYSON)
+		}
+		return int64(v), nil
 	case "BinData":
-		val, err := base64.StdEncoding.DecodeString(raw["value"].(string))
+		s, ok := raw["value"].(string)
+		if !ok {
+			return nil, fmt.Errorf("parse BinData: %w", ErrInvalidYSON)
+		}
+		val, err := base64.StdEncoding.DecodeString(s)
 		if err != nil {
 			return nil, fmt.Errorf("parse BinData: %w", ErrInvalidYSON)
 		}
 
 		return val, nil
 	case "Date":
-		val, err := time.Parse(time.RFC3339Nano, raw["value"].(string))
+		s, ok := raw["value"].(string)
+		if !ok {
+			return nil, fmt.Errorf("parse date: %w", ErrInvalidYSON)
+		}
+		val, err := time.Parse(time.RFC3339Nano, s)
 		if err != nil {
 			return nil, fmt.Errorf("parse date: %w", ErrInvalidYSON)
 		}
@@ -460,11 +476,19 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 		if t, ok := value["type"].(string); ok {
 			switch t {
 			case counterTypeInt:
+				v, ok := value["value"].(float64)
+				if !ok {
+					return Counter{}, fmt.Errorf("parse counter value: %w", ErrInvalidYSON)
+				}
 				counter.Type = crdt.IntegerCnt
-				counter.Value = int32(value["value"].(float64))
+				counter.Value = int32(v)
 			case counterTypeLong:
+				v, ok := value["value"].(float64)
+				if !ok {
+					return Counter{}, fmt.Errorf("parse counter value: %w", ErrInvalidYSON)
+				}
 				counter.Type = crdt.LongCnt
-				counter.Value = int64(value["value"].(float64))
+				counter.Value = int64(v)
 			default:
 				return Counter{}, fmt.Errorf("parse counter type: %w", ErrUnsupported)
 			}
@@ -512,7 +536,10 @@ func parseText(raw []interface{}) (Text, error) {
 	var text Text
 
 	for _, node := range raw {
-		n := node.(map[string]interface{})
+		n, ok := node.(map[string]interface{})
+		if !ok {
+			return text, fmt.Errorf("parse text node: %w", ErrInvalidYSON)
+		}
 		textNode := TextNode{}
 
 		if val, ok := n["val"].(string); !ok {
@@ -524,7 +551,11 @@ func parseText(raw []interface{}) (Text, error) {
 		if attrs, ok := n["attrs"].(map[string]interface{}); ok {
 			textNode.Attributes = make(map[string]string)
 			for k, v := range attrs {
-				textNode.Attributes[k] = v.(string)
+				s, ok := v.(string)
+				if !ok {
+					return text, fmt.Errorf("parse text attribute: %w", ErrInvalidYSON)
+				}
+				textNode.Attributes[k] = s
 			}
 		}
 
@@ -557,13 +588,21 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 	if attrs, ok := raw["attrs"].(map[string]interface{}); ok {
 		node.Attributes = make(map[string]string)
 		for k, v := range attrs {
-			node.Attributes[k] = v.(string)
+			s, ok := v.(string)
+			if !ok {
+				return TreeNode{}, fmt.Errorf("parse tree node attribute: %w", ErrInvalidYSON)
+			}
+			node.Attributes[k] = s
 		}
 	}
 
 	if children, ok := raw["children"].([]interface{}); ok {
 		for _, child := range children {
-			childNode, err := parseTreeNode(child.(map[string]interface{}))
+			childRaw, ok := child.(map[string]interface{})
+			if !ok {
+				return TreeNode{}, fmt.Errorf("parse tree node child: %w", ErrInvalidYSON)
+			}
+			childNode, err := parseTreeNode(childRaw)
 			if err != nil {
 				return TreeNode{}, err
 			}
