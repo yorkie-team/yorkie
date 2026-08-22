@@ -2018,15 +2018,15 @@ func (t *Tree) intendedMergeParent(
 func (t *Tree) mergedAnchorInterloperGuard(
 	pos *TreePos,
 	versionVector time.VersionVector,
-) func(*TreeNode) bool {
+) (func(*TreeNode) bool, *TreeNode, *TreeNode) {
 	if len(versionVector) == 0 {
-		return nil
+		return nil, nil, nil
 	}
 	declaredParent, _ := t.ToTreeNodes(pos)
 	if declaredParent == nil || !declaredParent.IsRemoved() ||
 		declaredParent.mergedInto == nil || declaredParent.removedAt == nil ||
 		ticketKnown(versionVector, declaredParent.removedAt) {
-		return nil
+		return nil, nil, nil
 	}
 	target := t.resolveMergeTarget(declaredParent)
 	// Restricted to the shape where the tombstone sits directly under the
@@ -2034,7 +2034,7 @@ func (t *Tree) mergedAnchorInterloperGuard(
 	// the interlopers.
 	if target == declaredParent || declaredParent.Index.Parent == nil ||
 		declaredParent.Index.Parent.Value != target {
-		return nil
+		return nil, nil, nil
 	}
 	// Collect the target's children positioned after the merge-source
 	// tombstone in one pass, so the predicate is O(depth) per node.
@@ -2068,7 +2068,87 @@ func (t *Tree) mergedAnchorInterloperGuard(
 			return false
 		}
 		return afterTombstone[top]
+	}, declaredParent, target
+}
+
+// stylePrevAttrs reports, for each key in attrs in sorted order, the value
+// that key held (or its absence) on the given node, for the reverse Style
+// capture.
+func stylePrevAttrs(node *TreeNode, attrs map[string]string) []PrevAttr {
+	keys := make([]string, 0, len(attrs))
+	for key := range attrs {
+		keys = append(keys, key)
 	}
+	sort.Strings(keys)
+	var prevAttrs []PrevAttr
+	for _, key := range keys {
+		if node.Attrs != nil && node.Attrs.Has(key) {
+			prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
+		} else {
+			prevAttrs = append(prevAttrs, PrevAttr{Key: key, Existed: false})
+		}
+	}
+	return prevAttrs
+}
+
+// styleClientLamportAt returns the styling client's lamport for the given
+// actor: MaxLamport for local edits (empty version vector), the vector entry
+// when present, and zero for actors the client had never seen.
+func styleClientLamportAt(versionVector time.VersionVector, actorID time.ActorID) int64 {
+	if len(versionVector) == 0 {
+		// Case 1: local editing from json package
+		return time.MaxLamport
+	}
+	// Case 2: from operation with version vector(After v0.5.7)
+	if lamport, ok := versionVector.Get(actorID); ok {
+		return lamport
+	}
+	return 0
+}
+
+// reversedFromAnchorRecovery prepares the §9.4 from-side counterpart of
+// mergedAnchorInterloperGuard for a style range whose start position was
+// declared inside a parent that a merge unknown to the styling client
+// removed. The resolved range then collapses (start past end) and the
+// traversal misses nodes the styling client covered. The recovery
+// re-anchors the traversal start just after the last live sibling before
+// the merge-source tombstone; the caller must style only nodes the
+// returned predicate positively identifies as interlopers. Stamped nodes
+// in the span stay out of reach and fail open unstyled — see the
+// §9.4 known limitations in docs/design/concurrent-merge-split.md.
+func (t *Tree) reversedFromAnchorRecovery(
+	from *TreePos,
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
+	versionVector time.VersionVector,
+) (*TreeNode, *TreeNode, func(*TreeNode) bool, error) {
+	isInterloper, declaredParent, target := t.mergedAnchorInterloperGuard(from, versionVector)
+	if isInterloper == nil {
+		return nil, nil, nil, nil
+	}
+	// Only a range that actually collapsed needs recovery: when both
+	// anchors moved with the merge, the resolved range stays ordered and
+	// still covers what the styling client covered.
+	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	toIdx, err := t.ToIndex(toParent, toLeft)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if fromIdx <= toIdx {
+		return nil, nil, nil, nil
+	}
+	anchorLeft := target
+	for _, child := range target.Index.Children(true) {
+		if child.Value == declaredParent {
+			break
+		}
+		if !child.Value.IsRemoved() {
+			anchorLeft = child.Value
+		}
+	}
+	return target, anchorLeft, isInterloper, nil
 }
 
 // styleSkipPredicate builds the per-token skip checks shared by Style and
@@ -2077,15 +2157,21 @@ func (t *Tree) mergedAnchorInterloperGuard(
 func (t *Tree) styleSkipPredicate(
 	to *TreePos,
 	versionVector time.VersionVector,
+	recoveredInterloper func(*TreeNode) bool,
 ) func(index.TreeToken[*TreeNode]) bool {
 	isVersionVectorEmpty := len(versionVector) == 0
-	isAnchorInterloper := t.mergedAnchorInterloperGuard(to, versionVector)
+	isAnchorInterloper, _, _ := t.mergedAnchorInterloperGuard(to, versionVector)
 	return func(token index.TreeToken[*TreeNode]) bool {
 		// Skip styling via End token when the node has an unknown
 		// split sibling. The End token is in the range only because
 		// a concurrent split extended the range into the sibling.
 		if token.TokenType == index.End && !isVersionVectorEmpty &&
 			t.hasUnknownSplitSibling(token.Node, versionVector) {
+			return true
+		}
+		// §9.4 from-side: a recovered traversal may only touch nodes the
+		// collapsed range lost, the positively identified interlopers.
+		if recoveredInterloper != nil && !recoveredInterloper(token.Node) {
 			return true
 		}
 		// §9.4: the node is in the range only because an unknown merge
@@ -2618,28 +2704,22 @@ func (t *Tree) Style(
 	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
-	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
+	recoveredParent, recoveredLeft, isRecoveredInterloper, err := t.reversedFromAnchorRecovery(
+		from, fromParent, fromLeft, toParent, toLeft, versionVector)
+	if err != nil {
+		return t.drainPendingGCPairs(), diff, nil, err
+	}
+	if recoveredParent != nil {
+		fromParent, fromLeft = recoveredParent, recoveredLeft
+	}
+	shouldSkipToken := t.styleSkipPredicate(to, versionVector, isRecoveredInterloper)
 
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
 	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		actorID := node.id.CreatedAt.ActorID()
-
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			// Case 1: local editing from json package
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			// Case 2: from operation with version vector(After v0.5.7)
-			lamport, ok := versionVector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
-			}
-		}
+		clientLamportAtChange := styleClientLamportAt(versionVector, node.id.CreatedAt.ActorID())
 
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
@@ -2647,18 +2727,7 @@ func (t *Tree) Style(
 			}
 
 			if !captured {
-				keys := make([]string, 0, len(attrs))
-				for key := range attrs {
-					keys = append(keys, key)
-				}
-				sort.Strings(keys)
-				for _, key := range keys {
-					if node.Attrs != nil && node.Attrs.Has(key) {
-						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
-					} else {
-						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Existed: false})
-					}
-				}
+				prevAttrs = stylePrevAttrs(node, attrs)
 				captured = true
 			}
 
@@ -2747,28 +2816,22 @@ func (t *Tree) RemoveStyle(
 	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
-	shouldSkipToken := t.styleSkipPredicate(to, versionVector)
+	recoveredParent, recoveredLeft, isRecoveredInterloper, err := t.reversedFromAnchorRecovery(
+		from, fromParent, fromLeft, toParent, toLeft, versionVector)
+	if err != nil {
+		return t.drainPendingGCPairs(), diff, nil, err
+	}
+	if recoveredParent != nil {
+		fromParent, fromLeft = recoveredParent, recoveredLeft
+	}
+	shouldSkipToken := t.styleSkipPredicate(to, versionVector, isRecoveredInterloper)
 
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
 	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		actorID := node.id.CreatedAt.ActorID()
-
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			// Case 1: local editing from json package
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			// Case 2: from operation with version vector(After v0.5.7)
-			lamport, ok := versionVector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
-			}
-		}
+		clientLamportAtChange := styleClientLamportAt(versionVector, node.id.CreatedAt.ActorID())
 
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
 			if shouldSkipToken(token) {

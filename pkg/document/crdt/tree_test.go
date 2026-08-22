@@ -526,6 +526,97 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, mergeTicket, content.MergedAt)
 	})
 
+	t.Run("recovers a style range reversed by an unknown merge at the from anchor", func(t *testing.T) {
+		// 01. Create <root><p>ab</p><p>cd</p></root> and insert the
+		// styler's own <p> after the second paragraph.
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+		_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(5, 5, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "cd"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		inserted := crdt.NewTreeNode(helper.PosT(ctx), "p", nil)
+		_, _, err = tree.EditT(8, 8, []*crdt.TreeNode{inserted}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+
+		// 02. Capture the styler-view range (from after `c`, to inside
+		// the insert) and a version vector that predates the merge.
+		fromPos, err := tree.FindPos(6)
+		assert.NoError(t, err)
+		toPos, err := tree.FindPos(9)
+		assert.NoError(t, err)
+		known := helper.TimeT(ctx)
+		vv := time.VersionVector{known.ActorID(): known.Lamport()}
+
+		// 03. Apply a merge from another actor, outside the styler's
+		// version vector: the moved `cd` resolves after the insert, so
+		// the range collapses. The recovery must still style the insert.
+		otherActor, err := time.ActorIDFromHex("111111111111111111111111")
+		assert.NoError(t, err)
+		mergeTicket := time.NewTicket(known.Lamport()+1, 0, otherActor)
+		_, _, err = tree.EditT(0, 5, nil, 0, mergeTicket, issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, _, err = tree.Style(fromPos, toPos, map[string]string{"bold": "x"}, helper.TimeT(ctx), vv)
+		assert.NoError(t, err)
+
+		require.NotNil(t, inserted.Attrs)
+		assert.Equal(t, "x", inserted.Attrs.Get("bold"))
+	})
+
+	t.Run("keeps an ordered from-anchor range off the writer insert", func(t *testing.T) {
+		// Same shape, but both anchors sit inside the merged paragraph:
+		// the resolved range moves with the merge and stays ordered, so
+		// the recovery must not widen it onto the insert.
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+		_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "ab"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
+			helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(5, 5, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "cd"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		inserted := crdt.NewTreeNode(helper.PosT(ctx), "p", nil)
+		_, _, err = tree.EditT(8, 8, []*crdt.TreeNode{inserted}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+
+		fromPos, err := tree.FindPos(6)
+		assert.NoError(t, err)
+		toPos, err := tree.FindPos(7)
+		assert.NoError(t, err)
+		known := helper.TimeT(ctx)
+		vv := time.VersionVector{known.ActorID(): known.Lamport()}
+
+		otherActor, err := time.ActorIDFromHex("111111111111111111111111")
+		assert.NoError(t, err)
+		mergeTicket := time.NewTicket(known.Lamport()+1, 0, otherActor)
+		_, _, err = tree.EditT(0, 5, nil, 0, mergeTicket, issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, _, err = tree.Style(fromPos, toPos, map[string]string{"bold": "x"}, helper.TimeT(ctx), vv)
+		assert.NoError(t, err)
+
+		if inserted.Attrs != nil {
+			assert.Empty(t, inserted.Attrs.Nodes())
+		}
+	})
+
 	t.Run("delete nodes between element nodes in different levels test", func(t *testing.T) {
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1   2 3 4    5    6   7 8 9    10
