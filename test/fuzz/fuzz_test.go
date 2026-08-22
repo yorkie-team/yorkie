@@ -168,7 +168,10 @@ func FuzzYSONUnmarshal(f *testing.F) {
 	f.Add(byte(3), `{"value":[{"val":"hello"}]}`)        // Text
 	f.Add(byte(4), `{"value":{"type":"Int","value":1}}`) // Counter
 	f.Add(byte(0), "")
-	f.Add(byte(0), `{"n":Int(1),"c":Counter(Int(1))}`) // YSON constructor syntax
+	f.Add(byte(0), `{"n":Int(1),"c":Counter(Int(1))}`)     // YSON constructor syntax
+	f.Add(byte(1), `[Int(1.5),Int(2147483648)]`)           // fractional / out-of-range Int
+	f.Add(byte(1), `[Long(9223372036854775808)]`)          // out-of-range Long
+	f.Add(byte(4), `DedupCounter(Int(2147483648),"AQ==")`) // out-of-range dedup counter
 
 	f.Fuzz(func(t *testing.T, typeSelector byte, data string) {
 		var elem yson.Element

@@ -19,6 +19,7 @@ package yson_test
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"testing"
 	gotime "time"
 
@@ -400,6 +401,18 @@ func TestYSONMarshal(t *testing.T) {
 		assert.Equal(t, expected, actual)
 	})
 
+	t.Run("large long value precision test", func(t *testing.T) {
+		// 9007199254740993 (2^53 + 1) and math.MaxInt64 are not exactly
+		// representable as float64, so they must be parsed from the lexeme.
+		arr := yson.Array{}
+		assert.NoError(t, yson.Unmarshal(`[Long(9007199254740993),Long(9223372036854775807)]`, &arr))
+		assert.Equal(t, yson.Array{int64(9007199254740993), int64(math.MaxInt64)}, arr)
+
+		counter := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(`Counter(Long(9223372036854775807))`, &counter))
+		assert.Equal(t, int64(math.MaxInt64), counter.Value)
+	})
+
 	t.Run("dedup counter marshal test", func(t *testing.T) {
 		// Create a 16384-byte register array with known values
 		registers := make([]byte, 16384)
@@ -572,6 +585,54 @@ func TestYSONMarshal(t *testing.T) {
 				name:        "missing required field in text node",
 				input:       `Text([{"attrs":{"bold":"true"}}])`,
 				targetType:  &yson.Text{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "fractional Int typed value",
+				input:       `[Int(1.5)]`,
+				targetType:  &yson.Array{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "out-of-range Int typed value",
+				input:       `[Int(2147483648)]`,
+				targetType:  &yson.Array{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "fractional Long typed value",
+				input:       `[Long(1.5)]`,
+				targetType:  &yson.Array{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "out-of-range Long typed value",
+				input:       `[Long(9223372036854775808)]`,
+				targetType:  &yson.Array{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "fractional counter Int value",
+				input:       `Counter(Int(1.5))`,
+				targetType:  &yson.Counter{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "out-of-range counter Int value",
+				input:       `Counter(Int(2147483648))`,
+				targetType:  &yson.Counter{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "fractional dedup counter value",
+				input:       `DedupCounter(Int(1.5),"AQ==")`,
+				targetType:  &yson.Counter{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "out-of-range dedup counter value",
+				input:       `DedupCounter(Int(2147483648),"AQ==")`,
+				targetType:  &yson.Counter{},
 				expectedErr: "invalid YSON",
 			},
 		}
