@@ -48,6 +48,11 @@ const (
 
 	// textPropertyKey is the key of the shared Text under the root object.
 	textPropertyKey = "text"
+
+	// textPropertyMaxSpan caps the width of an edited or styled range. A narrow
+	// span makes the replicas touch the same region often, which is where text
+	// convergence is at risk.
+	textPropertyMaxSpan = 3
 )
 
 // randomTextContent returns a short random ASCII string. An empty string turns
@@ -74,19 +79,20 @@ func applyRandomTextOps(t *testing.T, doc *document.Document, r *rand.Rand, opCo
 
 			switch r.Intn(3) {
 			case 0, 1:
-				// Edit: insert, replace, or delete over a narrow range. A narrow
-				// range makes the replicas touch the same region often, which is
-				// where text convergence is at risk.
+				// Edit: insert, replace, or delete over a narrow range capped at
+				// textPropertyMaxSpan, so the replicas touch the same region often,
+				// which is where text convergence is at risk.
 				from := r.Intn(length + 1)
-				to := from + r.Intn(length-from+1)
+				to := from + r.Intn(min(textPropertyMaxSpan, length-from)+1)
 				content := randomTextContent(r)
 				text.Edit(from, to, content)
 				length += len(content) - (to - from)
 			case 2:
-				// Style an existing non-empty range.
+				// Style an existing non-empty range, also capped at
+				// textPropertyMaxSpan to keep the styled spans overlapping.
 				if length > 0 {
 					from := r.Intn(length)
-					to := from + 1 + r.Intn(length-from)
+					to := from + 1 + r.Intn(min(textPropertyMaxSpan, length-from))
 					text.Style(from, to, map[string]string{"bold": strconv.Itoa(r.Intn(2))})
 				}
 			}
