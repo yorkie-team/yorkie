@@ -24,7 +24,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -63,7 +63,7 @@ const (
 // (TestConcurrentArrayOperations, TestComplicatedArrayConcurrency).
 func applyRandomArrayOps(t *testing.T, doc *document.Document, r *rand.Rand, opCount int) {
 	for range opCount {
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("arr")
 			length := arr.Len()
 
@@ -111,7 +111,7 @@ func TestArrayPropertyConvergence(t *testing.T) {
 			var pairs []clientAndDocPair
 			for _, cli := range clients {
 				doc := document.New(helper.TestKey(t))
-				assert.NoError(t, cli.Attach(ctx, doc))
+				require.NoError(t, cli.Attach(ctx, doc))
 				pairs = append(pairs, clientAndDocPair{cli, doc})
 			}
 
@@ -119,7 +119,7 @@ func TestArrayPropertyConvergence(t *testing.T) {
 			// replica edits the same CRDT. A per-replica SetNewArray would create
 			// distinct arrays that resolve by last-writer-wins and drop
 			// operations.
-			assert.NoError(t, pairs[0].doc.Update(func(root *json.Object, p *presence.Presence) error {
+			require.NoError(t, pairs[0].doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewArray("arr")
 				return nil
 			}))
