@@ -598,7 +598,11 @@ func parseText(raw []interface{}) (Text, error) {
 			textNode.Value = val
 		}
 
-		if attrs, ok := n["attrs"].(map[string]interface{}); ok {
+		if attrsVal, present := n["attrs"]; present {
+			attrs, ok := attrsVal.(map[string]interface{})
+			if !ok {
+				return text, fmt.Errorf("parse text attribute: %w", ErrInvalidYSON)
+			}
 			textNode.Attributes = make(map[string]string)
 			for k, v := range attrs {
 				s, ok := v.(string)
@@ -635,7 +639,11 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 		node.Value = value
 	}
 
-	if attrs, ok := raw["attrs"].(map[string]interface{}); ok {
+	if attrsVal, present := raw["attrs"]; present {
+		attrs, ok := attrsVal.(map[string]interface{})
+		if !ok {
+			return TreeNode{}, fmt.Errorf("parse tree node attribute: %w", ErrInvalidYSON)
+		}
 		node.Attributes = make(map[string]string)
 		for k, v := range attrs {
 			s, ok := v.(string)
@@ -646,7 +654,11 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 		}
 	}
 
-	if children, ok := raw["children"].([]interface{}); ok {
+	if childrenVal, present := raw["children"]; present {
+		children, ok := childrenVal.([]interface{})
+		if !ok {
+			return TreeNode{}, fmt.Errorf("parse tree node children: %w", ErrInvalidYSON)
+		}
 		for _, child := range children {
 			childRaw, ok := child.(map[string]interface{})
 			if !ok {

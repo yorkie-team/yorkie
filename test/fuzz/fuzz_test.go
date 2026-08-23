@@ -172,6 +172,9 @@ func FuzzYSONUnmarshal(f *testing.F) {
 	f.Add(byte(1), `[Int(1.5),Int(2147483648)]`)           // fractional / out-of-range Int
 	f.Add(byte(1), `[Long(9223372036854775808)]`)          // out-of-range Long
 	f.Add(byte(4), `DedupCounter(Int(2147483648),"AQ==")`) // out-of-range dedup counter
+	f.Add(byte(3), `Text([{"val":"hi","attrs":"nope"}])`)  // text attrs wrong type
+	f.Add(byte(2), `Tree({"type":"p","attrs":1})`)         // tree attrs wrong type
+	f.Add(byte(2), `Tree({"type":"p","children":"nope"})`) // tree children wrong type
 
 	f.Fuzz(func(t *testing.T, typeSelector byte, data string) {
 		var elem yson.Element

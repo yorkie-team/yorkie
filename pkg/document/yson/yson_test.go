@@ -635,6 +635,36 @@ func TestYSONMarshal(t *testing.T) {
 				targetType:  &yson.Counter{},
 				expectedErr: "invalid YSON",
 			},
+			{
+				name:        "text node attrs wrong type",
+				input:       `Text([{"val":"hi","attrs":"nope"}])`,
+				targetType:  &yson.Text{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "text node attrs number",
+				input:       `Text([{"val":"hi","attrs":1}])`,
+				targetType:  &yson.Text{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "tree node attrs wrong type",
+				input:       `Tree({"type":"p","attrs":"nope","children":[]})`,
+				targetType:  &yson.Tree{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "tree node children wrong type",
+				input:       `Tree({"type":"p","children":{"not":"an array"}})`,
+				targetType:  &yson.Tree{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "tree node children string",
+				input:       `Tree({"type":"p","children":"nope"})`,
+				targetType:  &yson.Tree{},
+				expectedErr: "invalid YSON",
+			},
 		}
 
 		for _, tc := range testCases {
