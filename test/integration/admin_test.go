@@ -442,6 +442,57 @@ func TestAdminMember(t *testing.T) {
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 
+	t.Run("UpdateProject role-based access control test", func(t *testing.T) {
+		// 01. Create a project (owner is the default admin user).
+		projectName := newSlug("prj")
+		project, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+
+		// 02. Invite a user as a member and accept the invite.
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
+		)
+		assert.NoError(t, err)
+
+		username, password := newUser(t)
+		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		defer func() { userCli.Close() }()
+		_, err = userCli.LogIn(ctx, username, password)
+		assert.NoError(t, err)
+		_, err = userCli.AcceptInvite(ctx, token)
+		assert.NoError(t, err)
+
+		// 03. A member must not be able to update the project config.
+		memberUpdate := newSlug("upd")
+		_, err = userCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			Name: &memberUpdate,
+		})
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+		// 04. After promotion to admin, the same user can update the project config.
+		_, err = adminCli.UpdateMemberRole(ctx, projectName, username, "admin")
+		assert.NoError(t, err)
+
+		adminUpdate := newSlug("upd")
+		updated, err := userCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			Name: &adminUpdate,
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, adminUpdate, updated.Name)
+
+		// 05. The owner can always update the project config.
+		ownerUpdate := newSlug("upd")
+		updated, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			Name: &ownerUpdate,
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, ownerUpdate, updated.Name)
+	})
+
 	t.Run("Owner cannot accept their own invite link test", func(t *testing.T) {
 		// 01. Create a project as owner.
 		projectName := newSlug("prj")
