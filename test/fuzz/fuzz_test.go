@@ -175,6 +175,9 @@ func FuzzYSONUnmarshal(f *testing.F) {
 	f.Add(byte(3), `Text([{"val":"hi","attrs":"nope"}])`)  // text attrs wrong type
 	f.Add(byte(2), `Tree({"type":"p","attrs":1})`)         // tree attrs wrong type
 	f.Add(byte(2), `Tree({"type":"p","children":"nope"})`) // tree children wrong type
+	f.Add(byte(0), `{"a":1}]`)                             // trailing closing bracket
+	f.Add(byte(0), `{"a":1} 42`)                           // trailing second value
+	f.Add(byte(1), `[1,2]{"b":2}`)                         // trailing second object
 
 	f.Fuzz(func(t *testing.T, typeSelector byte, data string) {
 		var elem yson.Element

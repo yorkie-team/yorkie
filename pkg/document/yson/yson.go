@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strconv"
@@ -271,9 +272,11 @@ func Unmarshal(data string, elem Element) error {
 	if err := dec.Decode(&raw); err != nil {
 		return fmt.Errorf("unmarshal JSON: %w", ErrInvalidYSON)
 	}
-	// Reject trailing data after the top-level value; json.Decoder tolerates
-	// it whereas json.Unmarshal did not.
-	if dec.More() {
+	// Reject any trailing data after the top-level value. json.Decoder
+	// tolerates trailing bytes whereas json.Unmarshal did not, and dec.More()
+	// alone misses stray closing tokens such as "]" or "}". Require the stream
+	// to be at EOF after the single top-level value.
+	if err := dec.Decode(new(interface{})); err != io.EOF {
 		return fmt.Errorf("unmarshal JSON: %w", ErrInvalidYSON)
 	}
 

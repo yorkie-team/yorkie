@@ -665,6 +665,30 @@ func TestYSONMarshal(t *testing.T) {
 				targetType:  &yson.Tree{},
 				expectedErr: "invalid YSON",
 			},
+			{
+				name:        "trailing closing bracket",
+				input:       `{"a":1}]`,
+				targetType:  &yson.Object{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "trailing closing brace",
+				input:       `{"a":1}}`,
+				targetType:  &yson.Object{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "trailing second value",
+				input:       `{"a":1} 42`,
+				targetType:  &yson.Object{},
+				expectedErr: "invalid YSON",
+			},
+			{
+				name:        "trailing second object",
+				input:       `[1,2]{"b":2}`,
+				targetType:  &yson.Array{},
+				expectedErr: "invalid YSON",
+			},
 		}
 
 		for _, tc := range testCases {
