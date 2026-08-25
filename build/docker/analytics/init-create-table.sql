@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS session_events (
     event_type VARCHAR(32)
 ) ENGINE = OLAP
 DUPLICATE KEY(project_id, session_id, timestamp)
-DISTRIBUTED BY HASH(project_id) BUCKETS 16
+DISTRIBUTED BY RANDOM BUCKETS 16
 PROPERTIES (
     "replication_num" = "1"
 );
