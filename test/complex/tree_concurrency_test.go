@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -1246,7 +1247,7 @@ func TestTreeConcurrencyRemoveStyleFromSideMovedAnchor(t *testing.T) {
 		assert.NotNil(t, survivor, "d%d: live <p> not found", i+1)
 		assert.NotNil(t, survivor.Attrs, "d%d: attribute container missing", i+1)
 		nodes := survivor.Attrs.Nodes()
-		assert.Len(t, nodes, 1, "d%d: removal entry count", i+1)
+		require.Len(t, nodes, 1, "d%d: removal entry count", i+1)
 		assert.Equal(t, "bold", nodes[0].Key(), "d%d", i+1)
 		assert.True(t, nodes[0].IsRemoved(), "d%d: entry must be a removal", i+1)
 	}
