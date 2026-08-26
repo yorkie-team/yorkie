@@ -39,6 +39,25 @@ under a *different actor* absent from the styler's vector, not a
 smaller lamport. The integration-level repro caught what the first
 unit attempt could not.
 
+## A per-replica shape check is not a convergence check
+
+The first version of the regression test asserted, for each replica
+independently, that the surviving `<p>` holds exactly one removed
+`bold` entry. That is a shape assertion, and it passes even when the
+two entries carry different identities or removal tickets — precisely
+the internal divergence class the issue reports, since Marshal already
+cannot see it. A convergence test has to compare the replicas against
+*each other*: the entries are now rendered as sorted descriptors
+carrying key, value, `updatedAt` and the removal flag, and the two
+lists are compared directly. The per-replica assertions stay, because
+"identical on both replicas" alone would also be satisfied by both
+being empty.
+
+The same review pass replaced the remaining `assert` calls guarding a
+dereference with `require`. `assert` does not stop the test, so a
+missing survivor or attribute container panicked on the next line
+instead of reporting the failure that had just been detected.
+
 ## PBT confirms a fix by moving, not by passing
 
 As in every previous cycle, the pinned-seed PBT run does not go green

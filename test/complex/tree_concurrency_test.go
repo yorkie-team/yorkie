@@ -21,6 +21,7 @@ package complex
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1235,22 +1236,43 @@ func TestTreeConcurrencyRemoveStyleFromSideMovedAnchor(t *testing.T) {
 		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
 
 	// Both replicas must hold the same removal entry on the surviving <p>.
+	// The entries are compared against each other and not merely counted:
+	// two replicas can each hold one removed "bold" entry while those
+	// entries carry different identities or removal tickets, which is the
+	// internal divergence issue #1942 reports and Marshal cannot see.
+	descs := make([][]string, 0, 2)
 	for i, pair := range []clientAndDocPair{{c1, d1}, {c2, d2}} {
 		tree, ok := pair.doc.RootObject().Members()["t"].(*crdt.Tree)
-		assert.True(t, ok)
+		require.True(t, ok, "d%d: tree not found", i+1)
 		var survivor *crdt.TreeNode
 		for _, child := range tree.Root().Children(true) {
 			if child.Type() == "p" && !child.IsRemoved() {
 				survivor = child
 			}
 		}
-		assert.NotNil(t, survivor, "d%d: live <p> not found", i+1)
-		assert.NotNil(t, survivor.Attrs, "d%d: attribute container missing", i+1)
+		require.NotNil(t, survivor, "d%d: live <p> not found", i+1)
+		require.NotNil(t, survivor.Attrs, "d%d: attribute container missing", i+1)
 		nodes := survivor.Attrs.Nodes()
 		require.Len(t, nodes, 1, "d%d: removal entry count", i+1)
 		assert.Equal(t, "bold", nodes[0].Key(), "d%d", i+1)
 		assert.True(t, nodes[0].IsRemoved(), "d%d: entry must be a removal", i+1)
+		descs = append(descs, attrEntryDescs(nodes))
 	}
+	assert.Equal(t, descs[0], descs[1], "attribute entries diverged")
+}
+
+// attrEntryDescs renders attribute RHT entries as comparable descriptors,
+// carrying the entry identity and removal metadata that Marshal omits. The
+// descriptors are sorted because RHT.Nodes iterates a map.
+func attrEntryDescs(nodes []*crdt.RHTNode) []string {
+	descs := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		descs = append(descs, fmt.Sprintf("%s=%q updatedAt=%s removed=%t",
+			node.Key(), node.Value(), node.UpdatedAt().Key(), node.IsRemoved()))
+	}
+	sort.Strings(descs)
+
+	return descs
 }
 
 // TestTreeConcurrencyStyleFromSideOrderedRange pins the recovery trigger:
