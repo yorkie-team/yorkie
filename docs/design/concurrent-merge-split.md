@@ -489,12 +489,52 @@ carries the same provenance under either merge-then-split or
 split-then-merge application order and is judged identically by the
 filter.
 
+**From-side recovery (Fix 23).** A range *start* anchored after a moved
+child is the mirror image: the merge moves the anchor child behind the
+interlopers, so on the applying replica the resolved range collapses
+(start past end) and the traversal misses nodes the styling client
+covered — the writer keeps a one-sided attribute entry. A skip filter
+cannot compensate (the traversal covers nothing), so
+`reversedFromAnchorRecovery` re-anchors the traversal start just after
+the last live sibling before the merge-source tombstone, but only when
+the same §9.4 shape holds for the *from* position **and** the resolved
+range actually collapsed; an ordered range that moved with the merge is
+left untouched. The recovered traversal styles only nodes the interloper
+predicate positively identifies (stamp-free children between the
+tombstone and the moved children); version-vector checks keep inserts
+unknown to the styler unstyled. For `RemoveStyle` this materializes the
+removal tombstone on both replicas — it must be recorded even for a
+missing key, because it arbitrates a concurrent `SetAttr` with an
+earlier ticket.
+
 **Known limitations** (tracked as follow-ups):
 
-- A range *start* anchored after a moved child shrinks the traversal
-  on the applying replica instead of growing it (the interlopers sit
-  before the start), which a skip filter cannot compensate; likewise
-  an edit-only divergence independent of styling.
+- An edit-only divergence independent of styling (concurrent unwrap
+  versus merge-delete of the same paragraph) remains open.
+- Within a collapsed from-side range, any *stamped* node fails open in
+  the other direction: a merge-moved element child at or after the
+  original from anchor (probe shape `<p>c<b/></p>`), an insert declared
+  inside the merged-away parent, or a child moved into the target by an
+  *earlier* merge the styler knew (and styled inside its range) all
+  carry a merge stamp, so the recovery cannot tell them from moved
+  content before the anchor and skips them — the writer styles them,
+  the applying replica does not. The pre-fix behavior styled nothing at
+  all there, so the recovery strictly narrows the divergence but does
+  not close this part.
+- A merge into a *sibling* (not the common parent) pulls the from
+  anchor inside that sibling, whose End token newly enters the range
+  and is styled on the merged replica only; the guard's direct-child
+  shape restriction deliberately excludes this shape (reproduces at
+  base, before Fix 23).
+- A range *end* whose left sibling is the merge-source tombstone under
+  a surviving parent resolves past the merge target's End token on the
+  applying replica and styles the target itself one-sidedly
+  (PBT counterexample: `RemoveStyle(6,8)` against `Edit(1,5)`).
+- The recovery inherits the guard's direct-child shape restriction, so
+  a from-anchor collapsed by a *chained* merge (declared parent's
+  tombstone left under an intermediate source) gets no recovery and
+  keeps the pre-fix behavior of styling nothing on the applying
+  replica.
 - A node moved into the target by an *earlier, different* merge that
   the styler knew (and therefore saw outside its range) also fails
   open and is styled on the applying replica — the pre-§9.4 behavior;
@@ -593,3 +633,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 20 | §6.3 | Flatten chained merge (P→Q→R) for redirect + snapshot consistency |
 | Fix 21 | §9.3 | Style range boundary right after merge-source tombstone |
 | Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
+| Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |
