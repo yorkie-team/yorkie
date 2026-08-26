@@ -866,6 +866,22 @@ func (s *RGATreeSplit[V]) restore(
 				prev := s.findRestoreAnchor(
 					span.createdAt, cursor, gapEnd, chainAnchor, fromPos, executedAt)
 				s.InsertAfter(prev, newNode)
+				// InsertAfter only maintains the physical prev/next chain.
+				// Relink the separate insertion chain (insPrev/insNext) too, the
+				// same way splitNode does, so a recreated interior fragment is
+				// not skipped by the surviving same-insertion neighbours.
+				// Otherwise a later edit whose boundary lands on this fragment
+				// resolves through a stale insertion pointer in
+				// findFloorNodePreferToLeft and miscomputes its offset
+				// (yorkie-team/yorkie-js-sdk#1327).
+				if cursor > 0 {
+					if insPrev := s.findPieceCovering(span.createdAt, cursor-1); insPrev != nil {
+						newNode.SetInsPrev(insPrev)
+					}
+				}
+				if insNext := s.findPieceCovering(span.createdAt, gapEnd); insNext != nil {
+					insNext.SetInsPrev(newNode)
+				}
 				recreated = append(recreated, newNode)
 				chainAnchor = newNode
 				cursor = gapEnd
