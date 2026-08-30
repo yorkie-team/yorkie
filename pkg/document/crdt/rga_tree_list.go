@@ -241,8 +241,17 @@ func (a *RGATreeList) Marshal() string {
 }
 
 // Add adds the given element at the last.
+//
+// The anchor must be the last node's POSITION identity (LastCreatedAt), not its
+// element identity (last.CreatedAt). When the last element was moved here, its
+// element createdAt maps in nodeMapByCreatedAt to the element's now-dead
+// original position node, so anchoring on element identity would insert after
+// that stale dead slot instead of the tail — and the forward-skip in
+// insertAfter would then place each successive Add before the previous one,
+// reversing the appended run (yorkie#1948, seen only via snapshot restore and
+// DeepCopy, which rebuild the list through Add).
 func (a *RGATreeList) Add(elem Element) error {
-	return a.InsertAfter(a.last.CreatedAt(), elem, nil)
+	return a.InsertAfter(a.LastCreatedAt(), elem, nil)
 }
 
 // AddDeadPosition appends a dead position node during snapshot restoration.
