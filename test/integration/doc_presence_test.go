@@ -473,7 +473,7 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): {},
 			},
 		})
-		_, cancel2, err := c2.WatchStream(d2)
+		_, _, err = c2.WatchStream(d2)
 		assert.NoError(t, err)
 		wgEvents.Wait()
 		wgEvents.Add(1)
@@ -502,8 +502,6 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		cancel2()
-
 		assert.NoError(t, c2.Detach(ctx, d2))
 		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 

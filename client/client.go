@@ -438,10 +438,6 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...in
 	attachment.syncMu.Lock()
 	defer attachment.syncMu.Unlock()
 
-	if attachment.closeWatchStream != nil {
-		attachment.closeWatchStream()
-	}
-
 	if attachment.Is(attachable.TypeDocument) {
 		d, ok := r.(*document.Document)
 		if !ok {
@@ -455,15 +451,28 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...in
 			}
 		}
 
-		return c.detachDocument(ctx, d, detachOpts)
+		if err := c.detachDocument(ctx, d, detachOpts); err != nil {
+			return err
+		}
+	} else {
+		p, ok := r.(*channel.Channel)
+		if !ok {
+			return ErrInvalidResource
+		}
+
+		if err := c.detachChannel(ctx, p); err != nil {
+			return err
+		}
 	}
 
-	p, ok := r.(*channel.Channel)
-	if !ok {
-		return ErrInvalidResource
+	// Keep the watch pipeline alive while applying the final ChangePack. Its
+	// event pump is the sole consumer of Document.Events, so stopping it first
+	// can leave ApplyChangePack blocked when the pack emits multiple events.
+	if attachment.closeWatchStream != nil {
+		attachment.closeWatchStream()
 	}
 
-	return c.detachChannel(ctx, p)
+	return nil
 }
 
 // attachDocument attaches the given document to this client. It tells the server that
