@@ -52,22 +52,19 @@ const (
 // read the replica's local length so the randomly picked indices always stay in
 // bounds.
 //
-// NOTE(convergence scope): The generated ops are limited to Add, Insert, Delete
-// and Set, which are the Array operations that converge under arbitrary
-// concurrency. Concurrent Move (MoveBefore/MoveAfterByIndex) is a non-commutative
-// operation that does not yet converge in the general case — a known limitation
-// tracked by #1382 (Operation Reorder/Replay Engine for non-commutative
-// operations). Randomized concurrent moves therefore diverge and are
-// intentionally excluded from this convergence guard; hand-written concurrent
-// move scenarios that are expected to converge already live in array_test.go
-// (TestConcurrentArrayOperations, TestComplicatedArrayConcurrency).
+// NOTE(convergence scope): The generator covers Add, Insert, Delete, Set, and
+// both Move variants (MoveBefore/MoveAfterByIndex). Concurrent Move used to be
+// excluded here because randomized moves diverged (#1948); that divergence was a
+// snapshot/DeepCopy reconstruction bug (Array.Add anchored on element identity
+// instead of position-node identity) and is now fixed, so Move is exercised as a
+// first-class convergence case.
 func applyRandomArrayOps(t *testing.T, doc *document.Document, r *rand.Rand, opCount int) {
 	for range opCount {
 		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("arr")
 			length := arr.Len()
 
-			switch r.Intn(4) {
+			switch r.Intn(6) {
 			case 0:
 				// Add: append a value to the end of the array.
 				arr.AddInteger(r.Intn(100))
@@ -89,6 +86,24 @@ func applyRandomArrayOps(t *testing.T, doc *document.Document, r *rand.Rand, opC
 				// Set: replace the element at a random index in place.
 				if length > 0 {
 					arr.SetInteger(r.Intn(length), r.Intn(100))
+				}
+			case 4:
+				// MoveAfterByIndex: relocate an element after another index.
+				if length >= 2 {
+					pi := r.Intn(length)
+					ti := r.Intn(length)
+					if pi != ti {
+						arr.MoveAfterByIndex(pi, ti)
+					}
+				}
+			case 5:
+				// MoveBefore: relocate an element before another element.
+				if length >= 2 {
+					ni := r.Intn(length)
+					ti := r.Intn(length)
+					if ni != ti {
+						arr.MoveBefore(arr.Get(ni).CreatedAt(), arr.Get(ti).CreatedAt())
+					}
 				}
 			}
 
