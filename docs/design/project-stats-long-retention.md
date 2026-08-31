@@ -200,10 +200,18 @@ boundary would over-count; this design never does.
 `sum_session_hll_daily_ch` for the history and from the base for today, then take
 the daily `MAX` (series) or the window `MAX` (total).
 
-**Fallback.** If the summary table is absent, every read falls back to the base
-scan the MV design already defines — correct, slower, lossless — so a cluster
-that has not created the summaries keeps working. This mirrors the MV design's
-fallback philosophy.
+**Fallback.** The fallback is the `SummaryEnabled` flag, which gates the whole
+dual read and defaults off. A cluster that has not created the summaries leaves
+it off and runs the base-scan path unchanged — byte-identical to today. The flag
+is turned on per environment only after the summary tables exist and are
+validated (see Deployment sequencing), so the base path is always the safe
+default. Unlike the MV design's rewrite — which falls back to a base scan
+per query automatically — this dual read names the summary table directly, so a
+misconfiguration (flag on, table missing) surfaces as a loud read error rather
+than a silent slow path; that is deliberate, since the flag is only ever enabled
+behind the validation gate. An automatic per-query fallback (catch a
+missing-table error, retry the retained base query) is a reserved hardening if a
+cluster ever needs the flag on before every summary exists.
 
 This is the one place the design reverses a decision from
 [project-stats-warehouse-mv](project-stats-warehouse-mv.md): that design kept the
@@ -260,7 +268,8 @@ fallback. Per environment:
    here is the proof the union math is right, because the two paths overlap
    completely before TTL.
 4. Enable the daily ingest CronJob; observe a few days of runs.
-5. Deploy the server with the dual-read path (summary-absent → base fallback).
+5. Deploy the server and turn on `SummaryEnabled` (the flag defaults off, so the
+   deploy itself changes nothing until it is flipped, and only after step 3/4).
 6. Only now recreate the base tables partitioned and enable the 90-day TTL,
    per-table, TTL last.
 

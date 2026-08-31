@@ -277,7 +277,7 @@ git commit -m "Add per-metric descriptors and SummaryEnabled warehouse flag"
 func TestTotalQuery_Straddling_Summary(t *testing.T) {
     day := func(s string) time.Time { d, _ := time.Parse("2006-01-02", s); return d }
     got := totalQuery(descUser, types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31"), true)
-    assert.Contains(t, got, "HLL_CARDINALITY(HLL_UNION_AGG(sketch))")
+    assert.Contains(t, got, "HLL_UNION_AGG(sketch)")
     assert.Contains(t, got, "SELECT user_hll AS sketch FROM sum_user_hll_daily")
     assert.Contains(t, got, "dt >= '2026-08-01' AND dt < '2026-08-31'")
     assert.Contains(t, got, "UNION ALL")
@@ -370,11 +370,15 @@ git commit -m "Route project-stats reads through the dual-read builders"
 - Produces: a running daily job filling `sum_*` tables. Backfill SQL example:
   ```sql
   INSERT INTO sum_user_hll_daily
-  SELECT project_id, DATE(timestamp), HLL_HASH(user_id)
+  SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(user_id))
   FROM user_events
   GROUP BY project_id, DATE(timestamp);
   ```
-  Daily SQL is the same with `WHERE DATE(timestamp) >= DATE_SUB(CURDATE(), 7) AND DATE(timestamp) < CURDATE()`.
+  The `GROUP BY` requires `HLL_UNION(HLL_HASH(...))`; a bare `HLL_HASH` is
+  rejected as "must be an aggregate expression". The daily SQL is the same with
+  a trailing 7-day UTC window — use `DATE(UTC_TIMESTAMP())` (not `CURDATE()`,
+  which StarRocks evaluates in the session `time_zone`, default `Asia/Shanghai`):
+  `WHERE DATE(timestamp) >= DATE_SUB(DATE(UTC_TIMESTAMP()), INTERVAL 7 DAY) AND DATE(timestamp) < DATE(UTC_TIMESTAMP())`.
 
 - [ ] **Step 1: Write the configmap SQL** for all 5 metrics (daily + backfill variants).
 - [ ] **Step 2: Write the CronJob and backfill Job** modeled on `starrocks/mv/job.yaml` and `tools/housekeeping-trend/cronjob.yaml`.

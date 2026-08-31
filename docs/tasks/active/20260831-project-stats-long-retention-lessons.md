@@ -53,12 +53,25 @@ once in the totals (3/5, not 4/6). Lesson: a warehouse query with no cluster in
 CI must be rehearsed against a real engine with representative data before it is
 trusted — string assertions prove shape, not semantics.
 
-## Known limitation: today boundary is per-call
+## Known limitation: today boundary is per-call, and refresh can lag it
 
 `todayUTC()` reads `time.Now()` inside each of the 12 metric methods, so a
 dashboard render that crosses midnight UTC mid-render can split two metrics at
-different `today` boundaries. Blast radius is one day of one metric served from
-base vs. summary — self-healing and within HLL error, and the design already
-treats the boundary as fuzzy. Threading a single per-request `today` through the
-`Warehouse` interface was judged not worth the interface churn. Revisit if
-strict intra-render consistency is ever required.
+different `today` boundaries — one day of one metric served from base vs. summary.
+
+The sharper case is **refresh lag at the boundary**, not just intra-render skew.
+The instant the UTC day rolls to D+1, every read now expects the just-closed day
+D to come from the summary (`[from, today)` includes D) — but the daily refresh
+runs later (01:30 UTC) and only then does its 7-day lookback populate D. Between
+00:00 and that run, D is read from a summary that has no D row yet, so that day
+reads **zero/undercount** — and a missing day is not covered by HLL error; it is
+recovered only when the refresh lands. It self-heals within that window and the
+lookback keeps re-filling, but it is a real freshness gap.
+
+Mitigations, in increasing cost: document it and add a freshness monitor on the
+newest summary partition (chosen for now); or split at `today - 1` so the
+just-closed day is always served fresh from the base until the summary is known
+to hold it (one extra partition-pruned day of base scan, no interface change);
+or capture one `today` per request and thread it through the `Warehouse`
+interface (removes the intra-render skew too, at the cost of interface churn).
+Revisit if the boundary undercount becomes visible in the dashboard.
