@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.18] - 2026-08-31
+
+### Fixed
+
+- Anchor Array.Add on the last node's position identity by @lemon0333 in https://github.com/yorkie-team/yorkie/pull/1958
+- Recover style ranges collapsed by a merge at the from anchor by @Nahee-Park in https://github.com/yorkie-team/yorkie/pull/1954
+- Relink insertion chain when restore recreates a purged fragment by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1953
+- Harden yson.Unmarshal against panics on malformed payloads by @lemon0333 in https://github.com/yorkie-team/yorkie/pull/1945
+- Keep the watch event pump alive while detaching by @lshtar13 in https://github.com/yorkie-team/yorkie/pull/1959
+
 ## [v0.7.17] - 2026-08-18
 
 ### Added
