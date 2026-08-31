@@ -204,14 +204,24 @@ the daily `MAX` (series) or the window `MAX` (total).
 dual read and defaults off. A cluster that has not created the summaries leaves
 it off and runs the base-scan path unchanged — byte-identical to today. The flag
 is turned on per environment only after the summary tables exist and are
-validated (see Deployment sequencing), so the base path is always the safe
-default. Unlike the MV design's rewrite — which falls back to a base scan
-per query automatically — this dual read names the summary table directly, so a
-misconfiguration (flag on, table missing) surfaces as a loud read error rather
-than a silent slow path; that is deliberate, since the flag is only ever enabled
-behind the validation gate. An automatic per-query fallback (catch a
-missing-table error, retry the retained base query) is a reserved hardening if a
-cluster ever needs the flag on before every summary exists.
+validated (see Deployment sequencing). Unlike the MV design's rewrite — which
+falls back to a base scan per query automatically — this dual read names the
+summary table directly, so a misconfiguration (flag on, table missing) surfaces
+as a loud read error rather than a silent slow path; that is deliberate, since
+the flag is only ever enabled behind the validation gate. An automatic per-query
+fallback (catch a missing-table error, retry the retained base query) is a
+reserved hardening if a cluster ever needs the flag on before every summary
+exists.
+
+**The flag-off path is only a lossless default before raw TTL.** It is
+byte-identical and complete only while the base still holds the full history —
+i.e. before step 6 enables the 90-day TTL. Once the base is trimmed to 90 days,
+turning `SummaryEnabled` off no longer reproduces the long windows: a 3-/12-month
+read then silently returns the last 90 days without erroring. So disabling the
+flag is a valid rollback only up to the TTL step; after it, rollback means
+repairing or backfilling the summaries (or temporarily restoring raw retention),
+not just flipping the flag. This is the other reason TTL is sequenced last and
+gated on the summary being trusted.
 
 This is the one place the design reverses a decision from
 [project-stats-warehouse-mv](project-stats-warehouse-mv.md): that design kept the
