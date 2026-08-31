@@ -167,6 +167,9 @@ spec:
           "--starrocks-dsn",
           "{{ .Values.yorkie.args.starrocksDSN }}",
           {{- end }}
+          {{- if .Values.yorkie.args.starrocksSummaryEnabled }}
+          "--starrocks-summary-enabled",
+          {{- end }}
           {{- with .Values.yorkie.housekeeping }}
           {{- if hasKey . "interval" }}
           "--housekeeping-interval",

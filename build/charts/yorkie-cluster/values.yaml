@@ -21,6 +21,10 @@ yorkie:
     # If empty, all requests are allowed.
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
+    # Serve project-stats history from the decoupled daily HLL summary tables
+    # (--starrocks-summary-enabled). Enable only after the summary tables are
+    # backfilled and validated. See docs/design/project-stats-long-retention.md.
+    starrocksSummaryEnabled: false
 
   ports:
     rpcPort: 8080
