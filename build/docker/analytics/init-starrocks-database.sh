@@ -55,6 +55,22 @@ for mv in "${mvs[@]}"; do
   [ $attempt -lt 60 ] && echo -e "$index is ready on $table"
 done
 
+
+echo -e 'Creating decoupled daily HLL summary tables'
+if mysql -h starrocks-fe -P 9030 -u root < /init-create-summary.sql; then
+  echo -e 'Successfully created summary tables'
+else
+  echo -e 'Summary tables may already exist, continuing...'
+fi
+
+# Seed the summaries from whatever base history exists. Idempotent (AGGREGATE
+# KEY + HLL_UNION), so a re-run merges rather than duplicates. In production the
+# scheduled summary CronJob keeps these fresh; locally this one-shot backfill is
+# enough to exercise the dual-read path with SummaryEnabled.
+echo -e 'Backfilling summary tables from base history'
+mysql -h starrocks-fe -P 9030 -u root < /init-backfill-summary.sql \
+  || echo -e 'Could not run the summary backfill, continuing...'
+
 sleep 5s
 echo -e 'Creating routine load'
 if mysql -h starrocks-fe -P 9030 -u root < /init-create-routine-load.sql 2>/dev/null; then

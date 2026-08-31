@@ -107,6 +107,8 @@ services:
     volumes:
       - ./init-create-table.sql:/init-create-table.sql
       - ./init-create-mv.sql:/init-create-mv.sql
+      - ./init-create-summary.sql:/init-create-summary.sql
+      - ./init-backfill-summary.sql:/init-backfill-summary.sql
       - ./init-create-routine-load.sql:/init-create-routine-load.sql
       - ./init-starrocks-database.sh:/init-starrocks-database.sh
     entrypoint: ["/bin/bash"]
