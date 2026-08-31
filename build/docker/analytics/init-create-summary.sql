@@ -13,6 +13,11 @@ USE yorkie;
 -- merges). partition_live_number retains ~15 months (12-month product window +
 -- buffer). Only the client table carries event_type and only the session table
 -- carries channel_key, mirroring init-create-mv.sql.
+--
+-- This file is the source of truth for the summary DDL. The deployed clusters
+-- carry the same statements in the analytics chart's init ConfigMap
+-- (build/charts/yorkie-analytics/templates/starrocks/configmap.yaml); keep the
+-- two in sync when changing a column, key, or partition_live_number.
 
 CREATE TABLE IF NOT EXISTS sum_user_hll_daily (
     project_id VARCHAR(64),

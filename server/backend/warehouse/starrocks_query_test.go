@@ -102,6 +102,33 @@ func TestPeakSeriesQueryStraddling(t *testing.T) {
 	assert.Contains(t, got, "ORDER BY event_date ASC")
 }
 
+func TestSeriesQueryStraddlingConcatenatesHalves(t *testing.T) {
+	got := norm(descUser.seriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
+
+	// history from the summary, per day
+	assert.Contains(t, got, "SELECT dt AS event_date, HLL_CARDINALITY(HLL_UNION_AGG(user_hll)) AS metric_value "+
+		"FROM sum_user_hll_daily WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' GROUP BY dt")
+	// today from the base, per day
+	assert.Contains(t, got, "SELECT DATE(timestamp) AS event_date, APPROX_COUNT_DISTINCT(user_id) AS metric_value "+
+		"FROM user_events")
+	assert.Contains(t, got, "timestamp >= '2026-08-31' AND timestamp < '2026-09-01'")
+	assert.Contains(t, got, "GROUP BY DATE(timestamp)")
+	assert.Contains(t, got, "UNION ALL")
+	assert.Contains(t, got, "ORDER BY event_date ASC")
+}
+
+func TestSessionTotalUnionsAcrossChannels(t *testing.T) {
+	got := norm(descSession.totalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
+
+	// distinct sessions across the whole window: union every channel-day sketch,
+	// cardinality once. The summary half must NOT filter or group by channel_key.
+	assert.Contains(t, got, "SELECT HLL_CARDINALITY(HLL_UNION_AGG(sketch)) FROM")
+	assert.Contains(t, got, "SELECT session_hll AS sketch FROM sum_session_hll_daily_ch "+
+		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")
+	assert.Contains(t, got, "SELECT HLL_HASH(session_id) AS sketch FROM session_events")
+	assert.NotContains(t, got, "channel_key")
+}
+
 func TestTotalQueryEmptyWindowNoUnion(t *testing.T) {
 	got := norm(descUser.totalQuery(types.ID("p1"), day("2026-08-31"), day("2026-08-31"), day("2026-08-31")))
 

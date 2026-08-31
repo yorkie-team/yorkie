@@ -67,6 +67,11 @@ fi
 # KEY + HLL_UNION), so a re-run merges rather than duplicates. In production the
 # scheduled summary CronJob keeps these fresh; locally this one-shot backfill is
 # enough to exercise the dual-read path with SummaryEnabled.
+#
+# NOTE: on a fresh local stack the base tables are empty, so this backfill is a
+# no-op and dual-read history stays empty until events have been ingested. To
+# see historical points, ingest some events and re-run this backfill by hand
+# (mysql ... < init-backfill-summary.sql) — not a missing-data bug.
 echo -e 'Backfilling summary tables from base history'
 mysql -h starrocks-fe -P 9030 -u root < /init-backfill-summary.sql \
   || echo -e 'Could not run the summary backfill, continuing...'
