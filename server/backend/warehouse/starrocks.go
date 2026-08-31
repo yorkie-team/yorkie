@@ -56,6 +56,17 @@ func (r *StarRocks) dial(dsn string) error {
 	return nil
 }
 
+// summaryEnabled reports whether the dual-read summary path is turned on.
+func (r *StarRocks) summaryEnabled() bool {
+	return r.conf != nil && r.conf.SummaryEnabled
+}
+
+// todayUTC returns the start of the current day in UTC, the boundary the
+// dual-read path splits the requested window on.
+func todayUTC() time.Time {
+	return time.Now().UTC().Truncate(24 * time.Hour)
+}
+
 // GetActiveUsers returns the number of active users in the given time range.
 func (r *StarRocks) GetActiveUsers(
 	ctx context.Context,
@@ -84,6 +95,10 @@ func (r *StarRocks) GetActiveUsers(
 	ORDER BY 
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = descUser.seriesQuery(id, from, to, todayUTC())
+	}
 
 	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
@@ -115,6 +130,10 @@ func (r *StarRocks) GetActiveUsersCount(
 		AND DATE(timestamp) >= '%s'
 		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = descUser.totalQuery(id, from, to, todayUTC())
+	}
 
 	count, err := r.queryCount(ctx, query)
 	if err != nil {
@@ -152,6 +171,10 @@ func (r *StarRocks) GetActiveDocuments(
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
+	if r.summaryEnabled() {
+		query = descDocument.seriesQuery(id, from, to, todayUTC())
+	}
+
 	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active documents: %w", err)
@@ -182,6 +205,10 @@ func (r *StarRocks) GetActiveDocumentsCount(
 		AND DATE(timestamp) >= '%s'
 		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = descDocument.totalQuery(id, from, to, todayUTC())
+	}
 
 	count, err := r.queryCount(ctx, query)
 	if err != nil {
@@ -220,6 +247,10 @@ func (r *StarRocks) GetActiveClients(
 	    event_date ASC;
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
+	if r.summaryEnabled() {
+		query = descClient.seriesQuery(id, from, to, todayUTC())
+	}
+
 	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active clients: %w", err)
@@ -251,6 +282,10 @@ func (r *StarRocks) GetActiveClientsCount(
 		AND DATE(timestamp) >= '%s'
 		AND DATE(timestamp) < '%s';
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = descClient.totalQuery(id, from, to, todayUTC())
+	}
 
 	count, err := r.queryCount(ctx, query)
 	if err != nil {
@@ -288,6 +323,10 @@ func (r *StarRocks) GetActiveChannels(
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
+	if r.summaryEnabled() {
+		query = descChannel.seriesQuery(id, from, to, todayUTC())
+	}
+
 	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get active channels: %w", err)
@@ -318,6 +357,10 @@ func (r *StarRocks) GetActiveChannelsCount(
 		AND DATE(timestamp) >= '%s'
 		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = descChannel.totalQuery(id, from, to, todayUTC())
+	}
 
 	count, err := r.queryCount(ctx, query)
 	if err != nil {
@@ -355,6 +398,10 @@ func (r *StarRocks) GetSessions(
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
+	if r.summaryEnabled() {
+		query = descSession.seriesQuery(id, from, to, todayUTC())
+	}
+
 	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get sessions: %w", err)
@@ -385,6 +432,10 @@ func (r *StarRocks) GetSessionsCount(
 		AND DATE(timestamp) >= '%s'
 		AND DATE(timestamp) < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = descSession.totalQuery(id, from, to, todayUTC())
+	}
 
 	count, err := r.queryCount(ctx, query)
 	if err != nil {
@@ -430,6 +481,10 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
+	if r.summaryEnabled() {
+		query = peakSeriesQuery(id, from, to, todayUTC())
+	}
+
 	metrics, err := r.queryMetrics(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("get peak sessions per channel: %w", err)
@@ -468,6 +523,10 @@ func (r *StarRocks) GetPeakSessionsPerChannelCount(
 	        event_date, channel_key
 	) AS channel_sessions;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	if r.summaryEnabled() {
+		query = peakTotalQuery(id, from, to, todayUTC())
+	}
 
 	count, err := r.queryCount(ctx, query)
 	if err != nil {

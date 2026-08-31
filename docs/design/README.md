@@ -52,6 +52,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 - [Project Stats Cache](project-stats-cache.md): Asynchronously refreshed cache for `ClientsCount` and `DocumentsCount` to keep `GetProjectStats` fast at large scale
 - [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md): Daily HLL rollups that make the warehouse-backed `GetProjectStats` metrics independent of event volume
+- [Project Stats Long-Retention Windows](project-stats-long-retention.md): Decoupled daily HLL summary tables and a dual read that serve up-to-12-month windows after raw-event TTL is enabled
 - [Per-Project Channel Session TTL](per-project-channel-session-ttl.md): Per-project override for `ChannelSessionTTL` to tune the presence-count "feels occupied" effect
 
 ## Maintaining the Document

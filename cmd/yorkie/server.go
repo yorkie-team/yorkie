@@ -93,7 +93,8 @@ var (
 	kafkaSessionEventsTopic  string
 	kafkaWriteTimeout        time.Duration
 
-	starRocksDSN string
+	starRocksDSN            string
+	starRocksSummaryEnabled bool
 
 	conf = server.NewConfig()
 )
@@ -165,7 +166,8 @@ func newServerCmd() *cobra.Command {
 
 			if starRocksDSN != "" {
 				conf.StarRocks = &warehouse.Config{
-					DSN: starRocksDSN,
+					DSN:            starRocksDSN,
+					SummaryEnabled: starRocksSummaryEnabled,
 				}
 			}
 
@@ -586,6 +588,13 @@ func init() {
 		"starrocks-dsn",
 		"",
 		"StarRocks DSN for the analytics",
+	)
+	cmd.Flags().BoolVar(
+		&starRocksSummaryEnabled,
+		"starrocks-summary-enabled",
+		false,
+		"Serve project-stats history from the decoupled daily HLL summary tables "+
+			"(dual read). Enable only after the summary tables are backfilled and validated.",
 	)
 	cmd.Flags().DurationVar(
 		&channelSessionTTL,

@@ -123,6 +123,47 @@ data:
         FROM client_events
         GROUP BY project_id, event_type, DATE(timestamp);
 
+  init-create-summary.sql: |
+    USE yorkie;
+
+    -- Decoupled daily HLL summary tables that outlive the base event tables, so
+    -- long-retention dashboard windows survive raw-event TTL. Independent
+    -- AGGREGATE KEY tables (not base-bound rollups); filled by the summary
+    -- CronJob and read by the dual-read path in
+    -- server/backend/warehouse/starrocks.go. AGGREGATE KEY + HLL_UNION makes
+    -- inserts idempotent; partition_live_number retains ~15 months.
+    -- See docs/design/project-stats-long-retention.md.
+
+    CREATE TABLE IF NOT EXISTS sum_user_hll_daily (
+        project_id VARCHAR(64), dt DATE, user_hll HLL HLL_UNION
+    ) ENGINE = OLAP AGGREGATE KEY(project_id, dt)
+    PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(project_id)
+    PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
+    CREATE TABLE IF NOT EXISTS sum_document_hll_daily (
+        project_id VARCHAR(64), dt DATE, document_hll HLL HLL_UNION
+    ) ENGINE = OLAP AGGREGATE KEY(project_id, dt)
+    PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(project_id)
+    PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
+    CREATE TABLE IF NOT EXISTS sum_channel_hll_daily (
+        project_id VARCHAR(64), dt DATE, channel_hll HLL HLL_UNION
+    ) ENGINE = OLAP AGGREGATE KEY(project_id, dt)
+    PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(project_id)
+    PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
+    CREATE TABLE IF NOT EXISTS sum_session_hll_daily_ch (
+        project_id VARCHAR(64), dt DATE, channel_key VARCHAR(128), session_hll HLL HLL_UNION
+    ) ENGINE = OLAP AGGREGATE KEY(project_id, dt, channel_key)
+    PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(project_id)
+    PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
+    CREATE TABLE IF NOT EXISTS sum_client_hll_daily (
+        project_id VARCHAR(64), event_type VARCHAR(32), dt DATE, client_hll HLL HLL_UNION
+    ) ENGINE = OLAP AGGREGATE KEY(project_id, event_type, dt)
+    PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(project_id)
+    PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
   init-create-routine-load.sql: |
     CREATE ROUTINE LOAD yorkie.user_events ON user_events
     PROPERTIES
@@ -243,6 +284,13 @@ data:
       done
       [ $attempt -lt 60 ] && echo -e "$index is ready on $table"
     done
+
+    echo -e 'Creating decoupled daily HLL summary tables'
+    if mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-create-summary.sql; then
+      echo -e 'Successfully created summary tables'
+    else
+      echo -e 'Summary tables may already exist, continuing...'
+    fi
 
     sleep 5s
     echo -e 'Creating routine load'
