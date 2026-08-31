@@ -53,6 +53,20 @@ once in the totals (3/5, not 4/6). Lesson: a warehouse query with no cluster in
 CI must be rehearsed against a real engine with representative data before it is
 trusted — string assertions prove shape, not semantics.
 
+A second pass closed the remaining gap: the SQL rehearsal ran the *builder
+output* by hand, but not the Go methods that execute and scan it. Added
+`e2e_rehearsal_test.go` (build tag `starrocksrehearsal`, `SR_DSN` env, skips in
+CI) that drives all twelve `Warehouse` methods with `SummaryEnabled` off vs on
+against a live seeded StarRocks. It passed on 3.3.9 — confirming the full
+dial → build → execute → `queryMetrics`/`queryCount` scan path, including the
+`HLL_UNION_AGG` bigint scanning into the `int32`/`NullInt64` result and the DATE
+column parsing. Run it during a rehearsal with:
+
+```sh
+SR_DSN='root:@tcp(127.0.0.1:9931)/yorkie' \
+  go test -tags starrocksrehearsal ./server/backend/warehouse/ -run TestE2E -v
+```
+
 ## Known limitation: today boundary is per-call, and refresh can lag it
 
 `todayUTC()` reads `time.Now()` inside each of the 12 metric methods, so a
