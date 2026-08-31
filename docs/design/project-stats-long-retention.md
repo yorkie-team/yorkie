@@ -128,15 +128,17 @@ ingestion and retries are covered:
 
 ```sql
 INSERT INTO sum_user_hll_daily
-SELECT project_id, DATE(timestamp) AS dt, HLL_HASH(user_id)
+SELECT project_id, DATE(timestamp) AS dt, HLL_UNION(HLL_HASH(user_id))
 FROM user_events
 WHERE DATE(timestamp) >= <today-7> AND DATE(timestamp) < <today>
 GROUP BY project_id, DATE(timestamp);
 ```
 
-`HLL_UNION` on the target column merges the re-inserted days; the 7-day window is
-safe to repeat every run. A one-time backfill over the full base history seeds
-the table before the job takes over.
+The `GROUP BY` needs `HLL_UNION` around `HLL_HASH` — a bare `HLL_HASH` under a
+`GROUP BY` is rejected as "must be an aggregate expression", the same shape the
+`mv_*_hll_daily` DDL uses. `HLL_UNION` on the target column then merges the
+re-inserted days, so the 7-day window is safe to repeat every run. A one-time
+backfill over the full base history seeds the table before the job takes over.
 
 The job runs as a **Kubernetes CronJob** — a `starrocks/fe-ubuntu` container
 running the idempotent SQL through the MySQL client, the same image and access
@@ -159,12 +161,17 @@ from the base, then concatenate:
 
 ```sql
 -- history, from the summary
-SELECT dt, HLL_CARDINALITY(HLL_UNION_AGG(user_hll)) AS v
+SELECT dt, HLL_UNION_AGG(user_hll) AS v
 FROM sum_user_hll_daily
 WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'   -- [from, today)
 GROUP BY dt ORDER BY dt;
 -- today, from the base (existing MV rewrite path, unchanged)
 ```
+
+`HLL_UNION_AGG` already returns the merged cardinality (a bigint), so it is not
+wrapped in `HLL_CARDINALITY` — doing so reads the count back as an HLL and yields
+zero. Use `HLL_UNION_AGG(col)` to count, or `HLL_RAW_AGG(col)` / `HLL_UNION(col)`
+when a merged sketch is needed.
 
 **Totals** (`GetActiveUsersCount`, …) are a distinct over the whole window, so
 the fresh day and the history must be **unioned, never summed** — a subject
@@ -173,7 +180,7 @@ active in both halves must count once. The union happens in the engine, over a
 exactly once:
 
 ```sql
-SELECT HLL_CARDINALITY(HLL_UNION_AGG(sketch)) FROM (
+SELECT HLL_UNION_AGG(sketch) FROM (
     SELECT user_hll AS sketch FROM sum_user_hll_daily
      WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'          -- [from, today)
     UNION ALL

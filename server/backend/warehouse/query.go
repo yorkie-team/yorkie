@@ -27,10 +27,12 @@ import (
 // The dual-read query builders split the requested window at the UTC day today:
 // the historical part [from, today) is served by the decoupled daily HLL
 // summary tables, and the fresh part [today, to) by the base rollups. Totals
-// union the two halves' sketches with HLL_UNION_AGG and take cardinality once,
-// so a subject active in both halves counts once. These builders run only when
-// SummaryEnabled is true; the flag-off path keeps the base-only queries in
-// starrocks.go unchanged. See docs/design/project-stats-long-retention.md.
+// union the two halves' sketches and count once with HLL_UNION_AGG, so a
+// subject active in both halves counts once. Note HLL_UNION_AGG already returns
+// the merged cardinality (a bigint), so it is not wrapped in HLL_CARDINALITY.
+// These builders run only when SummaryEnabled is true; the flag-off path keeps
+// the base-only queries in starrocks.go unchanged.
+// See docs/design/project-stats-long-retention.md.
 
 // dayFmt formats a time as the StarRocks date literal used throughout.
 func dayFmt(t time.Time) string {
@@ -85,7 +87,7 @@ func (d metricDesc) seriesQuery(id types.ID, from, to, today time.Time) string {
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
 		histSQL = fmt.Sprintf(
-			"SELECT dt AS event_date, HLL_CARDINALITY(HLL_UNION_AGG(%s)) AS metric_value "+
+			"SELECT dt AS event_date, HLL_UNION_AGG(%s) AS metric_value "+
 				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'%s GROUP BY dt",
 			d.hllColumn, d.summaryTable, id.String(),
 			dayFmt(from), dayFmt(hist.End), d.summaryEventTypePred(),
@@ -129,7 +131,7 @@ func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
 
 	//nolint:gosec
 	return fmt.Sprintf(
-		"SELECT HLL_CARDINALITY(HLL_UNION_AGG(sketch)) FROM (\n%s\n) t;",
+		"SELECT HLL_UNION_AGG(sketch) FROM (\n%s\n) t;",
 		join([]string{histSQL, freshSQL}),
 	)
 }
@@ -145,7 +147,7 @@ func peakSeriesQuery(id types.ID, from, to, today time.Time) string {
 	if !hist.Empty || fresh.Empty {
 		histSQL = fmt.Sprintf(
 			"SELECT event_date, MAX(session_count) AS metric_value FROM ("+
-				"SELECT dt AS event_date, channel_key, HLL_CARDINALITY(HLL_UNION_AGG(session_hll)) AS session_count "+
+				"SELECT dt AS event_date, channel_key, HLL_UNION_AGG(session_hll) AS session_count "+
 				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s' GROUP BY dt, channel_key"+
 				") hc GROUP BY event_date",
 			d.summaryTable, id.String(), dayFmt(from), dayFmt(hist.End),
@@ -178,7 +180,7 @@ func peakTotalQuery(id types.ID, from, to, today time.Time) string {
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
 		histSQL = fmt.Sprintf(
-			"SELECT HLL_CARDINALITY(HLL_UNION_AGG(session_hll)) AS session_count "+
+			"SELECT HLL_UNION_AGG(session_hll) AS session_count "+
 				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s' GROUP BY dt, channel_key",
 			d.summaryTable, id.String(), dayFmt(from), dayFmt(hist.End),
 		)

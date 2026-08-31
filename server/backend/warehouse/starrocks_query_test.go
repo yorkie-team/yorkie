@@ -40,7 +40,7 @@ func day(s string) time.Time {
 func TestTotalQueryStraddlingSummary(t *testing.T) {
 	got := norm(descUser.totalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
-	assert.Contains(t, got, "SELECT HLL_CARDINALITY(HLL_UNION_AGG(sketch)) FROM")
+	assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
 	assert.Contains(t, got, "SELECT user_hll AS sketch FROM sum_user_hll_daily "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")
 	assert.Contains(t, got, "UNION ALL")
@@ -52,7 +52,7 @@ func TestTotalQueryStraddlingSummary(t *testing.T) {
 func TestSeriesQueryEntirelyPastSummaryOnly(t *testing.T) {
 	got := norm(descDocument.seriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-08-31"), day("2026-08-31")))
 
-	assert.Contains(t, got, "SELECT dt AS event_date, HLL_CARDINALITY(HLL_UNION_AGG(document_hll)) AS metric_value "+
+	assert.Contains(t, got, "SELECT dt AS event_date, HLL_UNION_AGG(document_hll) AS metric_value "+
 		"FROM sum_document_hll_daily WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' GROUP BY dt")
 	assert.Contains(t, got, "ORDER BY event_date ASC")
 	assert.NotContains(t, got, "UNION ALL")
@@ -82,7 +82,7 @@ func TestPeakTotalQueryIsMaxNoBoundaryUnion(t *testing.T) {
 	got := norm(peakTotalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
 	assert.Contains(t, got, "SELECT MAX(session_count) FROM")
-	assert.Contains(t, got, "HLL_CARDINALITY(HLL_UNION_AGG(session_hll)) AS session_count "+
+	assert.Contains(t, got, "HLL_UNION_AGG(session_hll) AS session_count "+
 		"FROM sum_session_hll_daily_ch WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' "+
 		"GROUP BY dt, channel_key")
 	assert.Contains(t, got, "APPROX_COUNT_DISTINCT(session_id) AS session_count FROM session_events")
@@ -106,7 +106,7 @@ func TestSeriesQueryStraddlingConcatenatesHalves(t *testing.T) {
 	got := norm(descUser.seriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
 	// history from the summary, per day
-	assert.Contains(t, got, "SELECT dt AS event_date, HLL_CARDINALITY(HLL_UNION_AGG(user_hll)) AS metric_value "+
+	assert.Contains(t, got, "SELECT dt AS event_date, HLL_UNION_AGG(user_hll) AS metric_value "+
 		"FROM sum_user_hll_daily WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' GROUP BY dt")
 	// today from the base, per day
 	assert.Contains(t, got, "SELECT DATE(timestamp) AS event_date, APPROX_COUNT_DISTINCT(user_id) AS metric_value "+
@@ -122,7 +122,7 @@ func TestSessionTotalUnionsAcrossChannels(t *testing.T) {
 
 	// distinct sessions across the whole window: union every channel-day sketch,
 	// cardinality once. The summary half must NOT filter or group by channel_key.
-	assert.Contains(t, got, "SELECT HLL_CARDINALITY(HLL_UNION_AGG(sketch)) FROM")
+	assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
 	assert.Contains(t, got, "SELECT session_hll AS sketch FROM sum_session_hll_daily_ch "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")
 	assert.Contains(t, got, "SELECT HLL_HASH(session_id) AS sketch FROM session_events")

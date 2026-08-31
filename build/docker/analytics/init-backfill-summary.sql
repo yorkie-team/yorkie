@@ -9,27 +9,31 @@ USE yorkie;
 -- rather than all at once; each is a single base full scan. See
 -- docs/design/project-stats-long-retention.md and the MV migration playbook.
 
+-- HLL_HASH is per-row; grouping into the HLL_UNION column requires the
+-- HLL_UNION aggregate around it (a bare HLL_HASH under GROUP BY is rejected as
+-- "must be an aggregate expression"). This matches the mv_*_hll_daily DDL.
+
 INSERT INTO sum_user_hll_daily
-SELECT project_id, DATE(timestamp), HLL_HASH(user_id)
+SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(user_id))
 FROM user_events
 GROUP BY project_id, DATE(timestamp);
 
 INSERT INTO sum_document_hll_daily
-SELECT project_id, DATE(timestamp), HLL_HASH(document_key)
+SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(document_key))
 FROM document_events
 GROUP BY project_id, DATE(timestamp);
 
 INSERT INTO sum_channel_hll_daily
-SELECT project_id, DATE(timestamp), HLL_HASH(channel_key)
+SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(channel_key))
 FROM channel_events
 GROUP BY project_id, DATE(timestamp);
 
 INSERT INTO sum_session_hll_daily_ch
-SELECT project_id, DATE(timestamp), channel_key, HLL_HASH(session_id)
+SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
 FROM session_events
 GROUP BY project_id, DATE(timestamp), channel_key;
 
 INSERT INTO sum_client_hll_daily
-SELECT project_id, event_type, DATE(timestamp), HLL_HASH(client_id)
+SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
 FROM client_events
 GROUP BY project_id, event_type, DATE(timestamp);
