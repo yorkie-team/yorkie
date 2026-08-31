@@ -27,6 +27,13 @@ import (
 // Config is the configuration for StarRocks.
 type Config struct {
 	DSN string
+
+	// SummaryEnabled turns on the dual-read path that serves history from the
+	// decoupled daily HLL summary tables and today from the base rollups. When
+	// false, reads use the base rollups over the whole window, byte-identical to
+	// the pre-summary behavior. It is flipped on only after the summary tables
+	// are backfilled and validated. See docs/design/project-stats-long-retention.md.
+	SummaryEnabled bool
 }
 
 // Warehouse represents the warehouse interface.
