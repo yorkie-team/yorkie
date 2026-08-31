@@ -34,9 +34,11 @@ import (
 // the base-only queries in starrocks.go unchanged.
 // See docs/design/project-stats-long-retention.md.
 
-// dayFmt formats a time as the StarRocks date literal used throughout.
+// dayFmt formats a time as the StarRocks date literal used throughout. It
+// normalizes to UTC first so the summary-path literals line up with the UTC day
+// boundary from todayUTC, even when from/to arrive in the server's local zone.
 func dayFmt(t time.Time) string {
-	return t.Format("2006-01-02")
+	return t.UTC().Format("2006-01-02")
 }
 
 // summaryEventTypePred returns the summary-table event_type predicate for the
