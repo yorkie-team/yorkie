@@ -77,7 +77,7 @@ func TestWatchEventDeliveryPipeline(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			d2 := document.New(d1.Key())
 			assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-			_, cancel2, err := c2.WatchStream(d2)
+			_, _, err := c2.WatchStream(d2)
 			assert.NoError(t, err)
 
 			assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -86,7 +86,6 @@ func TestWatchEventDeliveryPipeline(t *testing.T) {
 			}))
 			assert.NoError(t, c2.Sync(ctx))
 
-			cancel2()
 			assert.NoError(t, c2.Detach(ctx, d2))
 		}
 
