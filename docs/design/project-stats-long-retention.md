@@ -61,6 +61,15 @@ StarRocks 3.3.9:
   `partition_ttl_number`; drop an old base partition; `REFRESH ... WITH SYNC
   MODE`; the MV loses that partition.
 
+The TTL knobs also point the wrong way. `partition_ttl` / `partition_ttl_number`
+retain only the *most recent* N partitions, and StarRocks documents that outdated
+MV partitions "will not be involved in the query plan, and the query will be
+executed on the base tables to guarantee the consistency of data"
+([partitioned MV docs][smv]). That is the opposite of what long retention needs —
+the MV holding *fewer* days than the base and deferring the rest to a base that,
+once purged, has nothing left to give back. An async MV is structurally a
+hot-data optimization, not a long-retention store.
+
 So the summary cannot be anything StarRocks maintains as a dependent of the base
 table. It has to be a plain table the base cannot reach.
 
@@ -94,6 +103,11 @@ PROPERTIES (
 `sum_session_hll_daily_ch` adds `channel_key` to the key, so it serves both the
 sessions metric and peak sessions per channel. `sum_client_hll_daily` adds
 `event_type`, matching the MV that carries it.
+
+This is the pattern StarRocks recommends directly: for HLL distinct counts, "when
+the data volume is large, it is better to create a corresponding rollup table for
+high frequency HLL queries" ([HLL docs][hll]). The summary table is that rollup,
+kept independent so it can also outlive the base.
 
 Two properties do the work:
 
@@ -266,6 +280,7 @@ retention, and by then the summary has been serving and validated.
 | Backfill full-scans the billion-row tables | Staged per table, `session_events` in a low-ingest window; cost is the one-time base scan (~80ns/row), as measured for the MV builds. |
 | Enabling raw TTL before the summary is trusted would lose history irrecoverably | TTL is step 6, gated on steps 1–5; validation in step 3 runs while both paths overlap. |
 | Expression partitioning, `partition_live_number`, and the HLL functions need a recent StarRocks | Verify the engine clears the version floor per environment before creating the tables (deployed clusters run 3.3.x). |
+| Raw-TTL enforcement may not drop partitions as expected on 3.3.x | `partition_live_number` has had drop bugs ([#39341][p39341]); the cleaner `partition_retention_condition` (Common Partition Expression TTL) is native-table-only from v3.5, past the deployed 3.3.x. Use dynamic partitioning / `partition_live_number` and confirm old partitions actually drop before relying on TTL for the storage saving. |
 
 ## Design Decisions
 
@@ -283,7 +298,8 @@ retention, and by then the summary has been serving and validated.
 
 | Alternative | Why not |
 |-------------|---------|
-| Asynchronous MV with its own TTL | Retention does not decouple — a dropped base partition drops the MV partition on the next refresh (measured on 3.3.9). |
+| Asynchronous MV with its own TTL | Retention does not decouple — a dropped base partition drops the MV partition on the next refresh (measured on 3.3.9), and its `partition_ttl` retains the *most recent* N partitions while routing older queries back to the base, the opposite of long retention. |
+| Archive raw events to an external store (S3/Parquet + a lakehouse table), as Grab does for Spark observability | Works for raw retention but adds an external store and a cross-system read on the historical path. The HLL summary is orders of magnitude smaller than raw, so long retention fits inside StarRocks with no external tier and no join across systems. |
 | Retain raw events for 12 months, no summary | Storage on a billion-row table for a full year is the cost this design exists to avoid. |
 | Summary table but keep automatic rewrite from `APPROX_COUNT_DISTINCT` | Rewrite targets the base's own rollup, which dies with the base. Serving a separate-lifetime table requires naming it and unioning by hand. |
 | StarRocks native `SUBMIT TASK ... SCHEDULE` for ingest | Runs inside the cluster with no run history or alerting; a silent failure stops the summary without a signal. |
@@ -294,3 +310,19 @@ retention, and by then the summary has been serving and validated.
 ## Tasks
 
 Track execution plans in `docs/tasks/active/` as separate task documents.
+
+## References
+
+- [Use HLL for approximate count distinct][hll] — the `HLL_UNION` column,
+  `HLL_HASH` on insert, `HLL_UNION_AGG` on read, and the rollup-table
+  recommendation this design follows.
+- [Create a partitioned materialized view][smv] — async MV `partition_ttl`
+  semantics and base-table fallback for outdated partitions.
+- [Building a Spark observability product with StarRocks][grab] — a production
+  short-hot-retention + external long-history precedent, contrasted above.
+- StarRocks [#39341][p39341] — `partition_live_number` drop bug.
+
+[hll]: https://docs.starrocks.io/docs/using_starrocks/distinct_values/Using_HLL/
+[smv]: https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/create_partitioned_materialized_view/
+[grab]: https://engineering.grab.com/building-a-spark-observability
+[p39341]: https://github.com/StarRocks/starrocks/issues/39341
