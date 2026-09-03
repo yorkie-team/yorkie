@@ -714,3 +714,173 @@ func TestYSONParse(t *testing.T) {
 		})
 	})
 }
+
+// textOf builds a single-node Text with the given value for round-trip tests.
+func textOf(value string) yson.Text {
+	return yson.Text{Nodes: []yson.TextNode{{Value: value}}}
+}
+
+func TestYSONStringAwareParsing(t *testing.T) {
+	t.Run("text value with closing paren round-trip", func(t *testing.T) {
+		obj := yson.Object{"c": textOf("see figure (1)")}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("text values with structural characters round-trip", func(t *testing.T) {
+		values := []string{
+			"close paren )",
+			"close brace }",
+			"close bracket ]",
+			"open bracket [",
+			"open brace {",
+			"open paren (",
+			"mixed )}]{[( soup",
+		}
+		for _, v := range values {
+			obj := yson.Object{"c": textOf(v)}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+			assert.Equal(t, obj, actual, "value %q", v)
+		}
+	})
+
+	t.Run("text values with constructor-like substrings round-trip", func(t *testing.T) {
+		values := []string{
+			"use Int( here",
+			"use Text( here",
+			"use Tree( here",
+			"use Counter( here",
+			"use Long( here",
+			"use Date( here",
+			"use BinData( here",
+			"use DedupCounter(Int(5),\"x\") here",
+			"Int(42) is a number",
+			"Tree({}) is empty",
+		}
+		for _, v := range values {
+			obj := yson.Object{"c": textOf(v)}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+			assert.Equal(t, obj, actual, "value %q", v)
+		}
+	})
+
+	t.Run("escaped quote adjacent to bracket in string round-trip", func(t *testing.T) {
+		values := []string{
+			`quote before bracket "] here`,
+			`bracket then quote [" here`,
+			`paren then escaped quote (\ okay`,
+			`he said ")" loudly`,
+		}
+		for _, v := range values {
+			obj := yson.Object{"c": textOf(v)}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+			assert.Equal(t, obj, actual, "value %q", v)
+		}
+	})
+
+	t.Run("text and tree in same root with tricky prose round-trip", func(t *testing.T) {
+		obj := yson.Object{
+			"note": textOf("see Int(3) in figure (2]"),
+			"body": yson.Tree{
+				Root: yson.TreeNode{
+					Type: "p",
+					Children: []yson.TreeNode{
+						{Type: "text", Value: "Tree(node) with ) brace }"},
+					},
+				},
+			},
+		}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("hand-written YSON literal with parens in string", func(t *testing.T) {
+		input := `Text([{"val":"see figure (1)"}])`
+		text := yson.Text{}
+		assert.NoError(t, yson.Unmarshal(input, &text))
+		assert.Equal(t, textOf("see figure (1)"), text)
+	})
+
+	t.Run("deeply nested tree past four levels round-trip", func(t *testing.T) {
+		// depth: root > a > b > c > d > text
+		leaf := yson.TreeNode{Type: "text", Value: "deep )"}
+		d := yson.TreeNode{Type: "d", Children: []yson.TreeNode{leaf}}
+		c := yson.TreeNode{Type: "c", Children: []yson.TreeNode{d}}
+		b := yson.TreeNode{Type: "b", Children: []yson.TreeNode{c}}
+		a := yson.TreeNode{Type: "a", Children: []yson.TreeNode{b}}
+		tree := yson.Tree{Root: yson.TreeNode{
+			Type: "root", Children: []yson.TreeNode{a},
+		}}
+
+		marshalled, err := tree.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Tree{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, tree, actual)
+	})
+
+	t.Run("counter regressions", func(t *testing.T) {
+		intCounter := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(`Counter(Int(10))`, &intCounter))
+		assert.Equal(t, crdt.IntegerCnt, intCounter.Type)
+		assert.Equal(t, int32(10), intCounter.Value)
+
+		longCounter := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(`Counter(Long(100))`, &longCounter))
+		assert.Equal(t, crdt.LongCnt, longCounter.Type)
+		assert.Equal(t, int64(100), longCounter.Value)
+
+		dedup := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(`DedupCounter(Int(15),"AQIDBA==")`, &dedup))
+		assert.Equal(t, crdt.IntegerDedupCnt, dedup.Type)
+		assert.Equal(t, int32(15), dedup.Value)
+		assert.Equal(t, []byte{1, 2, 3, 4}, dedup.Registers)
+	})
+
+	t.Run("empty text and tree regressions", func(t *testing.T) {
+		text := yson.Text{}
+		assert.NoError(t, yson.Unmarshal(`Text()`, &text))
+		assert.Equal(t, yson.Text{}, text)
+
+		tree := yson.Tree{}
+		assert.NoError(t, yson.Unmarshal(`Tree()`, &tree))
+		assert.Equal(t, yson.Tree{Root: yson.TreeNode{Type: yson.DefaultRootNodeType}}, tree)
+	})
+
+	t.Run("scalar type regressions", func(t *testing.T) {
+		arr := yson.Array{}
+		assert.NoError(t, yson.Unmarshal(
+			`[Int(42),Long(64),Date("2025-01-02T15:04:05.058Z"),BinData("AQID")]`, &arr))
+		assert.Equal(t, int32(42), arr[0])
+		assert.Equal(t, int64(64), arr[1])
+		assert.Equal(t, gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.UTC), arr[2])
+		assert.Equal(t, []byte{1, 2, 3}, arr[3])
+	})
+
+	t.Run("malformed input returns invalid YSON without panic", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.Error(t, yson.Unmarshal(`Text([{"val":"unterminated`, &obj))
+		assert.Error(t, yson.Unmarshal(`Counter(Int(10)`, &obj))
+	})
+}
