@@ -7,11 +7,15 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [v0.7.19-rc] - 2026-08-31
+## [v0.7.19] - 2026-09-03
 
 ### Added
 
 - Serve long-retention project-stats windows via decoupled HLL summaries by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1961
+
+### Fixed
+
+- Make YSON parser string-aware to avoid corrupting values by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1967
 
 ## [v0.7.18] - 2026-08-31
 
