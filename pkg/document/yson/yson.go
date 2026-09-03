@@ -679,45 +679,228 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 	return node, nil
 }
 
-// preprocessTypeValues replaces custom types in the YSON string with
-// JSON-compatible formats.
+// ysonConstructor maps a YSON constructor name to its intermediate JSON
+// object type. The scanner rewrites Name(<arg>) into
+// {"type":"<type>","value":<arg>} for these constructors.
+type ysonConstructor struct {
+	name string
+	typ  string
+}
+
+// ysonConstructors lists the value-carrying YSON constructors. Longer names
+// must precede any name that is a prefix of them so a prefix never shadows a
+// longer name (e.g. DedupCounter before Counter). Names are matched only at a
+// token boundary, so this ordering is defensive rather than strictly required.
+var ysonConstructors = []ysonConstructor{
+	{"Counter", "Counter"},
+	{"Text", "Text"},
+	{"Tree", "Tree"},
+	{"Int", "Int"},
+	{"Long", "Long"},
+	{"BinData", "BinData"},
+	{"Date", "Date"},
+}
+
+// preprocessTypeValues rewrites custom YSON constructors into JSON-compatible
+// forms so the result can be decoded with encoding/json.
+//
+// The rewrite is a single left-to-right, string-aware scan. String literals
+// are copied verbatim (honoring \" and \\ escapes) so that brackets, parens,
+// or constructor-like substrings appearing inside string values are never
+// interpreted as structure. Earlier revisions used global strings.ReplaceAll
+// calls (notably ")" → "}"), which silently corrupted such values.
 func preprocessTypeValues(data string) string {
-	// Pre-substitute DedupCounter into complete JSON before general
-	// replacements. The compound structure (Int(...) + bare base64 string)
-	// is incompatible with the global ')' → '}' replacement.
-	data = dedupCounterRe.ReplaceAllString(data,
-		`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`)
+	// DedupCounter is handled first by its precise regex. Its compound shape
+	// (Int(...) plus a bare base64 string argument) does not fit the generic
+	// Name(<arg>) rewrite, and the regex only matches at real DedupCounter
+	// call sites. The scanner then leaves the produced JSON untouched. Prose
+	// containing the literal text DedupCounter(...) inside a string value is
+	// protected because the scanner copies string literals verbatim; the regex
+	// pass may edit such prose, but the subsequent scanner would break on the
+	// same input regardless, and the marshalers never emit it inside strings.
+	data = rewriteDedupCounters(data)
 
-	type replacement struct {
-		oldStr string
-		newStr string
+	var b strings.Builder
+	b.Grow(len(data) + len(data)/4)
+	scanConstructors(&b, data)
+	return b.String()
+}
+
+// rewriteDedupCounters substitutes DedupCounter(Int(N),"b64") occurrences that
+// lie outside string literals with complete intermediate JSON. Occurrences
+// inside string literals are left untouched.
+func rewriteDedupCounters(data string) string {
+	var b strings.Builder
+	b.Grow(len(data))
+	i := 0
+	for i < len(data) {
+		c := data[i]
+		if c == '"' {
+			j := scanStringLiteral(data, i)
+			b.WriteString(data[i:j])
+			i = j
+			continue
+		}
+		// Gate the regex on a cheap prefix check. Only a match anchored at the
+		// current position is used, so without the "DedupCounter(" prefix the
+		// regex cannot contribute; skipping it keeps this pass linear instead of
+		// rescanning the whole suffix at every byte.
+		if strings.HasPrefix(data[i:], "DedupCounter(") {
+			if loc := dedupCounterRe.FindStringSubmatchIndex(data[i:]); loc != nil && loc[0] == 0 {
+				match := data[i : i+loc[1]]
+				b.WriteString(dedupCounterRe.ReplaceAllString(match,
+					`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`))
+				i += loc[1]
+				continue
+			}
+		}
+		b.WriteByte(c)
+		i++
 	}
+	return b.String()
+}
 
-	// Replace custom types with JSON-compatible formats in a specific order
-	replacements := []replacement{
-		// Process empty constructors first
-		{`Text()`, `{"type":"Text","value":[]}`},
-		{`Tree()`, `{"type":"Tree","value":{}}`},
+// scanConstructors walks data left to right, copying string literals verbatim
+// and rewriting known constructors at token boundaries. It writes the result
+// into b. Malformed input (unbalanced parens, unterminated strings) is copied
+// through best-effort; the surrounding decoder then rejects the invalid JSON.
+// maxConstructorDepth bounds how deeply YSON constructors may nest during
+// preprocessing. Real YSON nests constructors at most two deep (for example
+// Counter(Int(0))); anything past this generous bound is malformed. Bounding
+// the depth keeps preprocessing from recursing without limit on adversarial
+// input such as Int(Int(...Int(0)...)), which would otherwise exhaust the
+// goroutine stack and crash the process instead of returning ErrInvalidYSON.
+const maxConstructorDepth = 100
 
-		// Process constructors with values
-		{`Counter(`, `{"type":"Counter","value":`},
-		{`Text(`, `{"type":"Text","value":`},
-		{`Tree(`, `{"type":"Tree","value":`},
-		{`Int(`, `{"type":"Int","value":`},
-		{`Long(`, `{"type":"Long","value":`},
-		{`BinData("`, `{"type":"BinData","value":"`},
-		{`Date("`, `{"type":"Date","value":"`},
+func scanConstructors(b *strings.Builder, data string) {
+	scanConstructorsAt(b, data, 0)
+}
 
-		// Finally, handle closing parentheses
-		{`)`, `}`},
+// scanConstructorsAt is scanConstructors with an explicit nesting depth so that
+// unbounded recursion on pathologically nested input is rejected rather than
+// crashing the process.
+func scanConstructorsAt(b *strings.Builder, data string, depth int) {
+	i := 0
+	for i < len(data) {
+		c := data[i]
+		if c == '"' {
+			j := scanStringLiteral(data, i)
+			b.WriteString(data[i:j])
+			i = j
+			continue
+		}
+
+		if name, typ, argStart, ok := matchConstructor(data, i); ok {
+			if depth >= maxConstructorDepth {
+				// Too deeply nested: copy the remainder verbatim so the leftover
+				// constructor syntax makes the decoder report invalid YSON,
+				// instead of recursing until the stack is exhausted.
+				b.WriteString(data[i:])
+				return
+			}
+
+			argEnd, found := findMatchingParen(data, argStart)
+			if !found {
+				// Unbalanced parens: copy the rest verbatim so the decoder
+				// reports invalid YSON instead of us panicking.
+				b.WriteString(data[i:])
+				return
+			}
+
+			inner := strings.TrimSpace(data[argStart:argEnd])
+			b.WriteString(constructorPrefix(name, typ, inner))
+			scanConstructorsAt(b, inner, depth+1)
+			b.WriteByte('}')
+			i = argEnd + 1 // skip past ')'
+			continue
+		}
+
+		b.WriteByte(c)
+		i++
 	}
+}
 
-	// Replace custom types with JSON-compatible formats
-	for _, r := range replacements {
-		data = strings.ReplaceAll(data, r.oldStr, r.newStr)
+// matchConstructor reports whether data at position i begins a known
+// constructor name that is immediately followed by '(' and sits at a token
+// boundary (the preceding char is not an identifier char). On success it
+// returns the name, its intermediate type, and the index just after '('.
+func matchConstructor(data string, i int) (name, typ string, argStart int, ok bool) {
+	if i > 0 && isIdentChar(data[i-1]) {
+		return "", "", 0, false
 	}
+	for _, ctor := range ysonConstructors {
+		end := i + len(ctor.name)
+		if end < len(data) && data[i:end] == ctor.name && data[end] == '(' {
+			return ctor.name, ctor.typ, end + 1, true
+		}
+	}
+	return "", "", 0, false
+}
 
-	return data
+// constructorPrefix returns the JSON prefix emitted before a constructor's
+// processed argument. The closing '}' is written separately by the caller.
+// Empty Text()/Tree() collapse to a fixed empty value so that Text() and
+// Tree() decode as an empty array and object respectively.
+func constructorPrefix(name, typ, inner string) string {
+	if inner == "" {
+		switch name {
+		case "Text":
+			return `{"type":"Text","value":[]`
+		case "Tree":
+			return `{"type":"Tree","value":{}`
+		}
+	}
+	return fmt.Sprintf(`{"type":"%s","value":`, typ)
+}
+
+// findMatchingParen returns the index of the ')' that closes the '(' whose
+// argument starts at argStart, counting nested parens and skipping string
+// literals. found is false if no matching paren exists.
+func findMatchingParen(data string, argStart int) (int, bool) {
+	depth := 1
+	i := argStart
+	for i < len(data) {
+		switch data[i] {
+		case '"':
+			i = scanStringLiteral(data, i)
+			continue
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+		}
+		i++
+	}
+	return 0, false
+}
+
+// scanStringLiteral returns the index just past the JSON string literal that
+// starts at the opening quote data[start]. It honors \" and \\ escapes. If the
+// string is unterminated it returns len(data).
+func scanStringLiteral(data string, start int) int {
+	i := start + 1
+	for i < len(data) {
+		switch data[i] {
+		case '\\':
+			i += 2
+			continue
+		case '"':
+			return i + 1
+		}
+		i++
+	}
+	return len(data)
+}
+
+// isIdentChar reports whether c can appear in a YSON constructor identifier.
+func isIdentChar(c byte) bool {
+	return c == '_' ||
+		('a' <= c && c <= 'z') ||
+		('A' <= c && c <= 'Z') ||
+		('0' <= c && c <= '9')
 }
 
 // ParseObject parses a string representation of a YSON object into the
