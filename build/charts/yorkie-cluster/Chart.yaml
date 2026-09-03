@@ -9,8 +9,8 @@ maintainers:
 
 sources:
   - https://github.com/yorkie-team/yorkie
-version: 0.7.19-rc
-appVersion: "0.7.19-rc"
+version: 0.7.19
+appVersion: "0.7.19"
 kubeVersion: ">=1.28.0-0"
 
 dependencies:
