@@ -764,7 +764,22 @@ func rewriteDedupCounters(data string) string {
 // and rewriting known constructors at token boundaries. It writes the result
 // into b. Malformed input (unbalanced parens, unterminated strings) is copied
 // through best-effort; the surrounding decoder then rejects the invalid JSON.
+// maxConstructorDepth bounds how deeply YSON constructors may nest during
+// preprocessing. Real YSON nests constructors at most two deep (for example
+// Counter(Int(0))); anything past this generous bound is malformed. Bounding
+// the depth keeps preprocessing from recursing without limit on adversarial
+// input such as Int(Int(...Int(0)...)), which would otherwise exhaust the
+// goroutine stack and crash the process instead of returning ErrInvalidYSON.
+const maxConstructorDepth = 100
+
 func scanConstructors(b *strings.Builder, data string) {
+	scanConstructorsAt(b, data, 0)
+}
+
+// scanConstructorsAt is scanConstructors with an explicit nesting depth so that
+// unbounded recursion on pathologically nested input is rejected rather than
+// crashing the process.
+func scanConstructorsAt(b *strings.Builder, data string, depth int) {
 	i := 0
 	for i < len(data) {
 		c := data[i]
@@ -776,6 +791,14 @@ func scanConstructors(b *strings.Builder, data string) {
 		}
 
 		if name, typ, argStart, ok := matchConstructor(data, i); ok {
+			if depth >= maxConstructorDepth {
+				// Too deeply nested: copy the remainder verbatim so the leftover
+				// constructor syntax makes the decoder report invalid YSON,
+				// instead of recursing until the stack is exhausted.
+				b.WriteString(data[i:])
+				return
+			}
+
 			argEnd, found := findMatchingParen(data, argStart)
 			if !found {
 				// Unbalanced parens: copy the rest verbatim so the decoder
@@ -786,7 +809,7 @@ func scanConstructors(b *strings.Builder, data string) {
 
 			inner := strings.TrimSpace(data[argStart:argEnd])
 			b.WriteString(constructorPrefix(name, typ, inner))
-			scanConstructors(b, inner)
+			scanConstructorsAt(b, inner, depth+1)
 			b.WriteByte('}')
 			i = argEnd + 1 // skip past ')'
 			continue

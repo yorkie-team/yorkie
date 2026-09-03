@@ -20,6 +20,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	gotime "time"
 
@@ -882,5 +883,19 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		obj := yson.Object{}
 		assert.Error(t, yson.Unmarshal(`Text([{"val":"unterminated`, &obj))
 		assert.Error(t, yson.Unmarshal(`Counter(Int(10)`, &obj))
+	})
+
+	t.Run("deeply nested constructors are rejected without exhausting the stack", func(t *testing.T) {
+		// Real YSON nests constructors at most two deep (Counter(Int(...))).
+		// A pathological input nesting far past that must return invalid YSON
+		// rather than recursing until the goroutine stack is exhausted, which
+		// would crash the process. The depth is chosen well above the parser's
+		// bound so the preprocessing pass, not a later stage, rejects it.
+		const depth = 100000
+		data := `{"c":` + strings.Repeat("Int(", depth) + "0" +
+			strings.Repeat(")", depth) + "}"
+
+		obj := yson.Object{}
+		assert.Error(t, yson.Unmarshal(data, &obj))
 	})
 }
