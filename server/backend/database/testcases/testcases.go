@@ -1254,6 +1254,89 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 	})
 }
 
+// RunAttachResumeCheckpointTest runs the resumable-checkpoint-on-attach tests
+// for the given db. It covers the conditional checkpoint reset (Q3): a reload
+// resume seeds the presented checkpoint (Case B), a fresh attach still starts
+// at 0, and TryAttaching no longer clobbers an existing row's seqs.
+func RunAttachResumeCheckpointTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("attach seeds from presented checkpoint test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(
+			ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())), false,
+		)
+		assert.NoError(t, err)
+
+		// Case B (reload / new session): a presented checkpoint with a non-zero
+		// ServerSeq is the resume signal and seeds the ClientDocInfo instead of
+		// 0. The doc has advanced to serverSeq 5, so serverSeq 5 does not exceed
+		// the doc's actual and no clamp applies.
+		docInfo.ServerSeq = 5
+		presented := change.NewCheckpoint(5, 4)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, presented))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		reloaded, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		cp := reloaded.Checkpoint(docInfo.ID)
+		assert.Equal(t, uint32(4), cp.ClientSeq)
+		assert.Equal(t, int64(5), cp.ServerSeq)
+	})
+
+	t.Run("fresh attach seeds zero test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(
+			ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())), false,
+		)
+		assert.NoError(t, err)
+
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		reloaded, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		cp := reloaded.Checkpoint(docInfo.ID)
+		assert.Equal(t, uint32(0), cp.ClientSeq)
+		assert.Equal(t, int64(0), cp.ServerSeq)
+	})
+
+	t.Run("fresh attach with local edits seeds zero test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(
+			ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())), false,
+		)
+		assert.NoError(t, err)
+
+		// A fresh attach that already carries local edits presents a non-zero
+		// ClientSeq but a zero ServerSeq. This is NOT a resume; it must seed 0/0
+		// so the pending changes are not mistaken for already-pushed work.
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(
+			docInfo.ID, false, docInfo.Epoch, change.NewCheckpoint(0, 2),
+		))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		reloaded, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		cp := reloaded.Checkpoint(docInfo.ID)
+		assert.Equal(t, uint32(0), cp.ClientSeq)
+		assert.Equal(t, int64(0), cp.ServerSeq)
+	})
+}
+
 // RunUpdateProjectInfoTest runs the UpdateProjectInfo tests for the given db.
 func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {

@@ -126,6 +126,10 @@ func TestDB(t *testing.T) {
 		testcases.RunTryAttachingAndDeactivateClientTest(t, db, projectID)
 	})
 
+	t.Run("AttachResumeCheckpoint test", func(t *testing.T) {
+		testcases.RunAttachResumeCheckpointTest(t, db, projectID)
+	})
+
 	t.Run("VersionVectorStableActor test", func(t *testing.T) {
 		testcases.RunVersionVectorStableActorTest(t, db, projectID)
 	})

@@ -146,6 +146,10 @@ func TestClient(t *testing.T) {
 		testcases.RunTryAttachingAndDeactivateClientTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("AttachResumeCheckpoint test", func(t *testing.T) {
+		testcases.RunAttachResumeCheckpointTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("VersionVectorStableActor test", func(t *testing.T) {
 		testcases.RunVersionVectorStableActorTest(t, cli, dummyProjectID)
 	})
