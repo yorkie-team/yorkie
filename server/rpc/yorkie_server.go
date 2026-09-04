@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -220,7 +221,15 @@ func (s *yorkieServer) AttachDocument(
 		)
 	}
 
-	clientInfo, err = clients.AttachDocument(ctx, s.backend, clientInfo, docInfo, pack.IsAttached(), pack.Checkpoint)
+	// pack.Checkpoint.ClientSeq is the client's projected checkpoint
+	// (acked baseline + len(changes), from createChangePack.increaseClientSeq).
+	// Recover the acked baseline so a resumed client's ClientDocInfo is seeded at
+	// the baseline; its pending changes then validate and advance from there.
+	baseline := pack.Checkpoint
+	if n := uint32(pack.ChangesLen()); baseline.ClientSeq >= n {
+		baseline = change.NewCheckpoint(pack.Checkpoint.ServerSeq, pack.Checkpoint.ClientSeq-n)
+	}
+	clientInfo, err = clients.AttachDocument(ctx, s.backend, clientInfo, docInfo, pack.IsAttached(), baseline)
 	if err != nil {
 		return nil, err
 	}
