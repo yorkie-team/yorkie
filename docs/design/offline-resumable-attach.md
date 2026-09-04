@@ -422,6 +422,14 @@ docs attached across the upgrade.
   reuse the non-zero `pack.Checkpoint` presented at attach — no proto flag.)
 - **Tier 3 purge signal.** Whether the server should eventually expose a
   distinguishable "document purged" signal on attach (future hardening).
+- **Epoch-0 sentinel.** A presented epoch of `0` is treated as "no epoch
+  presented" (old SDK / never-synced) and falls back to the current doc epoch.
+  Consequence: a brand-new document (epoch `0`) force-compacted exactly once
+  (`0 → 1`) during a client's offline window presents `0` and is not detected as
+  stale. A doc compacted at least once before the client joins (epoch `≥ 1`) is
+  covered. Closing this narrow gap needs a 1-based initial epoch or a separate
+  "epoch present" flag; deferred to avoid changing the broader document-epoch
+  semantics.
 
 ## Tasks
 
