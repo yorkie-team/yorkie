@@ -91,10 +91,12 @@ to reuse the actor purely on the client. Both were evaluated and rejected:
 
 Instead, **decouple a stable actor identity from the per-session session
 identity**. The change localizes to two seams. The hard invariant tying them
-together: *the actor stamped into persisted changes must equal the key used for
-pull dedup, VV, min-VV, and GC.* Both are `ClientInfo.ID` today; move **both**
-to the stable actor together — never one without the other, or GC advances past
-un-synced tombstones.
+together: *the actor stamped into persisted changes must be recognized as the
+same client's own by the predicate that keys pull dedup, VV liveness, min-VV,
+and GC.* Because old and new SDKs stamp different actors, the recognition is
+**compare-both** (`IsOwnActor`: session id OR stable actor), applied to dedup and
+VV liveness together — never dedup without VV, or GC advances past un-synced
+tombstones.
 
 #### Seam 1 — actor identity on the wire
 
@@ -116,18 +118,32 @@ un-synced tombstones.
   *stable actor* (fed only to `doc.setActor`), with a nil-guard fallback to
   `clientId`-as-actor against old servers.
 
-#### Seam 2 — dedup and VV liveness
+#### Seam 2 — dedup and VV liveness (COMPARE-BOTH)
 
-Switch these from `clientInfo.ID` to the stable actor:
+A change carries whatever actor the client stamped into it. Old SDKs stamp the
+per-session `clientInfo.ID`; new SDKs stamp `clientInfo.StableActorID`. The
+server cannot know which SDK sent a given change, so it must recognize a
+change (or a VV entry) as "this client's own" if its actor equals **either**
+identity. Do **not** hard-switch these sites from `clientInfo.ID` to the stable
+actor — that would break old SDKs mid-transition. Instead compare against both.
 
-| Site | Role |
-|------|------|
-| `pushpull.go:568` (`clientInfo.ID == pulledChange.ActorID`) | Self-echo dedup — **the single most important switch** |
-| `pushpull.go:163` | Pubsub publisher actor |
-| `pushpull.go:377` | `DisableGC` VV truncation key |
-| `clients.go:90` | Cluster `DetachDocument` actor |
-| `client_info.go:354/360` | `VersionVectorInfo.ClientID` construction |
-| `memory/database.go:2260-2296`, `mongo/client.go:2374-2475` | VV upsert, min-VV, delete-on-detach, vector cache |
+The predicate lives on `ClientInfo`:
+
+```go
+func (i *ClientInfo) IsOwnActor(actorID types.ID) bool {
+    return i.ID == actorID || (i.StableActorID != "" && i.StableActorID == actorID)
+}
+```
+
+The empty-`StableActorID` guard is load-bearing: rows written before the stable
+actor existed leave it empty, and an empty value must never match.
+
+| Site | Role | Decision |
+|------|------|----------|
+| `pushpull.go` `pullChangeInfos` dedup (`clientInfo.ID == pulledChange.ActorID`) | Self-echo dedup — **the single most important switch** | `clientInfo.IsOwnActor(pulledChange.ActorID)` |
+| `pushpull.go` `DisableGC` VV truncation key | Size-1 VV keyed on the client's own actor so its lamport clock advances | `clientInfo.OwnActorID()` (StableActorID when present, else session id) |
+| `pushpull.go` pubsub publisher actor | DocChanged event author for self-echo filtering | **stays** on `clientInfo.ID` (see below) |
+| `client_info.go` `VersionVectorInfo.ClientID`; `memory/database.go`, `mongo/client.go` VV upsert / delete-on-detach / vector cache | VV **row identity** | **stays** on `clientInfo.ID` (see VV keying below) |
 
 Sites that **stay** on the session `_id`: all `IDFromActorID` RPC row lookups;
 `ActivateClient` minting a fresh `_id`; housekeeping row reaping; checkpoint
@@ -135,7 +151,45 @@ ownership in `ClientDocInfo` (scoped per session on purpose — see below);
 analytics counting (Q4). Snapshot authoring uses `InitialActorID`, unaffected.
 
 A client that does not supply a stable identity keeps today's behavior: a random
-actor per session.
+actor per session. With compare-both, its changes stamp the session id, which is
+still recognized as its own — no regression, byte-identical behavior.
+
+##### VV keying: row identity stays on the session id
+
+`VersionVectorInfo.ClientID` remains the per-session `clientInfo.ID` — it is the
+**row identity** for upsert and delete-on-detach, not a min-VV/GC key. The actor
+that matters for min-VV and GC lives **inside** the stored
+`VersionVectorInfo.VersionVector` map, keyed by whatever actor the client
+stamped into its changes (its StableActorID for a new SDK). That map is built
+from the client-supplied `reqPack.VersionVector`, so no server-side re-keying is
+needed. `MinVersionVector` iterates the entries **inside** each stored vector; it
+never reads `ClientID`. On detach, the row is deleted by `client_id =
+clientInfo.ID`, which removes the whole vector — including its stable-actor entry
+— so that client stops holding tombstones alive and GC can advance. This is
+GC-safe precisely because dedup now uses compare-both: the actor stamped into a
+change is recognized as the same client's own by the predicate that governs
+dedup, while its VV contribution is dropped atomically with the row on detach.
+
+##### Pubsub publisher stays on the session id
+
+The DocChanged publisher stays on `clientInfo.ID`. `Watch` subscribes with the
+wire `clientId` (the session id), and the pubsub self-echo filter drops events
+whose `Actor` equals the subscriber. Keying the publisher on the stable actor
+would leak the client's own event back to itself. Even if it did, that self-echo
+would be re-caught by the compare-both dedup on the next pull (no double-apply),
+but avoiding the wasted round trip is why the publisher keys on the session id.
+
+##### Version-vector transition staleness (accepted)
+
+During a rolling deploy, a long-lived attached doc can briefly hold a client's
+VV entry under its **old session actor** (written by a pre-Phase-1 session)
+alongside new entries under the stable actor. These stale session-actor entries
+linger until the client detaches (which deletes its VV row) or overwrites them
+on the next sync. Min-VV floors an actor missing from any presented vector at
+`0`, so a lingering stale entry can only hold GC **back** (conservative), never
+advance it past un-synced tombstones. This transient staleness is **accepted**;
+no data migration is required because VV rows are deleted on detach and new
+writes use the client-supplied vector.
 
 #### Stable actor derivation
 
@@ -245,7 +299,7 @@ attach(docKey, sessionId, resumeIntent?, lastCheckpoint?)
   └─ pull-before-trust: epoch/serverSeq behind → snapshot re-anchor [Q2 tiers]
   └─ client pushes pending changes from the (preserved) clientSeq
        └─ validateClientSeqContinuity guards continuity (loud on mismatch)
-  └─ dedup/VV/min-VV keyed on StableActorID                         [Seam 2]
+  └─ dedup/VV/min-VV recognize own actor via compare-both           [Seam 2]
 ```
 
 ### Analytics invariants (Q4)
@@ -279,7 +333,7 @@ docs attached across the upgrade.
 
 | Risk | Mitigation |
 |------|------------|
-| Seam 2 must move dedup **and** VV keying together; moving only one lets min-VV compare mismatched key spaces → GC past un-synced tombstones (data loss) | Treat "change actor == dedup/VV/GC key" as a hard invariant; switch all Seam-2 sites in one change; land behind an opt-in path so default behavior is byte-identical |
+| Seam 2 must move dedup **and** VV keying together; moving only one lets min-VV compare mismatched key spaces → GC past un-synced tombstones (data loss) | Treat "change actor recognized as own == dedup/VV/GC key" as a hard invariant; use compare-both (`IsOwnActor`) at dedup while VV rows delete atomically on detach; default behavior is byte-identical because the session id still matches |
 | Housekeeping (`FindDeactivateCandidates`, `housekeeping.go`) reaps a client idle past `ClientDeactivateThreshold`; a later return must revive under the same stable actor | Deterministic derivation reproduces the actor regardless of row lifecycle; revive reconciles via pull-before-trust |
 | A resumed checkpoint is behind `serverSeq` after compaction/purge | Pull-before-trust re-anchors via the three-tier contract before accepting pushes; never trust the stored `serverSeq` |
 | Tier 3 (`DocInfo` purged) has no server signal — attach silently mints a new empty doc | Closed only on the client: persist `docID`/`epoch` and raise a data-loss event on mismatch. Future server hardening: expose a distinguishable "purged" signal |
