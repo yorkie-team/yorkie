@@ -96,15 +96,32 @@ func TestClientInfo(t *testing.T) {
 		assert.Equal(t, int64(2), clientInfo.Documents[dummyDocID].Epoch)
 	})
 
-	t.Run("fresh attach ignores presented epoch test", func(t *testing.T) {
-		// A fresh attach (ServerSeq 0) is not a resume, so the presented epoch
-		// is ignored and the current doc epoch is seeded.
+	t.Run("fresh attach without presented epoch seeds doc epoch test", func(t *testing.T) {
+		// A fresh attach that presents no epoch (0) seeds the current doc epoch.
+		clientInfo := database.ClientInfo{Status: database.ClientActivated}
+
+		err := clientInfo.AttachDocument(dummyDocID, false, 5, 0, change.InitialCheckpoint)
+		assert.NoError(t, err)
+
+		assert.Equal(t, int64(5), clientInfo.Documents[dummyDocID].Epoch)
+	})
+
+	t.Run("empty-root resume seeds presented epoch despite zero serverSeq test", func(t *testing.T) {
+		// A doc force-compacted to an EMPTY root sits at ServerSeq 0, so the
+		// over-claim clamp drives the presented ServerSeq to 0 even for a genuine
+		// resume. The presented epoch is an independent resume signal: it is
+		// seeded (2) rather than the current doc epoch (5) whenever non-zero, so
+		// the epoch check downstream fires ErrEpochMismatch. The checkpoint still
+		// seeds 0/0 because ServerSeq is 0.
 		clientInfo := database.ClientInfo{Status: database.ClientActivated}
 
 		err := clientInfo.AttachDocument(dummyDocID, false, 5, 2, change.InitialCheckpoint)
 		assert.NoError(t, err)
 
-		assert.Equal(t, int64(5), clientInfo.Documents[dummyDocID].Epoch)
+		assert.Equal(t, int64(2), clientInfo.Documents[dummyDocID].Epoch)
+		cp := clientInfo.Checkpoint(dummyDocID)
+		assert.Equal(t, int64(0), cp.ServerSeq)
+		assert.Equal(t, uint32(0), cp.ClientSeq)
 	})
 
 	t.Run("attach seeds zero for fresh presented checkpoint test", func(t *testing.T) {

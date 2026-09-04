@@ -209,21 +209,27 @@ func (i *ClientInfo) AttachDocument(
 	// pending changes are not mistaken for already-pushed work.
 	serverSeq := int64(0)
 	clientSeq := uint32(0)
-	seededEpoch := epoch
 	if presented.ServerSeq != 0 {
 		serverSeq = presented.ServerSeq
 		clientSeq = presented.ClientSeq
+	}
 
-		// Q2 pull-before-trust: on a Case B resume, seed the client's persisted
-		// epoch (presentedEpoch) rather than the current doc epoch. If the doc
-		// was force-compacted while the client was offline, the two differ, so
-		// the epoch check in pushpull fires ErrEpochMismatch and the existing
-		// snapshot re-anchor machinery runs. When the client presents no epoch
-		// (0), fall back to the current doc epoch. See docs/design/
-		// offline-resumable-attach.md, "Interaction with Q3 checkpoint seeding".
-		if presentedEpoch != 0 {
-			seededEpoch = presentedEpoch
-		}
+	// Q2 pull-before-trust: seed the client's persisted epoch (presentedEpoch)
+	// rather than the current doc epoch whenever the client presents one. If the
+	// doc was force-compacted while the client was offline, the two differ, so
+	// the epoch check in pushpull fires ErrEpochMismatch and the existing
+	// snapshot re-anchor machinery runs. When the client presents no epoch (0),
+	// fall back to the current doc epoch. The presented epoch is an independent
+	// resume signal from the presented ServerSeq: a doc force-compacted to an
+	// EMPTY root sits at ServerSeq 0, so the serverSeq over-claim clamp in
+	// clients.AttachDocument drives presented.ServerSeq to 0 even for a genuine
+	// resume. Gating epoch seeding on presented.ServerSeq would then miss this
+	// case, seed the current epoch, and route recovery through ErrInvalidClientSeq
+	// instead of the design's "stale epoch -> ErrEpochMismatch". See docs/design/
+	// offline-resumable-attach.md, "Interaction with Q3 checkpoint seeding".
+	seededEpoch := epoch
+	if presentedEpoch != 0 {
+		seededEpoch = presentedEpoch
 	}
 
 	i.Documents[docID] = &ClientDocInfo{

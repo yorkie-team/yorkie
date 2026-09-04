@@ -254,11 +254,21 @@ server-side row memory. `AttachDocument` (`client_info.go:142`) today seeds
 `validateClientSeqContinuity` (`pushpull.go`) as the loud safety net for both.
 
 **Case A — same-session re-attach** (detach then re-attach without deactivating;
-same client row). The row still holds a `ClientDocInfo` for `docID`, so
-`AttachDocument` can **preserve** its `ServerSeq`/`ClientSeq` when the existing
-entry is `Attached`/`Attaching`. Also stop the `TryAttaching` impls
-(`memory/database.go`, `mongo/client.go`) from clobbering `server_seq`/`client_seq`
-on the `attached→attaching` transition, so `AttachDocument` is the sole owner.
+same client row) is **not reachable** on any production path, so it is **not
+implemented**. In principle the row could still hold a `ClientDocInfo` for
+`docID` whose `ServerSeq`/`ClientSeq` `AttachDocument` preserves, but no flow
+ever presents such a row: an `Attached` entry is preempted by the
+`ErrDocumentAlreadyAttached` check in `AttachDocument`, and no path ever persists
+an `Attaching` row with non-zero seqs — `TryAttaching` zeros them on the
+`attached→attaching` transition, and a genuine `DetachDocument` zeros them before
+the `IsAlreadyDetached` guard (`clients.go`) blocks re-attach. Resume is therefore
+carried **entirely by Case B** (the client-presented checkpoint). Both
+`TryAttaching` impls (`memory/database.go`, `mongo/client.go`) **reset**
+`server_seq`/`client_seq` to `0` on the transition, aligned across backends;
+`AttachDocument` remains the sole owner of the real seed and overwrites the entry
+from the presented checkpoint. If a same-session preserve-seqs path is ever
+needed, reintroduce Case A as an explicit branch keyed on a non-zero-seq
+`Attaching` row and drop the resets together.
 
 **Case B — reload / new session** (the primary offline case). A reload runs a
 fresh `ActivateClient`, which mints a **new per-session `_id` and a new client
@@ -282,9 +292,9 @@ Guarding Case B (a client-presented checkpoint is untrusted input):
   skip changes by over-claiming `serverSeq`.
 
 Do **not** touch `DetachDocument`/`RemoveDocument` resets — a genuine detach must
-restart `clientSeq` at `1`. For Case A the `IsAlreadyDetached` guard
-(`clients.go:160-163`) blocks re-attach today, so that path is opened
-deliberately, not by relaxing the guard.
+restart `clientSeq` at `1`. The `IsAlreadyDetached` guard (`clients.go`) still
+blocks re-attach of a detached row; Case A is not implemented, so this guard is
+not relaxed.
 
 #### Pull-before-trust reconciliation (Q2)
 
@@ -323,13 +333,26 @@ The server now **presents and seeds the client's persisted epoch**. A new
 ways: the response sets it to the doc's current epoch (`ServerPack.ApplyDocInfo`
 → `ToPBChangePack`) so a client can learn and persist it; the attach request
 carries the client's last-known epoch (`Pack.Epoch`, decoded in
-`converter.FromChangePack`). On a Case B resume, `clientInfo.AttachDocument`
-seeds `ClientDocInfo.Epoch` from that presented epoch (when non-zero) instead of
-the current doc epoch. If the doc was compacted while the client was offline, the
-seeded old epoch differs from the current doc epoch, so the existing epoch check
-fires `ErrEpochMismatch` and the existing snapshot re-anchor machinery runs — no
-new path. A presented epoch of `0` (old SDKs, or a client that only ever synced
-at epoch 0) falls back to the current doc epoch, preserving today's behavior.
+`converter.FromChangePack`). `clientInfo.AttachDocument` seeds `ClientDocInfo.Epoch`
+from that presented epoch **whenever it is non-zero**, instead of the current doc
+epoch. If the doc was compacted while the client was offline, the seeded old epoch
+differs from the current doc epoch, so the existing epoch check fires
+`ErrEpochMismatch` and the existing snapshot re-anchor machinery runs — no new
+path. A presented epoch of `0` (old SDKs, or a client that only ever synced at
+epoch 0) falls back to the current doc epoch, preserving today's behavior.
+
+The presented epoch is seeded **independently of the presented `serverSeq`**. This
+matters for a doc force-compacted to an **empty** root (a presence-only doc): the
+compacted snapshot sits at `serverSeq 0`, so the Q3 over-claim clamp in
+`clients.AttachDocument` drives the presented `serverSeq` to `0`, and the
+checkpoint-seeding gate (`presented.ServerSeq != 0`) routes into the fresh branch.
+Were epoch seeding gated on the same `serverSeq`, a stale client resuming against a
+compacted-to-empty doc would be seeded the **current** epoch, `ErrEpochMismatch`
+would never fire, and recovery would instead come (correctly, no data loss) via
+`ErrInvalidClientSeq` from `validateClientSeqContinuity` — a different tier than
+the design's "stale epoch → `ErrEpochMismatch`". Seeding the epoch on its own
+`presentedEpoch != 0` signal keeps the compacted-to-empty case on the same
+epoch-mismatch recovery tier as the compacted-to-non-empty case.
 
 **Remaining companion work (SDK side).** The yorkie-js-sdk must persist the
 `epoch` returned in the sync/attach response alongside the offline snapshot and
@@ -342,10 +365,10 @@ interim behavior), so this is safe to ship server-first.
 ```
 attach(docKey, ChangePack{ Checkpoint: presentedCkpt, Epoch: presentedEpoch, changes })
   └─ ActivateClient already ran → new per-session _id + StableActorID  [Seam 1]
-  └─ AttachDocument seeds ClientDocInfo:
-       Case A (same-session re-attach, row still has ClientDocInfo) → preserve seqs
+  └─ AttachDocument seeds ClientDocInfo (Case A is unreachable, not implemented):
        Case B (reload / new row) → seed from presentedCkpt if non-zero, else 0  [Q3]
-                                → seed Epoch from presentedEpoch if non-zero    [Q2]
+                                → seed Epoch from presentedEpoch if non-zero,   [Q2]
+                                  independent of presentedCkpt.ServerSeq
   └─ pull-before-trust: stale epoch → ErrEpochMismatch → snapshot re-anchor     [Q2]
      (response ChangePack.Epoch carries the doc's current epoch for the client)
   └─ client pushes pending changes from the seeded clientSeq
@@ -389,7 +412,7 @@ docs attached across the upgrade.
 | A resumed checkpoint is behind `serverSeq` after compaction/purge | Pull-before-trust re-anchors via the three-tier contract before accepting pushes; never trust the stored `serverSeq` |
 | Tier 3 (`DocInfo` purged) has no server signal — attach silently mints a new empty doc | Closed only on the client: persist `docID`/`epoch` and raise a data-loss event on mismatch. Future server hardening: expose a distinguishable "purged" signal |
 | Two live tabs share one stable actor → one checkpoint → `clientSeq` collisions and self-filtered pull dedup (real edit loss) | Bounded by the SDK single-active-session lease; background tabs observe, do not drive sync |
-| Threading the presented checkpoint into `AttachDocument` / dropping the `TryAttaching` seq resets ripples to both backends and all test doubles | Contained interface change; the checkpoint reuses `pack.Checkpoint` (no proto change), and the epoch rides a single additive `ChangePack.epoch` field (Q2, safe both ways); covered by existing attach suites plus new resume-path tests |
+| Threading the presented checkpoint into `AttachDocument` ripples to both backends and all test doubles | Contained interface change; the checkpoint reuses `pack.Checkpoint` (no proto change), and the epoch rides a single additive `ChangePack.epoch` field (Q2, safe both ways); covered by existing attach suites plus new resume-path tests |
 | VV re-key mixed-keying window on rolling deploy | See [Migration](#migration); confirm min-VV cannot regress during the transition |
 
 ### Design Decisions
@@ -400,7 +423,7 @@ docs attached across the upgrade.
 | Derive the actor deterministically via plain `SHA256(tag \|\| projectID \|\| clientKey)[:12]` | No unique index, no upsert, no cross-session write coordination; plain hash (not HMAC) needs no shared secret and is identical on every node/restart/offline; concurrent activations converge on the same actor |
 | Return the stable actor additively in `ActivateClientResponse`; keep `clientId` = session `_id` on the wire | All RPC row lookups stay unchanged (~21 `IDFromActorID` sites); old SDKs keep working by ignoring the field |
 | Keep per-session client rows | Preserves checkpoints, housekeeping, and activation metrics; isolates the change to the actor-identity layer |
-| Resume checkpoint conditionally in `AttachDocument`, guarded by `validateClientSeqContinuity`; drop the `TryAttaching` seq resets | Un-pushed local changes cannot push from a zeroed checkpoint; a single owner site plus the existing continuity guard turns a bad resume into a loud error, not corruption |
+| Resume checkpoint conditionally in `AttachDocument`, guarded by `validateClientSeqContinuity`; keep the `TryAttaching` seq resets (aligned across backends) | Un-pushed local changes cannot push from a zeroed checkpoint; `AttachDocument` is the sole seed owner and overwrites the zeroed entry from the presented checkpoint (Case B), so the resets are harmless and keep both backends in step; a bad resume becomes a loud error, not corruption |
 | Reuse epoch + snapshot machinery for pull-before-trust; reuse `ErrEpochMismatch` | The stale-after-compaction recovery path already exists; a parallel path would duplicate and drift |
 
 ## Alternatives Considered
@@ -416,10 +439,13 @@ docs attached across the upgrade.
 
 - **VV re-key transition window.** Whether a one-time migration or drain is
   needed for docs attached across the rolling deploy (see [Migration](#migration)).
-- **`TryAttaching` seq reset.** Whether the mongo atomic `FindOneAndUpdate` can
-  drop the `server_seq`/`client_seq` `$set` lines without losing the
-  attaching-status transition guarantee. (The resume-signal question is settled:
-  reuse the non-zero `pack.Checkpoint` presented at attach — no proto flag.)
+- **`TryAttaching` seq reset (RESOLVED).** Both backends **keep** resetting
+  `server_seq`/`client_seq` to `0` on the attaching transition, aligned: memory
+  mutates the entry in place, mongo `$set`s both to `0`. Because Case A is
+  unreachable, preserving seqs bought nothing; `AttachDocument` is the sole seed
+  owner and overwrites the zeroed entry from the presented checkpoint (Case B).
+  (The resume-signal question is settled: reuse the non-zero `pack.Checkpoint`
+  presented at attach — no proto flag.)
 - **Tier 3 purge signal.** Whether the server should eventually expose a
   distinguishable "document purged" signal on attach (future hardening).
 - **Epoch-0 sentinel.** A presented epoch of `0` is treated as "no epoch
