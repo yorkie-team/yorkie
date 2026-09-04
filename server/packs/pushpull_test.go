@@ -705,6 +705,190 @@ func TestPacks(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, uint32(3), clientInfoAfter.Checkpoint(docID).ClientSeq)
 	})
+
+	// Regression guard for the offline "resume" attach path: the acked-baseline
+	// seeding in AttachDocument (server/rpc/yorkie_server.go). On resume the SDK
+	// presents a PROJECTED checkpoint (createChangePack calls
+	// increaseClientSeq(len(changes))), so ClientSeq = acked baseline + number
+	// of pending changes. The RPC recovers the baseline via
+	// pack.Checkpoint.ClientSeq - len(pack.Changes) before seeding ClientDocInfo
+	// (Case B). If that recovery regresses to seeding the projected value, the
+	// resumed client's pending changes have clientSeq <= the seeded checkpoint
+	// and pushpull silently drops them as already-pushed — the un-pushed edits
+	// vanish. This drives the same RPC attach path a restored SDK client uses
+	// and asserts the pending change is accepted, not dropped.
+	t.Run("resumed attach seeds the acked baseline and keeps pending changes", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		clientKey := helper.TestKey(t).String()
+		docKey := helper.TestKey(t).String()
+
+		// 01. Initial session: activate, attach with one local change, so the
+		// doc's server_seq advances to 1 and the client's checkpoint is acked at
+		// (serverSeq=1, clientSeq=1). The change is stamped with the stable actor
+		// (ActivateClientResponse.ActorId), exactly as a real SDK client does via
+		// doc.setActor; this actor is deterministic per (project, clientKey), so
+		// the resumed session below reuses it.
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}),
+		)
+		assert.NoError(t, err)
+		stableActorHex := activateResp.Msg.ActorId
+		stableActor, err := hex.DecodeString(stableActorHex)
+		assert.NoError(t, err)
+
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: stableActor},
+					}},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		// The acked baseline the client persists locally: serverSeq=1, clientSeq=1.
+		assert.Equal(t, int64(1), docInfo.ServerSeq)
+
+		// Detach models the tab closing; the reload runs a fresh ActivateClient
+		// with no server memory of the prior checkpoint (Case B).
+		_, err = testClient.DetachDocument(
+			ctx,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: 1, ClientSeq: 2},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: stableActor},
+					}},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		serverSeqAfterDetach := docInfo.ServerSeq
+
+		// 02. Resume: a fresh ActivateClient with the same clientKey yields a new
+		// per-session client row (Case B: no ClientDocInfo history) but the same
+		// stable actor. The restored SDK client presents its PROJECTED checkpoint:
+		// acked baseline clientSeq=1 + one pending change = clientSeq=2, carrying
+		// that pending change at clientSeq=2. ServerSeq=1 is the baseline it saw.
+		resumeResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}),
+		)
+		assert.NoError(t, err)
+		// The stable actor must survive reactivation; otherwise the pending
+		// change's lineage would not be recognized as this client's own.
+		assert.Equal(t, stableActorHex, resumeResp.Msg.ActorId)
+		// A genuine reload is a new session row, not the old one.
+		assert.NotEqual(t, activateResp.Msg.ClientId, resumeResp.Msg.ClientId)
+
+		// The pending change carries a presence PUT so its effect is durably
+		// stored and pulled by an observer. (A change with no operations and no
+		// presence advances server_seq but leaves no retrievable row in the
+		// Mongo backend, so presence gives the resume an observable footprint.)
+		_, err = testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: resumeResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					// PROJECTED checkpoint: ClientSeq = baseline(1) + pending(1).
+					Checkpoint: &api.Checkpoint{ServerSeq: 1, ClientSeq: 2},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{ClientSeq: 2, Lamport: 3, ActorId: stableActor},
+						PresenceChange: &api.PresenceChange{
+							Type: api.PresenceChange_CHANGE_TYPE_PUT,
+							Presence: &api.Presence{
+								Data: map[string]string{"resumed": "true"},
+							},
+						},
+					}},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		// 03. Assert the pending change was ACCEPTED and applied, not dropped.
+		// If the baseline recovery regressed (seed the projected clientSeq=2),
+		// pushpull would drop the pending change at clientSeq=2 as already-pushed
+		// and server_seq would stay at serverSeqAfterDetach.
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, serverSeqAfterDetach+1, docInfo.ServerSeq,
+			"resumed pending change must advance server_seq, not be dropped as already-pushed")
+
+		// The resumed session's checkpoint must reflect the pushed pending change.
+		resumeActorID, err := time.ActorIDFromHex(resumeResp.Msg.ClientId)
+		assert.NoError(t, err)
+		resumeClientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(resumeActorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, uint32(2), resumeClientInfo.Checkpoint(docID).ClientSeq)
+		assert.Equal(t, docInfo.ServerSeq, resumeClientInfo.Checkpoint(docID).ServerSeq)
+
+		// The resumed change is durably stored at the new server_seq (the
+		// empty-op changes at earlier seqs leave no retrievable row, but the
+		// presence-carrying resumed change does).
+		stored, err := packs.FindChanges(ctx, testBackend, docInfo, docInfo.ServerSeq, docInfo.ServerSeq)
+		assert.NoError(t, err)
+		assert.Len(t, stored, 1)
+		assert.Equal(t, uint32(2), stored[0].ID().ClientSeq())
+
+		// 04. A fresh observer client attaches and pulls; it must see the resumed
+		// change's effect. Its checkpoint advances to the current server_seq and
+		// the resumed presence change is among the pulled changes. If the resume
+		// had been dropped, server_seq would sit one short and the presence
+		// change would be absent.
+		observerResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String() + "-observer"}),
+		)
+		assert.NoError(t, err)
+
+		observerPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: observerResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, docInfo.ServerSeq, observerPack.Msg.ChangePack.Checkpoint.ServerSeq)
+
+		var sawResumedPresence bool
+		for _, c := range observerPack.Msg.ChangePack.Changes {
+			if pc := c.GetPresenceChange(); pc != nil && pc.GetPresence().GetData()["resumed"] == "true" {
+				sawResumedPresence = true
+			}
+		}
+		assert.True(t, sawResumedPresence, "observer must pull the resumed change's presence effect")
+	})
 }
 
 // assertRejectedPushPullUnchanged reloads DocInfo/ClientInfo after a rejected
