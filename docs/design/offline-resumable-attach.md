@@ -248,23 +248,43 @@ checkpoint starts at `0` while the restored local changes continue the actor's
 
 #### Conditional checkpoint reset (Q3)
 
-Make the reset-to-`0` conditional at exactly two owned sites; leave
-`validateClientSeqContinuity` (`pushpull.go:205`) as the loud safety net.
+There are **two distinct resume cases**, and only one of them can rely on
+server-side row memory. `AttachDocument` (`client_info.go:142`) today seeds
+`ClientDocInfo{ServerSeq: 0, ClientSeq: 0}` unconditionally; leave
+`validateClientSeqContinuity` (`pushpull.go`) as the loud safety net for both.
 
-1. `ClientInfo.AttachDocument` (`client_info.go:154-159`): **preserve** existing
-   `ServerSeq`/`ClientSeq` when the same stable-actor row already holds a
-   `ClientDocInfo` for `docID` in `Attached`/`Attaching` status (crash/reload
-   resume); otherwise zero as today. Thread an explicit **resume-intent flag**
-   (or `change.Checkpoint`) into the pure-struct method rather than reading
-   global state, to keep it testable.
-2. Both `TryAttaching` impls (`memory/database.go:1064-1068`,
-   `mongo/client.go:1112-1113`): stop clobbering `server_seq`/`client_seq` on the
-   `attached→attaching` transition, letting `AttachDocument` be the sole owner.
+**Case A — same-session re-attach** (detach then re-attach without deactivating;
+same client row). The row still holds a `ClientDocInfo` for `docID`, so
+`AttachDocument` can **preserve** its `ServerSeq`/`ClientSeq` when the existing
+entry is `Attached`/`Attaching`. Also stop the `TryAttaching` impls
+(`memory/database.go`, `mongo/client.go`) from clobbering `server_seq`/`client_seq`
+on the `attached→attaching` transition, so `AttachDocument` is the sole owner.
+
+**Case B — reload / new session** (the primary offline case). A reload runs a
+fresh `ActivateClient`, which mints a **new per-session `_id` and a new client
+row with no `ClientDocInfo` history** — the server has *no* memory of the prior
+session's checkpoint. So preserving row seqs cannot help here. Instead, the
+client presents its **locally-persisted checkpoint in the attach `ChangePack`**
+(`pack.Checkpoint`), and `AttachDocument` seeds `ClientDocInfo` from that
+presented checkpoint (instead of `0`) when it is non-zero. **No new proto field
+is needed** — `pack.Checkpoint` already rides the attach request; a non-zero
+presented checkpoint *is* the resume signal (resolving the earlier
+"resume-intent flag vs `change.Checkpoint`" open question in favor of the
+latter). Thread the presented checkpoint into the pure-struct `AttachDocument`
+so it stays testable.
+
+Guarding Case B (a client-presented checkpoint is untrusted input):
+- `validateClientSeqContinuity` rejects a `clientSeq` that does not continue the
+  presented one — a bad `clientSeq` fails loudly, not silently.
+- **pull-before-trust** (Q2) re-anchors the presented `serverSeq`: if the server
+  compacted/GC'd past it, or it exceeds the doc's real `serverSeq`, the client is
+  sent a snapshot to re-anchor before its pushes are accepted, so a client cannot
+  skip changes by over-claiming `serverSeq`.
 
 Do **not** touch `DetachDocument`/`RemoveDocument` resets — a genuine detach must
-restart `clientSeq` at `1`. The current `IsAlreadyDetached` guard
-(`clients.go:160-163`) blocks re-attach today, so the resume path is opened
-deliberately via the resume-intent flag, not by relaxing the guard.
+restart `clientSeq` at `1`. For Case A the `IsAlreadyDetached` guard
+(`clients.go:160-163`) blocks re-attach today, so that path is opened
+deliberately, not by relaxing the guard.
 
 #### Pull-before-trust reconciliation (Q2)
 
@@ -291,15 +311,15 @@ snapshot-threshold + `FindClosestSnapshotInfo` empty-fallback** machinery (see
 ### Data flow
 
 ```
-attach(docKey, sessionId, resumeIntent?, lastCheckpoint?)
-  └─ server resolves StableActorID = derive(project_id, clientKey)  [Seam 1]
-  └─ AttachDocument: resumeIntent && existing ClientDocInfo[docKey] Attached/Attaching
-       ? preserve ClientSeq/ServerSeq                               [Q3]
-       : checkpoint = 0 (fresh)
-  └─ pull-before-trust: epoch/serverSeq behind → snapshot re-anchor [Q2 tiers]
-  └─ client pushes pending changes from the (preserved) clientSeq
+attach(docKey, ChangePack{ Checkpoint: presentedCkpt, changes })
+  └─ ActivateClient already ran → new per-session _id + StableActorID  [Seam 1]
+  └─ AttachDocument seeds ClientDocInfo:
+       Case A (same-session re-attach, row still has ClientDocInfo) → preserve seqs
+       Case B (reload / new row) → seed from presentedCkpt if non-zero, else 0  [Q3]
+  └─ pull-before-trust: epoch / presented serverSeq behind → snapshot re-anchor [Q2]
+  └─ client pushes pending changes from the seeded clientSeq
        └─ validateClientSeqContinuity guards continuity (loud on mismatch)
-  └─ dedup/VV/min-VV recognize own actor via compare-both           [Seam 2]
+  └─ dedup/VV/min-VV recognize own actor via compare-both              [Seam 2]
 ```
 
 ### Analytics invariants (Q4)
@@ -338,7 +358,7 @@ docs attached across the upgrade.
 | A resumed checkpoint is behind `serverSeq` after compaction/purge | Pull-before-trust re-anchors via the three-tier contract before accepting pushes; never trust the stored `serverSeq` |
 | Tier 3 (`DocInfo` purged) has no server signal — attach silently mints a new empty doc | Closed only on the client: persist `docID`/`epoch` and raise a data-loss event on mismatch. Future server hardening: expose a distinguishable "purged" signal |
 | Two live tabs share one stable actor → one checkpoint → `clientSeq` collisions and self-filtered pull dedup (real edit loss) | Bounded by the SDK single-active-session lease; background tabs observe, do not drive sync |
-| `Database.TryAttaching` signature change (resume flag) ripples to both backends and all test doubles | Contained interface change; covered by existing attach test suites plus new resume-path tests |
+| Threading the presented checkpoint into `AttachDocument` / dropping the `TryAttaching` seq resets ripples to both backends and all test doubles | Contained interface change; no proto change (reuses `pack.Checkpoint`); covered by existing attach suites plus new resume-path tests |
 | VV re-key mixed-keying window on rolling deploy | See [Migration](#migration); confirm min-VV cannot regress during the transition |
 
 ### Design Decisions
@@ -365,9 +385,10 @@ docs attached across the upgrade.
 
 - **VV re-key transition window.** Whether a one-time migration or drain is
   needed for docs attached across the rolling deploy (see [Migration](#migration)).
-- **`TryAttaching` signature.** Resume-intent flag vs `change.Checkpoint`; and
-  whether the mongo atomic `FindOneAndUpdate` can drop the seq `$set` lines
-  without losing the attaching-status transition guarantee.
+- **`TryAttaching` seq reset.** Whether the mongo atomic `FindOneAndUpdate` can
+  drop the `server_seq`/`client_seq` `$set` lines without losing the
+  attaching-status transition guarantee. (The resume-signal question is settled:
+  reuse the non-zero `pack.Checkpoint` presented at attach — no proto flag.)
 - **Tier 3 purge signal.** Whether the server should eventually expose a
   distinguishable "document purged" signal on attach (future hardening).
 
