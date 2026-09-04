@@ -70,7 +70,7 @@ func TestAttachDocumentResumeCheckpoint(t *testing.T) {
 		// A reload presents its persisted checkpoint. A non-zero serverSeq is the
 		// resume signal; it stays within the doc's actual (5), so no clamp.
 		presented := change.NewCheckpoint(5, 4)
-		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, presented)
+		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, 0, presented)
 		assert.NoError(t, err)
 
 		cp := got.Checkpoint(docInfo.ID)
@@ -78,12 +78,28 @@ func TestAttachDocumentResumeCheckpoint(t *testing.T) {
 		assert.Equal(t, int64(5), cp.ServerSeq)
 	})
 
+	t.Run("Case B seeds the presented epoch on resume", func(t *testing.T) {
+		clientInfo, docInfo := activate(t.Name())
+		docInfo.ServerSeq = 5
+		docInfo.Epoch = 5
+
+		// The client resumes presenting a stale epoch (2): its doc was
+		// force-compacted while it was offline. The presented epoch is seeded
+		// verbatim, not the current doc epoch, so the epoch mismatch in pushpull
+		// fires and the client re-anchors from a snapshot (Q2 pull-before-trust).
+		presented := change.NewCheckpoint(5, 4)
+		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, 2, presented)
+		assert.NoError(t, err)
+
+		assert.Equal(t, int64(2), got.Documents[docInfo.ID].Epoch)
+	})
+
 	t.Run("fresh attach with local edits seeds zero", func(t *testing.T) {
 		clientInfo, docInfo := activate(t.Name())
 
 		// A non-zero clientSeq with serverSeq 0 is a fresh attach carrying local
 		// edits, not a resume; it must seed 0/0 so the pending changes push.
-		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, change.NewCheckpoint(0, 3))
+		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, 0, change.NewCheckpoint(0, 3))
 		assert.NoError(t, err)
 
 		cp := got.Checkpoint(docInfo.ID)
@@ -99,7 +115,7 @@ func TestAttachDocumentResumeCheckpoint(t *testing.T) {
 		// actual (2) so it re-pulls what it has not really seen. clientSeq is
 		// untouched.
 		presented := change.NewCheckpoint(99, 7)
-		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, presented)
+		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, 0, presented)
 		assert.NoError(t, err)
 
 		cp := got.Checkpoint(docInfo.ID)
@@ -110,7 +126,7 @@ func TestAttachDocumentResumeCheckpoint(t *testing.T) {
 	t.Run("fresh attach seeds zero", func(t *testing.T) {
 		clientInfo, docInfo := activate(t.Name())
 
-		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, change.InitialCheckpoint)
+		got, err := clients.AttachDocument(ctx, be, clientInfo, docInfo, false, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 
 		cp := got.Checkpoint(docInfo.ID)

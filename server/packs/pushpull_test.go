@@ -38,6 +38,8 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -888,6 +890,177 @@ func TestPacks(t *testing.T) {
 			}
 		}
 		assert.True(t, sawResumedPresence, "observer must pull the resumed change's presence effect")
+	})
+
+	t.Run("resume with matching epoch succeeds", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		clientKey := helper.TestKey(t).String()
+		docKey := helper.TestKey(t).String()
+
+		// 01. Initial session: attach and push one change so server_seq advances
+		// to 1 and the response carries the doc's current epoch (0).
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}),
+		)
+		assert.NoError(t, err)
+		stableActor, err := hex.DecodeString(activateResp.Msg.ActorId)
+		assert.NoError(t, err)
+
+		resPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: stableActor},
+					}},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+		docID := types.ID(resPack.Msg.DocumentId)
+		// The response carries the doc's current epoch so the client can persist it.
+		presentedEpoch := resPack.Msg.ChangePack.Epoch
+
+		_, err = testClient.DetachDocument(
+			ctx,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: 1, ClientSeq: 1},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		// 02. Resume presenting the SAME (matching) epoch. The epoch check does
+		// not fire, so the resume attaches and syncs normally.
+		resumeResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}),
+		)
+		assert.NoError(t, err)
+
+		_, err = testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: resumeResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: 1, ClientSeq: 1},
+					Epoch:       presentedEpoch,
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		resumeActorID, err := time.ActorIDFromHex(resumeResp.Msg.ClientId)
+		assert.NoError(t, err)
+		resumeClientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(resumeActorID),
+		})
+		assert.NoError(t, err)
+		// The resumed client is seeded at the presented (matching) epoch.
+		assert.Equal(t, presentedEpoch, resumeClientInfo.Documents[docID].Epoch)
+	})
+
+	t.Run("resume with stale epoch after force compaction re-anchors", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		docKey := helper.TestKey(t)
+
+		// 01. Create a doc with real root content via a full SDK client, so the
+		// compacted snapshot carries a change and server_seq stays at 1 (a
+		// presence-only change would compact to an empty root at server_seq 0).
+		// Force-compact once so the working epoch is a non-zero value (1): a fresh
+		// doc's epoch is 0, and the presented-epoch seeding treats 0 as "no epoch
+		// presented" (falls back to the current doc epoch), so a non-zero epoch is
+		// needed to exercise the real stale-epoch signal.
+		sdkClient, err := client.Dial(testRPCAddr)
+		assert.NoError(t, err)
+		assert.NoError(t, sdkClient.Activate(ctx))
+		defer func() {
+			assert.NoError(t, sdkClient.Deactivate(ctx))
+			assert.NoError(t, sdkClient.Close())
+		}()
+
+		doc := document.New(docKey)
+		assert.NoError(t, sdkClient.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k", "v")
+			return nil
+		}))
+		assert.NoError(t, sdkClient.Sync(ctx))
+		assert.NoError(t, sdkClient.Detach(ctx, doc))
+
+		seedDocInfo, err := documents.FindDocInfoByKey(ctx, testBackend, project, docKey)
+		assert.NoError(t, err)
+		docRefKey := seedDocInfo.RefKey()
+		assert.NoError(t, packs.Compact(ctx, testBackend, project.ID, seedDocInfo, true))
+
+		afterFirstCompact, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		// The non-zero epoch the offline client persists as its baseline, and the
+		// server_seq the compacted snapshot sits at.
+		staleEpoch := afterFirstCompact.Epoch
+		assert.NotZero(t, staleEpoch)
+		baselineServerSeq := afterFirstCompact.ServerSeq
+		assert.NotZero(t, baselineServerSeq,
+			"a doc with root content compacts to a snapshot change at server_seq 1")
+
+		// 02. The doc is force-compacted AGAIN while the client is offline; this
+		// bumps the epoch past what the client persisted, but leaves server_seq at
+		// the compacted snapshot so the resume serverSeq is not clamped away.
+		assert.NoError(t, packs.Compact(ctx, testBackend, project.ID, afterFirstCompact, true))
+
+		compactedInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.NotEqual(t, staleEpoch, compactedInfo.Epoch,
+			"force compaction must bump the doc epoch past the client's persisted epoch")
+		assert.Equal(t, baselineServerSeq, compactedInfo.ServerSeq,
+			"compaction of a one-change doc keeps server_seq at the snapshot")
+
+		// 03. Resume presenting the STALE (pre-compaction) epoch with the baseline
+		// serverSeq as the resume signal. It equals the doc's current server_seq,
+		// so no clamp defeats the signal; AttachDocument seeds the stale epoch
+		// (Case B), and the epoch check in pushpull fires ErrEpochMismatch — the
+		// re-anchor signal. The client then re-attaches for a snapshot via the
+		// existing machinery (same recovery path as the compaction integration test).
+		resumeResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String() + "-resume"}),
+		)
+		assert.NoError(t, err)
+
+		_, err = testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: resumeResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey.String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: baselineServerSeq, ClientSeq: 1},
+					Epoch:       staleEpoch,
+				},
+			}),
+		)
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, "ErrEpochMismatch", converter.ErrorCodeOf(err))
 	})
 }
 

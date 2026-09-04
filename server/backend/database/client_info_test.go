@@ -37,7 +37,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -55,7 +55,7 @@ func TestClientInfo(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, isAttached)
 
-		err = clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err = clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 		isAttached, err = clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -66,17 +66,45 @@ func TestClientInfo(t *testing.T) {
 	t.Run("attach seeds from presented checkpoint test", func(t *testing.T) {
 		// Case B (reload / new session): a non-zero presented checkpoint is the
 		// resume signal and seeds ClientDocInfo so restored un-pushed changes
-		// push from the right clientSeq.
+		// push from the right clientSeq. With no presented epoch (0), the epoch
+		// falls back to the current doc epoch.
 		clientInfo := database.ClientInfo{Status: database.ClientActivated}
 
 		presented := change.NewCheckpoint(7, 5)
-		err := clientInfo.AttachDocument(dummyDocID, false, 3, presented)
+		err := clientInfo.AttachDocument(dummyDocID, false, 3, 0, presented)
 		assert.NoError(t, err)
 
 		cp := clientInfo.Checkpoint(dummyDocID)
 		assert.Equal(t, int64(7), cp.ServerSeq)
 		assert.Equal(t, uint32(5), cp.ClientSeq)
 		assert.Equal(t, int64(3), clientInfo.Documents[dummyDocID].Epoch)
+	})
+
+	t.Run("attach seeds presented epoch on resume test", func(t *testing.T) {
+		// Case B resume with a stale presented epoch (Q2 pull-before-trust): the
+		// client's persisted epoch (2) is seeded verbatim, not the current doc
+		// epoch (5). The seeded old epoch differs from the doc epoch, so the
+		// epoch check in pushpull fires ErrEpochMismatch and re-anchors from a
+		// snapshot. This is the signal that survives a force-compaction that
+		// happened while the client was offline.
+		clientInfo := database.ClientInfo{Status: database.ClientActivated}
+
+		presented := change.NewCheckpoint(7, 5)
+		err := clientInfo.AttachDocument(dummyDocID, false, 5, 2, presented)
+		assert.NoError(t, err)
+
+		assert.Equal(t, int64(2), clientInfo.Documents[dummyDocID].Epoch)
+	})
+
+	t.Run("fresh attach ignores presented epoch test", func(t *testing.T) {
+		// A fresh attach (ServerSeq 0) is not a resume, so the presented epoch
+		// is ignored and the current doc epoch is seeded.
+		clientInfo := database.ClientInfo{Status: database.ClientActivated}
+
+		err := clientInfo.AttachDocument(dummyDocID, false, 5, 2, change.InitialCheckpoint)
+		assert.NoError(t, err)
+
+		assert.Equal(t, int64(5), clientInfo.Documents[dummyDocID].Epoch)
 	})
 
 	t.Run("attach preserves existing row seqs test", func(t *testing.T) {
@@ -96,7 +124,7 @@ func TestClientInfo(t *testing.T) {
 		}
 
 		// A lower (or zero) presented checkpoint must not roll the row back.
-		err := clientInfo.AttachDocument(dummyDocID, false, 1, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 1, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 
 		cp := clientInfo.Checkpoint(dummyDocID)
@@ -112,7 +140,7 @@ func TestClientInfo(t *testing.T) {
 		// seed 0/0.
 		clientInfo := database.ClientInfo{Status: database.ClientActivated}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 
 		cp := clientInfo.Checkpoint(dummyDocID)
@@ -127,7 +155,7 @@ func TestClientInfo(t *testing.T) {
 		// changes as already-pushed, so it must seed 0/0.
 		clientInfo := database.ClientInfo{Status: database.ClientActivated}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.NewCheckpoint(0, 2))
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.NewCheckpoint(0, 2))
 		assert.NoError(t, err)
 
 		cp := clientInfo.Checkpoint(dummyDocID)
@@ -158,7 +186,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -175,7 +203,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientDeactivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 
 		err = clientInfo.EnsureDocumentAttached(dummyDocID)
@@ -209,13 +237,13 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
-		err = clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err = clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
 	})
 
@@ -298,7 +326,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false, 0, change.InitialCheckpoint)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0, 0, change.InitialCheckpoint)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
