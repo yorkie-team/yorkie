@@ -141,16 +141,13 @@ func (i *ClientInfo) Deactivate() {
 // AttachDocument attaches the given document to this client.
 //
 // AttachDocument is the sole owner of the seeded checkpoint (server_seq /
-// client_seq) on attach; the TryAttaching transition no longer touches those
-// seqs (they default to 0 when it creates a fresh Attaching entry). The
-// presented checkpoint is the client-supplied pack.Checkpoint and carries the
-// resume signal for offline-persistent clients (see
-// docs/design/offline-resumable-attach.md, "Conditional checkpoint reset").
+// client_seq) on attach; the TryAttaching transition resets those seqs to 0 on
+// the attached→attaching transition, so a fresh Attaching entry always arrives
+// here with zero seqs. The presented checkpoint is the client-supplied
+// pack.Checkpoint and carries the resume signal for offline-persistent clients
+// (see docs/design/offline-resumable-attach.md, "Conditional checkpoint reset").
 // Seeding distinguishes:
 //
-//   - Case A (same-session re-attach): the client row already holds a
-//     ClientDocInfo for docID in Attached/Attaching status with non-zero seqs
-//     — server-side row memory is authoritative and is preserved.
 //   - Case B (reload / new session): a client presents its persisted checkpoint
 //     with a non-zero ServerSeq (the resume signal), so seeding takes it,
 //     letting restored un-pushed changes push from the right clientSeq.
@@ -160,14 +157,22 @@ func (i *ClientInfo) Deactivate() {
 //     so its pending changes push, hence the resume signal is the ServerSeq, not
 //     the ClientSeq.
 //
-// epoch is the document's current compaction epoch and is the default seed for
-// Case A and fresh attach. presentedEpoch is the client's persisted epoch (from
-// the attach ChangePack). On a Case B resume it is seeded verbatim when non-zero
-// (pull-before-trust, Q2): if the doc was force-compacted while the client was
-// offline, the seeded old epoch differs from the current doc epoch, so the epoch
-// check in pushpull fires ErrEpochMismatch and the client re-anchors from a
-// snapshot. Non-resume callers pass 0 for presentedEpoch, which keeps the
-// current-doc-epoch behavior unchanged.
+// (The design doc also describes a "Case A" same-session re-attach that
+// preserves an existing non-zero-seq row. That path is not reachable on any
+// production flow: an Attached row is preempted by the ErrDocumentAlreadyAttached
+// check below, and no path ever persists an Attaching row with non-zero seqs —
+// TryAttaching resets them and a detach zeroes them before the IsAlreadyDetached
+// guard blocks re-attach. Resume is carried entirely by Case B, so Case A is not
+// implemented here.)
+//
+// epoch is the document's current compaction epoch and is the default seed for a
+// fresh attach. presentedEpoch is the client's persisted epoch (from the attach
+// ChangePack). It is seeded verbatim when non-zero (pull-before-trust, Q2): if
+// the doc was force-compacted while the client was offline, the seeded old epoch
+// differs from the current doc epoch, so the epoch check in pushpull fires
+// ErrEpochMismatch and the client re-anchors from a snapshot. Non-resume callers
+// pass 0 for presentedEpoch, which keeps the current-doc-epoch behavior
+// unchanged.
 //
 // validateClientSeqContinuity (pushpull.go) remains the loud safety net that
 // rejects a clientSeq not continuing the seeded one.
@@ -195,18 +200,6 @@ func (i *ClientInfo) AttachDocument(
 	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
 		return fmt.Errorf("client(%s) attaches %s: %w",
 			i.ID, docID, ErrDocumentAlreadyAttached)
-	}
-
-	// Case A: a same-session re-attach whose Attaching/Attached row still
-	// carries non-zero seqs is authoritative; preserve them.
-	if i.hasDocument(docID) &&
-		(i.Documents[docID].ServerSeq != 0 || i.Documents[docID].ClientSeq != 0) &&
-		(i.Documents[docID].Status == DocumentAttached ||
-			i.Documents[docID].Status == DocumentAttaching) {
-		i.Documents[docID].Status = DocumentAttached
-		i.Documents[docID].Epoch = epoch
-		i.UpdatedAt = gotime.Now()
-		return nil
 	}
 
 	// Case B vs fresh attach: seed from the presented checkpoint only when it

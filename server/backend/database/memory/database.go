@@ -1062,14 +1062,20 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 		clientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
 	}
 
-	// NOTE(hackerwins): Do not reset server_seq/client_seq here. AttachDocument
-	// is the sole owner of the seeded checkpoint so it can preserve a
-	// same-session re-attach's seqs (Case A) or seed from the client-presented
-	// checkpoint (Case B). A fresh Attaching entry defaults both to 0, matching
-	// the previous behavior. See docs/design/offline-resumable-attach.md.
-	clientInfo.Documents[docID] = &database.ClientDocInfo{
-		Status: database.DocumentAttaching,
+	// NOTE(hackerwins): Reset server_seq/client_seq to 0 on the attaching
+	// transition. AttachDocument owns the seeded checkpoint: a Case B resume
+	// overwrites this entry from the client-presented checkpoint, and a fresh
+	// attach seeds 0/0, so zeroing here matches AttachDocument's fresh baseline.
+	// The mongo backend zeroes the same two fields; keep the two in step. See
+	// docs/design/offline-resumable-attach.md.
+	existing := clientInfo.Documents[docID]
+	if existing == nil {
+		existing = &database.ClientDocInfo{}
+		clientInfo.Documents[docID] = existing
 	}
+	existing.Status = database.DocumentAttaching
+	existing.ServerSeq = 0
+	existing.ClientSeq = 0
 	clientInfo.UpdatedAt = gotime.Now()
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {

@@ -107,34 +107,6 @@ func TestClientInfo(t *testing.T) {
 		assert.Equal(t, int64(5), clientInfo.Documents[dummyDocID].Epoch)
 	})
 
-	t.Run("attach preserves existing row seqs test", func(t *testing.T) {
-		// Case A (same-session re-attach): an existing Attaching row still
-		// carries its seqs; AttachDocument preserves them (the element-wise max
-		// keeps them ahead of a lower presented checkpoint).
-		clientInfo := database.ClientInfo{
-			Status: database.ClientActivated,
-			Documents: map[types.ID]*database.ClientDocInfo{
-				dummyDocID: {
-					Status:    database.DocumentAttaching,
-					ServerSeq: 10,
-					ClientSeq: 8,
-					Epoch:     1,
-				},
-			},
-		}
-
-		// A lower (or zero) presented checkpoint must not roll the row back.
-		err := clientInfo.AttachDocument(dummyDocID, false, 1, 0, change.InitialCheckpoint)
-		assert.NoError(t, err)
-
-		cp := clientInfo.Checkpoint(dummyDocID)
-		assert.Equal(t, int64(10), cp.ServerSeq)
-		assert.Equal(t, uint32(8), cp.ClientSeq)
-		isAttached, err := clientInfo.IsAttached(dummyDocID)
-		assert.NoError(t, err)
-		assert.True(t, isAttached)
-	})
-
 	t.Run("attach seeds zero for fresh presented checkpoint test", func(t *testing.T) {
 		// Fresh attach (presented == InitialCheckpoint): today's behavior,
 		// seed 0/0.

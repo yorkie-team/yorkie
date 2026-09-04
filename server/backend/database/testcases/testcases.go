@@ -1335,6 +1335,49 @@ func RunAttachResumeCheckpointTest(t *testing.T, db database.Database, projectID
 		assert.Equal(t, uint32(0), cp.ClientSeq)
 		assert.Equal(t, int64(0), cp.ServerSeq)
 	})
+
+	t.Run("TryAttaching zeroes seqs on an existing doc row test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(
+			ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())), false,
+		)
+		assert.NoError(t, err)
+
+		// Advance the persisted row to a non-zero-seq Attached state (5/4) so the
+		// stored ClientDocInfo carries real seqs, then detach. This is the only
+		// way to leave a persisted, non-Attached doc row behind that a later
+		// TryAttaching will act on. (No public path persists a non-zero-seq
+		// non-Attached row: DetachDocument/UpdateClientInfoAfterPushPull zero the
+		// seqs for any non-Attached status.)
+		docInfo.ServerSeq = 5
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(
+			docInfo.ID, false, docInfo.Epoch, 0, change.NewCheckpoint(5, 4),
+		))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// TryAttaching on the pre-existing (now detached) doc row drives it to
+		// Attaching and must land on zeroed seqs in BOTH backends: memory mutates
+		// the entry in place, mongo $sets server_seq/client_seq to 0 (previously it
+		// $set only status, diverging from memory). AttachDocument then owns the
+		// real seed (Case B overwrites from the presented checkpoint).
+		attaching, err := db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, database.DocumentAttaching, attaching.Documents[docInfo.ID].Status)
+		assert.Equal(t, int64(0), attaching.Documents[docInfo.ID].ServerSeq)
+		assert.Equal(t, uint32(0), attaching.Documents[docInfo.ID].ClientSeq)
+
+		reloaded, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), reloaded.Checkpoint(docInfo.ID).ServerSeq)
+		assert.Equal(t, uint32(0), reloaded.Checkpoint(docInfo.ID).ClientSeq)
+	})
 }
 
 // RunUpdateProjectInfoTest runs the UpdateProjectInfo tests for the given db.
