@@ -308,31 +308,46 @@ snapshot-threshold + `FindClosestSnapshotInfo` empty-fallback** machinery (see
   snapshot; raise a data-loss event on re-attach when the returned `docID`
   differs or `serverSeq` regressed to `0` against a non-empty local snapshot).
 
-**Interaction with Q3 checkpoint seeding (must fix together).** The epoch check
-that fires Tier 2 is `clientDocInfo.Epoch != docInfo.Epoch` (`pushpull.go:445`).
-The Q3 increment currently seeds a resumed `ClientDocInfo.Epoch` from the
-**current** `docInfo.Epoch`, which **masks** Tier 2: a client that went offline,
-had its doc compacted (epoch bumped), and then resumed would be seeded with the
-new epoch, so the mismatch never fires and the client never re-anchors from a
-snapshot — its local baseline sits in the old epoch while the server advanced.
-The Q3 serverSeq clamp only caps over-claims; it does **not** re-anchor this
-case. So Q2 must make the resume path **present the client's persisted epoch**
-(the offline `StoredDoc` already stores `epoch`) and seed `ClientDocInfo.Epoch`
-from *that*, not from the current doc epoch — then the existing epoch machinery
-fires Tier 2 and re-anchors. Until Q2 lands, the current-doc-epoch seeding is a
-known interim limitation (safe only while no compaction occurs during an offline
-window). Presenting the epoch needs a carrier at attach (extend the presented
-checkpoint or the attach request); pin the exact carrier when Q2 is implemented.
+**Interaction with Q3 checkpoint seeding (RESOLVED, server side).** The epoch
+check that fires Tier 2 is `clientDocInfo.Epoch != docInfo.Epoch`
+(`pushpull.go`). The Q3 increment originally seeded a resumed
+`ClientDocInfo.Epoch` from the **current** `docInfo.Epoch`, which **masked**
+Tier 2: a client that went offline, had its doc force-compacted (epoch bumped),
+and then resumed was seeded with the new epoch, so the mismatch never fired and
+the client never re-anchored from a snapshot — its local baseline sat in the old
+epoch while the server advanced. The Q3 serverSeq clamp only caps over-claims; it
+does **not** re-anchor this case.
+
+The server now **presents and seeds the client's persisted epoch**. A new
+`epoch` field on `ChangePack` (`resources.proto`) is the carrier and flows both
+ways: the response sets it to the doc's current epoch (`ServerPack.ApplyDocInfo`
+→ `ToPBChangePack`) so a client can learn and persist it; the attach request
+carries the client's last-known epoch (`Pack.Epoch`, decoded in
+`converter.FromChangePack`). On a Case B resume, `clientInfo.AttachDocument`
+seeds `ClientDocInfo.Epoch` from that presented epoch (when non-zero) instead of
+the current doc epoch. If the doc was compacted while the client was offline, the
+seeded old epoch differs from the current doc epoch, so the existing epoch check
+fires `ErrEpochMismatch` and the existing snapshot re-anchor machinery runs — no
+new path. A presented epoch of `0` (old SDKs, or a client that only ever synced
+at epoch 0) falls back to the current doc epoch, preserving today's behavior.
+
+**Remaining companion work (SDK side).** The yorkie-js-sdk must persist the
+`epoch` returned in the sync/attach response alongside the offline snapshot and
+present it in the attach `ChangePack.epoch` on resume. Until the SDK presents a
+non-zero epoch, the server falls back to the current-doc-epoch seeding (the prior
+interim behavior), so this is safe to ship server-first.
 
 ### Data flow
 
 ```
-attach(docKey, ChangePack{ Checkpoint: presentedCkpt, changes })
+attach(docKey, ChangePack{ Checkpoint: presentedCkpt, Epoch: presentedEpoch, changes })
   └─ ActivateClient already ran → new per-session _id + StableActorID  [Seam 1]
   └─ AttachDocument seeds ClientDocInfo:
        Case A (same-session re-attach, row still has ClientDocInfo) → preserve seqs
        Case B (reload / new row) → seed from presentedCkpt if non-zero, else 0  [Q3]
-  └─ pull-before-trust: epoch / presented serverSeq behind → snapshot re-anchor [Q2]
+                                → seed Epoch from presentedEpoch if non-zero    [Q2]
+  └─ pull-before-trust: stale epoch → ErrEpochMismatch → snapshot re-anchor     [Q2]
+     (response ChangePack.Epoch carries the doc's current epoch for the client)
   └─ client pushes pending changes from the seeded clientSeq
        └─ validateClientSeqContinuity guards continuity (loud on mismatch)
   └─ dedup/VV/min-VV recognize own actor via compare-both              [Seam 2]
@@ -374,7 +389,7 @@ docs attached across the upgrade.
 | A resumed checkpoint is behind `serverSeq` after compaction/purge | Pull-before-trust re-anchors via the three-tier contract before accepting pushes; never trust the stored `serverSeq` |
 | Tier 3 (`DocInfo` purged) has no server signal — attach silently mints a new empty doc | Closed only on the client: persist `docID`/`epoch` and raise a data-loss event on mismatch. Future server hardening: expose a distinguishable "purged" signal |
 | Two live tabs share one stable actor → one checkpoint → `clientSeq` collisions and self-filtered pull dedup (real edit loss) | Bounded by the SDK single-active-session lease; background tabs observe, do not drive sync |
-| Threading the presented checkpoint into `AttachDocument` / dropping the `TryAttaching` seq resets ripples to both backends and all test doubles | Contained interface change; no proto change (reuses `pack.Checkpoint`); covered by existing attach suites plus new resume-path tests |
+| Threading the presented checkpoint into `AttachDocument` / dropping the `TryAttaching` seq resets ripples to both backends and all test doubles | Contained interface change; the checkpoint reuses `pack.Checkpoint` (no proto change), and the epoch rides a single additive `ChangePack.epoch` field (Q2, safe both ways); covered by existing attach suites plus new resume-path tests |
 | VV re-key mixed-keying window on rolling deploy | See [Migration](#migration); confirm min-VV cannot regress during the transition |
 
 ### Design Decisions
