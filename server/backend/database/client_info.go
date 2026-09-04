@@ -139,7 +139,35 @@ func (i *ClientInfo) Deactivate() {
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool, epoch int64) error {
+//
+// AttachDocument is the sole owner of the seeded checkpoint (server_seq /
+// client_seq) on attach; the TryAttaching transition no longer touches those
+// seqs (they default to 0 when it creates a fresh Attaching entry). The
+// presented checkpoint is the client-supplied pack.Checkpoint and carries the
+// resume signal for offline-persistent clients (see
+// docs/design/offline-resumable-attach.md, "Conditional checkpoint reset").
+// Seeding distinguishes:
+//
+//   - Case A (same-session re-attach): the client row already holds a
+//     ClientDocInfo for docID in Attached/Attaching status with non-zero seqs
+//     — server-side row memory is authoritative and is preserved.
+//   - Case B (reload / new session): a client presents its persisted checkpoint
+//     with a non-zero ServerSeq (the resume signal), so seeding takes it,
+//     letting restored un-pushed changes push from the right clientSeq.
+//   - Fresh attach: the presented ServerSeq is 0 (never synced with the server),
+//     so seed 0/0. A fresh attach that already carries local edits legitimately
+//     presents a non-zero ClientSeq with ServerSeq 0; that must still seed 0/0
+//     so its pending changes push, hence the resume signal is the ServerSeq, not
+//     the ClientSeq.
+//
+// validateClientSeqContinuity (pushpull.go) remains the loud safety net that
+// rejects a clientSeq not continuing the seeded one.
+func (i *ClientInfo) AttachDocument(
+	docID types.ID,
+	alreadyAttached bool,
+	epoch int64,
+	presented change.Checkpoint,
+) error {
 	if i.Status != ClientActivated {
 		return fmt.Errorf("client(%s) attaches %s: %w",
 			i.ID, docID, ErrClientNotActivated)
@@ -159,10 +187,34 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool, epoch 
 			i.ID, docID, ErrDocumentAlreadyAttached)
 	}
 
+	// Case A: a same-session re-attach whose Attaching/Attached row still
+	// carries non-zero seqs is authoritative; preserve them.
+	if i.hasDocument(docID) &&
+		(i.Documents[docID].ServerSeq != 0 || i.Documents[docID].ClientSeq != 0) &&
+		(i.Documents[docID].Status == DocumentAttached ||
+			i.Documents[docID].Status == DocumentAttaching) {
+		i.Documents[docID].Status = DocumentAttached
+		i.Documents[docID].Epoch = epoch
+		i.UpdatedAt = gotime.Now()
+		return nil
+	}
+
+	// Case B vs fresh attach: seed from the presented checkpoint only when it
+	// carries the resume signal (a non-zero ServerSeq, i.e. the client has
+	// synced with the server before). A fresh attach — even one carrying local
+	// edits, whose ClientSeq is non-zero but ServerSeq is 0 — seeds 0/0 so its
+	// pending changes are not mistaken for already-pushed work.
+	serverSeq := int64(0)
+	clientSeq := uint32(0)
+	if presented.ServerSeq != 0 {
+		serverSeq = presented.ServerSeq
+		clientSeq = presented.ClientSeq
+	}
+
 	i.Documents[docID] = &ClientDocInfo{
 		Status:    DocumentAttached,
-		ServerSeq: 0,
-		ClientSeq: 0,
+		ServerSeq: serverSeq,
+		ClientSeq: clientSeq,
 		Epoch:     epoch,
 	}
 	i.UpdatedAt = gotime.Now()

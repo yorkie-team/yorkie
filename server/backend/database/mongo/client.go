@@ -1107,12 +1107,16 @@ func (c *Client) TryAttaching(
 			"status":                           database.ClientActivated,
 			clientDocInfoKey(docID, StatusKey): bson.M{"$ne": database.DocumentAttached},
 		},
+		// NOTE(hackerwins): Do not $set server_seq/client_seq here. AttachDocument
+		// is the sole owner of the seeded checkpoint so it can preserve a
+		// same-session re-attach's seqs (Case A) or seed from the
+		// client-presented checkpoint (Case B). A fresh Attaching entry created
+		// by this $set omits both, which decode as 0, matching prior behavior.
+		// See docs/design/offline-resumable-attach.md.
 		bson.M{
 			"$set": bson.M{
-				clientDocInfoKey(docID, StatusKey):    database.DocumentAttaching,
-				clientDocInfoKey(docID, "server_seq"): int64(0),
-				clientDocInfoKey(docID, "client_seq"): uint32(0),
-				"updated_at":                          gotime.Now(),
+				clientDocInfoKey(docID, StatusKey): database.DocumentAttaching,
+				"updated_at":                       gotime.Now(),
 			},
 			"$addToSet": bson.M{
 				"attaching_docs": docID,

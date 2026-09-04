@@ -24,6 +24,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -145,12 +146,18 @@ func DeactivateAsync(
 }
 
 // AttachDocument attaches the given document to the client.
+//
+// The presented checkpoint is the client-supplied pack.Checkpoint. A non-zero
+// presented checkpoint is the resume signal for offline-persistent clients: it
+// seeds ClientDocInfo so restored un-pushed changes push cleanly (Case B in
+// docs/design/offline-resumable-attach.md).
 func AttachDocument(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	isAttached bool,
+	presented change.Checkpoint,
 ) (*database.ClientInfo, error) {
 	// NOTE(kokodak): Reattaching a document that has been detached is not allowed.
 	// This check is necessary because TryAttaching does not validate this case.
@@ -162,6 +169,22 @@ func AttachDocument(
 			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
 	}
 
+	// Minimal serverSeq safety clamp (stand-in for full Q2 pull-before-trust): a
+	// client must not skip changes by over-claiming ServerSeq. Clamp a presented
+	// ServerSeq above the doc's actual server_seq to the doc's actual, so the
+	// client re-pulls anything it has not really seen. Continuity of clientSeq is
+	// still guarded loudly by validateClientSeqContinuity in pushpull.
+	//
+	// TODO(hackerwins): This clamp does not cover the compaction/epoch re-anchor
+	// case, where the doc's server_seq was reset below what the client legitimately
+	// saw. Full Q2 pull-before-trust re-anchors via the epoch + snapshot machinery
+	// (ErrEpochMismatch, FindClosestSnapshotInfo empty-fallback) before trusting
+	// the presented serverSeq. See docs/design/offline-resumable-attach.md,
+	// "Pull-before-trust reconciliation (Q2)".
+	if presented.ServerSeq > docInfo.ServerSeq {
+		presented = change.NewCheckpoint(docInfo.ServerSeq, presented.ClientSeq)
+	}
+
 	if !clientInfo.IsAttaching(docInfo.ID) {
 		var err error
 		clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
@@ -170,7 +193,7 @@ func AttachDocument(
 		}
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch); err != nil {
+	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch, presented); err != nil {
 		return nil, err
 	}
 
