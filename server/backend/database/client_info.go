@@ -211,6 +211,13 @@ func (i *ClientInfo) AttachDocument(
 		clientSeq = presented.ClientSeq
 	}
 
+	// TODO(hackerwins): Q2 pull-before-trust. Seeding Epoch from the current doc
+	// epoch masks the compaction-while-offline case: a resumed client whose doc
+	// was compacted (epoch bumped) is seeded with the new epoch, so the epoch
+	// check in pushpull never fires and the client never re-anchors from a
+	// snapshot. Q2 must instead seed from the client's persisted epoch so the
+	// existing epoch machinery re-anchors. See docs/design/offline-resumable-
+	// attach.md, "Interaction with Q3 checkpoint seeding".
 	i.Documents[docID] = &ClientDocInfo{
 		Status:    DocumentAttached,
 		ServerSeq: serverSeq,

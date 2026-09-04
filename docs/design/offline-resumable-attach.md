@@ -308,6 +308,22 @@ snapshot-threshold + `FindClosestSnapshotInfo` empty-fallback** machinery (see
   snapshot; raise a data-loss event on re-attach when the returned `docID`
   differs or `serverSeq` regressed to `0` against a non-empty local snapshot).
 
+**Interaction with Q3 checkpoint seeding (must fix together).** The epoch check
+that fires Tier 2 is `clientDocInfo.Epoch != docInfo.Epoch` (`pushpull.go:445`).
+The Q3 increment currently seeds a resumed `ClientDocInfo.Epoch` from the
+**current** `docInfo.Epoch`, which **masks** Tier 2: a client that went offline,
+had its doc compacted (epoch bumped), and then resumed would be seeded with the
+new epoch, so the mismatch never fires and the client never re-anchors from a
+snapshot — its local baseline sits in the old epoch while the server advanced.
+The Q3 serverSeq clamp only caps over-claims; it does **not** re-anchor this
+case. So Q2 must make the resume path **present the client's persisted epoch**
+(the offline `StoredDoc` already stores `epoch`) and seed `ClientDocInfo.Epoch`
+from *that*, not from the current doc epoch — then the existing epoch machinery
+fires Tier 2 and re-anchors. Until Q2 lands, the current-doc-epoch seeding is a
+known interim limitation (safe only while no compaction occurs during an offline
+window). Presenting the epoch needs a carrier at attach (extend the presented
+checkpoint or the attach request); pin the exact carrier when Q2 is implemented.
+
 ### Data flow
 
 ```
