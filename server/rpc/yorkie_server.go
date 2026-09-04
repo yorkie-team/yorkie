@@ -105,6 +105,7 @@ func (s *yorkieServer) ActivateClient(
 
 	return connect.NewResponse(&api.ActivateClientResponse{
 		ClientId: cli.ID.String(),
+		ActorId:  cli.StableActorID.String(),
 	}), nil
 }
 

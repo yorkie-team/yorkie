@@ -58,6 +58,10 @@ message ActivateClientRequest {
 
 message ActivateClientResponse {
   string client_id = 1;
+  // actor_id is the stable actor derived from the project and client key.
+  // Opted-in SDKs stamp it into changes; old SDKs ignore it and keep using
+  // client_id as their actor.
+  string actor_id = 2;
 }
 
 message DeactivateClientRequest {
