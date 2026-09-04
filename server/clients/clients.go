@@ -150,13 +150,17 @@ func DeactivateAsync(
 // The presented checkpoint is the client-supplied pack.Checkpoint. A non-zero
 // presented checkpoint is the resume signal for offline-persistent clients: it
 // seeds ClientDocInfo so restored un-pushed changes push cleanly (Case B in
-// docs/design/offline-resumable-attach.md).
+// docs/design/offline-resumable-attach.md). presentedEpoch is the client's
+// persisted compaction epoch (from the attach ChangePack); on a Case B resume
+// it is seeded so a stale epoch fires ErrEpochMismatch and re-anchors from a
+// snapshot (pull-before-trust, Q2).
 func AttachDocument(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	isAttached bool,
+	presentedEpoch int64,
 	presented change.Checkpoint,
 ) (*database.ClientInfo, error) {
 	// NOTE(kokodak): Reattaching a document that has been detached is not allowed.
@@ -169,18 +173,18 @@ func AttachDocument(
 			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
 	}
 
-	// Minimal serverSeq safety clamp (stand-in for full Q2 pull-before-trust): a
-	// client must not skip changes by over-claiming ServerSeq. Clamp a presented
+	// serverSeq safety clamp (Q2 pull-before-trust, same-epoch tier): a client
+	// must not skip changes by over-claiming ServerSeq. Clamp a presented
 	// ServerSeq above the doc's actual server_seq to the doc's actual, so the
 	// client re-pulls anything it has not really seen. Continuity of clientSeq is
 	// still guarded loudly by validateClientSeqContinuity in pushpull.
 	//
-	// TODO(hackerwins): This clamp does not cover the compaction/epoch re-anchor
-	// case, where the doc's server_seq was reset below what the client legitimately
-	// saw. Full Q2 pull-before-trust re-anchors via the epoch + snapshot machinery
-	// (ErrEpochMismatch, FindClosestSnapshotInfo empty-fallback) before trusting
-	// the presented serverSeq. See docs/design/offline-resumable-attach.md,
-	// "Pull-before-trust reconciliation (Q2)".
+	// The compaction/epoch tier is handled separately: AttachDocument seeds the
+	// client's presented epoch, so a doc force-compacted while the client was
+	// offline makes the seeded epoch differ from the current doc epoch, and the
+	// epoch check in pushpull fires ErrEpochMismatch, re-anchoring from a snapshot.
+	// See docs/design/offline-resumable-attach.md, "Pull-before-trust
+	// reconciliation (Q2)".
 	if presented.ServerSeq > docInfo.ServerSeq {
 		presented = change.NewCheckpoint(docInfo.ServerSeq, presented.ClientSeq)
 	}
@@ -193,7 +197,7 @@ func AttachDocument(
 		}
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch, presented); err != nil {
+	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch, presentedEpoch, presented); err != nil {
 		return nil, err
 	}
 

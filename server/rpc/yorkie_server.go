@@ -229,7 +229,7 @@ func (s *yorkieServer) AttachDocument(
 	if n := uint32(pack.ChangesLen()); baseline.ClientSeq >= n {
 		baseline = change.NewCheckpoint(pack.Checkpoint.ServerSeq, pack.Checkpoint.ClientSeq-n)
 	}
-	clientInfo, err = clients.AttachDocument(ctx, s.backend, clientInfo, docInfo, pack.IsAttached(), baseline)
+	clientInfo, err = clients.AttachDocument(ctx, s.backend, clientInfo, docInfo, pack.IsAttached(), pack.Epoch, baseline)
 	if err != nil {
 		return nil, err
 	}

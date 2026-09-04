@@ -160,12 +160,22 @@ func (i *ClientInfo) Deactivate() {
 //     so its pending changes push, hence the resume signal is the ServerSeq, not
 //     the ClientSeq.
 //
+// epoch is the document's current compaction epoch and is the default seed for
+// Case A and fresh attach. presentedEpoch is the client's persisted epoch (from
+// the attach ChangePack). On a Case B resume it is seeded verbatim when non-zero
+// (pull-before-trust, Q2): if the doc was force-compacted while the client was
+// offline, the seeded old epoch differs from the current doc epoch, so the epoch
+// check in pushpull fires ErrEpochMismatch and the client re-anchors from a
+// snapshot. Non-resume callers pass 0 for presentedEpoch, which keeps the
+// current-doc-epoch behavior unchanged.
+//
 // validateClientSeqContinuity (pushpull.go) remains the loud safety net that
 // rejects a clientSeq not continuing the seeded one.
 func (i *ClientInfo) AttachDocument(
 	docID types.ID,
 	alreadyAttached bool,
 	epoch int64,
+	presentedEpoch int64,
 	presented change.Checkpoint,
 ) error {
 	if i.Status != ClientActivated {
@@ -206,23 +216,28 @@ func (i *ClientInfo) AttachDocument(
 	// pending changes are not mistaken for already-pushed work.
 	serverSeq := int64(0)
 	clientSeq := uint32(0)
+	seededEpoch := epoch
 	if presented.ServerSeq != 0 {
 		serverSeq = presented.ServerSeq
 		clientSeq = presented.ClientSeq
+
+		// Q2 pull-before-trust: on a Case B resume, seed the client's persisted
+		// epoch (presentedEpoch) rather than the current doc epoch. If the doc
+		// was force-compacted while the client was offline, the two differ, so
+		// the epoch check in pushpull fires ErrEpochMismatch and the existing
+		// snapshot re-anchor machinery runs. When the client presents no epoch
+		// (0), fall back to the current doc epoch. See docs/design/
+		// offline-resumable-attach.md, "Interaction with Q3 checkpoint seeding".
+		if presentedEpoch != 0 {
+			seededEpoch = presentedEpoch
+		}
 	}
 
-	// TODO(hackerwins): Q2 pull-before-trust. Seeding Epoch from the current doc
-	// epoch masks the compaction-while-offline case: a resumed client whose doc
-	// was compacted (epoch bumped) is seeded with the new epoch, so the epoch
-	// check in pushpull never fires and the client never re-anchors from a
-	// snapshot. Q2 must instead seed from the client's persisted epoch so the
-	// existing epoch machinery re-anchors. See docs/design/offline-resumable-
-	// attach.md, "Interaction with Q3 checkpoint seeding".
 	i.Documents[docID] = &ClientDocInfo{
 		Status:    DocumentAttached,
 		ServerSeq: serverSeq,
 		ClientSeq: clientSeq,
-		Epoch:     epoch,
+		Epoch:     seededEpoch,
 	}
 	i.UpdatedAt = gotime.Now()
 

@@ -494,7 +494,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		refKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()
@@ -793,7 +793,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		updatedClientInfo, _ := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -824,7 +824,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		refKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 01. Create a document and store changes
@@ -896,7 +896,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		refKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 01. Create a document and store changes
@@ -962,7 +962,7 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 		refKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Create a document and store changes.
@@ -1203,7 +1203,7 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 		assert.NoError(t, err)
 
 		// 05. failure case: client is activated, but document is already attached
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 		assert.NoError(t, err)
 		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
@@ -1238,7 +1238,7 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 		assert.Error(t, err)
 
 		// 03. failure case: client has attached document
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 		assert.NoError(t, err)
 		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
@@ -1277,7 +1277,7 @@ func RunAttachResumeCheckpointTest(t *testing.T, db database.Database, projectID
 		presented := change.NewCheckpoint(5, 4)
 		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
 		assert.NoError(t, err)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, presented))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, presented))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		reloaded, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -1299,7 +1299,7 @@ func RunAttachResumeCheckpointTest(t *testing.T, db database.Database, projectID
 
 		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
 		assert.NoError(t, err)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		reloaded, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -1325,7 +1325,7 @@ func RunAttachResumeCheckpointTest(t *testing.T, db database.Database, projectID
 		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
 		assert.NoError(t, err)
 		assert.NoError(t, clientInfo.AttachDocument(
-			docInfo.ID, false, docInfo.Epoch, change.NewCheckpoint(0, 2),
+			docInfo.ID, false, docInfo.Epoch, 0, change.NewCheckpoint(0, 2),
 		))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -1794,7 +1794,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Remove the document and check the document is removed.
@@ -1813,7 +1813,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo1, _ := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey, false)
 		docRefKey1 := docInfo1.RefKey()
-		assert.NoError(t, clientInfo1.AttachDocument(docRefKey1.DocID, false, docInfo1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo1.AttachDocument(docRefKey1.DocID, false, docInfo1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
 		// 02. Remove the document.
@@ -1824,7 +1824,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		// 03. Create a document with same key and check they have same key but different id.
 		docInfo2, _ := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey, false)
 		docRefKey2 := docInfo2.RefKey()
-		assert.NoError(t, clientInfo1.AttachDocument(docRefKey2.DocID, false, docInfo2.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo1.AttachDocument(docRefKey2.DocID, false, docInfo2.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
@@ -1837,7 +1837,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// Set removed_at in docInfo and store changes
@@ -1867,7 +1867,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NotEqual(t, gotime.Date(1, gotime.January, 1, 0, 0, 0, 0, gotime.UTC), docInfo1.UpdatedAt)
 		assert.Equal(t, docInfo1.CreatedAt, docInfo1.UpdatedAt)
 		refKey := docInfo1.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(refKey.DocID, false, docInfo1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(refKey.DocID, false, docInfo1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
 		bytesID, _ := clientInfo.ID.Bytes()
@@ -1929,7 +1929,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 
 		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 	})
 
@@ -1941,7 +1941,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -1959,7 +1959,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		clientInfo.Documents[docInfo.ID].ServerSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -2001,7 +2001,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		clientInfo.Documents[docInfo.ID].ServerSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -2030,7 +2030,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		clientInfo.Documents[docInfo.ID].ServerSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -2089,7 +2089,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		clientInfo.ID = "invalid clientInfo id"
@@ -2120,7 +2120,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.False(t, attached)
 
 		// 02. Check if document is attached after attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2134,9 +2134,9 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.False(t, attached)
 
 		// 04. Check if document is attached after two clients attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
-		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2170,14 +2170,14 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 
 		// 01. Check if documents are attached after attaching
 		docRefKey1 := d1.RefKey()
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err := db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
 		assert.True(t, attached)
 
 		docRefKey2 := d2.RefKey()
-		assert.NoError(t, c1.AttachDocument(docRefKey2.DocID, false, d2.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c1.AttachDocument(docRefKey2.DocID, false, d2.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d2))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey2, "")
 		assert.NoError(t, err)
@@ -2263,7 +2263,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.False(t, attached)
 
 		// 02. Check if document is attached after attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2283,9 +2283,9 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.False(t, attached)
 
 		// 04. Check if document is attached after two clients attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
-		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID, false, d1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID, false, d1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2335,7 +2335,7 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey, false)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo1.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo1.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
 
 		clientInfos, err := db.FindAttachedClientInfosByRefKey(ctx, docRefKey)
@@ -2344,7 +2344,7 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 		assert.Equal(t, clientInfo1.ID, clientInfos[0].ID)
 
 		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
-		assert.NoError(t, clientInfo2.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo2.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
 		clientInfos, err = db.FindAttachedClientInfosByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
@@ -2376,11 +2376,11 @@ func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database,
 		docKey1, docKey2 := key.Key(fmt.Sprintf("tests$%s-1", t.Name())), key.Key(fmt.Sprintf("tests$%s-2", t.Name()))
 		docInfo1, _ := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey1, false)
 		docInfo2, _ := db.FindOrCreateDocInfo(ctx, clientInfo2.RefKey(), docKey2, false)
-		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID, false, docInfo1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID, false, docInfo1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
-		assert.NoError(t, clientInfo1.AttachDocument(docInfo2.ID, false, docInfo2.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo2.ID, false, docInfo2.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
-		assert.NoError(t, clientInfo2.AttachDocument(docInfo1.ID, false, docInfo1.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo1.ID, false, docInfo1.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
 		{
 			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID, docInfo2.ID})
@@ -2431,7 +2431,7 @@ func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Purge the document and check the document is purged.
@@ -2688,7 +2688,7 @@ func RunVersionVectorStableActorTest(t *testing.T, db database.Database, project
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, change.InitialCheckpoint))
+		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. The client pushes a VV keyed by its StableActorID (as a new SDK
