@@ -23,6 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -144,6 +145,80 @@ func TestClientInfo(t *testing.T) {
 
 		err = clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
+	})
+
+	t.Run("is own actor compare-both test", func(t *testing.T) {
+		sessionID := types.ID("0000000000000000000000aa")
+		stableID := types.ID("0000000000000000000000bb")
+		thirdParty := types.ID("0000000000000000000000cc")
+
+		// New SDK: both session id and stable actor are recognized as own.
+		newClient := database.ClientInfo{ID: sessionID, StableActorID: stableID}
+		assert.True(t, newClient.IsOwnActor(sessionID))
+		assert.True(t, newClient.IsOwnActor(stableID))
+		assert.False(t, newClient.IsOwnActor(thirdParty))
+
+		// Old SDK / pre-Phase-1 row: empty StableActorID must never match, so
+		// only the session id is recognized as own.
+		oldClient := database.ClientInfo{ID: sessionID}
+		assert.True(t, oldClient.IsOwnActor(sessionID))
+		assert.False(t, oldClient.IsOwnActor(stableID))
+		assert.False(t, oldClient.IsOwnActor(thirdParty))
+		// An empty StableActorID must not match an empty query actor either.
+		assert.False(t, oldClient.IsOwnActor(types.ID("")))
+	})
+
+	t.Run("own actor id prefers stable actor test", func(t *testing.T) {
+		sessionID := types.IDFromActorID(time.MaxActorID)
+		stableID := types.DeriveActorID(dummyProjectID, "own-actor-key")
+
+		// New SDK: OwnActorID returns the stable actor.
+		newClient := database.ClientInfo{ID: sessionID, StableActorID: stableID}
+		actorID, err := newClient.OwnActorID()
+		assert.NoError(t, err)
+		stableActor, err := stableID.ToActorID()
+		assert.NoError(t, err)
+		assert.Equal(t, stableActor, actorID)
+
+		// Old SDK / pre-Phase-1 row: OwnActorID falls back to the session id.
+		oldClient := database.ClientInfo{ID: sessionID}
+		actorID, err = oldClient.OwnActorID()
+		assert.NoError(t, err)
+		sessionActor, err := sessionID.ToActorID()
+		assert.NoError(t, err)
+		assert.Equal(t, sessionActor, actorID)
+	})
+
+	t.Run("dedup path recognizes stable-actor own changes test", func(t *testing.T) {
+		sessionID := types.ID("0000000000000000000000aa")
+		stableID := types.DeriveActorID(dummyProjectID, "dedup-key")
+		thirdParty := types.DeriveActorID(dummyProjectID, "third-party-key")
+
+		// New SDK stamps the stable actor into its changes.
+		clientInfo := database.ClientInfo{ID: sessionID, StableActorID: stableID}
+
+		// A pulled change carrying the client's stable actor, already acked by
+		// the checkpoint, is this client's own and must be deduped.
+		ownChange := &database.ChangeInfo{ActorID: stableID, ClientSeq: 3}
+		// A change from another client is never this client's own.
+		otherChange := &database.ChangeInfo{ActorID: thirdParty, ClientSeq: 3}
+
+		// Mirror the filter condition in packs.pullChangeInfos: a change is
+		// dropped when it is the client's own AND the checkpoint already
+		// covers its clientSeq.
+		cpClientSeq := uint32(5)
+		dedup := func(ci *database.ChangeInfo) bool {
+			return clientInfo.IsOwnActor(ci.ActorID) && cpClientSeq >= ci.ClientSeq
+		}
+		assert.True(t, dedup(ownChange), "stable-actor own change must dedup")
+		assert.False(t, dedup(otherChange), "third-party change must not dedup")
+
+		// An old-SDK client whose changes carry the session id must still
+		// dedup its own changes and never dedup a stable-actor stranger.
+		oldClient := database.ClientInfo{ID: sessionID}
+		oldOwn := &database.ChangeInfo{ActorID: sessionID, ClientSeq: 3}
+		assert.True(t, oldClient.IsOwnActor(oldOwn.ActorID))
+		assert.False(t, oldClient.IsOwnActor(stableID))
 	})
 
 	t.Run("document detached when client deactivate test", func(t *testing.T) {

@@ -146,6 +146,10 @@ func TestClient(t *testing.T) {
 		testcases.RunTryAttachingAndDeactivateClientTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("VersionVectorStableActor test", func(t *testing.T) {
+		testcases.RunVersionVectorStableActorTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
 		testcases.RunUpdateProjectInfoTest(t, cli)
 	})

@@ -2582,3 +2582,65 @@ func RunFindCompactionCandidatesTest(t *testing.T, db database.Database, project
 		}
 	})
 }
+
+// RunVersionVectorStableActorTest verifies that a client whose changes carry
+// its StableActorID keeps a correct version-vector liveness key: its own VV
+// entry is tracked while attached, removed on detach, and min-VV never regresses
+// so GC cannot advance past its un-synced tombstones. It exercises the
+// compare-both invariant at the DB layer for both memory and MongoDB backends.
+func RunVersionVectorStableActorTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("stable-actor VV liveness and detach cleanup test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+
+		// 01. Activate a new-SDK client and attach a document. The stable actor
+		// is what the client stamps into its own changes and its VV entries.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, clientInfo.StableActorID)
+
+		stableActor, err := clientInfo.StableActorID.ToActorID()
+		assert.NoError(t, err)
+
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
+		assert.NoError(t, err)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false, docInfo.Epoch))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// 02. The client pushes a VV keyed by its StableActorID (as a new SDK
+		// stamps its changes). min-VV must include the stable-actor entry so
+		// tombstones stay alive for this client.
+		clientVV := time.VersionVector{stableActor: 7}
+		minVV, err := db.UpdateMinVersionVector(ctx, clientInfo, docRefKey, clientVV)
+		assert.NoError(t, err)
+		v, ok := minVV.Get(stableActor)
+		assert.True(t, ok, "min-VV must track the stable-actor entry while attached")
+		assert.Equal(t, int64(7), v)
+
+		// GetMinVersionVector observes the same stored entry.
+		minVV, err = db.GetMinVersionVector(ctx, docRefKey, time.NewVersionVector())
+		assert.NoError(t, err)
+		v, ok = minVV.Get(stableActor)
+		assert.True(t, ok)
+		assert.Equal(t, int64(0), v, "min against an empty peer VV floors the entry at 0")
+
+		// 03. Detach the document. The VV row keyed by the session id is
+		// removed, dropping the stored stable-actor entry. On detach the
+		// pushpull pipeline still passes the client's own presented VV as the
+		// incoming vector, so that call still sees the entry — that is expected
+		// and self-consistent.
+		assert.NoError(t, clientInfo.DetachDocument(docRefKey.DocID))
+		_, err = db.UpdateMinVersionVector(ctx, clientInfo, docRefKey, clientVV)
+		assert.NoError(t, err)
+
+		// From any peer's perspective (an empty incoming vector, i.e. the
+		// detached client no longer presents its VV), the stable-actor entry is
+		// gone: the row was deleted, so min-VV does not hold un-synced
+		// tombstones alive and GC can advance. No regression.
+		minVV, err = db.GetMinVersionVector(ctx, docRefKey, time.NewVersionVector())
+		assert.NoError(t, err)
+		_, ok = minVV.Get(stableActor)
+		assert.False(t, ok, "detach must drop the stored stable-actor VV entry")
+	})
+}
