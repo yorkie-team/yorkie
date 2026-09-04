@@ -160,6 +160,16 @@ func PushPull(
 	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
+			// Publish the DocChanged event under the per-session ID, not the
+			// stable actor. Watch subscribes with the wire clientId (the
+			// session id; yorkie_server.go Watch), and the pubsub self-echo
+			// filter (doc_subscription.go) drops events whose Actor equals the
+			// subscriber. Keying the publisher on the session id keeps that
+			// self-filter correct. A stable actor here would leak the client's
+			// own event back to itself; even so, that self-echo would be
+			// re-caught by the compare-both dedup in pullChangeInfos when the
+			// client next pulls, so no change would double-apply — but avoiding
+			// the wasted round trip is why we key on the session id.
 			publisher, err := clientInfo.ID.ToActorID()
 			if err != nil {
 				logging.From(ctx).Error(err)
@@ -373,8 +383,12 @@ func pullPack(
 			// pullSnapshot populated down to a single entry keyed by the
 			// requesting client's own actor: this preserves lamport
 			// progression via SetClocks while keeping the size-1 invariant
-			// the opt-out client maintains.
-			actorID, err := clientInfo.ID.ToActorID()
+			// the opt-out client maintains. Key on OwnActorID
+			// (StableActorID for new SDKs) so the entry matches the actor
+			// the client stamps into its own changes; otherwise its
+			// SetClocks would write the lamport under the wrong actor and its
+			// local clock would not advance.
+			actorID, err := clientInfo.OwnActorID()
 			if err != nil {
 				return nil, err
 			}
@@ -565,7 +579,11 @@ func pullChangeInfos(
 	//   "sync option with mixed mode test" in integration/client_test.go
 	var filteredChanges []*database.ChangeInfo
 	for _, pulledChange := range pulledChanges {
-		if clientInfo.ID == pulledChange.ActorID && cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
+		// Recognize the change as this client's own via compare-both: old SDKs
+		// stamp the per-session ID, new SDKs stamp the StableActorID. Both must
+		// dedup, or a stable-actor client's own changes echo back and re-apply
+		// (non-idempotent ops double-count).
+		if clientInfo.IsOwnActor(pulledChange.ActorID) && cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
 			continue
 		}
 

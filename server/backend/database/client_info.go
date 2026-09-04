@@ -364,6 +364,34 @@ func (i *ClientInfo) RefKey() types.ClientRefKey {
 	}
 }
 
+// IsOwnActor reports whether the given actorID belongs to this client, i.e.
+// whether a change or a version-vector entry stamped with actorID is this
+// client's own. It compares against both identities the client may stamp: the
+// per-session ID (old SDKs) and the StableActorID (new SDKs). Rows written
+// before StableActorID existed leave it empty, so an empty StableActorID never
+// matches.
+//
+// This compare-both check is the backward-compatible key correctness switch for
+// self-echo dedup, version-vector liveness, min-VV, and GC. The hard invariant:
+// the actor stamped into a change must be recognizable as this client's own by
+// the same predicate that keys dedup/VV/GC, or GC can advance past un-synced
+// tombstones.
+func (i *ClientInfo) IsOwnActor(actorID types.ID) bool {
+	return i.ID == actorID || (i.StableActorID != "" && i.StableActorID == actorID)
+}
+
+// OwnActorID returns the actor this client stamps into its own changes: the
+// StableActorID for new SDKs, or the per-session ID for old SDKs (and for rows
+// written before StableActorID existed). Use it when a value must be keyed by
+// the client's own actor, e.g. the size-1 version vector returned to a
+// GC-disabled client so its lamport clock advances under the right key.
+func (i *ClientInfo) OwnActorID() (time.ActorID, error) {
+	if i.StableActorID != "" {
+		return i.StableActorID.ToActorID()
+	}
+	return i.ID.ToActorID()
+}
+
 // IsServerClient returns true if this client represents a server‐side process.
 func (i *ClientInfo) IsServerClient() bool {
 	actorID, err := i.ID.ToActorID()
