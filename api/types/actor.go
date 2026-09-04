@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Yorkie Authors. All rights reserved.
+ * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package types
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -47,11 +46,10 @@ const actorIDSize = 12
 // probability of hitting either is negligible; the loop only makes the fallback
 // deterministic.
 func DeriveActorID(projectID ID, clientKey string) ID {
-	// projectID is an ObjectID hex string; decode it to its 12 raw bytes so the
-	// derivation matches the design's byte-level definition. If it is not valid
-	// hex (it always is in practice), fall back to its raw string bytes rather
-	// than panic.
-	projectBytes, err := hex.DecodeString(string(projectID))
+	// projectID is an ObjectID hex string; use its 12 raw bytes so the
+	// derivation matches the byte-level definition. It is always valid in
+	// practice; on the impossible decode error, fall back to its raw bytes.
+	projectBytes, err := projectID.Bytes()
 	if err != nil {
 		projectBytes = []byte(projectID)
 	}
@@ -65,13 +63,22 @@ func DeriveActorID(projectID ID, clientKey string) ID {
 	var actor [actorIDSize]byte
 	copy(actor[:], sum[:actorIDSize])
 
+	return resolveReserved(actor, sum)
+}
+
+// resolveReserved returns actor as an ID, re-hashing until it differs from the
+// reserved values time.InitialActorID (all-zero) and time.MaxActorID (all-0xFF).
+// seed is the SHA256 sum that produced actor and drives the deterministic
+// re-hash. The probability of hitting a reserved value is ~2^-96; the loop only
+// makes the fallback deterministic.
+func resolveReserved(actor [actorIDSize]byte, seed []byte) ID {
 	for actor == time.InitialActorID || actor == time.MaxActorID {
 		next := sha256.New()
 		next.Write([]byte(stableActorTag))
 		next.Write([]byte{0x01})
-		next.Write(sum)
-		sum = next.Sum(nil)
-		copy(actor[:], sum[:actorIDSize])
+		next.Write(seed)
+		seed = next.Sum(nil)
+		copy(actor[:], seed[:actorIDSize])
 	}
 
 	return IDFromBytes(actor[:])
