@@ -990,14 +990,15 @@ func (d *DB) ActivateClient(
 	now := gotime.Now()
 
 	clientInfo := &database.ClientInfo{
-		ID:        types.NewID(),
-		ProjectID: projectID,
-		Key:       key,
-		Metadata:  metadata,
-		Status:    database.ClientActivated,
-		Documents: make(database.ClientDocInfoMap),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:            types.NewID(),
+		StableActorID: types.DeriveActorID(projectID, key),
+		ProjectID:     projectID,
+		Key:           key,
+		Metadata:      metadata,
+		Status:        database.ClientActivated,
+		Documents:     make(database.ClientDocInfoMap),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {

@@ -1131,9 +1131,15 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
+		// The stable actor is derived deterministically and must be populated on
+		// activation, independent of the fresh per-session ID.
+		assert.Equal(t, types.DeriveActorID(projectID, t.Name()), clientInfo.StableActorID)
+		assert.NoError(t, clientInfo.StableActorID.Validate())
+
 		found, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
 		assert.Equal(t, clientInfo.Key, found.Key)
+		assert.Equal(t, clientInfo.StableActorID, found.StableActorID)
 	})
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
@@ -1158,6 +1164,11 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.Equal(t, t.Name(), info2.Key)
 		assert.Equal(t, database.ClientActivated, info2.Status)
 		assert.NotEqual(t, info1.ID, info2.ID) // Different client IDs
+
+		// The stable actor, unlike the session ID, is identical across two
+		// activations of the same key so persisted changes replay consistently.
+		assert.Equal(t, info1.StableActorID, info2.StableActorID)
+		assert.NotEmpty(t, info1.StableActorID)
 
 		info1, err = db.DeactivateClient(ctx, info1.RefKey())
 		assert.NoError(t, err)

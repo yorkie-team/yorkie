@@ -1070,14 +1070,15 @@ func (c *Client) ActivateClient(
 	now := gotime.Now()
 
 	info := &database.ClientInfo{
-		ID:        types.NewID(),
-		ProjectID: projectID,
-		Key:       key,
-		Status:    database.ClientActivated,
-		Documents: make(database.ClientDocInfoMap),
-		Metadata:  metadata,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:            types.NewID(),
+		StableActorID: types.DeriveActorID(projectID, key),
+		ProjectID:     projectID,
+		Key:           key,
+		Status:        database.ClientActivated,
+		Documents:     make(database.ClientDocInfoMap),
+		Metadata:      metadata,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if _, err := c.collection(ColClients).InsertOne(ctx, info); err != nil {

@@ -65,8 +65,16 @@ type ClientDocInfoMap map[types.ID]*ClientDocInfo
 
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
-	// ID is the unique ID of the client.
+	// ID is the unique ID of the client. It is a fresh per-session ObjectID
+	// minted on every activation and used as the session row id for RPC
+	// lookups and sharding.
 	ID types.ID `bson:"_id"`
+
+	// StableActorID is the stable actor identity derived deterministically from
+	// the project ID and client key. Unlike ID, it is the same across activate
+	// cycles for the same logical client, so locally-persisted un-pushed changes
+	// replay under a consistent actor. It carries no unique index.
+	StableActorID types.ID `bson:"stable_actor_id"`
 
 	// ProjectID is the ID of the project the client belongs to.
 	ProjectID types.ID `bson:"project_id"`
@@ -332,14 +340,15 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 
 	return &ClientInfo{
-		ID:        i.ID,
-		ProjectID: i.ProjectID,
-		Key:       i.Key,
-		Status:    i.Status,
-		Documents: documents,
-		Metadata:  i.Metadata,
-		CreatedAt: i.CreatedAt,
-		UpdatedAt: i.UpdatedAt,
+		ID:            i.ID,
+		StableActorID: i.StableActorID,
+		ProjectID:     i.ProjectID,
+		Key:           i.Key,
+		Status:        i.Status,
+		Documents:     documents,
+		Metadata:      i.Metadata,
+		CreatedAt:     i.CreatedAt,
+		UpdatedAt:     i.UpdatedAt,
 	}
 }
 
