@@ -197,7 +197,7 @@ An actor is exactly **12 bytes** (`time.ActorID [12]byte`; `types.ID` is its
 lowercase-hex form). The derivation is server-authoritative — the SDK receives
 the result and stamps it verbatim, so it never recomputes the hash:
 
-```
+```text
 DeriveActorID(projectID types.ID, clientKey string) time.ActorID:
     tag = "yorkie/stable-actor/v1"                  // domain tag, permanent
     h   = SHA256(tag || projectID.Bytes()/*12B*/ || []byte(clientKey))
@@ -362,7 +362,7 @@ interim behavior), so this is safe to ship server-first.
 
 ### Data flow
 
-```
+```text
 attach(docKey, ChangePack{ Checkpoint: presentedCkpt, Epoch: presentedEpoch, changes })
   └─ ActivateClient already ran → new per-session _id + StableActorID  [Seam 1]
   └─ AttachDocument seeds ClientDocInfo (Case A is unreachable, not implemented):
