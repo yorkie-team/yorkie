@@ -89,8 +89,12 @@ func (x *ActivateClientRequest) GetMetadata() map[string]string {
 }
 
 type ActivateClientResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ClientId string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	// actor_id is the stable actor derived from the project and client key.
+	// Opted-in SDKs stamp it into changes; old SDKs ignore it and keep using
+	// client_id as their actor.
+	ActorId       string `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -128,6 +132,13 @@ func (*ActivateClientResponse) Descriptor() ([]byte, []int) {
 func (x *ActivateClientResponse) GetClientId() string {
 	if x != nil {
 		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ActivateClientResponse) GetActorId() string {
+	if x != nil {
+		return x.ActorId
 	}
 	return ""
 }
@@ -2813,9 +2824,10 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\bmetadata\x18\x02 \x03(\v2..yorkie.v1.ActivateClientRequest.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"5\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"P\n" +
 	"\x16ActivateClientResponse\x12\x1b\n" +
-	"\tclient_id\x18\x01 \x01(\tR\bclientId\"X\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x19\n" +
+	"\bactor_id\x18\x02 \x01(\tR\aactorId\"X\n" +
 	"\x17DeactivateClientRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12 \n" +
 	"\vsynchronous\x18\x02 \x01(\bR\vsynchronous\"\x1a\n" +

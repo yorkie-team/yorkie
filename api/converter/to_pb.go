@@ -224,6 +224,7 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 		Changes:       pbChanges,
 		Snapshot:      pack.Snapshot,
 		VersionVector: pbVersionVector,
+		Epoch:         pack.Epoch,
 		IsRemoved:     pack.IsRemoved,
 	}, nil
 }

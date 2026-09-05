@@ -24,6 +24,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -145,12 +146,22 @@ func DeactivateAsync(
 }
 
 // AttachDocument attaches the given document to the client.
+//
+// The presented checkpoint is the client-supplied pack.Checkpoint. A non-zero
+// presented checkpoint is the resume signal for offline-persistent clients: it
+// seeds ClientDocInfo so restored un-pushed changes push cleanly (Case B in
+// docs/design/offline-resumable-attach.md). presentedEpoch is the client's
+// persisted compaction epoch (from the attach ChangePack); on a Case B resume
+// it is seeded so a stale epoch fires ErrEpochMismatch and re-anchors from a
+// snapshot (pull-before-trust, Q2).
 func AttachDocument(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	isAttached bool,
+	presentedEpoch int64,
+	presented change.Checkpoint,
 ) (*database.ClientInfo, error) {
 	// NOTE(kokodak): Reattaching a document that has been detached is not allowed.
 	// This check is necessary because TryAttaching does not validate this case.
@@ -162,6 +173,22 @@ func AttachDocument(
 			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
 	}
 
+	// serverSeq safety clamp (Q2 pull-before-trust, same-epoch tier): a client
+	// must not skip changes by over-claiming ServerSeq. Clamp a presented
+	// ServerSeq above the doc's actual server_seq to the doc's actual, so the
+	// client re-pulls anything it has not really seen. Continuity of clientSeq is
+	// still guarded loudly by validateClientSeqContinuity in pushpull.
+	//
+	// The compaction/epoch tier is handled separately: AttachDocument seeds the
+	// client's presented epoch, so a doc force-compacted while the client was
+	// offline makes the seeded epoch differ from the current doc epoch, and the
+	// epoch check in pushpull fires ErrEpochMismatch, re-anchoring from a snapshot.
+	// See docs/design/offline-resumable-attach.md, "Pull-before-trust
+	// reconciliation (Q2)".
+	if presented.ServerSeq > docInfo.ServerSeq {
+		presented = change.NewCheckpoint(docInfo.ServerSeq, presented.ClientSeq)
+	}
+
 	if !clientInfo.IsAttaching(docInfo.ID) {
 		var err error
 		clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
@@ -170,7 +197,7 @@ func AttachDocument(
 		}
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch); err != nil {
+	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch, presentedEpoch, presented); err != nil {
 		return nil, err
 	}
 

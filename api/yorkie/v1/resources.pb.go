@@ -394,6 +394,7 @@ type ChangePack struct {
 	MinSyncedTicket *TimeTicket            `protobuf:"bytes,5,opt,name=min_synced_ticket,json=minSyncedTicket,proto3" json:"min_synced_ticket,omitempty"` // deprecated
 	IsRemoved       bool                   `protobuf:"varint,6,opt,name=is_removed,json=isRemoved,proto3" json:"is_removed,omitempty"`
 	VersionVector   *VersionVector         `protobuf:"bytes,7,opt,name=version_vector,json=versionVector,proto3" json:"version_vector,omitempty"`
+	Epoch           int64                  `protobuf:"varint,8,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -475,6 +476,13 @@ func (x *ChangePack) GetVersionVector() *VersionVector {
 		return x.VersionVector
 	}
 	return nil
+}
+
+func (x *ChangePack) GetEpoch() int64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
 }
 
 type Change struct {
@@ -4996,7 +5004,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\tpresences\x18\x02 \x03(\v2\".yorkie.v1.Snapshot.PresencesEntryR\tpresences\x1aQ\n" +
 	"\x0ePresencesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\xd2\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\xe8\x02\n" +
 	"\n" +
 	"ChangePack\x12!\n" +
 	"\fdocument_key\x18\x01 \x01(\tR\vdocumentKey\x125\n" +
@@ -5008,7 +5016,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x11min_synced_ticket\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fminSyncedTicket\x12\x1d\n" +
 	"\n" +
 	"is_removed\x18\x06 \x01(\bR\tisRemoved\x12?\n" +
-	"\x0eversion_vector\x18\a \x01(\v2\x18.yorkie.v1.VersionVectorR\rversionVector\"\xc1\x01\n" +
+	"\x0eversion_vector\x18\a \x01(\v2\x18.yorkie.v1.VersionVectorR\rversionVector\x12\x14\n" +
+	"\x05epoch\x18\b \x01(\x03R\x05epoch\"\xc1\x01\n" +
 	"\x06Change\x12#\n" +
 	"\x02id\x18\x01 \x01(\v2\x13.yorkie.v1.ChangeIDR\x02id\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +

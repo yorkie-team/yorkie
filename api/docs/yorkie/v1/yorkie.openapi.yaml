@@ -682,6 +682,14 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        actorId:
+          additionalProperties: false
+          description: |-
+            actor_id is the stable actor derived from the project and client key.
+             Opted-in SDKs stamp it into changes; old SDKs ignore it and keep using
+             client_id as their actor.
+          title: actor_id
+          type: string
         clientId:
           additionalProperties: false
           description: ""
@@ -928,6 +936,13 @@ components:
           description: ""
           title: document_key
           type: string
+        epoch:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: epoch
         isRemoved:
           additionalProperties: false
           description: ""

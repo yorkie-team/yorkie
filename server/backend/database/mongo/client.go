@@ -1070,14 +1070,15 @@ func (c *Client) ActivateClient(
 	now := gotime.Now()
 
 	info := &database.ClientInfo{
-		ID:        types.NewID(),
-		ProjectID: projectID,
-		Key:       key,
-		Status:    database.ClientActivated,
-		Documents: make(database.ClientDocInfoMap),
-		Metadata:  metadata,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:            types.NewID(),
+		StableActorID: types.DeriveActorID(projectID, key),
+		ProjectID:     projectID,
+		Key:           key,
+		Status:        database.ClientActivated,
+		Documents:     make(database.ClientDocInfoMap),
+		Metadata:      metadata,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if _, err := c.collection(ColClients).InsertOne(ctx, info); err != nil {
@@ -1106,6 +1107,13 @@ func (c *Client) TryAttaching(
 			"status":                           database.ClientActivated,
 			clientDocInfoKey(docID, StatusKey): bson.M{"$ne": database.DocumentAttached},
 		},
+		// NOTE(hackerwins): Reset server_seq/client_seq to 0 on the attaching
+		// transition. AttachDocument owns the seeded checkpoint: a Case B resume
+		// overwrites this entry from the client-presented checkpoint, and a fresh
+		// attach seeds 0/0, so zeroing here matches AttachDocument's fresh
+		// baseline. $set (not $setOnInsert) so an existing non-zero-seq entry is
+		// also zeroed, keeping this in step with the memory backend. See
+		// docs/design/offline-resumable-attach.md.
 		bson.M{
 			"$set": bson.M{
 				clientDocInfoKey(docID, StatusKey):    database.DocumentAttaching,
