@@ -44,6 +44,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern
 - [Housekeeping](housekeeping.md): Background tasks for cleaning up documents and tombstones
 - [Document Epoch](document-epoch.md): Epoch-based detection and recovery for clients stale after compaction
+- [Offline-Resumable Attach](offline-resumable-attach.md): Stable actor decoupled from the per-session client row plus a resumable checkpoint, so a client's locally-persisted un-pushed changes replay after a reload
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs

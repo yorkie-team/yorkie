@@ -232,6 +232,25 @@ func TestConverter(t *testing.T) {
 		assert.ErrorIs(t, err, converter.ErrCheckpointRequired)
 	})
 
+	t.Run("change pack epoch round-trip test", func(t *testing.T) {
+		// The epoch carrier flows both ways: request = client's last-known
+		// epoch, response = the doc's current epoch. Encode/decode must
+		// preserve it so a resumed client can present its persisted epoch.
+		pack := &change.Pack{
+			DocumentKey: "d1",
+			Checkpoint:  change.NewCheckpoint(7, 5),
+			Epoch:       42,
+		}
+
+		pbPack, err := converter.ToChangePack(pack)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(42), pbPack.Epoch)
+
+		got, err := converter.FromChangePack(pbPack)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(42), got.Epoch)
+	})
+
 	t.Run("tree converting test", func(t *testing.T) {
 		root := helper.BuildTreeNode(&json.TreeNode{
 			Type: "r",

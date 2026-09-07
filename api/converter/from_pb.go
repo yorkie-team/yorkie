@@ -198,6 +198,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		Snapshot:      pbPack.Snapshot,
 		IsRemoved:     pbPack.IsRemoved,
 		VersionVector: versionVector,
+		Epoch:         pbPack.Epoch,
 	}
 
 	return pack, nil

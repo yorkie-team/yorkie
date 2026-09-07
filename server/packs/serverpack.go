@@ -47,6 +47,11 @@ type ServerPack struct {
 	// 2. In response(Snapshot), it is the version vector of the snapshot of the document.
 	VersionVector time.VersionVector
 
+	// Epoch is the document's current compaction epoch. It is carried in the
+	// response so the client can persist it and present it on the next resume,
+	// letting the server detect a stale-epoch baseline (pull-before-trust).
+	Epoch int64
+
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
 }
@@ -123,6 +128,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		Checkpoint:  converter.ToCheckpoint(p.Checkpoint),
 		Changes:     pbChanges,
 		Snapshot:    p.Snapshot,
+		Epoch:       p.Epoch,
 		IsRemoved:   p.IsRemoved,
 	}
 
@@ -141,4 +147,8 @@ func (p *ServerPack) ApplyDocInfo(info *database.DocInfo) {
 	if info.IsRemoved() {
 		p.IsRemoved = true
 	}
+
+	// Carry the doc's current epoch so the client can persist it and present it
+	// on the next resume (pull-before-trust, docs/design/offline-resumable-attach.md).
+	p.Epoch = info.Epoch
 }

@@ -40,6 +40,14 @@ type Pack struct {
 	// 2. In response(Snapshot), it is the version vector of the snapshot of the document.
 	VersionVector time.VersionVector
 
+	// Epoch is the compaction epoch carried in both directions.
+	// 1. In request, it is the client's last-known epoch, presented on resume so
+	//    the server can detect a stale-epoch baseline (see the pull-before-trust
+	//    reconciliation in docs/design/offline-resumable-attach.md).
+	// 2. In response, it is the document's current epoch, so the client can learn
+	//    and persist it for the next resume.
+	Epoch int64
+
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
 }

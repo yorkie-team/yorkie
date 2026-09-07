@@ -65,8 +65,16 @@ type ClientDocInfoMap map[types.ID]*ClientDocInfo
 
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
-	// ID is the unique ID of the client.
+	// ID is the unique ID of the client. It is a fresh per-session ObjectID
+	// minted on every activation and used as the session row id for RPC
+	// lookups and sharding.
 	ID types.ID `bson:"_id"`
+
+	// StableActorID is the stable actor identity derived deterministically from
+	// the project ID and client key. Unlike ID, it is the same across activate
+	// cycles for the same logical client, so locally-persisted un-pushed changes
+	// replay under a consistent actor. It carries no unique index.
+	StableActorID types.ID `bson:"stable_actor_id"`
 
 	// ProjectID is the ID of the project the client belongs to.
 	ProjectID types.ID `bson:"project_id"`
@@ -131,7 +139,50 @@ func (i *ClientInfo) Deactivate() {
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool, epoch int64) error {
+//
+// AttachDocument is the sole owner of the seeded checkpoint (server_seq /
+// client_seq) on attach; the TryAttaching transition resets those seqs to 0 on
+// the attached→attaching transition, so a fresh Attaching entry always arrives
+// here with zero seqs. The presented checkpoint is the client-supplied
+// pack.Checkpoint and carries the resume signal for offline-persistent clients
+// (see docs/design/offline-resumable-attach.md, "Conditional checkpoint reset").
+// Seeding distinguishes:
+//
+//   - Case B (reload / new session): a client presents its persisted checkpoint
+//     with a non-zero ServerSeq (the resume signal), so seeding takes it,
+//     letting restored un-pushed changes push from the right clientSeq.
+//   - Fresh attach: the presented ServerSeq is 0 (never synced with the server),
+//     so seed 0/0. A fresh attach that already carries local edits legitimately
+//     presents a non-zero ClientSeq with ServerSeq 0; that must still seed 0/0
+//     so its pending changes push, hence the resume signal is the ServerSeq, not
+//     the ClientSeq.
+//
+// (The design doc also describes a "Case A" same-session re-attach that
+// preserves an existing non-zero-seq row. That path is not reachable on any
+// production flow: an Attached row is preempted by the ErrDocumentAlreadyAttached
+// check below, and no path ever persists an Attaching row with non-zero seqs —
+// TryAttaching resets them and a detach zeroes them before the IsAlreadyDetached
+// guard blocks re-attach. Resume is carried entirely by Case B, so Case A is not
+// implemented here.)
+//
+// epoch is the document's current compaction epoch and is the default seed for a
+// fresh attach. presentedEpoch is the client's persisted epoch (from the attach
+// ChangePack). It is seeded verbatim when non-zero (pull-before-trust, Q2): if
+// the doc was force-compacted while the client was offline, the seeded old epoch
+// differs from the current doc epoch, so the epoch check in pushpull fires
+// ErrEpochMismatch and the client re-anchors from a snapshot. Non-resume callers
+// pass 0 for presentedEpoch, which keeps the current-doc-epoch behavior
+// unchanged.
+//
+// validateClientSeqContinuity (pushpull.go) remains the loud safety net that
+// rejects a clientSeq not continuing the seeded one.
+func (i *ClientInfo) AttachDocument(
+	docID types.ID,
+	alreadyAttached bool,
+	epoch int64,
+	presentedEpoch int64,
+	presented change.Checkpoint,
+) error {
 	if i.Status != ClientActivated {
 		return fmt.Errorf("client(%s) attaches %s: %w",
 			i.ID, docID, ErrClientNotActivated)
@@ -151,11 +202,41 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool, epoch 
 			i.ID, docID, ErrDocumentAlreadyAttached)
 	}
 
+	// Case B vs fresh attach: seed from the presented checkpoint only when it
+	// carries the resume signal (a non-zero ServerSeq, i.e. the client has
+	// synced with the server before). A fresh attach — even one carrying local
+	// edits, whose ClientSeq is non-zero but ServerSeq is 0 — seeds 0/0 so its
+	// pending changes are not mistaken for already-pushed work.
+	serverSeq := int64(0)
+	clientSeq := uint32(0)
+	if presented.ServerSeq != 0 {
+		serverSeq = presented.ServerSeq
+		clientSeq = presented.ClientSeq
+	}
+
+	// Q2 pull-before-trust: seed the client's persisted epoch (presentedEpoch)
+	// rather than the current doc epoch whenever the client presents one. If the
+	// doc was force-compacted while the client was offline, the two differ, so
+	// the epoch check in pushpull fires ErrEpochMismatch and the existing
+	// snapshot re-anchor machinery runs. When the client presents no epoch (0),
+	// fall back to the current doc epoch. The presented epoch is an independent
+	// resume signal from the presented ServerSeq: a doc force-compacted to an
+	// EMPTY root sits at ServerSeq 0, so the serverSeq over-claim clamp in
+	// clients.AttachDocument drives presented.ServerSeq to 0 even for a genuine
+	// resume. Gating epoch seeding on presented.ServerSeq would then miss this
+	// case, seed the current epoch, and route recovery through ErrInvalidClientSeq
+	// instead of the design's "stale epoch -> ErrEpochMismatch". See docs/design/
+	// offline-resumable-attach.md, "Interaction with Q3 checkpoint seeding".
+	seededEpoch := epoch
+	if presentedEpoch != 0 {
+		seededEpoch = presentedEpoch
+	}
+
 	i.Documents[docID] = &ClientDocInfo{
 		Status:    DocumentAttached,
-		ServerSeq: 0,
-		ClientSeq: 0,
-		Epoch:     epoch,
+		ServerSeq: serverSeq,
+		ClientSeq: clientSeq,
+		Epoch:     seededEpoch,
 	}
 	i.UpdatedAt = gotime.Now()
 
@@ -332,14 +413,15 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 
 	return &ClientInfo{
-		ID:        i.ID,
-		ProjectID: i.ProjectID,
-		Key:       i.Key,
-		Status:    i.Status,
-		Documents: documents,
-		Metadata:  i.Metadata,
-		CreatedAt: i.CreatedAt,
-		UpdatedAt: i.UpdatedAt,
+		ID:            i.ID,
+		StableActorID: i.StableActorID,
+		ProjectID:     i.ProjectID,
+		Key:           i.Key,
+		Status:        i.Status,
+		Documents:     documents,
+		Metadata:      i.Metadata,
+		CreatedAt:     i.CreatedAt,
+		UpdatedAt:     i.UpdatedAt,
 	}
 }
 
@@ -353,6 +435,34 @@ func (i *ClientInfo) RefKey() types.ClientRefKey {
 		ProjectID: i.ProjectID,
 		ClientID:  i.ID,
 	}
+}
+
+// IsOwnActor reports whether the given actorID belongs to this client, i.e.
+// whether a change or a version-vector entry stamped with actorID is this
+// client's own. It compares against both identities the client may stamp: the
+// per-session ID (old SDKs) and the StableActorID (new SDKs). Rows written
+// before StableActorID existed leave it empty, so an empty StableActorID never
+// matches.
+//
+// This compare-both check is the backward-compatible key correctness switch for
+// self-echo dedup, version-vector liveness, min-VV, and GC. The hard invariant:
+// the actor stamped into a change must be recognizable as this client's own by
+// the same predicate that keys dedup/VV/GC, or GC can advance past un-synced
+// tombstones.
+func (i *ClientInfo) IsOwnActor(actorID types.ID) bool {
+	return i.ID == actorID || (i.StableActorID != "" && i.StableActorID == actorID)
+}
+
+// OwnActorID returns the actor this client stamps into its own changes: the
+// StableActorID for new SDKs, or the per-session ID for old SDKs (and for rows
+// written before StableActorID existed). Use it when a value must be keyed by
+// the client's own actor, e.g. the size-1 version vector returned to a
+// GC-disabled client so its lamport clock advances under the right key.
+func (i *ClientInfo) OwnActorID() (time.ActorID, error) {
+	if i.StableActorID != "" {
+		return i.StableActorID.ToActorID()
+	}
+	return i.ID.ToActorID()
 }
 
 // IsServerClient returns true if this client represents a server‐side process.
