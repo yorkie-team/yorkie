@@ -509,9 +509,14 @@ func (x *DetachDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type WatchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Resources     []*ResourceDescriptor  `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ClientId  string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Resources []*ResourceDescriptor  `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
+	// actor_id is the stable actor the client stamps into its changes. When set,
+	// the server subscribes the client under it so watch peer ids and
+	// watched/unwatched events match the presence CRDT keying. Old SDKs omit it
+	// and the server falls back to client_id (the session id).
+	ActorId       string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -558,6 +563,13 @@ func (x *WatchRequest) GetResources() []*ResourceDescriptor {
 		return x.Resources
 	}
 	return nil
+}
+
+func (x *WatchRequest) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
 }
 
 type ResourceDescriptor struct {
@@ -2858,10 +2870,11 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x16remove_if_not_attached\x18\x04 \x01(\bR\x13removeIfNotAttached\"P\n" +
 	"\x16DetachDocumentResponse\x126\n" +
 	"\vchange_pack\x18\x02 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
-	"changePack\"h\n" +
+	"changePack\"\x83\x01\n" +
 	"\fWatchRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12;\n" +
-	"\tresources\x18\x02 \x03(\v2\x1d.yorkie.v1.ResourceDescriptorR\tresources\"\x97\x01\n" +
+	"\tresources\x18\x02 \x03(\v2\x1d.yorkie.v1.ResourceDescriptorR\tresources\x12\x19\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\"\x97\x01\n" +
 	"\x12ResourceDescriptor\x12;\n" +
 	"\bdocument\x18\x01 \x01(\v2\x1d.yorkie.v1.DocumentDescriptorH\x00R\bdocument\x128\n" +
 	"\achannel\x18\x02 \x01(\v2\x1c.yorkie.v1.ChannelDescriptorH\x00R\achannelB\n" +

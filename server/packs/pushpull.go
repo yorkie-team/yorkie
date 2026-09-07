@@ -160,20 +160,26 @@ func PushPull(
 	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
-			// Publish the DocChanged event under the per-session ID, not the
-			// stable actor. Watch subscribes with the wire clientId (the
-			// session id; yorkie_server.go Watch), and the pubsub self-echo
-			// filter (doc_subscription.go) drops events whose Actor equals the
-			// subscriber. Keying the publisher on the session id keeps that
-			// self-filter correct. A stable actor here would leak the client's
-			// own event back to itself; even so, that self-echo would be
-			// re-caught by the compare-both dedup in pullChangeInfos when the
-			// client next pulls, so no change would double-apply — but avoiding
-			// the wasted round trip is why we key on the session id.
+			// Publish under the actor the client stamps into its changes so the
+			// pubsub self-echo filter (doc_subscription.go drops events whose
+			// Actor equals the subscriber) recognizes the author's own event.
+			// Watch now subscribes under that same actor (WatchRequest.actor_id,
+			// yorkie_server.go Watch): new SDKs stamp and subscribe under the
+			// stable actor, old SDKs under the session id. The pushed change's
+			// actor is exactly that identity for both. A remove-only pack carries
+			// no pushed change to read the actor from, so fall back to the session
+			// id; the client is detaching (its Watch is torn down), so a missed
+			// self-echo there is moot. OwnActorID() is not used for the fallback:
+			// ActivateClient sets StableActorID for every client, so it would
+			// return the stable actor even for old SDKs that subscribe under the
+			// session id.
 			publisher, err := clientInfo.ID.ToActorID()
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
+			}
+			if len(reqPack.Changes) > 0 {
+				publisher = reqPack.Changes[0].ID().ActorID()
 			}
 
 			// TODO(hackerwins): For now, we are publishing the event to pubsub and
