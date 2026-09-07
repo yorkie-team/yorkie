@@ -1147,6 +1147,122 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 		assert.Equal(t, "ErrEpochMismatch", converter.ErrorCodeOf(err))
 	})
+
+	t.Run("stale-epoch resume recovers via clean re-attach and re-push", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		docKey := helper.TestKey(t)
+
+		// 01. Seed a doc with root content and force-compact twice so the working
+		// epoch is non-zero (compaction of a one-change doc keeps server_seq at 1),
+		// mirroring the stale-epoch re-anchor setup.
+		sdkClient, err := client.Dial(testRPCAddr)
+		assert.NoError(t, err)
+		assert.NoError(t, sdkClient.Activate(ctx))
+		defer func() {
+			assert.NoError(t, sdkClient.Deactivate(ctx))
+			assert.NoError(t, sdkClient.Close())
+		}()
+
+		doc := document.New(docKey)
+		assert.NoError(t, sdkClient.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k", "v")
+			return nil
+		}))
+		assert.NoError(t, sdkClient.Sync(ctx))
+		assert.NoError(t, sdkClient.Detach(ctx, doc))
+
+		seedDocInfo, err := documents.FindDocInfoByKey(ctx, testBackend, project, docKey)
+		assert.NoError(t, err)
+		docRefKey := seedDocInfo.RefKey()
+		assert.NoError(t, packs.Compact(ctx, testBackend, project.ID, seedDocInfo, true))
+
+		afterFirstCompact, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		staleEpoch := afterFirstCompact.Epoch
+		assert.NotZero(t, staleEpoch)
+		baselineServerSeq := afterFirstCompact.ServerSeq
+		assert.NoError(t, packs.Compact(ctx, testBackend, project.ID, afterFirstCompact, true))
+
+		compactedInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		currentEpoch := compactedInfo.Epoch
+		assert.NotEqual(t, staleEpoch, currentEpoch)
+
+		// 02. A stale resume is rejected with ErrEpochMismatch (the re-anchor
+		// signal). clients.AttachDocument commits the attach row before PushPull
+		// runs the epoch check, so the rejected session is left attached at the
+		// stale baseline — exactly the "attached but sync fails" state a live
+		// client sees after an offline compaction.
+		rejectResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String() + "-reject"}),
+		)
+		assert.NoError(t, err)
+		_, err = testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: rejectResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey.String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: baselineServerSeq, ClientSeq: 1},
+					Epoch:       staleEpoch,
+				},
+			}),
+		)
+		assert.Equal(t, "ErrEpochMismatch", converter.ErrorCodeOf(err))
+
+		// 03. Recovery: the client re-anchors by attaching CLEAN — a fresh session
+		// (a reload re-activates), checkpoint reset to 0, and no stale epoch. The
+		// resume then seeds the current doc epoch, so the epoch check no longer
+		// fires; the re-anchor delivers the compacted state and a pending change
+		// stamped as a fresh local edit pushes on the new epoch. This closes the
+		// arc the stale-epoch tests stop short of: rejection -> re-anchor -> push.
+		recoverResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String() + "-recover"}),
+		)
+		assert.NoError(t, err)
+		stableActor, err := hex.DecodeString(recoverResp.Msg.ActorId)
+		assert.NoError(t, err)
+
+		recoverPack, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: recoverResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey.String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: stableActor},
+						PresenceChange: &api.PresenceChange{
+							Type: api.PresenceChange_CHANGE_TYPE_PUT,
+							Presence: &api.Presence{
+								Data: map[string]string{"recovered": "true"},
+							},
+						},
+					}},
+				},
+			}),
+		)
+		assert.NoError(t, err, "clean re-attach after a stale-epoch rejection must re-anchor, not fail")
+		// The recovered client is anchored on the doc's CURRENT epoch, not the
+		// stale one it was rejected for.
+		assert.Equal(t, currentEpoch, recoverPack.Msg.ChangePack.Epoch)
+
+		// 04. The re-pushed change advanced server_seq past the compacted baseline,
+		// proving the client makes progress again after re-anchoring rather than
+		// staying permanently rejected.
+		recoveredInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Greater(t, recoveredInfo.ServerSeq, baselineServerSeq,
+			"the recovered client's change must advance server_seq on the new epoch")
+	})
 }
 
 // assertRejectedPushPullUnchanged reloads DocInfo/ClientInfo after a rejected
