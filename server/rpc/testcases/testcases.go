@@ -656,6 +656,61 @@ func RunWatchDocumentTest(
 	//assert.Contains(t, err.Error(), "EOF")
 }
 
+// RunWatchDocumentActorMismatchTest verifies that Watch rejects a declared
+// actor_id that is not the authenticated client's own stable actor, while
+// accepting the client's own actor.
+func RunWatchDocumentActorMismatchTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+) {
+	ctx := context.Background()
+
+	// Two distinct clients: A watches; B's actor is the spoof target.
+	respA, err := testClient.ActivateClient(
+		ctx, connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name() + "-a"}))
+	assert.NoError(t, err)
+	respB, err := testClient.ActivateClient(
+		ctx, connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name() + "-b"}))
+	assert.NoError(t, err)
+	assert.NotEqual(t, respA.Msg.ActorId, respB.Msg.ActorId)
+
+	resPack, err := testClient.AttachDocument(
+		ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: respA.Msg.ClientId,
+			ChangePack: &api.ChangePack{
+				DocumentKey: helper.TestKey(t).String(),
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			},
+		}))
+	assert.NoError(t, err)
+
+	docResources := []*api.ResourceDescriptor{{
+		Resource: &api.ResourceDescriptor_Document{
+			Document: &api.DocumentDescriptor{DocumentId: resPack.Msg.DocumentId},
+		},
+	}}
+
+	// 01. A declares B's actor -> rejected with ErrActorMismatch.
+	spoof, err := testClient.Watch(ctx, connect.NewRequest(&api.WatchRequest{
+		ClientId:  respA.Msg.ClientId,
+		ActorId:   respB.Msg.ActorId,
+		Resources: docResources,
+	}))
+	assert.NoError(t, err)
+	assert.False(t, spoof.Receive())
+	assert.Equal(t, "ErrActorMismatch", converter.ErrorCodeOf(spoof.Err()))
+
+	// 02. A declares its own actor -> accepted.
+	own, err := testClient.Watch(ctx, connect.NewRequest(&api.WatchRequest{
+		ClientId:  respA.Msg.ClientId,
+		ActorId:   respA.Msg.ActorId,
+		Resources: docResources,
+	}))
+	assert.NoError(t, err)
+	assert.True(t, own.Receive())
+	assert.NotNil(t, own.Msg())
+}
+
 // RunMaxSubscribersPerDocumentConcurrencyTest runs the MaxSubscribersPerDocument test.
 func RunMaxSubscribersPerDocumentConcurrencyTest(
 	t *testing.T,

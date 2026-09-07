@@ -581,24 +581,30 @@ func (s *yorkieServer) Watch(
 		return err
 	}
 
+	project := projects.From(ctx)
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	})
+	if err != nil {
+		return err
+	}
+
 	// Presence peers are keyed by the stable actor stamped into presence
 	// changes. Subscribe under the client-declared actor when present so the
 	// watch peer list and watched/unwatched events align with the presence
-	// CRDT keying; old SDKs omit it and fall back to the session id.
+	// CRDT keying; old SDKs omit it and fall back to the session id. The
+	// declared actor must be this authenticated client's own stable actor, so
+	// a client cannot subscribe under another client's presence identity.
 	presenceID := clientID
 	if req.Msg.ActorId != "" {
+		if types.ID(req.Msg.ActorId) != clientInfo.StableActorID {
+			return clients.ErrActorMismatch
+		}
 		presenceID, err = time.ActorIDFromHex(req.Msg.ActorId)
 		if err != nil {
 			return err
 		}
-	}
-
-	project := projects.From(ctx)
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
-		return err
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
