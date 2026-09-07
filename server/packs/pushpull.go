@@ -160,16 +160,17 @@ func PushPull(
 	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
-			// Publish under the actor the client stamps into its changes so the
-			// pubsub self-echo filter (doc_subscription.go drops events whose
-			// Actor equals the subscriber) recognizes the author's own event.
-			// Watch now subscribes under that same actor (WatchRequest.actor_id,
-			// yorkie_server.go Watch): new SDKs stamp and subscribe under the
-			// stable actor, old SDKs under the session id. The pushed change's
-			// actor is exactly that identity for both. A remove-only pack carries
-			// no pushed change to read the actor from, so fall back to the session
-			// id; the client is detaching (its Watch is torn down), so a missed
-			// self-echo there is moot. OwnActorID() is not used for the fallback:
+			// Publish under the actor of an accepted change so the pubsub
+			// self-echo filter (doc_subscription.go drops events whose Actor
+			// equals the subscriber) recognizes the author's own event. Watch
+			// subscribes under that same actor (WatchRequest.actor_id,
+			// yorkie_server.go Watch): new SDKs under the stable actor, old SDKs
+			// under the session id. Read it from an accepted change
+			// (pushedChanges), not reqPack.Changes[0], which may be an
+			// already-acknowledged change with a different actor in a malformed
+			// pack. A remove-only pack has no accepted change, so fall back to the
+			// session id; the client is detaching (its Watch is torn down), so a
+			// missed self-echo is moot. OwnActorID() is not used for the fallback:
 			// ActivateClient sets StableActorID for every client, so it would
 			// return the stable actor even for old SDKs that subscribe under the
 			// session id.
@@ -178,8 +179,12 @@ func PushPull(
 				logging.From(ctx).Error(err)
 				return
 			}
-			if len(reqPack.Changes) > 0 {
-				publisher = reqPack.Changes[0].ID().ActorID()
+			if len(pushedChanges) > 0 {
+				publisher, err = pushedChanges[0].ActorID.ToActorID()
+				if err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
 			}
 
 			// TODO(hackerwins): For now, we are publishing the event to pubsub and
