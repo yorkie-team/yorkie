@@ -115,6 +115,11 @@ message DetachDocumentResponse {
 message WatchRequest {
   string client_id = 1;
   repeated ResourceDescriptor resources = 2;
+  // actor_id is the stable actor the client stamps into its changes. When set,
+  // the server subscribes the client under it so watch peer ids and
+  // watched/unwatched events match the presence CRDT keying. Old SDKs omit it
+  // and the server falls back to client_id (the session id).
+  string actor_id = 3;
 }
 
 message ResourceDescriptor {
