@@ -50,15 +50,20 @@ func (d metricDesc) summaryEventTypePred() string {
 	return fmt.Sprintf(" AND event_type = '%s'", d.eventType)
 }
 
-// basePred returns the fresh-half base-table predicate: raw timestamp bounds so
-// a partitioned base prunes to today, plus DATE(timestamp) bounds so the MV
-// rewrite still matches, plus the optional event_type filter.
+// basePred returns the fresh-half base-table predicate: DATE(timestamp) bounds
+// plus the optional event_type filter.
+//
+// The bounds must go through DATE(timestamp) and nothing else. The sync MV
+// mv_*_hll_daily carries only mv_dt = DATE(timestamp), not the raw timestamp
+// column, so a query that mentions raw timestamp drops out of the rollup's
+// candidate set and full-scans the base event table instead. A raw bound does
+// prune partitions on a date-partitioned base, but that is a false economy: the
+// MV holds one row per (project, day), so scanning all of its partitions is far
+// cheaper than one raw partition of the base.
 func (d metricDesc) basePred(id types.ID, fresh dayRange) string {
-	start, end := dayFmt(fresh.Start), dayFmt(fresh.End)
 	pred := fmt.Sprintf(
-		"project_id = '%s' AND timestamp >= '%s' AND timestamp < '%s' "+
-			"AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'",
-		id.String(), start, end, start, end,
+		"project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'",
+		id.String(), dayFmt(fresh.Start), dayFmt(fresh.End),
 	)
 	if d.eventType != "" {
 		pred += fmt.Sprintf(" AND event_type = '%s'", d.eventType)
@@ -125,8 +130,16 @@ func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
 		)
 	}
 	if !fresh.Empty {
+		// The fresh half aggregates per day rather than emitting one
+		// HLL_HASH(id) per row: with a per-row projection the outer
+		// HLL_UNION_AGG sits above the UNION ALL, which StarRocks cannot push
+		// into the rollup, so the branch full-scans the base even with a
+		// DATE-only predicate. HLL_UNION(HLL_HASH(id)) GROUP BY DATE(timestamp)
+		// is the MV's own shape and rewrites onto it. HLL union is associative,
+		// so merging one sketch per day instead of one per row is the same
+		// distinct count.
 		freshSQL = fmt.Sprintf(
-			"SELECT HLL_HASH(%s) AS sketch FROM %s WHERE %s",
+			"SELECT HLL_UNION(HLL_HASH(%s)) AS sketch FROM %s WHERE %s GROUP BY DATE(timestamp)",
 			d.idColumn, d.baseTable, d.basePred(id, fresh),
 		)
 	}

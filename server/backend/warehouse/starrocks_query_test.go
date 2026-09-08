@@ -44,9 +44,9 @@ func TestTotalQueryStraddlingSummary(t *testing.T) {
 	assert.Contains(t, got, "SELECT user_hll AS sketch FROM sum_user_hll_daily "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")
 	assert.Contains(t, got, "UNION ALL")
-	assert.Contains(t, got, "SELECT HLL_HASH(user_id) AS sketch FROM user_events "+
-		"WHERE project_id = 'p1' AND timestamp >= '2026-08-31' AND timestamp < '2026-09-01' "+
-		"AND DATE(timestamp) >= '2026-08-31' AND DATE(timestamp) < '2026-09-01'")
+	assert.Contains(t, got, "SELECT HLL_UNION(HLL_HASH(user_id)) AS sketch FROM user_events "+
+		"WHERE project_id = 'p1' AND DATE(timestamp) >= '2026-08-31' AND DATE(timestamp) < '2026-09-01' "+
+		"GROUP BY DATE(timestamp)")
 }
 
 func TestSeriesQueryEntirelyPastSummaryOnly(t *testing.T) {
@@ -74,7 +74,7 @@ func TestTotalQueryClientCarriesEventType(t *testing.T) {
 	assert.Contains(t, got, "SELECT client_hll AS sketch FROM sum_client_hll_daily "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' AND event_type = 'client-activated'")
 	// fresh half filters event_type too
-	assert.Contains(t, got, "HLL_HASH(client_id) AS sketch FROM client_events")
+	assert.Contains(t, got, "HLL_UNION(HLL_HASH(client_id)) AS sketch FROM client_events")
 	assert.Contains(t, got, "AND event_type = 'client-activated'")
 }
 
@@ -111,7 +111,7 @@ func TestSeriesQueryStraddlingConcatenatesHalves(t *testing.T) {
 	// today from the base, per day
 	assert.Contains(t, got, "SELECT DATE(timestamp) AS event_date, APPROX_COUNT_DISTINCT(user_id) AS metric_value "+
 		"FROM user_events")
-	assert.Contains(t, got, "timestamp >= '2026-08-31' AND timestamp < '2026-09-01'")
+	assert.Contains(t, got, "DATE(timestamp) >= '2026-08-31' AND DATE(timestamp) < '2026-09-01'")
 	assert.Contains(t, got, "GROUP BY DATE(timestamp)")
 	assert.Contains(t, got, "UNION ALL")
 	assert.Contains(t, got, "ORDER BY event_date ASC")
@@ -125,7 +125,7 @@ func TestSessionTotalUnionsAcrossChannels(t *testing.T) {
 	assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
 	assert.Contains(t, got, "SELECT session_hll AS sketch FROM sum_session_hll_daily_ch "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")
-	assert.Contains(t, got, "SELECT HLL_HASH(session_id) AS sketch FROM session_events")
+	assert.Contains(t, got, "SELECT HLL_UNION(HLL_HASH(session_id)) AS sketch FROM session_events")
 	assert.NotContains(t, got, "channel_key")
 }
 
@@ -135,4 +135,54 @@ func TestTotalQueryEmptyWindowNoUnion(t *testing.T) {
 	// from == to: a single summary select over an empty range, no UNION ALL, no panic
 	assert.Contains(t, got, "sum_user_hll_daily")
 	assert.NotContains(t, got, "UNION ALL")
+}
+
+// The fresh half must reference timestamp only through DATE(timestamp). A raw
+// timestamp bound keeps the sync MV (mv_*_hll_daily, which carries only
+// mv_dt = DATE(timestamp)) out of the plan and falls back to a full scan of the
+// base event table. Verified with EXPLAIN on StarRocks 3.3: with the raw bound
+// the plan reads "rollup: client_events", without it "rollup:
+// mv_client_hll_daily".
+func TestFreshHalfOmitsRawTimestampBounds(t *testing.T) {
+	from, to, today := day("2026-08-01"), day("2026-09-01"), day("2026-08-31")
+	queries := map[string]string{
+		"series":      descUser.seriesQuery(types.ID("p1"), from, to, today),
+		"total":       descUser.totalQuery(types.ID("p1"), from, to, today),
+		"peak series": peakSeriesQuery(types.ID("p1"), from, to, today),
+		"peak total":  peakTotalQuery(types.ID("p1"), from, to, today),
+	}
+	for name, q := range queries {
+		t.Run(name, func(t *testing.T) {
+			got := norm(q)
+			assert.NotContains(t, got, "AND timestamp >=", "raw bound defeats the MV rewrite")
+			assert.NotContains(t, got, "AND timestamp <", "raw bound defeats the MV rewrite")
+			assert.Contains(t, got, "DATE(timestamp) >= '2026-08-31'")
+			assert.Contains(t, got, "DATE(timestamp) < '2026-09-01'")
+		})
+	}
+}
+
+// The total's fresh half must aggregate per day into one sketch. A per-row
+// HLL_HASH(col) inside the UNION ALL branch leaves the HLL_UNION_AGG above the
+// union, which StarRocks cannot push into the rollup, so the branch full-scans
+// the base even with a DATE-only predicate. HLL_UNION(HLL_HASH(col)) GROUP BY
+// DATE(timestamp) matches the MV's own shape and rewrites; the outer
+// HLL_UNION_AGG then merges the two halves, unchanged.
+func TestTotalQueryFreshHalfPreAggregatesPerDay(t *testing.T) {
+	from, to, today := day("2026-08-01"), day("2026-09-01"), day("2026-08-31")
+	for name, d := range map[string]metricDesc{
+		"user":    descUser,
+		"client":  descClient,
+		"session": descSession,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := norm(d.totalQuery(types.ID("p1"), from, to, today))
+
+			assert.Contains(t, got, "SELECT HLL_UNION(HLL_HASH("+d.idColumn+")) AS sketch")
+			assert.Contains(t, got, "GROUP BY DATE(timestamp)")
+			assert.NotContains(t, got, "SELECT HLL_HASH("+d.idColumn+") AS sketch")
+			// cardinality is still taken exactly once, above the union
+			assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
+		})
+	}
 }
