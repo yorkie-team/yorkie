@@ -156,6 +156,7 @@ data:
         project_id VARCHAR(64), dt DATE, channel_key VARCHAR(128), session_hll HLL HLL_UNION
     ) ENGINE = OLAP AGGREGATE KEY(project_id, dt, channel_key)
     PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(project_id)
+    ROLLUP (rl_session_daily (project_id, dt, session_hll))
     PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
     CREATE TABLE IF NOT EXISTS sum_client_hll_daily (

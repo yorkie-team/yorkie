@@ -49,6 +49,14 @@ PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
+-- The session summary is keyed by channel_key because peak sessions per channel
+-- needs that dimension, but the plain sessions total/series do not: they union
+-- every channel-day sketch of a project just to count distinct sessions. On a
+-- project with high channel cardinality that is millions of sketches per read.
+-- The rl_session_daily rollup holds the same sketches pre-merged to
+-- (project_id, dt), so those two metrics scan one row per day while peak keeps
+-- using the base index. StarRocks maintains it on insert and picks it
+-- automatically, so the refresh job and the read path stay unchanged.
 CREATE TABLE IF NOT EXISTS sum_session_hll_daily_ch (
     project_id  VARCHAR(64),
     dt          DATE,
@@ -58,6 +66,7 @@ CREATE TABLE IF NOT EXISTS sum_session_hll_daily_ch (
 AGGREGATE KEY(project_id, dt, channel_key)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
+ROLLUP (rl_session_daily (project_id, dt, session_hll))
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
 CREATE TABLE IF NOT EXISTS sum_client_hll_daily (
