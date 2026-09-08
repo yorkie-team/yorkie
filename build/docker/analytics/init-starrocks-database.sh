@@ -90,7 +90,7 @@ until mysql -h starrocks-fe -P 9030 -u root \
   -e "desc yorkie.sum_session_hll_daily_ch all\G" 2>/dev/null | grep -q "IndexName: rl_session_daily"; do
   attempt=$((attempt + 1))
   if [ $attempt -ge 60 ]; then
-    echo -e 'rl_session_daily is not ready yet; it may still be building'
+    echo -e 'rl_session_daily did not appear; it may still be building, or the ALTER failed'
     break
   fi
   sleep 2s
