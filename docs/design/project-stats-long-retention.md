@@ -221,7 +221,7 @@ from the base that the summary could already have served — slower for one quer
 never wrong.
 
 **Series** metrics (`GetActiveUsers`, …) are per-day and independent, so no
-cross-day work is needed. Read the historical days from the summary and today
+cross-day work is needed. Read the covered days from the summary and the rest
 from the base, then concatenate:
 
 ```sql
@@ -239,10 +239,10 @@ zero. Use `HLL_UNION_AGG(col)` to count, or `HLL_RAW_AGG(col)` / `HLL_UNION(col)
 when a merged sketch is needed.
 
 **Totals** (`GetActiveUsersCount`, …) are a distinct over the whole window, so
-the fresh day and the history must be **unioned, never summed** — a subject
+the fresh days and the history must be **unioned, never summed** — a subject
 active in both halves must count once. The union happens in the engine, over a
-`UNION ALL` of the summary sketches and today's base rows, with cardinality taken
-exactly once:
+`UNION ALL` of the summary sketches and the fresh days' own, with cardinality
+taken exactly once:
 
 ```sql
 SELECT HLL_UNION_AGG(sketch) FROM (
@@ -286,8 +286,8 @@ DATE-only predicate is enough; the totals need both.
 
 **Peak sessions** needs no boundary union: it is `MAX` over independent
 `(day, channel)` distinct counts. Read per-`(dt, channel)` cardinality from
-`sum_session_hll_daily_ch` for the history and from the base for today, then take
-the daily `MAX` (series) or the window `MAX` (total).
+`sum_session_hll_daily_ch` for the history and from the base for the fresh days,
+then take the daily `MAX` (series) or the window `MAX` (total).
 
 **Fallback.** The fallback is the `SummaryEnabled` flag, which gates the whole
 dual read and defaults off. A cluster that has not created the summaries leaves

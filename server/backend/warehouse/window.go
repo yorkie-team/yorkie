@@ -27,25 +27,27 @@ type dayRange struct {
 }
 
 // splitWindow splits the requested window [from, to) at the UTC day boundary
-// today into two half-open ranges: a historical range served by the daily
+// split into two half-open ranges: a historical range served by the daily
 // summary and a fresh range served by the base rollup. The two never overlap
 // by day, so their union is exact.
 //
-// hist  = [from, min(to, today))
-// fresh = [max(from, today), to)
+// hist  = [from, min(to, split))
+// fresh = [max(from, split), to)
 //
-// Either range may be Empty: a window entirely in the past has an empty fresh
-// range, and a window entirely within today has an empty historical range.
-func splitWindow(from, to, today time.Time) (hist, fresh dayRange) {
+// Either range may be Empty: a window that ends before the split has an empty
+// fresh range, and one that starts at or after it has an empty historical
+// range. The split day itself is whatever the caller passes; the dual read
+// passes the summary's coverage boundary, see coverage.go.
+func splitWindow(from, to, split time.Time) (hist, fresh dayRange) {
 	hEnd := to
-	if today.Before(hEnd) {
-		hEnd = today
+	if split.Before(hEnd) {
+		hEnd = split
 	}
 	hist = dayRange{Start: from, End: hEnd, Empty: !from.Before(hEnd)}
 
 	fStart := from
-	if today.After(fStart) {
-		fStart = today
+	if split.After(fStart) {
+		fStart = split
 	}
 	fresh = dayRange{Start: fStart, End: to, Empty: !fStart.Before(to)}
 

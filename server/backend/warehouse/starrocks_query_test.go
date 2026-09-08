@@ -47,6 +47,9 @@ func TestTotalQueryStraddlingSummary(t *testing.T) {
 	assert.Contains(t, got, "SELECT HLL_UNION(HLL_HASH(user_id)) AS sketch FROM user_events "+
 		"WHERE project_id = 'p1' AND DATE(timestamp) >= '2026-08-31' AND DATE(timestamp) < '2026-09-01' "+
 		"GROUP BY DATE(timestamp)")
+	// a per-row sketch here would leave the HLL_UNION_AGG above the UNION ALL,
+	// where it cannot rewrite onto the MV; see totalQuery.
+	assert.NotContains(t, got, "SELECT HLL_HASH(user_id) AS sketch")
 }
 
 func TestSeriesQueryEntirelyPastSummaryOnly(t *testing.T) {
@@ -79,7 +82,7 @@ func TestTotalQueryClientCarriesEventType(t *testing.T) {
 }
 
 func TestPeakTotalQueryIsMaxNoBoundaryUnion(t *testing.T) {
-	got := norm(peakTotalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
+	got := norm(descSession.peakTotalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
 	assert.Contains(t, got, "SELECT MAX(session_count) FROM")
 	assert.Contains(t, got, "HLL_UNION_AGG(session_hll) AS session_count "+
@@ -92,7 +95,7 @@ func TestPeakTotalQueryIsMaxNoBoundaryUnion(t *testing.T) {
 }
 
 func TestPeakSeriesQueryStraddling(t *testing.T) {
-	got := norm(peakSeriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
+	got := norm(descSession.peakSeriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
 	assert.Contains(t, got, "SELECT event_date, metric_value FROM")
 	assert.Contains(t, got, "MAX(session_count) AS metric_value")
@@ -144,12 +147,12 @@ func TestTotalQueryEmptyWindowNoUnion(t *testing.T) {
 // the plan reads "rollup: client_events", without it "rollup:
 // mv_client_hll_daily".
 func TestFreshHalfOmitsRawTimestampBounds(t *testing.T) {
-	from, to, today := day("2026-08-01"), day("2026-09-01"), day("2026-08-31")
+	from, to, split := day("2026-08-01"), day("2026-09-01"), day("2026-08-31")
 	queries := map[string]string{
-		"series":      descUser.seriesQuery(types.ID("p1"), from, to, today),
-		"total":       descUser.totalQuery(types.ID("p1"), from, to, today),
-		"peak series": peakSeriesQuery(types.ID("p1"), from, to, today),
-		"peak total":  peakTotalQuery(types.ID("p1"), from, to, today),
+		"series":      descUser.seriesQuery(types.ID("p1"), from, to, split),
+		"total":       descUser.totalQuery(types.ID("p1"), from, to, split),
+		"peak series": descSession.peakSeriesQuery(types.ID("p1"), from, to, split),
+		"peak total":  descSession.peakTotalQuery(types.ID("p1"), from, to, split),
 	}
 	for name, q := range queries {
 		t.Run(name, func(t *testing.T) {
@@ -158,31 +161,6 @@ func TestFreshHalfOmitsRawTimestampBounds(t *testing.T) {
 			assert.NotContains(t, got, "AND timestamp <", "raw bound defeats the MV rewrite")
 			assert.Contains(t, got, "DATE(timestamp) >= '2026-08-31'")
 			assert.Contains(t, got, "DATE(timestamp) < '2026-09-01'")
-		})
-	}
-}
-
-// The total's fresh half must aggregate per day into one sketch. A per-row
-// HLL_HASH(col) inside the UNION ALL branch leaves the HLL_UNION_AGG above the
-// union, which StarRocks cannot push into the rollup, so the branch full-scans
-// the base even with a DATE-only predicate. HLL_UNION(HLL_HASH(col)) GROUP BY
-// DATE(timestamp) matches the MV's own shape and rewrites; the outer
-// HLL_UNION_AGG then merges the two halves, unchanged.
-func TestTotalQueryFreshHalfPreAggregatesPerDay(t *testing.T) {
-	from, to, today := day("2026-08-01"), day("2026-09-01"), day("2026-08-31")
-	for name, d := range map[string]metricDesc{
-		"user":    descUser,
-		"client":  descClient,
-		"session": descSession,
-	} {
-		t.Run(name, func(t *testing.T) {
-			got := norm(d.totalQuery(types.ID("p1"), from, to, today))
-
-			assert.Contains(t, got, "SELECT HLL_UNION(HLL_HASH("+d.idColumn+")) AS sketch")
-			assert.Contains(t, got, "GROUP BY DATE(timestamp)")
-			assert.NotContains(t, got, "SELECT HLL_HASH("+d.idColumn+") AS sketch")
-			// cardinality is still taken exactly once, above the union
-			assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
 		})
 	}
 }

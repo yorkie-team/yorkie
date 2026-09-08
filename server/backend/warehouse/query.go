@@ -24,10 +24,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
-// The dual-read query builders split the requested window at the UTC day today:
-// the historical part [from, today) is served by the decoupled daily HLL
-// summary tables, and the fresh part [today, to) by the base rollups. Totals
-// union the two halves' sketches and count once with HLL_UNION_AGG, so a
+// The dual-read query builders split the requested window at a caller-supplied
+// day: the historical part [from, split) is served by the decoupled daily HLL
+// summary tables, and the fresh part [split, to) by the base rollups. The split
+// day is the summary's coverage boundary rather than today, see coverage.go.
+// Totals union the two halves' sketches and count once with HLL_UNION_AGG, so a
 // subject active in both halves counts once. Note HLL_UNION_AGG already returns
 // the merged cardinality (a bigint), so it is not wrapped in HLL_CARDINALITY.
 // These builders run only when SummaryEnabled is true; the flag-off path keeps
@@ -36,7 +37,7 @@ import (
 
 // dayFmt formats a time as the StarRocks date literal used throughout. It
 // normalizes to UTC first so the summary-path literals line up with the UTC day
-// boundary from todayUTC, even when from/to arrive in the server's local zone.
+// the split lands on, even when from/to arrive in the server's local zone.
 func dayFmt(t time.Time) string {
 	return t.UTC().Format("2006-01-02")
 }
@@ -88,8 +89,8 @@ func join(parts []string) string {
 
 // seriesQuery builds the per-day series for a simple distinct-count metric
 // (users, documents, channels, sessions) as a dual read.
-func (d metricDesc) seriesQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
+func (d metricDesc) seriesQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
@@ -116,10 +117,10 @@ func (d metricDesc) seriesQuery(id types.ID, from, to, today time.Time) string {
 }
 
 // totalQuery builds the whole-window distinct total as a dual read, unioning
-// the summary sketches with the fresh half's per-row sketches and taking
-// cardinality exactly once.
-func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
+// the summary's daily sketches with the fresh half's and taking cardinality
+// exactly once.
+func (d metricDesc) totalQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
@@ -154,9 +155,10 @@ func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
 // peakSeriesQuery builds the per-day peak-sessions-per-channel series as a dual
 // read: the daily peak is MAX over channels of the per-channel distinct
 // sessions, which needs no cross-boundary union because each day is independent.
-func peakSeriesQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
-	d := descSession
+// It is a method so the metric it reads and the coverage the caller splits on
+// cannot name different tables.
+func (d metricDesc) peakSeriesQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
@@ -188,9 +190,8 @@ func peakSeriesQuery(id types.ID, from, to, today time.Time) string {
 // peakTotalQuery builds the whole-window peak sessions per channel: the single
 // highest per-(day, channel) distinct-session count. It is a MAX over
 // independent buckets, so no cross-boundary sketch union is needed.
-func peakTotalQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
-	d := descSession
+func (d metricDesc) peakTotalQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {

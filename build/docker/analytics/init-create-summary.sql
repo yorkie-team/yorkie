@@ -49,14 +49,12 @@ PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
--- The session summary is keyed by channel_key because peak sessions per channel
--- needs that dimension, but the plain sessions total/series do not: they union
--- every channel-day sketch of a project just to count distinct sessions. On a
--- project with high channel cardinality that is millions of sketches per read.
--- The rl_session_daily rollup holds the same sketches pre-merged to
--- (project_id, dt), so those two metrics scan one row per day while peak keeps
--- using the base index. StarRocks maintains it on insert and picks it
--- automatically, so the refresh job and the read path stay unchanged.
+-- channel_key in the key is what peak sessions per channel needs; the plain
+-- sessions total/series do not want it and would union every channel-day sketch
+-- of a project to count distinct sessions. The rl_session_daily rollup holds
+-- those sketches pre-merged to (project_id, dt), which StarRocks picks for the
+-- reads that omit channel_key. See docs/design/project-stats-long-retention.md
+-- for the ALTER TABLE that adds it to a summary table created before this.
 CREATE TABLE IF NOT EXISTS sum_session_hll_daily_ch (
     project_id  VARCHAR(64),
     dt          DATE,

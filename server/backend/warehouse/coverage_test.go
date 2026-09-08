@@ -87,8 +87,7 @@ func TestCoverageBoundary(t *testing.T) {
 }
 
 func TestCoverageCacheProbesOncePerWindow(t *testing.T) {
-	now := day("2026-09-07")
-	cache := coverageCache{ttl: time.Minute, now: func() time.Time { return now }}
+	var cache coverageCache
 
 	calls := 0
 	fetch := func(context.Context) (map[string]time.Time, error) {
@@ -109,14 +108,14 @@ func TestCoverageCacheProbesOncePerWindow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 
-	now = now.Add(time.Minute + time.Second)
+	cache.fetchedAt = time.Now().Add(-coverageTTL - time.Second)
 	_, err = cache.maxDay(ctx, "sum_user_hll_daily", fetch)
 	require.NoError(t, err)
 	assert.Equal(t, 2, calls, "the probe must be redone once the TTL is up")
 }
 
 func TestCoverageCacheUnknownTableCoversNothing(t *testing.T) {
-	cache := coverageCache{ttl: time.Minute, now: time.Now}
+	var cache coverageCache
 	fetch := func(context.Context) (map[string]time.Time, error) {
 		return map[string]time.Time{}, nil
 	}
@@ -127,7 +126,7 @@ func TestCoverageCacheUnknownTableCoversNothing(t *testing.T) {
 }
 
 func TestCoverageCachePropagatesProbeError(t *testing.T) {
-	cache := coverageCache{ttl: time.Minute, now: time.Now}
+	var cache coverageCache
 	want := errors.New("boom")
 	calls := 0
 	fetch := func(context.Context) (map[string]time.Time, error) {
@@ -160,7 +159,7 @@ func TestCoverageQueryReadsEverySummaryTable(t *testing.T) {
 // port makes the probe fail, so a missing error is a missing probe.
 func TestEveryMetricProbesCoverage(t *testing.T) {
 	// sql.Open does not connect, so the failure lands on the probe's query.
-	driver, err := sql.Open("mysql", "root:@tcp(127.0.0.1:1)/yorkie")
+	driver, err := sql.Open("mysql", "root:@tcp(127.0.0.1:1)/yorkie?timeout=200ms")
 	require.NoError(t, err)
 	r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: driver}
 	defer func() { _ = r.Close() }()
@@ -180,8 +179,7 @@ func TestEveryMetricProbesCoverage(t *testing.T) {
 	for name, fn := range counts {
 		t.Run("count "+name, func(t *testing.T) {
 			_, err := fn()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "query summary coverage")
+			require.ErrorContains(t, err, "query summary coverage")
 		})
 	}
 
@@ -196,8 +194,7 @@ func TestEveryMetricProbesCoverage(t *testing.T) {
 	for name, fn := range series {
 		t.Run("series "+name, func(t *testing.T) {
 			_, err := fn()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "query summary coverage")
+			require.ErrorContains(t, err, "query summary coverage")
 		})
 	}
 }

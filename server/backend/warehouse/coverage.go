@@ -23,27 +23,22 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // The dual read may only serve a day from the summary once the refresh job has
-// written it. Splitting at a fixed today assumes the summary is complete
-// through yesterday, but the job runs on a schedule: between the moment a day
-// completes and the next run, that day is in neither half — not in the summary,
-// and not in the base half that starts at today — so it reads as zero and drags
-// the window's total down with it. Splitting at the summary's own coverage
-// instead closes the gap whatever the cadence, and survives a missed run.
-// See docs/design/project-stats-long-retention.md.
+// written it, so it splits the window at the summary's own coverage rather than
+// at a fixed today, which would leave the days the job has not reached yet in
+// neither half. See docs/design/project-stats-long-retention.md.
 
-// coverageTTL is how long a coverage probe is reused. The value it reads moves
-// at most once per refresh run, so a short window is enough to answer a whole
-// dashboard load from one probe while still picking up a fresh run promptly.
+// coverageTTL is how long a probe is reused across requests. One request needs
+// no TTL to share a probe — maxDay holds its lock across the fetch, so the
+// twelve metric queries GetProjectStats fans out already collapse onto one —
+// but the value moves at most once per refresh run, so consecutive dashboard
+// loads have nothing to gain from probing again.
 const coverageTTL = time.Minute
 
 // coverageQuery reads the last day present in every summary table in a single
-// round trip. GetProjectStats fans out twelve metric queries at once, and
-// caching one probe for all of them keeps that from becoming twelve more.
+// round trip.
 func coverageQuery() string {
 	parts := make([]string, 0, len(allDescs))
 	for _, d := range allDescs {
@@ -73,12 +68,10 @@ func coverageBoundary(maxDt, today, from time.Time) time.Time {
 	return boundary
 }
 
-// coverageCache holds the last coverage probe. The zero value is usable: it
-// probes on first use and falls back to coverageTTL and time.Now.
+// coverageCache holds the last coverage probe. The zero value is usable and
+// probes on first use.
 type coverageCache struct {
 	mu        sync.Mutex
-	ttl       time.Duration
-	now       func() time.Time
 	fetchedAt time.Time
 	maxDays   map[string]time.Time
 }
@@ -94,21 +87,12 @@ func (c *coverageCache) maxDay(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	now := time.Now
-	if c.now != nil {
-		now = c.now
-	}
-	ttl := c.ttl
-	if ttl == 0 {
-		ttl = coverageTTL
-	}
-
-	if c.maxDays == nil || now().Sub(c.fetchedAt) > ttl {
+	if c.maxDays == nil || time.Since(c.fetchedAt) > coverageTTL {
 		maxDays, err := fetch(ctx)
 		if err != nil {
 			return time.Time{}, err
 		}
-		c.maxDays, c.fetchedAt = maxDays, now()
+		c.maxDays, c.fetchedAt = maxDays, time.Now()
 	}
 
 	return c.maxDays[table], nil
@@ -120,11 +104,7 @@ func (r *StarRocks) fetchCoverage(ctx context.Context) (map[string]time.Time, er
 	if err != nil {
 		return nil, fmt.Errorf("query summary coverage: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logging.DefaultLogger().Errorf("close rows: %v", err)
-		}
-	}()
+	defer closeRows(rows)
 
 	maxDays := make(map[string]time.Time, len(allDescs))
 	for rows.Next() {
