@@ -73,3 +73,7 @@ var (
 		byChannel:    true,
 	}
 )
+
+// allDescs is every metric, one per summary table. The coverage probe walks it
+// so a new metric cannot be left out of the split.
+var allDescs = []metricDesc{descUser, descDocument, descChannel, descClient, descSession}
