@@ -30,11 +30,12 @@ import (
 // at a fixed today, which would leave the days the job has not reached yet in
 // neither half. See docs/design/project-stats-long-retention.md.
 
-// coverageTTL is how long a probe is reused across requests. One request needs
-// no TTL to share a probe — maxDay holds its lock across the fetch, so the
-// twelve metric queries GetProjectStats fans out already collapse onto one —
-// but the value moves at most once per refresh run, so consecutive dashboard
-// loads have nothing to gain from probing again.
+// coverageTTL is how long a probe is reused. It is what collapses one dashboard
+// load onto a single probe: maxDay holds its lock across the fetch, so the
+// twelve metric queries GetProjectStats fans out arrive one at a time and all
+// but the first find a result younger than the TTL. A minute also covers
+// consecutive loads, and costs nothing in staleness — the value it reads moves
+// at most once per refresh run.
 const coverageTTL = time.Minute
 
 // coverageQuery reads the last day present in every summary table in a single
@@ -57,7 +58,7 @@ func coverageQuery() string {
 func coverageBoundary(maxDt, today, from time.Time) time.Time {
 	if maxDt.IsZero() {
 		// The summary holds nothing for this metric, so it covers nothing and
-		// the whole window comes from the base — the flag-off numbers.
+		// the whole window is read from the base.
 		return from
 	}
 

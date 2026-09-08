@@ -72,8 +72,10 @@ func (d metricDesc) basePred(id types.ID, fresh dayRange) string {
 	return pred
 }
 
-// join wraps the non-empty parts in UNION ALL. When every part is empty it
-// returns the first part, whose empty range yields no rows.
+// join wraps the non-empty parts in UNION ALL. Every caller emits the summary
+// half whenever the fresh half is empty, so at least one part is always
+// non-empty; the all-empty fallback returns parts[0] only to keep the function
+// total.
 func join(parts []string) string {
 	nonEmpty := parts[:0:0]
 	for _, p := range parts {

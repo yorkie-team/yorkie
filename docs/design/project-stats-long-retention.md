@@ -210,8 +210,7 @@ So the boundary is `MAX(dt) + 1` per summary table, clamped to today:
   cadence, and it self-corrects after a missed or failed run.
 - Clamping to today keeps a backfill that included the running day from serving
   a partial sketch for today.
-- An empty summary covers nothing, so the whole window comes from the base — the
-  same numbers the flag-off path returns.
+- An empty summary covers nothing, so the whole window is read from the base.
 
 `MAX(dt)` is read per summary table, since a partly-failed refresh can leave them
 at different days, but in one round trip for all five and cached for a minute:
@@ -347,21 +346,36 @@ watched — `replication_num = 1` has a tablet-quorum-stall history. TTL is
 enabled last, only after the summary is backfilled and validated.
 
 **Partition pruning under `DATE()`.** The MV design warned that wrapping
-`timestamp` in `DATE()` can lose partition pruning once the base is partitioned.
-The fresh-day total query above therefore carries **both** predicates: raw
-`timestamp` bounds so the partitioned base prunes to a single day, and
-`DATE(timestamp)` bounds so the fresh half stays exact and the MV rewrite still
-matches. `EXPLAIN` must confirm the fresh query prunes to one partition on the
-deployed StarRocks version.
+`timestamp` in `DATE()` can lose partition pruning once the base is partitioned,
+and it does: measured on 3.3, a `DATE(timestamp)` range reads every partition.
+Carrying raw `timestamp` bounds alongside it to recover the pruning is not the
+answer — it takes the query off the MV entirely, which costs far more than the
+pruning saves (see *Keeping the fresh half on the rollup*). Measured on a
+day-partitioned copy of `client_events`:
+
+```
+raw + DATE : rollup: client_events_p        partitions=1/7   -- pruned, base scan
+DATE only  : rollup: mv_client_p_hll_daily  partitions=7/7   -- unpruned, one row per day
+```
+
+So the fresh half stays DATE-only after partitioning too. What `EXPLAIN` must
+confirm on the deployed version is that it reads `mv_*_hll_daily`, not how many
+partitions it touches.
 
 ### Deployment sequencing
 
 Each step is lossless and reversible; the base scan is always a correct
 fallback. Per environment:
 
-1. Create the summary tables (empty, partitioned, 15-month TTL).
+1. Create the summary tables (empty, partitioned, 15-month TTL). A cluster whose
+   tables predate `rl_session_daily` also needs `ALTER TABLE
+   sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
+   the clause but skips it on an existing table. The rollup builds
+   asynchronously; wait for it in `desc … all` before step 3.
 2. Backfill from the base — staged per table, `session_events` last and in a
-   low-ingest window, as with the MV builds. Idempotent.
+   low-ingest window, as with the MV builds. Idempotent, and it stops before the
+   running UTC day so the summary never holds a partial day for the read path to
+   trust as complete.
 3. **Validate**: while the base still holds full history, the dual-read result
    must equal the MV-only result for a set of projects and windows. Equality
    here is the proof the union math is right, because the two paths overlap
@@ -390,6 +404,7 @@ retention, and by then the summary has been serving and validated.
 | Adding cardinalities across the boundary over-counts a subject active in both halves | Union sketches with `HLL_UNION_AGG`, take cardinality once. Summary `[from, boundary)` and base `[boundary, to)` split on the day, so there is no overlap to double count. |
 | `DATE(timestamp)` loses partition pruning once the base is partitioned, so the fresh-day scan reads every partition | Accepted: the fresh half reads the MV, which holds one row per (project, day), so every partition of it is cheaper than one raw partition of the base. Raw `timestamp` bounds would prune but would also drop the query off the MV. |
 | Repartitioning a live billion-row table (session) risks stalled ingest and quorum loss under `replication_num = 1` | New table + `INSERT SELECT` + rename swap under `PAUSE`/`RESUME ROUTINE LOAD`, in a low-ingest window, watching `ADMIN SHOW REPLICA STATUS`. Same playbook as the `session_events` redistribution. |
+| A partial day in the summary would be trusted as complete, since the split trusts every day at or below `MAX(dt)` | Both writers stop before the running UTC day: the CronJob's window is `[today-7, today)` and the backfill carries the same `< DATE(UTC_TIMESTAMP())` guard. The read path's clamp to today is the second line of defense. |
 | The ingest job misses a day or late events land after it runs | 7-day lookback reprocess every run; `HLL_UNION` makes repeats idempotent. CronJob history and alerting surface a failed run. The read path splits at the summary's actual `MAX(dt)`, so a day the job has not written yet is read from the base rather than reported as zero. |
 | Summary drifts from the base over time | Periodic reconciliation comparing an overlap day's summary against a base recount; the 7-day lookback self-heals recent drift. |
 | Backfill full-scans the billion-row tables | Staged per table, `session_events` in a low-ingest window; cost is the one-time base scan (~80ns/row), as measured for the MV builds. |

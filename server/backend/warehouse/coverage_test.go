@@ -73,7 +73,7 @@ func TestCoverageBoundary(t *testing.T) {
 		},
 		{
 			// An empty summary covers nothing, so the whole window comes from
-			// the base: the same numbers the flag-off path returns.
+			// the base.
 			name:  "empty summary",
 			maxDt: time.Time{},
 			want:  from,

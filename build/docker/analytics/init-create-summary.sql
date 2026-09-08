@@ -6,8 +6,8 @@ USE yorkie;
 -- tables. They are filled by a scheduled idempotent job and survive base-table
 -- partition drops, so long-retention dashboard windows keep working after
 -- raw-event TTL is enabled. The dual-read path in
--- server/backend/warehouse/starrocks.go reads them for [from, today) and the
--- base rollups for today. See docs/design/project-stats-long-retention.md.
+-- server/backend/warehouse/starrocks.go reads them for the days they cover and
+-- the base rollups for the rest. See docs/design/project-stats-long-retention.md.
 --
 -- AGGREGATE KEY + HLL_UNION makes re-inserting a day idempotent (the sketch
 -- merges). partition_live_number retains ~15 months (12-month product window +
