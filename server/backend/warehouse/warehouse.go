@@ -28,8 +28,9 @@ import (
 type Config struct {
 	DSN string `yaml:"DSN"`
 
-	// SummaryEnabled turns on the dual-read path that serves history from the
-	// decoupled daily HLL summary tables and today from the base rollups. When
+	// SummaryEnabled turns on the dual-read path that serves the days the
+	// summary covers from the decoupled daily HLL summary tables and the rest
+	// from the base rollups. When
 	// false, reads use the base rollups over the whole window, byte-identical to
 	// the pre-summary behavior. It is flipped on only after the summary tables
 	// are backfilled and validated. See docs/design/project-stats-long-retention.md.

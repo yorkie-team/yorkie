@@ -77,7 +77,8 @@ table. It has to be a plain table the base cannot reach.
 
 Keep the synchronous MVs for the fresh path. Add an independent per-metric
 summary table with its own long TTL, fill it with a scheduled idempotent job,
-and split every read at *today*: history from the summary, today from the MV.
+and split every read at the summary's coverage boundary: history from the
+summary, the days it does not hold yet from the MV.
 
 ### Summary tables
 
@@ -103,6 +104,46 @@ PROPERTIES (
 `sum_session_hll_daily_ch` adds `channel_key` to the key, so it serves both the
 sessions metric and peak sessions per channel. `sum_client_hll_daily` adds
 `event_type`, matching the MV that carries it.
+
+#### The session summary carries a coarse rollup
+
+`channel_key` in the key is what peak sessions per channel needs, and it is also
+what makes the plain sessions total and series expensive: they union every
+channel-day sketch of a project just to count distinct sessions. On a project
+with high channel cardinality that is millions of sketches per read, which alone
+overruns the dashboard's per-query budget.
+
+The table therefore declares a rollup keyed by `(project_id, dt)`:
+
+```sql
+CREATE TABLE sum_session_hll_daily_ch (
+    project_id  VARCHAR(64),
+    dt          DATE,
+    channel_key VARCHAR(128),
+    session_hll HLL HLL_UNION
+) ENGINE = OLAP
+AGGREGATE KEY(project_id, dt, channel_key)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(project_id)
+ROLLUP (rl_session_daily (project_id, dt, session_hll))
+PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+```
+
+`(project_id, dt)` is a key prefix, so StarRocks picks `rl_session_daily` for any
+read that does not mention `channel_key` — the sessions total and series — and
+keeps the base index for the peak metrics that do. Verified with `EXPLAIN`: the
+sessions history half reads `rollup: rl_session_daily`, one row per day, while
+peak still reads `rollup: sum_session_hll_daily_ch`.
+
+A rollup rather than a second summary table: StarRocks maintains it on insert, so
+the refresh job, the read path, and the retention property all stay as they are —
+no second table to backfill, schedule, and keep in sync. A cluster whose summary
+table predates this rollup adds it in place, which is one scan of the summary:
+
+```sql
+ALTER TABLE sum_session_hll_daily_ch
+    ADD ROLLUP rl_session_daily (project_id, dt, session_hll);
+```
 
 This is the pattern StarRocks recommends directly: for HLL distinct counts, "when
 the data volume is large, it is better to create a corresponding rollup table for
@@ -151,21 +192,44 @@ the analytics deployment (`build/charts/yorkie-analytics/.../starrocks/`), with
 
 ### Read path (dual read)
 
-Split the requested window at **today** (UTC). The summary and the base never
-overlap by day — summary serves `[from, today)`, the MV serves
-`[today, tomorrow)` — so their union is exact with no double counting.
+Split the requested window at the day the summary's coverage ends. The summary
+and the base never overlap by day — the summary serves `[from, boundary)` and the
+MV serves `[boundary, to)` — so their union is exact with no double counting.
+
+**The boundary is the summary's own coverage, not today.** Splitting at a fixed
+today assumes the summary is complete through yesterday, but it is only complete
+through the days the refresh job has processed. With a once-daily job the summary
+sits at `today - 2` for most of the day, and the day in between — yesterday —
+lands in neither half: not in the summary, which has no row for it, and not in
+the base half, which starts at today. It reads as zero, a V-shaped dip in the
+series, and drags every total that includes it down with it.
+
+So the boundary is `MAX(dt) + 1` per summary table, clamped to today:
+
+- `MAX(dt) + 1` is the first day the summary does not hold, whatever the refresh
+  cadence, and it self-corrects after a missed or failed run.
+- Clamping to today keeps a backfill that included the running day from serving
+  a partial sketch for today.
+- An empty summary covers nothing, so the whole window is read from the base.
+
+`MAX(dt)` is read per summary table, since a partly-failed refresh can leave them
+at different days, but in one round trip for all five and cached for a minute:
+`GetProjectStats` fans out twelve metric queries at once, and the value moves at
+most once per refresh run. A stale-by-a-minute boundary only means a day is read
+from the base that the summary could already have served — slower for one query,
+never wrong.
 
 **Series** metrics (`GetActiveUsers`, …) are per-day and independent, so no
-cross-day work is needed. Read the historical days from the summary and today
+cross-day work is needed. Read the covered days from the summary and the rest
 from the base, then concatenate:
 
 ```sql
 -- history, from the summary
 SELECT dt, HLL_UNION_AGG(user_hll) AS v
 FROM sum_user_hll_daily
-WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'   -- [from, today)
+WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'   -- [from, boundary)
 GROUP BY dt ORDER BY dt;
--- today, from the base (existing MV rewrite path, unchanged)
+-- the fresh days, from the base (MV rewrite path)
 ```
 
 `HLL_UNION_AGG` already returns the merged cardinality (a bigint), so it is not
@@ -174,31 +238,55 @@ zero. Use `HLL_UNION_AGG(col)` to count, or `HLL_RAW_AGG(col)` / `HLL_UNION(col)
 when a merged sketch is needed.
 
 **Totals** (`GetActiveUsersCount`, …) are a distinct over the whole window, so
-the fresh day and the history must be **unioned, never summed** — a subject
+the fresh days and the history must be **unioned, never summed** — a subject
 active in both halves must count once. The union happens in the engine, over a
-`UNION ALL` of the summary sketches and today's base rows, with cardinality taken
-exactly once:
+`UNION ALL` of the summary sketches and the fresh days' own, with cardinality
+taken exactly once:
 
 ```sql
 SELECT HLL_UNION_AGG(sketch) FROM (
     SELECT user_hll AS sketch FROM sum_user_hll_daily
-     WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'          -- [from, today)
+     WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'          -- [from, boundary)
     UNION ALL
-    SELECT HLL_HASH(user_id) AS sketch FROM user_events
+    SELECT HLL_UNION(HLL_HASH(user_id)) AS sketch FROM user_events
      WHERE project_id = '%s'
-       AND timestamp >= '%s' AND timestamp < '%s'                  -- [today, tomorrow), raw bounds prune partitions
-       AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'      -- and DATE() keeps the fresh day exact
+       AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'      -- [boundary, to)
+     GROUP BY DATE(timestamp)                                      -- one sketch per day: the MV's own shape
 ) t;
 ```
 
-`HLL_UNION_AGG` accepts both a stored `HLL` column and the per-row `HLL_HASH(...)`
-output, so the two halves compose losslessly. Adding two cardinalities across the
+`HLL_UNION_AGG` accepts both a stored `HLL` column and a merged `HLL_UNION(...)`
+sketch, so the two halves compose losslessly. Adding two cardinalities across the
 boundary would over-count; this design never does.
+
+### Keeping the fresh half on the rollup
+
+The fresh half is only cheap while StarRocks serves it from the sync MV, and two
+things decide whether it does. Both were measured with `EXPLAIN` on 3.3
+(single-partition bases, as deployed):
+
+- **Reference `timestamp` only through `DATE(timestamp)`.** `mv_*_hll_daily`
+  carries `mv_dt = DATE(timestamp)` and no raw `timestamp` column, so a query
+  that mentions raw `timestamp` drops out of the rollup's candidate set:
+  `rollup: client_events` instead of `rollup: mv_client_hll_daily`. Raw bounds do
+  prune partitions on a date-partitioned base (`partitions=1/7` vs `7/7`), but
+  that is a false economy — the MV holds one row per (project, day), so all of
+  its partitions together are far cheaper than one raw partition of the base.
+- **Aggregate inside each `UNION ALL` branch.** A branch that projects one
+  `HLL_HASH(id)` per row leaves the `HLL_UNION_AGG` above the union, and
+  StarRocks cannot push that into the rollup — the branch full-scans the base
+  even with a DATE-only predicate. `HLL_UNION(HLL_HASH(id)) GROUP BY
+  DATE(timestamp)` matches the MV's own shape and rewrites. (`HLL_RAW_AGG` does
+  not.) HLL union is associative, so merging one sketch per day instead of one
+  per row is the same distinct count.
+
+The series and peak builders already aggregate in-branch, so for them the
+DATE-only predicate is enough; the totals need both.
 
 **Peak sessions** needs no boundary union: it is `MAX` over independent
 `(day, channel)` distinct counts. Read per-`(dt, channel)` cardinality from
-`sum_session_hll_daily_ch` for the history and from the base for today, then take
-the daily `MAX` (series) or the window `MAX` (total).
+`sum_session_hll_daily_ch` for the history and from the base for the fresh days,
+then take the daily `MAX` (series) or the window `MAX` (total).
 
 **Fallback.** The fallback is the `SummaryEnabled` flag, which gates the whole
 dual read and defaults off. A cluster that has not created the summaries leaves
@@ -258,21 +346,36 @@ watched — `replication_num = 1` has a tablet-quorum-stall history. TTL is
 enabled last, only after the summary is backfilled and validated.
 
 **Partition pruning under `DATE()`.** The MV design warned that wrapping
-`timestamp` in `DATE()` can lose partition pruning once the base is partitioned.
-The fresh-day total query above therefore carries **both** predicates: raw
-`timestamp` bounds so the partitioned base prunes to a single day, and
-`DATE(timestamp)` bounds so the fresh half stays exact and the MV rewrite still
-matches. `EXPLAIN` must confirm the fresh query prunes to one partition on the
-deployed StarRocks version.
+`timestamp` in `DATE()` can lose partition pruning once the base is partitioned,
+and it does: measured on 3.3, a `DATE(timestamp)` range reads every partition.
+Carrying raw `timestamp` bounds alongside it to recover the pruning is not the
+answer — it takes the query off the MV entirely, which costs far more than the
+pruning saves (see *Keeping the fresh half on the rollup*). Measured on a
+day-partitioned copy of `client_events`:
+
+```
+raw + DATE : rollup: client_events_p        partitions=1/7   -- pruned, base scan
+DATE only  : rollup: mv_client_p_hll_daily  partitions=7/7   -- unpruned, one row per day
+```
+
+So the fresh half stays DATE-only after partitioning too. What `EXPLAIN` must
+confirm on the deployed version is that it reads `mv_*_hll_daily`, not how many
+partitions it touches.
 
 ### Deployment sequencing
 
 Each step is lossless and reversible; the base scan is always a correct
 fallback. Per environment:
 
-1. Create the summary tables (empty, partitioned, 15-month TTL).
+1. Create the summary tables (empty, partitioned, 15-month TTL). A cluster whose
+   tables predate `rl_session_daily` also needs `ALTER TABLE
+   sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
+   the clause but skips it on an existing table. The rollup builds
+   asynchronously; wait for it in `desc … all` before step 3.
 2. Backfill from the base — staged per table, `session_events` last and in a
-   low-ingest window, as with the MV builds. Idempotent.
+   low-ingest window, as with the MV builds. Idempotent, and it stops before the
+   running UTC day so the summary never holds a partial day for the read path to
+   trust as complete.
 3. **Validate**: while the base still holds full history, the dual-read result
    must equal the MV-only result for a set of projects and windows. Equality
    here is the proof the union math is right, because the two paths overlap
@@ -298,10 +401,12 @@ retention, and by then the summary has been serving and validated.
 
 | Risk | Mitigation |
 |------|------------|
-| Adding cardinalities across the today boundary over-counts a subject active in both halves | Union sketches with `HLL_UNION_AGG`, take cardinality once. Summary `[from, today)` and base `[today, tomorrow)` split on the day, so there is no overlap to double count. |
-| `DATE(timestamp)` loses partition pruning once the base is partitioned, so the fresh-day scan reads every partition | Carry raw `timestamp` bounds alongside `DATE(timestamp)` on the fresh half; confirm single-partition pruning with `EXPLAIN` on the deployed version. |
+| Adding cardinalities across the boundary over-counts a subject active in both halves | Union sketches with `HLL_UNION_AGG`, take cardinality once. Summary `[from, boundary)` and base `[boundary, to)` split on the day, so there is no overlap to double count. |
+| `DATE(timestamp)` loses partition pruning once the base is partitioned, so the fresh-day scan reads every partition | Accepted: the fresh half reads the MV, which holds one row per (project, day), so every partition of it is cheaper than one raw partition of the base. Raw `timestamp` bounds would prune but would also drop the query off the MV. |
 | Repartitioning a live billion-row table (session) risks stalled ingest and quorum loss under `replication_num = 1` | New table + `INSERT SELECT` + rename swap under `PAUSE`/`RESUME ROUTINE LOAD`, in a low-ingest window, watching `ADMIN SHOW REPLICA STATUS`. Same playbook as the `session_events` redistribution. |
-| The ingest job misses a day or late events land after it runs | 7-day lookback reprocess every run; `HLL_UNION` makes repeats idempotent. CronJob history and alerting surface a failed run. |
+| `MAX(dt)` is a watermark, not a coverage set: a day missing *below* it is still served from a summary that has no row for it, and reads as zero | Accepted, and strictly narrower than what it replaces — a fixed today boundary exposed every day in the window to the same hole, where the boundary only exposes the days below the watermark. Contiguity is what the writers give it: the backfill covers full history and the CronJob reprocesses a 7-day lookback, so a hole heals within a week. Verified the failure mode by hand: with the summary holding `[D-6, D-2]` and `D`, the missing `D-1` reads as zero. |
+| A partial day in the summary would be trusted as complete, since the split trusts every day at or below `MAX(dt)` | Both writers stop before the running UTC day: the CronJob's window is `[today-7, today)` and the backfill carries the same `< DATE(UTC_TIMESTAMP())` guard. The read path's clamp to today is the second line of defense. |
+| The ingest job misses a day or late events land after it runs | 7-day lookback reprocess every run; `HLL_UNION` makes repeats idempotent. CronJob history and alerting surface a failed run. The read path splits at the summary's actual `MAX(dt)`, so a day the job has not written yet is read from the base rather than reported as zero. |
 | Summary drifts from the base over time | Periodic reconciliation comparing an overlap day's summary against a base recount; the 7-day lookback self-heals recent drift. |
 | Backfill full-scans the billion-row tables | Staged per table, `session_events` in a low-ingest window; cost is the one-time base scan (~80ns/row), as measured for the MV builds. |
 | Enabling raw TTL before the summary is trusted would lose history irrecoverably | TTL is step 6, gated on steps 1–5; validation in step 3 runs while both paths overlap. |
@@ -316,7 +421,7 @@ retention, and by then the summary has been serving and validated.
 | Kubernetes CronJob, not StarRocks `SUBMIT TASK` | Retries, run history, alerting, and ownership are native to the CronJob and the existing analytics ops tooling; a native task fails silently. |
 | Hand-written `HLL_UNION_AGG` in the Go read path | Reverses the MV design's "no schema in the server", but automatic rewrite cannot union two tables with different lifetimes. The base-scan fallback keeps clusters without the summary correct. |
 | 90-day raw retention, 15-month summary | 90 days keeps the quarter view answerable from the base fallback; 15 months is the 12-month product window plus buffer. |
-| Split at today; union across the boundary | The fresh day stays exact from the base, history comes from the summary, and the union avoids the double count a sum would introduce. |
+| Split at the summary's `MAX(dt) + 1`, not at today | The days the refresh job has not reached stay exact from the base instead of falling into a gap between the halves; the boundary self-corrects after a missed run. |
 | 7-day ingest lookback | Covers late ingestion and retries without a reconciliation job; `HLL_UNION` makes the repeat free of side effects. |
 | UTC day buckets | Unchanged from the MV design; a local-day boundary is still the reserved ingest-time-date path there. |
 

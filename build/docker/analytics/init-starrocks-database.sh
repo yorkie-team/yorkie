@@ -72,6 +72,32 @@ fi
 # no-op and dual-read history stays empty until events have been ingested. To
 # see historical points, ingest some events and re-run this backfill by hand
 # (mysql ... < init-backfill-summary.sql) — not a missing-data bug.
+echo -e 'Adding the coarse session rollup'
+# CREATE TABLE IF NOT EXISTS carries the ROLLUP clause, but skips it on a
+# cluster whose summary tables already exist -- which is every cluster the flag
+# is being turned on for. ADD ROLLUP covers those; it errors on a table that
+# already has it, hence the tolerant ||.
+mysql -h starrocks-fe -P 9030 -u root \
+  -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
+  || echo -e 'rl_session_daily may already exist, continuing...'
+
+echo -e 'Checking the coarse session rollup'
+# ADD ROLLUP builds asynchronously, so poll like the materialized views above.
+# Without it the sessions total and series still return the right numbers, they
+# just union every channel-day sketch to get them.
+attempt=0
+until mysql -h starrocks-fe -P 9030 -u root \
+  -e "desc yorkie.sum_session_hll_daily_ch all\G" 2>/dev/null | grep -q "IndexName: rl_session_daily"; do
+  attempt=$((attempt + 1))
+  if [ $attempt -ge 60 ]; then
+    echo -e 'rl_session_daily did not appear; it may still be building, or the ALTER failed'
+    break
+  fi
+  sleep 2s
+done
+[ $attempt -lt 60 ] && echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
+
+
 echo -e 'Backfilling summary tables from base history'
 mysql -h starrocks-fe -P 9030 -u root < /init-backfill-summary.sql \
   || echo -e 'Could not run the summary backfill, continuing...'

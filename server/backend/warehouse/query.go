@@ -24,10 +24,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
-// The dual-read query builders split the requested window at the UTC day today:
-// the historical part [from, today) is served by the decoupled daily HLL
-// summary tables, and the fresh part [today, to) by the base rollups. Totals
-// union the two halves' sketches and count once with HLL_UNION_AGG, so a
+// The dual-read query builders split the requested window at a caller-supplied
+// day: the historical part [from, split) is served by the decoupled daily HLL
+// summary tables, and the fresh part [split, to) by the base rollups. The split
+// day is the summary's coverage boundary rather than today, see coverage.go.
+// Totals union the two halves' sketches and count once with HLL_UNION_AGG, so a
 // subject active in both halves counts once. Note HLL_UNION_AGG already returns
 // the merged cardinality (a bigint), so it is not wrapped in HLL_CARDINALITY.
 // These builders run only when SummaryEnabled is true; the flag-off path keeps
@@ -36,7 +37,7 @@ import (
 
 // dayFmt formats a time as the StarRocks date literal used throughout. It
 // normalizes to UTC first so the summary-path literals line up with the UTC day
-// boundary from todayUTC, even when from/to arrive in the server's local zone.
+// the split lands on, even when from/to arrive in the server's local zone.
 func dayFmt(t time.Time) string {
 	return t.UTC().Format("2006-01-02")
 }
@@ -50,15 +51,20 @@ func (d metricDesc) summaryEventTypePred() string {
 	return fmt.Sprintf(" AND event_type = '%s'", d.eventType)
 }
 
-// basePred returns the fresh-half base-table predicate: raw timestamp bounds so
-// a partitioned base prunes to today, plus DATE(timestamp) bounds so the MV
-// rewrite still matches, plus the optional event_type filter.
+// basePred returns the fresh-half base-table predicate: DATE(timestamp) bounds
+// plus the optional event_type filter.
+//
+// The bounds must go through DATE(timestamp) and nothing else. The sync MV
+// mv_*_hll_daily carries only mv_dt = DATE(timestamp), not the raw timestamp
+// column, so a query that mentions raw timestamp drops out of the rollup's
+// candidate set and full-scans the base event table instead. A raw bound does
+// prune partitions on a date-partitioned base, but that is a false economy: the
+// MV holds one row per (project, day), so scanning all of its partitions is far
+// cheaper than one raw partition of the base.
 func (d metricDesc) basePred(id types.ID, fresh dayRange) string {
-	start, end := dayFmt(fresh.Start), dayFmt(fresh.End)
 	pred := fmt.Sprintf(
-		"project_id = '%s' AND timestamp >= '%s' AND timestamp < '%s' "+
-			"AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'",
-		id.String(), start, end, start, end,
+		"project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'",
+		id.String(), dayFmt(fresh.Start), dayFmt(fresh.End),
 	)
 	if d.eventType != "" {
 		pred += fmt.Sprintf(" AND event_type = '%s'", d.eventType)
@@ -66,8 +72,10 @@ func (d metricDesc) basePred(id types.ID, fresh dayRange) string {
 	return pred
 }
 
-// join wraps the non-empty parts in UNION ALL. When every part is empty it
-// returns the first part, whose empty range yields no rows.
+// join wraps the non-empty parts in UNION ALL. Every caller emits the summary
+// half whenever the fresh half is empty, so at least one part is always
+// non-empty; the all-empty fallback returns parts[0] only to keep the function
+// total.
 func join(parts []string) string {
 	nonEmpty := parts[:0:0]
 	for _, p := range parts {
@@ -83,8 +91,8 @@ func join(parts []string) string {
 
 // seriesQuery builds the per-day series for a simple distinct-count metric
 // (users, documents, channels, sessions) as a dual read.
-func (d metricDesc) seriesQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
+func (d metricDesc) seriesQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
@@ -111,10 +119,10 @@ func (d metricDesc) seriesQuery(id types.ID, from, to, today time.Time) string {
 }
 
 // totalQuery builds the whole-window distinct total as a dual read, unioning
-// the summary sketches with the fresh half's per-row sketches and taking
-// cardinality exactly once.
-func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
+// the summary's daily sketches with the fresh half's and taking cardinality
+// exactly once.
+func (d metricDesc) totalQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
@@ -125,8 +133,16 @@ func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
 		)
 	}
 	if !fresh.Empty {
+		// The fresh half aggregates per day rather than emitting one
+		// HLL_HASH(id) per row: with a per-row projection the outer
+		// HLL_UNION_AGG sits above the UNION ALL, which StarRocks cannot push
+		// into the rollup, so the branch full-scans the base even with a
+		// DATE-only predicate. HLL_UNION(HLL_HASH(id)) GROUP BY DATE(timestamp)
+		// is the MV's own shape and rewrites onto it. HLL union is associative,
+		// so merging one sketch per day instead of one per row is the same
+		// distinct count.
 		freshSQL = fmt.Sprintf(
-			"SELECT HLL_HASH(%s) AS sketch FROM %s WHERE %s",
+			"SELECT HLL_UNION(HLL_HASH(%s)) AS sketch FROM %s WHERE %s GROUP BY DATE(timestamp)",
 			d.idColumn, d.baseTable, d.basePred(id, fresh),
 		)
 	}
@@ -141,9 +157,10 @@ func (d metricDesc) totalQuery(id types.ID, from, to, today time.Time) string {
 // peakSeriesQuery builds the per-day peak-sessions-per-channel series as a dual
 // read: the daily peak is MAX over channels of the per-channel distinct
 // sessions, which needs no cross-boundary union because each day is independent.
-func peakSeriesQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
-	d := descSession
+// It is a method so the metric it reads and the coverage the caller splits on
+// cannot name different tables.
+func (d metricDesc) peakSeriesQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
@@ -175,9 +192,8 @@ func peakSeriesQuery(id types.ID, from, to, today time.Time) string {
 // peakTotalQuery builds the whole-window peak sessions per channel: the single
 // highest per-(day, channel) distinct-session count. It is a MAX over
 // independent buckets, so no cross-boundary sketch union is needed.
-func peakTotalQuery(id types.ID, from, to, today time.Time) string {
-	hist, fresh := splitWindow(from, to, today)
-	d := descSession
+func (d metricDesc) peakTotalQuery(id types.ID, from, to, split time.Time) string {
+	hist, fresh := splitWindow(from, to, split)
 
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {

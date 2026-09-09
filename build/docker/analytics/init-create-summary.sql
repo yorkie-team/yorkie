@@ -6,8 +6,8 @@ USE yorkie;
 -- tables. They are filled by a scheduled idempotent job and survive base-table
 -- partition drops, so long-retention dashboard windows keep working after
 -- raw-event TTL is enabled. The dual-read path in
--- server/backend/warehouse/starrocks.go reads them for [from, today) and the
--- base rollups for today. See docs/design/project-stats-long-retention.md.
+-- server/backend/warehouse/starrocks.go reads them for the days they cover and
+-- the base rollups for the rest. See docs/design/project-stats-long-retention.md.
 --
 -- AGGREGATE KEY + HLL_UNION makes re-inserting a day idempotent (the sketch
 -- merges). partition_live_number retains ~15 months (12-month product window +
@@ -49,6 +49,12 @@ PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
+-- channel_key in the key is what peak sessions per channel needs; the plain
+-- sessions total/series do not want it and would union every channel-day sketch
+-- of a project to count distinct sessions. The rl_session_daily rollup holds
+-- those sketches pre-merged to (project_id, dt), which StarRocks picks for the
+-- reads that omit channel_key. See docs/design/project-stats-long-retention.md
+-- for the ALTER TABLE that adds it to a summary table created before this.
 CREATE TABLE IF NOT EXISTS sum_session_hll_daily_ch (
     project_id  VARCHAR(64),
     dt          DATE,
@@ -58,6 +64,7 @@ CREATE TABLE IF NOT EXISTS sum_session_hll_daily_ch (
 AGGREGATE KEY(project_id, dt, channel_key)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
+ROLLUP (rl_session_daily (project_id, dt, session_hll))
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
 CREATE TABLE IF NOT EXISTS sum_client_hll_daily (

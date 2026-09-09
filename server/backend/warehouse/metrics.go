@@ -72,4 +72,9 @@ var (
 		hllColumn:    "session_hll",
 		byChannel:    true,
 	}
+
+	// allDescs is every metric, one per summary table, walked by the coverage
+	// probe. A metric missing from this list probes no coverage, so its reads
+	// silently fall back to base-only: right numbers, whole-history scan.
+	allDescs = []metricDesc{descUser, descDocument, descChannel, descClient, descSession}
 )

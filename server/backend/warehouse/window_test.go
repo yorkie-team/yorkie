@@ -29,7 +29,7 @@ func TestSplitWindow(t *testing.T) {
 		assert.NoError(t, err)
 		return d
 	}
-	today := day("2026-08-31")
+	split := day("2026-08-31")
 
 	cases := []struct {
 		name       string
@@ -39,8 +39,8 @@ func TestSplitWindow(t *testing.T) {
 		hEnd       string
 		fStart     string
 	}{
-		{"entirely past", "2026-08-01", "2026-08-31", false, true, "2026-08-31", ""},
-		{"entirely today", "2026-08-31", "2026-09-01", true, false, "", "2026-08-31"},
+		{"entirely before the split", "2026-08-01", "2026-08-31", false, true, "2026-08-31", ""},
+		{"entirely at or after the split", "2026-08-31", "2026-09-01", true, false, "", "2026-08-31"},
 		{"straddling", "2026-08-01", "2026-09-01", false, false, "2026-08-31", "2026-08-31"},
 		{"empty input", "2026-08-31", "2026-08-31", true, true, "", ""},
 		{"future window", "2026-09-01", "2026-09-05", true, false, "", "2026-09-01"},
@@ -48,7 +48,7 @@ func TestSplitWindow(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			hist, fresh := splitWindow(day(c.from), day(c.to), today)
+			hist, fresh := splitWindow(day(c.from), day(c.to), split)
 			assert.Equal(t, c.histEmpty, hist.Empty, "hist.Empty")
 			assert.Equal(t, c.freshEmpty, fresh.Empty, "fresh.Empty")
 			if !hist.Empty {

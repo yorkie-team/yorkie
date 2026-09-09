@@ -5,6 +5,11 @@ USE yorkie;
 -- this can be re-run safely. The scheduled daily job repeats the same SELECT
 -- for a trailing lookback window (see the devops repo's summary CronJob).
 --
+-- Every statement stops before the running UTC day. The read path splits at the
+-- summary's MAX(dt) + 1 and so trusts every day at or below MAX(dt) as
+-- complete; writing a partial current day would make that day undercount from
+-- the next UTC midnight until a later run merges the rest of it in.
+--
 -- On large clusters run these per table in a low-ingest window (session last)
 -- rather than all at once; each is a single base full scan. See
 -- docs/design/project-stats-long-retention.md and the MV migration playbook.
@@ -16,24 +21,29 @@ USE yorkie;
 INSERT INTO sum_user_hll_daily
 SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(user_id))
 FROM user_events
+WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, DATE(timestamp);
 
 INSERT INTO sum_document_hll_daily
 SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(document_key))
 FROM document_events
+WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, DATE(timestamp);
 
 INSERT INTO sum_channel_hll_daily
 SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(channel_key))
 FROM channel_events
+WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, DATE(timestamp);
 
 INSERT INTO sum_session_hll_daily_ch
 SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
 FROM session_events
+WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, DATE(timestamp), channel_key;
 
 INSERT INTO sum_client_hll_daily
 SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
 FROM client_events
+WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, event_type, DATE(timestamp);
