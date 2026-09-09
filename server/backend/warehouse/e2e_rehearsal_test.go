@@ -95,11 +95,16 @@ func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 				id, day, i, day, i%24, i%3, i%3))
 		}
 
-		exec("INSERT INTO user_events (project_id,user_id,timestamp,event_type,user_agent) VALUES %s", strings.Join(users, ","))
-		exec("INSERT INTO document_events (project_id,document_key,actor_id,timestamp,event_type) VALUES %s", strings.Join(docs, ","))
-		exec("INSERT INTO channel_events (project_id,channel_key,timestamp,event_type) VALUES %s", strings.Join(channels, ","))
-		exec("INSERT INTO client_events (project_id,client_id,timestamp,event_type) VALUES %s", strings.Join(clients, ","))
-		exec("INSERT INTO session_events (project_id,session_id,timestamp,user_id,channel_key,event_type) VALUES %s", strings.Join(sessions, ","))
+		exec("INSERT INTO user_events (project_id,user_id,timestamp,event_type,user_agent) VALUES %s",
+			strings.Join(users, ","))
+		exec("INSERT INTO document_events (project_id,document_key,actor_id,timestamp,event_type) VALUES %s",
+			strings.Join(docs, ","))
+		exec("INSERT INTO channel_events (project_id,channel_key,timestamp,event_type) VALUES %s",
+			strings.Join(channels, ","))
+		exec("INSERT INTO client_events (project_id,client_id,timestamp,event_type) VALUES %s",
+			strings.Join(clients, ","))
+		exec("INSERT INTO session_events (project_id,session_id,timestamp,user_id,channel_key,event_type) VALUES %s",
+			strings.Join(sessions, ","))
 	}
 
 	// Fill the summaries the way the refresh job does, but stopping a day short
@@ -115,7 +120,8 @@ func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 	exec(`INSERT INTO sum_channel_hll_daily SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(channel_key))
 	      FROM channel_events WHERE project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'
 	      GROUP BY project_id, DATE(timestamp)`, id, from, through)
-	exec(`INSERT INTO sum_session_hll_daily_ch SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
+	exec(`INSERT INTO sum_session_hll_daily_ch
+	      SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
 	      FROM session_events WHERE project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'
 	      GROUP BY project_id, DATE(timestamp), channel_key`, id, from, through)
 	exec(`INSERT INTO sum_client_hll_daily SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
@@ -200,7 +206,9 @@ func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
 		"active channels":  func(w Warehouse) ([]types.MetricPoint, error) { return w.GetActiveChannels(ctx, id, from, to) },
 		"active clients":   func(w Warehouse) ([]types.MetricPoint, error) { return w.GetActiveClients(ctx, id, from, to) },
 		"sessions":         func(w Warehouse) ([]types.MetricPoint, error) { return w.GetSessions(ctx, id, from, to) },
-		"peak":             func(w Warehouse) ([]types.MetricPoint, error) { return w.GetPeakSessionsPerChannel(ctx, id, from, to) },
+		"peak": func(w Warehouse) ([]types.MetricPoint, error) {
+			return w.GetPeakSessionsPerChannel(ctx, id, from, to)
+		},
 	} {
 		t.Run("series "+name, func(t *testing.T) {
 			base, err := fn(off)
