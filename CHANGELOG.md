@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.20] - 2026-09-09
+
+### Added
+
+- Add server-side offline-resumable attach (stable actor, resume, epoch) by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1969
+
+### Changed
+
+- Key watch subscriptions by the client's stable actor by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1970
+
+### Fixed
+
+- Keep the project-stats dual read on the HLL rollups and split at real coverage by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1976
+
 ## [v0.7.19] - 2026-09-03
 
 ### Added
