@@ -124,9 +124,14 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// build a snapshot, reach byte-identical state. Gating it on
 	// OpSourceUndoRedo spared only the replica that performed the undo and
 	// lost the member everywhere else, including in every snapshot built
-	// afterwards. The lookup costs one map read on an ordinary Set, whose
-	// value carries a freshly issued createdAt that nothing can be
-	// registered under.
+	// afterwards.
+	//
+	// An ordinary Set carries a freshly issued createdAt, so the lookup
+	// normally misses and costs one map read. It can hit: applying one Set
+	// twice leaves two live elements under one identity, and the lookup then
+	// answers with whichever the index holds. That is the defect filed in
+	// docs/tasks/active/20260911-duplicate-change-application-not-idempotent-todo.md,
+	// which the server's clientSeq checkpoint is what actually prevents.
 	if registered := root.FindByCreatedAt(value.CreatedAt()); registered != nil {
 		root.DeregisterElement(registered)
 	}
