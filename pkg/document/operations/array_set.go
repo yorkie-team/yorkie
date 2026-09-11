@@ -98,14 +98,27 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		return ExecutionResult{}, err
 	}
 
-	_, err = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
+	removed, err := obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
 	if err != nil {
 		return ExecutionResult{}, err
 	}
 
-	// TODO(junseo): GC logic is not implemented here
-	// because there is no way to distinguish between old and new element with same `createdAt`.
 	root.RegisterElement(value)
+
+	// NOTE(hackerwins): The element this assignment displaced has to be
+	// registered for collection. Discarding it left it charged to
+	// docSize.Live with nothing able to reach it: ten ordinary `arr[i] = x`
+	// assignments grew a one-integer document from {8,120} to {44,336} and
+	// collection reported nothing to do. docSize is what the server enforces
+	// against its size limit, so the growth is not merely cosmetic.
+	//
+	// The old TODO here said the two could not be told apart because they
+	// share a createdAt. They do not: o.createdAt names the element being
+	// displaced and value carries its own identity. A removal that lost to
+	// one already recorded comes back nil and registers nothing.
+	if removed != nil {
+		root.RegisterRemovedElementPair(obj, removed)
+	}
 
 	if previousCopy == nil {
 		return ExecutionResult{Observable: true}, nil
