@@ -102,19 +102,33 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// win the LWW comparison at all.
 	removed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
 
-	// NOTE(hackerwins): During undo/redo, this Set may restore an element
-	// under a createdAt that is already registered (set_operation.ts:98-104)
-	// -- for example, undoing a Remove re-inserts the removed element under
-	// its original identity. The stale entry must be deregistered before the
-	// restored element is registered again. It has to be the registered
-	// element that is deregistered, not the incoming copy: the copy's size and
-	// descendants are the ones about to be registered, so passing it would
-	// charge the wrong size against GC and leave the stale element's own
-	// descendants registered forever.
-	if source == OpSourceUndoRedo {
-		if registered := root.FindByCreatedAt(value.CreatedAt()); registered != nil {
-			root.DeregisterElement(registered)
-		}
+	// NOTE(hackerwins): A Set can restore an element under a createdAt that is
+	// already registered (set_operation.ts:98-104) -- undoing a Remove
+	// re-inserts the removed element under its original identity, and
+	// SetWithExecutedAt above has just handed that identity to the restored
+	// copy in the object's nodeMapByCreatedAt. Everything Root keys by
+	// createdAt must follow, or the tombstone keeps an entry naming an
+	// identity that no longer resolves to it.
+	//
+	// gcElementPairMap is the entry that matters: collection resolves
+	// pair.elem through the index that was just re-pointed, so a stale entry
+	// makes the next collection purge the restored element instead of the
+	// tombstone -- deleting live data. Deregistering is what drops it, and it
+	// has to be the registered element that is deregistered, not the incoming
+	// copy: the copy's size and descendants are the ones about to be
+	// registered, so passing it would charge the wrong size against GC and
+	// leave the stale element's own descendants registered forever.
+	//
+	// This is a condition on the state of the tree, not on who is applying:
+	// a peer receiving the undo, and the server replaying the change log to
+	// build a snapshot, reach byte-identical state. Gating it on
+	// OpSourceUndoRedo spared only the replica that performed the undo and
+	// lost the member everywhere else, including in every snapshot built
+	// afterwards. The lookup costs one map read on an ordinary Set, whose
+	// value carries a freshly issued createdAt that nothing can be
+	// registered under.
+	if registered := root.FindByCreatedAt(value.CreatedAt()); registered != nil {
+		root.DeregisterElement(registered)
 	}
 	root.RegisterElement(value)
 	if removed != nil {
