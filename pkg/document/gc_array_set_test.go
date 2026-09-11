@@ -70,6 +70,35 @@ func TestArraySetCollectsTheReplacedElement(t *testing.T) {
 			steady, doc.DocSize()))
 }
 
+// TestArraySetDoesNotExhaustTheSizeLimit pins that repeated assignment does
+// not walk a document into its size limit.
+//
+// `Update` checks MaxSizeLimit against the clone root it builds
+// (document.go:257-258), not against the root the operation is replayed on,
+// so fixing only `ArraySet.Execute` left the limit gated on an accounting
+// that still grew without bound: at a limit of 300 over a baseline of 100,
+// the eighth `arr[0] = v` was refused while `DocSize()` still reported 100.
+func TestArraySetDoesNotExhaustTheSizeLimit(t *testing.T) {
+	doc := document.New("array-set-size-limit")
+	doc.MaxSizeLimit = 300
+	require.NoError(t, doc.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetNewArray("arr").AddInteger(0)
+		return nil
+	}))
+
+	for i := 1; i <= 30; i++ {
+		require.NoError(t, doc.Update(func(r *json.Object, _ *presence.Presence) error {
+			r.GetArray("arr").SetInteger(0, i)
+			return nil
+		}), "assignment %d was refused", i)
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+	}
+
+	assert.Equal(t, `{"arr":[30]}`, doc.Marshal())
+	size := doc.DocSize()
+	assert.Equal(t, 100, size.Total())
+}
+
 // TestArraySetKeepsTheReplacedElementAddressable pins the other half: the
 // element the assignment displaced is a tombstone, not a hole. Collecting it
 // must not disturb the value that replaced it.

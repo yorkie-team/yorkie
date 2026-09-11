@@ -599,12 +599,25 @@ func (p *Array) setByIndexInternal(
 		ticket,
 	))
 
-	_, err = p.Set(createdAt, value, ticket)
+	removed, err := p.Set(createdAt, value, ticket)
 	if err != nil {
 		panic(err)
 	}
-	// TODO(junseo): GC logic is not implemented here
-	// because there is no way to distinguish between old and new element with same `createdAt`.
 	p.context.RegisterElement(value)
+
+	// NOTE(hackerwins): The displaced element has to be registered here too,
+	// not only in ArraySet.Execute. This path runs against the clone root that
+	// Update builds, and MaxSizeLimit is checked against that clone
+	// (document.go:257-258) -- not against the root the operation is later
+	// replayed on. Left out, an assignment loop trips the size limit on a
+	// document whose real size never moved: with a limit of 140 over a
+	// baseline of 100, the second `arr[0] = v` was refused while DocSize()
+	// still reported 100.
+	//
+	// json/object.go's setInternal already registers the value it replaces the
+	// same way.
+	if removed != nil {
+		p.context.RegisterRemovedElementPair(p, removed)
+	}
 	return elem
 }
