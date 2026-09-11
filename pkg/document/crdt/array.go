@@ -249,6 +249,11 @@ func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 	if err != nil {
 		return nil, err
 	}
+	// nil when the removal lost to one already recorded on the element, which
+	// mirrors what ElementRHT.DeleteByCreatedAt reports for an Object.
+	if node == nil {
+		return nil, nil
+	}
 	return node.Element(), nil
 }
 
