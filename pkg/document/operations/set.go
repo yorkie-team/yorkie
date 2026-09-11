@@ -129,9 +129,15 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// An ordinary Set carries a freshly issued createdAt, so the lookup
 	// normally misses and costs one map read. It can hit: applying one Set
 	// twice leaves two live elements under one identity, and the lookup then
-	// answers with whichever the index holds. That is the defect filed in
-	// docs/tasks/active/20260911-duplicate-change-application-not-idempotent-todo.md,
-	// which the server's clientSeq checkpoint is what actually prevents.
+	// answers with whichever the index holds. The clientSeq checkpoint does
+	// not rule that out -- it stops a change being stored twice, not applied
+	// twice. pushPack filters the list it stores and leaves reqPack.Changes
+	// intact, so pullSnapshot replays a retried pack's own changes onto a
+	// document built for a serverSeq that already includes them. That is the
+	// defect filed in
+	// docs/tasks/active/20260911-duplicate-change-application-not-idempotent-todo.md.
+	// Deregistering is the better behaviour there too: gated, the earlier
+	// copy's descendants stayed registered forever.
 	if registered := root.FindByCreatedAt(value.CreatedAt()); registered != nil {
 		root.DeregisterElement(registered)
 	}
