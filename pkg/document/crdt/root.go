@@ -256,6 +256,31 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	count := 0
 
 	for _, pair := range r.gcElementPairMap {
+		// A registered pair is a claim that its element is a tombstone, and
+		// both steps below trust it: EqualToOrAfter dereferences the ticket
+		// without checking it, and Purge deletes whatever the element's
+		// createdAt currently resolves to. An element that is registered but
+		// not removed would panic on the first and delete a live member on
+		// the second, which is the shape of every bug in this area.
+		//
+		// Nothing produces that state today -- removedAt is only ever cleared
+		// on Text and Tree nodes, which live in gcNodePairMap and have their
+		// own UnregisterGCPair path, never on an Element. Two known routes
+		// would reach it: identity-preserving revive for Elements, deferred
+		// out of this release, and RGATreeList.DeleteByCreatedAt, which hands
+		// Remove.Execute a node to register even when entry.elem.Remove
+		// declined (only when the delete ticket does not follow the element's
+		// createdAt, which a causal change log cannot produce).
+		//
+		// Skipping leaves the entry on the worklist rather than dropping it,
+		// so a revived element's size stays charged to GC until revive brings
+		// the GC->Live accounting that gcNodePairMap already has. A leak is
+		// the safe failure here; losing the element, or panicking inside a
+		// server-side snapshot build, is not.
+		if pair.elem.RemovedAt() == nil {
+			continue
+		}
+
 		if vector.EqualToOrAfter(pair.elem.RemovedAt()) {
 			if err := pair.parent.Purge(pair.elem); err != nil {
 				return 0, err
