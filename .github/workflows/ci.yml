@@ -91,6 +91,14 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Vet tag-gated reproductions
+        # Files behind a build tag are not compiled by any other job, so a
+        # refactor can break them without CI noticing. Vet compiles them
+        # without running them: the reproductions are expected to FAIL when
+        # run, and that is the point of them, so they must never be executed
+        # here. See docs/tasks/active/ for what each tag reproduces.
+        run: go vet -tags rgafuzz ./...
+
       - name: Stack
         run: docker compose -f build/docker/docker-compose.yml up --build -d
 
