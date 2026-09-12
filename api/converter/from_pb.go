@@ -894,6 +894,10 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 	if err != nil {
 		return nil, err
 	}
+	prevCreatedAt, err := fromTimeTicket(pbSetByIndex.PrevCreatedAt)
+	if err != nil {
+		return nil, err
+	}
 	elem, err := fromElement(pbSetByIndex.Value)
 	if err != nil {
 		return nil, err
@@ -905,6 +909,7 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 	return operations.NewArraySet(
 		parentCreatedAt,
 		createdAt,
+		prevCreatedAt,
 		elem,
 		executedAt,
 	), nil

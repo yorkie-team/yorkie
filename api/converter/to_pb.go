@@ -568,6 +568,7 @@ func toArraySet(setByIndex *operations.ArraySet) (*api.Operation_ArraySet_, erro
 		ArraySet: &api.Operation_ArraySet{
 			ParentCreatedAt: ToTimeTicket(setByIndex.ParentCreatedAt()),
 			CreatedAt:       ToTimeTicket(setByIndex.CreatedAt()),
+			PrevCreatedAt:   ToTimeTicket(setByIndex.PrevCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      ToTimeTicket(setByIndex.ExecutedAt()),
 		},

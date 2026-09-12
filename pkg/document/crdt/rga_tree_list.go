@@ -41,6 +41,15 @@ type RGATreeListNode struct {
 	createdAt    *time.Ticket
 	removedAt    *time.Ticket
 
+	// origin is the position ticket of the slot the creating operation named
+	// as its anchor -- the node's parent in the RGA insertion tree, not its
+	// left neighbour after the forward skip resolved. It is what lets
+	// findNextBeforeExecutedAt decide where an insert lands from what the
+	// surviving nodes say about themselves rather than from which tombstones
+	// are still linked. Nil only on the dummy head and on nodes restored from
+	// a snapshot written before origins were recorded.
+	origin *time.Ticket
+
 	prev *RGATreeListNode
 	next *RGATreeListNode
 }
@@ -150,6 +159,13 @@ func (n *RGATreeListNode) PositionCreatedAt() *time.Ticket {
 	return n.createdAt
 }
 
+// Origin returns the position ticket of the slot this node's creating
+// operation anchored on. Nil on the dummy head and on nodes restored from a
+// snapshot that predates origin recording.
+func (n *RGATreeListNode) Origin() *time.Ticket {
+	return n.origin
+}
+
 // PositionMovedAt returns the LWW timestamp of the element's move into this
 // position. Nil for insert-created positions.
 func (n *RGATreeListNode) PositionMovedAt() *time.Ticket {
@@ -254,26 +270,31 @@ func (a *RGATreeList) Add(elem Element) error {
 	return a.InsertAfter(a.LastCreatedAt(), elem, nil)
 }
 
-// AddDeadPosition appends a dead position node during snapshot restoration.
-func (a *RGATreeList) AddDeadPosition(posCreatedAt, removedAt *time.Ticket) {
+// Restore appends one position node in physical order, carrying the whole
+// position identity a snapshot or a deep copy holds: the position ticket, the
+// anchor the creating operation named, the move ticket and the removal ticket.
+// It is the single restoration primitive -- appending through Add would
+// re-derive the anchor from the current tail, which is not the anchor the
+// operation actually named and would therefore rebuild a different insertion
+// tree.
+//
+// elem may be nil, which restores a dead position slot abandoned by a move.
+// origin may be nil only for snapshots written before origins were recorded;
+// see fromJSONArray for what that costs.
+func (a *RGATreeList) Restore(
+	elem Element,
+	posCreatedAt, origin, posMovedAt, removedAt *time.Ticket,
+) error {
 	node := newBarePositionNode(posCreatedAt)
+	node.origin = origin
 	node.removedAt = removedAt
-	prevNode := a.last
-	insertNodeAfter(prevNode, node)
-	a.last = node
-	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, node.indexNode)
-	a.nodeMapByCreatedAt[posCreatedAt.Key()] = node
-}
 
-// AddMovedElement appends an element with explicit position identity during
-// snapshot restoration. The position node's createdAt is posCreatedAt, and
-// the element is recorded as having been moved at posMovedAt.
-func (a *RGATreeList) AddMovedElement(elem Element, posCreatedAt, posMovedAt *time.Ticket) error {
-	entry := &ElementEntry{elem: elem, posMovedAt: posMovedAt}
-
-	node := newBarePositionNode(posCreatedAt)
-	node.elementEntry = entry
-	entry.positionNode = node
+	if elem != nil {
+		entry := &ElementEntry{elem: elem, posMovedAt: posMovedAt}
+		node.elementEntry = entry
+		entry.positionNode = node
+		a.elementMapByCreatedAt[elem.CreatedAt().Key()] = entry
+	}
 
 	prevNode := a.last
 	insertNodeAfter(prevNode, node)
@@ -281,7 +302,6 @@ func (a *RGATreeList) AddMovedElement(elem Element, posCreatedAt, posMovedAt *ti
 
 	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, node.indexNode)
 	a.nodeMapByCreatedAt[posCreatedAt.Key()] = node
-	a.elementMapByCreatedAt[elem.CreatedAt().Key()] = entry
 	return nil
 }
 
@@ -313,10 +333,28 @@ func (a *RGATreeList) AllNodes() []*RGATreeListNode {
 	return nodes
 }
 
-// LastCreatedAt returns the position node's createdAt of the last node.
-// This is a position identity suitable for use as prevCreatedAt.
+// LastCreatedAt returns the position identity an append should anchor on: the
+// last position that still holds a live element, or the dummy head when the
+// list holds none.
+//
+// It deliberately does not return the last PHYSICAL position. A tombstone or a
+// dead slot at the tail is collectable the moment its removal is causally
+// stable, and an append that named it would then fail to apply on every replica
+// that collected -- no concurrency needed, since the appending client already
+// knows the tail is dead. An operation may only anchor on a position that is
+// alive when the operation is created; such a position cannot be collected
+// before the operation has been delivered everywhere.
+//
+// yorkie#1948 is still respected: this is a position identity, not an element
+// identity, so a moved last element resolves to the slot it now occupies rather
+// than to the dead slot it left behind.
 func (a *RGATreeList) LastCreatedAt() *time.Ticket {
-	return a.last.PositionCreatedAt()
+	for node := a.last; node != a.dummyHead; node = node.prev {
+		if !node.IsRemoved() {
+			return node.PositionCreatedAt()
+		}
+	}
+	return a.dummyHead.PositionCreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
@@ -385,7 +423,7 @@ func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode,
 // element using LWW (Last-Writer-Wins) position register semantics.
 // Returns the dead position node (if any) for GC registration.
 func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (*RGATreeListNode, error) {
-	if _, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; !ok {
+	if _, _, ok := a.resolveAnchor(prevCreatedAt); !ok {
 		return nil, fmt.Errorf("MoveAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
 
@@ -406,7 +444,16 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		if err != nil {
 			return nil, err
 		}
-		deadPosNode.removedAt = executedAt
+		// The slot is stamped with the move that BEAT it, not with its own
+		// ticket. What killed it is the winning move, and collection reads
+		// removedAt to decide whether every replica knows about the death.
+		// Stamping the loser's own ticket claims a death that everyone already
+		// knows about at the instant the slot appears, so a replica that
+		// applied the winner first may collect the slot while a replica that
+		// has not yet seen the winner still holds the element there and is
+		// still issuing operations anchored on it -- which then arrive at an
+		// anchor that no longer exists.
+		deadPosNode.removedAt = entry.posMovedAt
 		a.nodeMapByIndex.UpdateWeight(deadPosNode.indexNode)
 		return deadPosNode, nil
 	}
@@ -519,15 +566,116 @@ func (a *RGATreeList) purge(elem Element) error {
 	return nil
 }
 
+// findNextBeforeExecutedAt walks forward from the anchor to the slot the new
+// node belongs after.
+//
+// The RGA order is the preorder of the tree each node's origin defines, with
+// the children of one anchor ordered by descending position ticket. An
+// operation anchored at `anchorID` therefore lands after the anchor and after
+// the whole subtree of every child of the anchor whose ticket is newer than
+// executedAt -- and before everything else.
+//
+// The plain forward skip `for next.PositionedAt().After(executedAt)` computes
+// that same point, but only while every node between the anchor and the
+// insertion point is still linked: it infers "is this node inside a subtree I
+// am skipping" from the node's own ticket, which is sound only because a
+// subtree's root is still there to stop the walk. Collection unlinks exactly
+// those stoppers, so on a replica that collected, a node that used to sit
+// behind a tombstone with an older ticket gets skipped instead of stopped at,
+// and the two replicas order the insert differently and never recover.
+//
+// This walk instead reconstructs the ancestry from the origins the surviving
+// nodes carry. `path` holds the tickets of the cursor's ancestors below the
+// anchor, shallowest first and strictly increasing (a node's origin is always
+// causally before it, so a child's ticket is always newer than its parent's).
+// The decision reads path[0], the child of the anchor that owns the cursor's
+// subtree, which a collected intermediate node does not change as long as some
+// survivor still names it as its origin.
+//
+// On a list with nothing collected this returns exactly what the plain skip
+// returns: the first node whose subtree root is older than executedAt is the
+// first node that is itself older than executedAt.
 func (a *RGATreeList) findNextBeforeExecutedAt(
 	node *RGATreeListNode,
+	anchorID *time.Ticket,
 	executedAt *time.Ticket,
 ) *RGATreeListNode {
-	for node.next != nil && node.next.PositionedAt().After(executedAt) {
-		node = node.next
+	prev := node
+
+	// The path is bounded by the depth of the insertion tree under the anchor,
+	// which is one or two for ordinary editing; the backing array keeps the
+	// common case off the heap.
+	var buf [8]*time.Ticket
+	path := buf[:0]
+
+	for cur := node.next; cur != nil; cur = cur.next {
+		origin := cur.origin
+		if origin == nil {
+			// A node restored from a pre-origin snapshot says nothing about
+			// its ancestry; fall back to the plain ticket comparison for it.
+			if !cur.createdAt.After(executedAt) {
+				return prev
+			}
+			prev = cur
+			continue
+		}
+
+		// Unwind to the cursor's parent. Tickets increase with depth, so
+		// everything deeper than the origin is on a sibling branch.
+		for len(path) > 0 && path[len(path)-1].After(origin) {
+			path = path[:len(path)-1]
+		}
+
+		if cmp := origin.Compare(anchorID); cmp < 0 && len(path) == 0 {
+			// The origin is above the anchor, so the walk has left the
+			// anchor's subtree entirely.
+			return prev
+		} else if cmp != 0 &&
+			(len(path) == 0 || path[len(path)-1].Compare(origin) != 0) {
+			// The parent is gone -- collected, or never delivered here. Its
+			// ticket survives on this child, which is all the order needs.
+			path = append(path, origin)
+		}
+		path = append(path, cur.createdAt)
+
+		if !path[0].After(executedAt) {
+			return prev
+		}
+		prev = cur
 	}
 
-	return node
+	return prev
+}
+
+// resolveAnchor finds where an operation's prevCreatedAt sits, and returns the
+// node the forward walk should start from together with the anchor's own
+// position ticket -- which is not the same thing once the anchor has been
+// collected.
+//
+// A collected anchor is not necessarily lost. Its children still name it as
+// their origin, and a parent is immediately followed by its children, so the
+// first node in list order that names it marks the slot it used to occupy.
+// Resolving that way is what keeps the insertion point independent of whether
+// this replica has collected: falling through to elementMapByCreatedAt instead,
+// as the plain lookup does, silently re-points the operation at wherever the
+// element happens to live now, which is a different place in the list.
+func (a *RGATreeList) resolveAnchor(prevCreatedAt *time.Ticket) (*RGATreeListNode, *time.Ticket, bool) {
+	if node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; ok {
+		return node, node.createdAt, true
+	}
+
+	for cur := a.dummyHead.next; cur != nil; cur = cur.next {
+		if cur.origin != nil && cur.origin.Compare(prevCreatedAt) == 0 {
+			return cur.prev, prevCreatedAt, true
+		}
+	}
+
+	// Nothing left names it: the anchor was collected together with everything
+	// that hung off it, so there is no evidence of where it stood.
+	if entry, ok := a.elementMapByCreatedAt[prevCreatedAt.Key()]; ok {
+		return entry.positionNode, entry.positionNode.createdAt, true
+	}
+	return nil, nil, false
 }
 
 func (a *RGATreeList) release(node *RGATreeListNode) {
@@ -552,21 +700,16 @@ func (a *RGATreeList) insertAfter(
 	value Element,
 	executedAt *time.Ticket,
 ) (*RGATreeListNode, error) {
-	// prevCreatedAt is a position node identity. Look up in nodeMapByCreatedAt
-	// first (covers both live and dead position nodes), then fall back to
-	// elementMapByCreatedAt for backward compatibility with element identity.
-	var startNode *RGATreeListNode
-	if node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; ok {
-		startNode = node
-	} else if entry, ok := a.elementMapByCreatedAt[prevCreatedAt.Key()]; ok {
-		startNode = entry.positionNode
-	} else {
+	// prevCreatedAt is a position node identity.
+	startNode, anchorID, ok := a.resolveAnchor(prevCreatedAt)
+	if !ok {
 		return nil, fmt.Errorf("insertAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
 
-	prevNode := a.findNextBeforeExecutedAt(startNode, executedAt)
+	prevNode := a.findNextBeforeExecutedAt(startNode, anchorID, executedAt)
 
 	newNode := newRGATreeListNodeAfter(prevNode, value)
+	newNode.origin = anchorID
 	if prevNode == a.last {
 		a.last = newNode
 	}
@@ -584,14 +727,15 @@ func (a *RGATreeList) insertPositionAfter(
 	prevCreatedAt *time.Ticket,
 	executedAt *time.Ticket,
 ) (*RGATreeListNode, error) {
-	startNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
+	startNode, anchorID, ok := a.resolveAnchor(prevCreatedAt)
 	if !ok {
 		return nil, fmt.Errorf("insertPositionAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
 
-	prevNode := a.findNextBeforeExecutedAt(startNode, executedAt)
+	prevNode := a.findNextBeforeExecutedAt(startNode, anchorID, executedAt)
 
 	newNode := newBarePositionNode(executedAt)
+	newNode.origin = anchorID
 	insertNodeAfter(prevNode, newNode)
 	if prevNode == a.last {
 		a.last = newNode
@@ -604,7 +748,7 @@ func (a *RGATreeList) insertPositionAfter(
 
 // Set sets the given element at the given creation time.
 func (a *RGATreeList) Set(
-	createdAt *time.Ticket,
+	createdAt, prevCreatedAt *time.Ticket,
 	element Element,
 	executedAt *time.Ticket,
 ) (*RGATreeListNode, error) {
@@ -612,10 +756,15 @@ func (a *RGATreeList) Set(
 		return nil, fmt.Errorf("set %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	// Use the element's original position (via nodeMapByCreatedAt[createdAt])
-	// so that Set always inserts at the position where the element was when
-	// the Set operation was created, regardless of concurrent moves.
-	_, err := a.insertAfter(createdAt, element, executedAt)
+	// prevCreatedAt is the slot the originating client chose while it was
+	// alive. Falling back to createdAt -- the element's ORIGINAL slot -- is
+	// only for operations that predate the field: once a move has abandoned
+	// that slot it is collectable, and the assignment then lands in a
+	// different place on a replica that collected it.
+	if prevCreatedAt == nil {
+		prevCreatedAt = createdAt
+	}
+	_, err := a.insertAfter(prevCreatedAt, element, executedAt)
 	if err != nil {
 		return nil, nil
 	}

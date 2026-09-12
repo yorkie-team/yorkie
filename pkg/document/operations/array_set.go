@@ -29,6 +29,15 @@ type ArraySet struct {
 	// createdAt is the creation time of the target element to set.
 	createdAt *time.Ticket
 
+	// prevCreatedAt is the position slot the replacement anchors on. The
+	// creating client picks a slot that is alive at that moment, which
+	// createdAt -- the element's ORIGINAL slot -- is not once a move has
+	// abandoned it: that slot is collectable, and an operation anchored on it
+	// lands somewhere else on every replica that collected. Nil for operations
+	// decoded from a client that predates the field, which fall back to
+	// createdAt.
+	prevCreatedAt *time.Ticket
+
 	// value is an element set by the set_by_index operations.
 	value crdt.Element
 
@@ -40,15 +49,23 @@ type ArraySet struct {
 func NewArraySet(
 	parentCreatedAt *time.Ticket,
 	createdAt *time.Ticket,
+	prevCreatedAt *time.Ticket,
 	value crdt.Element,
 	executedAt *time.Ticket,
 ) *ArraySet {
 	return &ArraySet{
 		parentCreatedAt: parentCreatedAt,
 		createdAt:       createdAt,
+		prevCreatedAt:   prevCreatedAt,
 		value:           value,
 		executedAt:      executedAt,
 	}
+}
+
+// PrevCreatedAt returns the position slot the replacement anchors on, or nil
+// when the operation carries none.
+func (o *ArraySet) PrevCreatedAt() *time.Ticket {
+	return o.prevCreatedAt
 }
 
 // Execute executes this operation on the given document(`root`).
@@ -94,7 +111,11 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		return ExecutionResult{}, err
 	}
 
-	if err := obj.InsertAfter(o.createdAt, value, o.executedAt); err != nil {
+	prevCreatedAt := o.prevCreatedAt
+	if prevCreatedAt == nil {
+		prevCreatedAt = o.createdAt
+	}
+	if err := obj.InsertAfter(prevCreatedAt, value, o.executedAt); err != nil {
 		return ExecutionResult{}, err
 	}
 
@@ -123,7 +144,11 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 	if previousCopy == nil {
 		return ExecutionResult{Observable: true}, nil
 	}
-	reverseOp := NewArraySet(o.parentCreatedAt, value.CreatedAt(), previousCopy, o.executedAt)
+	// The reverse anchors on the slot this assignment just created, which is
+	// alive by construction and carries the new value's identity.
+	reverseOp := NewArraySet(
+		o.parentCreatedAt, value.CreatedAt(), value.CreatedAt(), previousCopy, o.executedAt,
+	)
 	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 

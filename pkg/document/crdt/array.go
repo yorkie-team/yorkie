@@ -169,7 +169,11 @@ func (a *Array) DeepCopy() (Element, error) {
 		if node.Element() == nil {
 			// Dead position node (abandoned by a move).
 			if node.RemovedAt() != nil {
-				elements.AddDeadPosition(node.PositionCreatedAt(), node.RemovedAt())
+				if err := elements.Restore(
+					nil, node.PositionCreatedAt(), node.Origin(), nil, node.RemovedAt(),
+				); err != nil {
+					return nil, err
+				}
 			}
 			continue
 		}
@@ -179,16 +183,12 @@ func (a *Array) DeepCopy() (Element, error) {
 			return nil, err
 		}
 
-		if node.PositionMovedAt() != nil {
-			if err = elements.AddMovedElement(
-				copiedNode, node.PositionCreatedAt(), node.PositionMovedAt(),
-			); err != nil {
-				return nil, err
-			}
-		} else {
-			if err = elements.Add(copiedNode); err != nil {
-				return nil, err
-			}
+		// The copy has to carry the anchor the original operation named, not
+		// re-derive one from the tail: the insertion rule reads it.
+		if err = elements.Restore(
+			copiedNode, node.PositionCreatedAt(), node.Origin(), node.PositionMovedAt(), nil,
+		); err != nil {
+			return nil, err
 		}
 	}
 
@@ -263,8 +263,12 @@ func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 }
 
 // Set sets the given element at the given position of the creation time.
-func (a *Array) Set(createdAt *time.Ticket, element Element, executedAt *time.Ticket) (Element, error) {
-	node, err := a.elements.Set(createdAt, element, executedAt)
+func (a *Array) Set(
+	createdAt, prevCreatedAt *time.Ticket,
+	element Element,
+	executedAt *time.Ticket,
+) (Element, error) {
+	node, err := a.elements.Set(createdAt, prevCreatedAt, element, executedAt)
 	if err != nil {
 		return nil, err
 	}

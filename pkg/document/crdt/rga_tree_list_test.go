@@ -332,7 +332,9 @@ func TestRGATreeListConcurrencyTable(t *testing.T) {
 		// Order 1: set then move
 		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
 		newElem1, _ := crdt.NewPrimitive("5", tSet)
-		_, err := list1.Set(t2, newElem1, tSet) // set elem at 2's position to 5
+		// The set was issued before the move, so it anchors on the slot the
+		// element held then, which is its original one.
+		_, err := list1.Set(t2, t2, newElem1, tSet) // set elem at 2's position to 5
 		assert.NoError(t, err)
 		_, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
 		assert.NoError(t, err)
@@ -343,7 +345,7 @@ func TestRGATreeListConcurrencyTable(t *testing.T) {
 		_, err = list2.MoveAfter(t4, t2, tMove)
 		assert.NoError(t, err)
 		newElem2, _ := crdt.NewPrimitive("5", tSet)
-		_, err = list2.Set(t2, newElem2, tSet)
+		_, err = list2.Set(t2, t2, newElem2, tSet)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 

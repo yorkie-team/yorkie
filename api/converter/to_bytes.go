@@ -218,12 +218,34 @@ func toRHTNodes(rhtNodes []*crdt.ElementRHTNode) ([]*api.RHTNode, error) {
 
 func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 	var pbRGANodes []*api.RGANode
+
+	// The anchor is written only when it is not the node physically before it
+	// in this stream, which is what it is for every node that was not placed
+	// after a forward skip -- the overwhelming majority. The first node always
+	// writes one, so a decoder can tell a stream that omits anchors by
+	// convention from one written before anchors existed.
+	var prevPos *crdt.RGATreeListNode
+	pbOrigin := func(node *crdt.RGATreeListNode) *api.TimeTicket {
+		origin := node.Origin()
+		if origin == nil {
+			return nil
+		}
+		if prevPos != nil && origin.Compare(prevPos.PositionCreatedAt()) == 0 {
+			return nil
+		}
+		return ToTimeTicket(origin)
+	}
+
 	for _, rgaNode := range rgaNodes {
+		origin := pbOrigin(rgaNode)
+		prevPos = rgaNode
+
 		if rgaNode.Element() == nil {
 			// Dead position node (abandoned by a move).
 			pbRGANodes = append(pbRGANodes, &api.RGANode{
 				PositionCreatedAt: ToTimeTicket(rgaNode.PositionCreatedAt()),
 				PositionRemovedAt: ToTimeTicket(rgaNode.RemovedAt()),
+				PositionOrigin:    origin,
 			})
 			continue
 		}
@@ -233,7 +255,7 @@ func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 			return nil, err
 		}
 
-		pbNode := &api.RGANode{Element: pbElem}
+		pbNode := &api.RGANode{Element: pbElem, PositionOrigin: origin}
 		if rgaNode.PositionMovedAt() != nil {
 			pbNode.PositionMovedAt = ToTimeTicket(rgaNode.PositionMovedAt())
 			pbNode.PositionCreatedAt = ToTimeTicket(rgaNode.PositionCreatedAt())

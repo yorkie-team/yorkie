@@ -592,14 +592,23 @@ func (p *Array) setByIndexInternal(
 	if err != nil {
 		panic(err)
 	}
+	// Anchor on the slot the element occupies NOW, not on the slot it was
+	// created in: a move may already have abandoned that one, and an abandoned
+	// slot is collectable.
+	prevCreatedAt, err := p.Array.PosCreatedAt(createdAt)
+	if err != nil {
+		prevCreatedAt = createdAt
+	}
+
 	p.context.Push(operations.NewArraySet(
 		p.Array.CreatedAt(),
 		createdAt,
+		prevCreatedAt,
 		copiedValue,
 		ticket,
 	))
 
-	removed, err := p.Set(createdAt, value, ticket)
+	removed, err := p.Set(createdAt, prevCreatedAt, value, ticket)
 	if err != nil {
 		panic(err)
 	}

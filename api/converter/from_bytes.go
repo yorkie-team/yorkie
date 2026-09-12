@@ -188,7 +188,24 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		return nil, fmt.Errorf("json array is nil")
 	}
 	elements := crdt.NewRGATreeList()
+
+	// toRGANodes omits the anchor when it is the physically preceding node, and
+	// always writes one on the first node. So a first node without an anchor
+	// means the whole array predates the field: those nodes keep their places,
+	// but the insertion rule has to fall back to the plain ticket comparison
+	// for them, which is the behaviour the field exists to replace.
+	legacy := len(pbArr.Nodes) > 0 && pbArr.Nodes[0].PositionOrigin == nil
+	var prevPos *time.Ticket
+
 	for _, pbNode := range pbArr.Nodes {
+		origin, err := fromTimeTicket(pbNode.PositionOrigin)
+		if err != nil {
+			return nil, err
+		}
+		if origin == nil && !legacy {
+			origin = prevPos
+		}
+
 		if pbNode.Element == nil {
 			// Dead position node (abandoned by a move).
 			if pbNode.PositionCreatedAt == nil || pbNode.PositionRemovedAt == nil {
@@ -202,7 +219,10 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 			if err != nil {
 				return nil, err
 			}
-			elements.AddDeadPosition(posCreatedAt, posRemovedAt)
+			if err = elements.Restore(nil, posCreatedAt, origin, nil, posRemovedAt); err != nil {
+				return nil, err
+			}
+			prevPos = posCreatedAt
 			continue
 		}
 
@@ -219,22 +239,19 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 			return nil, err
 		}
 
+		posCreatedAt := elem.CreatedAt()
 		if posMovedAt != nil {
 			if pbNode.PositionCreatedAt == nil {
 				return nil, fmt.Errorf("moved RGA node missing position_created_at")
 			}
-			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
-			if err != nil {
-				return nil, err
-			}
-			if err = elements.AddMovedElement(elem, posCreatedAt, posMovedAt); err != nil {
-				return nil, err
-			}
-		} else {
-			if err = elements.Add(elem); err != nil {
+			if posCreatedAt, err = fromTimeTicket(pbNode.PositionCreatedAt); err != nil {
 				return nil, err
 			}
 		}
+		if err = elements.Restore(elem, posCreatedAt, origin, posMovedAt, nil); err != nil {
+			return nil, err
+		}
+		prevPos = posCreatedAt
 	}
 
 	createdAt, err := fromTimeTicket(pbArr.CreatedAt)
