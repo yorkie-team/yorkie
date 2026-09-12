@@ -136,10 +136,12 @@ successor barrier addresses one:
 `pkg/document/gc_rga_fuzz_test.go` in this filing holds the harness, skipped
 because it fails on `main` — that is the point of it. Remove the skip to run it.
 
-Attempt 2's four targeted regression tests (array remove+move, concurrent moves
-with a server-computed `minVV`, the same defect in `Text`, the same defect in
-`Tree`) and its production diff are preserved outside the repository; all four
-were verified red on `main` and green with the fix.
+Attempt 2 is preserved on the branch `wip/rga-successor-barrier`, not for merge.
+It carries the successor-barrier change and four targeted regression tests —
+array remove+move, concurrent moves with a server-computed `minVV`, the same
+defect in `Text`, the same defect in `Tree` — each verified red on `main` and
+green with the fix. A third attempt should start from there rather than from
+scratch.
 
 ## See Also
 
