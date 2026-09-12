@@ -234,3 +234,150 @@ func TestUndoneArrayRemoveSurvivesCollection(t *testing.T) {
 	assert.Equal(t, 0, d1.GarbageLen())
 	assert.Equal(t, 0, d2.GarbageLen())
 }
+
+// broadcastChanges is deliverChanges for more than one receiver. The ack has
+// to happen once, after every receiver has the pack: it clears the sender's
+// localChanges, so acking per receiver would leave the second one with
+// nothing to apply.
+func broadcastChanges(t *testing.T, from *document.Document, tos ...*document.Document) {
+	t.Helper()
+	pack := from.CreateChangePack()
+	for _, to := range tos {
+		require.NoError(t, to.ApplyChangePack(change.NewPack(
+			pack.DocumentKey,
+			change.NewCheckpoint(0, 0),
+			pack.Changes,
+			time.InitialVersionVector,
+			nil,
+		)))
+	}
+	require.NoError(t, from.ApplyChangePack(change.NewPack(
+		pack.DocumentKey,
+		pack.Checkpoint,
+		nil,
+		time.InitialVersionVector,
+		nil,
+	)))
+}
+
+// TestRestoredContainerKeepsForeignDescendantsAddressable pins that restoring
+// a container does not cost the identities of members it does not carry.
+//
+// The reverse of a Remove is a Set of `value.DeepCopy()`, taken when the
+// removal was recorded. A peer that added a member into the container after
+// that copy was taken has a tombstone whose descendant set is a strict
+// superset of the copy's. Retiring the tombstone by deregistering it and its
+// descendants evicts those extra members from `elementMap`, and nothing puts
+// them back -- so the next change addressed at one of them fails with
+// ErrNotApplicableDataType.
+//
+// That failure is not confined to the replica it happens on. The server
+// rebuilds documents and snapshots by replaying the stored change log
+// (`server/packs/snapshot.go`, with OpSourceReplay), so a change that cannot
+// apply makes the document unloadable from then on, for everyone.
+//
+// The restored container still diverges -- d2's member is not in the copy, so
+// its edit lands on an orphaned subtree and is invisible. That is the
+// identity-preserving revive work this release defers. What must hold here is
+// narrower and is the whole point of the release: the change log stays
+// replayable.
+func TestRestoredContainerKeepsForeignDescendantsAddressable(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		collect bool
+	}{
+		{"undo arriving as a remote change", false},
+		// The server collects between syncs, so the tombstone is gone by the
+		// time the late change arrives. Nothing may depend on it still being
+		// registered.
+		{"with a collection pass before the late change", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d1 := document.New("restore-foreign")
+			d2 := document.New("restore-foreign")
+			d3 := document.New("restore-foreign")
+
+			require.NoError(t, d1.Update(func(r *json.Object, _ *presence.Presence) error {
+				r.SetNewObject("obj").SetInteger("k", 1)
+				return nil
+			}))
+			broadcastChanges(t, d1, d2, d3)
+
+			// d2 adds a member inside obj. d1 never sees it, so the copy its
+			// undo carries will not contain it.
+			require.NoError(t, d2.Update(func(r *json.Object, _ *presence.Presence) error {
+				r.GetObject("obj").SetNewObject("n").SetInteger("y", 1)
+				return nil
+			}))
+			broadcastChanges(t, d2, d3)
+
+			require.NoError(t, d1.Update(func(r *json.Object, _ *presence.Presence) error {
+				r.Delete("obj")
+				return nil
+			}, "remove obj"))
+			require.NoError(t, d1.Undo())
+			deliverChanges(t, d1, d3)
+
+			if tc.collect {
+				d3.GarbageCollect(helper.MaxVersionVector(
+					d1.ActorID(), d2.ActorID(), d3.ActorID()))
+			}
+
+			// d2, which has not seen the removal, edits the member it added.
+			require.NoError(t, d2.Update(func(r *json.Object, _ *presence.Presence) error {
+				r.GetObject("obj").GetObject("n").SetInteger("x", 5)
+				return nil
+			}))
+
+			pack := d2.CreateChangePack()
+			assert.NoError(t, d3.ApplyChangePack(change.NewPack(
+				pack.DocumentKey,
+				change.NewCheckpoint(0, 0),
+				pack.Changes,
+				time.InitialVersionVector,
+				nil,
+			)), "the peer's change no longer applies, so the stored change log is unreplayable")
+		})
+	}
+}
+
+// TestRepeatedRestoreAndRemoveCollects pins that a createdAt can be restored
+// and removed again without collection tripping over the tombstones that
+// accumulate under it.
+//
+// Each cycle leaves another tombstone answering to the same createdAt. A
+// collection worklist or a purge that resolves an entry through a
+// createdAt-keyed index rather than through the element it was registered for
+// will, on the second pass, either unlink a live member on a dead one's
+// behalf or fail to find the node at all -- and `Document.GarbageCollect`
+// turns that error into a panic.
+//
+// Map iteration order decides which entry a pass reaches first, so a single
+// run proves little; this repeats.
+func TestRepeatedRestoreAndRemoveCollects(t *testing.T) {
+	for range 200 {
+		d := document.New("restore-repeat")
+
+		require.NoError(t, d.Update(func(r *json.Object, _ *presence.Presence) error {
+			r.SetNewObject("o").SetInteger("k", 1)
+			return nil
+		}))
+
+		for range 3 {
+			require.NoError(t, d.Update(func(r *json.Object, _ *presence.Presence) error {
+				r.Delete("o")
+				return nil
+			}, "remove o"))
+			require.NoError(t, d.Undo())
+		}
+
+		require.NoError(t, d.Update(func(r *json.Object, _ *presence.Presence) error {
+			r.Delete("o")
+			return nil
+		}, "remove o"))
+
+		d.GarbageCollect(helper.MaxVersionVector(d.ActorID()))
+		assert.Equal(t, `{}`, d.Marshal())
+		assert.Equal(t, 0, d.GarbageLen())
+	}
+}
