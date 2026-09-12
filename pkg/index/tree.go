@@ -755,6 +755,28 @@ func (n *Node[V]) HasTextChild() bool {
 	return true
 }
 
+// NextSiblingOf returns the child that follows the given child among this
+// node's children, removed ones included, or nil when it is the last or not a
+// child at all.
+//
+// Children(true) followed by OffsetOfChild would answer the same question, but
+// it copies the whole children slice and walks it twice. Garbage collection
+// asks this once per node it purges, so on a parent with many children that
+// turns a collection pass into quadratic time over freshly allocated slices.
+func (n *Node[V]) NextSiblingOf(child *Node[V]) *Node[V] {
+	for i, c := range n.children {
+		if c != child {
+			continue
+		}
+		if i+1 < len(n.children) {
+			return n.children[i+1]
+		}
+		return nil
+	}
+
+	return nil
+}
+
 // OffsetOfChild returns offset of children of the given node.
 func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 	for i, child := range n.children {

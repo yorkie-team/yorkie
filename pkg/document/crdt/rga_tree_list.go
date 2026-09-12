@@ -315,8 +315,53 @@ func (a *RGATreeList) AllNodes() []*RGATreeListNode {
 
 // LastCreatedAt returns the position node's createdAt of the last node.
 // This is a position identity suitable for use as prevCreatedAt.
+//
+// It reports the last PHYSICAL node, tombstones included, so it is the right
+// anchor only while rebuilding a list whose physical order is already known
+// (DeepCopy, snapshot restore). An operation that will be sent to peers must
+// use LastLiveCreatedAt instead -- see the note there.
 func (a *RGATreeList) LastCreatedAt() *time.Ticket {
 	return a.last.PositionCreatedAt()
+}
+
+// LastLiveCreatedAt returns the position identity of the last node that still
+// holds a live element, or the dummy head when there is none.
+//
+// An operation names a node, and every replica has to be able to resolve that
+// name for as long as the operation can still arrive. Collection is gated on
+// removedAt being covered by the minimum version vector, which says every
+// replica has SEEN the removal -- it does not say no replica will NAME the node
+// again, and appending names the tail unconditionally. A replica that has not
+// collected yet still has the tail tombstone, names it, and the append then
+// fails to resolve on every replica that has (ErrChildNotFound), permanently,
+// including the server's replay.
+//
+// Anchoring on the last live node closes that: a live node cannot be collected
+// (removedAt is nil), and by the time its own removal is covered by the minimum
+// version vector every operation that named it is already on the server's log,
+// so it is applied before the purge that unlinks it. The dummy head is never
+// collected, so an all-tombstone list still has an anchor.
+//
+// The appended node lands before any trailing tombstones rather than after
+// them, which is the same visible order and becomes the same physical order as
+// soon as those tombstones are collected.
+func (a *RGATreeList) LastLiveCreatedAt() *time.Ticket {
+	// nodeMapByIndex weights removed nodes at zero, so Len is the number of
+	// live ones and Find walks straight to the last of them. Scanning back
+	// from a.last would answer the same question but in time proportional to
+	// the run of tombstones in front of it, which turns clear-then-refill
+	// into quadratic work: 2000 deletes at the tail made a single append 5x
+	// slower on BenchmarkArrayAppendOverTombstoneTail.
+	n := a.nodeMapByIndex.Len()
+	if n == 0 {
+		return a.dummyHead.PositionCreatedAt()
+	}
+
+	node, err := a.nodeMapByIndex.Find(n - 1)
+	if err != nil || node == nil {
+		return a.dummyHead.PositionCreatedAt()
+	}
+	return node.Value().PositionCreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
@@ -406,7 +451,25 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		if err != nil {
 			return nil, err
 		}
-		deadPosNode.removedAt = executedAt
+
+		// removedAt on a position slot is what authorises collection to unlink
+		// it, so it has to mean "no replica still parks this element here".
+		// The move that took the element away is the ticket that means that:
+		// once the version vector covers it, every replica has applied it, and
+		// LWW puts the element somewhere later on all of them.
+		//
+		// executedAt does not mean that. This branch runs on a replica that
+		// saw the winning move first, so the slot this losing move would have
+		// filled is born dead -- but a replica that saw the moves in the other
+		// order has the element sitting on it right now, and hands this slot
+		// out as the anchor for anything inserted after that element
+		// (json/array.go's PosCreatedAt). Collecting on executedAt collects a
+		// slot those replicas are still naming, and the insert that names it
+		// then fails to apply here, permanently, including on the server's
+		// replay. entry.posMovedAt is the winning move and is later than
+		// executedAt by the branch condition, so this is strictly more
+		// conservative.
+		deadPosNode.removedAt = entry.posMovedAt
 		a.nodeMapByIndex.UpdateWeight(deadPosNode.indexNode)
 		return deadPosNode, nil
 	}
@@ -496,6 +559,76 @@ func (a *RGATreeList) Purge(child GCChild) error {
 	}
 	a.release(node)
 	return nil
+}
+
+// PurgeBarrierAt implements GCBarrier[GCChild] for the dead position nodes a
+// move leaves behind. Two things have to be covered before one may be unlinked:
+// the ticket findNextBeforeExecutedAt would read in its place, and the ticket
+// that retires the last name still pointing at this slot.
+func (a *RGATreeList) PurgeBarrierAt(child GCChild) PurgeBarrier {
+	node, ok := child.(*RGATreeListNode)
+	if !ok {
+		return PurgeBarrier{}
+	}
+	return PurgeBarrier{successorBarrierAt(node), a.nameBarrierAt(node)}
+}
+
+// purgeBarrierAt is the same barrier for a removed element, reached through the
+// position node currently holding it.
+func (a *RGATreeList) purgeBarrierAt(elem Element) PurgeBarrier {
+	entry, ok := a.elementMapByCreatedAt[elem.CreatedAt().Key()]
+	// Same identity guard as purge below: an entry now holding a different
+	// element is not this element's position, and purge declines anyway.
+	if !ok || entry.elem != elem {
+		return PurgeBarrier{}
+	}
+	return PurgeBarrier{successorBarrierAt(entry.positionNode)}
+}
+
+// successorBarrierAt returns the positioning ticket of the node that would take
+// over as findNextBeforeExecutedAt's stopping point once the given node is
+// unlinked. Nil at the tail: with nothing behind it, unlinking cannot send an
+// insert past anything.
+func successorBarrierAt(node *RGATreeListNode) *time.Ticket {
+	if node == nil || node.next == nil {
+		return nil
+	}
+	return node.next.PositionedAt()
+}
+
+// nameBarrierAt returns the ticket that has to be covered before nothing can
+// name this slot any more.
+//
+// A slot a move abandoned is named by POSITION identity, and removedAt already
+// covers that: it is the ticket of the move that took the element away, so a
+// vector that covers it is one where every replica has applied that move and
+// none of them will hand this slot out as an anchor again.
+//
+// The element's FIRST slot is different, because it is also named by ELEMENT
+// identity. ArraySet anchors on the element's createdAt and insertAfter
+// resolves that through nodeMapByCreatedAt, which is this slot -- deliberately,
+// so that an assignment lands where the element was written rather than
+// wherever a concurrent move has since put it (see Set). Unlinking the slot
+// does not make that operation fail, which would at least be visible: the
+// lookup falls through to elementMapByCreatedAt and the assignment silently
+// anchors on the element's CURRENT position instead, which is a different place
+// in the list on a replica that has collected than on one that has not.
+//
+// The element's own removal is what retires the name, and it is the removal
+// itself that has to be covered rather than merely recorded: two replicas can
+// assign over the same element concurrently, and the one whose assignment lost
+// still named this slot. Once the element is collected this lookup stops
+// finding it and the slot drains on removedAt like any other. A nil removedAt
+// is an element that is still live, which no vector covers.
+func (a *RGATreeList) nameBarrierAt(node *RGATreeListNode) *time.Ticket {
+	entry, ok := a.elementMapByCreatedAt[node.createdAt.Key()]
+	if !ok {
+		return nil
+	}
+	if removedAt := entry.elem.RemovedAt(); removedAt != nil {
+		return removedAt
+	}
+	return time.MaxTicket
 }
 
 // purge physically purge child element.

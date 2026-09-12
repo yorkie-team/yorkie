@@ -493,7 +493,7 @@ func (p *Array) Len() int {
 func (p *Array) addInternal(
 	creator func(ticket *time.Ticket) crdt.Element,
 ) crdt.Element {
-	return p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
+	return p.insertAfterInternal(p.Array.LastLiveCreatedAt(), creator)
 }
 
 func (p *Array) insertAfterInternal(
@@ -577,7 +577,7 @@ func (p *Array) MoveFront(createdAt *time.Ticket) {
 }
 
 func (p *Array) MoveLast(createdAt *time.Ticket) {
-	p.moveAfterInternal(p.LastCreatedAt(), createdAt)
+	p.moveAfterInternal(p.LastLiveCreatedAt(), createdAt)
 }
 
 func (p *Array) setByIndexInternal(

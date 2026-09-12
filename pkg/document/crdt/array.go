@@ -48,6 +48,12 @@ func (a *Array) Purge(elem Element) error {
 	return a.elements.purge(elem)
 }
 
+// PurgeBarrierAt implements GCBarrier[Element]: purging an element unlinks the
+// position node holding it, so the array's order decides when that is safe.
+func (a *Array) PurgeBarrierAt(elem Element) PurgeBarrier {
+	return a.elements.purgeBarrierAt(elem)
+}
+
 // Add adds the given element at the last.
 func (a *Array) Add(elem Element) error {
 	return a.elements.Add(elem)
@@ -241,6 +247,13 @@ func (a *Array) Remove(removedAt *time.Ticket) bool {
 // LastCreatedAt returns the creation time of the last element.
 func (a *Array) LastCreatedAt() *time.Ticket {
 	return a.elements.LastCreatedAt()
+}
+
+// LastLiveCreatedAt returns the position identity of the last live element, the
+// anchor an append that will be sent to peers has to use. See
+// RGATreeList.LastLiveCreatedAt.
+func (a *Array) LastLiveCreatedAt() *time.Ticket {
+	return a.elements.LastLiveCreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
