@@ -505,6 +505,13 @@ func (a *RGATreeList) purge(elem Element) error {
 		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
 
+	// Same guard as ElementRHT.purge: releasing the position node of an entry
+	// that now holds a different element would unlink a live one on a
+	// tombstone's behalf.
+	if entry.elem != elem {
+		return nil
+	}
+
 	node := entry.positionNode
 	delete(a.elementMapByCreatedAt, elem.CreatedAt().Key())
 	a.release(node)

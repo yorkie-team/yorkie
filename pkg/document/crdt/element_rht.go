@@ -275,6 +275,16 @@ func (rht *ElementRHT) purge(elem Element) error {
 	if !ok {
 		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
+
+	// The slot names a creation time, not an element. Undo of a Remove
+	// re-inserts a copy under the original createdAt and SetWithExecutedAt
+	// re-points this map at it, so unlinking whatever the key answers with
+	// would delete a live member on a tombstone's behalf. The tombstone is
+	// already off both maps by then, so there is nothing left to unlink.
+	if node.elem != elem {
+		return nil
+	}
+
 	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 
 	nodeByKey, ok := rht.nodeMapByKey[node.key]

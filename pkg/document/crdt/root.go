@@ -50,14 +50,34 @@ type Root struct {
 
 	// sizeInGC maps the creation time of every registered element whose size
 	// counts toward docSize.GC rather than docSize.Live, to the exact amount
-	// charged. Each element's size belongs to exactly one of the two, and an
-	// element reaches GC by more routes than it has removals: it can be
-	// removed itself, or be a descendant of a removed container. Recording
-	// the amount rather than a flag keeps the two sides symmetric even though
-	// DataSize is not stable over an element's lifetime -- it grows by a
-	// ticket the moment removedAt is set, which can happen after the size has
-	// already moved.
-	sizeInGC map[string]resource.DataSize
+	// charged and to the element it is charged for. Each element's size
+	// belongs to exactly one of the two, and an element reaches GC by more
+	// routes than it has removals: it can be removed itself, or be a
+	// descendant of a removed container. Recording the amount rather than a
+	// flag keeps the two sides symmetric even though DataSize is not stable
+	// over an element's lifetime -- it grows by a ticket the moment removedAt
+	// is set, which can happen after the size has already moved.
+	sizeInGC map[string]gcCharge
+}
+
+// gcCharge is what docSize.GC is holding on behalf of one element, and which
+// element that is.
+//
+// The identity is load-bearing. A createdAt is meant to name one element, but
+// it does not for the whole of a document's life: undo restores
+// `value.DeepCopy()` of a removed element, and the copy keeps the original's
+// createdAt while the original is still a tombstone. Charging or releasing by
+// key alone then bills whichever of the two happens to occupy the slot, and a
+// size can be taken out of docSize.Live that Live was never holding -- which
+// is how docSize goes negative.
+//
+// A zero size is not the same as no record. It says this element has been
+// released: charged to neither side, because its subtree was orphaned by a
+// restore and nothing will ever collect it. Anything that later charges it
+// again has to know Live is not the side to take it from.
+type gcCharge struct {
+	elem Element
+	size resource.DataSize
 }
 
 // NewRoot creates a new instance of Root.
@@ -66,7 +86,7 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[string]GCPair),
-		sizeInGC:         make(map[string]resource.DataSize),
+		sizeInGC:         make(map[string]gcCharge),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
 				Data: 0,
@@ -131,15 +151,6 @@ func (r *Root) RegisterElement(element Element) {
 	}
 }
 
-// DeregisterElement deregisters the given element and its descendants from
-// the hash tables. It is exported for operations that must replace an
-// element under a pre-existing createdAt during undo/redo (set_operation.ts:
-// 98-104 in the JS SDK), where a previously tombstoned element is restored
-// under the same identity and its stale entry must be dropped first.
-func (r *Root) DeregisterElement(element Element) int {
-	return r.deregisterElement(element)
-}
-
 // deregisterElement deregister the given element from hash tables.
 func (r *Root) deregisterElement(element Element) int {
 	count := 0
@@ -150,16 +161,38 @@ func (r *Root) deregisterElement(element Element) int {
 		// amount actually charged. A descendant created inside an
 		// already-removed container never passed through a removal, so it
 		// still sits in Live; subtracting it from GC would push GC below zero
-		// and leave its cost in Live forever.
-		if charged, ok := r.sizeInGC[createdAt]; ok {
-			r.docSize.GC.Sub(charged)
+		// and leave its cost in Live forever. A charge recorded against some
+		// other element that shares this createdAt says nothing about this
+		// one, which is still in Live.
+		if charged, ok := r.sizeInGC[createdAt]; ok && charged.elem == elem {
+			r.docSize.GC.Sub(charged.size)
 			delete(r.sizeInGC, createdAt)
 		} else {
 			r.docSize.Live.Sub(elem.DataSize())
 		}
 
-		delete(r.elementMap, createdAt)
-		delete(r.gcElementPairMap, createdAt)
+		// NOTE(hackerwins): Drop the index entries by identity, not by key.
+		// A createdAt is meant to name one element, but undo breaks that: it
+		// restores `value.DeepCopy()` of a removed container, and the copy
+		// keeps every descendant's createdAt while the original is still a
+		// tombstone. Only the top level of an undone ArraySet gets a fresh
+		// ticket (document.go's executeUndoRedo), so the descendants below it
+		// are answered by the live copy while the tombstone is still the one
+		// being collected here. `delete(map, createdAt)` would evict the live
+		// element's entry, and every later operation addressed at it fails
+		// with ErrNotApplicableDataType -- on the server's replay too, which
+		// makes the stored change log unreplayable.
+		//
+		// Comparing the slot against the element being deregistered leaves
+		// the entry alone when it has been taken over. The tombstone loses
+		// nothing by it: it is already unlinked from the tree, and whatever
+		// now owns the slot will clear it when its own turn comes.
+		if r.elementMap[createdAt] == elem {
+			delete(r.elementMap, createdAt)
+		}
+		if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
+			delete(r.gcElementPairMap, createdAt)
+		}
 		count++
 	}
 
@@ -213,27 +246,115 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
+// UnregisterRemovedElementPair drops the collection entry registered under the
+// given createdAt, if there is one, and releases the GC charge it holds. It
+// reports whether an entry was dropped.
+//
+// It is the narrow counterpart of RegisterRemovedElementPair, for the one
+// caller that has to retire a tombstone without collecting it: a Set that
+// restores an element under a createdAt a tombstone already answers to
+// (set_operation.ts:98-104 in the JS SDK). ElementRHT.SetWithExecutedAt has by
+// then re-pointed nodeMapByCreatedAt at the restored copy, so the entry the
+// removal left behind now resolves, through that index, to live data -- and
+// collection would purge it. Dropping the entry is what stops that.
+//
+// Deliberately narrow. The obvious alternative, deregistering the tombstone
+// and its descendants outright, reaches past the entry that is stale: the
+// tombstone's descendant set can be a strict superset of the restored copy's
+// -- a peer may have added a child into the container after the undoing
+// replica took its copy -- and deregistering evicts those descendants from
+// elementMap with nothing to put them back. A later change addressed at one of
+// them then fails on every replica, and permanently on the server, which
+// replays the same change log to rebuild the document and its snapshots.
+//
+// What it still does reach is the accounting, and it has to. SetWithExecutedAt
+// has displaced this tombstone from its container's nodeMapByCreatedAt, so the
+// subtree is orphaned: dropping the entry is dropping the only thing that would
+// ever have collected it. Its cost is therefore released from wherever it sits
+// -- docSize.GC for anything a removal moved there, docSize.Live for a member a
+// peer added into the container after it was already removed -- which is
+// exactly the split deregisterElement makes on the collection path, and leaves
+// the restored copy that RegisterElement is about to charge to Live as the only
+// thing accounted for.
+//
+// Collection entries belonging to the subtree's own tombstones go with it, for
+// the same reason: nothing can reach them to collect them, so leaving them
+// would hold GarbageLen above zero forever and let a later pass subtract a cost
+// this call has already released.
+func (r *Root) UnregisterRemovedElementPair(createdAt *time.Ticket) bool {
+	pair, ok := r.gcElementPairMap[createdAt.Key()]
+	if !ok {
+		return false
+	}
+
+	r.release(pair.elem)
+	if container, ok := pair.elem.(Container); ok {
+		container.Descendants(func(e Element, _ Container) bool {
+			r.release(e)
+			return false
+		})
+	}
+
+	delete(r.gcElementPairMap, createdAt.Key())
+	return true
+}
+
+// release forgets the cost of an element that has become unreachable without
+// being collected, and any collection entry naming it. It leaves elementMap
+// alone: the slot may since have been taken over by a live element restored
+// under this same createdAt, and that element's registration has to stand.
+func (r *Root) release(elem Element) {
+	createdAt := elem.CreatedAt().Key()
+
+	// Subtract from whichever side is actually holding it, by the amount
+	// actually charged -- the same split deregisterElement makes. A member
+	// added into an already-removed container never passed through a removal,
+	// so it still sits in Live.
+	if charged, ok := r.sizeInGC[createdAt]; ok && charged.elem == elem {
+		r.docSize.GC.Sub(charged.size)
+	} else {
+		r.docSize.Live.Sub(elem.DataSize())
+	}
+
+	// Record the release rather than forgetting it. This element stays
+	// addressable -- that is the whole point of not deregistering it -- so a
+	// peer that has not seen the restore can still remove something inside
+	// this subtree, and moveSizeToGC would then take its size out of Live for
+	// a second time and drive docSize negative. A zero charge says Live is
+	// not holding it, and the identity says which element that is about, so a
+	// copy restored under the same createdAt is still charged normally.
+	r.sizeInGC[createdAt] = gcCharge{elem: elem}
+
+	if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
+		delete(r.gcElementPairMap, createdAt)
+	}
+}
+
 // moveSizeToGC moves the size of the given element from Live to GC, and
-// reports whether it moved a size Live was holding. A size already in GC --
-// because the element was removed before, or because a container above it was
-// -- only has its charge topped up: DataSize grows by a ticket when removedAt
-// is set, which can happen after the move.
+// reports whether it moved a size Live was holding. A size already charged to
+// GC for this same element -- because it was removed before, because a
+// container above it was, or because a restore released it -- only has its
+// charge topped up: DataSize grows by a ticket when removedAt is set, which
+// can happen after the move.
+//
+// A charge recorded against a different element that shares this createdAt is
+// not this element's: this one is still in Live and moves in full. The record
+// it displaces is a released one (zero), so nothing charged is lost.
 func (r *Root) moveSizeToGC(elem Element) bool {
 	createdAt := elem.CreatedAt().Key()
 	size := elem.DataSize()
 
-	charged, ok := r.sizeInGC[createdAt]
-	if ok {
+	if charged, ok := r.sizeInGC[createdAt]; ok && charged.elem == elem {
 		diff := size
-		diff.Sub(charged)
+		diff.Sub(charged.size)
 		r.docSize.GC.Add(diff)
-		r.sizeInGC[createdAt] = size
+		r.sizeInGC[createdAt] = gcCharge{elem, size}
 		return false
 	}
 
 	r.docSize.GC.Add(size)
 	r.docSize.Live.Sub(size)
-	r.sizeInGC[createdAt] = size
+	r.sizeInGC[createdAt] = gcCharge{elem, size}
 	return true
 }
 

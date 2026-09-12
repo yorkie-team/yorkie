@@ -102,45 +102,35 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// win the LWW comparison at all.
 	removed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
 
-	// NOTE(hackerwins): A Set can restore an element under a createdAt that is
-	// already registered (set_operation.ts:98-104) -- undoing a Remove
-	// re-inserts the removed element under its original identity, and
+	// NOTE(hackerwins): A Set can restore an element under a createdAt that a
+	// tombstone already answers to (set_operation.ts:98-104) -- undoing a
+	// Remove re-inserts the removed element under its original identity, and
 	// SetWithExecutedAt above has just handed that identity to the restored
-	// copy in the object's nodeMapByCreatedAt. Everything Root keys by
-	// createdAt must follow, or the tombstone keeps an entry naming an
-	// identity that no longer resolves to it.
+	// copy in the object's nodeMapByCreatedAt.
 	//
-	// gcElementPairMap is the entry that matters: collection resolves
-	// pair.elem through the index that was just re-pointed, so a stale entry
-	// makes the next collection purge the restored element instead of the
-	// tombstone -- deleting live data. Deregistering is what drops it, and it
-	// has to be the registered element that is deregistered, not the incoming
-	// copy: the copy's size and descendants are the ones about to be
-	// registered, so passing it would charge the wrong size against GC and
-	// leave the stale element's own descendants registered forever.
+	// The entry that has to follow is the one in gcElementPairMap. Collection
+	// resolves it through the index that was just re-pointed, so leaving it
+	// makes the next pass purge the restored element instead of the tombstone
+	// -- deleting live data, on every replica and in every snapshot the server
+	// builds afterwards.
+	//
+	// Retiring that entry is the whole job, so retire only that entry. The
+	// tombstone's other registrations are deliberately left alone: its
+	// descendant set can be a strict superset of the restored copy's, since a
+	// peer may have added a child into the container after the undoing replica
+	// took its copy, and tearing the subtree out of elementMap would take those
+	// extra descendants with it, with nothing to put them back. See
+	// Root.UnregisterRemovedElementPair.
 	//
 	// This is a condition on the state of the tree, not on who is applying:
 	// a peer receiving the undo, and the server replaying the change log to
 	// build a snapshot, reach byte-identical state. Gating it on
 	// OpSourceUndoRedo spared only the replica that performed the undo and
-	// lost the member everywhere else, including in every snapshot built
-	// afterwards.
+	// lost the member everywhere else.
 	//
 	// An ordinary Set carries a freshly issued createdAt, so the lookup
-	// normally misses and costs one map read. It can hit: applying one Set
-	// twice leaves two live elements under one identity, and the lookup then
-	// answers with whichever the index holds. The clientSeq checkpoint does
-	// not rule that out -- it stops a change being stored twice, not applied
-	// twice. pushPack filters the list it stores and leaves reqPack.Changes
-	// intact, so pullSnapshot replays a retried pack's own changes onto a
-	// document built for a serverSeq that already includes them. That is the
-	// defect filed in
-	// docs/tasks/active/20260911-duplicate-change-application-not-idempotent-todo.md.
-	// Deregistering is the better behaviour there too: gated, the earlier
-	// copy's descendants stayed registered forever.
-	if registered := root.FindByCreatedAt(value.CreatedAt()); registered != nil {
-		root.DeregisterElement(registered)
-	}
+	// normally misses and costs one map read.
+	root.UnregisterRemovedElementPair(value.CreatedAt())
 	root.RegisterElement(value)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
