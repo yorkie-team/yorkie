@@ -109,27 +109,129 @@ successor barrier addresses one:
    references — untouched, because the successor can be perfectly stable while
    an in-flight operation points at the node being removed.
 
+
+## Attempt 3 — four framings, all reached the bar, none shippable
+
+Four framings were built and measured against the same fuzz. **All four reached
+0 of 300.** None closed the defect, and the reason matters more than the
+framings: **the acceptance criterion above was the wrong bar.** It is array-only,
+string-elements-only, no-undo, and client-side-collection-only, and every framing
+fails outside that box.
+
+| | framing | fuzz | why it is excluded |
+|---|---|---|---|
+| A | anchor barrier (attempt 2 + three gates) | 0/300 | 48 B per moved element retained in `DocSize.GC` indefinitely; Text and Tree anchor half open by the author's own admission; its load-bearing argument about server append ordering was refuted |
+| B | origin-carrying insertion rule (YATA shape) | 0/300 | two new proto fields and a flag day; array-only, and **not** a superset of attempt 2 — attempt 2's Text and Tree tests fail under it; legacy snapshots permanently sticky |
+| C | retain the position node, collect only content | 0/300 | author reported `viable: false`. `docSize = base + 48·edits` with no asymptote, 111× snapshot at 10k edits, and it **refuses assignment 5 of 30** under `MaxSizeLimit` |
+| D | reference discipline (fix the anchor producers) | 0/300 | refuted twice independently, on correctness and on cost |
+
+D was the right candidate on paper — 323 production lines, no schema change, zero
+upstream tests modified — and it is the one most thoroughly destroyed.
+
+### The measured ceilings — this is the real result
+
+Every number from the same faithful `advServer` harness, with paired attribution
+where the control is dirty: run each seed twice, differing only in the vector
+handed to `GarbageCollect`, and count only seeds where the control **passes** and
+collection-on **fails**. `onlyControlFails` was 0 in every cell.
+
+**Array, no undo, string elements — solved.** A, B and D all reach 0, and D was
+then attacked with 8,000 nested-container runs and 12,000 server-replay runs it
+was never tuned against — both of which fail on `main` at 155-402 and 143-277 per
+1000 — with **zero** failures.
+
+**Array + undo/redo — open.** 2000 seeds per cell:
+
+| clients | main | framing D |
+|---|---|---|
+| 2 | 295 (childNotFound 214, diverged 81) | 66 |
+| 3 | 440 (320 / 120) | 107 |
+| 4 | 751 (558 / 193) | 198 |
+| 5 | 979 (723 / 256) | 327 |
+
+D cuts it about 70% and removes the silent-divergence class entirely, but does
+not reach 0. Four failing call sites, all `child not found`: `MoveAfter`,
+`insertAfter`, `FindPrevCreatedAt`, `DeleteByCreatedAt`. The anchors the history
+stack captures when a forward op is issued, and executes arbitrarily later, are
+a producer site no framing enumerated.
+
+**Text — open, one mechanism.** 2000 seeds per cell, 2/3/4 clients: main
+269/291/300 → D 235/233/243. Every failure is `the node of the given id should
+be found`.
+
+**Tree — open, one mechanism.** main 207/252/297 → D 177/199/240. Every failure
+is `node not found`.
+
+So attempt 2's successor barrier — the only thing A and D do for Text and Tree —
+buys 15-20% there and nothing more. The anchor half in those two structures is
+now **measured** rather than admitted, and it is one mechanism each, the same one.
+
+### What killed D on cost, measured here
+
+D's own retention fixture re-moves a handful of elements by index and retains
+exactly 7 slots at every array size, so its reported cost is independent of the
+array. On a **drag-reorder** — each element moved once, the canonical move
+workload — retention is n−1:
+
+| n=200, collect after each move | main | framing D |
+|---|---|---|
+| `garbageLen` | 0 | 199 |
+| `DocSize` total | 6472 | 16024 (+148%) |
+| `DocSize.GC` meta | 0 | 9552 — twice the live metadata |
+
+`DocSize.Total` feeds `MaxSizeLimit`, so this is enforced and user-visible: a
+20-element array under a 1000-byte limit accepts all 19 drags on `main` and is
+**refused at move 8** under D. Idle `GarbageCollect` also regresses about
+5,200× at n=1000, which no existing test covers.
+
+### Framings now closed by evidence
+
+- **Constrain collection with a better predicate** (attempts 1, 2, 3A) — the
+  predicate is not one ticket. It is at least three structural facts, and each
+  one found adds retention. A reaches the array bar and pays 48 B per moved
+  element forever.
+- **Change the insertion rule** (3B) — costs a wire change and a flag day, and
+  did not even generalise to Text and Tree, which is where the cheap win was
+  supposed to be.
+- **Retain the structure** (3C) — unbounded by measurement, and its own author
+  declared it unshippable.
+
+What is left is the anchor half in `Text` and `Tree`, plus the history stack's
+captured anchors — and the only framing that removes the dependency rather than
+constraining collection needs a wire change. **That places this defect with the
+identity-preserving revive work rather than as a standalone fix**, which is where
+this filing now recommends it goes.
+
+### Artifacts
+
+Four diffs, none proposed for merge. `wip/rga-successor-barrier` carries attempt
+2. Attempt 3's four diffs were produced in session worktrees; D is the smallest
+and the best documented, and a fourth attempt should start from the ceilings
+table above rather than from any of the diffs.
+
 ## Tasks
 
-- [ ] Decide whether attempt 2 ships on its own. It is strictly better in every
-      measured category and costs little, but it is a partial fix for a
-      convergence bug, and both mechanisms share a root — a complete fix may
-      have to undo its shape. The artifacts are preserved (see below)
+- [x] ~~Decide whether attempt 2 ships on its own~~ — no. Attempt 3 superseded
+      the question: three framings beat it on the array bar and none is
+      shippable, so shipping the weakest of them buys nothing
+- [ ] **Carry the anchor half into the wire-format work.** That is attempt 3's
+      conclusion and the reason this is not a standalone fix
 - [ ] Close the anchor mechanism, or establish that it is unreachable through
       the real push/pull path. Attempt 2's author argued unreachability from
       reading `pushpull.go` and `document.go` and was explicit that it was an
       argument and not a measurement; the fuzz above reaches it
-- [ ] Decide about `findNextBeforeExecutedAt` itself. Making the skip read
-      nothing collection can remove means each node carrying its own anchor id
-      and a comparison over anchors — the YATA/Yjs shape. That is a permanent
-      per-node ticket on every array, text and tree node, on the wire and in
-      snapshots, plus a rewritten insertion rule in both SDKs. Rejected in
-      attempt 2 on cost; it is the only direction that removes the dependency
-      rather than constraining collection
+- [x] ~~Decide about `findNextBeforeExecutedAt` itself~~ — built in attempt 3
+      (framing B). Two new proto fields, a flag day, legacy snapshots
+      permanently sticky, and it did not generalise to Text or Tree. It remains
+      the only direction that removes the dependency, which is why the
+      conclusion is to take it inside the wire-format work rather than alone
 - [ ] Whatever is chosen, the JS SDK needs the identical decision — the same
       three skips exist there
-- [ ] Keep the fuzz as the acceptance criterion. "Fixed" means the
-      collection-on run matches the collection-off control
+- [ ] **Replace the acceptance criterion.** The array/no-undo/strings fuzz is
+      met by three independent framings and is therefore no longer
+      discriminating. A real bar needs undo/redo in the op mix, `Text` and
+      `Tree` harnesses, and paired attribution so a dirty control does not hide
+      the signal — all three exist in the attempt 3 transcripts
 
 ## Reproduction and artifacts
 
