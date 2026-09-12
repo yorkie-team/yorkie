@@ -970,6 +970,24 @@ func (t *Tree) Marshal() string {
 }
 
 // Purge physically purges the given node.
+// PurgeBarrierAt implements GCBarrier[GCChild]. findNodesAndSplitText walks the
+// parent's children, removed ones included, advancing while the next sibling
+// was created after the incoming edit; a tombstoned sibling with an older
+// ticket ends that walk. Purging detaches it from the parent, so the next
+// sibling inherits the decision and must be causally stable first.
+func (t *Tree) PurgeBarrierAt(child GCChild) (*time.Ticket, bool) {
+	node, ok := child.(*TreeNode)
+	if !ok || node.Index == nil || node.Index.Parent == nil {
+		return nil, true
+	}
+
+	next := node.Index.Parent.NextSiblingOf(node.Index)
+	if next == nil {
+		return nil, true
+	}
+	return next.Value.id.CreatedAt, true
+}
+
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 

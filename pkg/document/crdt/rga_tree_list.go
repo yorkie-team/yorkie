@@ -406,7 +406,19 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		if err != nil {
 			return nil, err
 		}
-		deadPosNode.removedAt = executedAt
+
+		// The slot is dead here because posMovedAt got there first, and that is
+		// the ticket collection has to wait on -- not executedAt.
+		//
+		// executedAt is this move's own ticket, and this move is the one that
+		// LOST. On a replica that applied it before the winner, it won there,
+		// so the very same slot is live and holds the element, and later
+		// operations anchor on it. Stamping executedAt would let a vector that
+		// covers only the loser authorise the unlink, which is a purge of a
+		// node another replica is still using as a position. posMovedAt is the
+		// winner, so covering it means every replica has moved the element out
+		// of this slot and nothing can name it again.
+		deadPosNode.removedAt = entry.posMovedAt
 		a.nodeMapByIndex.UpdateWeight(deadPosNode.indexNode)
 		return deadPosNode, nil
 	}
@@ -496,6 +508,73 @@ func (a *RGATreeList) Purge(child GCChild) error {
 	}
 	a.release(node)
 	return nil
+}
+
+// PurgeBarrierAt implements GCBarrier[GCChild] for the dead position nodes a
+// move leaves behind: the ticket that must be covered before this slot may be
+// unlinked is the one findNextBeforeExecutedAt would read in its place.
+func (a *RGATreeList) PurgeBarrierAt(child GCChild) (*time.Ticket, bool) {
+	node, ok := child.(*RGATreeListNode)
+	if !ok {
+		return nil, true
+	}
+	return a.purgeBarrierAtNode(node, nil)
+}
+
+// purgeBarrierAt is the same barrier for a removed element, reached through the
+// position node currently holding it.
+func (a *RGATreeList) purgeBarrierAt(elem Element) (*time.Ticket, bool) {
+	entry, ok := a.elementMapByCreatedAt[elem.CreatedAt().Key()]
+	// Same identity guard as purge below: an entry now holding a different
+	// element is not this element's position, and purge declines anyway.
+	if !ok || entry.elem != elem {
+		return nil, true
+	}
+	return a.purgeBarrierAtNode(entry.positionNode, elem)
+}
+
+// purgeBarrierAtNode answers both barrier questions for one position node.
+// going is the element this same purge is about to erase from
+// elementMapByCreatedAt, or nil when only the node is being unlinked.
+//
+// A node earns its unlink by being neither a future stopping point nor a future
+// anchor. Nothing else about it matters: its own removedAt is the caller's
+// business, and by the time the caller asks, the vector already covers it.
+func (a *RGATreeList) purgeBarrierAtNode(node *RGATreeListNode, going Element) (*time.Ticket, bool) {
+	if node == nil {
+		return nil, true
+	}
+
+	// 01. The anchor, at the tail. Add takes a.last as its prevCreatedAt --
+	// the last PHYSICAL node, tombstones included -- so while this node is the
+	// tail, any append issued on any replica that still holds it names it.
+	// Replicas purge at different moments, so the only safe answer is to keep
+	// the tail until something causally stable sits behind it. Nothing is lost:
+	// the next stable append gives it a successor and it becomes collectable.
+	if node.next == nil {
+		return nil, false
+	}
+
+	// 02. The anchor, by element identity. insertAfter resolves prevCreatedAt
+	// through nodeMapByCreatedAt BEFORE elementMapByCreatedAt, and a move
+	// leaves the element's insert-created slot in nodeMapByCreatedAt under the
+	// element's own createdAt. Every later ArraySet on that element anchors
+	// there. Unlinking the slot does not make those operations fail -- it makes
+	// them silently fall through to the element's CURRENT position node, which
+	// is a different place in the list. Hold the slot while the element it
+	// names is still here; once the element is itself collected the key is free
+	// and the next pass takes the slot.
+	if key := node.createdAt.Key(); going == nil || going.CreatedAt().Key() != key {
+		if _, ok := a.elementMapByCreatedAt[key]; ok {
+			return nil, false
+		}
+	}
+
+	// 03. The stopping point. findNextBeforeExecutedAt stops at the first node
+	// that does not follow the incoming operation, so unlinking this one hands
+	// that decision to the node behind it. Same decision only once that node is
+	// causally stable.
+	return node.next.PositionedAt(), true
 }
 
 // purge physically purge child element.

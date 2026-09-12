@@ -48,3 +48,47 @@ type GCChild interface {
 	RemovedAt() *time.Ticket
 	DataSize() resource.DataSize
 }
+
+// GCBarrier is an optional capability of a GC parent whose surviving order is
+// decided by which nodes are still linked.
+//
+// Every such container resolves a concurrent insert by walking forward from the
+// anchor and stopping at the first node whose positioning ticket does not
+// follow the insert: RGATreeList.findNextBeforeExecutedAt, RGATreeSplit's skip
+// in findNodeWithSplit, and Tree's sibling skip in findNodesAndSplitText. The
+// walk reads the nodes currently linked, tombstones included, so a tombstone
+// with a small ticket is a hard barrier that ends the walk. Purging it physi-
+// cally unlinks it, which means collection mutates the input to the insertion
+// rule: a replica that has collected sends a still-in-flight insert past the
+// node behind the tombstone, a replica that has not does not, and the two
+// orders never reconverge.
+//
+// removedAt alone does not authorise the unlink, and it fails to for two
+// separate reasons.
+//
+// The first is the walk's stopping point. What authorises the unlink there is
+// the node that would inherit the decision: once that successor is causally
+// stable, every future insert carries a ticket after it, so every future walk
+// stops there whether or not the tombstone in front of it still exists, and the
+// insert lands in the same place either way.
+//
+// The second is the anchor. A tombstone is not only something a walk passes
+// over, it is also something later operations name as their starting point --
+// RGATreeList.Add anchors on the last physical node and ArraySet anchors on the
+// element's insert-created position, both of which are routinely tombstones.
+// Such an operation is issued against whatever the issuing replica still holds,
+// and replicas purge at different moments, so a node that is a legal anchor
+// anywhere must survive here. Those are structural conditions rather than
+// tickets, which is why the barrier answers with an `ok` as well as a ticket.
+//
+// The type parameter is only there because the two purge paths name their child
+// differently: Root.GarbageCollect walks removed elements as Element and
+// removed nodes as GCChild, and both end in the same physical unlink.
+type GCBarrier[C any] interface {
+	// PurgeBarrierAt reports what has to hold before the given child may be
+	// unlinked. ok is false when no version vector authorises the unlink yet,
+	// because the child is still a reachable anchor. Otherwise the ticket is
+	// the one the vector must additionally cover, or nil when the unlink is
+	// unconditionally safe.
+	PurgeBarrierAt(child C) (barrier *time.Ticket, ok bool)
+}

@@ -1083,6 +1083,26 @@ func (s *RGATreeSplit[V]) ToTestString() string {
 }
 
 // Purge physically purge the given node from RGATreeSplit.
+// PurgeBarrierAt implements GCBarrier[GCChild]. findNodeWithSplit skips forward
+// while node.next was created after the incoming edit, so a tombstone whose
+// createdAt precedes the edit stops that walk. Unlinking it hands the next node
+// the stopping decision, which is only the same decision once that node is
+// causally stable.
+func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) (*time.Ticket, bool) {
+	node, ok := child.(*RGATreeSplitNode[V])
+	if !ok {
+		return nil, true
+	}
+	// No successor: the stopping-point half has nothing to hand over. The
+	// anchor half is still open here -- see the note on RGATreeList's tail
+	// clause -- but text anchors are resolved through treeByID rather than
+	// through the physical tail, so the tail is not where it bites.
+	if node.next == nil {
+		return nil, true
+	}
+	return node.next.createdAt(), true
+}
+
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
 

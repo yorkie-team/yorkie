@@ -615,10 +615,16 @@ func runSetAnchorScenario(t *testing.T, gc bool) {
 // TestAdvArrayAppendAfterPurgedTail: RGATreeList.Add anchors on a.last, the
 // last PHYSICAL position node, tombstones included. So an append issued long
 // after a delete legitimately names the deleted node as its prevCreatedAt.
-// GC purges that node as soon as minVV covers the delete -- the successor
-// barrier returns nil at the tail by construction -- and the append then fails
-// to apply on the collecting replica. No concurrency and no move is involved;
-// the append strictly follows the delete.
+// Gating the purge on minVV covering the delete is not enough, because it says
+// only that every replica KNOWS about the delete, not that every replica has
+// acted on it: B still holds the tombstone and still anchors on it. A must
+// therefore keep its physical tail, and may collect it once B's append has
+// given it a causally stable successor.
+//
+// The original form of this test asserted the opposite at the midpoint -- that
+// A had already purged the tombstone -- which is the defect itself written down
+// as an expectation. What matters is the endpoint: the append applies and the
+// two replicas agree, with nothing retained forever.
 func TestAdvArrayAppendAfterPurgedTail(t *testing.T) {
 	srv := newAdvServer()
 	cs := newAdvClients(t, 2)
@@ -642,9 +648,10 @@ func TestAdvArrayAppendAfterPurgedTail(t *testing.T) {
 	require.NoError(t, srv.sync(A, true))
 	require.NoError(t, srv.sync(A, true))
 	t.Logf("A after GC: %s", advDumpArr(A.doc))
-	require.NotContains(t, advDumpArr(A.doc), `"c"`, "A should have purged the tombstone")
+	require.Contains(t, advDumpArr(A.doc), `"c"`,
+		"A must hold its physical tail: B has not collected and still anchors appends there")
 
-	// B appends. Add anchors on a.last == the tombstone A just purged.
+	// B appends. Add anchors on a.last == the tombstone.
 	require.NoError(t, B.doc.Update(func(r *json.Object, _ *presence.Presence) error {
 		r.GetArray("arr").AddString("x")
 		return nil
@@ -654,4 +661,16 @@ func TestAdvArrayAppendAfterPurgedTail(t *testing.T) {
 	// A pulls the append.
 	require.NoError(t, srv.sync(A, true), "A could not apply a plain append")
 	t.Logf("A=%s B=%s", A.doc.Root().GetArray("arr").Marshal(), B.doc.Root().GetArray("arr").Marshal())
+	require.Equal(t, B.doc.Root().GetArray("arr").Marshal(), A.doc.Root().GetArray("arr").Marshal())
+
+	// And nothing is retained forever: once the append is causally stable the
+	// tombstone has a stable successor and both replicas collect it.
+	for range 4 {
+		require.NoError(t, srv.sync(A, true))
+		require.NoError(t, srv.sync(B, true))
+	}
+	t.Logf("A settled: %s", advDumpArr(A.doc))
+	t.Logf("B settled: %s", advDumpArr(B.doc))
+	require.NotContains(t, advDumpArr(A.doc), `"c"`, "the tombstone must not be retained forever")
+	require.NotContains(t, advDumpArr(B.doc), `"c"`, "the tombstone must not be retained forever")
 }

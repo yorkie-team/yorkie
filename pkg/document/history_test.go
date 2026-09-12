@@ -242,9 +242,24 @@ func TestHistoryStack(t *testing.T) {
 		// old identity, or a GC pass purges the live element instead of the
 		// tombstone, silently reverting the redo.
 		assert.Equal(t, 1, doc.GarbageLen())
+
+		// The tombstone itself is held back, not leaked. Redo revives the
+		// element in FRONT of the tombstone -- the forward skip stops there --
+		// so the tombstone is the list's last physical node, and Add anchors on
+		// the last physical node. Collecting it here would leave a concurrent
+		// append with nothing to anchor on, so it waits for a successor.
+		assert.Equal(t, 0, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, `{"list":[1,2,3,4]}`, doc.Marshal())
+
+		// One append gives it that successor and it goes.
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("list").AddInteger(5)
+			return nil
+		}))
 		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
 		assert.Equal(t, 0, doc.GarbageLen())
-		assert.Equal(t, `{"list":[1,2,3,4]}`, doc.Marshal())
+		assert.Equal(t, `{"list":[1,2,3,4,5]}`, doc.Marshal())
 	})
 
 	t.Run("array move undo redo test", func(t *testing.T) {

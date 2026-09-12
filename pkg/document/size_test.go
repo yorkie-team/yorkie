@@ -527,8 +527,32 @@ func TestDocumentSize(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, `{"k":[{"a":"1"}]}`, doc.Marshal())
 
+		// The undo revives the container in FRONT of the tombstone it replaces
+		// -- the RGA forward skip stops at the tombstone -- so the tombstone is
+		// left as the list's last physical node. RGATreeList.Add anchors on the
+		// last physical node, tombstones included, so collecting it would leave
+		// an append from a replica that has not collected with nothing to
+		// resolve against. The live cost is exactly what it was when the
+		// document was built; the tombstone is charged to GC and waits.
 		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
-		assert.Equal(t, built, doc.DocSize())
+		assert.Equal(t, built.Live, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 2, Meta: 96}, doc.DocSize().GC)
+
+		// Anything appended behind it is that successor, and the next pass
+		// brings the document back to exactly what it cost when it was built.
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").AddString("z")
+			return nil
+		}))
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 0}, doc.DocSize().GC)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").Delete(1)
+			return nil
+		}))
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.Equal(t, built.Live, doc.DocSize().Live)
 	})
 
 	t.Run("deep copy test", func(t *testing.T) {

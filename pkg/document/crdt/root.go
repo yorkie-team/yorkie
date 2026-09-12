@@ -373,8 +373,36 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
+//
+// A pass can hold a purge back (see GCBarrier), and holding one back can be the
+// only reason another is held back: purging a node hands its successor to the
+// node in front of it, and that successor is one this pass already found
+// stable. So a pass that both purged and deferred may have more to do, and the
+// loop repeats until a pass purges nothing new or defers nothing. Everything
+// held back stays on the worklist for the next vector that covers it.
+//
+// The repeat also makes the result independent of Go's map iteration order,
+// which decides only how many passes it takes, not what ends up collected.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	count := 0
+
+	for {
+		purged, deferred, err := r.collect(vector)
+		if err != nil {
+			return 0, err
+		}
+		count += purged
+
+		if purged == 0 || deferred == 0 {
+			return count, nil
+		}
+	}
+}
+
+// collect runs one collection pass, reporting how much it purged and how much
+// it held back on a barrier.
+func (r *Root) collect(vector time.VersionVector) (int, int, error) {
+	count, deferred := 0, 0
 
 	for _, pair := range r.gcElementPairMap {
 		// A registered pair is a claim that its element is a tombstone, and
@@ -402,28 +430,51 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 			continue
 		}
 
-		if vector.EqualToOrAfter(pair.elem.RemovedAt()) {
-			if err := pair.parent.Purge(pair.elem); err != nil {
-				return 0, err
-			}
-
-			count += r.deregisterElement(pair.elem)
+		if !vector.EqualToOrAfter(pair.elem.RemovedAt()) {
+			continue
 		}
+
+		// A tombstone is not only a value that is gone, it is also a place in
+		// its parent that other replicas may still be deciding against.
+		// removedAt covers the value; GCBarrier covers the place.
+		if parent, ok := pair.parent.(GCBarrier[Element]); ok {
+			at, allowed := parent.PurgeBarrierAt(pair.elem)
+			if !allowed || (at != nil && !vector.EqualToOrAfter(at)) {
+				deferred++
+				continue
+			}
+		}
+
+		if err := pair.parent.Purge(pair.elem); err != nil {
+			return 0, 0, err
+		}
+
+		count += r.deregisterElement(pair.elem)
 	}
 
 	for _, pair := range r.gcNodePairMap {
-		if vector.EqualToOrAfter(pair.Child.RemovedAt()) {
-			if err := pair.Parent.Purge(pair.Child); err != nil {
-				return 0, err
-			}
-
-			r.docSize.GC.Sub(pair.Child.DataSize())
-			delete(r.gcNodePairMap, pair.Child.IDString())
-			count++
+		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
+			continue
 		}
+
+		if parent, ok := pair.Parent.(GCBarrier[GCChild]); ok {
+			at, allowed := parent.PurgeBarrierAt(pair.Child)
+			if !allowed || (at != nil && !vector.EqualToOrAfter(at)) {
+				deferred++
+				continue
+			}
+		}
+
+		if err := pair.Parent.Purge(pair.Child); err != nil {
+			return 0, 0, err
+		}
+
+		r.docSize.GC.Sub(pair.Child.DataSize())
+		delete(r.gcNodePairMap, pair.Child.IDString())
+		count++
 	}
 
-	return count, nil
+	return count, deferred, nil
 }
 
 // ElementMapLen returns the size of element map.
