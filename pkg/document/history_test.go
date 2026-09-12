@@ -175,8 +175,13 @@ func TestHistoryStack(t *testing.T) {
 		// ArraySet's reverse restores the replaced value under a freshly
 		// reissued createdAt (executeUndoRedo's ArraySet branch). This pins
 		// that a full undo/redo cycle leaves the document intact and that
-		// GC's view of the document -- whatever it tracks for ArraySet --
-		// does not change out from under us.
+		// every element the cycle displaces is collected.
+		//
+		// The counts used to be zero throughout, because ArraySet discarded
+		// the element it displaced instead of registering it: there was no
+		// garbage to report because nothing was tracking it. Each assignment
+		// now leaves one tombstone -- the value it replaced -- and collection
+		// takes it.
 		doc := document.New("d1")
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("list").AddInteger(1, 2, 3)
@@ -188,18 +193,24 @@ func TestHistoryStack(t *testing.T) {
 		}))
 		assert.Equal(t, `{"list":[9,2,3]}`, doc.Marshal())
 
+		// The assignment displaced `1`; that is the one tombstone so far.
+		assert.Equal(t, 1, doc.GarbageLen())
+
 		assert.NoError(t, doc.Undo())
 		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
-		assert.Equal(t, 0, doc.GarbageLen())
-		assert.Equal(t, 0, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		// The undo restored `1` and displaced `9` in turn.
+		assert.Equal(t, 2, doc.GarbageLen())
+		assert.Equal(t, 2, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
 		assert.Equal(t, `{"list":[1,2,3]}`, doc.Marshal())
+		assert.Equal(t, 0, doc.GarbageLen())
 
 		assert.True(t, doc.CanRedo())
 		assert.NoError(t, doc.Redo())
 		assert.Equal(t, `{"list":[9,2,3]}`, doc.Marshal())
-		assert.Equal(t, 0, doc.GarbageLen())
-		assert.Equal(t, 0, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
 		assert.Equal(t, `{"list":[9,2,3]}`, doc.Marshal())
+		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
 	t.Run("array add undo redo survives gc test", func(t *testing.T) {

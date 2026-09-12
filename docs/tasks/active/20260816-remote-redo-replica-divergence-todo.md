@@ -122,6 +122,45 @@ unsafe to sync to a peer running the other. Do not fix Go alone.
 Either direction needs the identical decision applied in
 `yorkie-js-sdk`.
 
+### Update (2026-09-12): direction 1 taken, both open questions answered
+
+Fixed by **direction 1** in PR #1978, with the JS half in
+`yorkie-js-sdk#1341`. The two SDKs ship together, as this document required.
+
+The severity was also worse than described above. The mechanism here is
+redo of a `Set`; the same gate is reached by **undo of an object member
+removal**, which needs no redo at all, and the loss is not confined to
+peers — the server replays the change log with `OpSourceReplay` to build
+snapshots (`server/packs/snapshot.go:121`, `:238`), so the restored key
+disappears from every snapshot built afterwards and from every client that
+later loads one. Pinned by `TestUndoneObjectRemoveSurvivesCollection`
+(`pkg/document/gc_restore_test.go`), RED on `main`.
+
+Direction 1's two open questions, answered:
+
+- *Is dropping the gate safe for an ordinary `Set` that collides with a
+  tombstoned `createdAt`?* Yes. An ordinary `Set` carries a freshly issued
+  `createdAt`, so the lookup misses and costs one map read. It hits only
+  under duplicate application — and there the unconditional deregister is
+  the **better** of the two, since the gated version left the earlier
+  copy's descendants registered forever. Duplicate application is its own
+  defect, filed as
+  `20260911-duplicate-change-application-not-idempotent-todo.md`.
+- *Do `Remove`'s array reverse (`Add`) and `Move`'s reverse have the same
+  gating?* No. The only `OpSourceUndoRedo`-gated deregister was the one in
+  `set.go`. The array path is immune for a different reason —
+  `executeUndoRedo` re-tickets the restored element — and
+  `TestUndoneArrayRemoveSurvivesCollection` pins that, so the asymmetry
+  cannot be closed in the direction that would reintroduce this bug.
+
+Direction 2 (re-ticketing `Remove`'s reverse `Set`) was prototyped
+separately in the JS SDK and **rejected on measurement**: giving a restored
+element a fresh identity makes it a *new* element, so every operation
+stacked against the old one stops applying. Reconciling the descendants
+makes the two ends of one operation name different objects and it throws;
+not reconciling them makes the undo a silent no-op. No arrangement
+satisfies both. See `docs/design/element-identity.md` in `yorkie-js-sdk`.
+
 ### Reproduction sketch
 
 Two clients, plain `Object.Set`, no presence involved (confirms the bug
@@ -161,24 +200,27 @@ end-state key loss.
 
 ## Tasks
 
-- [ ] Reproduce with an explicit integration test in `yorkie` (both the
-      end-state divergence and, ideally, the intermediate
-      `gcElementPairMap` state) before attempting a fix
-- [ ] Decide between the two fix directions above (or find a better one)
-      for both SDKs — this needs its own design discussion, since
-      direction 1 has an open safety question and direction 2 needs the
-      equivalent JS change designed alongside it
-- [ ] Check whether `Remove`'s `*crdt.Array` reverse (`Add`) and `Move`'s
-      reverse have the same `OpSourceUndoRedo`-gated special-casing that
-      would need the identical treatment (`remove.go`, `move.go`)
+- [x] Reproduce before attempting a fix — `pkg/document/gc_restore_test.go`,
+      RED on `main`. It pins the end state on both replicas; the
+      intermediate `gcElementPairMap` state is pinned separately by
+      `TestUndoneObjectRemoveLeavesNoGarbage`, which rejects a fix that
+      merely *skips* the stale entry and leaves `GarbageLen` above zero
+- [x] Decide between the two fix directions — **direction 1**, with both of
+      its open safety questions answered. See the 2026-09-12 update above
+- [x] Check whether `Remove`'s `*crdt.Array` reverse (`Add`) and `Move`'s
+      reverse have the same gating — they do not; see the same update
 - [ ] Fix in `yorkie` and `yorkie-js-sdk` together; land both before
-      either ships, or add a version gate
-- [ ] Add the regression test from the reproduction sketch to both SDKs'
-      undo/redo integration suites
+      either ships, or add a version gate — **in review**: #1978 and
+      `yorkie-js-sdk#1341`, each naming the other as a merge prerequisite
+- [x] Add the regression test from the reproduction sketch to both SDKs —
+      `gc_restore_test.go` here, `test/unit/document/gc_containment_test.ts`
+      and `test/integration/gc_containment_test.ts` there
 - [ ] Re-tighten `test/integration/doc_presence_test.go`'s mixed
       op+presence redo assertion back to asserting on the peer (`d2`)
-      instead of locally (`d1`) once fixed — see the comment referencing
-      this document at that call site
+      instead of locally (`d1`) now that the gate is gone — see the comment
+      referencing this document at that call site. Deliberately left for a
+      follow-up: it is a presence-path assertion change, and bundling it
+      would mix an unrelated test rewrite into a containment release
 
 ## Related: `Presence.Initialize` leaves `clonePresences` stale
 

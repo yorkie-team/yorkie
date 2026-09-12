@@ -91,6 +91,11 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Same nil as DeleteByCreatedAt reports when the removal lost to one
+	// already recorded; Element() would dereference the missing node.
+	if node == nil {
+		return nil, nil
+	}
 	return node.Element(), nil
 }
 
@@ -248,6 +253,11 @@ func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 	node, err := a.elements.DeleteByCreatedAt(createdAt, deletedAt)
 	if err != nil {
 		return nil, err
+	}
+	// nil when the removal lost to one already recorded on the element, which
+	// mirrors what ElementRHT.DeleteByCreatedAt reports for an Object.
+	if node == nil {
+		return nil, nil
 	}
 	return node.Element(), nil
 }

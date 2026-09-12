@@ -346,8 +346,16 @@ func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 
 	node := entry.positionNode
 
+	// A removal that loses to one already recorded on the element changes
+	// nothing, and reporting the node anyway invites the caller to register a
+	// GC pair for an element this removal did not tombstone. Report only the
+	// removal that took: `Remove` returns false when an earlier removal
+	// already won, and the caller decides what to do with the nil.
 	alreadyRemoved := node.IsRemoved()
-	if entry.elem.Remove(deletedAt) && !alreadyRemoved {
+	if !entry.elem.Remove(deletedAt) {
+		return nil, nil
+	}
+	if !alreadyRemoved {
 		a.nodeMapByIndex.UpdateWeight(node.indexNode)
 	}
 	return node, nil
@@ -495,6 +503,13 @@ func (a *RGATreeList) purge(elem Element) error {
 	entry, ok := a.elementMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
 		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
+	}
+
+	// Same guard as ElementRHT.purge: releasing the position node of an entry
+	// that now holds a different element would unlink a live one on a
+	// tombstone's behalf.
+	if entry.elem != elem {
+		return nil
 	}
 
 	node := entry.positionNode

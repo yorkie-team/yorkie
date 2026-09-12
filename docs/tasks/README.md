@@ -1,5 +1,5 @@
 ---
-updated: 2026-08-22
+updated: 2026-09-12
 ---
 
 # Tasks Index
@@ -20,6 +20,8 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Applying one change twice corrupts an object's createdAt index (2026-09-11) | [20260911-duplicate-change-application-not-idempotent-todo.md](./active/20260911-duplicate-change-application-not-idempotent-todo.md) | - |
+| Project Stats Long-Retention Windows Implementation Plan (2026-08-31) | [20260831-project-stats-long-retention-todo.md](./active/20260831-project-stats-long-retention-todo.md) | [20260831-project-stats-long-retention-lessons.md](./active/20260831-project-stats-long-retention-lessons.md) |
 | Tree: recover style ranges collapsed by a merge at the from anchor (2026-08-22) | [20260822-tree-style-from-side-anchor-todo.md](./active/20260822-tree-style-from-side-anchor-todo.md) | [20260822-tree-style-from-side-anchor-lessons.md](./active/20260822-tree-style-from-side-anchor-lessons.md) |
 | DocSize: a snapshot rebuild over-credits one ticket per tombstone (2026-08-17) | [20260817-docsize-snapshot-rebuild-drift-todo.md](./active/20260817-docsize-snapshot-rebuild-drift-todo.md) | [20260817-docsize-snapshot-rebuild-drift-lessons.md](./active/20260817-docsize-snapshot-rebuild-drift-lessons.md) |
 | DocSize: port the container-removal accounting fix to the JS SDK (2026-08-17) | [20260817-docsize-js-sdk-parity-todo.md](./active/20260817-docsize-js-sdk-parity-todo.md) | [20260817-docsize-js-sdk-parity-lessons.md](./active/20260817-docsize-js-sdk-parity-lessons.md) |
