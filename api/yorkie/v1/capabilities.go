@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package v1 provides the Yorkie v1 API: the protobuf-generated types for the
+// wire format, and the hand-written constants that describe it.
 package v1
 
 // Wire capabilities are the names carried in ChangePack.capabilities. They live
