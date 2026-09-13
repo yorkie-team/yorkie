@@ -2644,6 +2644,11 @@ components:
           description: ""
           title: prev_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
         value:
           $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
           additionalProperties: false
@@ -2674,6 +2679,11 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
         value:
           $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
           additionalProperties: false
@@ -2719,6 +2729,32 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
+        restoreSpans:
+          additionalProperties: false
+          description: identity-preserving undo/redo
+          items:
+            $ref: '#/components/schemas/yorkie.v1.RestoreSpan'
+            type: object
+          title: restore_spans
+          type: array
+        retombstoneSpans:
+          additionalProperties: false
+          description: |-
+            retombstone_spans is the companion span set for an identity-preserving
+             reverse op: restore_spans is content the reversed edit removed (to
+             revive), retombstone_spans is content it inserted (to re-remove). Both
+             are addressed by original identity so a revived neighbour keeps its
+             relative order across chained undo/redo. restore_mode selects direction.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.RestoreSpan'
+            type: object
+          title: retombstone_spans
+          type: array
         to:
           $ref: '#/components/schemas/yorkie.v1.TextNodePos'
           additionalProperties: false
@@ -2864,6 +2900,11 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
         value:
           $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
           additionalProperties: false
@@ -2987,11 +3028,44 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
+        restoreSpans:
+          additionalProperties: false
+          description: identity-preserving undo/redo
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TreeRestoreSpan'
+            type: object
+          title: restore_spans
+          type: array
+        retombstoneSpans:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TreeRestoreSpan'
+            type: object
+          title: retombstone_spans
+          type: array
         splitLevel:
           additionalProperties: false
           description: ""
           title: split_level
           type: integer
+        splitTickets:
+          additionalProperties: false
+          description: |-
+            split_tickets carries the tickets the originating replica issued for the
+             nodes an element split creates, in issue order. Empty for a change
+             written before this field existed, which replays through the simulation
+             that reconstructed them from executed_at and the content count.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+            type: object
+          title: split_tickets
+          type: array
         to:
           $ref: '#/components/schemas/yorkie.v1.TreePos'
           additionalProperties: false
@@ -3204,6 +3278,11 @@ components:
           description: ""
           title: auto_revision_enabled
           type: boolean
+        channelSessionTtl:
+          additionalProperties: false
+          description: ""
+          title: channel_session_ttl
+          type: string
         clientDeactivateThreshold:
           additionalProperties: false
           description: ""
@@ -3374,6 +3453,34 @@ components:
       description: ""
       title: RemoveSchemaResponse
       type: object
+    yorkie.v1.RestoreMode:
+      description: |-
+        RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
+         means an ordinary edit (no restore semantics), keeping forward edits
+         unchanged on the wire.
+
+         For elements it selects between reviving the element already in the tree and
+         inserting a copy of it. The copy is what undo does today, and because a
+         deep copy keeps every descendant's created_at, it puts a second live element
+         under ids the document is indexed by. Reviving needs a replicated liveness
+         register -- removed_at paired with revived_at on each element -- so that
+         every replica resolves a remove/revive race the same way, with a tie going
+         to the removal as the shipped remove register already does.
+
+         The branch cannot be chosen from local state. A replica that collected
+         between the removal and the undo has purged the tombstone, and one that
+         joined from a later snapshot never had it, so "revive if a tombstone is
+         present" is a function of local collection timing and the same change log
+         would produce different documents. That is why the branch is on the wire.
+      enum:
+      - - RESTORE_MODE_UNSPECIFIED
+        - 0
+        - RESTORE_MODE_RESTORE
+        - 1
+        - RESTORE_MODE_RETOMBSTONE
+        - 2
+      title: RestoreMode
+      type: string
     yorkie.v1.RestoreRevisionByAdminRequest:
       additionalProperties: false
       description: ""
@@ -3399,6 +3506,58 @@ components:
       additionalProperties: false
       description: ""
       title: RestoreRevisionByAdminResponse
+      type: object
+    yorkie.v1.RestoreSpan:
+      additionalProperties: false
+      description: |-
+        RestoreSpan carries a run of characters from a single original text
+         insertion, addressed by split-invariant absolute offsets [start, end),
+         for identity-preserving undo/redo. content and attributes are a deep
+         copy of the removed value so restore is independent of GC state.
+      properties:
+        attributes:
+          additionalProperties: false
+          description: ""
+          title: attributes
+          type: object
+        content:
+          additionalProperties: false
+          description: ""
+          title: content
+          type: string
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        end:
+          additionalProperties: false
+          description: ""
+          title: end
+          type: integer
+        start:
+          additionalProperties: false
+          description: ""
+          title: start
+          type: integer
+      title: RestoreSpan
+      type: object
+    yorkie.v1.RestoreSpan.AttributesEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: AttributesEntry
       type: object
     yorkie.v1.RevisionSummary:
       additionalProperties: false
@@ -3789,6 +3948,87 @@ components:
           type: object
       title: TreePos
       type: object
+    yorkie.v1.TreeRestoreSpan:
+      additionalProperties: false
+      description: |-
+        TreeRestoreSpan carries a tree node run from a single deletion, addressed
+         by TreeNodeID identity, for identity-preserving Tree undo/redo. Unlike the
+         text RestoreSpan (flat offsets), a tree span records the node's structure
+         (type/attrs) and its position anchors, because in a tree id-order is not
+         sibling-order: left_sibling_id and right_sibling_id are redundant external
+         boundary anchors of the deleted run, so restore can reconstruct the run's
+         internal order from the op's own spans and needs only one surviving
+         boundary to place it. value/attributes are a deep copy so a GC-purged node
+         can be recreated.
+      properties:
+        attributes:
+          additionalProperties: false
+          description: ""
+          title: attributes
+          type: object
+        id:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: id
+          type: object
+        isText:
+          additionalProperties: false
+          description: ""
+          title: is_text
+          type: boolean
+        leftSiblingId:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: left_sibling_id
+          type: object
+        length:
+          additionalProperties: false
+          description: ""
+          title: length
+          type: integer
+        nodeType:
+          additionalProperties: false
+          description: ""
+          title: node_type
+          type: string
+        parentId:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: parent_id
+          type: object
+        rightSiblingId:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: right_sibling_id
+          type: object
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: TreeRestoreSpan
+      type: object
+    yorkie.v1.TreeRestoreSpan.AttributesEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.NodeAttr'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: AttributesEntry
+      type: object
     yorkie.v1.UpdatableProjectFields:
       additionalProperties: false
       description: ""
@@ -3840,6 +4080,12 @@ components:
           additionalProperties: false
           description: ""
           title: auto_revision_enabled
+          type: object
+        channelSessionTtl:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: channel_session_ttl
           type: object
         clientDeactivateThreshold:
           $ref: '#/components/schemas/google.protobuf.StringValue'

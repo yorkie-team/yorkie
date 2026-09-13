@@ -48,6 +48,17 @@ message ChangePack {
   bool is_removed = 6;
   VersionVector version_vector = 7;
   int64 epoch = 8;
+  // capabilities is the negotiation channel for wire features a peer may not
+  // understand. A server sets it on the pack it returns to advertise what it
+  // supports; a client must treat absence as "unsupported" rather than as
+  // "unknown", because a server that predates a feature cannot say so.
+  //
+  // It exists because a server does not store the bytes a client sent: it
+  // re-encodes from its own domain model, so a field it does not know is
+  // dropped from the stored change log and the push still succeeds. Without a
+  // handshake a client cannot tell that its restore was silently downgraded to
+  // an ordinary insert. Measured against a pinned v0.7.20 server.
+  repeated string capabilities = 9;
 }
 
 message Change {
@@ -75,12 +86,14 @@ message Operation {
     string key = 2;
     JSONElementSimple value = 3;
     TimeTicket executed_at = 4;
+    RestoreMode restore_mode = 5;
   }
   message Add {
     TimeTicket parent_created_at = 1;
     TimeTicket prev_created_at = 2;
     JSONElementSimple value = 3;
     TimeTicket executed_at = 4;
+    RestoreMode restore_mode = 5;
   }
   message Move {
     TimeTicket parent_created_at = 1;
@@ -156,6 +169,7 @@ message Operation {
     TimeTicket created_at = 2;
     JSONElementSimple value = 3;
     TimeTicket executed_at = 4;
+    RestoreMode restore_mode = 5;
   }
 
   oneof body {
@@ -190,12 +204,16 @@ message JSONElement {
     TimeTicket created_at = 2;
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
+    // revived_at is the revive half of the liveness register. See the comment
+    // on RestoreMode for why an element needs one.
+    TimeTicket revived_at = 5;
   }
   message JSONArray {
     repeated RGANode nodes = 1;
     TimeTicket created_at = 2;
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
+    TimeTicket revived_at = 5;
   }
   message Primitive {
     ValueType type = 1;
@@ -203,12 +221,14 @@ message JSONElement {
     TimeTicket created_at = 3;
     TimeTicket moved_at = 4;
     TimeTicket removed_at = 5;
+    TimeTicket revived_at = 6;
   }
   message Text {
     repeated TextNode nodes = 1;
     TimeTicket created_at = 2;
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
+    TimeTicket revived_at = 5;
   }
   message Counter {
     ValueType type = 1;
@@ -218,12 +238,14 @@ message JSONElement {
     TimeTicket removed_at = 5;
     reserved 6; // was is_dedup, now encoded in ValueType
     bytes hll_registers = 7;
+    TimeTicket revived_at = 8;
   }
   message Tree {
     repeated TreeNode nodes = 1;
     TimeTicket created_at = 2;
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
+    TimeTicket revived_at = 5;
   }
 
   oneof body {
@@ -455,6 +477,20 @@ message RestoreSpan {
 // RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
 // means an ordinary edit (no restore semantics), keeping forward edits
 // unchanged on the wire.
+//
+// For elements it selects between reviving the element already in the tree and
+// inserting a copy of it. The copy is what undo does today, and because a
+// deep copy keeps every descendant's created_at, it puts a second live element
+// under ids the document is indexed by. Reviving needs a replicated liveness
+// register -- removed_at paired with revived_at on each element -- so that
+// every replica resolves a remove/revive race the same way, with a tie going
+// to the removal as the shipped remove register already does.
+//
+// The branch cannot be chosen from local state. A replica that collected
+// between the removal and the undo has purged the tombstone, and one that
+// joined from a later snapshot never had it, so "revive if a tombstone is
+// present" is a function of local collection timing and the same change log
+// would produce different documents. That is why the branch is on the wire.
 enum RestoreMode {
   RESTORE_MODE_UNSPECIFIED = 0;
   RESTORE_MODE_RESTORE = 1;

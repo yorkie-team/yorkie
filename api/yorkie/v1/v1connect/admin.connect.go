@@ -33,7 +33,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AdminServiceName is the fully-qualified name of the AdminService service.
@@ -206,191 +206,229 @@ type AdminServiceClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AdminServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	adminServiceMethods := v1.File_yorkie_v1_admin_proto.Services().ByName("AdminService").Methods()
 	return &adminServiceClient{
 		signUp: connect.NewClient[v1.SignUpRequest, v1.SignUpResponse](
 			httpClient,
 			baseURL+AdminServiceSignUpProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("SignUp")),
+			connect.WithClientOptions(opts...),
 		),
 		logIn: connect.NewClient[v1.LogInRequest, v1.LogInResponse](
 			httpClient,
 			baseURL+AdminServiceLogInProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("LogIn")),
+			connect.WithClientOptions(opts...),
 		),
 		deleteAccount: connect.NewClient[v1.DeleteAccountRequest, v1.DeleteAccountResponse](
 			httpClient,
 			baseURL+AdminServiceDeleteAccountProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("DeleteAccount")),
+			connect.WithClientOptions(opts...),
 		),
 		changePassword: connect.NewClient[v1.ChangePasswordRequest, v1.ChangePasswordResponse](
 			httpClient,
 			baseURL+AdminServiceChangePasswordProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ChangePassword")),
+			connect.WithClientOptions(opts...),
 		),
 		createProject: connect.NewClient[v1.CreateProjectRequest, v1.CreateProjectResponse](
 			httpClient,
 			baseURL+AdminServiceCreateProjectProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("CreateProject")),
+			connect.WithClientOptions(opts...),
 		),
 		listProjects: connect.NewClient[v1.ListProjectsRequest, v1.ListProjectsResponse](
 			httpClient,
 			baseURL+AdminServiceListProjectsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListProjects")),
+			connect.WithClientOptions(opts...),
 		),
 		getProject: connect.NewClient[v1.GetProjectRequest, v1.GetProjectResponse](
 			httpClient,
 			baseURL+AdminServiceGetProjectProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetProject")),
+			connect.WithClientOptions(opts...),
 		),
 		getProjectStats: connect.NewClient[v1.GetProjectStatsRequest, v1.GetProjectStatsResponse](
 			httpClient,
 			baseURL+AdminServiceGetProjectStatsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetProjectStats")),
+			connect.WithClientOptions(opts...),
 		),
 		updateProject: connect.NewClient[v1.UpdateProjectRequest, v1.UpdateProjectResponse](
 			httpClient,
 			baseURL+AdminServiceUpdateProjectProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("UpdateProject")),
+			connect.WithClientOptions(opts...),
 		),
 		rotateProjectKeys: connect.NewClient[v1.RotateProjectKeysRequest, v1.RotateProjectKeysResponse](
 			httpClient,
 			baseURL+AdminServiceRotateProjectKeysProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("RotateProjectKeys")),
+			connect.WithClientOptions(opts...),
 		),
 		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
 			httpClient,
 			baseURL+AdminServiceRemoveMemberProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("RemoveMember")),
+			connect.WithClientOptions(opts...),
 		),
 		listMembers: connect.NewClient[v1.ListMembersRequest, v1.ListMembersResponse](
 			httpClient,
 			baseURL+AdminServiceListMembersProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListMembers")),
+			connect.WithClientOptions(opts...),
 		),
 		updateMemberRole: connect.NewClient[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse](
 			httpClient,
 			baseURL+AdminServiceUpdateMemberRoleProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("UpdateMemberRole")),
+			connect.WithClientOptions(opts...),
 		),
 		createInvite: connect.NewClient[v1.CreateInviteRequest, v1.CreateInviteResponse](
 			httpClient,
 			baseURL+AdminServiceCreateInviteProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("CreateInvite")),
+			connect.WithClientOptions(opts...),
 		),
 		acceptInvite: connect.NewClient[v1.AcceptInviteRequest, v1.AcceptInviteResponse](
 			httpClient,
 			baseURL+AdminServiceAcceptInviteProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("AcceptInvite")),
+			connect.WithClientOptions(opts...),
 		),
 		createDocument: connect.NewClient[v1.CreateDocumentRequest, v1.CreateDocumentResponse](
 			httpClient,
 			baseURL+AdminServiceCreateDocumentProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("CreateDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		listDocuments: connect.NewClient[v1.ListDocumentsRequest, v1.ListDocumentsResponse](
 			httpClient,
 			baseURL+AdminServiceListDocumentsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListDocuments")),
+			connect.WithClientOptions(opts...),
 		),
 		getDocument: connect.NewClient[v1.GetDocumentRequest, v1.GetDocumentResponse](
 			httpClient,
 			baseURL+AdminServiceGetDocumentProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		getDocuments: connect.NewClient[v1.GetDocumentsRequest, v1.GetDocumentsResponse](
 			httpClient,
 			baseURL+AdminServiceGetDocumentsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetDocuments")),
+			connect.WithClientOptions(opts...),
 		),
 		searchDocuments: connect.NewClient[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse](
 			httpClient,
 			baseURL+AdminServiceSearchDocumentsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("SearchDocuments")),
+			connect.WithClientOptions(opts...),
 		),
 		updateDocument: connect.NewClient[v1.UpdateDocumentRequest, v1.UpdateDocumentResponse](
 			httpClient,
 			baseURL+AdminServiceUpdateDocumentProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("UpdateDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		removeDocumentByAdmin: connect.NewClient[v1.RemoveDocumentByAdminRequest, v1.RemoveDocumentByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceRemoveDocumentByAdminProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("RemoveDocumentByAdmin")),
+			connect.WithClientOptions(opts...),
 		),
 		getSnapshotMeta: connect.NewClient[v1.GetSnapshotMetaRequest, v1.GetSnapshotMetaResponse](
 			httpClient,
 			baseURL+AdminServiceGetSnapshotMetaProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetSnapshotMeta")),
+			connect.WithClientOptions(opts...),
 		),
 		listChanges: connect.NewClient[v1.ListChangesRequest, v1.ListChangesResponse](
 			httpClient,
 			baseURL+AdminServiceListChangesProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListChanges")),
+			connect.WithClientOptions(opts...),
 		),
 		createSchema: connect.NewClient[v1.CreateSchemaRequest, v1.CreateSchemaResponse](
 			httpClient,
 			baseURL+AdminServiceCreateSchemaProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("CreateSchema")),
+			connect.WithClientOptions(opts...),
 		),
 		listSchemas: connect.NewClient[v1.ListSchemasRequest, v1.ListSchemasResponse](
 			httpClient,
 			baseURL+AdminServiceListSchemasProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListSchemas")),
+			connect.WithClientOptions(opts...),
 		),
 		getSchema: connect.NewClient[v1.GetSchemaRequest, v1.GetSchemaResponse](
 			httpClient,
 			baseURL+AdminServiceGetSchemaProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetSchema")),
+			connect.WithClientOptions(opts...),
 		),
 		getSchemas: connect.NewClient[v1.GetSchemasRequest, v1.GetSchemasResponse](
 			httpClient,
 			baseURL+AdminServiceGetSchemasProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetSchemas")),
+			connect.WithClientOptions(opts...),
 		),
 		removeSchema: connect.NewClient[v1.RemoveSchemaRequest, v1.RemoveSchemaResponse](
 			httpClient,
 			baseURL+AdminServiceRemoveSchemaProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("RemoveSchema")),
+			connect.WithClientOptions(opts...),
 		),
 		listRevisionsByAdmin: connect.NewClient[v1.ListRevisionsByAdminRequest, v1.ListRevisionsByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceListRevisionsByAdminProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListRevisionsByAdmin")),
+			connect.WithClientOptions(opts...),
 		),
 		getRevisionByAdmin: connect.NewClient[v1.GetRevisionByAdminRequest, v1.GetRevisionByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceGetRevisionByAdminProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetRevisionByAdmin")),
+			connect.WithClientOptions(opts...),
 		),
 		restoreRevisionByAdmin: connect.NewClient[v1.RestoreRevisionByAdminRequest, v1.RestoreRevisionByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceRestoreRevisionByAdminProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("RestoreRevisionByAdmin")),
+			connect.WithClientOptions(opts...),
 		),
 		listChannels: connect.NewClient[v1.ListChannelsRequest, v1.ListChannelsResponse](
 			httpClient,
 			baseURL+AdminServiceListChannelsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("ListChannels")),
+			connect.WithClientOptions(opts...),
 		),
 		getChannels: connect.NewClient[v1.GetChannelsRequest, v1.GetChannelsResponse](
 			httpClient,
 			baseURL+AdminServiceGetChannelsProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetChannels")),
+			connect.WithClientOptions(opts...),
 		),
 		broadcastByAdmin: connect.NewClient[v1.BroadcastByAdminRequest, v1.BroadcastByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceBroadcastByAdminProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("BroadcastByAdmin")),
+			connect.WithClientOptions(opts...),
 		),
 		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
 			httpClient,
 			baseURL+AdminServiceGetServerVersionProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("GetServerVersion")),
+			connect.WithClientOptions(opts...),
 		),
 		compactDocumentByAdmin: connect.NewClient[v1.CompactDocumentByAdminRequest, v1.CompactDocumentByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceCompactDocumentByAdminProcedure,
-			opts...,
+			connect.WithSchema(adminServiceMethods.ByName("CompactDocumentByAdmin")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -668,190 +706,228 @@ type AdminServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	adminServiceMethods := v1.File_yorkie_v1_admin_proto.Services().ByName("AdminService").Methods()
 	adminServiceSignUpHandler := connect.NewUnaryHandler(
 		AdminServiceSignUpProcedure,
 		svc.SignUp,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("SignUp")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceLogInHandler := connect.NewUnaryHandler(
 		AdminServiceLogInProcedure,
 		svc.LogIn,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("LogIn")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceDeleteAccountHandler := connect.NewUnaryHandler(
 		AdminServiceDeleteAccountProcedure,
 		svc.DeleteAccount,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("DeleteAccount")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceChangePasswordHandler := connect.NewUnaryHandler(
 		AdminServiceChangePasswordProcedure,
 		svc.ChangePassword,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ChangePassword")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceCreateProjectHandler := connect.NewUnaryHandler(
 		AdminServiceCreateProjectProcedure,
 		svc.CreateProject,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("CreateProject")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListProjectsHandler := connect.NewUnaryHandler(
 		AdminServiceListProjectsProcedure,
 		svc.ListProjects,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListProjects")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetProjectHandler := connect.NewUnaryHandler(
 		AdminServiceGetProjectProcedure,
 		svc.GetProject,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetProject")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetProjectStatsHandler := connect.NewUnaryHandler(
 		AdminServiceGetProjectStatsProcedure,
 		svc.GetProjectStats,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetProjectStats")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceUpdateProjectHandler := connect.NewUnaryHandler(
 		AdminServiceUpdateProjectProcedure,
 		svc.UpdateProject,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("UpdateProject")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceRotateProjectKeysHandler := connect.NewUnaryHandler(
 		AdminServiceRotateProjectKeysProcedure,
 		svc.RotateProjectKeys,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("RotateProjectKeys")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceRemoveMemberHandler := connect.NewUnaryHandler(
 		AdminServiceRemoveMemberProcedure,
 		svc.RemoveMember,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("RemoveMember")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListMembersHandler := connect.NewUnaryHandler(
 		AdminServiceListMembersProcedure,
 		svc.ListMembers,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListMembers")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceUpdateMemberRoleHandler := connect.NewUnaryHandler(
 		AdminServiceUpdateMemberRoleProcedure,
 		svc.UpdateMemberRole,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("UpdateMemberRole")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceCreateInviteHandler := connect.NewUnaryHandler(
 		AdminServiceCreateInviteProcedure,
 		svc.CreateInvite,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("CreateInvite")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceAcceptInviteHandler := connect.NewUnaryHandler(
 		AdminServiceAcceptInviteProcedure,
 		svc.AcceptInvite,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("AcceptInvite")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceCreateDocumentHandler := connect.NewUnaryHandler(
 		AdminServiceCreateDocumentProcedure,
 		svc.CreateDocument,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("CreateDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListDocumentsHandler := connect.NewUnaryHandler(
 		AdminServiceListDocumentsProcedure,
 		svc.ListDocuments,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListDocuments")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetDocumentHandler := connect.NewUnaryHandler(
 		AdminServiceGetDocumentProcedure,
 		svc.GetDocument,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetDocumentsHandler := connect.NewUnaryHandler(
 		AdminServiceGetDocumentsProcedure,
 		svc.GetDocuments,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetDocuments")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceSearchDocumentsHandler := connect.NewUnaryHandler(
 		AdminServiceSearchDocumentsProcedure,
 		svc.SearchDocuments,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("SearchDocuments")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceUpdateDocumentHandler := connect.NewUnaryHandler(
 		AdminServiceUpdateDocumentProcedure,
 		svc.UpdateDocument,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("UpdateDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceRemoveDocumentByAdminHandler := connect.NewUnaryHandler(
 		AdminServiceRemoveDocumentByAdminProcedure,
 		svc.RemoveDocumentByAdmin,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("RemoveDocumentByAdmin")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetSnapshotMetaHandler := connect.NewUnaryHandler(
 		AdminServiceGetSnapshotMetaProcedure,
 		svc.GetSnapshotMeta,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetSnapshotMeta")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListChangesHandler := connect.NewUnaryHandler(
 		AdminServiceListChangesProcedure,
 		svc.ListChanges,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListChanges")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceCreateSchemaHandler := connect.NewUnaryHandler(
 		AdminServiceCreateSchemaProcedure,
 		svc.CreateSchema,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("CreateSchema")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListSchemasHandler := connect.NewUnaryHandler(
 		AdminServiceListSchemasProcedure,
 		svc.ListSchemas,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListSchemas")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetSchemaHandler := connect.NewUnaryHandler(
 		AdminServiceGetSchemaProcedure,
 		svc.GetSchema,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetSchema")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetSchemasHandler := connect.NewUnaryHandler(
 		AdminServiceGetSchemasProcedure,
 		svc.GetSchemas,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetSchemas")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceRemoveSchemaHandler := connect.NewUnaryHandler(
 		AdminServiceRemoveSchemaProcedure,
 		svc.RemoveSchema,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("RemoveSchema")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListRevisionsByAdminHandler := connect.NewUnaryHandler(
 		AdminServiceListRevisionsByAdminProcedure,
 		svc.ListRevisionsByAdmin,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListRevisionsByAdmin")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetRevisionByAdminHandler := connect.NewUnaryHandler(
 		AdminServiceGetRevisionByAdminProcedure,
 		svc.GetRevisionByAdmin,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetRevisionByAdmin")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceRestoreRevisionByAdminHandler := connect.NewUnaryHandler(
 		AdminServiceRestoreRevisionByAdminProcedure,
 		svc.RestoreRevisionByAdmin,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("RestoreRevisionByAdmin")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceListChannelsHandler := connect.NewUnaryHandler(
 		AdminServiceListChannelsProcedure,
 		svc.ListChannels,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("ListChannels")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetChannelsHandler := connect.NewUnaryHandler(
 		AdminServiceGetChannelsProcedure,
 		svc.GetChannels,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetChannels")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceBroadcastByAdminHandler := connect.NewUnaryHandler(
 		AdminServiceBroadcastByAdminProcedure,
 		svc.BroadcastByAdmin,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("BroadcastByAdmin")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceGetServerVersionHandler := connect.NewUnaryHandler(
 		AdminServiceGetServerVersionProcedure,
 		svc.GetServerVersion,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("GetServerVersion")),
+		connect.WithHandlerOptions(opts...),
 	)
 	adminServiceCompactDocumentByAdminHandler := connect.NewUnaryHandler(
 		AdminServiceCompactDocumentByAdminProcedure,
 		svc.CompactDocumentByAdmin,
-		opts...,
+		connect.WithSchema(adminServiceMethods.ByName("CompactDocumentByAdmin")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/yorkie.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

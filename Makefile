@@ -22,7 +22,7 @@ default: help
 tools: ## install tools for developing yorkie
 	go install github.com/bufbuild/buf/cmd/buf@v1.28.1
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
-	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.12.0
+	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 	go install github.com/sudorandom/protoc-gen-connect-openapi@v0.5.5
 

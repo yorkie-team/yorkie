@@ -41,6 +41,20 @@ const (
 // RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
 // means an ordinary edit (no restore semantics), keeping forward edits
 // unchanged on the wire.
+//
+// For elements it selects between reviving the element already in the tree and
+// inserting a copy of it. The copy is what undo does today, and because a
+// deep copy keeps every descendant's created_at, it puts a second live element
+// under ids the document is indexed by. Reviving needs a replicated liveness
+// register -- removed_at paired with revived_at on each element -- so that
+// every replica resolves a remove/revive race the same way, with a tie going
+// to the removal as the shipped remove register already does.
+//
+// The branch cannot be chosen from local state. A replica that collected
+// between the removal and the undo has purged the tombstone, and one that
+// joined from a later snapshot never had it, so "revive if a tombstone is
+// present" is a function of local collection timing and the same change log
+// would produce different documents. That is why the branch is on the wire.
 type RestoreMode int32
 
 const (
@@ -395,8 +409,19 @@ type ChangePack struct {
 	IsRemoved       bool                   `protobuf:"varint,6,opt,name=is_removed,json=isRemoved,proto3" json:"is_removed,omitempty"`
 	VersionVector   *VersionVector         `protobuf:"bytes,7,opt,name=version_vector,json=versionVector,proto3" json:"version_vector,omitempty"`
 	Epoch           int64                  `protobuf:"varint,8,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// capabilities is the negotiation channel for wire features a peer may not
+	// understand. A server sets it on the pack it returns to advertise what it
+	// supports; a client must treat absence as "unsupported" rather than as
+	// "unknown", because a server that predates a feature cannot say so.
+	//
+	// It exists because a server does not store the bytes a client sent: it
+	// re-encodes from its own domain model, so a field it does not know is
+	// dropped from the stored change log and the push still succeeds. Without a
+	// handshake a client cannot tell that its restore was silently downgraded to
+	// an ordinary insert. Measured against a pinned v0.7.20 server.
+	Capabilities  []string `protobuf:"bytes,9,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChangePack) Reset() {
@@ -483,6 +508,13 @@ func (x *ChangePack) GetEpoch() int64 {
 		return x.Epoch
 	}
 	return 0
+}
+
+func (x *ChangePack) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 type Change struct {
@@ -3603,6 +3635,7 @@ type Operation_Set struct {
 	Key             string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Value           *JSONElementSimple     `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	ExecutedAt      *TimeTicket            `protobuf:"bytes,4,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	RestoreMode     RestoreMode            `protobuf:"varint,5,opt,name=restore_mode,json=restoreMode,proto3,enum=yorkie.v1.RestoreMode" json:"restore_mode,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3665,12 +3698,20 @@ func (x *Operation_Set) GetExecutedAt() *TimeTicket {
 	return nil
 }
 
+func (x *Operation_Set) GetRestoreMode() RestoreMode {
+	if x != nil {
+		return x.RestoreMode
+	}
+	return RestoreMode_RESTORE_MODE_UNSPECIFIED
+}
+
 type Operation_Add struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ParentCreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
 	PrevCreatedAt   *TimeTicket            `protobuf:"bytes,2,opt,name=prev_created_at,json=prevCreatedAt,proto3" json:"prev_created_at,omitempty"`
 	Value           *JSONElementSimple     `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	ExecutedAt      *TimeTicket            `protobuf:"bytes,4,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	RestoreMode     RestoreMode            `protobuf:"varint,5,opt,name=restore_mode,json=restoreMode,proto3,enum=yorkie.v1.RestoreMode" json:"restore_mode,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3731,6 +3772,13 @@ func (x *Operation_Add) GetExecutedAt() *TimeTicket {
 		return x.ExecutedAt
 	}
 	return nil
+}
+
+func (x *Operation_Add) GetRestoreMode() RestoreMode {
+	if x != nil {
+		return x.RestoreMode
+	}
+	return RestoreMode_RESTORE_MODE_UNSPECIFIED
 }
 
 type Operation_Move struct {
@@ -4368,6 +4416,7 @@ type Operation_ArraySet struct {
 	CreatedAt       *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Value           *JSONElementSimple     `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	ExecutedAt      *TimeTicket            `protobuf:"bytes,4,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	RestoreMode     RestoreMode            `protobuf:"varint,5,opt,name=restore_mode,json=restoreMode,proto3,enum=yorkie.v1.RestoreMode" json:"restore_mode,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -4430,12 +4479,22 @@ func (x *Operation_ArraySet) GetExecutedAt() *TimeTicket {
 	return nil
 }
 
+func (x *Operation_ArraySet) GetRestoreMode() RestoreMode {
+	if x != nil {
+		return x.RestoreMode
+	}
+	return RestoreMode_RESTORE_MODE_UNSPECIFIED
+}
+
 type JSONElement_JSONObject struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Nodes         []*RHTNode             `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
-	CreatedAt     *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	MovedAt       *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
-	RemovedAt     *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Nodes     []*RHTNode             `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	CreatedAt *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	MovedAt   *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
+	RemovedAt *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	// revived_at is the revive half of the liveness register. See the comment
+	// on RestoreMode for why an element needs one.
+	RevivedAt     *TimeTicket `protobuf:"bytes,5,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4498,12 +4557,20 @@ func (x *JSONElement_JSONObject) GetRemovedAt() *TimeTicket {
 	return nil
 }
 
+func (x *JSONElement_JSONObject) GetRevivedAt() *TimeTicket {
+	if x != nil {
+		return x.RevivedAt
+	}
+	return nil
+}
+
 type JSONElement_JSONArray struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Nodes         []*RGANode             `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	CreatedAt     *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	MovedAt       *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
 	RemovedAt     *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RevivedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4566,6 +4633,13 @@ func (x *JSONElement_JSONArray) GetRemovedAt() *TimeTicket {
 	return nil
 }
 
+func (x *JSONElement_JSONArray) GetRevivedAt() *TimeTicket {
+	if x != nil {
+		return x.RevivedAt
+	}
+	return nil
+}
+
 type JSONElement_Primitive struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          ValueType              `protobuf:"varint,1,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
@@ -4573,6 +4647,7 @@ type JSONElement_Primitive struct {
 	CreatedAt     *TimeTicket            `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	MovedAt       *TimeTicket            `protobuf:"bytes,4,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
 	RemovedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RevivedAt     *TimeTicket            `protobuf:"bytes,6,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4642,12 +4717,20 @@ func (x *JSONElement_Primitive) GetRemovedAt() *TimeTicket {
 	return nil
 }
 
+func (x *JSONElement_Primitive) GetRevivedAt() *TimeTicket {
+	if x != nil {
+		return x.RevivedAt
+	}
+	return nil
+}
+
 type JSONElement_Text struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Nodes         []*TextNode            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	CreatedAt     *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	MovedAt       *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
 	RemovedAt     *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RevivedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4710,6 +4793,13 @@ func (x *JSONElement_Text) GetRemovedAt() *TimeTicket {
 	return nil
 }
 
+func (x *JSONElement_Text) GetRevivedAt() *TimeTicket {
+	if x != nil {
+		return x.RevivedAt
+	}
+	return nil
+}
+
 type JSONElement_Counter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          ValueType              `protobuf:"varint,1,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
@@ -4718,6 +4808,7 @@ type JSONElement_Counter struct {
 	MovedAt       *TimeTicket            `protobuf:"bytes,4,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
 	RemovedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
 	HllRegisters  []byte                 `protobuf:"bytes,7,opt,name=hll_registers,json=hllRegisters,proto3" json:"hll_registers,omitempty"`
+	RevivedAt     *TimeTicket            `protobuf:"bytes,8,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4794,12 +4885,20 @@ func (x *JSONElement_Counter) GetHllRegisters() []byte {
 	return nil
 }
 
+func (x *JSONElement_Counter) GetRevivedAt() *TimeTicket {
+	if x != nil {
+		return x.RevivedAt
+	}
+	return nil
+}
+
 type JSONElement_Tree struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Nodes         []*TreeNode            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	CreatedAt     *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	MovedAt       *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
 	RemovedAt     *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RevivedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4858,6 +4957,13 @@ func (x *JSONElement_Tree) GetMovedAt() *TimeTicket {
 func (x *JSONElement_Tree) GetRemovedAt() *TimeTicket {
 	if x != nil {
 		return x.RemovedAt
+	}
+	return nil
+}
+
+func (x *JSONElement_Tree) GetRevivedAt() *TimeTicket {
+	if x != nil {
+		return x.RevivedAt
 	}
 	return nil
 }
@@ -5004,7 +5110,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\tpresences\x18\x02 \x03(\v2\".yorkie.v1.Snapshot.PresencesEntryR\tpresences\x1aQ\n" +
 	"\x0ePresencesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\xe8\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\x8c\x03\n" +
 	"\n" +
 	"ChangePack\x12!\n" +
 	"\fdocument_key\x18\x01 \x01(\tR\vdocumentKey\x125\n" +
@@ -5017,7 +5123,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"is_removed\x18\x06 \x01(\bR\tisRemoved\x12?\n" +
 	"\x0eversion_vector\x18\a \x01(\v2\x18.yorkie.v1.VersionVectorR\rversionVector\x12\x14\n" +
-	"\x05epoch\x18\b \x01(\x03R\x05epoch\"\xc1\x01\n" +
+	"\x05epoch\x18\b \x01(\x03R\x05epoch\x12\"\n" +
+	"\fcapabilities\x18\t \x03(\tR\fcapabilities\"\xc1\x01\n" +
 	"\x06Change\x12#\n" +
 	"\x02id\x18\x01 \x01(\v2\x13.yorkie.v1.ChangeIDR\x02id\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
@@ -5037,7 +5144,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x06vector\x18\x01 \x03(\v2$.yorkie.v1.VersionVector.VectorEntryR\x06vector\x1a9\n" +
 	"\vVectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa9$\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xda%\n" +
 	"\tOperation\x12,\n" +
 	"\x03set\x18\x01 \x01(\v2\x18.yorkie.v1.Operation.SetH\x00R\x03set\x12,\n" +
 	"\x03add\x18\x02 \x01(\v2\x18.yorkie.v1.Operation.AddH\x00R\x03add\x12/\n" +
@@ -5050,19 +5157,21 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"tree_style\x18\n" +
 	" \x01(\v2\x1e.yorkie.v1.Operation.TreeStyleH\x00R\ttreeStyle\x12<\n" +
-	"\tarray_set\x18\v \x01(\v2\x1d.yorkie.v1.Operation.ArraySetH\x00R\barraySet\x1a\xc6\x01\n" +
+	"\tarray_set\x18\v \x01(\v2\x1d.yorkie.v1.Operation.ArraySetH\x00R\barraySet\x1a\x81\x02\n" +
 	"\x03Set\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x122\n" +
 	"\x05value\x18\x03 \x01(\v2\x1c.yorkie.v1.JSONElementSimpleR\x05value\x126\n" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAt\x1a\xf3\x01\n" +
+	"executedAt\x129\n" +
+	"\frestore_mode\x18\x05 \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreMode\x1a\xae\x02\n" +
 	"\x03Add\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12=\n" +
 	"\x0fprev_created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\rprevCreatedAt\x122\n" +
 	"\x05value\x18\x03 \x01(\v2\x1c.yorkie.v1.JSONElementSimpleR\x05value\x126\n" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAt\x1a\xf6\x01\n" +
+	"executedAt\x129\n" +
+	"\frestore_mode\x18\x05 \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreMode\x1a\xf6\x01\n" +
 	"\x04Move\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12=\n" +
 	"\x0fprev_created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\rprevCreatedAt\x124\n" +
@@ -5154,14 +5263,15 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a]\n" +
 	"\x18CreatedAtMapByActorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
-	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a\xef\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a\xaa\x02\n" +
 	"\bArraySet\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x124\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x122\n" +
 	"\x05value\x18\x03 \x01(\v2\x1c.yorkie.v1.JSONElementSimpleR\x05value\x126\n" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAtB\x06\n" +
+	"executedAt\x129\n" +
+	"\frestore_mode\x18\x05 \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreModeB\x06\n" +
 	"\x04body\"\xf1\x01\n" +
 	"\x11JSONElementSimple\x124\n" +
 	"\n" +
@@ -5170,7 +5280,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\fR\x05value\"\xd4\r\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\"\x98\x10\n" +
 	"\vJSONElement\x12D\n" +
 	"\vjson_object\x18\x01 \x01(\v2!.yorkie.v1.JSONElement.JSONObjectH\x00R\n" +
 	"jsonObject\x12A\n" +
@@ -5179,7 +5289,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\tprimitive\x18\x03 \x01(\v2 .yorkie.v1.JSONElement.PrimitiveH\x00R\tprimitive\x121\n" +
 	"\x04text\x18\x05 \x01(\v2\x1b.yorkie.v1.JSONElement.TextH\x00R\x04text\x12:\n" +
 	"\acounter\x18\x06 \x01(\v2\x1e.yorkie.v1.JSONElement.CounterH\x00R\acounter\x121\n" +
-	"\x04tree\x18\a \x01(\v2\x1b.yorkie.v1.JSONElement.TreeH\x00R\x04tree\x1a\xd4\x01\n" +
+	"\x04tree\x18\a \x01(\v2\x1b.yorkie.v1.JSONElement.TreeH\x00R\x04tree\x1a\x8a\x02\n" +
 	"\n" +
 	"JSONObject\x12(\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x12.yorkie.v1.RHTNodeR\x05nodes\x124\n" +
@@ -5187,14 +5297,18 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\xd3\x01\n" +
+	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
+	"\n" +
+	"revived_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\x89\x02\n" +
 	"\tJSONArray\x12(\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x12.yorkie.v1.RGANodeR\x05nodes\x124\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\xe9\x01\n" +
+	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
+	"\n" +
+	"revived_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\x9f\x02\n" +
 	"\tPrimitive\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x124\n" +
@@ -5202,14 +5316,18 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"created_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\xcf\x01\n" +
+	"removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
+	"\n" +
+	"revived_at\x18\x06 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\x85\x02\n" +
 	"\x04Text\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.yorkie.v1.TextNodeR\x05nodes\x124\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\x92\x02\n" +
+	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
+	"\n" +
+	"revived_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\xc8\x02\n" +
 	"\aCounter\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x124\n" +
@@ -5218,14 +5336,18 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\bmoved_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
 	"removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12#\n" +
-	"\rhll_registers\x18\a \x01(\fR\fhllRegistersJ\x04\b\x06\x10\a\x1a\xcf\x01\n" +
+	"\rhll_registers\x18\a \x01(\fR\fhllRegisters\x124\n" +
+	"\n" +
+	"revived_at\x18\b \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAtJ\x04\b\x06\x10\a\x1a\x85\x02\n" +
 	"\x04Tree\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.yorkie.v1.TreeNodeR\x05nodes\x124\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAtB\x06\n" +
+	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
+	"\n" +
+	"revived_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAtB\x06\n" +
 	"\x04body\"M\n" +
 	"\aRHTNode\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
@@ -5739,92 +5861,101 @@ var file_yorkie_v1_resources_proto_depIdxs = []int32{
 	35,  // 107: yorkie.v1.Operation.Set.parent_created_at:type_name -> yorkie.v1.TimeTicket
 	11,  // 108: yorkie.v1.Operation.Set.value:type_name -> yorkie.v1.JSONElementSimple
 	35,  // 109: yorkie.v1.Operation.Set.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 110: yorkie.v1.Operation.Add.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 111: yorkie.v1.Operation.Add.prev_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 112: yorkie.v1.Operation.Add.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 113: yorkie.v1.Operation.Add.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 114: yorkie.v1.Operation.Move.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 115: yorkie.v1.Operation.Move.prev_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 116: yorkie.v1.Operation.Move.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 117: yorkie.v1.Operation.Move.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 118: yorkie.v1.Operation.Remove.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 119: yorkie.v1.Operation.Remove.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 120: yorkie.v1.Operation.Remove.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 121: yorkie.v1.Operation.Edit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 122: yorkie.v1.Operation.Edit.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 123: yorkie.v1.Operation.Edit.to:type_name -> yorkie.v1.TextNodePos
-	57,  // 124: yorkie.v1.Operation.Edit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
-	35,  // 125: yorkie.v1.Operation.Edit.executed_at:type_name -> yorkie.v1.TimeTicket
-	58,  // 126: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
-	33,  // 127: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
-	0,   // 128: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	33,  // 129: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
-	35,  // 130: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 131: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 132: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
-	59,  // 133: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
-	35,  // 134: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
-	60,  // 135: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
-	35,  // 136: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 137: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 138: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 139: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 140: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
-	21,  // 141: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
-	61,  // 142: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
-	19,  // 143: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
-	35,  // 144: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 145: yorkie.v1.Operation.TreeEdit.restore_spans:type_name -> yorkie.v1.TreeRestoreSpan
-	0,   // 146: yorkie.v1.Operation.TreeEdit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	34,  // 147: yorkie.v1.Operation.TreeEdit.retombstone_spans:type_name -> yorkie.v1.TreeRestoreSpan
-	35,  // 148: yorkie.v1.Operation.TreeEdit.split_tickets:type_name -> yorkie.v1.TimeTicket
-	35,  // 149: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 150: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
-	21,  // 151: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
-	62,  // 152: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
-	35,  // 153: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
-	63,  // 154: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
-	35,  // 155: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 156: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 157: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 158: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 159: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 160: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 161: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 162: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	13,  // 163: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
-	35,  // 164: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 165: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 166: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
-	14,  // 167: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
-	35,  // 168: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 169: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 170: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 171: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
-	35,  // 172: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 173: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 174: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
-	16,  // 175: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
-	35,  // 176: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 177: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 178: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 179: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
-	35,  // 180: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 181: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 182: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
-	18,  // 183: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
-	35,  // 184: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 185: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 186: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
-	15,  // 187: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	15,  // 188: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	29,  // 189: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
-	15,  // 190: yorkie.v1.TreeRestoreSpan.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	191, // [191:191] is the sub-list for method output_type
-	191, // [191:191] is the sub-list for method input_type
-	191, // [191:191] is the sub-list for extension type_name
-	191, // [191:191] is the sub-list for extension extendee
-	0,   // [0:191] is the sub-list for field type_name
+	0,   // 110: yorkie.v1.Operation.Set.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 111: yorkie.v1.Operation.Add.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 112: yorkie.v1.Operation.Add.prev_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 113: yorkie.v1.Operation.Add.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 114: yorkie.v1.Operation.Add.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 115: yorkie.v1.Operation.Add.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 116: yorkie.v1.Operation.Move.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 117: yorkie.v1.Operation.Move.prev_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 118: yorkie.v1.Operation.Move.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 119: yorkie.v1.Operation.Move.executed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 120: yorkie.v1.Operation.Remove.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 121: yorkie.v1.Operation.Remove.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 122: yorkie.v1.Operation.Remove.executed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 123: yorkie.v1.Operation.Edit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 124: yorkie.v1.Operation.Edit.from:type_name -> yorkie.v1.TextNodePos
+	32,  // 125: yorkie.v1.Operation.Edit.to:type_name -> yorkie.v1.TextNodePos
+	57,  // 126: yorkie.v1.Operation.Edit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
+	35,  // 127: yorkie.v1.Operation.Edit.executed_at:type_name -> yorkie.v1.TimeTicket
+	58,  // 128: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
+	33,  // 129: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
+	0,   // 130: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
+	33,  // 131: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
+	35,  // 132: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 133: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
+	32,  // 134: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
+	59,  // 135: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
+	35,  // 136: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
+	60,  // 137: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
+	35,  // 138: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 139: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 140: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 141: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	21,  // 142: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
+	21,  // 143: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
+	61,  // 144: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
+	19,  // 145: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
+	35,  // 146: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 147: yorkie.v1.Operation.TreeEdit.restore_spans:type_name -> yorkie.v1.TreeRestoreSpan
+	0,   // 148: yorkie.v1.Operation.TreeEdit.restore_mode:type_name -> yorkie.v1.RestoreMode
+	34,  // 149: yorkie.v1.Operation.TreeEdit.retombstone_spans:type_name -> yorkie.v1.TreeRestoreSpan
+	35,  // 150: yorkie.v1.Operation.TreeEdit.split_tickets:type_name -> yorkie.v1.TimeTicket
+	35,  // 151: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	21,  // 152: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
+	21,  // 153: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
+	62,  // 154: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
+	35,  // 155: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
+	63,  // 156: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
+	35,  // 157: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 158: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 159: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 160: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 161: yorkie.v1.Operation.ArraySet.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 162: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	35,  // 163: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	35,  // 164: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	35,  // 165: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	13,  // 166: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
+	35,  // 167: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 168: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 169: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 170: yorkie.v1.JSONElement.JSONObject.revived_at:type_name -> yorkie.v1.TimeTicket
+	14,  // 171: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
+	35,  // 172: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 173: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 174: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 175: yorkie.v1.JSONElement.JSONArray.revived_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 176: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
+	35,  // 177: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 178: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 179: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 180: yorkie.v1.JSONElement.Primitive.revived_at:type_name -> yorkie.v1.TimeTicket
+	16,  // 181: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
+	35,  // 182: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 183: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 184: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 185: yorkie.v1.JSONElement.Text.revived_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 186: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
+	35,  // 187: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 188: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 189: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 190: yorkie.v1.JSONElement.Counter.revived_at:type_name -> yorkie.v1.TimeTicket
+	18,  // 191: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
+	35,  // 192: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 193: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 194: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 195: yorkie.v1.JSONElement.Tree.revived_at:type_name -> yorkie.v1.TimeTicket
+	15,  // 196: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	15,  // 197: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	29,  // 198: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
+	15,  // 199: yorkie.v1.TreeRestoreSpan.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	200, // [200:200] is the sub-list for method output_type
+	200, // [200:200] is the sub-list for method input_type
+	200, // [200:200] is the sub-list for extension type_name
+	200, // [200:200] is the sub-list for extension extendee
+	0,   // [0:200] is the sub-list for field type_name
 }
 
 func init() { file_yorkie_v1_resources_proto_init() }
