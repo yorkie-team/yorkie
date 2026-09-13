@@ -88,6 +88,26 @@ jobs:
       - name: Lint proto files
         uses: bufbuild/buf-lint-action@v1
 
+      - name: Check proto for breaking changes
+        # api/buf.yaml has configured `breaking: use: FILE` since before this
+        # job existed, but nothing ever ran it. Wire changes are the one kind
+        # this repository cannot walk back: a rolled-back server has to keep
+        # decoding changes it already stored.
+        run: buf breaking --against 'https://github.com/yorkie-team/yorkie.git#branch=main'
+
+      - name: Check generated code is up to date
+        # Two independent drifts reached main without this. The Makefile pinned
+        # the connect generator to a version older than the connect library in
+        # go.mod, so contributors rewrote whichever generated files their own
+        # plugin disagreed with, and the OpenAPI docs went eleven releases
+        # without being regenerated at all.
+        run: |
+          buf generate
+          if ! git diff --exit-code; then
+            echo "::error::Generated code is stale. Run 'make tools && buf generate' and commit the result."
+            exit 1
+          fi
+
       - name: Build
         run: make build
 
