@@ -33,7 +33,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ClusterServiceName is the fully-qualified name of the ClusterService service.
@@ -99,51 +99,61 @@ type ClusterServiceClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ClusterServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	clusterServiceMethods := v1.File_yorkie_v1_cluster_proto.Services().ByName("ClusterService").Methods()
 	return &clusterServiceClient{
 		detachDocument: connect.NewClient[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse](
 			httpClient,
 			baseURL+ClusterServiceDetachDocumentProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("DetachDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		compactDocument: connect.NewClient[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse](
 			httpClient,
 			baseURL+ClusterServiceCompactDocumentProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("CompactDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		purgeDocument: connect.NewClient[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse](
 			httpClient,
 			baseURL+ClusterServicePurgeDocumentProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("PurgeDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		getDocument: connect.NewClient[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse](
 			httpClient,
 			baseURL+ClusterServiceGetDocumentProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("GetDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		listChannels: connect.NewClient[v1.ClusterServiceListChannelsRequest, v1.ClusterServiceListChannelsResponse](
 			httpClient,
 			baseURL+ClusterServiceListChannelsProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("ListChannels")),
+			connect.WithClientOptions(opts...),
 		),
 		getChannels: connect.NewClient[v1.ClusterServiceGetChannelsRequest, v1.ClusterServiceGetChannelsResponse](
 			httpClient,
 			baseURL+ClusterServiceGetChannelsProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("GetChannels")),
+			connect.WithClientOptions(opts...),
 		),
 		broadcast: connect.NewClient[v1.ClusterServiceBroadcastRequest, v1.ClusterServiceBroadcastResponse](
 			httpClient,
 			baseURL+ClusterServiceBroadcastProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("Broadcast")),
+			connect.WithClientOptions(opts...),
 		),
 		getChannelCount: connect.NewClient[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse](
 			httpClient,
 			baseURL+ClusterServiceGetChannelCountProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("GetChannelCount")),
+			connect.WithClientOptions(opts...),
 		),
 		invalidateCache: connect.NewClient[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse](
 			httpClient,
 			baseURL+ClusterServiceInvalidateCacheProcedure,
-			opts...,
+			connect.WithSchema(clusterServiceMethods.ByName("InvalidateCache")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -225,50 +235,60 @@ type ClusterServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	clusterServiceMethods := v1.File_yorkie_v1_cluster_proto.Services().ByName("ClusterService").Methods()
 	clusterServiceDetachDocumentHandler := connect.NewUnaryHandler(
 		ClusterServiceDetachDocumentProcedure,
 		svc.DetachDocument,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("DetachDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceCompactDocumentHandler := connect.NewUnaryHandler(
 		ClusterServiceCompactDocumentProcedure,
 		svc.CompactDocument,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("CompactDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServicePurgeDocumentHandler := connect.NewUnaryHandler(
 		ClusterServicePurgeDocumentProcedure,
 		svc.PurgeDocument,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("PurgeDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceGetDocumentHandler := connect.NewUnaryHandler(
 		ClusterServiceGetDocumentProcedure,
 		svc.GetDocument,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("GetDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceListChannelsHandler := connect.NewUnaryHandler(
 		ClusterServiceListChannelsProcedure,
 		svc.ListChannels,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("ListChannels")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceGetChannelsHandler := connect.NewUnaryHandler(
 		ClusterServiceGetChannelsProcedure,
 		svc.GetChannels,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("GetChannels")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceBroadcastHandler := connect.NewUnaryHandler(
 		ClusterServiceBroadcastProcedure,
 		svc.Broadcast,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("Broadcast")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceGetChannelCountHandler := connect.NewUnaryHandler(
 		ClusterServiceGetChannelCountProcedure,
 		svc.GetChannelCount,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("GetChannelCount")),
+		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceInvalidateCacheHandler := connect.NewUnaryHandler(
 		ClusterServiceInvalidateCacheProcedure,
 		svc.InvalidateCache,
-		opts...,
+		connect.WithSchema(clusterServiceMethods.ByName("InvalidateCache")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/yorkie.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
