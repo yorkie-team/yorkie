@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.21] - 2026-09-13
+
+### Added
+
+- Add the element-restore wire fields and a capability handshake, and stop generated code from drifting by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1981
+
+### Fixed
+
+- Stop garbage collection from deleting a restored object member by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1978
+- Stop collection from moving the RGA forward skip's stopping point by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1980
+
 ## [v0.7.20] - 2026-09-09
 
 ### Added
