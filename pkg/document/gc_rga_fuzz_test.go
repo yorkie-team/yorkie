@@ -619,6 +619,17 @@ func runSetAnchorScenario(t *testing.T, gc bool) {
 // barrier returns nil at the tail by construction -- and the append then fails
 // to apply on the collecting replica. No concurrency and no move is involved;
 // the append strictly follows the delete.
+// TestAdvArrayAppendAfterPurgedTail stays red with the successor barrier
+// applied, and that is structural rather than an oversight. The barrier refuses
+// a purge when the node that would become a forward skip's new stopping point is
+// not yet causally stable. Here the tombstone IS the tail: there is no successor
+// for the barrier to find unstable, so it never engages, and the anchor B's
+// append names is purged anyway.
+//
+// So this is the cleanest statement of the anchor half that remains open. Any
+// fourth attempt has to address the anchor an in-flight operation references,
+// not just the stopping point, and the physical tail is where the two halves are
+// easiest to tell apart.
 func TestAdvArrayAppendAfterPurgedTail(t *testing.T) {
 	srv := newAdvServer()
 	cs := newAdvClients(t, 2)

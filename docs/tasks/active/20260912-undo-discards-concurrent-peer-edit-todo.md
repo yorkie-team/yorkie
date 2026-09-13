@@ -104,8 +104,9 @@ characterization test of the precondition; it is safe to land as-is.
 
 ## Tasks
 
-- [ ] Land `TestRestoreTombstoneIsNotReliablyPresent` on its own — it is green
-      and it pins the argument that the branch cannot be chosen locally
+- [x] ~~Land `TestRestoreTombstoneIsNotReliablyPresent` on its own~~ — landed in
+      `pkg/document/restore_precondition_test.go`. It is green and it pins the
+      argument that the branch cannot be chosen locally
 - [ ] Adopt the two failing tests as **acceptance tests for train 1**, not as
       regressions. They are what "train 1 worked" means for this defect
 - [ ] Decide whether this warrants an advisory before train 1 ships. It is
