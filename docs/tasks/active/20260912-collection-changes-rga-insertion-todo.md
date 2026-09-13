@@ -7,8 +7,10 @@ garbage collection. Pre-existing on `main`; not introduced by the containment
 release (`f2533292`). Present in **all three** RGA-shaped structures — `Array`,
 `Text` and `Tree`.
 
-Two fixes were attempted and both were refuted by measurement. This filing
-records what they established so a third attempt does not repeat them.
+Three attempts were made. Attempt 2 **ships in this PR as a partial fix** — it
+closes the stopping-point half in all three structures and leaves the anchor
+half open. Attempts 1 and 3 were refuted by measurement, and this filing records
+what they established so a fourth attempt does not repeat them.
 
 ## Problem
 
@@ -74,7 +76,7 @@ moves by different actors leave those unordered, and a legitimate `minVV` can
 cover `m2` while `m1` is in flight. Refuted independently by two reviewers with
 the same counterexample.
 
-## Attempt 2 — a real improvement, still not a fix
+## Attempt 2 — ships here, as a partial fix
 
 Reframed the barrier as a property of the **successor**, not of the node being
 purged:
@@ -101,8 +103,8 @@ Retention cost measured at +5.2% mean collected pairs on a move-heavy workload
 and byte-identical to `main` on ordinary ones; it drains within one sync round
 and is charged to `DocSize.Total`, so `MaxSizeLimit` accounts for it.
 
-**It does not close the bug.** Purging a tombstone destroys two things and the
-successor barrier addresses one:
+**It does not close the bug, and it is not presented as closing it.** Purging a
+tombstone destroys two things and the successor barrier addresses one:
 
 1. the skip's stopping point — closed by attempt 2;
 2. the **anchor** that an operation concurrent with the removal still
@@ -211,9 +213,17 @@ table above rather than from any of the diffs.
 
 ## Tasks
 
-- [x] ~~Decide whether attempt 2 ships on its own~~ — no. Attempt 3 superseded
-      the question: three framings beat it on the array bar and none is
-      shippable, so shipping the weakest of them buys nothing
+- [x] ~~Decide whether attempt 2 ships on its own~~ — **yes, it ships here.**
+      This reverses an earlier decision in this file, and the earlier reasoning
+      was wrong in a way worth recording: it argued that three framings beat
+      attempt 2 on the array bar and none of them is shippable, therefore
+      "shipping the weakest of them buys nothing". If every alternative is
+      unshippable then the comparison against them carries no information, and
+      attempt 2 has to be judged on its own record. That record is every fuzz
+      category improved with none regressed, one class of silent divergence
+      eliminated outright, and a cost that no workload has been found to
+      distinguish from `main` — including the drag-reorder that disqualified
+      framing D. "Not a complete fix" is not "not worth shipping"
 - [ ] **Carry the anchor half into the wire-format work.** That is attempt 3's
       conclusion and the reason this is not a standalone fix
 - [ ] Close the anchor mechanism, or establish that it is unreachable through
@@ -235,15 +245,25 @@ table above rather than from any of the diffs.
 
 ## Reproduction and artifacts
 
-`pkg/document/gc_rga_fuzz_test.go` in this filing holds the harness, skipped
-because it fails on `main` — that is the point of it. Remove the skip to run it.
+`pkg/document/gc_rga_fuzz_test.go` holds the harness, behind the `rgafuzz` build
+tag because it is expected to fail — that is the point of it. It still fails with
+attempt 2 applied, at 33 of 300 rather than 43, and the remaining failures are
+the anchor half. `go vet -tags rgafuzz ./...` runs in CI so a refactor cannot rot
+it without running it.
 
-Attempt 2 is preserved on the branch `wip/rga-successor-barrier`, not for merge.
-It carries the successor-barrier change and four targeted regression tests —
-array remove+move, concurrent moves with a server-computed `minVV`, the same
-defect in `Text`, the same defect in `Tree` — each verified red on `main` and
-green with the fix. A third attempt should start from there rather than from
-scratch.
+Attempt 2 ships here: the successor-barrier change plus four targeted regression
+tests — array remove+move, concurrent moves with a server-computed `minVV`, the
+same defect in `Text`, the same defect in `Tree` — each verified red on `main`
+and green with the fix. `gc_rga_barrier_cost_test.go` pins the cost shape rather
+than a golden number, because a misleading cost fixture is exactly what let
+framing D look affordable.
+
+A fourth attempt should start from the ceilings table above, not from any of the
+attempt 3 diffs. Those are preserved, none proposed for merge:
+`wip/rga-anchor-barrier` (framing A, and its commit message records the three
+structural gates it had to discover), `wip/rga-origin-insertion` (framing B, the
+only direction that removes the dependency rather than constraining collection),
+`wip/rga-reference-discipline` (framing D).
 
 ## See Also
 
