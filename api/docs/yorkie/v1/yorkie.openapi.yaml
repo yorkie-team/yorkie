@@ -917,6 +917,23 @@ components:
         ChangePack is a message that contains all changes that occurred in a document.
          It is used to synchronize changes between clients and servers.
       properties:
+        capabilities:
+          additionalProperties: false
+          description: |-
+            capabilities is the negotiation channel for wire features a peer may not
+             understand. A server sets it on the pack it returns to advertise what it
+             supports; a client must treat absence as "unsupported" rather than as
+             "unknown", because a server that predates a feature cannot say so.
+
+             It exists because a server does not store the bytes a client sent: it
+             re-encodes from its own domain model, so a field it does not know is
+             dropped from the stored change log and the push still succeeds. Without a
+             handshake a client cannot tell that its restore was silently downgraded to
+             an ordinary insert. Measured against a pinned v0.7.20 server.
+          items:
+            type: string
+          title: capabilities
+          type: array
         changes:
           additionalProperties: false
           description: ""
@@ -1544,6 +1561,11 @@ components:
           description: ""
           title: prev_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
         value:
           $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
           additionalProperties: false
@@ -1574,6 +1596,11 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
         value:
           $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
           additionalProperties: false
@@ -1790,6 +1817,11 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
         value:
           $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
           additionalProperties: false
@@ -2342,6 +2374,20 @@ components:
         RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
          means an ordinary edit (no restore semantics), keeping forward edits
          unchanged on the wire.
+
+         For elements it selects between reviving the element already in the tree and
+         inserting a copy of it. The copy is what undo does today, and because a
+         deep copy keeps every descendant's created_at, it puts a second live element
+         under ids the document is indexed by. Reviving needs a replicated liveness
+         register -- removed_at paired with revived_at on each element -- so that
+         every replica resolves a remove/revive race the same way, with a tie going
+         to the removal as the shipped remove register already does.
+
+         The branch cannot be chosen from local state. A replica that collected
+         between the removal and the undo has purged the tombstone, and one that
+         joined from a later snapshot never had it, so "revive if a tombstone is
+         present" is a function of local collection timing and the same change log
+         would produce different documents. That is why the branch is on the wire.
       enum:
       - - RESTORE_MODE_UNSPECIFIED
         - 0
