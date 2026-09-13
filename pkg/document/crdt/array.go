@@ -48,6 +48,12 @@ func (a *Array) Purge(elem Element) error {
 	return a.elements.purge(elem)
 }
 
+// PurgeBarrierAt implements GCBarrier[Element]: purging an element unlinks the
+// position node holding it, so the array's order decides when that is safe.
+func (a *Array) PurgeBarrierAt(elem Element) *time.Ticket {
+	return a.elements.purgeBarrierAt(elem)
+}
+
 // Add adds the given element at the last.
 func (a *Array) Add(elem Element) error {
 	return a.elements.Add(elem)
