@@ -93,7 +93,16 @@ jobs:
         # job existed, but nothing ever ran it. Wire changes are the one kind
         # this repository cannot walk back: a rolled-back server has to keep
         # decoding changes it already stored.
-        run: buf breaking --against 'https://github.com/yorkie-team/yorkie.git#branch=main'
+        #
+        # Compared against the pull request's own base commit, not against the
+        # tip of main. Against a moving tip, a PR branched from an older main
+        # inherits every proto change that landed since and can be failed for
+        # something it did not do; and for a stacked PR, main is not the base
+        # it is proposing to change at all.
+        if: github.event_name == 'pull_request'
+        run: |
+          buf breaking --against \
+            "https://github.com/yorkie-team/yorkie.git#ref=${{ github.event.pull_request.base.sha }}"
 
       - name: Check generated code is up to date
         # Two independent drifts reached main without this. The Makefile pinned
