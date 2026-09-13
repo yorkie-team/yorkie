@@ -101,10 +101,18 @@ jobs:
         # go.mod, so contributors rewrote whichever generated files their own
         # plugin disagreed with, and the OpenAPI docs went eleven releases
         # without being regenerated at all.
+        #
+        # Scoped to api/ because that is where every buf.gen.yaml output goes,
+        # and because a repository-wide check would also see artefacts left by
+        # the steps above and fail for reasons that have nothing to do with
+        # codegen. Untracked files count: `git diff` alone would not notice a
+        # brand new generated file that was never committed.
         run: |
           buf generate
-          if ! git diff --exit-code; then
+          if [ -n "$(git status --porcelain --untracked-files=all -- api/)" ]; then
             echo "::error::Generated code is stale. Run 'make tools && buf generate' and commit the result."
+            git status --short -- api/
+            git diff -- api/
             exit 1
           fi
 
