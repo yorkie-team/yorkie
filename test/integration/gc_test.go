@@ -945,16 +945,21 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:2, c2:5], minvv = [c1:2], db.vv {c1: [c1:2], c2: [c1:2, c2:5]}
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5))
-		// "b", "c" removedAt = 2@c1, minvv[c1] = 2 meet GC condition
+		// "b", "c" removedAt = 2@c1, minvv[c1] = 2 meet GC condition.
+		// One of them is still held by the successor barrier: purging it would
+		// move the stopping point of a forward skip that c2's concurrent insert
+		// still depends on. It drains on the next round, which
+		// TestGarbageCollectionBarrierDrainsWithinOneRound pins.
 		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:6, c2:5], minvv = [c1:2, c2:0], db.vv {c1: [c1:2], c2: [c1:2, c2:5]}
 		assertVectorEquality(t, d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 5))
-		// "b", "c" removedAt = 4@c1, minvv[c1] = 4 meet GC condition
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		// "b", "c" removedAt = 4@c1, minvv[c1] = 4 meet GC condition. One
+		// tombstone each is still held by the successor barrier; see above.
+		assert.Equal(t, 1, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 	})
 
 	t.Run("concurrent garbage collection test(with pushonly)", func(t *testing.T) {
@@ -1071,16 +1076,18 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:5, c2:7], minvv = [c1:6, c2:6], db.vv {c1: [c1:8, c2:6], c2: [c1:6, c2:8]}
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 7))
-		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition
+		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition. One is held by
+		// the successor barrier for a round.
 		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d2.vv = [c1:8, c2:6], minvv = [c1:6, c2:7], db.vv {c1: [c1:9, c2:7], c2: [c1:6, c2:8]}
 		assertVectorEquality(t, d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 6))
-		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition
+		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition. d2 still holds
+		// one behind the successor barrier.
 		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`, d2.Marshal())
 	})
@@ -1323,7 +1330,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 	})
 
 	t.Run("attach > pushpull > detach lifecycle version vector test (run gc at last client detaches document)", func(t *testing.T) {
@@ -1396,7 +1403,7 @@ func TestGarbageCollection(t *testing.T) {
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5))
 
 		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		assertVectorEquality(t, d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 5))
@@ -1562,4 +1569,77 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"c"},{"val":"0"},{"val":"a"}]}`, d2.Marshal())
 		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"c"},{"val":"0"},{"val":"a"}]}`, d1.Marshal())
 	})
+}
+
+// TestGarbageCollectionBarrierDrainsWithinOneRound is the load-bearing test for
+// the successor barrier's cost. The barrier delays a purge when the node that
+// would become a forward skip's new stopping point is not yet causally stable,
+// which is why several assertions above now expect one retained tombstone where
+// they used to expect none.
+//
+// A delay is acceptable; a leak is not. Retaining a tombstone forever is what
+// disqualified two other candidate fixes for the same defect, and the
+// difference is invisible in a test that stops asserting at the point the delay
+// begins. So this replays the same sequence as "concurrent garbage collection
+// test" and then keeps syncing with no further edits: the retention has to
+// reach zero and the replicas have to agree.
+func TestGarbageCollectionBarrierDrainsWithinOneRound(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
+		return nil
+	}, "sets text"))
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	// c2 inserts next to what c1 is about to delete. This is the concurrency
+	// the barrier exists for: the tombstone c1 leaves is what stops the forward
+	// skip that c2's insert is positioned by.
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("text").Edit(2, 2, "c")
+		return nil
+	}, "insert c"))
+	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("text").Edit(1, 3, "")
+		return nil
+	}, "delete bc"))
+
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+
+	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("text").Edit(2, 2, "1")
+		return nil
+	}, "insert 1"))
+	assert.NoError(t, c2.Sync(ctx))
+	assert.NoError(t, c1.Sync(ctx))
+
+	// Where the assertions above stop: one tombstone each, held by the barrier.
+	assert.Equal(t, 1, d1.GarbageLen())
+	assert.Equal(t, 1, d2.GarbageLen())
+
+	// One more round with no edits at all has to drain it.
+	assert.NoError(t, c1.Sync(ctx))
+	assert.NoError(t, c2.Sync(ctx))
+	assert.Equal(t, 0, d1.GarbageLen(), "the barrier must delay a purge, not prevent it")
+	assert.Equal(t, 0, d2.GarbageLen(), "the barrier must delay a purge, not prevent it")
+
+	// Further rounds must not resurrect anything, and the replicas must agree.
+	for range 3 {
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+	}
+	assert.Equal(t, d1.Marshal(), d2.Marshal())
+	assert.Equal(t, `{"text":[{"val":"a"},{"val":"c"},{"val":"1"}]}`, d1.Marshal())
 }

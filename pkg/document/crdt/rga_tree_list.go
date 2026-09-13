@@ -498,6 +498,40 @@ func (a *RGATreeList) Purge(child GCChild) error {
 	return nil
 }
 
+// PurgeBarrierAt implements GCBarrier[GCChild] for the dead position nodes a
+// move leaves behind: the ticket that must be covered before this slot may be
+// unlinked is the one findNextBeforeExecutedAt would read in its place.
+func (a *RGATreeList) PurgeBarrierAt(child GCChild) *time.Ticket {
+	node, ok := child.(*RGATreeListNode)
+	if !ok {
+		return nil
+	}
+	return successorBarrierAt(node)
+}
+
+// purgeBarrierAt is the same barrier for a removed element, reached through the
+// position node currently holding it.
+func (a *RGATreeList) purgeBarrierAt(elem Element) *time.Ticket {
+	entry, ok := a.elementMapByCreatedAt[elem.CreatedAt().Key()]
+	// Same identity guard as purge below: an entry now holding a different
+	// element is not this element's position, and purge declines anyway.
+	if !ok || entry.elem != elem {
+		return nil
+	}
+	return successorBarrierAt(entry.positionNode)
+}
+
+// successorBarrierAt returns the positioning ticket of the node that would take
+// over as findNextBeforeExecutedAt's stopping point once the given node is
+// unlinked. Nil at the tail: with nothing behind it, unlinking cannot send an
+// insert past anything.
+func successorBarrierAt(node *RGATreeListNode) *time.Ticket {
+	if node == nil || node.next == nil {
+		return nil
+	}
+	return node.next.PositionedAt()
+}
+
 // purge physically purge child element.
 func (a *RGATreeList) purge(elem Element) error {
 	entry, ok := a.elementMapByCreatedAt[elem.CreatedAt().Key()]

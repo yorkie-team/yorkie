@@ -20,6 +20,8 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Undoing a container removal discards a peer's concurrent edit inside it (2026-09-12) | [20260912-undo-discards-concurrent-peer-edit-todo.md](./active/20260912-undo-discards-concurrent-peer-edit-todo.md) | - |
+| Collection changes where a later insert lands (2026-09-12) | [20260912-collection-changes-rga-insertion-todo.md](./active/20260912-collection-changes-rga-insertion-todo.md) | - |
 | Applying one change twice corrupts an object's createdAt index (2026-09-11) | [20260911-duplicate-change-application-not-idempotent-todo.md](./active/20260911-duplicate-change-application-not-idempotent-todo.md) | - |
 | Project Stats Long-Retention Windows Implementation Plan (2026-08-31) | [20260831-project-stats-long-retention-todo.md](./active/20260831-project-stats-long-retention-todo.md) | [20260831-project-stats-long-retention-lessons.md](./active/20260831-project-stats-long-retention-lessons.md) |
 | Tree: recover style ranges collapsed by a merge at the from anchor (2026-08-22) | [20260822-tree-style-from-side-anchor-todo.md](./active/20260822-tree-style-from-side-anchor-todo.md) | [20260822-tree-style-from-side-anchor-lessons.md](./active/20260822-tree-style-from-side-anchor-lessons.md) |
