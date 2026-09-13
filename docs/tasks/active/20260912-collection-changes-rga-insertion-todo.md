@@ -99,9 +99,37 @@ Measured against `main` on the same fuzz:
 | 1000 seeds, all ops: `ErrChildNotFound` | 26 | **18** |
 
 Better in every category, and it eliminates insert/delete divergence entirely.
-Retention cost measured at +5.2% mean collected pairs on a move-heavy workload
-and byte-identical to `main` on ordinary ones; it drains within one sync round
-and is charged to `DocSize.Total`, so `MaxSizeLimit` accounts for it.
+
+### The cost, corrected
+
+An earlier revision of this file claimed the retention was byte-identical to
+`main` on ordinary workloads and that no workload had been found where it costs
+more. **That was wrong, and the integration suite found the counterexample.**
+The fixtures behind the claim were single-document array `MoveFront` sequences,
+which never engage the barrier at all: they retain the same nodes on both
+branches, so "no difference" measured nothing.
+
+What the barrier actually costs is **one sync round of delay in ordinary
+multi-client text editing**, which is the common case rather than an exotic one.
+Seven assertions across four of the version-vector GC contract tests in
+`test/integration/gc_test.go` expected zero garbage at a point where the barrier
+still holds one tombstone, because purging it would move the stopping point of a
+forward skip a concurrent insert still depends on.
+
+It is a delay and not a leak, which is the distinction that disqualified framings
+C and D, and it is pinned rather than argued:
+`TestGarbageCollectionBarrierDrainsWithinOneRound` replays the same sequence and
+keeps syncing with no further edits — retention goes to zero on the next round,
+stays there, and the replicas agree on the expected document.
+
+The cost is charged to `DocSize.Total`, so `MaxSizeLimit` accounts for it, and it
+is bounded by how far the collection vector lags rather than by the size of the
+structure. `pkg/document/gc_rga_barrier_cost_test.go` pins that shape, including
+the drag-reorder that refused framing D's 8th of 19 moves under a byte limit and
+is unaffected here.
+
+The general lesson, which is the same one framing D's cost fixture taught: a cost
+fixture that does not engage the mechanism reports a number about nothing.
 
 **It does not close the bug, and it is not presented as closing it.** Purging a
 tombstone destroys two things and the successor barrier addresses one:
@@ -248,8 +276,13 @@ table above rather than from any of the diffs.
 `pkg/document/gc_rga_fuzz_test.go` holds the harness, behind the `rgafuzz` build
 tag because it is expected to fail — that is the point of it. It still fails with
 attempt 2 applied, at 33 of 300 rather than 43, and the remaining failures are
-the anchor half. `go vet -tags rgafuzz ./...` runs in CI so a refactor cannot rot
-it without running it.
+the anchor half.
+
+CI runs `go vet -tags rgafuzz ./...`, which type-checks the tagged files without
+executing them, so a refactor cannot rot the harness and CI never runs the
+failures. Reproduce them deliberately with:
+
+    go test -tags rgafuzz ./pkg/document/ -run TestAdvArray -v
 
 Attempt 2 ships here: the successor-barrier change plus four targeted regression
 tests — array remove+move, concurrent moves with a server-computed `minVV`, the

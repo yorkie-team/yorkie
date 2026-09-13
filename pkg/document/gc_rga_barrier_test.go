@@ -399,7 +399,9 @@ func runConcurrentMovesScenario(t *testing.T, collect bool) {
 	t.Logf("A=%s", dA.Root().GetArray("arr").Marshal())
 	t.Logf("B=%s", dB.Root().GetArray("arr").Marshal())
 
-	// Nothing reconverges them, including a full collection on both sides.
+	// A full collection once the vector covers everything is the last chance to
+	// reconverge, and on main it does not: the two replicas stay apart. With the
+	// barrier they must agree here and retain nothing.
 	dA.GarbageCollect(helper.MaxVersionVector(idA, idB))
 	dB.GarbageCollect(helper.MaxVersionVector(idA, idB))
 	t.Logf("after full GC: A=%s B=%s",
