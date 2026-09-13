@@ -33,6 +33,11 @@ linters:
       - linters:
           - lll
         path: api/types/updatable_project_fields.go
+      # Golden wire bytes. Wrapping them would make a mismatch unreadable in
+      # the diff, which is the only thing the file is for.
+      - linters:
+          - lll
+        path: pkg/document/wire_forward_compat_test.go
     paths:
       - third_party$
       - builtin$
