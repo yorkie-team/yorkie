@@ -153,7 +153,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 		// createdAt -- otherwise a member restored by undo/redo (whose
 		// createdAt predates its movedAt) can lose the LWW race here and be
 		// silently dropped from the decoded object. Mirrors fromObject in
-		// the JS SDK (converter.ts:1667), which passes
+		// the JS SDK (fromObject in converter.ts), which passes
 		// value.getPositionedAt() to rht.set.
 		members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem))
 	}
