@@ -29,6 +29,17 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
+// marshalOpts is what every encoder in this file marshals through.
+//
+// Deterministic sorts protobuf map fields by key. Map fields are unordered by
+// definition and every decoder reads them back into a map, so this changes no
+// meaning -- it makes "the same document always encodes to the same bytes" a
+// property a test can assert, which is what keeps a randomized order from
+// reaching the wire again (see TestSnapshotEncodingIsDeterministic). Repeated
+// fields, whose order IS protocol-visible, are made stable at their source in
+// crdt.ElementRHT.Nodes / crdt.RHT.Nodes.
+var marshalOpts = proto.MarshalOptions{Deterministic: true}
+
 // SnapshotToBytes converts the given document to byte array.
 func SnapshotToBytes(obj *crdt.Object, presences map[string]presence.Data) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
@@ -38,7 +49,7 @@ func SnapshotToBytes(obj *crdt.Object, presences map[string]presence.Data) ([]by
 
 	pbPresences := ToPresences(presences)
 
-	bytes, err := proto.Marshal(&api.Snapshot{
+	bytes, err := marshalOpts.Marshal(&api.Snapshot{
 		Root:      pbElem,
 		Presences: pbPresences,
 	})
@@ -56,7 +67,7 @@ func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 		return nil, err
 	}
 
-	bytes, err := proto.Marshal(pbElem)
+	bytes, err := marshalOpts.Marshal(pbElem)
 	if err != nil {
 		return nil, fmt.Errorf("marshal JSON element to bytes: %w", err)
 	}
@@ -69,7 +80,7 @@ func ArrayToBytes(array *crdt.Array) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	bytes, err := proto.Marshal(pbArray)
+	bytes, err := marshalOpts.Marshal(pbArray)
 	if err != nil {
 		return nil, fmt.Errorf("marshal Array to bytes: %w", err)
 	}
@@ -79,7 +90,7 @@ func ArrayToBytes(array *crdt.Array) ([]byte, error) {
 // TreeToBytes converts the given tree to byte array.
 func TreeToBytes(tree *crdt.Tree) ([]byte, error) {
 	pbTree := toTree(tree)
-	bytes, err := proto.Marshal(pbTree)
+	bytes, err := marshalOpts.Marshal(pbTree)
 	if err != nil {
 		return nil, fmt.Errorf("marshal Tree to bytes: %w", err)
 	}

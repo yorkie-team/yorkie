@@ -109,32 +109,24 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // comparison must use the operation's fresh execution ticket, not the
 // restored element's creation ticket, or the restore can never win against
 // whatever currently occupies the key. It mirrors the separate `executedAt`
-// parameter of ElementRHT.set in the JS SDK (element_rht.ts:92-114) -- with
-// one deliberate divergence, described next.
+// parameter of ElementRHT.set in the JS SDK.
 //
-// The win/lose decision and the eviction of the previous occupant here
-// always use the same anchor (PositionedAt). JS's eviction check instead
-// gates on the occupant's raw createdAt (element_rht.ts:99, via
-// CRDTElement.remove), independently of the positionedAt-based winner
-// check a few lines below it (element_rht.ts:105,109). Those two checks
-// can disagree there: when createdAt < executedAt < positionedAt, JS's
-// eviction check (using createdAt) still fires and tombstones the true
-// (positionedAt) winner, while its winner check (using positionedAt)
-// decides the incoming value should *not* replace it -- so the winner
-// ends up tombstoned but still linked as the key's value, and the
-// incoming value is dropped without being registered as removed either.
-// The key then spuriously reads as absent from get() on that replica.
-// This is JS's actual, shipped behavior in that case, not a hypothetical.
+// Both the win/lose decision and the eviction of the previous occupant are
+// anchored on the same ticket, PositionedAt. They must be: gating the
+// eviction on the occupant's raw createdAt while gating the winner on its
+// PositionedAt lets the two disagree whenever
+// createdAt < executedAt < positionedAt. The eviction then fires and
+// tombstones the true winner, the winner check declines to replace it, and
+// the key is left pointing at a tombstone nothing ever removed -- it reads
+// as absent from get() on that replica.
 //
-// Go deliberately does not reproduce this: matching it would mean
-// gating eviction on createdAt while gating the winner on PositionedAt,
-// which is corrupt by construction, not merely different. Go anchors
-// both checks on PositionedAt, so in the same case the true winner
-// simply stays in place -- correct, but not what JS's shipped code does.
-//
-// Note that undo/redo is what makes the window reachable at all: before
-// it, movedAt always equaled createdAt and the two anchors could not
-// disagree. The JS half is filed in
+// The JS SDK shipped exactly that split through v0.7.21, which is how a
+// randomized snapshot member order turned into a key that resolved
+// differently on different page loads; the matching yorkie-js-sdk change
+// anchors both on positionedAt as this does. Note that undo/redo is what makes the window reachable at
+// all: before it, movedAt always equaled createdAt and the two anchors could
+// not disagree. A separate reach of the same precondition -- a remote redo
+// deleting a restored key on a peer via GC -- is filed in
 // docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByKey[k]
@@ -167,7 +159,7 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 // between can incorrectly win on one replica and lose on another,
 // diverging the two. Exported for api/converter, which must replay an
 // already-decoded element's own positionedAt rather than its createdAt when
-// rebuilding an ElementRHT from a snapshot (converter.ts:1667).
+// rebuilding an ElementRHT from a snapshot (fromObject in converter.ts).
 func PositionedAt(elem Element) *time.Ticket {
 	if movedAt := elem.MovedAt(); movedAt != nil {
 		return movedAt
@@ -181,7 +173,7 @@ func PositionedAt(elem Element) *time.Ticket {
 // as the tie-break ticket, which can lose to a value it had already validly
 // beaten (an element restored by undo/redo keeps its original createdAt but
 // carries a newer movedAt), silently dropping a live member. It mirrors
-// ElementRHT.deepcopy in the JS SDK (element_rht.ts:214-234), which copies
+// ElementRHT.deepcopy in the JS SDK, which copies
 // both maps structurally for the same reason.
 func (rht *ElementRHT) DeepCopy() (*ElementRHT, error) {
 	clone := NewElementRHT()
@@ -258,13 +250,38 @@ func (rht *ElementRHT) Elements() map[string]Element {
 	return members
 }
 
-// Nodes returns a map of elements because the map easy to use for loop.
+// Nodes returns every node of this hashtable, live and tombstoned, in
+// ascending PositionedAt order (tie-broken by createdAt).
+//
+// The order is protocol-visible: api/converter emits an object's members
+// from here into a repeated field, and a peer rebuilds the object by
+// replaying SetWithExecutedAt over that order. Ranging nodeMapByCreatedAt
+// directly gives Go's randomized map order, so the same unchanged document
+// encoded twice produced two different snapshots.
+//
+// Ascending PositionedAt is replay order: each node arrives with a ticket
+// newer than the one occupying its key, so the LWW comparison always
+// resolves forward. SetWithExecutedAt does not need that -- it is
+// order-independent (TestSnapshotDecodeIsOrderIndependent) -- but a client
+// that has not taken the matching yorkie-js-sdk fix does, and this costs
+// nothing. That guarantee assumes no two nodes under one key share a
+// PositionedAt, which per-operation tickets make unreachable; the createdAt
+// tie-break restores determinism, not the forward-replay property.
+//
+// See docs/tasks/active/20260914-nondeterministic-snapshot-member-order-todo.md.
+//
 // TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *ElementRHT) Nodes() []*ElementRHTNode {
-	var nodes []*ElementRHTNode
+	nodes := make([]*ElementRHTNode, 0, len(rht.nodeMapByCreatedAt))
 	for _, node := range rht.nodeMapByCreatedAt {
 		nodes = append(nodes, node)
 	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if c := PositionedAt(nodes[i].elem).Compare(PositionedAt(nodes[j].elem)); c != 0 {
+			return c < 0
+		}
+		return nodes[i].elem.CreatedAt().Compare(nodes[j].elem.CreatedAt()) < 0
+	})
 
 	return nodes
 }

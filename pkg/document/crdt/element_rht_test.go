@@ -159,3 +159,89 @@ func TestElementRHT(t *testing.T) {
 		assert.Equal(t, replicaA.Get("key").Marshal(), replicaB.Get("key").Marshal())
 	})
 }
+
+func TestElementRHTNodeOrder(t *testing.T) {
+	// The identity of a Nodes() result, as a comparable value.
+	order := func(nodes []*crdt.ElementRHTNode) []string {
+		out := make([]string, 0, len(nodes))
+		for _, node := range nodes {
+			out = append(out, node.Key()+"@"+node.Element().CreatedAt().Key())
+		}
+		return out
+	}
+
+	// A key whose occupant was re-placed under a ticket newer than its own
+	// createdAt -- the shape undo/redo leaves -- so PositionedAt and createdAt
+	// disagree and the order is observable. The members here are distinct
+	// elements, not literal restores; only the disagreement matters.
+	build := func(t *testing.T) *crdt.ElementRHT {
+		t.Helper()
+		rht := crdt.NewElementRHT()
+
+		actorA := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+		actorB := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+
+		for i, spec := range []struct {
+			key        string
+			lamport    int64
+			actor      time.ActorID
+			executedAt int64
+		}{
+			{"a", 1, actorA, 1},
+			{"a", 3, actorB, 3},
+			{"b", 2, actorA, 2},
+			{"b", 5, actorB, 5},
+			{"a", 1, actorA, 6}, // re-placed: older createdAt, newer executedAt
+		} {
+			ticket := time.NewTicket(spec.lamport, uint32(i), spec.actor)
+			value, err := crdt.NewPrimitive("v", ticket)
+			assert.NoError(t, err)
+			rht.SetWithExecutedAt(spec.key, value, time.NewTicket(spec.executedAt, uint32(i), spec.actor))
+		}
+		return rht
+	}
+
+	t.Run("returns nodes in ascending PositionedAt order", func(t *testing.T) {
+		nodes := build(t).Nodes()
+		assert.Len(t, nodes, 5)
+		for i := 1; i < len(nodes); i++ {
+			prev := crdt.PositionedAt(nodes[i-1].Element())
+			curr := crdt.PositionedAt(nodes[i].Element())
+			assert.LessOrEqual(t, prev.Compare(curr), 0,
+				"node %d is positioned before node %d", i, i-1)
+		}
+	})
+
+	t.Run("returns the same order on every call", func(t *testing.T) {
+		// The property the ordering exists for: ranging the underlying Go map
+		// gave a different answer each time, and api/converter emits an
+		// object's members from here.
+		rht := build(t)
+		first := order(rht.Nodes())
+		for i := 0; i < 50; i++ {
+			assert.Equal(t, first, order(rht.Nodes()),
+				"call %d returned a different order", i)
+		}
+	})
+
+	t.Run("breaks a PositionedAt tie by createdAt", func(t *testing.T) {
+		// Two elements cannot share a PositionedAt in practice -- tickets are
+		// unique per operation -- but the comparator must still be a total
+		// order, or sort.Slice leaves the result unstable.
+		rht := crdt.NewElementRHT()
+		actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+		shared := time.NewTicket(9, 0, actor)
+		for i := 0; i < 3; i++ {
+			value, err := crdt.NewPrimitive("v", time.NewTicket(int64(i+1), 0, actor))
+			assert.NoError(t, err)
+			value.SetMovedAt(shared)
+			rht.SetWithExecutedAt("k", value, shared)
+		}
+
+		first := order(rht.Nodes())
+		for i := 0; i < 20; i++ {
+			assert.Equal(t, first, order(rht.Nodes()),
+				"call %d returned a different order", i)
+		}
+	})
+}

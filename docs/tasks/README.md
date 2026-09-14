@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-12
+updated: 2026-09-14
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| The same document encodes to a different snapshot on every attach (2026-09-14) | [20260914-nondeterministic-snapshot-member-order-todo.md](./active/20260914-nondeterministic-snapshot-member-order-todo.md) | [20260914-nondeterministic-snapshot-member-order-lessons.md](./active/20260914-nondeterministic-snapshot-member-order-lessons.md) |
 | Undoing a container removal discards a peer's concurrent edit inside it (2026-09-12) | [20260912-undo-discards-concurrent-peer-edit-todo.md](./active/20260912-undo-discards-concurrent-peer-edit-todo.md) | - |
 | Collection changes where a later insert lands (2026-09-12) | [20260912-collection-changes-rga-insertion-todo.md](./active/20260912-collection-changes-rga-insertion-todo.md) | - |
 | Applying one change twice corrupts an object's createdAt index (2026-09-11) | [20260911-duplicate-change-application-not-idempotent-todo.md](./active/20260911-duplicate-change-application-not-idempotent-todo.md) | - |
