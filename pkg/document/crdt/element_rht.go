@@ -258,13 +258,38 @@ func (rht *ElementRHT) Elements() map[string]Element {
 	return members
 }
 
-// Nodes returns a map of elements because the map easy to use for loop.
+// Nodes returns every node of this hashtable, live and tombstoned, in
+// ascending PositionedAt order (tie-broken by createdAt).
+//
+// The order is protocol-visible: api/converter emits an object's members
+// from here into a repeated field, and a peer rebuilds the object by
+// replaying SetWithExecutedAt over that order. Ranging nodeMapByCreatedAt
+// directly gives Go's randomized map order, so the same unchanged document
+// encoded twice produced two different snapshots.
+//
+// Ascending PositionedAt is replay order: each node arrives with a ticket
+// newer than the one occupying its key, so the LWW comparison always
+// resolves forward. SetWithExecutedAt does not need that -- it is
+// order-independent (TestSnapshotDecodeIsOrderIndependent) -- but a client
+// that has not taken the matching yorkie-js-sdk fix does, and this costs
+// nothing. That guarantee assumes no two nodes under one key share a
+// PositionedAt, which per-operation tickets make unreachable; the createdAt
+// tie-break restores determinism, not the forward-replay property.
+//
+// See docs/tasks/active/20260914-nondeterministic-snapshot-member-order-todo.md.
+//
 // TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *ElementRHT) Nodes() []*ElementRHTNode {
-	var nodes []*ElementRHTNode
+	nodes := make([]*ElementRHTNode, 0, len(rht.nodeMapByCreatedAt))
 	for _, node := range rht.nodeMapByCreatedAt {
 		nodes = append(nodes, node)
 	}
+	sort.Slice(nodes, func(i, j int) bool {
+		if c := PositionedAt(nodes[i].elem).Compare(PositionedAt(nodes[j].elem)); c != 0 {
+			return c < 0
+		}
+		return nodes[i].elem.CreatedAt().Compare(nodes[j].elem.CreatedAt()) < 0
+	})
 
 	return nodes
 }

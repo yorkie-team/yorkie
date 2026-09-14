@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -903,5 +904,30 @@ func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
 			return nil
 		})
 		assert.NoError(b, err)
+	}
+}
+
+// BenchmarkSnapshotEncoding measures encoding a wide object, which is what
+// ElementRHT.Nodes' sort costs. Snapshot encoding runs per attach and per
+// snapshot interval, and nothing else here exercises an object with many
+// members, so a regression in that comparator would otherwise be invisible.
+func BenchmarkSnapshotEncoding(b *testing.B) {
+	for _, members := range []int{50, 1000} {
+		b.Run(fmt.Sprintf("object with %d members", members), func(b *testing.B) {
+			doc := document.New("d1")
+			assert.NoError(b, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				for i := 0; i < members; i++ {
+					root.SetString(fmt.Sprintf("k%d", i), "v")
+				}
+				return nil
+			}))
+			root := doc.RootObject()
+
+			b.ResetTimer()
+			for b.Loop() {
+				_, err := converter.ObjectToBytes(root)
+				assert.NoError(b, err)
+			}
+		})
 	}
 }
