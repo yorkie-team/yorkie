@@ -131,13 +131,15 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// An ordinary Set carries a freshly issued createdAt, so the lookup
 	// normally misses and costs one map read.
 	root.UnregisterRemovedElementPair(value.CreatedAt())
-	root.RegisterElement(value)
+	root.RegisterElement(value, obj)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
 	}
-	if value.RemovedAt() != nil {
-		root.RegisterRemovedElementPair(obj, value)
-	}
+	// NOTE(hackerwins): A value that lost the Set is marked removed by
+	// SetWithExecutedAt above, before it was registered. RegisterElement is what
+	// books it into GC, and registering it as removed a second time here would
+	// refund a ticket Live is holding on the one path where RegisterElement
+	// leaves it in Live.
 	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 }
 

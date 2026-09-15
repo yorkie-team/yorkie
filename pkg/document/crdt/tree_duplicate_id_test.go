@@ -73,7 +73,7 @@ func createDigitTree(t *testing.T, ctx *change.Context, root *crdt.Root) (*crdt.
 	assert.Equal(t, "<r><p>0123456789</p></r>", tree.ToXML())
 
 	root.Object().Set("t", tree)
-	root.RegisterElement(tree)
+	root.RegisterElement(tree, root.Object())
 
 	return tree, textID
 }

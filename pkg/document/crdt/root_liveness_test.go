@@ -44,7 +44,7 @@ func TestGarbageCollectSkipsLiveRegisteredElement(t *testing.T) {
 
 	obj := crdt.NewObject(crdt.NewElementRHT(), ctx.IssueTimeTicket())
 	root.Object().Set("obj", obj)
-	root.RegisterElement(obj)
+	root.RegisterElement(obj, root.Object())
 
 	removedAt := ctx.IssueTimeTicket()
 	_, err := root.Object().DeleteByCreatedAt(obj.CreatedAt(), removedAt)

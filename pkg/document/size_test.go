@@ -531,6 +531,146 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, built, doc.DocSize())
 	})
 
+	t.Run("restoring a container holding an earlier tombstone test", func(t *testing.T) {
+		// An undo restores the copy its reverse captured, and that copy keeps
+		// the member that was tombstoned before the container was. It is
+		// registered at its post-removal size, so that member's cost belongs to
+		// GC rather than Live, and it has to stay collectable -- booking it into
+		// Live instead strands it there with nothing left to collect it.
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			obj := root.SetNewObject("k")
+			obj.SetString("a", "1")
+			obj.SetString("b", "2")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("k").Delete("b")
+			return nil
+		}))
+		beforeRemoval := doc.DocSize()
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("k")
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"k":{"a":"1"}}`, doc.Marshal())
+
+		// The restored document is the one that stood before the removal, so it
+		// costs exactly what it cost then, tombstoned member included.
+		assert.Equal(t, beforeRemoval, doc.DocSize())
+
+		// And that member is still garbage.
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, beforeRemoval.Live, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{}, doc.DocSize().GC)
+	})
+
+	t.Run("applying the losing side of a concurrent set test", func(t *testing.T) {
+		// ElementRHT marks the losing value removed before the operation
+		// registers it, so Live is charged the post-removal size, removal ticket
+		// included. Giving that ticket back would leave the replica that applied
+		// the loser permanently larger than the one that never saw it.
+		d1, d2, a1, a2 := newReplicas(t)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k", "1")
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k", "2")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+
+		d1.GarbageCollect(helper.MaxVersionVector(a1, a2))
+		d2.GarbageCollect(helper.MaxVersionVector(a1, a2))
+
+		fresh := document.New("doc")
+		assert.NoError(t, fresh.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k", d1.Marshal()[6:7])
+			return nil
+		}))
+
+		assert.Equal(t, d1.DocSize(), d2.DocSize())
+		assert.Equal(t, fresh.DocSize(), d1.DocSize())
+	})
+
+	t.Run("rebuilding a document that holds a tombstone test", func(t *testing.T) {
+		// NewRoot registers an already-tombstoned element at its post-removal
+		// size, so a refund there over-credits Live by one ticket per tombstone.
+		// Document.Update gates the size limit on the clone, which is built this
+		// way, while DocSize reports the incrementally kept figure -- the two
+		// have to agree.
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			obj := root.SetNewObject("k")
+			obj.SetString("a", "1")
+			obj.SetString("b", "2")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("k").Delete("b")
+			return nil
+		}))
+
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
+
+		// The tombstone has to arrive collectable too. NewRoot no longer
+		// registers it separately -- RegisterElement is what enters it for
+		// collection -- so a rebuilt root that cannot collect would strand the
+		// charge with nothing reporting it as garbage.
+		assert.Equal(t, 1, clone.GarbageLen())
+		n, err := clone.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.NoError(t, err)
+		assert.Equal(t, 1, n)
+		assert.Equal(t, resource.DataSize{}, clone.DocSize().GC)
+	})
+
+	t.Run("restoring an array container holding an earlier tombstone test", func(t *testing.T) {
+		// Undoing an array removal reissues a ticket for the restored container
+		// alone, so its members come back sharing createdAts with the tombstoned
+		// ones. Charging by element gives each of the two a slot of its own, so
+		// the restored member is booked into GC on its own account and the charge
+		// GC holds for the tombstone stays where it is. The restored document
+		// therefore costs what it cost before the removal, and collecting the
+		// tombstone drains GC rather than debiting Live.
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			obj := root.SetNewArray("k").AddNewObject()
+			obj.SetString("a", "1")
+			obj.SetString("b", "2")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").GetObject(0).Delete("b")
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 2, Meta: 144}, doc.DocSize().Live)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").Delete(0)
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, `{"k":[{"a":"1"}]}`, doc.Marshal())
+
+		// The restored document is the one that stood before the removal, so it
+		// costs exactly what it cost then.
+		assert.Equal(t, resource.DataSize{Data: 2, Meta: 144}, doc.DocSize().Live)
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		assert.Equal(t, resource.DataSize{Data: 2, Meta: 144}, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{}, doc.DocSize().GC)
+	})
+
 	t.Run("removing an array container that was restored test", func(t *testing.T) {
 		// Undoing an array removal reissues a ticket for the restored container
 		// alone, so its members come back sharing createdAts with the tombstoned

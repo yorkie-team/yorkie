@@ -118,7 +118,7 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	root := helper.TestRoot()
 	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
-	root.RegisterElement(tree)
+	root.RegisterElement(tree, root.Object())
 	parent := tree.CreatedAt()
 
 	p := tree.Root().Children()[0]
@@ -167,7 +167,7 @@ func TestTreeRestoreReverseFlipsDirection(t *testing.T) {
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	root := helper.TestRoot()
 	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
-	root.RegisterElement(tree)
+	root.RegisterElement(tree, root.Object())
 	parent := tree.CreatedAt()
 
 	p := tree.Root().Children()[0]
@@ -249,7 +249,7 @@ func TestTreeRestoreRejectsForgedIdentity(t *testing.T) {
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	root := helper.TestRoot()
 	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
-	root.RegisterElement(tree)
+	root.RegisterElement(tree, root.Object())
 	parent := tree.CreatedAt()
 
 	forged := &crdt.TreeRestoreSpan{
@@ -405,7 +405,7 @@ func TestTreeRestoreRecreateKeepsTreeEditable(t *testing.T) {
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	root := helper.TestRoot()
 	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
-	root.RegisterElement(tree)
+	root.RegisterElement(tree, root.Object())
 	parent := tree.CreatedAt()
 
 	p := tree.Root().Children()[0]
@@ -450,7 +450,7 @@ func TestTreeRestoreDocSizeSymmetry(t *testing.T) {
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	root := helper.TestRoot()
 	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
-	root.RegisterElement(tree)
+	root.RegisterElement(tree, root.Object())
 	parent := tree.CreatedAt()
 
 	p := tree.Root().Children()[0]

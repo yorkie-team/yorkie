@@ -518,7 +518,7 @@ func (p *Array) insertAfterInternal(
 	if err = p.InsertAfter(prevCreatedAt, value, nil); err != nil {
 		panic(err)
 	}
-	p.context.RegisterElement(value)
+	p.context.RegisterElement(value, p)
 
 	return elem
 }
@@ -603,7 +603,7 @@ func (p *Array) setByIndexInternal(
 	if err != nil {
 		panic(err)
 	}
-	p.context.RegisterElement(value)
+	p.context.RegisterElement(value, p)
 
 	// NOTE(hackerwins): The displaced element has to be registered here too,
 	// not only in ArraySet.Execute. This path runs against the clone root that

@@ -135,8 +135,8 @@ func (c *Context) Push(op operations.Operation) {
 }
 
 // RegisterElement registers the given element to the root.
-func (c *Context) RegisterElement(elem crdt.Element) {
-	c.root.RegisterElement(elem)
+func (c *Context) RegisterElement(elem crdt.Element, parent crdt.Container) {
+	c.root.RegisterElement(elem, parent)
 }
 
 // RegisterRemovedElementPair registers the given element pair to hash table.

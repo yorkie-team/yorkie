@@ -95,13 +95,11 @@ func NewRoot(root *Object) *Root {
 	}
 
 	r.object = root
-	r.RegisterElement(root)
+	r.RegisterElement(root, nil)
 
+	// NOTE(hackerwins): tombstoned elements are not re-registered here:
+	// RegisterElement above already booked every one of them into GC.
 	root.Descendants(func(elem Element, parent Container) bool {
-		if elem.RemovedAt() != nil {
-			r.RegisterRemovedElementPair(parent, elem)
-		}
-
 		switch e := elem.(type) {
 		case *Array:
 			for _, pair := range e.GCPairs() {
@@ -132,18 +130,91 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 	return r.elementMap[createdAt.Key()]
 }
 
-// RegisterElement registers the given element to hash table.
-func (r *Root) RegisterElement(element Element) {
+// RegisterElement registers the given element and its descendants to hash
+// table.
+func (r *Root) RegisterElement(element Element, parent Container) {
+	r.registerLive(element)
+
+	// NOTE(hackerwins): An element can be registered while it already carries a
+	// removedAt. An undo re-sets the DeepCopy its reverse captured, and that
+	// copy keeps the members that were tombstoned before the container was;
+	// NewRoot loads a document that still holds tombstones; and the losing side
+	// of an LWW Set is marked removed by ElementRHT before it is booked. The
+	// size registered above is the post-removal one in every such case, so it
+	// belongs to GC rather than Live, and the tombstone has to be collectable.
+	// Booking it here is what makes both true whichever route brought it in,
+	// and it is the one place all of them pass through.
+	//
+	// This is a second pass on purpose. Adopting a tombstone moves its whole
+	// subtree, so doing it while the first pass is still walking would move
+	// descendants Live has not been charged for yet, and drive Live negative.
+	r.adoptTombstones(element, parent)
+}
+
+// registerLive registers the given element and its descendants to the element
+// map, and charges docSize.Live for each.
+func (r *Root) registerLive(element Element) {
 	r.elementMap[element.CreatedAt().Key()] = element
 	r.docSize.Live.Add(element.DataSize())
 
-	if element, ok := element.(Container); ok {
-		element.Descendants(func(elem Element, parent Container) bool {
+	if container, ok := element.(Container); ok {
+		container.Descendants(func(elem Element, _ Container) bool {
 			r.elementMap[elem.CreatedAt().Key()] = elem
 			r.docSize.Live.Add(elem.DataSize())
 			return false
 		})
 	}
+}
+
+// adoptTombstones books every element of the given subtree that already carries
+// a removedAt into GC.
+func (r *Root) adoptTombstones(element Element, parent Container) {
+	if element.RemovedAt() != nil {
+		r.adoptRemovedElementPair(parent, element)
+	}
+
+	container, ok := element.(Container)
+	if !ok {
+		return
+	}
+
+	container.Descendants(func(elem Element, par Container) bool {
+		if elem.RemovedAt() != nil {
+			r.adoptRemovedElementPair(par, elem)
+		}
+		return false
+	})
+}
+
+// adoptRemovedElementPair books an element that was already tombstoned when it
+// was registered, and its descendants, into GC. It is
+// RegisterRemovedElementPair without the ticket refund: the size just charged
+// to Live already included the removedAt ticket, so Live has nothing to get
+// back.
+func (r *Root) adoptRemovedElementPair(parent Container, elem Element) {
+	r.moveSizeToGC(elem)
+	r.moveDescendantsToGC(elem)
+	r.gcElementPairMap[elem.CreatedAt().Key()] = ElementPair{parent, elem}
+}
+
+// moveDescendantsToGC moves the size of every descendant of the given element
+// from Live to GC.
+//
+// NOTE(hackerwins): RegisterElement books a container and every descendant into
+// Live, and deregisterElement subtracts both when the tombstone is collected.
+// Removing a container therefore has to move its descendants as well: booking
+// only the container itself would strand their size in Live forever and drive
+// GC negative once the collection subtracted them.
+func (r *Root) moveDescendantsToGC(elem Element) {
+	container, ok := elem.(Container)
+	if !ok {
+		return
+	}
+
+	container.Descendants(func(e Element, _ Container) bool {
+		r.moveSizeToGC(e)
+		return false
+	})
 }
 
 // deregisterElement deregister the given element from hash tables.
@@ -180,6 +251,13 @@ func (r *Root) deregisterElement(element Element) int {
 		// the entry alone when it has been taken over. The tombstone loses
 		// nothing by it: it is already unlinked from the tree, and whatever
 		// now owns the slot will clear it when its own turn comes.
+		//
+		// The JS SDK reads the same rule off a different structure. Its
+		// gcElementSetByCreatedAt holds keys alone, because its pair map
+		// already carries a parent for every element, so it takes the identity
+		// from that map rather than from an entry of its own. Same rule, one
+		// resolver each -- the two differ in where the identity is read, not
+		// in what it decides.
 		if r.elementMap[createdAt] == elem {
 			delete(r.elementMap, createdAt)
 		}
@@ -204,18 +282,7 @@ func (r *Root) deregisterElement(element Element) int {
 // RegisterRemovedElementPair register the given element pair to hash table.
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	moved := r.moveSizeToGC(elem)
-
-	// NOTE(hackerwins): RegisterElement books a container and every descendant
-	// into Live, and deregisterElement subtracts both when the tombstone is
-	// collected. Removing a container therefore has to move its descendants as
-	// well: booking only the container itself would strand their size in Live
-	// forever and drive GC negative once the collection subtracted them.
-	if container, ok := elem.(Container); ok {
-		container.Descendants(func(e Element, _ Container) bool {
-			r.moveSizeToGC(e)
-			return false
-		})
-	}
+	r.moveDescendantsToGC(elem)
 
 	// NOTE(hackerwins): When an element is removed, parent sets the removedAt
 	// to mark the child as removed. That ticket is part of the size charged to
@@ -224,11 +291,11 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	// it: a size already in GC, or one moved as a descendant while its own
 	// removedAt is still unset, did not.
 	//
-	// This holds for the incremental path. NewRoot instead registers an
-	// already-tombstoned element at its post-removal size, so Live did hold the
-	// ticket and the refund over-credits it by one per tombstone. That drift is
-	// pre-existing and unchanged here; see the follow-up task
-	// docs/tasks/active/20260817-docsize-snapshot-rebuild-drift-todo.md.
+	// An element that already carried its removedAt when it was registered does
+	// not get the refund. RegisterElement books it with adoptRemovedElementPair
+	// and the top-up branch of moveSizeToGC then reports that nothing moved, so
+	// a later removal of it lands here with moved false. Live did hold that
+	// ticket, and there is nothing to give back.
 	if moved && elem.RemovedAt() != nil {
 		r.docSize.Live.Meta += time.TicketSize
 	}
