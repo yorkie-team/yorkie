@@ -531,6 +531,46 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, built, doc.DocSize())
 	})
 
+	t.Run("removing an array container that was restored test", func(t *testing.T) {
+		// Undoing an array removal reissues a ticket for the restored container
+		// alone, so its members come back sharing createdAts with the tombstoned
+		// ones. Both are registered, and both are charged -- one slot per
+		// createdAt would let the second displace the first, and collecting the
+		// displaced one would then take a size out of Live that Live was never
+		// holding.
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			obj := root.SetNewArray("k").AddNewObject()
+			obj.SetString("a", "1")
+			obj.SetString("b", "2")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").GetObject(0).Delete("b")
+			return nil
+		}))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").Delete(0)
+			return nil
+		}))
+		assert.NoError(t, doc.Undo())
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k").Delete(0)
+			return nil
+		}))
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+
+		assert.Equal(t, `{"k":[]}`, doc.Marshal())
+
+		empty := document.New("doc")
+		assert.NoError(t, empty.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k")
+			return nil
+		}))
+		assert.Equal(t, empty.DocSize(), doc.DocSize())
+	})
+
 	t.Run("deep copy test", func(t *testing.T) {
 		doc := document.New("doc")
 

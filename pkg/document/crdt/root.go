@@ -48,36 +48,31 @@ type Root struct {
 	gcNodePairMap    map[string]GCPair
 	docSize          resource.DocSize
 
-	// sizeInGC maps the creation time of every registered element whose size
-	// counts toward docSize.GC rather than docSize.Live, to the exact amount
-	// charged and to the element it is charged for. Each element's size
-	// belongs to exactly one of the two, and an element reaches GC by more
-	// routes than it has removals: it can be removed itself, or be a
-	// descendant of a removed container. Recording the amount rather than a
+	// sizeInGC maps every registered element whose size counts toward
+	// docSize.GC rather than docSize.Live to the exact amount charged. Each
+	// element's size belongs to exactly one of the two, and an element reaches
+	// GC by more routes than it has removals: it can be removed itself, or be
+	// a descendant of a removed container. Recording the amount rather than a
 	// flag keeps the two sides symmetric even though DataSize is not stable
 	// over an element's lifetime -- it grows by a ticket the moment removedAt
 	// is set, which can happen after the size has already moved.
-	sizeInGC map[string]gcCharge
-}
-
-// gcCharge is what docSize.GC is holding on behalf of one element, and which
-// element that is.
-//
-// The identity is load-bearing. A createdAt is meant to name one element, but
-// it does not for the whole of a document's life: undo restores
-// `value.DeepCopy()` of a removed element, and the copy keeps the original's
-// createdAt while the original is still a tombstone. Charging or releasing by
-// key alone then bills whichever of the two happens to occupy the slot, and a
-// size can be taken out of docSize.Live that Live was never holding -- which
-// is how docSize goes negative.
-//
-// A zero size is not the same as no record. It says this element has been
-// released: charged to neither side, because its subtree was orphaned by a
-// restore and nothing will ever collect it. Anything that later charges it
-// again has to know Live is not the side to take it from.
-type gcCharge struct {
-	elem Element
-	size resource.DataSize
+	//
+	// It is keyed by the element, not by its createdAt. A createdAt is meant
+	// to name one element, but it does not for the whole of a document's life:
+	// undo restores `value.DeepCopy()` of a removed element, and the copy
+	// keeps the original's createdAt while the original is still a tombstone.
+	// Undoing an array removal reissues a ticket for the restored container
+	// alone, so its members come back aliasing the tombstoned ones outright.
+	// One slot per createdAt cannot describe both: whichever is charged last
+	// displaces the other, and collecting the displaced one then takes a size
+	// out of docSize.Live that Live was never holding -- which is how docSize
+	// goes negative. One slot per element has room for both.
+	//
+	// A zero size is not the same as no record. It says this element has been
+	// released: charged to neither side, because its subtree was orphaned by a
+	// restore and nothing will ever collect it. Anything that later charges it
+	// again has to know Live is not the side to take it from.
+	sizeInGC map[Element]resource.DataSize
 }
 
 // NewRoot creates a new instance of Root.
@@ -86,7 +81,7 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[string]GCPair),
-		sizeInGC:         make(map[string]gcCharge),
+		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
 				Data: 0,
@@ -161,12 +156,10 @@ func (r *Root) deregisterElement(element Element) int {
 		// amount actually charged. A descendant created inside an
 		// already-removed container never passed through a removal, so it
 		// still sits in Live; subtracting it from GC would push GC below zero
-		// and leave its cost in Live forever. A charge recorded against some
-		// other element that shares this createdAt says nothing about this
-		// one, which is still in Live.
-		if charged, ok := r.sizeInGC[createdAt]; ok && charged.elem == elem {
-			r.docSize.GC.Sub(charged.size)
-			delete(r.sizeInGC, createdAt)
+		// and leave its cost in Live forever.
+		if charged, ok := r.sizeInGC[elem]; ok {
+			r.docSize.GC.Sub(charged)
+			delete(r.sizeInGC, elem)
 		} else {
 			r.docSize.Live.Sub(elem.DataSize())
 		}
@@ -310,8 +303,8 @@ func (r *Root) release(elem Element) {
 	// actually charged -- the same split deregisterElement makes. A member
 	// added into an already-removed container never passed through a removal,
 	// so it still sits in Live.
-	if charged, ok := r.sizeInGC[createdAt]; ok && charged.elem == elem {
-		r.docSize.GC.Sub(charged.size)
+	if charged, ok := r.sizeInGC[elem]; ok {
+		r.docSize.GC.Sub(charged)
 	} else {
 		r.docSize.Live.Sub(elem.DataSize())
 	}
@@ -321,9 +314,9 @@ func (r *Root) release(elem Element) {
 	// peer that has not seen the restore can still remove something inside
 	// this subtree, and moveSizeToGC would then take its size out of Live for
 	// a second time and drive docSize negative. A zero charge says Live is
-	// not holding it, and the identity says which element that is about, so a
-	// copy restored under the same createdAt is still charged normally.
-	r.sizeInGC[createdAt] = gcCharge{elem: elem}
+	// not holding it. A copy restored under the same createdAt has a slot of
+	// its own and is still charged normally.
+	r.sizeInGC[elem] = resource.DataSize{}
 
 	if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
 		delete(r.gcElementPairMap, createdAt)
@@ -337,24 +330,22 @@ func (r *Root) release(elem Element) {
 // charge topped up: DataSize grows by a ticket when removedAt is set, which
 // can happen after the move.
 //
-// A charge recorded against a different element that shares this createdAt is
-// not this element's: this one is still in Live and moves in full. The record
-// it displaces is a released one (zero), so nothing charged is lost.
+// Another element sharing this createdAt has a charge of its own, and it is not
+// this one's: this element is still in Live and moves in full.
 func (r *Root) moveSizeToGC(elem Element) bool {
-	createdAt := elem.CreatedAt().Key()
 	size := elem.DataSize()
 
-	if charged, ok := r.sizeInGC[createdAt]; ok && charged.elem == elem {
+	if charged, ok := r.sizeInGC[elem]; ok {
 		diff := size
-		diff.Sub(charged.size)
+		diff.Sub(charged)
 		r.docSize.GC.Add(diff)
-		r.sizeInGC[createdAt] = gcCharge{elem, size}
+		r.sizeInGC[elem] = size
 		return false
 	}
 
 	r.docSize.GC.Add(size)
 	r.docSize.Live.Sub(size)
-	r.sizeInGC[createdAt] = gcCharge{elem, size}
+	r.sizeInGC[elem] = size
 	return true
 }
 
