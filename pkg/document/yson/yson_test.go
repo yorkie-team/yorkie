@@ -777,6 +777,39 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		}
 	})
 
+	t.Run("object keys with structural characters round-trip", func(t *testing.T) {
+		keys := []string{
+			`quote " inside`,
+			`backslash \ inside`,
+			`trailing backslash \`,
+			"colon : and comma ,",
+			"close brace } and bracket ]",
+			"use Int( here",
+			"Int(42) is a number",
+			"newline \n inside",
+		}
+		for _, k := range keys {
+			obj := yson.Object{k: int32(1)}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual), "key %q", k)
+			assert.Equal(t, obj, actual, "key %q", k)
+		}
+	})
+
+	t.Run("object key cannot forge a sibling member", func(t *testing.T) {
+		obj := yson.Object{`a":Int(1),"b`: int32(1)}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Len(t, actual, 1)
+		assert.Equal(t, obj, actual)
+	})
+
 	t.Run("escaped quote adjacent to bracket in string round-trip", func(t *testing.T) {
 		values := []string{
 			`quote before bracket "] here`,

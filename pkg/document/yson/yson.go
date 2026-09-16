@@ -191,7 +191,7 @@ func (y Object) Marshal() (string, error) {
 			return "", err
 		}
 
-		pairs = append(pairs, fmt.Sprintf(`"%s":%s`, key, marshalled))
+		pairs = append(pairs, fmt.Sprintf(`%s:%s`, strconv.Quote(key), marshalled))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(pairs, ",")), nil
 }
