@@ -153,6 +153,15 @@ func marshalElement(elem interface{}) (string, error) {
 	}
 }
 
+// quoteString returns s as a JSON string literal. strconv.Quote is a Go
+// literal quoter, not a JSON one: for bytes below 0x20 outside \b \f \n \r \t,
+// for DEL and for invalid UTF-8 it emits \v, \x00 or \xff, escapes JSON has no
+// reading for, so what Marshal emitted could not always be read back.
+// crdt.EscapeString is the escaper the CRDT marshaler already uses.
+func quoteString(s string) string {
+	return `"` + crdt.EscapeString(s) + `"`
+}
+
 func marshalPrimitive(v interface{}) (string, error) {
 	switch v := v.(type) {
 	case nil:
@@ -162,7 +171,7 @@ func marshalPrimitive(v interface{}) (string, error) {
 	case float64:
 		return fmt.Sprintf("%v", v), nil
 	case string:
-		return strconv.Quote(v), nil
+		return quoteString(v), nil
 	case int32:
 		return fmt.Sprintf("Int(%d)", v), nil
 	case int64:
@@ -191,7 +200,7 @@ func (y Object) Marshal() (string, error) {
 			return "", err
 		}
 
-		pairs = append(pairs, fmt.Sprintf(`%s:%s`, strconv.Quote(key), marshalled))
+		pairs = append(pairs, fmt.Sprintf(`%s:%s`, quoteString(key), marshalled))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(pairs, ",")), nil
 }
@@ -227,16 +236,16 @@ func (y Text) Marshal() (string, error) {
 	var nodes []string
 	for _, node := range y.Nodes {
 		if len(node.Attributes) == 0 {
-			nodes = append(nodes, fmt.Sprintf(`{"val":%s}`, strconv.Quote(node.Value)))
+			nodes = append(nodes, fmt.Sprintf(`{"val":%s}`, quoteString(node.Value)))
 			continue
 		}
 
 		attrs := make([]string, 0, len(node.Attributes))
 		for k, v := range node.Attributes {
-			attrs = append(attrs, fmt.Sprintf(`%s:%s`, strconv.Quote(k), strconv.Quote(v)))
+			attrs = append(attrs, fmt.Sprintf(`%s:%s`, quoteString(k), quoteString(v)))
 		}
 		sort.Strings(attrs)
-		nodes = append(nodes, fmt.Sprintf(`{"val":%s,"attrs":{%s}}`, strconv.Quote(node.Value), strings.Join(attrs, ",")))
+		nodes = append(nodes, fmt.Sprintf(`{"val":%s,"attrs":{%s}}`, quoteString(node.Value), strings.Join(attrs, ",")))
 	}
 	return fmt.Sprintf("Text([%s])", strings.Join(nodes, ",")), nil
 }
@@ -247,7 +256,7 @@ func (y Tree) Marshal() (string, error) {
 
 func (n *TreeNode) Marshal() string {
 	if n.Type == "text" {
-		return fmt.Sprintf(`{"type":%s,"value":%s}`, strconv.Quote(n.Type), strconv.Quote(n.Value))
+		return fmt.Sprintf(`{"type":%s,"value":%s}`, quoteString(n.Type), quoteString(n.Value))
 	}
 
 	var children []string
@@ -256,16 +265,16 @@ func (n *TreeNode) Marshal() string {
 	}
 
 	if len(n.Attributes) == 0 {
-		return fmt.Sprintf(`{"type":%s,"children":[%s]}`, strconv.Quote(n.Type), strings.Join(children, ","))
+		return fmt.Sprintf(`{"type":%s,"children":[%s]}`, quoteString(n.Type), strings.Join(children, ","))
 	}
 
 	var attrs []string
 	for k, v := range n.Attributes {
-		attrs = append(attrs, fmt.Sprintf(`%s:%s`, strconv.Quote(k), strconv.Quote(v)))
+		attrs = append(attrs, fmt.Sprintf(`%s:%s`, quoteString(k), quoteString(v)))
 	}
 	sort.Strings(attrs)
 	return fmt.Sprintf(`{"type":%s,"attrs":{%s},"children":[%s]}`,
-		strconv.Quote(n.Type), strings.Join(attrs, ","), strings.Join(children, ","))
+		quoteString(n.Type), strings.Join(attrs, ","), strings.Join(children, ","))
 }
 
 // Unmarshal parses a string representation of a YSON element into the

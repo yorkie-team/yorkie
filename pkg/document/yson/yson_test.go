@@ -810,6 +810,40 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		assert.Equal(t, obj, actual)
 	})
 
+	t.Run("control characters round-trip in keys and values", func(t *testing.T) {
+		// A Go literal quoter writes these as \v or \x00, which JSON cannot
+		// read back, so a document holding one would marshal to a snapshot that
+		// never reloads.
+		for _, s := range []string{
+			"vertical tab \v here",
+			"nul \x00 here",
+			"bell \a here",
+			"unit separator \x1f here",
+			"delete \x7f here",
+			"tab \t and newline \n here",
+		} {
+			obj := yson.Object{
+				s:     int32(1),
+				"str": s,
+				"txt": yson.Text{Nodes: []yson.TextNode{{
+					Value:      s,
+					Attributes: map[string]string{s: s},
+				}}},
+				"tree": yson.Tree{Root: yson.TreeNode{
+					Type:       "p",
+					Attributes: map[string]string{s: s},
+					Children:   []yson.TreeNode{{Type: "text", Value: s}},
+				}},
+			}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual), "string %q", s)
+			assert.Equal(t, obj, actual, "string %q", s)
+		}
+	})
+
 	t.Run("escaped quote adjacent to bracket in string round-trip", func(t *testing.T) {
 		values := []string{
 			`quote before bracket "] here`,
