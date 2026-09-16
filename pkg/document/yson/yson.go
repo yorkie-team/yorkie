@@ -44,10 +44,16 @@ var (
 	// valid.
 	ErrInvalidYSON = errors.InvalidArgument("invalid YSON")
 
-	// dedupCounterRe matches DedupCounter(Int(N),"base64") in YSON text.
+	// dedupCounterRe matches DedupCounter(Int(N),"base64") in YSON text. The
+	// registers group is the base64 alphabet, and may be empty so that
+	// whatever Counter.Marshal emits can be read back. Restricting it to that
+	// alphabet is what keeps the argument from reshaping the rewritten JSON:
+	// the group is copied into "hll":"$2", so a quote would end the value
+	// early and a trailing backslash would escape the closing quote and let
+	// the string run on into the rest of the document.
 	// Only Int is supported. If Long is added, extend both this regex
 	// and parseDedupCounter.
-	dedupCounterRe = regexp.MustCompile(`DedupCounter\(Int\((-?\d+)\),"([^"]+)"\)`)
+	dedupCounterRe = regexp.MustCompile(`DedupCounter\(Int\((-?\d+)\),"([A-Za-z0-9+/=]*)"\)`)
 )
 
 const (
@@ -59,6 +65,11 @@ const (
 
 	// counterTypeLong is the YSON token for 64-bit integer counters.
 	counterTypeLong = "Long"
+
+	// ctorText and ctorTree are the constructors that carry a container
+	// argument and may therefore be written with no argument at all.
+	ctorText = "Text"
+	ctorTree = "Tree"
 )
 
 var (
@@ -260,7 +271,10 @@ func (n *TreeNode) Marshal() string {
 // Unmarshal parses a string representation of a YSON element into the
 // corresponding Element type.
 func Unmarshal(data string, elem Element) error {
-	processedData := preprocessTypeValues(data)
+	processedData, err := preprocessTypeValues(data)
+	if err != nil {
+		return err
+	}
 
 	// Parse the processed JSON data. UseNumber keeps numeric lexemes as
 	// json.Number so that integer typed values can be validated exactly
@@ -418,13 +432,13 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 		return parseCounter(raw)
 	case "DedupCounter":
 		return parseDedupCounter(raw)
-	case "Tree":
+	case ctorTree:
 		if value, ok := raw["value"].(map[string]interface{}); ok {
 			return parseTree(value)
 		}
 
 		return nil, fmt.Errorf("parse counter: %w", ErrInvalidYSON)
-	case "Text":
+	case ctorText:
 		if value, ok := raw["value"].([]interface{}); ok {
 			return parseText(value)
 		}
@@ -568,6 +582,12 @@ func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
 	if err != nil {
 		return Counter{}, fmt.Errorf("parse dedup counter hll: %w", ErrInvalidYSON)
 	}
+	// DecodeString returns a non-nil empty slice for "", while the counter
+	// that marshalled to "" had nil registers. Hand back the nil so the value
+	// round-trips to an equal one.
+	if len(registers) == 0 {
+		registers = nil
+	}
 
 	switch counterType {
 	case counterTypeInt:
@@ -693,8 +713,8 @@ type ysonConstructor struct {
 // token boundary, so this ordering is defensive rather than strictly required.
 var ysonConstructors = []ysonConstructor{
 	{"Counter", "Counter"},
-	{"Text", "Text"},
-	{"Tree", "Tree"},
+	{ctorText, ctorText},
+	{ctorTree, ctorTree},
 	{"Int", "Int"},
 	{"Long", "Long"},
 	{"BinData", "BinData"},
@@ -709,27 +729,33 @@ var ysonConstructors = []ysonConstructor{
 // or constructor-like substrings appearing inside string values are never
 // interpreted as structure. Earlier revisions used global strings.ReplaceAll
 // calls (notably ")" → "}"), which silently corrupted such values.
-func preprocessTypeValues(data string) string {
+func preprocessTypeValues(data string) (string, error) {
 	// DedupCounter is handled first by its precise regex. Its compound shape
 	// (Int(...) plus a bare base64 string argument) does not fit the generic
 	// Name(<arg>) rewrite, and the regex only matches at real DedupCounter
 	// call sites. The scanner then leaves the produced JSON untouched. Prose
 	// containing the literal text DedupCounter(...) inside a string value is
-	// protected because the scanner copies string literals verbatim; the regex
-	// pass may edit such prose, but the subsequent scanner would break on the
-	// same input regardless, and the marshalers never emit it inside strings.
-	data = rewriteDedupCounters(data)
+	// protected because both passes copy string literals verbatim, so the
+	// malformed-call-site error below cannot fire on document content.
+	data, err := rewriteDedupCounters(data)
+	if err != nil {
+		return "", err
+	}
 
 	var b strings.Builder
 	b.Grow(len(data) + len(data)/4)
-	scanConstructors(&b, data)
-	return b.String()
+	if err := scanConstructors(&b, data, 0); err != nil {
+		return "", err
+	}
+	return b.String(), nil
 }
 
 // rewriteDedupCounters substitutes DedupCounter(Int(N),"b64") occurrences that
 // lie outside string literals with complete intermediate JSON. Occurrences
-// inside string literals are left untouched.
-func rewriteDedupCounters(data string) string {
+// inside string literals are left untouched. A DedupCounter call site that
+// does not have the expected shape is rejected here rather than being left for
+// the JSON decoder, so the error names the constructor at fault.
+func rewriteDedupCounters(data string) (string, error) {
 	var b strings.Builder
 	b.Grow(len(data))
 	i := 0
@@ -745,25 +771,27 @@ func rewriteDedupCounters(data string) string {
 		// current position is used, so without the "DedupCounter(" prefix the
 		// regex cannot contribute; skipping it keeps this pass linear instead of
 		// rescanning the whole suffix at every byte.
-		if strings.HasPrefix(data[i:], "DedupCounter(") {
-			if loc := dedupCounterRe.FindStringSubmatchIndex(data[i:]); loc != nil && loc[0] == 0 {
-				match := data[i : i+loc[1]]
-				b.WriteString(dedupCounterRe.ReplaceAllString(match,
-					`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`))
-				i += loc[1]
-				continue
+		atBoundary := i == 0 || !isIdentChar(data[i-1])
+		if atBoundary && strings.HasPrefix(data[i:], "DedupCounter(") {
+			loc := dedupCounterRe.FindStringSubmatchIndex(data[i:])
+			if loc == nil || loc[0] != 0 {
+				return "", fmt.Errorf(
+					"DedupCounter expects an Int value and a registers string: %w",
+					ErrInvalidYSON,
+				)
 			}
+			match := data[i : i+loc[1]]
+			b.WriteString(dedupCounterRe.ReplaceAllString(match,
+				`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`))
+			i += loc[1]
+			continue
 		}
 		b.WriteByte(c)
 		i++
 	}
-	return b.String()
+	return b.String(), nil
 }
 
-// scanConstructors walks data left to right, copying string literals verbatim
-// and rewriting known constructors at token boundaries. It writes the result
-// into b. Malformed input (unbalanced parens, unterminated strings) is copied
-// through best-effort; the surrounding decoder then rejects the invalid JSON.
 // maxConstructorDepth bounds how deeply YSON constructors may nest during
 // preprocessing. Real YSON nests constructors at most two deep (for example
 // Counter(Int(0))); anything past this generous bound is malformed. Bounding
@@ -772,14 +800,16 @@ func rewriteDedupCounters(data string) string {
 // goroutine stack and crash the process instead of returning ErrInvalidYSON.
 const maxConstructorDepth = 100
 
-func scanConstructors(b *strings.Builder, data string) {
-	scanConstructorsAt(b, data, 0)
-}
-
-// scanConstructorsAt is scanConstructors with an explicit nesting depth so that
-// unbounded recursion on pathologically nested input is rejected rather than
-// crashing the process.
-func scanConstructorsAt(b *strings.Builder, data string, depth int) {
+// scanConstructors walks data left to right, copying string literals verbatim
+// and rewriting known constructors at token boundaries. It writes the result
+// into b. depth carries the current constructor nesting so that pathologically
+// nested input is rejected rather than crashing the process.
+//
+// Every constructor argument is validated before it is interpolated into the
+// emitted marker object. Malformed input is rejected here, naming the
+// constructor at fault, rather than being copied through for the JSON decoder
+// to reject with a message about the rewritten text.
+func scanConstructors(b *strings.Builder, data string, depth int) error {
 	i := 0
 	for i < len(data) {
 		c := data[i]
@@ -792,24 +822,23 @@ func scanConstructorsAt(b *strings.Builder, data string, depth int) {
 
 		if name, typ, argStart, ok := matchConstructor(data, i); ok {
 			if depth >= maxConstructorDepth {
-				// Too deeply nested: copy the remainder verbatim so the leftover
-				// constructor syntax makes the decoder report invalid YSON,
-				// instead of recursing until the stack is exhausted.
-				b.WriteString(data[i:])
-				return
+				return fmt.Errorf("%s is nested too deeply: %w", name, ErrInvalidYSON)
 			}
 
 			argEnd, found := findMatchingParen(data, argStart)
 			if !found {
-				// Unbalanced parens: copy the rest verbatim so the decoder
-				// reports invalid YSON instead of us panicking.
-				b.WriteString(data[i:])
-				return
+				return fmt.Errorf("%s has unbalanced parentheses: %w", name, ErrInvalidYSON)
 			}
 
 			inner := strings.TrimSpace(data[argStart:argEnd])
+			if err := validateConstructorArg(name, inner); err != nil {
+				return err
+			}
+
 			b.WriteString(constructorPrefix(name, typ, inner))
-			scanConstructorsAt(b, inner, depth+1)
+			if err := scanConstructors(b, inner, depth+1); err != nil {
+				return err
+			}
 			b.WriteByte('}')
 			i = argEnd + 1 // skip past ')'
 			continue
@@ -818,6 +847,86 @@ func scanConstructorsAt(b *strings.Builder, data string, depth int) {
 		b.WriteByte(c)
 		i++
 	}
+	return nil
+}
+
+// allowsEmptyArg reports whether the constructor may be written without an
+// argument. Text() and Tree() collapse to an empty text and an empty tree.
+func allowsEmptyArg(name string) bool {
+	return name == ctorText || name == ctorTree
+}
+
+// matchingOpen returns the opening bracket that closer closes, or 0 if closer
+// is not a closing bracket.
+func matchingOpen(closer byte) byte {
+	switch closer {
+	case ')':
+		return '('
+	case ']':
+		return '['
+	case '}':
+		return '{'
+	default:
+		return 0
+	}
+}
+
+// validateConstructorArg checks that arg, the text between a constructor's
+// parentheses, is a single well-formed argument.
+//
+// Both checks close a hole in the rewrite. Because arg is interpolated into
+// {"type":...,"value":<arg>}, a second argument becomes a sibling key of the
+// marker object: Int(42,"type":"Long") would emit a duplicate "type" key and
+// decode as a Long. And because findMatchingParen balances only parentheses, a
+// stray '}' inside them would close the marker object early, so the text after
+// it would escape into the parent: Int(1},"y":{"a":2) would decode to an object
+// carrying a "y" key that was never in the document.
+func validateConstructorArg(name, arg string) error {
+	if arg == "" {
+		if allowsEmptyArg(name) {
+			return nil
+		}
+		return fmt.Errorf("%s expects one argument, got none: %w", name, ErrInvalidYSON)
+	}
+
+	var stack []byte
+	args := 1
+	i := 0
+	for i < len(arg) {
+		switch c := arg[i]; c {
+		case '"':
+			// Defence in depth: scanConstructors only reaches here once
+			// findMatchingParen has closed the argument, which it cannot do
+			// while a literal inside it is unterminated. The check keeps this
+			// function correct on its own terms if that ever changes.
+			end, closed := scanStringLiteralEnd(arg, i)
+			if !closed {
+				return fmt.Errorf("%s has an unterminated string: %w", name, ErrInvalidYSON)
+			}
+			i = end
+			continue
+		case '(', '[', '{':
+			stack = append(stack, c)
+		case ')', ']', '}':
+			if len(stack) == 0 || stack[len(stack)-1] != matchingOpen(c) {
+				return fmt.Errorf("%s has unbalanced brackets: %w", name, ErrInvalidYSON)
+			}
+			stack = stack[:len(stack)-1]
+		case ',':
+			if len(stack) == 0 {
+				args++
+			}
+		}
+		i++
+	}
+
+	if len(stack) != 0 {
+		return fmt.Errorf("%s has unbalanced brackets: %w", name, ErrInvalidYSON)
+	}
+	if args != 1 {
+		return fmt.Errorf("%s expects one argument, got %d: %w", name, args, ErrInvalidYSON)
+	}
+	return nil
 }
 
 // matchConstructor reports whether data at position i begins a known
@@ -844,9 +953,9 @@ func matchConstructor(data string, i int) (name, typ string, argStart int, ok bo
 func constructorPrefix(name, typ, inner string) string {
 	if inner == "" {
 		switch name {
-		case "Text":
+		case ctorText:
 			return `{"type":"Text","value":[]`
-		case "Tree":
+		case ctorTree:
 			return `{"type":"Tree","value":{}`
 		}
 	}
@@ -881,6 +990,15 @@ func findMatchingParen(data string, argStart int) (int, bool) {
 // starts at the opening quote data[start]. It honors \" and \\ escapes. If the
 // string is unterminated it returns len(data).
 func scanStringLiteral(data string, start int) int {
+	end, _ := scanStringLiteralEnd(data, start)
+	return end
+}
+
+// scanStringLiteralEnd is scanStringLiteral with an explicit report of whether
+// the literal was closed. An unterminated literal ending in an escaped quote is
+// indistinguishable from a closed one by index alone, so callers that must
+// reject truncated input use this form.
+func scanStringLiteralEnd(data string, start int) (int, bool) {
 	i := start + 1
 	for i < len(data) {
 		switch data[i] {
@@ -888,11 +1006,11 @@ func scanStringLiteral(data string, start int) int {
 			i += 2
 			continue
 		case '"':
-			return i + 1
+			return i + 1, true
 		}
 		i++
 	}
-	return len(data)
+	return len(data), false
 }
 
 // isIdentChar reports whether c can appear in a YSON constructor identifier.

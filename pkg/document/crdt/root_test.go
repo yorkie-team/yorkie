@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -253,5 +254,22 @@ func TestRoot(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())
+	})
+}
+
+func TestRootWithTombstonedRootObject(t *testing.T) {
+	// A snapshot can decode a root object that already carries a removedAt.
+	// The root has no parent, so it must not be booked into GC: collect would
+	// have nothing to purge it from.
+	t.Run("tombstoned root object is not booked into gc", func(t *testing.T) {
+		obj := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
+		obj.SetRemovedAt(time.NewTicket(1, 0, time.InitialActorID))
+
+		root := crdt.NewRoot(obj)
+		assert.Equal(t, 0, root.GarbageLen())
+
+		n, err := root.GarbageCollect(helper.MaxVersionVector())
+		assert.NoError(t, err)
+		assert.Equal(t, 0, n)
 	})
 }

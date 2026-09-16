@@ -168,8 +168,14 @@ func (r *Root) registerLive(element Element) {
 
 // adoptTombstones books every element of the given subtree that already carries
 // a removedAt into GC.
+//
+// The subtree's own root is skipped when it has no parent. That is the document
+// root, which NewRoot registers with a nil parent; a snapshot can decode one
+// that carries a removedAt, and booking it would leave collect with a nil
+// parent to purge it from. Leaving it charged to Live is the safe reading: a
+// root nothing can purge is not garbage.
 func (r *Root) adoptTombstones(element Element, parent Container) {
-	if element.RemovedAt() != nil {
+	if element.RemovedAt() != nil && parent != nil {
 		r.adoptRemovedElementPair(parent, element)
 	}
 

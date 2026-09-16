@@ -899,3 +899,197 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		assert.Error(t, yson.Unmarshal(data, &obj))
 	})
 }
+
+// assertInvalidYSON asserts that err reports invalid YSON and names the
+// constructor at fault, without dereferencing a nil error on failure.
+func assertInvalidYSON(t *testing.T, err error, ctor string) {
+	t.Helper()
+	if !assert.Error(t, err) {
+		return
+	}
+	assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+	if ctor != "" {
+		assert.Contains(t, err.Error(), ctor)
+	}
+}
+
+func TestYSONConstructorArgumentValidation(t *testing.T) {
+	t.Run("extra argument is rejected instead of changing the type", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Int(42,"type":"Long")}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("extra argument is rejected instead of being dropped", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Date("2025-01-01T00:00:00Z","junk":1)}`, &obj)
+		assertInvalidYSON(t, err, "Date")
+	})
+
+	t.Run("unbalanced brace in an argument cannot invent a parent key", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Int(1},"y":{"a":2)}`, &obj)
+		assertInvalidYSON(t, err, "")
+		assert.NotContains(t, obj, "y")
+	})
+
+	t.Run("unbalanced bracket in an argument cannot invent a parent key", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Text([{"val":"a"}]],"y":[{"a":2)}`, &obj)
+		assertInvalidYSON(t, err, "")
+		assert.NotContains(t, obj, "y")
+	})
+
+	t.Run("mismatched bracket kinds in an argument are rejected", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Int([1})}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("missing argument is rejected with the constructor name", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Int()}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("two arguments are rejected with the constructor name", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Int(1,2)}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("Counter with an extra argument is rejected", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Counter(Int(1),"z")}`, &obj)
+		assertInvalidYSON(t, err, "Counter")
+	})
+
+	t.Run("unterminated string in an argument is rejected", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Date("2025-01-01T00:00:00Z)}`, &obj)
+		assertInvalidYSON(t, err, "Date")
+	})
+
+	t.Run("malformed DedupCounter is rejected with the constructor name", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":DedupCounter(Int(1),"x"},"y":{"a":1)}`, &obj)
+		assertInvalidYSON(t, err, "DedupCounter")
+		assert.NotContains(t, obj, "y")
+	})
+
+	t.Run("empty Text and Tree remain valid", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"t":Text(),"r":Tree()}`, &obj))
+		assert.Equal(t, yson.Text{}, obj["t"])
+	})
+
+	t.Run("commas inside nested brackets are not arguments", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"t":Text([{"val":"a"},{"val":"b"}])}`, &obj))
+		assert.Equal(t, yson.Text{Nodes: []yson.TextNode{{Value: "a"}, {Value: "b"}}}, obj["t"])
+	})
+
+	t.Run("commas inside string literals are not arguments", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"t":Text([{"val":"a,b"}])}`, &obj))
+		assert.Equal(t, textOf("a,b"), obj["t"])
+	})
+
+	t.Run("parens inside string literals are not structure", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"t":Text([{"val":"a)b(c"}])}`, &obj))
+		assert.Equal(t, textOf("a)b(c"), obj["t"])
+	})
+
+	t.Run("nested constructors still parse", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"c":Counter(Long(10))}`, &obj))
+		assert.Equal(t, yson.Counter{Type: crdt.LongCnt, Value: int64(10)}, obj["c"])
+	})
+
+	t.Run("well-formed DedupCounter still parses", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"c":DedupCounter(Int(15),"aGVsbG8=")}`, &obj))
+	})
+
+	t.Run("DedupCounter registers must be base64", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":DedupCounter(Int(1),"a\")}`, &obj)
+		assertInvalidYSON(t, err, "DedupCounter")
+	})
+
+	t.Run("DedupCounter with no registers round-trips", func(t *testing.T) {
+		obj := yson.Object{"c": yson.Counter{
+			Type:  crdt.IntegerDedupCnt,
+			Value: int32(3),
+		}}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("extra argument inside a nested constructor is rejected", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"c":Counter(Int(1,2))}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("an argument list of only a comma is rejected", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":Int(,)}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("deeply nested constructors are rejected with the constructor name", func(t *testing.T) {
+		deep := strings.Repeat("Int(", 200) + "0" + strings.Repeat(")", 200)
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"v":`+deep+`}`, &obj)
+		assertInvalidYSON(t, err, "Int")
+	})
+
+	t.Run("constructor-like text in a string value is not a call site", func(t *testing.T) {
+		values := []string{
+			`DedupCounter(bogus`,
+			`DedupCounter(Int(1),"x"},"y":{"a":1)`,
+			`Int(42,"type":"Long")`,
+			`Int(1},"y":{"a":2)`,
+		}
+		for _, v := range values {
+			obj := yson.Object{"c": textOf(v)}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual), "value %q", v)
+			assert.Equal(t, obj, actual, "value %q", v)
+		}
+	})
+
+	t.Run("whitespace around an argument is accepted", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal("{\"v\":Int( 42 ),\"c\":Counter(\n\tLong(3)\n)}", &obj))
+		assert.Equal(t, int32(42), obj["v"])
+		assert.Equal(t, yson.Counter{Type: crdt.LongCnt, Value: int64(3)}, obj["c"])
+	})
+
+	t.Run("text node attributes with commas round-trip", func(t *testing.T) {
+		obj := yson.Object{"c": yson.Text{Nodes: []yson.TextNode{
+			{Value: "a,b", Attributes: map[string]string{"k,1": "v,1", "k2": "v2"}},
+		}}}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("top-level array of constructors still parses", func(t *testing.T) {
+		arr := yson.Array{}
+		assert.NoError(t, yson.Unmarshal(`[Int(1),Text([{"val":"a"}]),Tree()]`, &arr))
+		assert.Len(t, arr, 3)
+	})
+}
