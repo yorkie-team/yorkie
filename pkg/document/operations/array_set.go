@@ -103,7 +103,7 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		return ExecutionResult{}, err
 	}
 
-	root.RegisterElement(value)
+	root.RegisterElement(value, obj)
 
 	// NOTE(hackerwins): The element this assignment displaced has to be
 	// registered for collection. Discarding it left it charged to

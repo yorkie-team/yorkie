@@ -69,7 +69,7 @@ func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Execut
 		return ExecutionResult{}, err
 	}
 
-	root.RegisterElement(value)
+	root.RegisterElement(value, obj)
 
 	// The reverse is a Remove of the just-added element, mirroring
 	// AddOperation.toReverseOperation (add_operation.ts:92-100). Its own

@@ -179,7 +179,7 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		assert.NoError(t, err)
 
 		root := helper.TestRoot()
-		root.RegisterElement(text)
+		root.RegisterElement(text, root.Object())
 		return root, text, textTicket
 	}
 
@@ -278,7 +278,7 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 	textTicket := tick(1)
 	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 	root := helper.TestRoot()
-	root.RegisterElement(text)
+	root.RegisterElement(text, root.Object())
 
 	exec := func(from, to int, content string, at *time.Ticket) {
 		f, e, err := text.CreateRange(from, to)
@@ -328,7 +328,7 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 	textTicket := tick(1)
 	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 	root := helper.TestRoot()
-	root.RegisterElement(text)
+	root.RegisterElement(text, root.Object())
 
 	// Type char by char: each Edit is a distinct insertion (createdAt = tick).
 	charAt := make([]*time.Ticket, len(s))
@@ -394,7 +394,7 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 		textTicket := tick(1)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 		root := helper.TestRoot()
-		root.RegisterElement(text)
+		root.RegisterElement(text, root.Object())
 		f, e, err := text.CreateRange(0, 0)
 		assert.NoError(t, err)
 		ins := operations.NewEdit(textTicket, f, e, "0123456789", nil, tick(1000))
@@ -471,7 +471,7 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 		textTicket := tick(1)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 		root := helper.TestRoot()
-		root.RegisterElement(text)
+		root.RegisterElement(text, root.Object())
 
 		f, e, err := text.CreateRange(0, 0)
 		assert.NoError(t, err)
@@ -532,7 +532,7 @@ func TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle(t *testing.T) {
 	textTicket := tick(1)
 	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
 	root := helper.TestRoot()
-	root.RegisterElement(text)
+	root.RegisterElement(text, root.Object())
 
 	f, e, err := text.CreateRange(0, 0)
 	assert.NoError(t, err)

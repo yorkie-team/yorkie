@@ -421,7 +421,7 @@ func (p *Object) setInternal(
 	}
 
 	removed := p.Set(k, value)
-	p.context.RegisterElement(value)
+	p.context.RegisterElement(value, p)
 	if removed != nil {
 		p.context.RegisterRemovedElementPair(p, removed)
 	}
