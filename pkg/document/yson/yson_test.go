@@ -777,6 +777,95 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		}
 	})
 
+	t.Run("object keys with structural characters round-trip", func(t *testing.T) {
+		keys := []string{
+			`quote " inside`,
+			`backslash \ inside`,
+			`trailing backslash \`,
+			"colon : and comma ,",
+			"close brace } and bracket ]",
+			"use Int( here",
+			"Int(42) is a number",
+			"newline \n inside",
+		}
+		for _, k := range keys {
+			obj := yson.Object{k: int32(1)}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual), "key %q", k)
+			assert.Equal(t, obj, actual, "key %q", k)
+		}
+	})
+
+	t.Run("object key cannot forge a sibling member", func(t *testing.T) {
+		obj := yson.Object{`a":Int(1),"b`: int32(1)}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Len(t, actual, 1)
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("control characters round-trip in keys and values", func(t *testing.T) {
+		// A Go literal quoter writes these as \v or \x00, which JSON cannot
+		// read back, so a document holding one would marshal to a snapshot that
+		// never reloads.
+		for _, s := range []string{
+			"vertical tab \v here",
+			"nul \x00 here",
+			"bell \a here",
+			"unit separator \x1f here",
+			"delete \x7f here",
+			"tab \t and newline \n here",
+		} {
+			obj := yson.Object{
+				s:     int32(1),
+				"str": s,
+				"txt": yson.Text{Nodes: []yson.TextNode{{
+					Value:      s,
+					Attributes: map[string]string{s: s},
+				}}},
+				"tree": yson.Tree{Root: yson.TreeNode{
+					Type:       "p",
+					Attributes: map[string]string{s: s},
+					Children:   []yson.TreeNode{{Type: "text", Value: s}},
+				}},
+			}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual), "string %q", s)
+			assert.Equal(t, obj, actual, "string %q", s)
+		}
+	})
+
+	t.Run("invalid UTF-8 is rejected rather than replaced", func(t *testing.T) {
+		// A JSON string literal cannot carry invalid UTF-8: the decoder reads
+		// it back as U+FFFD, so marshalling it would hand back a document
+		// other than the one that was marshalled.
+		const bad = "a\xffb"
+
+		for name, elem := range map[string]yson.Element{
+			"key":            yson.Object{bad: int32(1)},
+			"value":          yson.Object{"k": bad},
+			"text value":     yson.Text{Nodes: []yson.TextNode{{Value: bad}}},
+			"text attribute": yson.Text{Nodes: []yson.TextNode{{Attributes: map[string]string{"b": bad}}}},
+			"tree value":     yson.Tree{Root: yson.TreeNode{Type: "text", Value: bad}},
+			"tree type":      yson.Tree{Root: yson.TreeNode{Type: bad}},
+			"tree attribute": yson.Tree{Root: yson.TreeNode{Type: "p", Attributes: map[string]string{"b": bad}}},
+		} {
+			_, err := elem.Marshal()
+			if assert.Error(t, err, name) {
+				assert.ErrorIs(t, err, yson.ErrInvalidUTF8, name)
+			}
+		}
+	})
+
 	t.Run("escaped quote adjacent to bracket in string round-trip", func(t *testing.T) {
 		values := []string{
 			`quote before bracket "] here`,
