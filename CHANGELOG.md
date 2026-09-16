@@ -7,6 +7,15 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.22] - 2026-09-17
+
+### Fixed
+
+- Emit an object's members in a stable order when encoding by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1984
+- Fix docSize accounting for elements removed before registration by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1990
+- Reject malformed YSON constructor argument lists by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1991
+- Quote object keys and strings as JSON when marshalling YSON by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1993
+
 ## [v0.7.21] - 2026-09-13
 
 ### Added
