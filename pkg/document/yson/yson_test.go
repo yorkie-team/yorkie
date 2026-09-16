@@ -844,6 +844,28 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid UTF-8 is rejected rather than replaced", func(t *testing.T) {
+		// A JSON string literal cannot carry invalid UTF-8: the decoder reads
+		// it back as U+FFFD, so marshalling it would hand back a document
+		// other than the one that was marshalled.
+		const bad = "a\xffb"
+
+		for name, elem := range map[string]yson.Element{
+			"key":            yson.Object{bad: int32(1)},
+			"value":          yson.Object{"k": bad},
+			"text value":     yson.Text{Nodes: []yson.TextNode{{Value: bad}}},
+			"text attribute": yson.Text{Nodes: []yson.TextNode{{Attributes: map[string]string{"b": bad}}}},
+			"tree value":     yson.Tree{Root: yson.TreeNode{Type: "text", Value: bad}},
+			"tree type":      yson.Tree{Root: yson.TreeNode{Type: bad}},
+			"tree attribute": yson.Tree{Root: yson.TreeNode{Type: "p", Attributes: map[string]string{"b": bad}}},
+		} {
+			_, err := elem.Marshal()
+			if assert.Error(t, err, name) {
+				assert.ErrorIs(t, err, yson.ErrInvalidUTF8, name)
+			}
+		}
+	})
+
 	t.Run("escaped quote adjacent to bracket in string round-trip", func(t *testing.T) {
 		values := []string{
 			`quote before bracket "] here`,

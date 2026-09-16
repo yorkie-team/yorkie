@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -43,6 +44,10 @@ var (
 	// ErrInvalidYSON is returned when the given YSON is not
 	// valid.
 	ErrInvalidYSON = errors.InvalidArgument("invalid YSON")
+
+	// ErrInvalidUTF8 is returned when a string cannot be marshalled because
+	// it is not valid UTF-8, which a JSON string literal cannot carry.
+	ErrInvalidUTF8 = errors.InvalidArgument("invalid UTF-8 string")
 
 	// dedupCounterRe matches DedupCounter(Int(N),"base64") in YSON text. The
 	// registers group is the base64 alphabet, and may be empty so that
@@ -154,12 +159,20 @@ func marshalElement(elem interface{}) (string, error) {
 }
 
 // quoteString returns s as a JSON string literal. strconv.Quote is a Go
-// literal quoter, not a JSON one: for bytes below 0x20 outside \b \f \n \r \t,
-// for DEL and for invalid UTF-8 it emits \v, \x00 or \xff, escapes JSON has no
-// reading for, so what Marshal emitted could not always be read back.
-// crdt.EscapeString is the escaper the CRDT marshaler already uses.
-func quoteString(s string) string {
-	return `"` + crdt.EscapeString(s) + `"`
+// literal quoter, not a JSON one: for bytes below 0x20 outside \b \f \n \r \t
+// and for DEL it emits \v or \x00, escapes JSON has no reading for, so what
+// Marshal emitted could not always be read back. crdt.EscapeString is the
+// escaper the CRDT marshaler already uses.
+//
+// A JSON string literal cannot carry invalid UTF-8 at all: the decoder
+// substitutes U+FFFD for it, so emitting it would return a different document
+// than the one that was marshalled. Reject it instead.
+func quoteString(s string) (string, error) {
+	if !utf8.ValidString(s) {
+		return "", fmt.Errorf("quote string: %w", ErrInvalidUTF8)
+	}
+
+	return `"` + crdt.EscapeString(s) + `"`, nil
 }
 
 func marshalPrimitive(v interface{}) (string, error) {
@@ -171,7 +184,7 @@ func marshalPrimitive(v interface{}) (string, error) {
 	case float64:
 		return fmt.Sprintf("%v", v), nil
 	case string:
-		return quoteString(v), nil
+		return quoteString(v)
 	case int32:
 		return fmt.Sprintf("Int(%d)", v), nil
 	case int64:
@@ -200,7 +213,12 @@ func (y Object) Marshal() (string, error) {
 			return "", err
 		}
 
-		pairs = append(pairs, fmt.Sprintf(`%s:%s`, quoteString(key), marshalled))
+		quoted, err := quoteString(key)
+		if err != nil {
+			return "", err
+		}
+
+		pairs = append(pairs, fmt.Sprintf(`%s:%s`, quoted, marshalled))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(pairs, ",")), nil
 }
@@ -235,46 +253,93 @@ func (y Counter) Marshal() (string, error) {
 func (y Text) Marshal() (string, error) {
 	var nodes []string
 	for _, node := range y.Nodes {
+		value, err := quoteString(node.Value)
+		if err != nil {
+			return "", err
+		}
+
 		if len(node.Attributes) == 0 {
-			nodes = append(nodes, fmt.Sprintf(`{"val":%s}`, quoteString(node.Value)))
+			nodes = append(nodes, fmt.Sprintf(`{"val":%s}`, value))
 			continue
 		}
 
-		attrs := make([]string, 0, len(node.Attributes))
-		for k, v := range node.Attributes {
-			attrs = append(attrs, fmt.Sprintf(`%s:%s`, quoteString(k), quoteString(v)))
+		attrs, err := marshalAttributes(node.Attributes)
+		if err != nil {
+			return "", err
 		}
-		sort.Strings(attrs)
-		nodes = append(nodes, fmt.Sprintf(`{"val":%s,"attrs":{%s}}`, quoteString(node.Value), strings.Join(attrs, ",")))
+
+		nodes = append(nodes, fmt.Sprintf(`{"val":%s,"attrs":{%s}}`, value, attrs))
 	}
 	return fmt.Sprintf("Text([%s])", strings.Join(nodes, ",")), nil
 }
 
-func (y Tree) Marshal() (string, error) {
-	return fmt.Sprintf("Tree(%s)", y.Root.Marshal()), nil
+// marshalAttributes marshals the given attributes into a sorted list of
+// quoted pairs, shared by Text and TreeNode.
+func marshalAttributes(attributes map[string]string) (string, error) {
+	attrs := make([]string, 0, len(attributes))
+	for k, v := range attributes {
+		key, err := quoteString(k)
+		if err != nil {
+			return "", err
+		}
+
+		value, err := quoteString(v)
+		if err != nil {
+			return "", err
+		}
+
+		attrs = append(attrs, fmt.Sprintf(`%s:%s`, key, value))
+	}
+	sort.Strings(attrs)
+
+	return strings.Join(attrs, ","), nil
 }
 
-func (n *TreeNode) Marshal() string {
+func (y Tree) Marshal() (string, error) {
+	root, err := y.Root.Marshal()
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("Tree(%s)", root), nil
+}
+
+func (n *TreeNode) Marshal() (string, error) {
+	typ, err := quoteString(n.Type)
+	if err != nil {
+		return "", err
+	}
+
 	if n.Type == "text" {
-		return fmt.Sprintf(`{"type":%s,"value":%s}`, quoteString(n.Type), quoteString(n.Value))
+		value, err := quoteString(n.Value)
+		if err != nil {
+			return "", err
+		}
+
+		return fmt.Sprintf(`{"type":%s,"value":%s}`, typ, value), nil
 	}
 
 	var children []string
 	for _, child := range n.Children {
-		children = append(children, child.Marshal())
+		marshalled, err := child.Marshal()
+		if err != nil {
+			return "", err
+		}
+
+		children = append(children, marshalled)
 	}
 
 	if len(n.Attributes) == 0 {
-		return fmt.Sprintf(`{"type":%s,"children":[%s]}`, quoteString(n.Type), strings.Join(children, ","))
+		return fmt.Sprintf(`{"type":%s,"children":[%s]}`, typ, strings.Join(children, ",")), nil
 	}
 
-	var attrs []string
-	for k, v := range n.Attributes {
-		attrs = append(attrs, fmt.Sprintf(`%s:%s`, quoteString(k), quoteString(v)))
+	attrs, err := marshalAttributes(n.Attributes)
+	if err != nil {
+		return "", err
 	}
-	sort.Strings(attrs)
+
 	return fmt.Sprintf(`{"type":%s,"attrs":{%s},"children":[%s]}`,
-		quoteString(n.Type), strings.Join(attrs, ","), strings.Join(children, ","))
+		typ, attrs, strings.Join(children, ",")), nil
 }
 
 // Unmarshal parses a string representation of a YSON element into the
