@@ -32,7 +32,7 @@ import (
 
 // coverageTTL is how long a probe is reused. It is what collapses one dashboard
 // load onto a single probe: maxDay holds its lock across the fetch, so the
-// twelve metric queries GetProjectStats fans out arrive one at a time and all
+// eleven metric queries GetProjectStats fans out arrive one at a time and all
 // but the first find a result younger than the TTL. A minute also covers
 // consecutive loads, and costs nothing in staleness — the value it reads moves
 // at most once per refresh run.

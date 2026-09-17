@@ -184,12 +184,15 @@ func (d metricDesc) peakSeriesQuery(id types.ID, from, to, split time.Time) stri
 		)
 	}
 	if !fresh.Empty {
+		// channel_key stays literal where idColumn does not: it is not a
+		// property of the metric but the grain peak is defined over, so this
+		// builder only fits a base table that carries it.
 		freshSQL = fmt.Sprintf(
 			"SELECT event_date, MAX(session_count) AS metric_value FROM ("+
-				"SELECT DATE(timestamp) AS event_date, channel_key, APPROX_COUNT_DISTINCT(session_id) AS session_count "+
+				"SELECT DATE(timestamp) AS event_date, channel_key, APPROX_COUNT_DISTINCT(%s) AS session_count "+
 				"FROM %s WHERE %s GROUP BY DATE(timestamp), channel_key"+
 				") fc GROUP BY event_date",
-			d.baseTable, d.basePred(id, fresh),
+			d.idColumn, d.baseTable, d.basePred(id, fresh),
 		)
 	}
 
