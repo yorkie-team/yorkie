@@ -10,10 +10,12 @@ USE yorkie;
 -- complete; writing a partial current day would make that day undercount from
 -- the next UTC midnight until a later run merges the rest of it in.
 --
--- On large clusters run these per table in a low-ingest window (the session
--- scan last) rather than all at once; each base statement is a single full
--- scan. The order below is not free to shuffle: sum_session_peak_daily is
--- derived from sum_session_hll_daily_ch, so it has to run after it. See
+-- On large clusters run these per statement in a low-ingest window rather than
+-- all at once; each base statement is a single full scan. Keep the session scan
+-- last of the base scans, and run the sum_session_peak_daily statement
+-- immediately after it -- peak is derived from sum_session_hll_daily_ch, so it
+-- has nothing to read until the session scan has landed. That pairing is the
+-- one thing the order below is not free to shuffle. See
 -- docs/design/project-stats-long-retention.md and the MV migration playbook.
 
 -- HLL_HASH is per-row; grouping into the HLL_UNION column requires the

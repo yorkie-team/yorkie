@@ -74,6 +74,17 @@ DISTRIBUTED BY HASH(project_id)
 ROLLUP (rl_session_daily (project_id, dt, session_hll))
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
+CREATE TABLE IF NOT EXISTS sum_client_hll_daily (
+    project_id VARCHAR(64),
+    event_type VARCHAR(32),
+    dt         DATE,
+    client_hll HLL HLL_UNION
+) ENGINE = OLAP
+AGGREGATE KEY(project_id, event_type, dt)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(project_id)
+PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
 -- Peak sessions per channel keyed by channel is the only metric whose summary
 -- read scales with channel cardinality: a 3-month window on a project with
 -- ~4,900 channels reads ~280k rows from sum_session_hll_daily_ch, about two
@@ -83,23 +94,20 @@ PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 -- The same 3-month window then reads ~91 rows and no longer depends on how many
 -- channels the project has. No sketch and no cross-day union are needed, which
 -- is why this is an integer table rather than a sixth HLL table.
+--
+-- It is last on purpose, out of the session grouping it belongs to by subject.
+-- The init scripts pipe this file to mysql without --force and only log that
+-- the summaries "may already exist" when it exits non-zero, so a statement that
+-- fails takes every statement below it with it, quietly. The newest table is
+-- the one most likely to hit an engine that will not take it, and last is where
+-- that costs nothing but itself. Its backfill is ordered the opposite way --
+-- right after the session summary it reads -- see init-backfill-summary.sql.
 CREATE TABLE IF NOT EXISTS sum_session_peak_daily (
     project_id    VARCHAR(64),
     dt            DATE,
     peak_sessions BIGINT MAX
 ) ENGINE = OLAP
 AGGREGATE KEY(project_id, dt)
-PARTITION BY date_trunc('day', dt)
-DISTRIBUTED BY HASH(project_id)
-PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
-
-CREATE TABLE IF NOT EXISTS sum_client_hll_daily (
-    project_id VARCHAR(64),
-    event_type VARCHAR(32),
-    dt         DATE,
-    client_hll HLL HLL_UNION
-) ENGINE = OLAP
-AGGREGATE KEY(project_id, event_type, dt)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
