@@ -255,8 +255,16 @@ thing derived from two different scans and expected to coincide.
 
 The price is an ordering constraint: the peak statement must run after the
 session-summary insert in the same script, in both the backfill and the daily
-refresh, or it maximises over a day the summary does not hold yet. The
-statements are commented to that effect where they live.
+refresh, or it maximises over a day the summary does not hold yet. It is written
+last in both scripts rather than directly after the session insert, which
+satisfies the constraint and one more: these scripts are piped to `mysql`, which
+stops at the first failing statement, and the wrappers only log that the
+summaries could not be written. A newly added statement placed mid-script can
+therefore skip the ones below it silently — a summary left empty reads as
+covering nothing, which is correct but puts that metric back on whole-history
+base scans, and after raw TTL loses the history outright. The same reasoning
+puts the `CREATE TABLE` last in the DDL script. The statements are commented to
+that effect where they live.
 
 The job runs as a **Kubernetes CronJob** — a `starrocks/fe-ubuntu` container
 running the idempotent SQL through the MySQL client, the same image and access
@@ -535,7 +543,7 @@ DDL only, so it gets the `CREATE TABLE` and nothing else.
 | Adding cardinalities across the boundary over-counts a subject active in both halves | Union sketches with `HLL_UNION_AGG`, take cardinality once. Summary `[from, boundary)` and base `[boundary, to)` split on the day, so there is no overlap to double count. |
 | `DATE(timestamp)` loses partition pruning once the base is partitioned, so the fresh-day scan reads every partition | Accepted: the fresh half reads the MV, which holds one row per (project, day), so every partition of it is cheaper than one raw partition of the base. Raw `timestamp` bounds would prune but would also drop the query off the MV. |
 | Repartitioning a live billion-row table (session) risks stalled ingest and quorum loss under `replication_num = 1` | New table + `INSERT SELECT` + rename swap under `PAUSE`/`RESUME ROUTINE LOAD`, in a low-ingest window, watching `ADMIN SHOW REPLICA STATUS`. Same playbook as the `session_events` redistribution. |
-| `MAX(dt)` is a watermark, not a coverage set: a day missing *below* it is still served from a summary that has no row for it, and reads as zero | Accepted, and strictly narrower than what it replaces — a fixed today boundary exposed every day in the window to the same hole, where the boundary only exposes the days below the watermark. Contiguity is what the writers give it: the backfill covers full history and the CronJob reprocesses a 7-day lookback, so a hole heals within a week. Verified the failure mode by hand: with the summary holding `[D-6, D-2]` and `D`, the missing `D-1` reads as zero. |
+| `MAX(dt)` is a watermark, not a coverage set: a day missing *below* it is still served from a summary that has no row for it, and reads as zero | Accepted, and strictly narrower than what it replaces — a fixed today boundary exposed every day in the window to the same hole, where the boundary only exposes the days below the watermark. Contiguity is what the writers give it: the backfill covers full history and the CronJob reprocesses a 7-day lookback, so a hole heals within a week. Verified the failure mode by hand: with the summary holding `[D-6, D-2]` and `D`, the missing `D-1` reads as zero. The exposure is at its worst for a summary added to a cluster where the flag is *already on*, as `sum_session_peak_daily` is: if the CronJob's 7-day window writes before the one-time backfill has run, `MAX(dt)` jumps to yesterday over a table holding one week, and the rest of the window reads as zero with nothing logged. Hence the sequencing — backfill the new table, and check its `MIN(dt)`, before the release that names it. |
 | A partial day in the summary would be trusted as complete, since the split trusts every day at or below `MAX(dt)` | Both writers stop before the running UTC day: the CronJob's window is `[today-7, today)` and the backfill carries the same `< DATE(UTC_TIMESTAMP())` guard. The read path's clamp to today is the second line of defense. |
 | The ingest job misses a day or late events land after it runs | 7-day lookback reprocess every run; `HLL_UNION` makes repeats idempotent. CronJob history and alerting surface a failed run. The read path splits at the summary's actual `MAX(dt)`, so a day the job has not written yet is read from the base rather than reported as zero. |
 | Summary drifts from the base over time | Periodic reconciliation comparing an overlap day's summary against a base recount; the 7-day lookback self-heals recent drift. |

@@ -11,11 +11,11 @@ USE yorkie;
 -- the next UTC midnight until a later run merges the rest of it in.
 --
 -- On large clusters run these per statement in a low-ingest window rather than
--- all at once; each base statement is a single full scan. Keep the session scan
--- last of the base scans, and run the sum_session_peak_daily statement
--- immediately after it -- peak is derived from sum_session_hll_daily_ch, so it
--- has nothing to read until the session scan has landed. That pairing is the
--- one thing the order below is not free to shuffle. See
+-- all at once; each base statement is a single full scan, the session one the
+-- heaviest. The order of the base statements is free, with one exception: the
+-- sum_session_peak_daily statement reads sum_session_hll_daily_ch, so it has
+-- nothing to work with until the session statement has landed. It is written
+-- last for that reason and for one more, given at the statement itself. See
 -- docs/design/project-stats-long-retention.md and the MV migration playbook.
 
 -- HLL_HASH is per-row; grouping into the HLL_UNION column requires the
@@ -46,10 +46,21 @@ FROM session_events
 WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, DATE(timestamp), channel_key;
 
+INSERT INTO sum_client_hll_daily
+SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
+FROM client_events
+WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
+GROUP BY project_id, event_type, DATE(timestamp);
+
 -- Peak sessions per channel, as a plain integer per (project_id, dt).
 --
--- This statement MUST stay after the sum_session_hll_daily_ch INSERT above: it
--- reads the rows that statement just wrote, not session_events.
+-- This statement MUST run after the sum_session_hll_daily_ch INSERT above: it
+-- reads the rows that statement wrote, not session_events. It is last rather
+-- than directly after it because mysql stops at the first failing statement and
+-- the wrapper only logs that it "could not run the summary backfill": a failure
+-- here would otherwise skip the client backfill, leaving that summary empty,
+-- its coverage at nothing, and its reads on whole-history base scans with
+-- nothing to say so.
 --
 -- Deriving from the summary rather than the base is deliberate. The summary is
 -- orders of magnitude smaller -- one row per (project, day, channel) against a
@@ -71,9 +82,3 @@ SELECT project_id, dt, MAX(session_count) FROM (
     GROUP BY project_id, dt, channel_key
 ) c
 GROUP BY project_id, dt;
-
-INSERT INTO sum_client_hll_daily
-SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
-FROM client_events
-WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
-GROUP BY project_id, event_type, DATE(timestamp);
