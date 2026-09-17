@@ -77,8 +77,8 @@ table. It has to be a plain table the base cannot reach.
 
 Keep the synchronous MVs for the fresh path. Add an independent per-metric
 summary table with its own long TTL, fill it with a scheduled idempotent job,
-and split every read at the summary's coverage boundary: history from the
-summary, the days it does not hold yet from the MV.
+and split every read against the summary's coverage: the days it holds from the
+summary, the days outside that range from the MV.
 
 ### Summary tables
 
@@ -101,14 +101,16 @@ PROPERTIES (
 ```
 
 `sum_document_hll_daily` and `sum_channel_hll_daily` follow the same shape.
-`sum_session_hll_daily_ch` adds `channel_key` to the key, so it serves both the
-sessions metric and peak sessions per channel. `sum_client_hll_daily` adds
-`event_type`, matching the MV that carries it.
+`sum_session_hll_daily_ch` adds `channel_key` to the key, which is the grain the
+per-channel peak is computed from. `sum_client_hll_daily` adds `event_type`,
+matching the MV that carries it. A sixth table, `sum_session_peak_daily`, holds
+the finished daily peak as a plain integer; it is the one summary with no sketch
+in it, for the reasons below.
 
 #### The session summary carries a coarse rollup
 
-`channel_key` in the key is what peak sessions per channel needs, and it is also
-what makes the plain sessions total and series expensive: they union every
+`channel_key` in the key is what the per-channel peak is derived from, and it is
+also what makes the plain sessions total and series expensive: they union every
 channel-day sketch of a project just to count distinct sessions. On a project
 with high channel cardinality that is millions of sketches per read, which alone
 overruns the dashboard's per-query budget.
@@ -131,9 +133,11 @@ PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
 `(project_id, dt)` is a key prefix, so StarRocks picks `rl_session_daily` for any
 read that does not mention `channel_key` — the sessions total and series — and
-keeps the base index for the peak metrics that do. Verified with `EXPLAIN`: the
-sessions history half reads `rollup: rl_session_daily`, one row per day, while
-peak still reads `rollup: sum_session_hll_daily_ch`.
+keeps the base index for whatever does. Verified with `EXPLAIN`: the sessions
+history half reads `rollup: rl_session_daily`, one row per day, while a
+channel-grained read still reads `rollup: sum_session_hll_daily_ch`. The only
+remaining channel-grained reader is the refresh job that computes the daily peak;
+the peak read path does not touch this table at all (next section).
 
 A rollup rather than a second summary table: StarRocks maintains it on insert, so
 the refresh job, the read path, and the retention property all stay as they are —
@@ -162,6 +166,50 @@ Two properties do the work:
 Retention is 15 months — the 12-month product window plus a buffer — via
 `partition_live_number` on the daily partitions.
 
+#### Peak sessions gets a precomputed integer summary
+
+Peak sessions per channel is the only metric whose summary is keyed by channel,
+so it is the only one whose read cost scales with channels x days; every other
+metric scales with days alone. Measured on production StarRocks 3.3.9 over a
+3-month window on a project with ~4,900 channels — about 280k rows in
+`sum_session_hll_daily_ch` — the peak series took ~2.24s while every other
+metric came in under 0.7s. The dashboard's admin RPC deadline is a fixed 3s, and
+the 3-month view intermittently blew through it.
+
+`rl_session_daily` cannot help here. The rollup pre-merges the sketches to
+`(project_id, dt)`, which is exactly the breakdown peak needs to keep: the peak
+is the maximum *across* channels of each channel's distinct sessions, so the
+per-channel cardinality has to be computed before it can be maximised. A rollup
+aggregates with the column's own aggregate function — it can `HLL_UNION`, it
+cannot `MAX` over a sketch.
+
+So the daily peak is precomputed and stored as a number. It is independent per
+day — the peak of a window is the maximum of its daily peaks — so nothing about
+it needs to stay mergeable as a sketch:
+
+```sql
+CREATE TABLE IF NOT EXISTS sum_session_peak_daily (
+    project_id    VARCHAR(64),
+    dt            DATE,
+    peak_sessions BIGINT MAX
+) ENGINE = OLAP
+AGGREGATE KEY(project_id, dt)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(project_id)
+PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+```
+
+`BIGINT MAX` plays the role `HLL_UNION` plays for the sketch tables: re-inserting
+a day merges into the existing row — taking the larger of the two values —
+instead of appending a second one, so the refresh job can reprocess a day
+safely. Partitioning and retention are identical to the other five.
+
+A 3-month read now touches ~91 rows instead of ~280k, and, more to the point,
+stops depending on how many channels the project has. It adds no approximation
+of its own: the stored integer is a maximum of per-day HLL estimates, and the
+window value is a maximum of those, with no sketch and no cross-day union
+anywhere in the path.
+
 ### Daily ingest job
 
 A scheduled, idempotent insert per metric, reprocessing a 7-day lookback so late
@@ -181,6 +229,43 @@ The `GROUP BY` needs `HLL_UNION` around `HLL_HASH` — a bare `HLL_HASH` under a
 re-inserted days, so the 7-day window is safe to repeat every run. A one-time
 backfill over the full base history seeds the table before the job takes over.
 
+**Peak is derived from the session summary, not from the base.** Its statement
+reads the rows the session insert has just written, over the same 7-day window:
+
+```sql
+INSERT INTO sum_session_peak_daily
+SELECT project_id, dt, MAX(session_count) FROM (
+    SELECT project_id, dt, channel_key, HLL_UNION_AGG(session_hll) AS session_count
+    FROM sum_session_hll_daily_ch
+    WHERE dt >= <today-7> AND dt < <today>
+    GROUP BY project_id, dt, channel_key
+) c
+GROUP BY project_id, dt;
+```
+
+Two reasons, and the backfill uses the same shape for both. First, cost: the
+session summary is orders of magnitude smaller than `session_events`, so this is
+a scan of the summary rather than a second full scan of a billion-row base.
+Second, and the one that actually decides it: the number stored this way is
+*exactly* the maximum of the per-day HLL estimates the summary already holds —
+the same quantity, off the same sketches, that the read path itself computed for
+those days before the table existed. Precomputed history and freshly computed
+days therefore agree by construction, instead of being two estimates of the same
+thing derived from two different scans and expected to coincide.
+
+The price is an ordering constraint: the peak statement must run after the
+session-summary insert in the same script, in both the backfill and the daily
+refresh, or it maximises over a day the summary does not hold yet. It is written
+last in both scripts rather than directly after the session insert, which
+satisfies the constraint and one more: these scripts are piped to `mysql`, which
+stops at the first failing statement, and the wrappers only log that the
+summaries could not be written. A newly added statement placed mid-script can
+therefore skip the ones below it silently — a summary left empty reads as
+covering nothing, which is correct but puts that metric back on whole-history
+base scans, and after raw TTL loses the history outright. The same reasoning
+puts the `CREATE TABLE` last in the DDL script. The statements are commented to
+that effect where they live.
+
 The job runs as a **Kubernetes CronJob** — a `starrocks/fe-ubuntu` container
 running the idempotent SQL through the MySQL client, the same image and access
 path the MV migration Jobs already use — not a StarRocks native `SUBMIT TASK`.
@@ -192,19 +277,29 @@ the analytics deployment (`build/charts/yorkie-analytics/.../starrocks/`), with
 
 ### Read path (dual read)
 
-Split the requested window at the day the summary's coverage ends. The summary
-and the base never overlap by day — the summary serves `[from, boundary)` and the
-MV serves `[boundary, to)` — so their union is exact with no double counting.
+Cut the requested window against the days the summary actually holds. Coverage
+is a range, `[MIN(dt), MAX(dt) + 1)` clamped to today, and the window cuts into
+three half-open ranges on it:
 
-**The boundary is the summary's own coverage, not today.** Splitting at a fixed
-today assumes the summary is complete through yesterday, but it is only complete
-through the days the refresh job has processed. With a once-daily job the summary
-sits at `today - 2` for most of the day, and the day in between — yesterday —
-lands in neither half: not in the summary, which has no row for it, and not in
-the base half, which starts at today. It reads as zero, a V-shaped dip in the
-series, and drags every total that includes it down with it.
+- `pre = [from, floor)` — below the summary's first row, served by the base.
+- `hist = [floor, boundary)` — the covered days, served by the summary.
+- `fresh = [boundary, to)` — above the summary's last row, served by the base.
 
-So the boundary is `MAX(dt) + 1` per summary table, clamped to today:
+Any of the three may be empty. They are disjoint by day and their union is
+exactly `[from, to)`, which is what keeps a subject counted once and every day
+counted at all. In the steady state — a backfilled summary, a window inside the
+product window — `pre` is empty and the read is the two-branch dual read it has
+always been, byte for byte.
+
+**The ends of the coverage are the summary's own, not today.** Splitting at a
+fixed today assumes the summary is complete through yesterday, but it is only
+complete through the days the refresh job has processed. With a once-daily job
+the summary sits at `today - 2` for most of the day, and the day in between —
+yesterday — lands in neither half: not in the summary, which has no row for it,
+and not in the base half, which starts at today. It reads as zero, a V-shaped
+dip in the series, and drags every total that includes it down with it.
+
+So the upper end is `MAX(dt) + 1` per summary table, clamped to today:
 
 - `MAX(dt) + 1` is the first day the summary does not hold, whatever the refresh
   cadence, and it self-corrects after a missed or failed run.
@@ -212,24 +307,49 @@ So the boundary is `MAX(dt) + 1` per summary table, clamped to today:
   a partial sketch for today.
 - An empty summary covers nothing, so the whole window is read from the base.
 
-`MAX(dt)` is read per summary table, since a partly-failed refresh can leave them
-at different days, but in one round trip for all five and cached for a minute:
-`GetProjectStats` fans out twelve metric queries at once, and the value moves at
-most once per refresh run. A stale-by-a-minute boundary only means a day is read
-from the base that the summary could already have served — slower for one query,
-never wrong.
+**And the lower end is `MIN(dt)`, because `MAX(dt)` alone is a watermark, not a
+coverage set.** A day *below* `MAX(dt)` that the summary does not hold would
+otherwise be read from the summary, return nothing, and draw as zero with
+nothing logged. That is not hypothetical for a summary table introduced onto a
+cluster where `SummaryEnabled` is already on — `sum_session_peak_daily` is the
+first such table: if the refresh CronJob's 7-day window writes before the
+one-time backfill runs, `MAX(dt)` jumps to yesterday over a table holding one
+week, and a 3-month window draws ~83 days as zero. Probing `MIN(dt)` alongside
+`MAX(dt)` routes those days to the base instead.
+
+**What the floor does not fix is a hole *inside* the range.** The probe is
+global rather than per project — one `MIN` and one `MAX` per table across every
+project — so a day missing for one project only still sits between the two ends,
+is still read from the summary, and still comes back as zero. Contiguity there
+remains something the writers provide: the backfill covers full history and the
+CronJob reprocesses a 7-day lookback, so an interior hole heals within a week.
+The floor fixes a summary that *starts* later than the window; it does not turn
+`MAX(dt)` into a coverage set.
+
+The cost is honest to state too. A window reaching back before any summary data
+now runs an extra base branch that returns nothing, and after raw TTL the days
+it covers are simply not available anywhere — the read reports them as absent
+rather than as zeroes, which is the difference that matters.
+
+Both ends are read per summary table, since a partly-failed refresh can leave
+them at different days, but in one round trip for all six and cached for a
+minute: `GetProjectStats` fans out eleven metric queries at once, and the values
+move at most once per refresh run. A stale-by-a-minute coverage only means a day
+is read from the base that the summary could already have served — slower for
+one query, never wrong.
 
 **Series** metrics (`GetActiveUsers`, …) are per-day and independent, so no
 cross-day work is needed. Read the covered days from the summary and the rest
 from the base, then concatenate:
 
 ```sql
--- history, from the summary
+-- the covered days, from the summary
 SELECT dt, HLL_UNION_AGG(user_hll) AS v
 FROM sum_user_hll_daily
-WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'   -- [from, boundary)
+WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'   -- [floor, boundary)
 GROUP BY dt ORDER BY dt;
--- the fresh days, from the base (MV rewrite path)
+-- the days below the floor and the days above the boundary, from the base
+-- (MV rewrite path), one branch each
 ```
 
 `HLL_UNION_AGG` already returns the merged cardinality (a bigint), so it is not
@@ -238,15 +358,20 @@ zero. Use `HLL_UNION_AGG(col)` to count, or `HLL_RAW_AGG(col)` / `HLL_UNION(col)
 when a merged sketch is needed.
 
 **Totals** (`GetActiveUsersCount`, …) are a distinct over the whole window, so
-the fresh days and the history must be **unioned, never summed** — a subject
-active in both halves must count once. The union happens in the engine, over a
-`UNION ALL` of the summary sketches and the fresh days' own, with cardinality
-taken exactly once:
+the base days and the covered days must be **unioned, never summed** — a subject
+active in more than one range must count once. The union happens in the engine,
+over a `UNION ALL` of the summary sketches and the base ranges' own, with
+cardinality taken exactly once:
 
 ```sql
 SELECT HLL_UNION_AGG(sketch) FROM (
+    SELECT HLL_UNION(HLL_HASH(user_id)) AS sketch FROM user_events
+     WHERE project_id = '%s'
+       AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'      -- [from, floor)
+     GROUP BY DATE(timestamp)                                      -- omitted when the summary reaches the window
+    UNION ALL
     SELECT user_hll AS sketch FROM sum_user_hll_daily
-     WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'          -- [from, boundary)
+     WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'          -- [floor, boundary)
     UNION ALL
     SELECT HLL_UNION(HLL_HASH(user_id)) AS sketch FROM user_events
      WHERE project_id = '%s'
@@ -256,8 +381,10 @@ SELECT HLL_UNION_AGG(sketch) FROM (
 ```
 
 `HLL_UNION_AGG` accepts both a stored `HLL` column and a merged `HLL_UNION(...)`
-sketch, so the two halves compose losslessly. Adding two cardinalities across the
-boundary would over-count; this design never does.
+sketch, so the ranges compose losslessly. Adding two cardinalities across a
+split would over-count; this design never does. The two base branches are the
+same shape with different bounds, and each is emitted only when its range is
+non-empty — in the steady state only the `[boundary, to)` one is.
 
 ### Keeping the fresh half on the rollup
 
@@ -281,12 +408,42 @@ things decide whether it does. Both were measured with `EXPLAIN` on 3.3
   per row is the same distinct count.
 
 The series and peak builders already aggregate in-branch, so for them the
-DATE-only predicate is enough; the totals need both.
+DATE-only predicate is enough; the totals need both. Both rules apply to the
+`[from, floor)` branch exactly as they do to `[boundary, to)` — the two are the
+same SQL with different bounds, emitted from one helper per builder precisely so
+a future edit cannot fix one and forget the other.
 
-**Peak sessions** needs no boundary union: it is `MAX` over independent
-`(day, channel)` distinct counts. Read per-`(dt, channel)` cardinality from
-`sum_session_hll_daily_ch` for the history and from the base for the fresh days,
-then take the daily `MAX` (series) or the window `MAX` (total).
+**Peak sessions** needs no cross-range union: it is `MAX` over independent
+`(day, channel)` distinct counts, so each day stands alone. Its summary half and
+its base halves have different shapes on purpose. The summary half reads the
+finished peak straight out of `sum_session_peak_daily`, one plain integer per
+`(project, day)` — written as `MAX(peak_sessions) ... GROUP BY dt` rather than as
+a bare column read, so the result does not depend on the aggregate table having
+merged its duplicate keys at read time. A base half has no precomputed row to
+read, so it is unchanged: the base rollup, `APPROX_COUNT_DISTINCT` per
+`(day, channel)`, and the daily `MAX` taken in-branch.
+
+Peak therefore carries its own metric descriptor, whose summary table is
+`sum_session_peak_daily`, and that descriptor joins the list the coverage probe
+walks. The peak table is written after the session summary and can lag it, so the
+two have genuinely different coverage; a read has to split on the coverage of the
+table it actually touches, and the way to guarantee that is for the descriptor
+that names the table and the descriptor the caller probes to be the same value.
+
+**The window peak is reduced from its own series, not queried again.** The series
+and the total scanned the same per-`(day, channel)` buckets and reduced them with
+the same `MAX`, which made the total exactly the `MAX` of the series the sibling
+goroutine was already computing — measured at ~2.19s against the series' ~2.24s
+on the same 3-month window, identical values, the two scans contending for the
+same data. So `GetProjectStats` takes the maximum over the series after its
+errgroup joins, and the peak-total query is gone from the warehouse interface,
+the dummy, and the StarRocks implementation.
+
+This reduction is exact for peak, and only for peak. `MAX` over independent
+buckets is associative, so the maximum of the daily maxima is the window maximum.
+The other five metrics are distinct counts whose window total is an HLL union
+across days — neither the maximum nor the sum of their daily values — which is
+why each of them keeps a total query of its own.
 
 **Fallback.** The fallback is the `SummaryEnabled` flag, which gates the whole
 dual read and defaults off. A cluster that has not created the summaries leaves
@@ -296,10 +453,12 @@ validated (see Deployment sequencing). Unlike the MV design's rewrite — which
 falls back to a base scan per query automatically — this dual read names the
 summary table directly, so a misconfiguration (flag on, table missing) surfaces
 as a loud read error rather than a silent slow path; that is deliberate, since
-the flag is only ever enabled behind the validation gate. An automatic per-query
-fallback (catch a missing-table error, retry the retained base query) is a
-reserved hardening if a cluster ever needs the flag on before every summary
-exists.
+the flag is only ever enabled behind the validation gate. What that loud error
+is not is *local*: the coverage probe names every summary table in one statement,
+so one missing table fails the split for all metrics at once (see Deployment
+sequencing). An automatic per-query fallback (catch a missing-table error, retry
+the retained base query) is a reserved hardening if a cluster ever needs the flag
+on before every summary exists.
 
 **The flag-off path is only a lossless default before raw TTL.** It is
 byte-identical and complete only while the base still holds the full history —
@@ -367,7 +526,8 @@ partitions it touches.
 Each step is lossless and reversible; the base scan is always a correct
 fallback. Per environment:
 
-1. Create the summary tables (empty, partitioned, 15-month TTL). A cluster whose
+1. Create the summary tables (empty, partitioned, 15-month TTL),
+   `sum_session_peak_daily` among them. A cluster whose
    tables predate `rl_session_daily` also needs `ALTER TABLE
    sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
    the clause but skips it on an existing table. The rollup builds
@@ -375,7 +535,8 @@ fallback. Per environment:
 2. Backfill from the base — staged per table, `session_events` last and in a
    low-ingest window, as with the MV builds. Idempotent, and it stops before the
    running UTC day so the summary never holds a partial day for the read path to
-   trust as complete.
+   trust as complete. `sum_session_peak_daily` is filled from
+   `sum_session_hll_daily_ch` and so must come after it, not from the base.
 3. **Validate**: while the base still holds full history, the dual-read result
    must equal the MV-only result for a set of projects and windows. Equality
    here is the proof the union math is right, because the two paths overlap
@@ -389,10 +550,36 @@ fallback. Per environment:
 Steps 1–5 change nothing a user sees; step 6 is the one that shortens raw
 retention, and by then the summary has been serving and validated.
 
+**A summary table the server names but the cluster lacks takes down every
+metric, not one.** The coverage probe reads `MIN(dt)` and `MAX(dt)` from every
+summary table in a single `UNION ALL` round trip, so a server whose descriptor
+list mentions
+`sum_session_peak_daily` against a cluster that has not created it fails the probe
+for *all* metrics: the dashboard goes blank rather than losing one chart. This is
+the same "loud error rather than silent slow path" the fallback section argues
+for on purpose, but the blast radius is wider than the metric at fault, and that
+is worth stating outright. The consequence for ordering is firm: the table must
+exist and be backfilled before the server version that names it rolls out —
+steps 1 and 2 for the new table, then step 5. On the public test cluster the
+manifest that creates and refreshes it is `k8s/cluster/analytics-summary.yaml` in
+the devops repo, mirrored there by hand because the ArgoCD application is still
+pinned at chart 0.6.0; the table, its backfill statement, and its refresh
+statement all have to be added there. The chart's init ConfigMap carries create
+DDL only, so it gets the `CREATE TABLE` and nothing else.
+
 ### Verification
 
 - Dual-read total equals the MV-only total for windows inside current retention
-  (step 3).
+  (step 3), including a window that reaches back before the summary's first row
+  while the base still holds those days — the case the coverage floor exists
+  for.
+- The peak stored in `sum_session_peak_daily` for a day equals the `MAX` over
+  channels of that day's `HLL_UNION_AGG(session_hll)` in
+  `sum_session_hll_daily_ch` — the two are supposed to agree by construction, so
+  a mismatch means the refresh ordering broke.
+- The window peak the server returns equals the maximum of the peak series it
+  returns for the same window, now that the total is reduced in Go rather than
+  queried.
 - `ScanRows` in the FE audit log stays small for the six metrics.
 - After TTL: a 12-month window still returns a full series, and its values match
   the summary rather than collapsing to the 90-day base.
@@ -401,16 +588,21 @@ retention, and by then the summary has been serving and validated.
 
 | Risk | Mitigation |
 |------|------------|
-| Adding cardinalities across the boundary over-counts a subject active in both halves | Union sketches with `HLL_UNION_AGG`, take cardinality once. Summary `[from, boundary)` and base `[boundary, to)` split on the day, so there is no overlap to double count. |
+| Adding cardinalities across the split over-counts a subject active in more than one range | Union sketches with `HLL_UNION_AGG`, take cardinality once. The three ranges split on the day and are disjoint by construction — their union is exactly the window — so there is no overlap to double count. Asserted directly, day by day, over a table of windows against coverage ranges. |
 | `DATE(timestamp)` loses partition pruning once the base is partitioned, so the fresh-day scan reads every partition | Accepted: the fresh half reads the MV, which holds one row per (project, day), so every partition of it is cheaper than one raw partition of the base. Raw `timestamp` bounds would prune but would also drop the query off the MV. |
 | Repartitioning a live billion-row table (session) risks stalled ingest and quorum loss under `replication_num = 1` | New table + `INSERT SELECT` + rename swap under `PAUSE`/`RESUME ROUTINE LOAD`, in a low-ingest window, watching `ADMIN SHOW REPLICA STATUS`. Same playbook as the `session_events` redistribution. |
-| `MAX(dt)` is a watermark, not a coverage set: a day missing *below* it is still served from a summary that has no row for it, and reads as zero | Accepted, and strictly narrower than what it replaces — a fixed today boundary exposed every day in the window to the same hole, where the boundary only exposes the days below the watermark. Contiguity is what the writers give it: the backfill covers full history and the CronJob reprocesses a 7-day lookback, so a hole heals within a week. Verified the failure mode by hand: with the summary holding `[D-6, D-2]` and `D`, the missing `D-1` reads as zero. |
+| `MAX(dt)` is a watermark, not a coverage set: a day missing *below* it is still served from a summary that has no row for it, and reads as zero | Half fixed, half accepted, and worth reading as both. Fixed: the probe reads `MIN(dt)` as well, so coverage is the range `[MIN(dt), MAX(dt) + 1)` and a window reaching below the summary's first row reads those days from the base, in a third branch shaped exactly like the fresh one. That closes the case that actually bites — a summary added to a cluster where the flag is *already on*, as `sum_session_peak_daily` is: if the CronJob's 7-day window writes before the one-time backfill has run, `MAX(dt)` jumps to yesterday over a table holding one week, and ~83 days of a 3-month window would read as zero with nothing logged. Accepted: a hole *inside* the range is still invisible, because the probe is global rather than per project and cannot see a day missing for one project only. Contiguity there is still the writers' job — full-history backfill plus a 7-day reprocess lookback, so an interior hole heals within a week. Verified the remaining failure mode by hand: with the summary holding `[D-6, D-2]` and `D`, the missing `D-1` reads as zero. |
+| A window reaching back before any summary data runs an extra base branch that returns nothing | Accepted. The branch is the honest answer, not a regression: before raw TTL the base still holds those days and the branch returns them correctly; after raw TTL they are unavailable anywhere, and reporting them as absent beats serving them as zeroes out of a summary with no rows for them. In the steady state — a backfilled summary — the branch is not emitted at all and the SQL is unchanged. |
 | A partial day in the summary would be trusted as complete, since the split trusts every day at or below `MAX(dt)` | Both writers stop before the running UTC day: the CronJob's window is `[today-7, today)` and the backfill carries the same `< DATE(UTC_TIMESTAMP())` guard. The read path's clamp to today is the second line of defense. |
-| The ingest job misses a day or late events land after it runs | 7-day lookback reprocess every run; `HLL_UNION` makes repeats idempotent. CronJob history and alerting surface a failed run. The read path splits at the summary's actual `MAX(dt)`, so a day the job has not written yet is read from the base rather than reported as zero. |
+| The ingest job misses a day or late events land after it runs | 7-day lookback reprocess every run; `HLL_UNION` makes repeats idempotent. CronJob history and alerting surface a failed run. The read path splits at the summary's actual coverage, so a day the job has not written yet — at either end of the range — is read from the base rather than reported as zero. |
 | Summary drifts from the base over time | Periodic reconciliation comparing an overlap day's summary against a base recount; the 7-day lookback self-heals recent drift. |
 | Backfill full-scans the billion-row tables | Staged per table, `session_events` in a low-ingest window; cost is the one-time base scan (~80ns/row), as measured for the MV builds. |
 | Enabling raw TTL before the summary is trusted would lose history irrecoverably | TTL is step 6, gated on steps 1–5; validation in step 3 runs while both paths overlap. |
 | Expression partitioning, `partition_live_number`, and the HLL functions need a recent StarRocks | Verify the engine clears the version floor per environment before creating the tables (deployed clusters run 3.3.x). |
+| A server that names `sum_session_peak_daily` reaches a cluster without it, and the single-round-trip coverage probe fails for *every* metric | Sequencing: the analytics manifest that creates and backfills the table lands and runs before the server version rolls out (steps 1–2 before step 5). The failure is loud and immediate rather than a silent wrong number, but it blanks the whole dashboard, so it is a release-order hazard, not a runtime one. |
+| `sum_session_peak_daily` lags `sum_session_hll_daily_ch`, since it is written from it | Peak has its own descriptor and its own entry in the coverage probe, so its reads split against *its* table's coverage; the days between the two tables' ranges are served from the base, exactly as for any other lagging summary. |
+| `BIGINT MAX` can only ever revise a day's peak upward, so an over-counted day cannot be corrected by re-running the refresh | Accepted, and identical in kind to `HLL_UNION`'s monotone merge on the other five tables. The input is itself monotone — a day's true peak only grows as late events land — so a re-run overwriting upward is the correct direction. A genuine over-count is repaired the same way a corrupt sketch is: drop the day's partition and rewrite it. |
+| The peak refresh maximises over a day the session summary does not hold yet, if the statements are reordered | The peak statement runs after the session-summary insert in the same script, in both the backfill and the refresh, with the dependency stated in a comment at both sites. The 7-day lookback also re-derives the day on the next run, so a one-off inversion heals. |
 | Raw-TTL enforcement may not drop partitions as expected on 3.3.x | `partition_live_number` has had drop bugs ([#39341][p39341]); the cleaner `partition_retention_condition` (Common Partition Expression TTL) is native-table-only from v3.5, past the deployed 3.3.x. Use dynamic partitioning / `partition_live_number` and confirm old partitions actually drop before relying on TTL for the storage saving. |
 
 ## Design Decisions
@@ -421,7 +613,12 @@ retention, and by then the summary has been serving and validated.
 | Kubernetes CronJob, not StarRocks `SUBMIT TASK` | Retries, run history, alerting, and ownership are native to the CronJob and the existing analytics ops tooling; a native task fails silently. |
 | Hand-written `HLL_UNION_AGG` in the Go read path | Reverses the MV design's "no schema in the server", but automatic rewrite cannot union two tables with different lifetimes. The base-scan fallback keeps clusters without the summary correct. |
 | 90-day raw retention, 15-month summary | 90 days keeps the quarter view answerable from the base fallback; 15 months is the 12-month product window plus buffer. |
-| Split at the summary's `MAX(dt) + 1`, not at today | The days the refresh job has not reached stay exact from the base instead of falling into a gap between the halves; the boundary self-corrects after a missed run. |
+| Split against the summary's probed `[MIN(dt), MAX(dt) + 1)`, not at today | The days the refresh job has not reached stay exact from the base instead of falling into a gap between the halves, and both ends self-correct as the writers fill in. `MIN(dt)` is what keeps `MAX(dt)` from being read as a coverage set on a table whose history is not backfilled yet — the state a newly added summary is in on a cluster where the flag is already on. It does not detect a hole *inside* the range: the probe is global, not per project. |
+| Precompute the daily peak into its own integer table | Peak is the only metric keyed by channel, so it is the only one whose cost scales with channel cardinality (~2.24s on a 3-month, ~4,900-channel window against under 0.7s for every other metric, on a 3s deadline). The daily peak is independent per day, so it needs no sketch — a plain number is enough, and it makes the read cost days rather than channels x days. |
+| Derive the peak row from `sum_session_hll_daily_ch`, not from `session_events` | Avoids a second full scan of a billion-row base, and makes the stored integer exactly the maximum of the per-day HLL estimates the session summary already holds — the value the read path derived itself before the table existed — so precomputed history and freshly computed days agree by construction instead of by two scans coinciding. |
+| `BIGINT MAX` as the aggregate on the peak column | It is the idempotence mechanism `HLL_UNION` is for the sketch tables: a re-inserted day merges instead of duplicating, so the 7-day lookback stays safe to repeat. |
+| Reduce the window peak in Go from the peak series, dropping the second query | The two queries scanned the same buckets and applied the same `MAX` (~2.19s vs ~2.24s, identical values), so the total was recomputing the series. `MAX` is associative over independent buckets, which makes the reduction exact — for peak alone; the distinct-count metrics need an HLL union across days and keep their own total query. |
+| Peak carries its own descriptor in the coverage probe | Its summary lives in a different table from sessions' and can lag it; the split a read takes must follow the coverage of the table that read actually touches. |
 | 7-day ingest lookback | Covers late ingestion and retries without a reconciliation job; `HLL_UNION` makes the repeat free of side effects. |
 | UTC day buckets | Unchanged from the MV design; a local-day boundary is still the reserved ingest-time-date path there. |
 
@@ -436,6 +633,10 @@ retention, and by then the summary has been serving and validated.
 | StarRocks native `SUBMIT TASK ... SCHEDULE` for ingest | Runs inside the cluster with no run history or alerting; a silent failure stops the summary without a signal. |
 | Union the sketches in Go instead of SQL | HLL sketches cannot be merged outside the engine; the union must be a `HLL_UNION_AGG` in the query. |
 | Cache the 12-month totals in MongoDB, as `stats_clients_count` does | A second staleness budget for a value that is not a small scalar and that the summary already produces cheaply. |
+| A second rollup on `sum_session_hll_daily_ch`, pre-maximised to `(project_id, dt)` | A rollup aggregates with the column's own aggregate function, and the sketch column's is `HLL_UNION`. Peak is a maximum *across* channels of each channel's cardinality, so the cardinality has to be computed before it can be maximised — which a rollup cannot do. |
+| Keep deriving peak per (day, channel) on every read | The cost this removes: ~280k summary rows and ~2.24s on a 3-month, ~4,900-channel window, against a fixed 3s RPC deadline, and growing with the project's channel count. |
+| Keep the separate peak-total query | It scanned the same buckets and reduced them with the same `MAX` as the series, so it recomputed a value the sibling goroutine already had, and the two contended on the same scan. The maximum of the series is exact for peak. |
+| Write the peak row from `session_events` in the refresh | A second full scan of a billion-row base, and two independently derived estimates of the same quantity — the stored history and the freshly computed days could disagree at the split boundary for no reason a reader could act on. |
 | Longer raw retention instead of a summary | Directly defeats the storage goal; the summary is what lets raw retention be short. |
 
 ## Tasks

@@ -28,45 +28,69 @@ import (
 // The dual read may only serve a day from the summary once the refresh job has
 // written it, so it splits the window at the summary's own coverage rather than
 // at a fixed today, which would leave the days the job has not reached yet in
-// neither half. See docs/design/project-stats-long-retention.md.
+// neither half. Coverage is a range, [MIN(dt), MAX(dt) + 1), not a watermark:
+// the days below the summary's first row are as absent from it as the days
+// above its last, and both come from the base.
+// See docs/design/project-stats-long-retention.md.
 
 // coverageTTL is how long a probe is reused. It is what collapses one dashboard
-// load onto a single probe: maxDay holds its lock across the fetch, so the
-// twelve metric queries GetProjectStats fans out arrive one at a time and all
+// load onto a single probe: days holds its lock across the fetch, so the
+// eleven metric queries GetProjectStats fans out arrive one at a time and all
 // but the first find a result younger than the TTL. A minute also covers
-// consecutive loads, and costs nothing in staleness — the value it reads moves
+// consecutive loads, and costs nothing in staleness — the values it reads move
 // at most once per refresh run.
 const coverageTTL = time.Minute
 
-// coverageQuery reads the last day present in every summary table in a single
-// round trip.
+// summaryDays is the first and last day one summary table holds. The zero value
+// means the table holds nothing, which is what an empty or unprobed table
+// reports.
+type summaryDays struct {
+	Min time.Time
+	Max time.Time
+}
+
+// coverageQuery reads the first and last day present in every summary table in
+// a single round trip.
 func coverageQuery() string {
 	parts := make([]string, 0, len(allDescs))
 	for _, d := range allDescs {
 		parts = append(parts, fmt.Sprintf(
-			"SELECT '%s' AS summary_table, MAX(dt) AS max_dt FROM %s",
+			"SELECT '%s' AS summary_table, MIN(dt) AS min_dt, MAX(dt) AS max_dt FROM %s",
 			d.summaryTable, d.summaryTable,
 		))
 	}
 	return strings.Join(parts, "\nUNION ALL\n") + ";"
 }
 
-// coverageBoundary returns the first day the summary does not cover, the day the
-// dual read switches from the summary to the base. It never passes today: a
-// backfill that included the running day leaves a partial sketch in the summary,
-// and serving that would undercount today.
-func coverageBoundary(maxDt, today, from time.Time) time.Time {
-	if maxDt.IsZero() {
-		// The summary holds nothing for this metric, so it covers nothing and
-		// the whole window is read from the base.
-		return from
+// coverageDays returns the half-open day range the summary can serve: from the
+// first day it holds to the first day it does not.
+//
+// The end is MAX(dt) + 1, never past today. A backfill that included the
+// running day leaves a partial sketch in the summary, and serving that would
+// undercount today.
+//
+// The start is MIN(dt), and it is what keeps MAX(dt) from being trusted as a
+// coverage set. A window reaching back before the summary's first row would
+// otherwise be served from a summary that has no row for those days, which
+// reads as zero; the caller routes them to the base instead. What this does not
+// see is a hole inside the range: the probe is global rather than per project,
+// so a day missing for one project only is still below MAX(dt) and still reads
+// as zero.
+//
+// An Empty range means the summary covers nothing and the whole window comes
+// from the base. That is the answer for an empty or unprobed table, and for a
+// summary holding nothing but the running day, whose only day the clamp takes
+// away.
+func coverageDays(days summaryDays, today time.Time) dayRange {
+	if days.Min.IsZero() || days.Max.IsZero() {
+		return dayRange{Empty: true}
 	}
 
-	boundary := maxDt.AddDate(0, 0, 1)
+	boundary := days.Max.AddDate(0, 0, 1)
 	if boundary.After(today) {
-		return today
+		boundary = today
 	}
-	return boundary
+	return newDayRange(days.Min, boundary)
 }
 
 // coverageCache holds the last coverage probe. The zero value is usable and
@@ -74,70 +98,76 @@ func coverageBoundary(maxDt, today, from time.Time) time.Time {
 type coverageCache struct {
 	mu        sync.Mutex
 	fetchedAt time.Time
-	maxDays   map[string]time.Time
+	probed    map[string]summaryDays
 }
 
-// maxDay returns the last day the given summary table holds, running fetch when
-// the cached probe is missing or stale. A table the probe did not report is
-// reported as the zero day, i.e. covering nothing.
-func (c *coverageCache) maxDay(
+// days returns the days the given summary table holds, running fetch when the
+// cached probe is missing or stale. A table the probe did not report is
+// reported as the zero value, i.e. covering nothing.
+func (c *coverageCache) days(
 	ctx context.Context,
 	table string,
-	fetch func(context.Context) (map[string]time.Time, error),
-) (time.Time, error) {
+	fetch func(context.Context) (map[string]summaryDays, error),
+) (summaryDays, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.maxDays == nil || time.Since(c.fetchedAt) > coverageTTL {
-		maxDays, err := fetch(ctx)
+	if c.probed == nil || time.Since(c.fetchedAt) > coverageTTL {
+		probed, err := fetch(ctx)
 		if err != nil {
-			return time.Time{}, err
+			return summaryDays{}, err
 		}
-		c.maxDays, c.fetchedAt = maxDays, time.Now()
+		c.probed, c.fetchedAt = probed, time.Now()
 	}
 
-	return c.maxDays[table], nil
+	return c.probed[table], nil
 }
 
 // fetchCoverage runs the coverage probe against StarRocks.
-func (r *StarRocks) fetchCoverage(ctx context.Context) (map[string]time.Time, error) {
+func (r *StarRocks) fetchCoverage(ctx context.Context) (map[string]summaryDays, error) {
 	rows, err := r.driver.QueryContext(ctx, coverageQuery())
 	if err != nil {
 		return nil, fmt.Errorf("query summary coverage: %w", err)
 	}
 	defer closeRows(rows)
 
-	maxDays := make(map[string]time.Time, len(allDescs))
+	probed := make(map[string]summaryDays, len(allDescs))
 	for rows.Next() {
 		var table string
-		var maxDt sql.NullString
-		if err := rows.Scan(&table, &maxDt); err != nil {
+		var minDt, maxDt sql.NullString
+		if err := rows.Scan(&table, &minDt, &maxDt); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
-		if !maxDt.Valid {
+		// An empty table reports both as NULL, which is the zero value: it
+		// covers nothing, so it is left out of the map entirely.
+		if !minDt.Valid || !maxDt.Valid {
 			continue
 		}
 
-		day, err := time.Parse("2006-01-02", maxDt.String)
+		first, err := time.Parse("2006-01-02", minDt.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse min dt: %w", err)
+		}
+		last, err := time.Parse("2006-01-02", maxDt.String)
 		if err != nil {
 			return nil, fmt.Errorf("parse max dt: %w", err)
 		}
-		maxDays[table] = day
+		probed[table] = summaryDays{Min: first, Max: last}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate rows: %w", err)
 	}
 
-	return maxDays, nil
+	return probed, nil
 }
 
-// splitDay returns the day the given metric's dual read splits the window on:
-// the summary's coverage boundary, clamped to today.
-func (r *StarRocks) splitDay(ctx context.Context, d metricDesc, from time.Time) (time.Time, error) {
-	maxDt, err := r.coverage.maxDay(ctx, d.summaryTable, r.fetchCoverage)
+// summaryCoverage returns the day range the given metric's summary can serve,
+// the range its dual read splits the window against.
+func (r *StarRocks) summaryCoverage(ctx context.Context, d metricDesc) (dayRange, error) {
+	days, err := r.coverage.days(ctx, d.summaryTable, r.fetchCoverage)
 	if err != nil {
-		return time.Time{}, err
+		return dayRange{Empty: true}, err
 	}
 
-	return coverageBoundary(maxDt, todayUTC(), from), nil
+	return coverageDays(days, todayUTC()), nil
 }

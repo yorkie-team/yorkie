@@ -37,14 +37,15 @@ import (
 // uses the same expression in its predicate. With a raw timestamp predicate the
 // query silently falls back to a full scan of the base event table.
 //
-// With SummaryEnabled the reads are a dual read, split at the day the summary's
-// coverage ends rather than at today; see coverage.go and query.go.
+// With SummaryEnabled the reads are a dual read, split against the day range
+// the summary actually covers rather than at today; see coverage.go and
+// query.go.
 type StarRocks struct {
 	conf   *Config
 	driver *sql.DB
 
-	// coverage caches how far each summary table is filled, the day the dual
-	// read splits the window on. See coverage.go.
+	// coverage caches which days each summary table holds, the range the dual
+	// read splits the window against. See coverage.go.
 	coverage coverageCache
 }
 
@@ -69,7 +70,7 @@ func (r *StarRocks) summaryEnabled() bool {
 }
 
 // todayUTC returns the start of the current day in UTC. It is the ceiling the
-// summary's coverage boundary is clamped to, not the boundary itself; see
+// end of the summary's coverage is clamped to, not that end itself; see
 // coverage.go.
 func todayUTC() time.Time {
 	return time.Now().UTC().Truncate(24 * time.Hour)
@@ -105,11 +106,11 @@ func (r *StarRocks) GetActiveUsers(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descUser, from)
+		cov, err := r.summaryCoverage(ctx, descUser)
 		if err != nil {
 			return nil, fmt.Errorf("get active users: %w", err)
 		}
-		query = descUser.seriesQuery(id, from, to, split)
+		query = descUser.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -144,11 +145,11 @@ func (r *StarRocks) GetActiveUsersCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descUser, from)
+		cov, err := r.summaryCoverage(ctx, descUser)
 		if err != nil {
 			return 0, fmt.Errorf("get active users count: %w", err)
 		}
-		query = descUser.totalQuery(id, from, to, split)
+		query = descUser.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -188,11 +189,11 @@ func (r *StarRocks) GetActiveDocuments(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descDocument, from)
+		cov, err := r.summaryCoverage(ctx, descDocument)
 		if err != nil {
 			return nil, fmt.Errorf("get active documents: %w", err)
 		}
-		query = descDocument.seriesQuery(id, from, to, split)
+		query = descDocument.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -227,11 +228,11 @@ func (r *StarRocks) GetActiveDocumentsCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descDocument, from)
+		cov, err := r.summaryCoverage(ctx, descDocument)
 		if err != nil {
 			return 0, fmt.Errorf("get active documents count: %w", err)
 		}
-		query = descDocument.totalQuery(id, from, to, split)
+		query = descDocument.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -272,11 +273,11 @@ func (r *StarRocks) GetActiveClients(
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descClient, from)
+		cov, err := r.summaryCoverage(ctx, descClient)
 		if err != nil {
 			return nil, fmt.Errorf("get active clients: %w", err)
 		}
-		query = descClient.seriesQuery(id, from, to, split)
+		query = descClient.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -312,11 +313,11 @@ func (r *StarRocks) GetActiveClientsCount(
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descClient, from)
+		cov, err := r.summaryCoverage(ctx, descClient)
 		if err != nil {
 			return 0, fmt.Errorf("get active clients count: %w", err)
 		}
-		query = descClient.totalQuery(id, from, to, split)
+		query = descClient.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -356,11 +357,11 @@ func (r *StarRocks) GetActiveChannels(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descChannel, from)
+		cov, err := r.summaryCoverage(ctx, descChannel)
 		if err != nil {
 			return nil, fmt.Errorf("get active channels: %w", err)
 		}
-		query = descChannel.seriesQuery(id, from, to, split)
+		query = descChannel.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -395,11 +396,11 @@ func (r *StarRocks) GetActiveChannelsCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descChannel, from)
+		cov, err := r.summaryCoverage(ctx, descChannel)
 		if err != nil {
 			return 0, fmt.Errorf("get active channels count: %w", err)
 		}
-		query = descChannel.totalQuery(id, from, to, split)
+		query = descChannel.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -439,11 +440,11 @@ func (r *StarRocks) GetSessions(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descSession, from)
+		cov, err := r.summaryCoverage(ctx, descSession)
 		if err != nil {
 			return nil, fmt.Errorf("get sessions: %w", err)
 		}
-		query = descSession.seriesQuery(id, from, to, split)
+		query = descSession.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -478,11 +479,11 @@ func (r *StarRocks) GetSessionsCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descSession, from)
+		cov, err := r.summaryCoverage(ctx, descSession)
 		if err != nil {
 			return 0, fmt.Errorf("get sessions count: %w", err)
 		}
-		query = descSession.totalQuery(id, from, to, split)
+		query = descSession.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -530,11 +531,13 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descSession, from)
+		// Peak splits on its own summary's coverage, not on descSession's: the
+		// two tables are refreshed separately and either may lag the other.
+		cov, err := r.summaryCoverage(ctx, descPeak)
 		if err != nil {
 			return nil, fmt.Errorf("get peak sessions per channel: %w", err)
 		}
-		query = descSession.peakSeriesQuery(id, from, to, split)
+		query = descPeak.peakSeriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -542,53 +545,6 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 		return nil, fmt.Errorf("get peak sessions per channel: %w", err)
 	}
 	return metrics, nil
-}
-
-// GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
-func (r *StarRocks) GetPeakSessionsPerChannelCount(
-	ctx context.Context,
-	id types.ID,
-	from, to time.Time,
-) (int, error) {
-	if err := validateTimeRange(from, to); err != nil {
-		return 0, err
-	}
-
-	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
-	// Prepared Statement. So, we need to use string interpolation to build the query.
-	//nolint:gosec
-	query := fmt.Sprintf(`
-	SELECT 
-	    MAX(session_count) AS peak_sessions
-	FROM (
-	    SELECT 
-	        DATE(timestamp) AS event_date,
-	        channel_key,
-	        APPROX_COUNT_DISTINCT(session_id) AS session_count
-	    FROM 
-	        session_events
-	    WHERE
-	        project_id = '%s'
-	        AND DATE(timestamp) >= '%s'
-	        AND DATE(timestamp) < '%s'
-	    GROUP BY 
-	        event_date, channel_key
-	) AS channel_sessions;
-	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
-
-	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descSession, from)
-		if err != nil {
-			return 0, fmt.Errorf("get peak sessions per channel count: %w", err)
-		}
-		query = descSession.peakTotalQuery(id, from, to, split)
-	}
-
-	count, err := r.queryCount(ctx, query)
-	if err != nil {
-		return 0, fmt.Errorf("get peak sessions per channel count: %w", err)
-	}
-	return count, nil
 }
 
 // Close closes the connection to the StarRocks.

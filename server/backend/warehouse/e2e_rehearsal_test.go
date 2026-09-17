@@ -50,18 +50,30 @@ import (
 // rehearsalProject owns every row the rehearsal writes.
 var rehearsalProject = types.ID("000000000000000000e2e001")
 
-// rehearsalDays is how many days back the seeded window reaches.
+// rehearsalDays is how many days back the summary's seeded coverage reaches.
 const rehearsalDays = 6
 
-// seedRehearsal writes base events for [today-rehearsalDays, today] and summary
-// rows for all but the last two of those days.
+// rehearsalPreDays is how many further days of base events are seeded *below*
+// the summary's first day, with no summary row to match them.
 //
-// The two-day hole is the point. The last completed day (yesterday) is absent
-// from the summary but present in the base, which is exactly what a refresh job
-// that has not run since the UTC day rolled over leaves behind. A read that
-// splits at today serves yesterday from a summary that has no row for it and
-// reports zero; a read that splits at the summary's own coverage serves it from
-// the base and matches.
+// That is the shape of a summary table added to a cluster where the dual read
+// is already on: its refresh job's 7-day lookback fills the last week before
+// the one-time backfill has filled the rest, so the table's MAX(dt) says
+// "yesterday" over a table holding one week. A read that trusts MAX(dt) as a
+// coverage set serves these days from a summary with no rows for them and
+// reports zeroes.
+const rehearsalPreDays = 3
+
+// seedRehearsal writes base events for
+// [today-rehearsalDays-rehearsalPreDays, today] and summary rows for
+// [today-rehearsalDays, today-1).
+//
+// Two holes are the point, one at each end of the coverage. The last completed
+// day (yesterday) is absent from the summary but present in the base, which is
+// what a refresh job that has not run since the UTC day rolled over leaves
+// behind. The rehearsalPreDays oldest days are absent from the summary for the
+// other reason, a backfill that has not reached them. Both must be served from
+// the base; neither may be asked of the summary.
 func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 	t.Helper()
 
@@ -75,7 +87,7 @@ func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 	}
 
 	id := rehearsalProject.String()
-	for d := rehearsalDays; d >= 0; d-- {
+	for d := rehearsalDays + rehearsalPreDays; d >= 0; d-- {
 		day := today.AddDate(0, 0, -d).Format("2006-01-02")
 		// Each day gets a different number of distinct subjects, so a day
 		// served from the wrong half shows up as a wrong value, not just a
@@ -107,8 +119,9 @@ func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 			strings.Join(sessions, ","))
 	}
 
-	// Fill the summaries the way the refresh job does, but stopping a day short
-	// of the running day rather than at it.
+	// Fill the summaries the way the refresh job does: a bounded lookback that
+	// starts above the oldest base events and stops a day short of the running
+	// day rather than at it.
 	from := dayFmt(today.AddDate(0, 0, -rehearsalDays))
 	through := dayFmt(today.AddDate(0, 0, -1))
 	exec(`INSERT INTO sum_user_hll_daily SELECT project_id, DATE(timestamp), HLL_UNION(HLL_HASH(user_id))
@@ -124,63 +137,56 @@ func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 	      SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
 	      FROM session_events WHERE project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'
 	      GROUP BY project_id, DATE(timestamp), channel_key`, id, from, through)
+	// The daily peak is derived from the per-channel sketches, exactly as the
+	// refresh job derives it, and stops at the same day so both summaries lag
+	// together. Deriving it from the sketches rather than from the base events
+	// is what makes the rehearsal prove the precomputed number matches the
+	// estimate the old per-channel read produced.
+	exec(`INSERT INTO sum_session_peak_daily
+	      SELECT project_id, dt, MAX(session_count) FROM (
+	          SELECT project_id, dt, channel_key, HLL_UNION_AGG(session_hll) AS session_count
+	          FROM sum_session_hll_daily_ch WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'
+	          GROUP BY project_id, dt, channel_key
+	      ) ch GROUP BY project_id, dt`, id, from, through)
 	exec(`INSERT INTO sum_client_hll_daily SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
 	      FROM client_events WHERE project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'
 	      GROUP BY project_id, event_type, DATE(timestamp)`, id, from, through)
 }
 
-// requireLaggingCoverage skips unless every summary table stops at wantMaxDt.
-// The split boundary is global, not per project, so a cluster carrying other
-// projects' summaries past that day cannot stage the refresh-lag scenario.
-func requireLaggingCoverage(t *testing.T, db *sql.DB, wantMaxDt time.Time) {
+// requireSeededCoverage skips unless every summary table covers exactly
+// [wantMinDt, wantMaxDt]. Coverage is probed globally, not per project, so a
+// cluster carrying other projects' summary rows past wantMaxDt cannot stage the
+// refresh-lag hole this rehearsal depends on.
+//
+// A zero wantMinDt leaves the first day unchecked, for a test whose window
+// starts inside the coverage whatever sits below it. The floor test does check
+// it: rows below its window's start would fill in the very hole it stages.
+func requireSeededCoverage(t *testing.T, db *sql.DB, wantMinDt, wantMaxDt time.Time) {
 	t.Helper()
 
 	for _, d := range allDescs {
-		var maxDt sql.NullString
-		row := db.QueryRow(fmt.Sprintf("SELECT MAX(dt) FROM %s", d.summaryTable))
-		require.NoError(t, row.Scan(&maxDt), "read coverage of %s", d.summaryTable)
+		var minDt, maxDt sql.NullString
+		row := db.QueryRow(fmt.Sprintf("SELECT MIN(dt), MAX(dt) FROM %s", d.summaryTable))
+		require.NoError(t, row.Scan(&minDt, &maxDt), "read coverage of %s", d.summaryTable)
 		require.True(t, maxDt.Valid, "%s is empty; seeding did not run", d.summaryTable)
 
-		if maxDt.String != dayFmt(wantMaxDt) {
-			t.Skipf("%s covers through %s, want %s: point SR_DSN at a cluster whose "+
-				"summaries this test owns", d.summaryTable, maxDt.String, dayFmt(wantMaxDt))
+		if (!wantMinDt.IsZero() && minDt.String != dayFmt(wantMinDt)) || maxDt.String != dayFmt(wantMaxDt) {
+			t.Skipf("%s covers [%s, %s], want [%s, %s]: point SR_DSN at a cluster whose "+
+				"summaries this test owns", d.summaryTable, minDt.String, maxDt.String,
+				dayFmt(wantMinDt), dayFmt(wantMaxDt))
 		}
 	}
 }
 
-// TestE2EDualReadMatchesBaseUnderRefreshLag is the regression test for the
-// refresh-lag gap: with the summary a day behind, every metric read through the
-// dual read must equal what the base-only path returns. Before the split moved
-// to the summary's actual coverage, the day the summary had not reached yet was
-// served from neither half and came back as zero.
-func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
-	dsn := os.Getenv("SR_DSN")
-	if dsn == "" {
-		t.Skip("set SR_DSN to run the StarRocks e2e rehearsal")
-	}
-
-	db, err := sql.Open("mysql", dsn)
-	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
-	require.NoError(t, db.Ping())
-
-	today := todayUTC()
-	seedRehearsal(t, db, today)
-	requireLaggingCoverage(t, db, today.AddDate(0, 0, -2))
-
-	off, err := Ensure(&Config{DSN: dsn, SummaryEnabled: false})
-	require.NoError(t, err)
-	defer func() { _ = off.Close() }()
-	on, err := Ensure(&Config{DSN: dsn, SummaryEnabled: true})
-	require.NoError(t, err)
-	defer func() { _ = on.Close() }()
+// requireDualReadMatchesBase asserts every metric read through the dual read
+// equals what the base-only path returns over the same window, day for day.
+// The base-only path is the oracle: it reads nothing but raw events, so it
+// cannot be wrong about a day the summary is missing.
+func requireDualReadMatchesBase(t *testing.T, off, on Warehouse, from, to time.Time, wantDays int) {
+	t.Helper()
 
 	ctx := context.Background()
 	id := rehearsalProject
-	// The window straddles the boundary: it starts inside the summary's
-	// coverage and runs past the day the summary is missing, into today.
-	from := today.AddDate(0, 0, -rehearsalDays)
-	to := today.AddDate(0, 0, 1)
 
 	for name, fn := range map[string]func(Warehouse) (int, error){
 		"active users":     func(w Warehouse) (int, error) { return w.GetActiveUsersCount(ctx, id, from, to) },
@@ -188,7 +194,6 @@ func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
 		"active channels":  func(w Warehouse) (int, error) { return w.GetActiveChannelsCount(ctx, id, from, to) },
 		"active clients":   func(w Warehouse) (int, error) { return w.GetActiveClientsCount(ctx, id, from, to) },
 		"sessions":         func(w Warehouse) (int, error) { return w.GetSessionsCount(ctx, id, from, to) },
-		"peak":             func(w Warehouse) (int, error) { return w.GetPeakSessionsPerChannelCount(ctx, id, from, to) },
 	} {
 		t.Run("count "+name, func(t *testing.T) {
 			base, err := fn(off)
@@ -215,12 +220,76 @@ func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
 			require.NoError(t, err)
 			dual, err := fn(on)
 			require.NoError(t, err)
-			// Every seeded day must be present. The gap dropped one of them
-			// entirely, which the dashboard drew as a zero.
-			assert.Len(t, base, rehearsalDays+1, "base-only series is short; seeding did not take")
+			// Every seeded day must be present. A day served from the wrong
+			// half comes back missing, which the dashboard draws as a zero.
+			assert.Len(t, base, wantDays, "base-only series is short; seeding did not take")
 			assert.Equal(t, base, dual, "dual read must equal base-only, day for day")
 		})
 	}
+}
+
+// dialRehearsal opens the seeded cluster and the two warehouses the comparison
+// needs, or skips when SR_DSN is unset.
+func dialRehearsal(t *testing.T) (db *sql.DB, off, on Warehouse) {
+	t.Helper()
+
+	dsn := os.Getenv("SR_DSN")
+	if dsn == "" {
+		t.Skip("set SR_DSN to run the StarRocks e2e rehearsal")
+	}
+
+	db, err := sql.Open("mysql", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	require.NoError(t, db.Ping())
+
+	off, err = Ensure(&Config{DSN: dsn, SummaryEnabled: false})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = off.Close() })
+	on, err = Ensure(&Config{DSN: dsn, SummaryEnabled: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = on.Close() })
+
+	return db, off, on
+}
+
+// TestE2EDualReadMatchesBaseUnderRefreshLag is the regression test for the
+// refresh-lag gap: with the summary a day behind, every metric read through the
+// dual read must equal what the base-only path returns. Before the split moved
+// to the summary's actual coverage, the day the summary had not reached yet was
+// served from neither half and came back as zero.
+func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
+	db, off, on := dialRehearsal(t)
+
+	today := todayUTC()
+	seedRehearsal(t, db, today)
+	requireSeededCoverage(t, db, time.Time{}, today.AddDate(0, 0, -2))
+
+	// The window starts on the summary's first day and runs past the day the
+	// summary is missing, into today: it straddles the top of the coverage and
+	// never reaches below the bottom.
+	from := today.AddDate(0, 0, -rehearsalDays)
+	to := today.AddDate(0, 0, 1)
+	requireDualReadMatchesBase(t, off, on, from, to, rehearsalDays+1)
+}
+
+// TestE2EDualReadMatchesBaseBelowTheSummaryFloor is the regression test for the
+// other end of the coverage: a window reaching back before the summary's first
+// row. MAX(dt) alone called those days covered, so they were served from a
+// summary that has no rows for them and came back as zeroes — the state a
+// summary table added to a live cluster sits in until its backfill has run.
+func TestE2EDualReadMatchesBaseBelowTheSummaryFloor(t *testing.T) {
+	db, off, on := dialRehearsal(t)
+
+	today := todayUTC()
+	seedRehearsal(t, db, today)
+	requireSeededCoverage(t, db, today.AddDate(0, 0, -rehearsalDays), today.AddDate(0, 0, -2))
+
+	// The window reaches below the summary's first day and past its last, so
+	// all three ranges are non-empty and every one of them must contribute.
+	from := today.AddDate(0, 0, -(rehearsalDays + rehearsalPreDays))
+	to := today.AddDate(0, 0, 1)
+	requireDualReadMatchesBase(t, off, on, from, to, rehearsalDays+rehearsalPreDays+1)
 }
 
 // TestE2EDualReadStaysOnTheRollups is the regression test for the two latency
@@ -231,15 +300,7 @@ func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
 // scan on a cluster whose rollups are missing or whose optimizer stops matching
 // the shape.
 func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
-	dsn := os.Getenv("SR_DSN")
-	if dsn == "" {
-		t.Skip("set SR_DSN to run the StarRocks e2e rehearsal")
-	}
-
-	db, err := sql.Open("mysql", dsn)
-	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
-	require.NoError(t, db.Ping())
+	db, _, _ := dialRehearsal(t)
 
 	today := todayUTC()
 	seedRehearsal(t, db, today)
@@ -265,9 +326,11 @@ func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
 	}
 
 	id := rehearsalProject
-	from := today.AddDate(0, 0, -rehearsalDays)
+	// The window straddles both ends of the coverage, so every query below
+	// carries all three ranges and the two base branches are both planned.
+	from := today.AddDate(0, 0, -(rehearsalDays + rehearsalPreDays))
 	to := today.AddDate(0, 0, 1)
-	split := today.AddDate(0, 0, -1)
+	cov := newDayRange(today.AddDate(0, 0, -rehearsalDays), today.AddDate(0, 0, -1))
 
 	type plan struct {
 		name  string
@@ -277,18 +340,22 @@ func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
 	}
 	var plans []plan
 	for _, d := range allDescs {
+		// The generic distinct-count builders read hllColumn, which peak's
+		// summary does not have: peak has its own builder, planned below.
+		if d.hllColumn == "" {
+			continue
+		}
 		plans = append(plans,
-			plan{"series " + d.baseTable, d.seriesQuery(id, from, to, split), d.baseTable, ""},
-			plan{"total " + d.baseTable, d.totalQuery(id, from, to, split), d.baseTable, ""},
+			plan{"series " + d.baseTable, d.seriesQuery(id, from, to, cov), d.baseTable, ""},
+			plan{"total " + d.baseTable, d.totalQuery(id, from, to, cov), d.baseTable, ""},
 		)
 	}
 	plans = append(plans,
-		plan{"peak series", descSession.peakSeriesQuery(id, from, to, split), descSession.baseTable, ""},
-		plan{"peak total", descSession.peakTotalQuery(id, from, to, split), descSession.baseTable, ""},
+		plan{"peak series", descPeak.peakSeriesQuery(id, from, to, cov), descPeak.baseTable, ""},
 		// The sessions total and series must not pay for the channel_key
 		// dimension they never read.
-		plan{"sessions series on the coarse rollup", descSession.seriesQuery(id, from, to, split), "", "rl_session_daily"},
-		plan{"sessions total on the coarse rollup", descSession.totalQuery(id, from, to, split), "", "rl_session_daily"},
+		plan{"sessions series on the coarse rollup", descSession.seriesQuery(id, from, to, cov), "", "rl_session_daily"},
+		plan{"sessions total on the coarse rollup", descSession.totalQuery(id, from, to, cov), "", "rl_session_daily"},
 	)
 
 	for _, p := range plans {
@@ -304,8 +371,10 @@ func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
 		})
 	}
 
-	// Peak is the one metric that does need channel_key, so it keeps the base
-	// index of the summary rather than the coarse rollup.
-	assert.Contains(t, rollups(t, descSession.peakSeriesQuery(id, from, to, split)),
-		descSession.summaryTable, "peak must keep the per-channel index")
+	// Peak's summary half must land on its own precomputed table. Reading
+	// sum_session_hll_daily_ch instead would put the channels x days scan the
+	// precompute exists to remove back into the plan.
+	picked := rollups(t, descPeak.peakSeriesQuery(id, from, to, cov))
+	assert.Contains(t, picked, descPeak.summaryTable, "plan reads %v", picked)
+	assert.NotContains(t, picked, descSession.summaryTable, "plan reads %v", picked)
 }
