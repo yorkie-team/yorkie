@@ -26,30 +26,61 @@ type dayRange struct {
 	Empty bool
 }
 
-// splitWindow splits the requested window [from, to) at the UTC day boundary
-// split into two half-open ranges: a historical range served by the daily
-// summary and a fresh range served by the base rollup. The two never overlap
-// by day, so their union is exact.
+// newDayRange builds the half-open range [start, end), deriving Empty from the
+// bounds so no caller has to remember to.
+func newDayRange(start, end time.Time) dayRange {
+	return dayRange{Start: start, End: end, Empty: !start.Before(end)}
+}
+
+// splitWindow cuts the requested window [from, to) against cov, the day range
+// the summary can serve, into three half-open ranges:
 //
-// hist  = [from, min(to, split))
-// fresh = [max(from, split), to)
+//	pre   = [from, min(to, cov.Start))           from the base
+//	hist  = [max(from, cov.Start), min(to, cov.End)) from the summary
+//	fresh = [max(from, cov.End), to)             from the base
 //
-// Either range may be Empty: a window that ends before the split has an empty
-// fresh range, and one that starts at or after it has an empty historical
-// range. The split day itself is whatever the caller passes; the dual read
-// passes the summary's coverage boundary, see coverage.go.
-func splitWindow(from, to, split time.Time) (hist, fresh dayRange) {
-	hEnd := to
-	if split.Before(hEnd) {
-		hEnd = split
+// The three are disjoint by day and their union is exactly [from, to), which is
+// what keeps a subject counted once across the halves. Any of them may be
+// Empty: a window inside the coverage has no pre and no fresh, one that ends
+// before the summary starts is all pre, and one that starts after the summary
+// ends is all fresh.
+//
+// pre is what keeps MAX(dt) from being read as a coverage set. A summary filled
+// only for the last week — a table added to a cluster where the dual read is
+// already on, whose refresh job wrote before its backfill — has a coverage that
+// starts well after a 3-month window does, and the days below it have to come
+// from the base rather than from a summary with no row for them. See
+// coverage.go.
+//
+// An Empty cov means the summary covers nothing, so the whole window is fresh:
+// the base serves it as it did before the summary existed.
+func splitWindow(from, to time.Time, cov dayRange) (pre, hist, fresh dayRange) {
+	floor, boundary := from, from
+	if !cov.Empty {
+		floor, boundary = cov.Start, cov.End
 	}
-	hist = dayRange{Start: from, End: hEnd, Empty: !from.Before(hEnd)}
+
+	pEnd := to
+	if floor.Before(pEnd) {
+		pEnd = floor
+	}
+	pre = newDayRange(from, pEnd)
+
+	hStart := from
+	if floor.After(hStart) {
+		hStart = floor
+	}
+	hEnd := to
+	if boundary.Before(hEnd) {
+		hEnd = boundary
+	}
+	hist = newDayRange(hStart, hEnd)
 
 	fStart := from
-	if split.After(fStart) {
-		fStart = split
+	if boundary.After(fStart) {
+		fStart = boundary
 	}
-	fresh = dayRange{Start: fStart, End: to, Empty: !fStart.Before(to)}
+	fresh = newDayRange(fStart, to)
 
-	return hist, fresh
+	return pre, hist, fresh
 }
