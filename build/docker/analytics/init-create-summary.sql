@@ -100,8 +100,9 @@ PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 -- the summaries "may already exist" when it exits non-zero, so a statement that
 -- fails takes every statement below it with it, quietly. The newest table is
 -- the one most likely to hit an engine that will not take it, and last is where
--- that costs nothing but itself. Its backfill is ordered the opposite way --
--- right after the session summary it reads -- see init-backfill-summary.sql.
+-- that costs nothing but itself. Its backfill statement is last of its file for
+-- the same reason, and has to run after the session summary it reads -- see
+-- init-backfill-summary.sql.
 CREATE TABLE IF NOT EXISTS sum_session_peak_daily (
     project_id    VARCHAR(64),
     dt            DATE,
