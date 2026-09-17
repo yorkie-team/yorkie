@@ -95,5 +95,14 @@ var (
 	// Peak carries its own entry because its summary is a separate table that
 	// can lag descSession's: the split a read takes must follow the coverage of
 	// the table that read actually touches.
+	//
+	// summaryTable is the only field every entry has, and the probe reads
+	// nothing else. The query builders are not interchangeable across the list:
+	// seriesQuery and totalQuery need hllColumn, which descPeak has none of,
+	// and peakSeriesQuery needs peakColumn, which only descPeak has. Walking
+	// this list to build queries would emit HLL_UNION_AGG() or MAX() with an
+	// empty column name — valid Go, invalid SQL — so a caller that wants the
+	// sketch builders has to select the descriptors it means rather than range
+	// over every metric.
 	allDescs = []metricDesc{descUser, descDocument, descChannel, descClient, descSession, descPeak}
 )
