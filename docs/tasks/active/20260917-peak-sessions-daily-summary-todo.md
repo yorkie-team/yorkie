@@ -65,49 +65,57 @@ dashboard goes blank — not just the peak chart. So the order is fixed:
 
 ### Warehouse SQL (yorkie)
 
-- [ ] `build/docker/analytics/init-create-summary.sql`: add
+- [x] `build/docker/analytics/init-create-summary.sql`: add
       `sum_session_peak_daily`, with the reason it holds an integer rather than a
       sketch in a comment.
-- [ ] `build/docker/analytics/init-backfill-summary.sql`: add the peak insert
+- [x] `build/docker/analytics/init-backfill-summary.sql`: add the peak insert
       **after** the `sum_session_hll_daily_ch` insert, with the ordering
       dependency spelled out at the statement.
-- [ ] `build/charts/yorkie-analytics/templates/starrocks/configmap.yaml`: mirror
+- [x] `build/charts/yorkie-analytics/templates/starrocks/configmap.yaml`: mirror
       the `CREATE TABLE` under `init-create-summary.sql`. This ConfigMap carries
       create DDL only — backfill and refresh live in the devops manifest.
 
 ### Go read path (yorkie)
 
-- [ ] `server/backend/warehouse/metrics.go`: add `peakColumn` and a `descPeak`
+- [x] `server/backend/warehouse/metrics.go`: add `peakColumn` and a `descPeak`
       whose `summaryTable` is the new table; add it to `allDescs` so the coverage
       probe tracks the peak summary's own lag. Drop `byChannel` — nothing read
       it, and its rationale ("one table serves both sessions and peak") no longer
       holds.
-- [ ] `server/backend/warehouse/query.go`: history half of `peakSeriesQuery`
+- [x] `server/backend/warehouse/query.go`: history half of `peakSeriesQuery`
       reads `MAX(peak_sessions) ... GROUP BY dt` from the new table (aggregate,
       not a bare column read, so the result does not depend on the aggregate
       table having merged duplicate keys at read time). Fresh half unchanged.
       Delete `peakTotalQuery`.
-- [ ] Delete `GetPeakSessionsPerChannelCount` from the `Warehouse` interface,
+- [x] Delete `GetPeakSessionsPerChannelCount` from the `Warehouse` interface,
       `DummyWarehouse`, and `StarRocks`.
-- [ ] `server/projects/projects.go`: drop the twelfth goroutine; take the max of
+- [x] `server/projects/projects.go`: drop the twelfth goroutine; take the max of
       `peakSessionsPerChannel` after `g.Wait()`.
+- [x] Unplanned, added in review: the coverage probe reads `MIN(dt)` as well as
+      `MAX(dt)`, coverage becomes a day range, and `splitWindow` cuts the window
+      into three (base / summary / base). A watermark alone would have served a
+      partially backfilled `sum_session_peak_daily` as complete. Steady-state SQL
+      must stay byte-identical, pinned by a test.
 
 ### Tests (yorkie)
 
-- [ ] Golden-string tests for the new peak history half and for the coverage
+- [x] Golden-string tests for the new peak history half and for the coverage
       probe now naming six tables.
-- [ ] Drop the peak-total cases from `coverage_test.go` and
+- [x] Drop the peak-total cases from `coverage_test.go` and
       `e2e_rehearsal_test.go`; add a case asserting the returned window peak
       equals the max of the returned series.
-- [ ] `make lint`, `go test ./...`.
-- [ ] Local StarRocks rehearsal (`allin1-ubuntu:3.3.9`): backfill including the
+- [x] `make lint`, `go test ./...`.
+- [x] End-to-end coverage test for `GetProjectStats`: nothing called it, so the
+      derived peak total was only tested at the helper. A warehouse double
+      serving a series whose maximum is neither its first nor its last point.
+- [x] Local StarRocks rehearsal (`allin1-ubuntu:3.3.9`): backfill including the
       peak table, then dual-read vs base-only for all metrics, and
       `sum_session_peak_daily` vs a `MAX` over channels computed from
       `sum_session_hll_daily_ch` for the same days.
 
 ### devops (internal repo, ships first)
 
-- [ ] `k8s/cluster/analytics-summary.yaml`: add the table to `create.sql`, the
+- [x] `k8s/cluster/analytics-summary.yaml`: add the table to `create.sql`, the
       derived insert to `backfill.sql` and `refresh.sql` (after the session
       statement in both). Mirrored by hand — the ArgoCD application is still
       pinned at chart 0.6.0.

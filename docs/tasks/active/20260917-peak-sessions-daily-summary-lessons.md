@@ -57,6 +57,60 @@ the metric at fault, which turns "create the table first" from tidiness into a
 release-order requirement, with the devops manifest landing and running before
 the server version.
 
+## An accepted risk is only as good as the invariant underneath it
+
+The dual read splits at `MAX(dt) + 1` and trusts every day below it. The design
+recorded that as an accepted risk, and the mitigation was that the writers give
+the summary contiguity: a full-history backfill, then a 7-day lookback that
+heals recent holes. That argument was sound for the five tables it was written
+about — every one of them was backfilled before `SummaryEnabled` was turned on.
+
+`sum_session_peak_daily` is the first summary added to a cluster where the flag
+is already on, and the invariant is not true of it until someone runs its
+backfill. Nothing in the risk row said so, because at the time it could not have
+been otherwise. The accepted risk had a precondition that was invisible because
+it had never been violated.
+
+The fix was small once seen — probe `MIN(dt)` as well, make coverage a range,
+cut the window into three — and it is worth noting what it does *not* buy: an
+interior hole is still invisible, because the probe is global rather than per
+project. Half fixed, half accepted, and the doc now says which half.
+
+The transferable part: when a design accepts a risk on the grounds that "the
+writers make this safe", write down what the writers have to do. The next table
+will be added by someone who reads the risk, not the history.
+
+## Statement order in a piped script is a failure-isolation decision
+
+`init-create-summary.sql` and `init-backfill-summary.sql` are fed to `mysql`,
+which stops at the first failing statement, and the wrappers only log that the
+summaries could not be written. Adding the newest, least proven statement in the
+middle — next to the table it is conceptually related to — puts every statement
+below it behind it. A failure there leaves an existing summary uncreated or
+unfilled, which reads as covering nothing, which puts that metric back on
+whole-history base scans with nothing to say so.
+
+So the new statements go last, against the instinct to group them with the
+session table they derive from. The only real constraint is that peak runs after
+the session summary it reads, and last satisfies it.
+
+## Moving a statement leaves its comment behind
+
+Reordering the `CREATE TABLE` left its eight-line rationale where it had been,
+now sitting above a different table and describing it as the sketch-free one.
+Three review rounds later it was still there — the diff looked like an insertion
+and a deletion, and the stranded block was in neither. Reordering a commented
+statement is two edits, and only one of them is visible in review.
+
+## Re-reviewing after the fixes is where the regressions were
+
+Each review round found something the previous round's fix had introduced or
+exposed: the stranded comment came from a reorder, the false cross-reference
+came from a second reorder, and the quick-backfill runbook added in one round
+did not create the table it backfilled. None of it would have surfaced from
+reviewing the original change once. Fixes deserve the same scrutiny as the code
+they fix, especially the ones that only move things.
+
 ## See Also
 
 - `docs/tasks/active/20260917-peak-sessions-daily-summary-todo.md` — the plan
