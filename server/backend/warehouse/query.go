@@ -188,32 +188,3 @@ func (d metricDesc) peakSeriesQuery(id types.ID, from, to, split time.Time) stri
 		join([]string{histSQL, freshSQL}),
 	)
 }
-
-// peakTotalQuery builds the whole-window peak sessions per channel: the single
-// highest per-(day, channel) distinct-session count. It is a MAX over
-// independent buckets, so no cross-boundary sketch union is needed.
-func (d metricDesc) peakTotalQuery(id types.ID, from, to, split time.Time) string {
-	hist, fresh := splitWindow(from, to, split)
-
-	var histSQL, freshSQL string
-	if !hist.Empty || fresh.Empty {
-		histSQL = fmt.Sprintf(
-			"SELECT HLL_UNION_AGG(session_hll) AS session_count "+
-				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s' GROUP BY dt, channel_key",
-			d.summaryTable, id.String(), dayFmt(from), dayFmt(hist.End),
-		)
-	}
-	if !fresh.Empty {
-		freshSQL = fmt.Sprintf(
-			"SELECT APPROX_COUNT_DISTINCT(session_id) AS session_count "+
-				"FROM %s WHERE %s GROUP BY DATE(timestamp), channel_key",
-			d.baseTable, d.basePred(id, fresh),
-		)
-	}
-
-	//nolint:gosec
-	return fmt.Sprintf(
-		"SELECT MAX(session_count) FROM (\n%s\n) t;",
-		join([]string{histSQL, freshSQL}),
-	)
-}

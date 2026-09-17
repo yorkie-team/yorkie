@@ -174,7 +174,6 @@ func TestEveryMetricProbesCoverage(t *testing.T) {
 		"active clients":   func() (int, error) { return r.GetActiveClientsCount(ctx, id, from, to) },
 		"active channels":  func() (int, error) { return r.GetActiveChannelsCount(ctx, id, from, to) },
 		"sessions":         func() (int, error) { return r.GetSessionsCount(ctx, id, from, to) },
-		"peak":             func() (int, error) { return r.GetPeakSessionsPerChannelCount(ctx, id, from, to) },
 	}
 	for name, fn := range counts {
 		t.Run("count "+name, func(t *testing.T) {

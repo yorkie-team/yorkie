@@ -188,7 +188,6 @@ func TestE2EDualReadMatchesBaseUnderRefreshLag(t *testing.T) {
 		"active channels":  func(w Warehouse) (int, error) { return w.GetActiveChannelsCount(ctx, id, from, to) },
 		"active clients":   func(w Warehouse) (int, error) { return w.GetActiveClientsCount(ctx, id, from, to) },
 		"sessions":         func(w Warehouse) (int, error) { return w.GetSessionsCount(ctx, id, from, to) },
-		"peak":             func(w Warehouse) (int, error) { return w.GetPeakSessionsPerChannelCount(ctx, id, from, to) },
 	} {
 		t.Run("count "+name, func(t *testing.T) {
 			base, err := fn(off)
@@ -284,7 +283,6 @@ func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
 	}
 	plans = append(plans,
 		plan{"peak series", descSession.peakSeriesQuery(id, from, to, split), descSession.baseTable, ""},
-		plan{"peak total", descSession.peakTotalQuery(id, from, to, split), descSession.baseTable, ""},
 		// The sessions total and series must not pay for the channel_key
 		// dimension they never read.
 		plan{"sessions series on the coarse rollup", descSession.seriesQuery(id, from, to, split), "", "rl_session_daily"},

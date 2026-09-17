@@ -544,53 +544,6 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 	return metrics, nil
 }
 
-// GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
-func (r *StarRocks) GetPeakSessionsPerChannelCount(
-	ctx context.Context,
-	id types.ID,
-	from, to time.Time,
-) (int, error) {
-	if err := validateTimeRange(from, to); err != nil {
-		return 0, err
-	}
-
-	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
-	// Prepared Statement. So, we need to use string interpolation to build the query.
-	//nolint:gosec
-	query := fmt.Sprintf(`
-	SELECT 
-	    MAX(session_count) AS peak_sessions
-	FROM (
-	    SELECT 
-	        DATE(timestamp) AS event_date,
-	        channel_key,
-	        APPROX_COUNT_DISTINCT(session_id) AS session_count
-	    FROM 
-	        session_events
-	    WHERE
-	        project_id = '%s'
-	        AND DATE(timestamp) >= '%s'
-	        AND DATE(timestamp) < '%s'
-	    GROUP BY 
-	        event_date, channel_key
-	) AS channel_sessions;
-	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
-
-	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descSession, from)
-		if err != nil {
-			return 0, fmt.Errorf("get peak sessions per channel count: %w", err)
-		}
-		query = descSession.peakTotalQuery(id, from, to, split)
-	}
-
-	count, err := r.queryCount(ctx, query)
-	if err != nil {
-		return 0, fmt.Errorf("get peak sessions per channel count: %w", err)
-	}
-	return count, nil
-}
-
 // Close closes the connection to the StarRocks.
 func (r *StarRocks) Close() error {
 	if r.driver == nil {

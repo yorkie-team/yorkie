@@ -145,20 +145,19 @@ func GetProjectStats(
 	// the derived context on the first error, so a slow query is not left running
 	// after the client has already given up.
 	var (
-		activeUsers                 []types.MetricPoint
-		activeUsersCount            int
-		activeDocuments             []types.MetricPoint
-		activeDocumentsCount        int
-		activeClients               []types.MetricPoint
-		activeClientsCount          int
-		activeChannels              []types.MetricPoint
-		activeChannelsCount         int
-		sessions                    []types.MetricPoint
-		sessionsCount               int
-		peakSessionsPerChannel      []types.MetricPoint
-		peakSessionsPerChannelCount int
-		counts                      *database.ProjectStatsCounts
-		channelsCount               int
+		activeUsers            []types.MetricPoint
+		activeUsersCount       int
+		activeDocuments        []types.MetricPoint
+		activeDocumentsCount   int
+		activeClients          []types.MetricPoint
+		activeClientsCount     int
+		activeChannels         []types.MetricPoint
+		activeChannelsCount    int
+		sessions               []types.MetricPoint
+		sessionsCount          int
+		peakSessionsPerChannel []types.MetricPoint
+		counts                 *database.ProjectStatsCounts
+		channelsCount          int
 	)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -207,10 +206,6 @@ func GetProjectStats(
 		return err
 	})
 	g.Go(func() (err error) {
-		peakSessionsPerChannelCount, err = be.Warehouse.GetPeakSessionsPerChannelCount(ctx, id, from, to)
-		return err
-	})
-	g.Go(func() (err error) {
 		counts, err = be.DB.GetProjectStatsCounts(ctx, id)
 		return err
 	})
@@ -233,13 +228,36 @@ func GetProjectStats(
 		ActiveChannels:              activeChannels,
 		SessionsCount:               sessionsCount,
 		Sessions:                    sessions,
-		PeakSessionsPerChannelCount: peakSessionsPerChannelCount,
+		PeakSessionsPerChannelCount: maxMetricValue(peakSessionsPerChannel),
 		PeakSessionsPerChannel:      peakSessionsPerChannel,
 		DocumentsCount:              counts.DocumentsCount,
 		ClientsCount:                counts.ClientsCount,
 		ChannelsCount:               int64(channelsCount),
 		StatsUpdatedAt:              counts.UpdatedAt,
 	}, nil
+}
+
+// maxMetricValue returns the largest value in the series, or 0 when it is
+// empty.
+//
+// This is how the window's peak total is derived, instead of asking the
+// warehouse for it. The peak of a window is a MAX over independent
+// per-(day, channel) buckets, and MAX is associative: reducing the buckets to a
+// daily maximum first and then taking the maximum of those days gives exactly
+// the same number as reducing all the buckets at once. Querying it separately
+// only repeated the series' scan.
+//
+// It works for peak alone. The other metrics are distinct counts, whose window
+// total is an HLL union across the days rather than the maximum, or the sum, of
+// the per-day values: a subject active on several days must still count once.
+func maxMetricValue(points []types.MetricPoint) int {
+	maxValue := 0
+	for _, p := range points {
+		if p.Value > maxValue {
+			maxValue = p.Value
+		}
+	}
+	return maxValue
 }
 
 // GetProjectFromAPIKey returns a project from an API key.

@@ -126,15 +126,6 @@ func (w *DummyWarehouse) GetPeakSessionsPerChannel(
 	return nil, nil
 }
 
-// GetPeakSessionsPerChannelCount does nothing.
-func (w *DummyWarehouse) GetPeakSessionsPerChannelCount(
-	ctx context.Context,
-	id types.ID,
-	from, to time.Time,
-) (int, error) {
-	return 0, nil
-}
-
 // GetDocs does nothing.
 func (w *DummyWarehouse) Close() error {
 	return nil

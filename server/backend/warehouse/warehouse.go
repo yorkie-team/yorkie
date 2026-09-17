@@ -118,13 +118,6 @@ type Warehouse interface {
 		id types.ID,
 		from, to time.Time,
 	) ([]types.MetricPoint, error)
-
-	// GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
-	GetPeakSessionsPerChannelCount(
-		ctx context.Context,
-		id types.ID,
-		from, to time.Time,
-	) (int, error)
 }
 
 // Ensure creates a warehouse instance.

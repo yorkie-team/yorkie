@@ -81,19 +81,6 @@ func TestTotalQueryClientCarriesEventType(t *testing.T) {
 	assert.Contains(t, got, "AND event_type = 'client-activated'")
 }
 
-func TestPeakTotalQueryIsMaxNoBoundaryUnion(t *testing.T) {
-	got := norm(descSession.peakTotalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
-
-	assert.Contains(t, got, "SELECT MAX(session_count) FROM")
-	assert.Contains(t, got, "HLL_UNION_AGG(session_hll) AS session_count "+
-		"FROM sum_session_hll_daily_ch WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' "+
-		"GROUP BY dt, channel_key")
-	assert.Contains(t, got, "APPROX_COUNT_DISTINCT(session_id) AS session_count FROM session_events")
-	assert.Contains(t, got, "GROUP BY DATE(timestamp), channel_key")
-	// peak never unions sketches across the today boundary
-	assert.NotContains(t, got, "HLL_UNION_AGG(sketch)")
-}
-
 func TestPeakSeriesQueryStraddling(t *testing.T) {
 	got := norm(descSession.peakSeriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
@@ -152,7 +139,6 @@ func TestFreshHalfOmitsRawTimestampBounds(t *testing.T) {
 		"series":      descUser.seriesQuery(types.ID("p1"), from, to, split),
 		"total":       descUser.totalQuery(types.ID("p1"), from, to, split),
 		"peak series": descSession.peakSeriesQuery(types.ID("p1"), from, to, split),
-		"peak total":  descSession.peakTotalQuery(types.ID("p1"), from, to, split),
 	}
 	for name, q := range queries {
 		t.Run(name, func(t *testing.T) {
