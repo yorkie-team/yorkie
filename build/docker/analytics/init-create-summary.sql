@@ -14,6 +14,13 @@ USE yorkie;
 -- buffer). Only the client table carries event_type and only the session table
 -- carries channel_key, mirroring init-create-mv.sql.
 --
+-- sum_session_peak_daily is the one summary that holds no sketch: peak sessions
+-- per channel is a MAX over per-(day, channel) distinct counts, and the daily
+-- peak is independent per day, so the read path never unions it across days. A
+-- plain BIGINT MAX column is enough, and it plays the same idempotence role
+-- HLL_UNION plays for the sketch tables -- re-inserting a day takes the max
+-- instead of duplicating the row.
+--
 -- This file is the source of truth for the summary DDL. The deployed clusters
 -- carry the same statements in the analytics chart's init ConfigMap
 -- (build/charts/yorkie-analytics/templates/starrocks/configmap.yaml); keep the
@@ -65,6 +72,25 @@ AGGREGATE KEY(project_id, dt, channel_key)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(project_id)
 ROLLUP (rl_session_daily (project_id, dt, session_hll))
+PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
+
+-- Peak sessions per channel keyed by channel is the only metric whose summary
+-- read scales with channel cardinality: a 3-month window on a project with
+-- ~4,900 channels reads ~280k rows from sum_session_hll_daily_ch, about two
+-- thirds of the dashboard's 3s admin-RPC deadline. The daily peak is
+-- independent per day -- peak(day) = MAX over that day's channels of its
+-- distinct sessions -- so it is stored per (project_id, dt) as a plain integer.
+-- The same 3-month window then reads ~91 rows and no longer depends on how many
+-- channels the project has. No sketch and no cross-day union are needed, which
+-- is why this is an integer table rather than a sixth HLL table.
+CREATE TABLE IF NOT EXISTS sum_session_peak_daily (
+    project_id    VARCHAR(64),
+    dt            DATE,
+    peak_sessions BIGINT MAX
+) ENGINE = OLAP
+AGGREGATE KEY(project_id, dt)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 
 CREATE TABLE IF NOT EXISTS sum_client_hll_daily (

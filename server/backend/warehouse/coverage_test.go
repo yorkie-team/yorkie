@@ -19,6 +19,7 @@ package warehouse
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"strings"
 	"testing"
@@ -196,4 +197,72 @@ func TestEveryMetricProbesCoverage(t *testing.T) {
 			require.ErrorContains(t, err, "query summary coverage")
 		})
 	}
+}
+
+// captureConnector answers every query with an error after recording its SQL,
+// so a read's built query can be asserted on without a StarRocks to run it
+// against. It is a connector rather than a registered driver so the tests need
+// no global driver name.
+type captureConnector struct {
+	queries []string
+}
+
+// errCaptured is what the fake connection answers with. It is deliberately not
+// driver.ErrBadConn, which database/sql would retry on a fresh connection.
+var errCaptured = errors.New("captured")
+
+func (c *captureConnector) Connect(context.Context) (driver.Conn, error) {
+	return &captureConn{c: c}, nil
+}
+func (c *captureConnector) Driver() driver.Driver { return captureDriver{} }
+
+type captureDriver struct{}
+
+func (captureDriver) Open(string) (driver.Conn, error) { return nil, errCaptured }
+
+type captureConn struct {
+	c *captureConnector
+}
+
+func (c *captureConn) Prepare(string) (driver.Stmt, error) { return nil, errCaptured }
+func (c *captureConn) Close() error                        { return nil }
+func (c *captureConn) Begin() (driver.Tx, error)           { return nil, errCaptured }
+
+func (c *captureConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	c.c.queries = append(c.c.queries, query)
+	return nil, errCaptured
+}
+
+// Peak reads its own summary table, which a separate refresh job fills and
+// which may therefore lag sum_session_hll_daily_ch. Splitting the window on the
+// sketch table's coverage would serve days out of sum_session_peak_daily that
+// nothing has written yet, and the dashboard would draw them as zeroes. The
+// split and the table read must be the same metric's.
+func TestPeakReadSplitsOnThePeakSummary(t *testing.T) {
+	conn := &captureConnector{}
+	r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(conn)}
+	defer func() { _ = r.Close() }()
+
+	today := todayUTC()
+	peakMaxDt := today.AddDate(0, 0, -4)
+	// A primed, fresh probe: no round trip, and the peak summary sits two days
+	// behind the per-channel sketch summary.
+	r.coverage.maxDays = map[string]time.Time{
+		descSession.summaryTable: today.AddDate(0, 0, -2),
+		descPeak.summaryTable:    peakMaxDt,
+	}
+	r.coverage.fetchedAt = time.Now()
+
+	from, to := today.AddDate(0, 0, -30), today.AddDate(0, 0, 1)
+	_, err := r.GetPeakSessionsPerChannel(context.Background(), types.ID("p1"), from, to)
+	require.ErrorIs(t, err, errCaptured)
+	require.Len(t, conn.queries, 1, "the primed probe must not have cost a round trip")
+
+	got := norm(conn.queries[0])
+	split := dayFmt(peakMaxDt.AddDate(0, 0, 1))
+	assert.Contains(t, got, "FROM sum_session_peak_daily WHERE project_id = 'p1' "+
+		"AND dt >= '"+dayFmt(from)+"' AND dt < '"+split+"'")
+	assert.NotContains(t, got, descSession.summaryTable)
+	// The two days the peak summary has not reached come from the base.
+	assert.Contains(t, got, "DATE(timestamp) >= '"+split+"'")
 }

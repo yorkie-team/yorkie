@@ -25,9 +25,12 @@ import (
 )
 
 // The dual-read query builders split the requested window at a caller-supplied
-// day: the historical part [from, split) is served by the decoupled daily HLL
+// day: the historical part [from, split) is served by the decoupled daily
 // summary tables, and the fresh part [split, to) by the base rollups. The split
 // day is the summary's coverage boundary rather than today, see coverage.go.
+// Every summary but peak's stores an HLL sketch, because a distinct count is
+// only mergeable across days through a sketch; peak's stores a plain integer,
+// because a MAX is mergeable as it is.
 // Totals union the two halves' sketches and count once with HLL_UNION_AGG, so a
 // subject active in both halves counts once. Note HLL_UNION_AGG already returns
 // the merged cardinality (a bigint), so it is not wrapped in HLL_CARDINALITY.
@@ -155,8 +158,18 @@ func (d metricDesc) totalQuery(id types.ID, from, to, split time.Time) string {
 }
 
 // peakSeriesQuery builds the per-day peak-sessions-per-channel series as a dual
-// read: the daily peak is MAX over channels of the per-channel distinct
-// sessions, which needs no cross-boundary union because each day is independent.
+// read. The daily peak is a MAX over independent per-(day, channel) buckets, so
+// each day stands alone and no sketch is unioned across the split boundary.
+//
+// The two halves have different shapes on purpose. The historical half reads
+// summaryTable, which already holds the finished peak as one plain integer per
+// (project, day): the refresh job did the MAX over channels when it wrote the
+// row, so the read costs days rather than channels x days. The MAX ... GROUP BY
+// dt is kept rather than reading the column bare so the result does not depend
+// on the aggregate table merging its duplicate keys at read time. The fresh
+// half has no precomputed row to read, so it still does the per-(day, channel)
+// APPROX_COUNT_DISTINCT and takes the daily MAX in-branch.
+//
 // It is a method so the metric it reads and the coverage the caller splits on
 // cannot name different tables.
 func (d metricDesc) peakSeriesQuery(id types.ID, from, to, split time.Time) string {
@@ -165,11 +178,9 @@ func (d metricDesc) peakSeriesQuery(id types.ID, from, to, split time.Time) stri
 	var histSQL, freshSQL string
 	if !hist.Empty || fresh.Empty {
 		histSQL = fmt.Sprintf(
-			"SELECT event_date, MAX(session_count) AS metric_value FROM ("+
-				"SELECT dt AS event_date, channel_key, HLL_UNION_AGG(session_hll) AS session_count "+
-				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s' GROUP BY dt, channel_key"+
-				") hc GROUP BY event_date",
-			d.summaryTable, id.String(), dayFmt(from), dayFmt(hist.End),
+			"SELECT dt AS event_date, MAX(%s) AS metric_value "+
+				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s' GROUP BY dt",
+			d.peakColumn, d.summaryTable, id.String(), dayFmt(from), dayFmt(hist.End),
 		)
 	}
 	if !fresh.Empty {

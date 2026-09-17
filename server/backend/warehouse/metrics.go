@@ -19,21 +19,25 @@ package warehouse
 import "github.com/yorkie-team/yorkie/api/types/events"
 
 // metricDesc describes one warehouse metric's base and summary shapes so the
-// dual-read query builders can be shared across the six metrics. Each metric
-// counts distinct idColumn per (project, day) over baseTable, and the daily
-// summary lives in summaryTable with an HLL_UNION column named hllColumn.
+// dual-read query builders can be shared across the metrics. Each metric
+// derives its value from idColumn per (project, day) over baseTable, and the
+// daily summary lives in summaryTable.
 type metricDesc struct {
 	// baseTable is the raw event table, e.g. "user_events".
 	baseTable string
 	// idColumn is the identifier counted distinct, e.g. "user_id".
 	idColumn string
-	// summaryTable is the decoupled daily HLL summary, e.g. "sum_user_hll_daily".
+	// summaryTable is the decoupled daily summary, e.g. "sum_user_hll_daily".
 	summaryTable string
 	// hllColumn is the HLL_UNION sketch column in summaryTable, e.g. "user_hll".
+	// It is empty for a metric whose summary stores a plain number instead of a
+	// sketch.
 	hllColumn string
-	// byChannel is true for the session metric, which groups by channel_key so
-	// one table serves both sessions and peak sessions per channel.
-	byChannel bool
+	// peakColumn is the plain per-day peak column in summaryTable, e.g.
+	// "peak_sessions". It is set only for the peak metric, whose daily value is
+	// a MAX over independent buckets and therefore needs no sketch to stay
+	// mergeable across days.
+	peakColumn string
 	// eventType, when non-empty, filters the base query and keys the summary,
 	// used only by the client metric ("client-activated").
 	eventType string
@@ -65,16 +69,31 @@ var (
 		hllColumn:    "client_hll",
 		eventType:    string(events.ClientActivatedEvent),
 	}
+	// descSession counts distinct sessions. Its summary is keyed by channel as
+	// well as day, a shape the sessions reads themselves do not need: they
+	// union every channel-day sketch of a day back together. The peak metric,
+	// which does need the per-channel breakdown, no longer reads this table.
 	descSession = metricDesc{
 		baseTable:    "session_events",
 		idColumn:     "session_id",
 		summaryTable: "sum_session_hll_daily_ch",
 		hllColumn:    "session_hll",
-		byChannel:    true,
+	}
+	// descPeak is the daily peak sessions per channel. Its summary is
+	// precomputed from descSession's per-channel sketches, one plain integer per
+	// (project, day), so a read costs days rather than channels x days.
+	descPeak = metricDesc{
+		baseTable:    "session_events",
+		idColumn:     "session_id",
+		summaryTable: "sum_session_peak_daily",
+		peakColumn:   "peak_sessions",
 	}
 
 	// allDescs is every metric, one per summary table, walked by the coverage
 	// probe. A metric missing from this list probes no coverage, so its reads
 	// silently fall back to base-only: right numbers, whole-history scan.
-	allDescs = []metricDesc{descUser, descDocument, descChannel, descClient, descSession}
+	// Peak carries its own entry because its summary is a separate table that
+	// can lag descSession's: the split a read takes must follow the coverage of
+	// the table that read actually touches.
+	allDescs = []metricDesc{descUser, descDocument, descChannel, descClient, descSession, descPeak}
 )

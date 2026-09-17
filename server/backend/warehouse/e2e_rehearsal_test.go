@@ -124,6 +124,17 @@ func seedRehearsal(t *testing.T, db *sql.DB, today time.Time) {
 	      SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
 	      FROM session_events WHERE project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'
 	      GROUP BY project_id, DATE(timestamp), channel_key`, id, from, through)
+	// The daily peak is derived from the per-channel sketches, exactly as the
+	// refresh job derives it, and stops at the same day so both summaries lag
+	// together. Deriving it from the sketches rather than from the base events
+	// is what makes the rehearsal prove the precomputed number matches the
+	// estimate the old per-channel read produced.
+	exec(`INSERT INTO sum_session_peak_daily
+	      SELECT project_id, dt, MAX(session_count) FROM (
+	          SELECT project_id, dt, channel_key, HLL_UNION_AGG(session_hll) AS session_count
+	          FROM sum_session_hll_daily_ch WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'
+	          GROUP BY project_id, dt, channel_key
+	      ) ch GROUP BY project_id, dt`, id, from, through)
 	exec(`INSERT INTO sum_client_hll_daily SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))
 	      FROM client_events WHERE project_id = '%s' AND DATE(timestamp) >= '%s' AND DATE(timestamp) < '%s'
 	      GROUP BY project_id, event_type, DATE(timestamp)`, id, from, through)
@@ -276,13 +287,18 @@ func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
 	}
 	var plans []plan
 	for _, d := range allDescs {
+		// The generic distinct-count builders read hllColumn, which peak's
+		// summary does not have: peak has its own builder, planned below.
+		if d.hllColumn == "" {
+			continue
+		}
 		plans = append(plans,
 			plan{"series " + d.baseTable, d.seriesQuery(id, from, to, split), d.baseTable, ""},
 			plan{"total " + d.baseTable, d.totalQuery(id, from, to, split), d.baseTable, ""},
 		)
 	}
 	plans = append(plans,
-		plan{"peak series", descSession.peakSeriesQuery(id, from, to, split), descSession.baseTable, ""},
+		plan{"peak series", descPeak.peakSeriesQuery(id, from, to, split), descPeak.baseTable, ""},
 		// The sessions total and series must not pay for the channel_key
 		// dimension they never read.
 		plan{"sessions series on the coarse rollup", descSession.seriesQuery(id, from, to, split), "", "rl_session_daily"},
@@ -302,8 +318,10 @@ func TestE2EDualReadStaysOnTheRollups(t *testing.T) {
 		})
 	}
 
-	// Peak is the one metric that does need channel_key, so it keeps the base
-	// index of the summary rather than the coarse rollup.
-	assert.Contains(t, rollups(t, descSession.peakSeriesQuery(id, from, to, split)),
-		descSession.summaryTable, "peak must keep the per-channel index")
+	// Peak's history half must land on its own precomputed table. Reading
+	// sum_session_hll_daily_ch instead would put the channels x days scan the
+	// precompute exists to remove back into the plan.
+	picked := rollups(t, descPeak.peakSeriesQuery(id, from, to, split))
+	assert.Contains(t, picked, descPeak.summaryTable, "plan reads %v", picked)
+	assert.NotContains(t, picked, descSession.summaryTable, "plan reads %v", picked)
 }

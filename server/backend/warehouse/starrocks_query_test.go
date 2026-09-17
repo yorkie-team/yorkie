@@ -82,14 +82,35 @@ func TestTotalQueryClientCarriesEventType(t *testing.T) {
 }
 
 func TestPeakSeriesQueryStraddling(t *testing.T) {
-	got := norm(descSession.peakSeriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
+	got := norm(descPeak.peakSeriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), day("2026-08-31")))
 
 	assert.Contains(t, got, "SELECT event_date, metric_value FROM")
+	// The history half reads the precomputed daily peak, one plain integer per
+	// project-day, not the per-channel sketches it used to reduce itself.
+	assert.Contains(t, got, "SELECT dt AS event_date, MAX(peak_sessions) AS metric_value "+
+		"FROM sum_session_peak_daily WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' "+
+		"GROUP BY dt")
+	assert.NotContains(t, got, "sum_session_hll_daily_ch")
+	assert.NotContains(t, got, "HLL_UNION_AGG(session_hll)")
+	// The fresh half has no precomputed row, so it still reduces per
+	// (day, channel) in-branch and takes the daily maximum itself.
+	assert.Contains(t, got, "SELECT DATE(timestamp) AS event_date, channel_key, "+
+		"APPROX_COUNT_DISTINCT(session_id) AS session_count FROM session_events")
+	assert.Contains(t, got, "GROUP BY DATE(timestamp), channel_key")
 	assert.Contains(t, got, "MAX(session_count) AS metric_value")
-	assert.Contains(t, got, "sum_session_hll_daily_ch")
 	assert.Contains(t, got, "UNION ALL")
-	assert.Contains(t, got, "session_events")
 	assert.Contains(t, got, "ORDER BY event_date ASC")
+}
+
+// The summary half must never reach for channel_key: the whole point of the
+// precomputed table is that the per-channel reduction already happened offline.
+func TestPeakSeriesQueryHistoryOnlyIgnoresChannels(t *testing.T) {
+	got := norm(descPeak.peakSeriesQuery(types.ID("p1"), day("2026-08-01"), day("2026-08-31"), day("2026-08-31")))
+
+	assert.Contains(t, got, "FROM sum_session_peak_daily")
+	assert.NotContains(t, got, "channel_key")
+	assert.NotContains(t, got, "session_events")
+	assert.NotContains(t, got, "UNION ALL")
 }
 
 func TestSeriesQueryStraddlingConcatenatesHalves(t *testing.T) {
@@ -138,7 +159,7 @@ func TestFreshHalfOmitsRawTimestampBounds(t *testing.T) {
 	queries := map[string]string{
 		"series":      descUser.seriesQuery(types.ID("p1"), from, to, split),
 		"total":       descUser.totalQuery(types.ID("p1"), from, to, split),
-		"peak series": descSession.peakSeriesQuery(types.ID("p1"), from, to, split),
+		"peak series": descPeak.peakSeriesQuery(types.ID("p1"), from, to, split),
 	}
 	for name, q := range queries {
 		t.Run(name, func(t *testing.T) {

@@ -10,8 +10,10 @@ USE yorkie;
 -- complete; writing a partial current day would make that day undercount from
 -- the next UTC midnight until a later run merges the rest of it in.
 --
--- On large clusters run these per table in a low-ingest window (session last)
--- rather than all at once; each is a single base full scan. See
+-- On large clusters run these per table in a low-ingest window (the session
+-- scan last) rather than all at once; each base statement is a single full
+-- scan. The order below is not free to shuffle: sum_session_peak_daily is
+-- derived from sum_session_hll_daily_ch, so it has to run after it. See
 -- docs/design/project-stats-long-retention.md and the MV migration playbook.
 
 -- HLL_HASH is per-row; grouping into the HLL_UNION column requires the
@@ -41,6 +43,32 @@ SELECT project_id, DATE(timestamp), channel_key, HLL_UNION(HLL_HASH(session_id))
 FROM session_events
 WHERE DATE(timestamp) < DATE(UTC_TIMESTAMP())
 GROUP BY project_id, DATE(timestamp), channel_key;
+
+-- Peak sessions per channel, as a plain integer per (project_id, dt).
+--
+-- This statement MUST stay after the sum_session_hll_daily_ch INSERT above: it
+-- reads the rows that statement just wrote, not session_events.
+--
+-- Deriving from the summary rather than the base is deliberate. The summary is
+-- orders of magnitude smaller -- one row per (project, day, channel) against a
+-- billion raw session_events rows -- so this costs a scan of the summary rather
+-- than a second full scan of the base. It also makes the stored integer exactly
+-- the MAX of the per-day HLL estimates the read path would compute from
+-- sum_session_hll_daily_ch itself, so the precomputed history and the freshly
+-- computed days agree by construction instead of by two estimators happening to
+-- land on the same number.
+--
+-- BIGINT MAX on the target column is what makes a re-insert idempotent, the
+-- same role HLL_UNION plays for the sketch tables: re-running a day takes the
+-- max of the old and new values instead of appending a second row.
+INSERT INTO sum_session_peak_daily
+SELECT project_id, dt, MAX(session_count) FROM (
+    SELECT project_id, dt, channel_key, HLL_UNION_AGG(session_hll) AS session_count
+    FROM sum_session_hll_daily_ch
+    WHERE dt < DATE(UTC_TIMESTAMP())
+    GROUP BY project_id, dt, channel_key
+) c
+GROUP BY project_id, dt;
 
 INSERT INTO sum_client_hll_daily
 SELECT project_id, event_type, DATE(timestamp), HLL_UNION(HLL_HASH(client_id))

@@ -530,11 +530,13 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		split, err := r.splitDay(ctx, descSession, from)
+		// Peak splits on its own summary's coverage, not on descSession's: the
+		// two tables are refreshed separately and either may lag the other.
+		split, err := r.splitDay(ctx, descPeak, from)
 		if err != nil {
 			return nil, fmt.Errorf("get peak sessions per channel: %w", err)
 		}
-		query = descSession.peakSeriesQuery(id, from, to, split)
+		query = descPeak.peakSeriesQuery(id, from, to, split)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
