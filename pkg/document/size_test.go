@@ -306,6 +306,189 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 36, Meta: 168}, doc.DocSize().GC)
 	})
 
+	t.Run("tree element split test", func(t *testing.T) {
+		// A split mints a new element node, but Phase 7 dropped the size
+		// TreeNode.Split reported, so docSize.Live never carried it. Cycling
+		// a split and the merge that undoes it then walked Live down by one
+		// ticket per cycle and took it negative -- the number the server's
+		// document size limit reads (yorkie#1998).
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("tree", json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "span",
+						Children: []json.TreeNode{{Type: "text", Value: "abcdefghij"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<doc><p><span>abcdefghij</span></p></doc>`, doc.Root().GetTree("tree").ToXML())
+		assert.Equal(t, resource.DataSize{Data: 20, Meta: 168}, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 0}, doc.DocSize().GC)
+
+		// Split after `a`: a new <span> and a text split, one ticket each.
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, `<doc><p><span>a</span><span>bcdefghij</span></p></doc>`,
+			doc.Root().GetTree("tree").ToXML())
+		assert.Equal(t, resource.DataSize{Data: 20, Meta: 216}, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 0}, doc.DocSize().GC)
+
+		// Merge the boundary back. The <span> the split created is tombstoned,
+		// so its size moves to GC. The text stays two nodes, which is why Live
+		// keeps the ticket the text split added rather than returning to its
+		// pre-split value.
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{0, 0, 1}, []int{0, 1, 0}, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, `<doc><p><span>abcdefghij</span></p></doc>`, doc.Root().GetTree("tree").ToXML())
+		assert.Equal(t, resource.DataSize{Data: 20, Meta: 192}, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 48}, doc.DocSize().GC)
+
+		// Every further cycle needs no text split, so Live returns to the same
+		// two values instead of drifting.
+		for range 3 {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("tree").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, nil, 1)
+				return nil
+			}))
+			assert.Equal(t, resource.DataSize{Data: 20, Meta: 216}, doc.DocSize().Live)
+
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("tree").EditByPath([]int{0, 0, 1}, []int{0, 1, 0}, nil, 0)
+				return nil
+			}))
+			assert.Equal(t, resource.DataSize{Data: 20, Meta: 192}, doc.DocSize().Live)
+		}
+
+		// The incrementally maintained size has to agree with the one NewRoot
+		// recomputes from the tree, or a snapshot rebuild reports a different
+		// size than the live document for the same content.
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
+	})
+
+	t.Run("tree multi level split test", func(t *testing.T) {
+		// Phase 7 splits once per level, so its diff has to accumulate across
+		// the loop rather than carry only the last level's. A level 2 split
+		// mints two elements -- the <span> and the <p> above it -- and both
+		// tickets belong in Live.
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("tree", json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "span",
+						Children: []json.TreeNode{{Type: "text", Value: "abcdefghij"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 20, Meta: 168}, doc.DocSize().Live)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, nil, 2)
+			return nil
+		}))
+		assert.Equal(t, `<doc><p><span>a</span></p><p><span>bcdefghij</span></p></doc>`,
+			doc.Root().GetTree("tree").ToXML())
+		assert.Equal(t, resource.DataSize{Data: 20, Meta: 240}, doc.DocSize().Live)
+
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
+	})
+
+	t.Run("tree style tombstone test", func(t *testing.T) {
+		// docSize.Live may only be debited for a value it was holding. An
+		// attribute tombstone minted over a key that was absent, or over one
+		// already removed, was never live, and charging it to Live anyway
+		// walked the live size down on every such edit without bound. A
+		// rich-text editor toggling one key is exactly that loop, and once
+		// Live goes negative the document size limit stops applying.
+		newStyled := func(t *testing.T) *document.Document {
+			doc := document.New("doc")
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("tree", json.TreeNode{
+					Type: "doc",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "abc"}},
+					}},
+				})
+				return nil
+			}))
+			assert.Equal(t, resource.DataSize{Data: 6, Meta: 144}, doc.DocSize().Live)
+			return doc
+		}
+		removeStyle := func(t *testing.T, doc *document.Document, key string) {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("tree").RemoveStyle(0, 5, []string{key})
+				return nil
+			}))
+		}
+		style := func(t *testing.T, doc *document.Document) {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("tree").Style(0, 5, map[string]string{"bold": "true"})
+				return nil
+			}))
+		}
+		// The recomputed size is the ground truth the incremental one has to
+		// match; asserting it alongside the constants keeps this honest even
+		// where the constants would have to change.
+		assertAgrees := func(t *testing.T, doc *document.Document, live resource.DataSize) {
+			t.Helper()
+			clone, err := doc.InternalDocument().DeepCopy()
+			assert.NoError(t, err)
+			assert.Equal(t, live, doc.DocSize().Live)
+			assert.Equal(t, clone.DocSize().Live, doc.DocSize().Live)
+		}
+
+		t.Run("removing a key the element never carried test", func(t *testing.T) {
+			doc := newStyled(t)
+			removeStyle(t, doc, "never-set")
+			assertAgrees(t, doc, resource.DataSize{Data: 6, Meta: 144})
+			assert.Equal(t, resource.DataSize{Data: 18, Meta: 24}, doc.DocSize().GC,
+				"the tombstone is still real garbage")
+		})
+
+		t.Run("removing the same key twice test", func(t *testing.T) {
+			doc := newStyled(t)
+			style(t, doc)
+			assert.Equal(t, resource.DataSize{Data: 22, Meta: 168}, doc.DocSize().Live)
+
+			removeStyle(t, doc, "bold")
+			assertAgrees(t, doc, resource.DataSize{Data: 6, Meta: 144})
+			removeStyle(t, doc, "bold")
+			assertAgrees(t, doc, resource.DataSize{Data: 6, Meta: 144})
+		})
+
+		t.Run("toggling a key does not drift test", func(t *testing.T) {
+			doc := newStyled(t)
+			for range 5 {
+				style(t, doc)
+				assertAgrees(t, doc, resource.DataSize{Data: 22, Meta: 168})
+				removeStyle(t, doc, "bold")
+				assertAgrees(t, doc, resource.DataSize{Data: 6, Meta: 144})
+			}
+			assert.Equal(t, resource.DataSize{Data: 16, Meta: 24}, doc.DocSize().GC,
+				"each cycle supersedes the previous tombstone rather than stacking")
+		})
+	})
+
 	t.Run("gc test", func(t *testing.T) {
 		doc := document.New("doc")
 

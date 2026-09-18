@@ -1780,7 +1780,14 @@ func (t *Tree) Edit(
 	pairs = append(pairs, mergePairs...)
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
-	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
+	//
+	// diffSplit is added before the error check, the way Phase 1 adds diffFrom
+	// before returning on the to-resolution error: a multi-level split that
+	// fails partway through has still created the elements it got to, and
+	// docSize.Live has to carry them.
+	diffSplit, err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector)
+	diff.Add(diffSplit)
+	if err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
@@ -2545,6 +2552,11 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 	return current
 }
 
+// split splits element nodes for the given splitLevel and reports the net
+// metadata the new elements added, which the caller accounts to docSize.Live.
+// A piece born tombstoned -- split off a node a concurrent deletion already
+// removed -- contributes nothing here: TreeNode.Split routes its size straight
+// to docSize.GC and hands back a zero diff.
 func (t *Tree) split(
 	fromParent *TreeNode,
 	fromLeft *TreeNode,
@@ -2552,9 +2564,10 @@ func (t *Tree) split(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
-) error {
+) (resource.DataSize, error) {
+	var diff resource.DataSize
 	if splitLevel == 0 {
-		return nil
+		return diff, nil
 	}
 
 	splitCount := 0
@@ -2593,13 +2606,15 @@ func (t *Tree) split(
 		if left != parent {
 			offset, err = parent.Index.FindOffset(left.Index, true)
 			if err != nil {
-				return err
+				return diff, err
 			}
 
 			offset++
 		}
-		if _, err := parent.Split(t, offset, issueTimeTicket, versionVector); err != nil {
-			return err
+		splitDiff, err := parent.Split(t, offset, issueTimeTicket, versionVector)
+		diff.Add(splitDiff)
+		if err != nil {
+			return diff, err
 		}
 
 		left = parent
@@ -2607,7 +2622,7 @@ func (t *Tree) split(
 		splitCount++
 	}
 
-	return nil
+	return diff, nil
 }
 
 // hasUnknownSplitSibling checks whether the given element node has a split
@@ -2751,10 +2766,7 @@ func (t *Tree) Style(
 
 			for key, value := range attrs {
 				if rhtNode := node.SetAttr(key, value, editedAt); rhtNode != nil {
-					pairs = append(pairs, GCPair{
-						Parent: node,
-						Child:  rhtNode,
-					})
+					pairs = append(pairs, attrGCPair(node, rhtNode, false))
 				}
 				if newNode, ok := node.Attrs.nodeMapByKey[key]; ok && token.TokenType != index.End {
 					diff.Add(newNode.DataSize())
@@ -2776,10 +2788,7 @@ func (t *Tree) Style(
 					}
 					for key, value := range attrs {
 						if rhtNode := next.SetAttr(key, value, editedAt); rhtNode != nil {
-							pairs = append(pairs, GCPair{
-								Parent: next,
-								Child:  rhtNode,
-							})
+							pairs = append(pairs, attrGCPair(next, rhtNode, false))
 						}
 						if newNode, ok := next.Attrs.nodeMapByKey[key]; ok {
 							diff.Add(newNode.DataSize())
@@ -2868,12 +2877,13 @@ func (t *Tree) RemoveStyle(
 			}
 
 			for _, attr := range attrs {
-				rhtNodes := node.RemoveAttr(attr, editedAt)
-				for _, rhtNode := range rhtNodes {
-					pairs = append(pairs, GCPair{
-						Parent: node,
-						Child:  rhtNode,
-					})
+				wasLive := node.Attrs != nil && node.Attrs.Has(attr)
+				for _, rhtNode := range node.RemoveAttr(attr, editedAt) {
+					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive))
+					// Only the node that replaces the live value takes a size
+					// out of Live; a second one in the same call is the
+					// tombstone it superseded.
+					wasLive = false
 				}
 			}
 
@@ -2889,12 +2899,10 @@ func (t *Tree) RemoveStyle(
 						break
 					}
 					for _, attr := range attrs {
-						rhtNodes := next.RemoveAttr(attr, editedAt)
-						for _, rhtNode := range rhtNodes {
-							pairs = append(pairs, GCPair{
-								Parent: next,
-								Child:  rhtNode,
-							})
+						wasLive := next.Attrs != nil && next.Attrs.Has(attr)
+						for _, rhtNode := range next.RemoveAttr(attr, editedAt) {
+							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive))
+							wasLive = false
 						}
 					}
 					current = next
@@ -2908,6 +2916,27 @@ func (t *Tree) RemoveStyle(
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
 	return pairs, diff, prevAttrs, nil
+}
+
+// attrGCPair builds the GC pair for an RHT node a style edit turned into
+// garbage. wasLive says whether docSize.Live was holding the value this node
+// replaces: only then does collecting it take a size out of Live.
+//
+// A tombstone minted over a key that was absent, or over one that was already
+// removed, was never in Live. Charging it to Live anyway walked the live size
+// down by the attribute's size on every such edit, without bound — a
+// rich-text editor toggling one key is exactly that loop — and drove it
+// negative, at which point the document size limit stops applying at all.
+// Those go to GC alone, by the same GCOnlySize route a born-tombstoned split
+// piece takes.
+func attrGCPair(parent *TreeNode, child *RHTNode, wasLive bool) GCPair {
+	pair := GCPair{Parent: parent, Child: child}
+	if !wasLive {
+		size := child.DataSize()
+		pair.GCOnlySize = &size
+	}
+
+	return pair
 }
 
 // PosBoundary selects how a position inside a merged-away parent resolves
@@ -2999,7 +3028,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		if err != nil {
 			return nil, nil, diff, err
 		}
-		diff = diff2
+		diff.Add(diff2)
 	}
 
 	// 04. Find the appropriate left node. If some nodes are inserted at the
