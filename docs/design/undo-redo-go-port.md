@@ -469,8 +469,10 @@ during implementation is richer than a bare tuple would allow:
   those spans are trustworthy or the edit must fall back to copy-reinsert),
   `MergeLevel`, `InsertedContentSize`, `Removed`, `PreTombstoned`,
   `PreEditFromIdx` (the reconciliation anchor Lesson 4 above is about — the
-  index `from` occupies right after Phase 3, before any mutation), and
-  `RemovedSize` — nine fields where a plain 2-tuple would have forced the
+  index `from` occupies right after Phase 3, before any mutation),
+  `RemovedSize`, and `SplitSize` (the visible-index growth Phase 7's split
+  opened, which neither size field above reports) — ten fields where a plain
+  2-tuple would have forced the
   copy-reinsert fallback's quite different needs (raw removed nodes, a
   pre-tombstoned ID set, the pre-mutation anchor and size) to be threaded
   through the same two return slots as the restore-mode path's identity

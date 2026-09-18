@@ -56,6 +56,12 @@ L1 reverse: edit(fromIdx, fromIdx + 2, undefined, 0)   // delete 2 boundary toke
 L2 reverse: edit(fromIdx, fromIdx + 4, undefined, 0)   // delete 4 boundary tokens
 ```
 
+The width is the number of tokens the split actually opened
+(`TreeEditReverseInfo.SplitSize`), not `2 * splitLevel`, which is only how
+many it asked for. The split loop stops when it runs out of ancestors to
+split, so on a tree with less depth than the level requested the two differ
+and the reverse would cover tokens the split never opened.
+
 The reverse op is a standard `TreeEditOperation` with `isUndoOp=true`,
 `splitLevel=0`, and integer indices for reconciliation. This means:
 
@@ -63,11 +69,20 @@ The reverse op is a standard `TreeEditOperation` with `isUndoOp=true`,
    `TreeEditOperation` infrastructure.
 2. **Reconciliation unchanged.** The reverse op is `splitLevel=0`, so
    the existing 6-case overlap logic in `reconcileOperation` applies
-   directly.
+   directly — provided the remote edits it is reconciled *against*
+   report the index they moved. A split reports no inserted content and
+   no removed range, so it has to report the boundaries it opened
+   separately (`TreeEditReverseInfo.SplitSize`, summed into
+   `GetContentSize`); without that a remote split looks like a no-op to
+   the 6-case logic and every stacked entry to its right stays put. See
+   yorkie#1999.
 3. **Redo works automatically.** When the boundary deletion (undo)
-   executes, it removes nodes and produces its own reverse via the
-   existing `toReverseOperation` path — a `splitLevel=0` re-insertion
-   of the boundary nodes.
+   executes, it produces its own reverse via the existing
+   `toReverseOperation` path. That reverse is a re-split at the merged
+   position (`splitReverseAt`, selected by `redoSplitLevel`), not a
+   re-insertion of the boundary nodes the deletion tombstoned: those
+   nodes' children now live in the merge target, so restoring them
+   would restore empty shells.
 
 ### Undo/Redo Cycle
 
@@ -120,6 +135,7 @@ concurrent edits are unchanged.
 | L2 back split (`<div><p>ab\|</p></div>`) | Same — 4 boundary tokens removed |
 | Concurrent parent deletion | `fromIdx + boundarySize > tree.getSize()` guard → undo is no-op |
 | Concurrent insert into split result (non-overlapping) | Reconciliation Cases 1–2 shift indices correctly |
+| Concurrent **split** to the left of a stacked reverse | Same Cases 1–2, but only once the remote split reports its boundary growth (`SplitSize`). Reporting zero deleted two tokens of live text instead of the boundary — yorkie#1999 |
 | Concurrent insert into split boundary (overlapping) | Out of scope — Cases 3–6, Phase 2 |
 | Parent delete with already-tombstoned descendants | Pre-tombstoned filtering drops them from `reverseContents`; redo does not resurrect |
 
@@ -128,6 +144,7 @@ concurrent edits are unchanged.
 | Risk | Mitigation |
 |------|------------|
 | Boundary size assumption (`2 * splitLevel`) wrong if concurrent edits insert nodes between split boundaries | L1 concurrent split converges. L2 forward convergence also passes. Reconciliation Cases 1–2 handle non-overlapping shifts. |
+| A remote edit that moves the index without inserting or removing anything is invisible to reconciliation | A split was exactly that edit, and this is what yorkie#1999 was. `SplitSize` is measured off the tree across Phase 7 rather than assumed to be `2 * splitLevel`, so a split with no visible effect reports the zero growth it produced. |
 | L2 boundary deletion removes 4 tokens — more structural change than L1 | Same merge path as L1, applied twice. Verified with L2-specific tests (front/middle/back). |
 | Merge semantics on undo may differ from original pre-split state (`mergedFrom`/`mergedAt` metadata) | Boundary deletion triggers the standard CRDTTree merge path, same as user-initiated merge. |
 | Redo re-inserts deep-copied boundary nodes — node IDs may conflict with GC | Existing `splitLevel=0` redo path already handles this. |

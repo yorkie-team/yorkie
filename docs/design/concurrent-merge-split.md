@@ -316,9 +316,15 @@ make them safe markers.
 After creating a split sibling and linking it into the `InsNextID`
 chain, check whether the existing `InsNext` sibling is in a different
 parent (due to a prior parent-level split by another operation). If
-so, and the new split sibling has no children (empty), detach it from
-the original parent and insert it before `InsNext` in `InsNext`'s
-parent.
+so, and the new split sibling has no children (empty), move it before
+`InsNext` in `InsNext`'s parent with `index.Node.MoveChildBefore`.
+
+That move has to be tombstone-aware for the same reason §6.1's is: the
+split product inherits `removedAt` from the node it was split off, and
+a product born tombstoned contributes no `VisibleLength` to either
+parent. The `DetachChild`/`InsertBefore` pair used here before took two
+tokens off the source it never held and gave the destination two it
+must not have (yorkie#1999).
 
 This fixes divergences where concurrent `splitLevel >= 2` operations
 produce empty replay split siblings that land in different parents

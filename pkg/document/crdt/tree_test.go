@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -1287,4 +1288,76 @@ func TestTreeRemoveStyleReturnsPrevAttr(t *testing.T) {
 
 	pNode := tree.Root().Children()[0]
 	require.False(t, pNode.Attrs.Has("bold"), "the removed key must actually be gone")
+}
+
+func TestIndexTreeMoveChildBefore(t *testing.T) {
+	// Tree.Edit's §7.4 Empty Sibling Re-Parenting moves a split sibling to
+	// the parent its InsNext sibling ended up in, and the split it moves can
+	// be born tombstoned. A tombstone contributes no VisibleLength to either
+	// parent -- remove() already took it out of its ancestors -- so the move
+	// must relocate only the include-removed length. Detaching and
+	// re-inserting instead takes two tokens off the source that it never held
+	// and gives the destination two it must not have, which silently shifts
+	// every index to the right of them.
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+
+	for _, value := range []string{"ab", "cd"} {
+		_, _, err := tree.EditT(tree.Root().Len(), tree.Root().Len(), []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "p", nil, ""),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		require.NoError(t, err)
+		_, _, err = tree.EditT(tree.Root().Len()-1, tree.Root().Len()-1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, value),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		require.NoError(t, err)
+	}
+	require.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
+
+	// Tombstone the second paragraph and take the element node itself out of
+	// what the edit reports, so the move below acts on a real tombstone
+	// rather than one synthesized by the test.
+	from, err := tree.FindPos(4)
+	require.NoError(t, err)
+	to, err := tree.FindPos(8)
+	require.NoError(t, err)
+	_, _, info, err := tree.Edit(from, to, nil, 0, helper.TimeT(ctx), issueTicket(ctx), nil, true)
+	require.NoError(t, err)
+	require.Equal(t, "<r><p>ab</p></r>", tree.ToXML())
+
+	var removedP *crdt.TreeNode
+	for _, node := range info.Removed {
+		if !node.IsText() {
+			removedP = node
+		}
+	}
+	require.NotNil(t, removedP)
+
+	root := tree.Root().Index
+	liveP := root.Children(false)[0]
+	rootVisible, rootTotal := root.Len(), root.PaddedLength(true)
+	liveVisible, liveTotal := liveP.Len(), liveP.PaddedLength(true)
+
+	require.NoError(t, liveP.MoveChildBefore(removedP.Index, liveP.Children(true)[0]))
+
+	assert.Equal(t, rootVisible, root.Len(), "a tombstone carries no visible length")
+	assert.Equal(t, liveVisible, liveP.Len(), "nor into the parent it moves to")
+	assert.Equal(t, rootTotal, root.PaddedLength(true), "the total stays inside the same root")
+	assert.Equal(t, liveTotal+removedP.Index.PaddedLength(true), liveP.PaddedLength(true),
+		"the destination takes over the include-removed length")
+	assert.Equal(t, "<r><p>ab</p></r>", tree.ToXML())
+
+	// A reference that is not a child decides the failure before anything
+	// moves. Detaching first and discovering it afterwards would hand back an
+	// error over a tree that had already lost the child.
+	text := liveP.Children(true)[1]
+	beforeXML := tree.ToXML()
+	err = liveP.MoveChildBefore(text, root)
+	assert.ErrorIs(t, err, index.ErrChildNotFound)
+	assert.Equal(t, beforeXML, tree.ToXML(), "a refused move must not have moved anything")
+	assert.Equal(t, liveP, text.Parent, "nor left the child parentless")
+
+	// Moving a node before itself is where it already is.
+	assert.NoError(t, liveP.MoveChildBefore(text, text))
+	assert.Equal(t, beforeXML, tree.ToXML())
 }
