@@ -90,13 +90,15 @@ report different sizes for identical content.
       The GC ledger was already right — superseding a tombstone correctly
       takes the old one back out of GC — so the repair is only to route these
       through `GCOnlySize`, the same way a born-tombstoned split piece goes.
-- [ ] Mirror in `yorkie-js-sdk`: `crdt/tree.ts`'s split phase is a close port
+- [x] Mirror in `yorkie-js-sdk`: `crdt/tree.ts`'s split phase is a close port
       and drops the same diff (`tree.ts` inlines Phase 7 and discards
       `CRDTTreeNode.split`'s tuple). `MaxSizeLimit` is enforced client-side, in
       `Document.Update`, so until the mirror lands a JS client and a Go client
       enforce different limits on the same document — the JS one under-counting
       by a ticket per split-born element. A correctness follow-up, not a
-      tidiness one.
+      tidiness one. Landed as yorkie-js-sdk#1359 — two of the three cases
+      reproduced there; toggling a key was already correct in that SDK,
+      because the restyle credits live for the node it revives.
 
 ## Non-Goals
 
@@ -133,6 +135,7 @@ In a rebuilt document the tombstoned attribute can never be collected. It is
 the GC ledger rather than the Live one, it is identical on `main`, and the
 repair is an identity question — mint a distinct id for the copied tombstone,
 or key `gcNodePairMap` on (parent, child) — so it is not this task's to make.
+Tracked as yorkie#2002; it reproduces in the JS SDK too.
 
 Also out of scope: the issue's note that `DocSize()` hands back a reference
 rather than a copy. `resource.DocSize` and `resource.DataSize` are plain value
