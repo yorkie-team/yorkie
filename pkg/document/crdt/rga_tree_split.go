@@ -556,6 +556,29 @@ func (s *RGATreeSplit[V]) splitNode(
 	diff.Add(node.DataSize(), splitNode.DataSize())
 	diff.Sub(prevSize)
 
+	// NOTE: Splitting a value deep-copies its attributes, tombstones
+	// included -- it has to, or the two halves of what was one node would
+	// resolve a concurrent style differently and never reconverge. Each
+	// copied tombstone is a distinct piece of garbage that no removal path
+	// produced, so register it; otherwise it sits in the new value's RHT
+	// forever, uncounted and unpurgeable.
+	//
+	// GCOnlySize, even though the copy was charged to docSize.Live: unlike
+	// TreeNode.DataSize, TextValue.DataSize counts removed attributes, so a
+	// text attribute tombstone sits in Live and in GC at once, and the
+	// original this one was copied from is carried that way already. Taking
+	// only the copy out of Live would put the live document out of step with
+	// what NewRoot computes from the same content. Charging both the same way
+	// keeps them equal; that they are charged twice at all is a separate
+	// defect in this path, not one this registration should silently half-fix.
+	if v, ok := any(splitNode.value).(gcPairProvider); ok {
+		for _, pair := range v.GCPairs() {
+			gcSize := pair.Child.DataSize()
+			pair.GCOnlySize = &gcSize
+			s.pendingGCPairs = append(s.pendingGCPairs, pair)
+		}
+	}
+
 	// NOTE: A piece split off an already-tombstoned node inherits
 	// removedAt without going through Remove(), so no GC pair is created
 	// for it in the normal deletion path. Buffer one here so it can be

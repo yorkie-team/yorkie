@@ -49,6 +49,13 @@ type GCChild interface {
 	DataSize() resource.DataSize
 }
 
+// gcPairProvider is an optional capability of a value that owns garbage of
+// its own -- today, an RGATreeSplit value carrying an RHT of attributes whose
+// tombstones a split copies along with the live ones.
+type gcPairProvider interface {
+	GCPairs() []GCPair
+}
+
 // GCBarrier is an optional capability of a GC parent whose surviving order is
 // decided by which nodes are still linked.
 //

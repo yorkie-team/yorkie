@@ -363,6 +363,22 @@ func (n *TreeNode) Split(
 		n.InsNextID = split.id
 		tree.putNode(split)
 
+		// NOTE: SplitElement deep-copies the node's attributes, tombstones
+		// included -- it has to, or the two halves of what was one node would
+		// resolve a concurrent style differently and never reconverge. Each
+		// copied tombstone is a distinct piece of garbage that no removal path
+		// produced, so buffer a registration for it; otherwise it sits in the
+		// split's RHT forever, uncounted and unpurgeable.
+		//
+		// TreeNode.DataSize skips removed attributes, so the split's diff
+		// never charged these to docSize.Live -- GCOnlySize sends each
+		// straight to docSize.GC, and Purge subtracts the same amount back.
+		for _, pair := range split.GCPairs() {
+			gcSize := pair.Child.DataSize()
+			pair.GCOnlySize = &gcSize
+			tree.pendingGCPairs = append(tree.pendingGCPairs, pair)
+		}
+
 		// NOTE: A piece split off an already-tombstoned node inherits
 		// removedAt without going through remove(), so no GC pair is
 		// created for it in the normal deletion path. Buffer one here so

@@ -35,6 +35,33 @@ func (p *ElementPair) Elem() Element {
 	return p.elem
 }
 
+// gcPairKey identifies a registered GC pair by both of its ends.
+//
+// The child's id alone is not unique document-wide. An RHTNode is identified
+// by (updatedAt, key), and a split deep-copies the attributes of the node it
+// splits -- tombstones included, because the copy has to reject the same stale
+// styles the original does. The copy is therefore a distinct piece of garbage
+// wearing the original's id. Keying on the child alone made the two collide,
+// and since RegisterGCPair reads a second registration under a known key as an
+// un-registration, the second tombstone cancelled the first instead of joining
+// it.
+//
+// The parent is the discriminator because it is what Purge is called on: two
+// pairs that share a parent and a child id name the same collectable thing,
+// two that differ in either do not. It is held as the interface value rather
+// than an id string because no GC parent carries an identifier today, and
+// every one of them is a pointer -- comparable, and stable for as long as the
+// registration lives.
+type gcPairKey struct {
+	parent GCParent
+	child  string
+}
+
+// keyOf returns the map key identifying the given pair.
+func keyOf(pair GCPair) gcPairKey {
+	return gcPairKey{parent: pair.Parent, child: pair.Child.IDString()}
+}
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
@@ -45,7 +72,7 @@ type Root struct {
 	object           *Object
 	elementMap       map[string]Element
 	gcElementPairMap map[string]ElementPair
-	gcNodePairMap    map[string]GCPair
+	gcNodePairMap    map[gcPairKey]GCPair
 	docSize          resource.DocSize
 
 	// sizeInGC maps every registered element whose size counts toward
@@ -80,7 +107,7 @@ func NewRoot(root *Object) *Root {
 	r := &Root{
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
-		gcNodePairMap:    make(map[string]GCPair),
+		gcNodePairMap:    make(map[gcPairKey]GCPair),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -532,7 +559,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		r.docSize.GC.Sub(pair.Child.DataSize())
-		delete(r.gcNodePairMap, pair.Child.IDString())
+		delete(r.gcNodePairMap, keyOf(pair))
 		count++
 	}
 
@@ -571,7 +598,8 @@ func (r *Root) GarbageLen() int {
 func (r *Root) RegisterGCPair(pair GCPair) {
 	// NOTE(hackerwins): If the child is already registered, it means that the
 	// child should be removed from the cache.
-	if p, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
+	key := keyOf(pair)
+	if p, ok := r.gcNodePairMap[key]; ok {
 		// Subtract exactly what registration added: GCOnlySize for a
 		// born-dead split piece (only its net-new size was added to GC),
 		// the full child size otherwise.
@@ -581,11 +609,11 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 			r.docSize.GC.Sub(p.Child.DataSize())
 		}
 
-		delete(r.gcNodePairMap, p.Child.IDString())
+		delete(r.gcNodePairMap, key)
 		return
 	}
 
-	r.gcNodePairMap[pair.Child.IDString()] = pair
+	r.gcNodePairMap[key] = pair
 
 	// NOTE: A born-removed split piece was never counted in docSize.Live,
 	// so only its net-new size is added to GC (Live is left untouched by
@@ -602,7 +630,8 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 // UnregisterGCPair removes a GC pair whose child has been restored
 // (un-tombstoned) by an identity-preserving undo, moving its size GC→Live.
 func (r *Root) UnregisterGCPair(pair GCPair) {
-	_, ok := r.gcNodePairMap[pair.Child.IDString()]
+	key := keyOf(pair)
+	_, ok := r.gcNodePairMap[key]
 	if !ok {
 		return
 	}
@@ -623,7 +652,7 @@ func (r *Root) UnregisterGCPair(pair GCPair) {
 		r.docSize.GC.Meta -= time.TicketSize
 	}
 
-	delete(r.gcNodePairMap, pair.Child.IDString())
+	delete(r.gcNodePairMap, key)
 }
 
 // Acc accumulates the given DataSize to Live.
