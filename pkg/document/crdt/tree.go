@@ -1217,6 +1217,14 @@ func (t *Tree) Retombstone(
 			}
 		}
 	}
+
+	// Defensive, mirroring RGATreeSplit.retombstone: nothing buffers here
+	// today, because isolateTextRange only splits text nodes and SplitText
+	// hands the new node nil attributes (a tree text node can never carry
+	// one -- canStyle refuses it). Draining anyway costs nothing and stops
+	// that from being load-bearing.
+	pairs = append(pairs, t.drainPendingGCPairs()...)
+
 	return pairs, diff, nil
 }
 

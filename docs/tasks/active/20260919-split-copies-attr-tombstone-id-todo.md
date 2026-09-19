@@ -82,6 +82,45 @@ Measured on `main` at a23ba9b8. Identical before and after #2000 and #2001.
       removed), and a two-replica exchange for each. Every one fails on
       `main`; the two-replica ones only once they assert the count rather than
       just that the replicas agree, since the leak was symmetric.
+- [x] Charge a GC pair only for what no other pair covers (`gcCharge` /
+      `gcNestedOwner`). A text node's `DataSize` counts its removed
+      attributes and each of those is registered in its own right, so the
+      node's registration booked the same bytes twice. Purging the attribute
+      shrinks the node, so the double charge cancelled or not depending on
+      which pair `collect` reached first -- and Go randomises map iteration
+      order. Measured over 200 documents, residue after a full collection:
+
+      | shape | before | after |
+      |---|---|---|
+      | text, no split, delete the node | 38/40 (pre-existing) | 0/200 |
+      | text, split, delete the split half | 0/40 -> 34/40 (added here) | 0/200 |
+
+      Registering the split copies is what extended it to the second shape,
+      so it is this task's to repair. An earlier attempt recorded the charged
+      amount at registration and gave that back; `TestTextRestoreDocSizeAccounting`
+      rejected it, because a registered child that is later split and partly
+      revived redistributes its bytes and the recorded figure stops matching.
+      Netting the nested size out at both ends does not have that problem:
+      purging an attribute removes it from `DataSize` and from the nested
+      total together, so the value does not move.
+- [x] Drain `pendingGCPairs` in `RGATreeSplit.retombstone`. It isolates LIVE
+      pieces, and splitting a live piece buffered nothing before this change,
+      so returning only its own pairs was correct; now each split copies the
+      value's RHT and buffers a pair per copy. Left buffered they are
+      registered by whichever operation drains next, under that operation's
+      accounting, or never. Measured: `returned pairs=1, still buffered=2`.
+      `Tree.Retombstone` drains too, defensively -- nothing buffers there
+      today only because `SplitText` hands the new node nil attributes.
+- [x] Declare `GCPairs()` on `RGATreeSplitValue` instead of probing for it
+      with a type assertion. Renaming `TextValue.GCPairs` still compiled with
+      the assertion in place; the leak came back silently and only a test
+      caught it.
+- [x] Assert at compile time that every GC parent is comparable
+      (`gcParentsAreComparable`). An interface in a map key panics at runtime
+      if its dynamic type is not, and the panic would land inside `NewRoot`,
+      which the server runs on every snapshot rebuild. `GCParent` is exported
+      and satisfied structurally -- `json.Tree` picks it up from the `*Tree`
+      it embeds -- so the set of implementations is not closed.
 - [x] Mirror in `yorkie-js-sdk`, as yorkie-js-sdk#1363. Both defects reproduce
       there. A third one surfaced only after they were repaired, and only in
       that SDK: `RGATreeSplit.splitValue` replaced the left node's value with

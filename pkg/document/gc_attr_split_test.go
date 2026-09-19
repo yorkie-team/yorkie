@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Yorkie Authors. All rights reserved.
+ * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -136,6 +136,92 @@ func TestTreeAttrSplitGC(t *testing.T) {
 		assert.Equal(t, resource.DataSize{}, doc.DocSize().GC)
 	})
 
+	t.Run("counts every removed attribute a split copies", func(t *testing.T) {
+		doc := document.New("test-doc")
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{{
+				Type: "p", Children: []json.TreeNode{{
+					Type:     "span",
+					Children: []json.TreeNode{{Type: "text", Value: "abcdefghij"}},
+				}},
+			}}})
+			return nil
+		}))
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Style(1, 13,
+				map[string]string{"color": "red", "size": "9", "b": "1"})
+			return nil
+		}))
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(1, 13, []string{"color", "size", "b"})
+			return nil
+		}))
+		assert.Equal(t, 3, doc.GarbageLen())
+
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, nil, 1)
+			return nil
+		}))
+
+		// One pair per key per half. On main all three copies cancelled
+		// their originals and the rebuilt document reported zero.
+		assert.Equal(t, 6, doc.GarbageLen())
+		assertRebuildsSame(t, doc, "after splitting three tombstones")
+
+		assert.Equal(t, 6, doc.GarbageCollect(doc.VersionVector()))
+		assert.Equal(t, resource.DataSize{}, doc.DocSize().GC)
+	})
+
+	t.Run("counts the tombstones copied into a piece born tombstoned", func(t *testing.T) {
+		d1, d2, a1, a2 := newReplicas(t)
+
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{{
+				Type: "p", Children: []json.TreeNode{{
+					Type:     "span",
+					Children: []json.TreeNode{{Type: "text", Value: "abcdefghij"}},
+				}},
+			}}})
+			return nil
+		}))
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Style(1, 13, map[string]string{"color": "red"})
+			return nil
+		}))
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(1, 13, []string{"color"})
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		// d1 splits the <span>; d2 concurrently deletes the whole <p>. When
+		// d1's split arrives at d2 it splits a node already tombstoned, so
+		// the copied attribute tombstone is born inside a born-dead piece --
+		// the branch where the new registration meets GCOnlySize.
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, nil, 1)
+			return nil
+		}))
+		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 14, nil, 0)
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "<doc></doc>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+		// main reported 6 live against 5 rebuilt here.
+		assert.Equal(t, 7, d1.GarbageLen())
+		assert.Equal(t, 7, d2.GarbageLen())
+		assertRebuildsSame(t, d1, "the replica that split")
+		assertRebuildsSame(t, d2, "the replica that deleted")
+
+		assert.Equal(t, 7, d1.GarbageCollect(helper.MaxVersionVector(a1, a2)))
+		assert.Equal(t, 7, d2.GarbageCollect(helper.MaxVersionVector(a1, a2)))
+		assert.Equal(t, resource.DataSize{}, d1.DocSize().GC)
+		assert.Equal(t, resource.DataSize{}, d2.DocSize().GC)
+	})
+
 	t.Run("drains when a later style revives the key on both halves", func(t *testing.T) {
 		doc := styledAndRemoved(t)
 		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -201,31 +287,34 @@ func TestTreeAttrSplitGC(t *testing.T) {
 	})
 }
 
+// textStyledAndRemoved returns a document whose only text node carries one
+// tombstoned attribute. Undoing a Style that introduced a key issues a reverse
+// Style carrying attributesToRemove, which is the only route that tombstones a
+// text attribute today.
+func textStyledAndRemoved(t *testing.T) *document.Document {
+	t.Helper()
+
+	doc := document.New("test-doc")
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("k").Edit(0, 0, "abcdefghij")
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Style(0, 10, map[string]string{"b": "1"})
+		return nil
+	}))
+	require.NoError(t, doc.Undo())
+
+	return doc
+}
+
 // TestTextAttrSplitGC covers the same defect in the Text CRDT, which the
 // tracking issue did not name: TextValue.Split deep-copies the value's
 // attributes the same way, and the copies collided the same way.
 func TestTextAttrSplitGC(t *testing.T) {
-	styledAndRemoved := func(t *testing.T) *document.Document {
-		t.Helper()
-
-		doc := document.New("test-doc")
-		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewText("k").Edit(0, 0, "abcdefghij")
-			return nil
-		}))
-		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetText("k").Style(0, 10, map[string]string{"b": "1"})
-			return nil
-		}))
-		// Undoing a Style that introduced a key issues a reverse Style
-		// carrying attributesToRemove, which is the only route that
-		// tombstones a text attribute today.
-		require.NoError(t, doc.Undo())
-		return doc
-	}
 
 	t.Run("counts and collects the tombstone a split copied", func(t *testing.T) {
-		doc := styledAndRemoved(t)
+		doc := textStyledAndRemoved(t)
 		assert.Equal(t, 1, doc.GarbageLen())
 		assertRebuildsSame(t, doc, "before the split")
 
@@ -240,6 +329,48 @@ func TestTextAttrSplitGC(t *testing.T) {
 		assert.Equal(t, 2, doc.GarbageCollect(doc.VersionVector()))
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(t, resource.DataSize{}, doc.DocSize().GC)
+
+		// The tree case asserts assertRebuildsSame here. This one cannot,
+		// and the difference is yorkie#2007 rather than anything this change
+		// does: TextValue.DataSize counts removed attributes, so Live is
+		// holding each tombstone's bytes, and collect only ever gives back
+		// to GC -- so purging one strands its size in Live forever. Pinned
+		// rather than skipped, so the day #2007 lands this says so.
+		rebuilt, err := doc.InternalDocument().DeepCopy()
+		require.NoError(t, err)
+		stranded := doc.DocSize().Live
+		stranded.Sub(rebuilt.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 8, Meta: 48}, stranded,
+			"two purged text attribute tombstones, each stranding its own "+
+				"size in Live (yorkie#2007)")
+		assert.Equal(t, doc.DocSize().GC, rebuilt.DocSize().GC, "gc still agrees")
+		assert.Equal(t, doc.GarbageLen(), rebuilt.GarbageLen(), "count still agrees")
+	})
+
+	t.Run("drains gc whichever order collection reaches the pairs in", func(t *testing.T) {
+		// A text node's DataSize counts its removed attributes, so charging
+		// the node for them as well as charging each on its own booked the
+		// same bytes twice. Purging the attribute shrinks the node, so the
+		// double charge cancelled only when collection happened to reach the
+		// node first -- and Go randomises map iteration order. Repeat enough
+		// that a re-regression cannot pass by luck.
+		for i := 0; i < 50; i++ {
+			doc := textStyledAndRemoved(t)
+			require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetText("k").Edit(5, 5, "X")
+				return nil
+			}))
+			// Delete the half holding the copied tombstone, so both its pair
+			// and its owner's pair are in the map at the same time.
+			require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetText("k").Edit(6, 11, "")
+				return nil
+			}))
+
+			doc.GarbageCollect(doc.VersionVector())
+			require.Equal(t, 0, doc.GarbageLen(), "run %d", i)
+			require.Equal(t, resource.DataSize{}, doc.DocSize().GC, "run %d", i)
+		}
 	})
 
 	t.Run("purges the same tombstones on both replicas when the split is remote", func(t *testing.T) {
