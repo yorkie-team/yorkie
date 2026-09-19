@@ -109,12 +109,19 @@ uses `GCOnlySize` despite the copy having been charged to `Live`: the original
 it was copied from is carried in `Live` too, so charging both the same way is
 what keeps the live and rebuilt documents equal. Taking only the copy out
 would half-fix the ledger and break the invariant this task is here to
-restore. Filed separately.
+restore. Tracked as yorkie#2007.
 
 **Text nodes inside a tree.** `SplitText` hands the right-hand node `nil`
 attributes rather than a copy. That is correct, not a third instance of this
 bug: `TreeNode.canStyle` returns false for text nodes, so a tree text node can
 never carry an attribute.
+
+**The snapshot converter.** `toTextNodes` does not carry `IsRemoved` for text
+node attributes, so a tombstoned text attribute does not survive a snapshot at
+all -- it comes back as a live one, and the document's *content* differs
+between a client that replayed the changes and one that loaded a snapshot.
+Present in both SDKs. Tracked as yorkie#2006. It is why the text tests here
+rebuild with `InternalDocument.DeepCopy` rather than through the converter.
 
 ## See Also
 
