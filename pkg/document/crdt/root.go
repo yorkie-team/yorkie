@@ -35,6 +35,58 @@ func (p *ElementPair) Elem() Element {
 	return p.elem
 }
 
+// gcPairKey identifies a registered GC pair by both of its ends.
+//
+// The child's id alone is not unique document-wide. An RHTNode is identified
+// by (updatedAt, key), and a split deep-copies the attributes of the node it
+// splits -- tombstones included, because the copy has to reject the same stale
+// styles the original does. The copy is therefore a distinct piece of garbage
+// wearing the original's id. Keying on the child alone made the two collide,
+// and since RegisterGCPair reads a second registration under a known key as an
+// un-registration, the second tombstone cancelled the first instead of joining
+// it.
+//
+// The parent is the discriminator because it is what Purge is called on: two
+// pairs that share a parent and a child id name the same collectable thing,
+// two that differ in either do not. It is held as the interface value rather
+// than an id string because no GC parent carries an identifier today, and
+// giving three of the five one (RGATreeList, RGATreeSplit and TextValue know
+// nothing of their element's createdAt) costs more than the key is worth.
+//
+// An interface in a map key panics if its dynamic type is not comparable.
+// gcParentsAreComparable checks the implementations this repo has; it cannot
+// check every possible one, because GCParent is exported and satisfied
+// structurally. Sealing it with an unexported method does not close that hole
+// either -- a struct embedding one of these inherits the seal, so
+// `struct{ *Tree; notes []string }` still satisfies the interface and still
+// panics as a key. Nothing outside this module implements GCParent today, and
+// every Parent this repo constructs is one of the five below.
+type gcPairKey struct {
+	parent GCParent
+	child  string
+}
+
+// keyOf returns the map key identifying the given pair.
+func keyOf(pair GCPair) gcPairKey {
+	return gcPairKey{parent: pair.Parent, child: pair.Child.IDString()}
+}
+
+// comparableGCParent fails to compile if T is not usable in gcPairKey.
+func comparableGCParent[T comparable](T) {}
+
+// gcParentsAreComparable is never called. It exists so that making one of the
+// GC parents non-comparable -- a struct with a slice, map or func field,
+// passed by value -- is a build failure here rather than a runtime panic
+// inside NewRoot, which the server runs on every snapshot rebuild. Add a line
+// when you add a parent.
+func gcParentsAreComparable() {
+	comparableGCParent[*Tree](nil)
+	comparableGCParent[*TreeNode](nil)
+	comparableGCParent[*TextValue](nil)
+	comparableGCParent[*RGATreeList](nil)
+	comparableGCParent[*RGATreeSplit[*TextValue]](nil)
+}
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
@@ -45,7 +97,7 @@ type Root struct {
 	object           *Object
 	elementMap       map[string]Element
 	gcElementPairMap map[string]ElementPair
-	gcNodePairMap    map[string]GCPair
+	gcNodePairMap    map[gcPairKey]GCPair
 	docSize          resource.DocSize
 
 	// sizeInGC maps every registered element whose size counts toward
@@ -80,7 +132,7 @@ func NewRoot(root *Object) *Root {
 	r := &Root{
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
-		gcNodePairMap:    make(map[string]GCPair),
+		gcNodePairMap:    make(map[gcPairKey]GCPair),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -515,7 +567,13 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		count += r.deregisterElement(pair.elem)
 	}
 
-	for _, pair := range r.gcNodePairMap {
+	// Delete by the range key, not by one recomputed after Purge: keyOf reads
+	// the child's IDString, and an entry keyed on a value the purge had
+	// changed would survive the delete, keep GarbageLen from ever reaching
+	// zero, and have its size subtracted again on the next pass. No IDString
+	// is purge-dependent today; using the key already in hand means none has
+	// to stay that way.
+	for key, pair := range r.gcNodePairMap {
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			continue
 		}
@@ -532,7 +590,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		r.docSize.GC.Sub(pair.Child.DataSize())
-		delete(r.gcNodePairMap, pair.Child.IDString())
+		delete(r.gcNodePairMap, key)
 		count++
 	}
 
@@ -571,7 +629,8 @@ func (r *Root) GarbageLen() int {
 func (r *Root) RegisterGCPair(pair GCPair) {
 	// NOTE(hackerwins): If the child is already registered, it means that the
 	// child should be removed from the cache.
-	if p, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
+	key := keyOf(pair)
+	if p, ok := r.gcNodePairMap[key]; ok {
 		// Subtract exactly what registration added: GCOnlySize for a
 		// born-dead split piece (only its net-new size was added to GC),
 		// the full child size otherwise.
@@ -581,11 +640,11 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 			r.docSize.GC.Sub(p.Child.DataSize())
 		}
 
-		delete(r.gcNodePairMap, p.Child.IDString())
+		delete(r.gcNodePairMap, key)
 		return
 	}
 
-	r.gcNodePairMap[pair.Child.IDString()] = pair
+	r.gcNodePairMap[key] = pair
 
 	// NOTE: A born-removed split piece was never counted in docSize.Live,
 	// so only its net-new size is added to GC (Live is left untouched by
@@ -602,7 +661,8 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 // UnregisterGCPair removes a GC pair whose child has been restored
 // (un-tombstoned) by an identity-preserving undo, moving its size GC→Live.
 func (r *Root) UnregisterGCPair(pair GCPair) {
-	_, ok := r.gcNodePairMap[pair.Child.IDString()]
+	key := keyOf(pair)
+	_, ok := r.gcNodePairMap[key]
 	if !ok {
 		return
 	}
@@ -623,7 +683,7 @@ func (r *Root) UnregisterGCPair(pair GCPair) {
 		r.docSize.GC.Meta -= time.TicketSize
 	}
 
-	delete(r.gcNodePairMap, pair.Child.IDString())
+	delete(r.gcNodePairMap, key)
 }
 
 // Acc accumulates the given DataSize to Live.
