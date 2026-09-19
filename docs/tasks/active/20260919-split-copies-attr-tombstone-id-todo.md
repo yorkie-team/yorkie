@@ -82,7 +82,12 @@ Measured on `main` at a23ba9b8. Identical before and after #2000 and #2001.
       removed), and a two-replica exchange for each. Every one fails on
       `main`; the two-replica ones only once they assert the count rather than
       just that the replicas agree, since the leak was symmetric.
-- [ ] Mirror in `yorkie-js-sdk`.
+- [x] Mirror in `yorkie-js-sdk`, as yorkie-js-sdk#1363. Both defects reproduce
+      there. A third one surfaced only after they were repaired, and only in
+      that SDK: `RGATreeSplit.splitValue` replaced the left node's value with
+      a new object instead of shortening it, so a pair registered before the
+      split purged an orphan and left the real tombstone in the list. Go
+      splits in place and does not have it.
 
 ## Non-Goals
 
