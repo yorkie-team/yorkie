@@ -567,7 +567,13 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		count += r.deregisterElement(pair.elem)
 	}
 
-	for _, pair := range r.gcNodePairMap {
+	// Delete by the range key, not by one recomputed after Purge: keyOf reads
+	// the child's IDString, and an entry keyed on a value the purge had
+	// changed would survive the delete, keep GarbageLen from ever reaching
+	// zero, and have its size subtracted again on the next pass. No IDString
+	// is purge-dependent today; using the key already in hand means none has
+	// to stay that way.
+	for key, pair := range r.gcNodePairMap {
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			continue
 		}
@@ -584,7 +590,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		r.docSize.GC.Sub(pair.Child.DataSize())
-		delete(r.gcNodePairMap, keyOf(pair))
+		delete(r.gcNodePairMap, key)
 		count++
 	}
 
