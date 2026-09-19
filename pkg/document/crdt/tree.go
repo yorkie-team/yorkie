@@ -3112,6 +3112,15 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 		var childNode *TreeNode
 		for parentNode.IsRemoved() {
 			childNode = parentNode
+			// If the subtree has been detached by garbage collection, the walk
+			// can run off the top of it. Report it instead of dereferencing nil.
+			if childNode.Index.Parent == nil {
+				return nil, fmt.Errorf(
+					"least alive ancestor of %s: %w",
+					childNode.ID().toIDString(),
+					ErrNodeNotFound,
+				)
+			}
 			parentNode = childNode.Index.Parent.Value
 		}
 
