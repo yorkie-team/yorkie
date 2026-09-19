@@ -396,7 +396,11 @@ func fromTextNode(
 		if err != nil {
 			return nil, err
 		}
-		attrs.Set(key, pbAttr.Value, updatedAt)
+		// NOTE(hackerwins): SetInternal is used instead of Set to restore the
+		// `isRemoved` flag as-is. Unlike Set, it never loses to an existing
+		// occupant and keeps the removed element count in sync. This is safe
+		// here because the RHT is freshly built and the keys are unique.
+		attrs.SetInternal(key, pbAttr.Value, updatedAt, pbAttr.IsRemoved)
 	}
 
 	textNode := crdt.NewRGATreeSplitNode(
