@@ -385,15 +385,16 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
 
 		op := NewTreeEdit(issue(), nil, nil, nil, 1, issue())
-		reverse, err := op.toSplitReverseOperation(tree, info.PreEditFromIdx)
+		reverse, err := op.toSplitReverseOperation(tree, info.PreEditFromIdx, info.SplitSize)
 		assert.NoError(t, err)
+		assert.Equal(t, 2, info.SplitSize, "one close tag plus one open tag")
 
 		edit := reverse.(*TreeEdit)
 		assert.Equal(t, 0, edit.SplitLevel(), "the boundary deletion is a plain edit")
 		assert.Empty(t, edit.Contents(), "it deletes; it re-inserts nothing")
 		assert.True(t, edit.isUndoOp)
 		assert.Equal(t, 2, *edit.fromIdx)
-		assert.Equal(t, 4, *edit.toIdx, "2*splitLevel boundary tokens")
+		assert.Equal(t, 4, *edit.toIdx, "the boundary tokens the split opened")
 		assert.Equal(t, 1, edit.redoSplitLevel,
 			"the redo of this deletion has to re-split, not revive the boundary nodes")
 		assert.Equal(t, 2, indexOfPos(t, tree, edit.FromPos()))
@@ -409,10 +410,23 @@ func TestTreeEditCopyReinsertFallback(t *testing.T) {
 		info := splitAt(t, tree, 2, 1, issue)
 
 		op := NewTreeEdit(issue(), nil, nil, nil, 1, issue())
-		reverse, err := op.toSplitReverseOperation(tree, tree.Root().Len()-1)
+		reverse, err := op.toSplitReverseOperation(tree, tree.Root().Len()-1, 2)
 		assert.NoError(t, err)
 		assert.Nil(t, reverse, "a reverse is skipped, never an error")
 		assert.Equal(t, 2, info.PreEditFromIdx)
+	})
+
+	t.Run("skips a split that opened no boundary test", func(t *testing.T) {
+		// A split the tree had no room for, or whose product was born
+		// tombstoned, opens nothing. There is no boundary to merge back, and
+		// sizing the range as 2*splitLevel anyway would delete live content.
+		issue := ticketer()
+		tree := buildTree(t, issue)
+
+		op := NewTreeEdit(issue(), nil, nil, nil, 3, issue())
+		reverse, err := op.toSplitReverseOperation(tree, 2, 0)
+		assert.NoError(t, err)
+		assert.Nil(t, reverse, "nothing was opened, so nothing is undone")
 	})
 }
 

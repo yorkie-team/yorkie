@@ -118,6 +118,18 @@ type TreeEdit struct {
 	// an op that took the identity-preserving path, which never sets it --
 	// the same value JS's own contents-less fallback there returns.
 	insertedContentSize int
+
+	// splitSize is the visible-index size the boundaries THIS execution's
+	// forward Tree.Edit call opened (info.SplitSize): two tokens per element
+	// it split, zero for a split with no visible effect. A split creates
+	// boundaries rather than inserting nodes, so insertedContentSize above
+	// never sees them; reconciliation needs both, and reads their sum through
+	// GetContentSize. Zero for a non-splitting edit and for one that took the
+	// identity-preserving path, which never sets it.
+	//
+	// The JS SDK has no counterpart: TreeEditOperation reports only
+	// insertedContentSize, which is why yorkie#1999 reproduces there too.
+	splitSize int
 }
 
 // NewTreeEdit creates a new instance of TreeEdit.
@@ -361,6 +373,7 @@ func (e *TreeEdit) Execute(
 		// reassigned on every execution that reaches here, reported via
 		// GetContentSize for the applyChanges reconciliation loop.
 		e.insertedContentSize = info.InsertedContentSize
+		e.splitSize = info.SplitSize
 
 		// The pre-edit visible-index range this execution affected, read
 		// straight off info rather than recomputed here: Tree.Edit captures
@@ -395,9 +408,9 @@ func (e *TreeEdit) Execute(
 		// Only the reverse is skipped for a remote change -- every caller
 		// that runs this remotely discards it, and building it deep-copies
 		// the removed subtrees for nothing. On a client's remote path
-		// lastFromIdx, lastToIdx and insertedContentSize above must still be
-		// set: the applyChanges reconciliation loop reads them off remote
-		// operations to adjust stacked undo/redo entries.
+		// lastFromIdx, lastToIdx, insertedContentSize and splitSize above
+		// must still be set: the applyChanges reconciliation loop reads them
+		// off remote operations to adjust stacked undo/redo entries.
 		if !source.NeedsReverse() {
 			return ExecutionResult{Observable: true}, nil
 		}
@@ -457,7 +470,7 @@ func (e *TreeEdit) selectReverseOperation(
 		return nil, nil
 	}
 
-	return e.toSplitReverseOperation(tree, info.PreEditFromIdx)
+	return e.toSplitReverseOperation(tree, info.PreEditFromIdx, info.SplitSize)
 }
 
 // toReverseOperation builds the operation that undoes this edit. It has four
@@ -667,11 +680,17 @@ func (e *TreeEdit) toReverseOperation(
 // boundary deletion. Ported from tree_edit_operation.ts:680-712.
 //
 // A split creates element boundaries without removing anything: one close tag
-// plus one open tag per level, so 2*splitLevel tree-index tokens. Deleting
-// exactly those tokens merges the split elements back together, which is why
-// the reverse is an ordinary splitLevel 0 edit rather than a new operation
-// kind — every existing reconciliation and redo path applies to it unchanged.
-// See docs/design/tree-split-undo-redo.md.
+// plus one open tag per level. Deleting exactly those tokens merges the split
+// elements back together, which is why the reverse is an ordinary splitLevel 0
+// edit rather than a new operation kind — every existing reconciliation and
+// redo path applies to it unchanged. See docs/design/tree-split-undo-redo.md.
+//
+// splitSize is how many tokens the split actually opened (info.SplitSize),
+// not 2*splitLevel, which is only how many it asked for: the split loop stops
+// when it runs out of ancestors to split, and a level the tree has no room
+// for would size this range over tokens the split never opened. The undo then
+// deletes live content past its own boundary and merges elements the split
+// never separated.
 //
 // preFromIdx is info.PreEditFromIdx, captured inside Tree.Edit after Phase 3
 // and so naming the position in the PRE-split tree that the split ran at.
@@ -680,14 +699,24 @@ func (e *TreeEdit) toReverseOperation(
 // left), which is what lets one index serve both as the anchor read off the
 // post-edit tree here and as the reconciliation anchor stored on the reverse.
 // JS captures and uses it at exactly this point too.
-func (e *TreeEdit) toSplitReverseOperation(tree *crdt.Tree, preFromIdx int) (Operation, error) {
-	fromIdx := preFromIdx
-	toIdx := preFromIdx + 2*e.splitLevel
-
+func (e *TreeEdit) toSplitReverseOperation(
+	tree *crdt.Tree,
+	preFromIdx int,
+	splitSize int,
+) (Operation, error) {
 	// The split had no visible effect — e.g. a concurrent deletion tombstoned
 	// the element it split, so the boundary it created occupies no visible
-	// index. Deleting the range anyway would take out live content to the
-	// right of it.
+	// index, or there was no ancestor left to split at all. There is nothing
+	// for an undo to merge back.
+	if splitSize == 0 {
+		return nil, nil
+	}
+
+	fromIdx := preFromIdx
+	toIdx := preFromIdx + splitSize
+
+	// Belt and braces against a range that runs off the end of the tree:
+	// deleting it would take out live content to the right of the boundary.
 	if toIdx > tree.Root().Len() {
 		return nil, nil
 	}
@@ -939,9 +968,12 @@ func (e *TreeEdit) RetombstoneSpans() []*crdt.TreeRestoreSpan {
 // lastToIdx) is returned. Neither is available for an operation that has
 // never executed, or whose reverse took the identity-preserving path (which
 // returns before either is captured) -- (0, 0) is returned then, matching
-// the JS SDK's own fallback. That degenerate case is harmless: GetContentSize
-// degrades to 0 in lockstep (see there), so every ReconcileOperation case
-// below computes a net-zero shift from it.
+// the JS SDK's own fallback. That degenerate case is harmless: on both of
+// those paths GetContentSize degrades to 0 in lockstep (see there), so every
+// ReconcileOperation case below computes a net-zero shift from it. A replay
+// is the one execution that sets the sizes without capturing a range, and it
+// is reached only through InternalDocument, which never runs the
+// reconciliation loop.
 func (e *TreeEdit) NormalizePos() (int, int) {
 	if e.isUndoOp && e.fromIdx != nil && e.toIdx != nil {
 		return *e.fromIdx, *e.toIdx
@@ -952,10 +984,20 @@ func (e *TreeEdit) NormalizePos() (int, int) {
 	return 0, 0
 }
 
-// GetContentSize returns the visible-index size of the content this
-// operation's own most recent forward execution accepted, mirroring
-// TreeEditOperation.getContentSize in the JS SDK (tree_edit_operation.ts:
-// 826-836). JS falls back to summing this.contents' padded sizes when
+// GetContentSize returns the visible-index size this operation's own most
+// recent forward execution ADDED to the tree: the content it accepted plus
+// the boundaries its split opened. Reconciliation is the only reader, and
+// what it needs is how far the indices to the right of this edit moved, which
+// a split moves as surely as an insertion does -- it just does so by
+// splitting an element instead of adding a node, which is why the two are
+// counted separately and summed here. Reporting only the content left every
+// stacked undo/redo entry to the right of a remote split unshifted, so
+// undoing one of two concurrent splits deleted the wrong two tokens
+// (yorkie#1999).
+//
+// Mirrors TreeEditOperation.getContentSize in the JS SDK
+// (tree_edit_operation.ts:826-836), except for the split term, which the JS
+// SDK does not have. JS falls back to summing this.contents' padded sizes when
 // insertedContentSize was never captured; that fallback is not ported here
 // because it is unreachable through Go's own call site (applyChanges calls
 // this only on an operation from Execute's executed list, which has always
@@ -966,7 +1008,7 @@ func (e *TreeEdit) NormalizePos() (int, int) {
 // never actually compute from -- e.Contents() is *crdt.TreeNode, not the
 // padded-length-bearing type JS's fallback reduces over.
 func (e *TreeEdit) GetContentSize() int {
-	return e.insertedContentSize
+	return e.insertedContentSize + e.splitSize
 }
 
 // ReconcileOperation adjusts this TreeEdit's fromIdx/toIdx in place so a

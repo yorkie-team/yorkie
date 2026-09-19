@@ -662,39 +662,93 @@ func (n *Node[V]) MoveChild(child *Node[V]) error {
 		return ErrInvalidMethodCallForTextNode
 	}
 
-	removed := child.Value.IsRemoved()
-
-	if child.Parent != nil {
-		offset := -1
-		for i, c := range child.Parent.children {
-			if c == child {
-				offset = i
-				break
-			}
-		}
-		if offset == -1 {
-			return ErrChildNotFound
-		}
-
-		child.Parent.children = append(
-			child.Parent.children[:offset],
-			child.Parent.children[offset+1:]...,
-		)
-		if !removed {
-			child.UpdateAncestorsLength(-(child.PaddedLength()))
-		}
-		child.UpdateAncestorsLength(-(child.PaddedLength(true)), true)
-		child.Parent = nil
+	removed, err := detachForMove(child)
+	if err != nil {
+		return err
 	}
 
 	n.children = append(n.children, child)
 	child.Parent = n
+	attachAfterMove(child, removed)
+
+	return nil
+}
+
+// MoveChildBefore detaches the given child from its current parent (if any)
+// and inserts it before reference among this node's children, preserving both
+// length dimensions on both parents. It is MoveChild with a position: see
+// there for why a removed child relocates only its include-removed length.
+//
+// Both failures are decided before anything moves, so an error leaves the
+// tree exactly as it was rather than holding a child that belongs to no
+// parent. The reference's offset is still read after the detach, since
+// removing the child can shift it when the two share a parent.
+func (n *Node[V]) MoveChildBefore(child, reference *Node[V]) error {
+	if n.IsText() {
+		return ErrInvalidMethodCallForTextNode
+	}
+	// Already where it is being asked to go, and the detach below would make
+	// the reference impossible to find again.
+	if child == reference {
+		return nil
+	}
+	if n.OffsetOfChild(reference) == -1 {
+		return ErrChildNotFound
+	}
+
+	removed, err := detachForMove(child)
+	if err != nil {
+		return err
+	}
+
+	if err := n.insertAtInternal(child, n.OffsetOfChild(reference)); err != nil {
+		return err
+	}
+	attachAfterMove(child, removed)
+
+	return nil
+}
+
+// detachForMove takes the child off its current parent, if it has one,
+// subtracting its lengths from that parent's ancestors, and reports whether
+// the child is a tombstone — which the re-attachment needs to know too.
+//
+// A tombstone moves only its include-removed length: it contributes no
+// VisibleLength to either parent, because remove() already took it out of its
+// ancestors. Splitting the move into this pair and attachAfterMove keeps that
+// rule in one place; stating it once per call site is how the two dimensions
+// drift apart.
+func detachForMove[V Value](child *Node[V]) (bool, error) {
+	removed := child.Value.IsRemoved()
+	if child.Parent == nil {
+		return removed, nil
+	}
+
+	offset := child.Parent.OffsetOfChild(child)
+	if offset == -1 {
+		return removed, ErrChildNotFound
+	}
+
+	child.Parent.children = append(
+		child.Parent.children[:offset],
+		child.Parent.children[offset+1:]...,
+	)
+	if !removed {
+		child.UpdateAncestorsLength(-(child.PaddedLength()))
+	}
+	child.UpdateAncestorsLength(-(child.PaddedLength(true)), true)
+	child.Parent = nil
+
+	return removed, nil
+}
+
+// attachAfterMove adds the child's lengths to its new parent's ancestors, the
+// mirror of detachForMove. removed is what that call reported.
+func attachAfterMove[V Value](child *Node[V], removed bool) {
 	if !removed {
 		child.UpdateAncestorsLength(child.PaddedLength())
 	}
 	child.UpdateAncestorsLength(child.PaddedLength(true), true)
-
-	return nil
 }
 
 // InsertBefore inserts the given node before the given child.

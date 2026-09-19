@@ -437,6 +437,36 @@ func TestTreeSplitUndo(t *testing.T) {
 			"a split that also inserts is not undoable")
 	})
 
+	t.Run("a split deeper than the tree undoes only what it split test", func(t *testing.T) {
+		// The split loop stops when it runs out of ancestors to split, so a
+		// splitLevel the tree has no room for opens fewer boundaries than it
+		// asked for. Sizing the reverse as 2*splitLevel then covers tokens the
+		// split never opened, and the undo deletes live content beyond its own
+		// boundary: `cd` disappeared and the wrong pair of paragraphs merged.
+		doc := document.New("doc")
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: textNodeType, Value: "abcd"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: textNodeType, Value: "0123456789"}}},
+			}})
+			return nil
+		}))
+
+		// Only one level below <r> is splittable, so level 3 splits once.
+		splitTree(t, doc, 3, 3)
+		assert.Equal(t, "<r><p>ab</p><p>cd</p><p>0123456789</p></r>", treeXML(t, doc))
+
+		assert.NoError(t, doc.Undo())
+		assert.Equal(t, "<r><p>abcd</p><p>0123456789</p></r>", treeXML(t, doc),
+			"the undo must merge only the boundary the split opened")
+		assertNoDuplicateTreeIDs(t, doc, "after undoing an over-deep split")
+
+		assert.True(t, doc.CanRedo())
+		assert.NoError(t, doc.Redo())
+		assert.Equal(t, "<r><p>ab</p><p>cd</p><p>0123456789</p></r>", treeXML(t, doc))
+		assertNoDuplicateTreeIDs(t, doc, "after redoing an over-deep split")
+	})
+
 	t.Run("merge undo redo undo cycle test", func(t *testing.T) {
 		// A merge is a split run backwards: it deletes the boundary tokens
 		// between two elements and moves the second's children into the first.
@@ -479,4 +509,278 @@ func TestTreeSplitUndo(t *testing.T) {
 			"gc must not touch the element the split undo minted")
 		assertNoDuplicateTreeIDs(t, doc, "after a merge undo and gc")
 	})
+}
+
+// TestTreeSplitUndoConcurrent covers a stacked split reverse against a remote
+// split of the same node. The reverse is a boundary deletion addressed by
+// integer indices, and applyChanges reconciles those indices against every
+// remote edit that lands while it waits on the stack. A split grows the
+// visible index by two tokens per level without inserting any content and
+// without removing anything, so it used to report itself to reconciliation as
+// a zero-width, zero-growth edit: a stacked reverse to the RIGHT of it never
+// shifted, and undoing it deleted two tokens of live text instead of the
+// boundary it had opened (yorkie#1999).
+func TestTreeSplitUndoConcurrent(t *testing.T) {
+	// newSpanDoc's shape. Numbered the way newSplitDoc above numbers its
+	// own: each index is the one immediately AFTER the token above it, so 3
+	// is the point between `a` and `b` and 6 the point before `e`.
+	//
+	//	<span>  a  b  c  d  e  </span>  </p>
+	//	  2     3  4  5  6  7    8       9
+	newSpanDoc := func(t *testing.T) (*document.Document, *document.Document) {
+		t.Helper()
+
+		d1, d2, _, _ := newReplicas(t)
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewTree("t", json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "span",
+						Children: []json.TreeNode{{Type: textNodeType, Value: "abcde"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		return d1, d2
+	}
+
+	const settled = "<doc><p><span>a</span><span>bcd</span><span>e</span></p></doc>"
+
+	t.Run("undoing the later of two concurrent splits test", func(t *testing.T) {
+		// d1's split lands to the LEFT of the boundary d2's stacked reverse
+		// addresses, so that reverse has to shift by the two tokens d1 opened.
+		// Unshifted it deleted `c` and `d`, and both replicas converged on the
+		// loss -- nothing surfaced it to either application.
+		d1, d2 := newSpanDoc(t)
+		splitTree(t, d1, 3, 1)
+		splitTree(t, d2, 6, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, settled, treeXML(t, d1))
+		assert.Equal(t, settled, treeXML(t, d2))
+
+		assert.True(t, d2.CanUndo())
+		assert.NoError(t, d2.Undo())
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "<doc><p><span>a</span><span>bcde</span></p></doc>", treeXML(t, d2),
+			"the undo must merge only the boundary d2 opened")
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1), "the replicas must agree")
+		assert.Equal(t, liveTreeNodeIDs(t, d1), liveTreeNodeIDs(t, d2),
+			"and must agree on which nodes are live, not only on the rendering")
+		assertNoDuplicateTreeIDs(t, d1, "on d1 after the undo")
+		assertNoDuplicateTreeIDs(t, d2, "on d2 after the undo")
+
+		// The boundary the undo merged away is a tombstone on both replicas,
+		// and the text it rejoined must survive its collection.
+		collectGarbage(t, d1)
+		collectGarbage(t, d2)
+		assert.Equal(t, "<doc><p><span>a</span><span>bcde</span></p></doc>", treeXML(t, d2))
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1))
+		assertNoDuplicateTreeIDs(t, d2, "on d2 after gc")
+	})
+
+	t.Run("undoing the later of two concurrent splits over the wire test", func(t *testing.T) {
+		// crossSync hands operation pointers between the two documents, and
+		// an undo re-derives its range from integer indices on every
+		// execution -- indices that do not cross the wire. So the reported
+		// case is driven once more through a real protobuf round trip, the
+		// way split undo applies on a replica across the wire test does, to
+		// pin that the reconciliation happens on the receiving replica's own
+		// tree rather than on a shared operation object.
+		d1, d2 := newSpanDoc(t)
+		splitTree(t, d1, 3, 1)
+		splitTree(t, d2, 6, 1)
+		wireSync(t, d1, d2)
+		assert.Equal(t, settled, treeXML(t, d1))
+		assert.Equal(t, settled, treeXML(t, d2))
+
+		assert.NoError(t, d2.Undo())
+		wireSync(t, d1, d2)
+
+		assert.Equal(t, "<doc><p><span>a</span><span>bcde</span></p></doc>", treeXML(t, d2))
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1), "the replicas must agree")
+		assertNoDuplicateTreeIDs(t, d1, "on d1 after the undo")
+	})
+
+	t.Run("undoing the earlier of two concurrent splits test", func(t *testing.T) {
+		// The mirror case: d2's split is to the RIGHT of d1's stacked reverse,
+		// which needs no shift. It passed before the fix, and pins that the
+		// fix does not over-shift.
+		d1, d2 := newSpanDoc(t)
+		splitTree(t, d1, 3, 1)
+		splitTree(t, d2, 6, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, settled, treeXML(t, d1))
+
+		assert.True(t, d1.CanUndo())
+		assert.NoError(t, d1.Undo())
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "<doc><p><span>abcd</span><span>e</span></p></doc>", treeXML(t, d1))
+		assert.Equal(t, treeXML(t, d1), treeXML(t, d2), "the replicas must agree")
+		assertNoDuplicateTreeIDs(t, d1, "on d1 after the undo")
+	})
+
+	t.Run("redoing a split after a remote split test", func(t *testing.T) {
+		// The redo of a split is a re-split carrying the same integer indices,
+		// so it is reconciled the same way. Here the remote split arrives
+		// while the re-split sits on d2's redo stack.
+		d1, d2 := newSpanDoc(t)
+		splitTree(t, d2, 6, 1)
+		assert.NoError(t, d2.Undo())
+		assert.Equal(t, "<doc><p><span>abcde</span></p></doc>", treeXML(t, d2))
+		crossSync(t, d1, d2)
+
+		splitTree(t, d1, 3, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, "<doc><p><span>a</span><span>bcde</span></p></doc>", treeXML(t, d2))
+
+		assert.True(t, d2.CanRedo())
+		assert.NoError(t, d2.Redo())
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, settled, treeXML(t, d2), "the redo must re-split where it split before")
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1), "the replicas must agree")
+		assertNoDuplicateTreeIDs(t, d2, "on d2 after the redo")
+	})
+
+	t.Run("undoing a split after a remote l2 split test", func(t *testing.T) {
+		// A level 2 split opens four tokens, so the shift is four, not two.
+		d1, d2, _, _ := newReplicas(t)
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewTree("t", json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type: "d",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: textNodeType, Value: "abcdef"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		// <d>  <p>  a  b  c  d  e  f  </p>  </d>
+		//  1    2   3  4  5  6  7  8    9    10
+		splitTree(t, d1, 4, 2)
+		splitTree(t, d2, 7, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, "<r><d><p>ab</p></d><d><p>cde</p><p>f</p></d></r>", treeXML(t, d1))
+		assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
+
+		assert.NoError(t, d2.Undo())
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "<r><d><p>ab</p></d><d><p>cdef</p></d></r>", treeXML(t, d2),
+			"the undo must merge only the boundary d2 opened")
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1), "the replicas must agree")
+		assertNoDuplicateTreeIDs(t, d2, "on d2 after the undo")
+	})
+
+	t.Run("a remote split with no visible effect shifts nothing test", func(t *testing.T) {
+		// d1 splits an element d2 has already removed. Its product is born
+		// tombstoned on d2, so the visible index does not move and the stacked
+		// reverse must stay where it is. This is why the growth is measured
+		// off the tree rather than assumed to be 2*splitLevel: reporting two
+		// here shifts the reverse past the boundary it opened and deletes the
+		// text beyond it instead.
+		d1, d2, _, _ := newReplicas(t)
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: textNodeType, Value: "abcd"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: textNodeType, Value: "efgh"}}},
+			}})
+			return nil
+		}))
+		crossSync(t, d1, d2)
+
+		// d2 removes the first paragraph, then splits the survivor after `ef`.
+		editTree(t, d2, 0, 6, nil)
+		assert.Equal(t, "<r><p>efgh</p></r>", treeXML(t, d2))
+		splitTree(t, d2, 3, 1)
+		assert.Equal(t, "<r><p>ef</p><p>gh</p></r>", treeXML(t, d2))
+
+		// d1 concurrently splits the paragraph d2 removed.
+		splitTree(t, d1, 3, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, "<r><p>ef</p><p>gh</p></r>", treeXML(t, d2))
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1))
+
+		assert.NoError(t, d2.Undo())
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "<r><p>efgh</p></r>", treeXML(t, d2),
+			"the undo must merge the boundary d2 opened, not the one past it")
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1), "the replicas must agree")
+		assertNoDuplicateTreeIDs(t, d2, "on d2 after the undo")
+	})
+
+	t.Run("a remote split inside a stacked boundary range test", func(t *testing.T) {
+		// The remote split lands strictly inside the range the stacked reverse
+		// deletes, which is reconciliation Case 4: the range grows to cover
+		// it, so the undo merges away the remote boundary too. That is the
+		// six-case semantic Text already had; pinned here because reporting
+		// the split's growth is what first makes it reachable for a split.
+		d1, d2 := newSpanDoc(t)
+		splitTree(t, d2, 6, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, "<doc><p><span>abcd</span><span>e</span></p></doc>", treeXML(t, d1))
+
+		splitTree(t, d1, 7, 1)
+		crossSync(t, d1, d2)
+		assert.Equal(t, "<doc><p><span>abcd</span></p><p><span>e</span></p></doc>", treeXML(t, d2))
+
+		assert.NoError(t, d2.Undo())
+		crossSync(t, d1, d2)
+
+		assert.Equal(t, "<doc><p><span>abcde</span></p></doc>", treeXML(t, d2),
+			"the undo absorbs the remote boundary its range grew over")
+		assert.Equal(t, treeXML(t, d2), treeXML(t, d1), "the replicas must agree")
+		assertNoDuplicateTreeIDs(t, d2, "on d2 after the undo")
+	})
+}
+
+// wireSync is crossSync with every pack forced through a protobuf round trip,
+// so the exchange goes over converter.ToChangePack/FromChangePack instead of
+// handing operation pointers from one document to the other. An undo re-derives
+// its range from integer indices on every execution and those indices are
+// local-only state, so the two are not the same exercise: only this one shows
+// the receiving replica reconciling against its own tree.
+func wireSync(t *testing.T, d1, d2 *document.Document) {
+	t.Helper()
+
+	thru := func(p *change.Pack) *change.Pack {
+		pb, err := converter.ToChangePack(p)
+		assert.NoError(t, err)
+		out, err := converter.FromChangePack(pb)
+		assert.NoError(t, err)
+		return out
+	}
+
+	p1, p2 := thru(d1.CreateChangePack()), thru(d2.CreateChangePack())
+
+	assert.NoError(t, d2.ApplyChangePack(change.NewPack(
+		p1.DocumentKey, change.NewCheckpoint(0, 0), p1.Changes, time.InitialVersionVector, nil,
+	)))
+	assert.NoError(t, d1.ApplyChangePack(change.NewPack(
+		p2.DocumentKey, change.NewCheckpoint(0, 0), p2.Changes, time.InitialVersionVector, nil,
+	)))
+
+	ack := func(p *change.Pack) *change.Pack {
+		var lastSeq uint32
+		if len(p.Changes) > 0 {
+			lastSeq = p.Changes[len(p.Changes)-1].ClientSeq()
+		}
+		return change.NewPack(
+			p.DocumentKey, change.NewCheckpoint(0, lastSeq), nil, time.InitialVersionVector, nil,
+		)
+	}
+	assert.NoError(t, d1.ApplyChangePack(ack(p1)))
+	assert.NoError(t, d2.ApplyChangePack(ack(p2)))
 }

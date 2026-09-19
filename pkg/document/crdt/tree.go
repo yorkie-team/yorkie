@@ -342,13 +342,17 @@ func (n *TreeNode) Split(
 				// parent. This ensures that split siblings land in the same
 				// parent regardless of operation application order.
 				// VV-independent for clone/root consistency.
+				//
+				// Moved rather than detached and re-inserted: a split born
+				// tombstoned contributes no VisibleLength to either parent,
+				// so detaching would take two tokens off the source that it
+				// never held and re-inserting would give the destination two
+				// it must not have. MoveChildBefore carries the same
+				// tombstone-aware semantics MoveChild documents.
 				if !n.IsText() && insNext.Index.Parent != nil &&
 					insNext.Index.Parent != split.Index.Parent &&
 					len(split.Index.Children(true)) == 0 {
-					if err := split.Index.Parent.DetachChild(split.Index); err != nil {
-						return diff, err
-					}
-					if err := insNext.Index.Parent.InsertBefore(
+					if err := insNext.Index.Parent.MoveChildBefore(
 						split.Index, insNext.Index,
 					); err != nil {
 						return diff, err
@@ -474,7 +478,14 @@ func (n *TreeNode) SplitElement(
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
 		return nil, diff, err
 	}
-	split.Index.UpdateAncestorsLength(split.Index.PaddedLength())
+	// A piece born tombstoned -- split off a node a concurrent deletion has
+	// already removed -- is not visible, so it must not lengthen its live
+	// ancestors. remove() holds the same invariant from the other side,
+	// subtracting a node's padded length from its ancestors as it becomes a
+	// tombstone. TotalLength counts tombstones and grows either way.
+	if split.removedAt == nil {
+		split.Index.UpdateAncestorsLength(split.Index.PaddedLength())
+	}
 	split.Index.UpdateAncestorsLength(split.Index.PaddedLength(true), true)
 
 	allChildren := n.Index.Children(true)
@@ -1645,6 +1656,18 @@ type TreeEditReverseInfo struct {
 	// pre-tombstoned nodes the way this field does, unlike Removed above --
 	// see Removed's own doc comment.
 	RemovedSize int
+
+	// SplitSize is the visible-index size Phase 7's split added: one close
+	// token plus one open token per element it actually split. Measured off
+	// the tree rather than computed as 2*splitLevel, so a split whose product
+	// is born tombstoned -- the element was already removed by a concurrent
+	// deletion -- reports the zero growth it really produced.
+	//
+	// A split creates boundaries instead of inserting nodes, so it adds
+	// nothing to InsertedContentSize; without this field the operations layer
+	// reported a split as a zero-width, zero-growth edit and undo/redo
+	// reconciliation left every stacked entry to the right of it unshifted.
+	SplitSize int
 }
 
 // Edit edits the tree with the given range and content. If the content is
@@ -1781,12 +1804,20 @@ func (t *Tree) Edit(
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
 	//
-	// diffSplit is added before the error check, the way Phase 1 adds diffFrom
-	// before returning on the to-resolution error: a multi-level split that
-	// fails partway through has still created the elements it got to, and
-	// docSize.Live has to carry them.
+	// Two things are reported across the call. diffSplit is the metadata the
+	// new elements added, and it is added before the error check the way
+	// Phase 1 adds diffFrom before returning on the to-resolution error: a
+	// multi-level split that fails partway through has still created the
+	// elements it got to, and docSize.Live has to carry them.
+	//
+	// SplitSize is the visible index those boundaries opened, which nothing
+	// else in this method reports: they are not content, so Phase 8's
+	// InsertedContentSize does not see them, and they remove nothing, so
+	// RemovedSize does not either.
+	sizeBeforeSplit := t.Root().Len()
 	diffSplit, err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector)
 	diff.Add(diffSplit)
+	info.SplitSize = t.Root().Len() - sizeBeforeSplit
 	if err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
