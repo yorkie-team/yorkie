@@ -38,8 +38,20 @@ type GCPair struct {
 }
 
 // GCParent is an interface for the parent of the garbage collection target.
+//
+// It is sealed: gcParent is unexported, so only this package can implement it
+// (a type embedding one of these implementations inherits it, which is how
+// json.Tree satisfies it). Root keys its GC map on the parent, and an
+// interface in a map key panics if its dynamic type is not comparable --
+// inside NewRoot, which the server runs on every snapshot rebuild. Sealing
+// turns "every implementation must be comparable" from a hope about an open
+// interface into a closed set that gcParentsAreComparable checks at compile
+// time.
 type GCParent interface {
 	Purge(node GCChild) error
+
+	// gcParent seals this interface. It has no behaviour; see above.
+	gcParent()
 }
 
 // GCChild is an interface for the child of the garbage collection target.

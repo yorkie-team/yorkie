@@ -298,6 +298,9 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 	return child.Value, nil
 }
 
+// gcParent seals GCParent to this package.
+func (n *TreeNode) gcParent() {}
+
 // Purge removes the given child from the children.
 func (n *TreeNode) Purge(child GCChild) error {
 	rhtNode := child.(*RHTNode)
@@ -1014,6 +1017,9 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	}
 	return next.Value.id.CreatedAt
 }
+
+// gcParent seals GCParent to this package.
+func (t *Tree) gcParent() {}
 
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)

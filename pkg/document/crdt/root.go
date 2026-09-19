@@ -51,11 +51,10 @@ func (p *ElementPair) Elem() Element {
 // two that differ in either do not. It is held as the interface value rather
 // than an id string because no GC parent carries an identifier today.
 //
-// An interface in a map key panics if its dynamic type is not comparable, so
-// gcParentsAreComparable below asserts at compile time that every
-// implementation still is. The assertion is the contract; do not read the list
-// of implementations as one -- GCParent is exported and satisfied structurally
-// (json.Tree picks it up from the *Tree it embeds), so it is not closed.
+// An interface in a map key panics if its dynamic type is not comparable. That
+// cannot happen here: GCParent is sealed by an unexported method, so the set
+// of implementations is closed to this package, and gcParentsAreComparable
+// names every one of them for the compiler to check.
 type gcPairKey struct {
 	parent GCParent
 	child  string
@@ -72,7 +71,8 @@ func comparableGCParent[T comparable](T) {}
 // gcParentsAreComparable is never called. It exists so that making a GC parent
 // non-comparable -- a struct with a slice, map or func field, passed by value
 // -- is a build failure here rather than a runtime panic inside NewRoot, which
-// the server runs on every snapshot rebuild.
+// the server runs on every snapshot rebuild. Add a line when you add a parent;
+// the seal on GCParent is what makes this list exhaustive.
 func gcParentsAreComparable() {
 	comparableGCParent[*Tree](nil)
 	comparableGCParent[*TreeNode](nil)

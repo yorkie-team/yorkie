@@ -1145,6 +1145,9 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return node.next.createdAt()
 }
 
+// gcParent seals GCParent to this package.
+func (s *RGATreeSplit[V]) gcParent() {}
+
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
 
