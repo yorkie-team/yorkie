@@ -10,6 +10,9 @@ Splitting a node that carries a **removed attribute** leaves the live document
 and a document rebuilt from it disagreeing about garbage, and the rebuilt one
 can never collect that tombstone.
 
+This task covers the **Tree** half only. The Text half is deferred; see the
+deferred item below and Non-Goals for the measurements that put it there.
+
 Two independent errors produce it, and they mask each other:
 
 1. **The copy is never registered.** `SplitElement` deep-copies the node's
@@ -71,56 +74,31 @@ Measured on `main` at a23ba9b8. Identical before and after #2000 and #2001.
       attributes, so the split's diff never charged these to `docSize.Live`:
       `GCOnlySize` sends each straight to `docSize.GC`, and `collect`
       subtracts the same amount back.
-- [x] Register the tombstones a text split copies, from
-      `(*RGATreeSplit[V]).splitNode`, reached through a `gcPairProvider`
-      capability check on the split value. `GCOnlySize` here too, for the
-      opposite reason — see Non-Goals.
-- [x] Tests in `pkg/document/gc_attr_split_test.go`: the tree case and the
-      text case, a multi-level split, a split of a split, a later `Style` that
+- [ ] Register the tombstones a text split copies. **Deferred behind
+      yorkie#2007** — two attempts to keep the ledger conserved both failed,
+      and both failures trace to the root cause #2007 describes:
+
+      | attempt | breaks on |
+      |---|---|
+      | record the amount charged at registration, refund exactly that | a registered node later split and partly revived redistributes its bytes across three pairs (`TestTextRestoreDocSizeAccounting`) |
+      | recompute a netted charge at both ends | a `Style` reviving a removed attribute on an already-tombstoned node drops the nested size from A to 0, so purge refunds A more than registration charged — `docSize.GC` goes **negative**, 50 runs in 50 |
+
+      Measured on the negative case: `main` and this branch without the
+      netting both finish at `GC {0,0}`; with it, `GC {-4,-24}`. A negative
+      `docSize` is worse than the leak it was fixing, since the server's size
+      limit reads `Live + GC`.
+
+      Both are downstream of `TextValue.DataSize` counting removed attributes
+      while `TreeNode.DataSize` does not. Fix that first and the registration
+      is a two-line change with nothing to reconcile.
+- [x] Tests in `pkg/document/gc_attr_split_test.go`: a multi-level split, a
+      split of a split, every removed attribute of a node carrying three, a
+      split product born tombstoned, a later `Style` that
       revives the key on both halves (the collision's other face — with the
       old key the second un-registration re-added the entry the first
       removed), and a two-replica exchange for each. Every one fails on
       `main`; the two-replica ones only once they assert the count rather than
       just that the replicas agree, since the leak was symmetric.
-- [x] Charge a GC pair only for what no other pair covers (`gcCharge` /
-      `gcNestedOwner`). A text node's `DataSize` counts its removed
-      attributes and each of those is registered in its own right, so the
-      node's registration booked the same bytes twice. Purging the attribute
-      shrinks the node, so the double charge cancelled or not depending on
-      which pair `collect` reached first -- and Go randomises map iteration
-      order. Measured over 200 documents, residue after a full collection:
-
-      | shape | before | after |
-      |---|---|---|
-      | text, no split, delete the node | 38/40 (pre-existing) | 0/200 |
-      | text, split, delete the split half | 0/40 -> 34/40 (added here) | 0/200 |
-
-      Registering the split copies is what extended it to the second shape,
-      so it is this task's to repair. An earlier attempt recorded the charged
-      amount at registration and gave that back; `TestTextRestoreDocSizeAccounting`
-      rejected it, because a registered child that is later split and partly
-      revived redistributes its bytes and the recorded figure stops matching.
-      Netting the nested size out at both ends does not have that problem:
-      purging an attribute removes it from `DataSize` and from the nested
-      total together, so the value does not move.
-- [x] Drain `pendingGCPairs` in `RGATreeSplit.retombstone`. It isolates LIVE
-      pieces, and splitting a live piece buffered nothing before this change,
-      so returning only its own pairs was correct; now each split copies the
-      value's RHT and buffers a pair per copy. Left buffered they are
-      registered by whichever operation drains next, under that operation's
-      accounting, or never. Measured: `returned pairs=1, still buffered=2`.
-      `Tree.Retombstone` drains too, defensively -- nothing buffers there
-      today only because `SplitText` hands the new node nil attributes.
-- [x] Declare `GCPairs()` on `RGATreeSplitValue` instead of probing for it
-      with a type assertion. Renaming `TextValue.GCPairs` still compiled with
-      the assertion in place; the leak came back silently and only a test
-      caught it.
-- [x] Assert at compile time that every GC parent is comparable
-      (`gcParentsAreComparable`). An interface in a map key panics at runtime
-      if its dynamic type is not, and the panic would land inside `NewRoot`,
-      which the server runs on every snapshot rebuild. `GCParent` is exported
-      and satisfied structurally -- `json.Tree` picks it up from the `*Tree`
-      it embeds -- so the set of implementations is not closed.
 - [x] Mirror in `yorkie-js-sdk`, as yorkie-js-sdk#1363. Both defects reproduce
       there. A third one surfaced only after they were repaired, and only in
       that SDK: `RGATreeSplit.splitValue` replaced the left node's value with
@@ -129,6 +107,13 @@ Measured on `main` at a23ba9b8. Identical before and after #2000 and #2001.
       splits in place and does not have it.
 
 ## Non-Goals
+
+**The Text half of the fix.** `TextValue.Split` copies attribute tombstones
+exactly as `SplitElement` does, and they collide by id the same way — the
+defect is real and reproduces. Registering them is not, on its own, a repair:
+it lands on a ledger that already double-counts those bytes, and every way of
+reconciling that from inside this change made something else worse. Tracked
+with yorkie#2007, which has to land first.
 
 **The text attribute ledger.** `TextValue.DataSize` counts removed attributes
 and `TreeNode.DataSize` does not, so a text attribute tombstone is charged to

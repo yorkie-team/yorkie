@@ -489,9 +489,6 @@ func (a *RGATreeList) GetByID(createdAt *time.Ticket) *RGATreeListNode {
 }
 
 // Purge physically removes a dead position node from the list (GCParent).
-// gcParent seals GCParent to this package.
-func (a *RGATreeList) gcParent() {}
-
 func (a *RGATreeList) Purge(child GCChild) error {
 	node, ok := child.(*RGATreeListNode)
 	if !ok {

@@ -38,20 +38,8 @@ type GCPair struct {
 }
 
 // GCParent is an interface for the parent of the garbage collection target.
-//
-// It is sealed: gcParent is unexported, so only this package can implement it
-// (a type embedding one of these implementations inherits it, which is how
-// json.Tree satisfies it). Root keys its GC map on the parent, and an
-// interface in a map key panics if its dynamic type is not comparable --
-// inside NewRoot, which the server runs on every snapshot rebuild. Sealing
-// turns "every implementation must be comparable" from a hope about an open
-// interface into a closed set that gcParentsAreComparable checks at compile
-// time.
 type GCParent interface {
 	Purge(node GCChild) error
-
-	// gcParent seals this interface. It has no behaviour; see above.
-	gcParent()
 }
 
 // GCChild is an interface for the child of the garbage collection target.
@@ -59,15 +47,6 @@ type GCChild interface {
 	IDString() string
 	RemovedAt() *time.Ticket
 	DataSize() resource.DataSize
-}
-
-// gcNestedOwner is an optional capability of a GC child whose DataSize counts
-// garbage that is registered separately -- today, a text node whose value
-// carries an RHT of attributes, each removed one a GC child of its own. Its
-// own registration must not charge for those bytes a second time. See
-// Root.gcCharge.
-type gcNestedOwner interface {
-	NestedGCSize() resource.DataSize
 }
 
 // GCBarrier is an optional capability of a GC parent whose surviving order is

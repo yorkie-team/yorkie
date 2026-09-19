@@ -49,63 +49,42 @@ func (p *ElementPair) Elem() Element {
 // The parent is the discriminator because it is what Purge is called on: two
 // pairs that share a parent and a child id name the same collectable thing,
 // two that differ in either do not. It is held as the interface value rather
-// than an id string because no GC parent carries an identifier today.
+// than an id string because no GC parent carries an identifier today, and
+// giving three of the five one (RGATreeList, RGATreeSplit and TextValue know
+// nothing of their element's createdAt) costs more than the key is worth.
 //
-// An interface in a map key panics if its dynamic type is not comparable. That
-// cannot happen here: GCParent is sealed by an unexported method, so the set
-// of implementations is closed to this package, and gcParentsAreComparable
-// names every one of them for the compiler to check.
+// An interface in a map key panics if its dynamic type is not comparable.
+// gcParentsAreComparable checks the implementations this repo has; it cannot
+// check every possible one, because GCParent is exported and satisfied
+// structurally. Sealing it with an unexported method does not close that hole
+// either -- a struct embedding one of these inherits the seal, so
+// `struct{ *Tree; notes []string }` still satisfies the interface and still
+// panics as a key. Nothing outside this module implements GCParent today, and
+// every Parent this repo constructs is one of the five below.
 type gcPairKey struct {
 	parent GCParent
 	child  string
 }
 
-// gcPairKeyOf returns the map key identifying the given pair.
-func gcPairKeyOf(pair GCPair) gcPairKey {
+// keyOf returns the map key identifying the given pair.
+func keyOf(pair GCPair) gcPairKey {
 	return gcPairKey{parent: pair.Parent, child: pair.Child.IDString()}
 }
 
 // comparableGCParent fails to compile if T is not usable in gcPairKey.
 func comparableGCParent[T comparable](T) {}
 
-// gcParentsAreComparable is never called. It exists so that making a GC parent
-// non-comparable -- a struct with a slice, map or func field, passed by value
-// -- is a build failure here rather than a runtime panic inside NewRoot, which
-// the server runs on every snapshot rebuild. Add a line when you add a parent;
-// the seal on GCParent is what makes this list exhaustive.
+// gcParentsAreComparable is never called. It exists so that making one of the
+// GC parents non-comparable -- a struct with a slice, map or func field,
+// passed by value -- is a build failure here rather than a runtime panic
+// inside NewRoot, which the server runs on every snapshot rebuild. Add a line
+// when you add a parent.
 func gcParentsAreComparable() {
 	comparableGCParent[*Tree](nil)
 	comparableGCParent[*TreeNode](nil)
 	comparableGCParent[*TextValue](nil)
 	comparableGCParent[*RGATreeList](nil)
 	comparableGCParent[*RGATreeSplit[*TextValue]](nil)
-}
-
-// gcCharge reports the size a pair's own registration accounts for in
-// docSize.GC: the child's DataSize less anything a nested registration already
-// covers.
-//
-// A text node's DataSize counts its removed attributes, and every one of those
-// is registered as a pair in its own right, so charging the node for them
-// books the same bytes twice. The double charge was invisible until collection,
-// where it decided the ledger by coin flip: purging an attribute shrinks the
-// TextValue holding it and so shrinks the node that owns that value, so a node
-// collected after its own attribute gave back less than it took, while one
-// collected before gave back exactly the double. Go randomises map iteration
-// order, so the same document finished with docSize.GC at zero or holding an
-// attribute's worth of residue that nothing would ever reclaim -- and two
-// replicas holding identical content disagreed about their own size.
-//
-// Netting the nested size out at both ends makes the two agree whatever the
-// order: purging an attribute takes it out of DataSize and out of the nested
-// total together, so this value does not move.
-func gcCharge(child GCChild) resource.DataSize {
-	size := child.DataSize()
-	if owner, ok := child.(gcNestedOwner); ok {
-		size.Sub(owner.NestedGCSize())
-	}
-
-	return size
 }
 
 // Root is a structure represents the root of JSON. It has a hash table of
@@ -588,7 +567,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		count += r.deregisterElement(pair.elem)
 	}
 
-	for key, pair := range r.gcNodePairMap {
+	for _, pair := range r.gcNodePairMap {
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			continue
 		}
@@ -604,8 +583,8 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			return 0, 0, err
 		}
 
-		r.docSize.GC.Sub(gcCharge(pair.Child))
-		delete(r.gcNodePairMap, key)
+		r.docSize.GC.Sub(pair.Child.DataSize())
+		delete(r.gcNodePairMap, keyOf(pair))
 		count++
 	}
 
@@ -644,15 +623,15 @@ func (r *Root) GarbageLen() int {
 func (r *Root) RegisterGCPair(pair GCPair) {
 	// NOTE(hackerwins): If the child is already registered, it means that the
 	// child should be removed from the cache.
-	key := gcPairKeyOf(pair)
+	key := keyOf(pair)
 	if p, ok := r.gcNodePairMap[key]; ok {
 		// Subtract exactly what registration added: GCOnlySize for a
 		// born-dead split piece (only its net-new size was added to GC),
-		// the child's own charge otherwise.
+		// the full child size otherwise.
 		if p.GCOnlySize != nil {
 			r.docSize.GC.Sub(*p.GCOnlySize)
 		} else {
-			r.docSize.GC.Sub(gcCharge(p.Child))
+			r.docSize.GC.Sub(p.Child.DataSize())
 		}
 
 		delete(r.gcNodePairMap, key)
@@ -669,13 +648,14 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 		return
 	}
 
-	r.docSize.GC.Add(gcCharge(pair.Child))
+	size := pair.Child.DataSize()
+	r.docSize.GC.Add(size)
 }
 
 // UnregisterGCPair removes a GC pair whose child has been restored
 // (un-tombstoned) by an identity-preserving undo, moving its size GC→Live.
 func (r *Root) UnregisterGCPair(pair GCPair) {
-	key := gcPairKeyOf(pair)
+	key := keyOf(pair)
 	_, ok := r.gcNodePairMap[key]
 	if !ok {
 		return
@@ -685,14 +665,14 @@ func (r *Root) UnregisterGCPair(pair GCPair) {
 	// exists to avoid double-counting data at registration time, when a
 	// split-born child's content was already counted via a sibling's
 	// existing registration. Once registered, this entry's contribution
-	// to docSize.GC is always the child's own current charge — that's
+	// to docSize.GC is always the child's own current DataSize() — that's
 	// what must come back out, regardless of how it went in.
 	//
 	// The caller clears removedAt before calling this, so DataSize() no
 	// longer includes the removedAt ticket that WAS counted while it was
 	// still registered. Add it back explicitly so GC doesn't retain a
 	// stale ticket's worth of residue.
-	r.docSize.GC.Sub(gcCharge(pair.Child))
+	r.docSize.GC.Sub(pair.Child.DataSize())
 	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
 		r.docSize.GC.Meta -= time.TicketSize
 	}

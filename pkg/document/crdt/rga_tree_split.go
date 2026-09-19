@@ -69,12 +69,6 @@ type RGATreeSplitValue interface {
 	Marshal() string
 	toTestString() string
 	DataSize() resource.DataSize
-
-	// GCPairs returns this value's own garbage: the tombstones in the RHT of
-	// attributes it carries. A split copies that RHT wholesale, so the pieces
-	// need registering; declaring it here rather than probing for it means
-	// renaming or dropping the method is a build failure, not a silent leak.
-	GCPairs() []GCPair
 }
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
@@ -285,18 +279,6 @@ func (s *RGATreeSplitNode[V]) DataSize() resource.DataSize {
 	}
 
 	return dataSize
-}
-
-// NestedGCSize returns the size of the garbage this node's value owns and
-// registers separately: its removed attributes. DataSize counts them, so a
-// registration that charged DataSize whole would book those bytes twice.
-func (s *RGATreeSplitNode[V]) NestedGCSize() resource.DataSize {
-	var size resource.DataSize
-	for _, pair := range s.value.GCPairs() {
-		size.Add(pair.Child.DataSize())
-	}
-
-	return size
 }
 
 // DeepCopy returns a new instance of this RGATreeSplitNode without structural info.
@@ -573,27 +555,6 @@ func (s *RGATreeSplit[V]) splitNode(
 	// the split operation.
 	diff.Add(node.DataSize(), splitNode.DataSize())
 	diff.Sub(prevSize)
-
-	// NOTE: Splitting a value deep-copies its attributes, tombstones
-	// included -- it has to, or the two halves of what was one node would
-	// resolve a concurrent style differently and never reconverge. Each
-	// copied tombstone is a distinct piece of garbage that no removal path
-	// produced, so register it; otherwise it sits in the new value's RHT
-	// forever, uncounted and unpurgeable.
-	//
-	// GCOnlySize, even though the copy was charged to docSize.Live: unlike
-	// TreeNode.DataSize, TextValue.DataSize counts removed attributes, so a
-	// text attribute tombstone sits in Live and in GC at once, and the
-	// original this one was copied from is carried that way already. Taking
-	// only the copy out of Live would put the live document out of step with
-	// what NewRoot computes from the same content. Charging both the same way
-	// keeps them equal; that they are charged twice at all is a separate
-	// defect in this path, not one this registration should silently half-fix.
-	for _, pair := range splitNode.value.GCPairs() {
-		gcSize := pair.Child.DataSize()
-		pair.GCOnlySize = &gcSize
-		s.pendingGCPairs = append(s.pendingGCPairs, pair)
-	}
 
 	// NOTE: A piece split off an already-tombstoned node inherits
 	// removedAt without going through Remove(), so no GC pair is created
@@ -966,16 +927,6 @@ func (s *RGATreeSplit[V]) retombstone(
 			pairs = append(pairs, GCPair{Parent: s, Child: target})
 		}
 	}
-
-	// isolateRange splits here are splits of LIVE pieces, which buffered
-	// nothing before attribute tombstones became registerable -- so this
-	// path never drained. It has to now: a split copies the value's RHT,
-	// tombstones included, and each copy buffers a pair. Left in the buffer
-	// they would be registered by whichever operation drains next, under
-	// that operation's accounting, or never at all. restore drains for the
-	// same reason, and Tree.Restore does it in a defer.
-	pairs = append(pairs, s.drainPendingGCPairs()...)
-
 	return pairs, diff
 }
 
@@ -1144,9 +1095,6 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 	}
 	return node.next.createdAt()
 }
-
-// gcParent seals GCParent to this package.
-func (s *RGATreeSplit[V]) gcParent() {}
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])

@@ -124,9 +124,6 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 }
 
 // Purge removes the given ticket from this value.
-// gcParent seals GCParent to this package.
-func (t *TextValue) gcParent() {}
-
 func (t *TextValue) Purge(child GCChild) error {
 	rhtNode := child.(*RHTNode)
 	return t.attrs.Purge(rhtNode)

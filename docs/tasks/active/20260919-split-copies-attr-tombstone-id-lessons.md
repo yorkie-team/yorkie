@@ -60,48 +60,41 @@ the same reference. The cost is that the key is not stable across document
 instances, which nothing needs — registration and lookup always happen within
 one root.
 
-## Registering garbage changed what a buffer meant
+## The repair that had to be un-repaired
 
-Two of the three defects review found have the same shape: a path that was
-correct only because a buffer was always empty. `RGATreeSplit.retombstone`
-never drained `pendingGCPairs`, and that was right for as long as splitting a
-live piece buffered nothing. `Tree.Retombstone` is in the same position today
-and stays correct only because `SplitText` passes nil attributes.
+Review found that registering the text copies made the GC ledger depend on
+collection order, so the next commit netted out the bytes a nested pair
+already covered. The netting is recomputed from the child's current state at
+registration and again at collection, which is sound only while that state
+holds still. It does not: `canStyle` deliberately permits styling an
+already-tombstoned node, and reviving a key drops the removed `RHTNode`, so a
+node charged `D − A` is refunded `D` and `docSize.GC` finishes negative. Fifty
+runs in fifty, where `main` and the commit before the fix both finish at zero.
 
-Adding a producer to a shared buffer is not a local change. The question to
-ask is not "does my new code drain?" but "which existing readers assumed this
-was empty?" -- and the answer is found by listing every caller of the thing
-that now buffers, not by reading the diff.
+The earlier attempt — record what was charged, refund exactly that — fails on
+the mirror-image case, a registered node that is later split and partly
+revived. Between them the two cover the whole design space for reconciling a
+charge with a refund, and both fail because the underlying quantity is not
+stable. That is the signal that the defect is not here: `TextValue.DataSize`
+counts removed attributes and `TreeNode.DataSize` does not, so the text ledger
+double-counts before this change touches it. The Tree half needs none of this
+machinery and has been clean through both review rounds.
 
-## The first fix for the ledger was rejected by a test I did not write
+Knowing when a fix is downstream of another one is worth more than landing it.
 
-Collection subtracted the child's size read at purge time, which moves when a
-sibling is purged first, so the ledger came out differently depending on Go's
-map iteration order. Recording the amount charged at registration and giving
-exactly that back looks like the obvious repair, and it is wrong:
-`TestTextRestoreDocSizeAccounting` covers a registered node that is later
-split and partly revived, which redistributes its bytes across three pairs,
-and the recorded figure stops matching any of them.
+## Twelve thousand seeds missed a five-operation bug
 
-The repair that works attacks the double charge instead of its symptom. A text
-node's `DataSize` counts its removed attributes and each of those is a
-registered pair in its own right, so the node was charged for bytes another
-pair already covered. Netting the nested size out at both ends is stable under
-any purge order, because purging an attribute removes it from `DataSize` and
-from the nested total in the same step. It also fixed the pre-existing shape
-(no split at all), which had been leaking 38 times in 40 on `main`.
+Two round-2 reviewers reached opposite conclusions. A differential fuzz over
+~12 000 seed-runs reported no regression attributable to the change, having
+classified the branch-only negative-`GC` seeds as map-order flake after
+re-running *different* sequences. A targeted reviewer reasoning from
+`canStyle`'s comment found a five-operation sequence that is negative 50 times
+in 50.
 
-## Three lenses, one finding, and that is the signal
+The fuzz was not wrong about what it measured; its generator never emitted
+"style an already-tombstoned node to revive its removed attribute", so the
+shape was outside its reach. Breadth bounds how much of a space you sample,
+not which parts of it you can reach at all. When a broad sweep and a narrow
+probe disagree, the probe's concrete reproducer settles it — re-running the
+exact sequence on both sides, fifty times, cost a minute and was decisive.
 
-All three reviewers independently reported the same order-dependent GC leak,
-and two of them proposed the same fix. Convergence from prompts that shared no
-vocabulary -- one was asked about convergence, one about the ledger, one about
-structure -- is worth more than any single report's confidence rating. The two
-findings only one reviewer reached (the undrained buffer, the silently
-optional interface) are the argument for running more than one lens at all.
-
-One classification needed correcting: the leak was reported as introduced
-here. It is not -- the same shape without a split fires on `main` -- and the
-difference matters, because "this PR adds one more instance of a pre-existing
-defect" and "this PR creates a defect" lead to different decisions about
-whether to fix it here. Measuring `main` in the same run is what settled it.

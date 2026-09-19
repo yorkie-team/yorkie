@@ -298,9 +298,6 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 	return child.Value, nil
 }
 
-// gcParent seals GCParent to this package.
-func (n *TreeNode) gcParent() {}
-
 // Purge removes the given child from the children.
 func (n *TreeNode) Purge(child GCChild) error {
 	rhtNode := child.(*RHTNode)
@@ -1018,9 +1015,6 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
-// gcParent seals GCParent to this package.
-func (t *Tree) gcParent() {}
-
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
@@ -1223,14 +1217,6 @@ func (t *Tree) Retombstone(
 			}
 		}
 	}
-
-	// Defensive, mirroring RGATreeSplit.retombstone: nothing buffers here
-	// today, because isolateTextRange only splits text nodes and SplitText
-	// hands the new node nil attributes (a tree text node can never carry
-	// one -- canStyle refuses it). Draining anyway costs nothing and stops
-	// that from being load-bearing.
-	pairs = append(pairs, t.drainPendingGCPairs()...)
-
 	return pairs, diff, nil
 }
 
