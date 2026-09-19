@@ -132,7 +132,7 @@ correctly.
       a range the `toIdx > tree.Root().Len()` guard only sometimes caught.
 - [x] Correct `docs/design/tree-split-undo-redo.md`, whose edge-case table
       claimed reconciliation already handled a concurrent split.
-- [ ] Mirror in `yorkie-js-sdk`, both halves. `TreeEditOperation.getContentSize`
+- [x] Mirror in `yorkie-js-sdk`, all three halves. `TreeEditOperation.getContentSize`
       reports only `insertedContentSize`, so the reconciliation defect
       reproduces there identically; it is recorded as a skipped case in
       `packages/sdk/test/integration/history_tree_concurrent_test.ts`
@@ -144,7 +144,8 @@ correctly.
       §7.4 change: `crdt/tree.ts` still re-parents with `detachChild` plus
       `insertBefore` and `util/index_tree.ts` has no `moveChildBefore`, so the
       guard on its own leaves the source two short and the destination two
-      long. The three have to land together.
+      long. The three have to land together. Landed as yorkie-js-sdk#1360,
+      with the over-deep reverse range as a fourth.
 
 ## Non-Goals
 
