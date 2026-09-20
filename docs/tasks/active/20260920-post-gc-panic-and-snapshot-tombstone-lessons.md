@@ -81,6 +81,62 @@ Both facts belong in the issue when it is closed. A fix that changes the symptom
 class is worth shipping, but calling it resolution hides the defect it was
 protecting against.
 
+## A candidate that breaks no test can still be the worst option available
+
+The GC-site candidate for 1b broke zero existing tests, added one passing test,
+and read as a clean strictly-positive fix. It made two replicas render different
+content based on when each happened to run garbage collection — a purely local
+decision no replica coordinates with any other.
+
+It was invisible to the suite for a structural reason worth naming: **no test in
+the repository compared two replicas that received the same changes in a
+different order.** A whole class of defect had no instrument. Adding one turned
+a question that looked like it needed a senior judgement call into a
+measurement, and the measurement disagreed with the reasoning — the "obvious"
+one-line fix was insufficient and the plausible second option was actively
+harmful.
+
+When a change touches convergence, build the instrument before evaluating
+candidates. A green suite is evidence about the tests you have, not about the
+property you care about.
+
+## Compare a restored node against its siblings, not against itself
+
+Both ticket candidates were first measured the obvious way: does the restored
+node carry the same ticket across all delivery orders? That question was nearly
+decisive but not quite — it compares the node only against itself.
+
+The sharper question was whether it agrees with **its own never-purged
+siblings** — the pieces split from the same insertion that the same removal
+swept. `parent.RemovedAt()` agrees 6 of 6; the alternative breaks ranks 3 of 6.
+A restored node is a re-materialisation of something that already existed and
+was already swept, so the gold standard is "indistinguishable from what it would
+have been had it never been purged". That framing picked the winner in one
+measurement where the self-comparison left room to argue.
+
+## A boolean cannot detect a ticket divergence
+
+The harness's state dump recorded `removed` as a bool. Under the rejected ticket
+variant two replicas held `3:1:AB` and `4:1:AC` on the same node while every
+field of that dump matched — a false green. Only a direct ticket comparison saw
+it.
+
+If a value participates in LWW, assert the value. Asserting the predicate
+derived from it hides exactly the disagreements that matter.
+
+## Write regression tests so they fail when their premise is removed
+
+`TestTreeStyleAfterCollect` depended on a state that a *different, unfixed*
+defect produced. Tightened to require the guard's specific error, it failed the
+moment that defect was fixed — loudly, in the same session, with an obvious
+cause. Left as "assert nothing crashed", it would have gone green while
+guarding nothing and nobody would have known.
+
+The fix was to split it: the end-to-end sequence stays as the issue's
+reproduction and now asserts reachability, and the guard moved down to the layer
+it actually lives at, where it can be driven directly and does not depend on any
+higher-level sequence still being able to reach it.
+
 ## See Also
 
 - `docs/tasks/active/20260920-post-gc-panic-and-snapshot-tombstone-todo.md` — the

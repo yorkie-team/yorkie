@@ -31,6 +31,12 @@ tests have to rebuild in memory rather than through the converter. Once the
 converter can carry a text attribute tombstone, converter round-trip tests become
 available as the regression harness for #2007 and #2002.
 
+> **Scope changed 2026-09-20.** This started as the two defects that needed
+> nothing else landed first, with 1b explicitly a Non-Goal. It now closes both
+> #2008 and #2006 outright, in two PRs — one per repository — because the
+> experiment that was only supposed to *scope* 1b settled it instead. What
+> follows keeps the original framing; the Review section records what changed.
+
 ## Goals
 
 - #2008: a `Tree.Style` over a collected subtree returns an error instead of
@@ -70,9 +76,11 @@ available as the regression harness for #2007 and #2002.
 - [x] Scope the 1b follow-up
 - [x] `go test ./...` green, `make lint` green
 - [x] Self review over the full branch diff
-- [ ] Open the PR, one commit per issue
-- [ ] File the 1b follow-up issue (restore under a tombstoned parent)
-- [ ] File the paired `yorkie-js-sdk` PR for #2006's JS half
+- [x] 1b — settle the tombstone-ticket question by experiment rather than filing it
+- [x] 1b — recreate the node tombstoned with the parent's `removedAt`
+- [x] Re-anchor the nil-guard test at the crdt level once 1b made it unreachable
+- [ ] Mirror 1b into `yorkie-js-sdk` and port the six-order ticket test
+- [ ] Open both PRs — one per repository
 
 ## Review
 
@@ -170,6 +178,70 @@ data pass.
 `crdt.NewRoot` does register a GC pair for a text attribute tombstone
 (`TextValue.GCPairs` → `Text.GCPairs` → the `*Text` case in the `Descendants`
 walk), which is why the accounting comes out exact rather than half-fixed.
+
+### 1b — settled by experiment, not filed
+
+The plan said scope 1b and file it. The experiment answered it instead, so it
+ships here. Three candidates were built and measured against a harness that
+drives seven histories under every delivery order.
+
+| candidate | regressions | harness | outcome |
+|---|---|---|---|
+| unpatched main | 0 | RED 7/7 | already diverges — this is the bug |
+| refuse a tombstoned parent | 0 | RED | orphan and panic gone, tombstone sets still differ |
+| retain a tombstone with a live descendant (GC site) | **0** | RED | **rejected** |
+| born tombstoned, parent's `removedAt` | 0 | **GREEN 7/7** | shipped |
+| born tombstoned, restoring op's `executedAt` | 0 | RED 2/7 | rejected |
+
+**The GC-site candidate is why the harness had to exist.** It broke zero
+existing tests and added a passing one — and it made two replicas render
+different content based on nothing but when each happened to run collection, a
+purely local decision no replica coordinates. Nothing in the existing suite
+could see it, because no existing test compares two replicas that received the
+same changes in a different order.
+
+**The premise was also wrong.** The question was framed as "would a fix trade
+the crash for a divergence?" Main already diverges on these histories: in
+garbage accounting before any collection runs, and in rendered content once the
+parent's removal is undone. The right question was whether a candidate *removes*
+the existing divergence.
+
+**The ticket question had a measurable answer.** `removedAt` is LWW-overwritable,
+so the worry was that a later higher-ticket removal of the parent would leave
+replicas disagreeing. It does not bite: the restored node is linked before it is
+stamped, so a later removal reaches it and overwrites the ticket upward, and
+every order lands on whichever removal wins the race. The decisive measurement
+was not the node against itself across orders but **the node against its own
+never-purged siblings** — `parent.RemovedAt()` agrees with them 6 of 6,
+`executedAt` breaks ranks 3 of 6. A restored node is a re-materialisation of a
+node that was already swept; it should carry the ticket that swept its siblings.
+
+That also disposes of the strongest argument for `executedAt`, "consistency with
+the insert path". `crdt/tree.go:1883` stamps `editedAt` because a genuinely new
+node has no siblings predating it — nothing to agree with. The fix mirrors the
+*shape* of that convention and correctly departs on the ticket.
+
+**The price, which a reviewer must sign off deliberately:** this converges by
+*discarding* the restored content. When the parent's removal is later undone,
+both orders render the parent empty — consistent, and not what the user who
+pressed undo asked for. Consistency is the property a CRDT cannot trade away, so
+this is the right direction, but 7/7 green is not free. Resurrecting descendants
+when a parent's removal is undone is a separate mechanism, not a ticket choice.
+
+### What landing 1b did to the 1a test
+
+`TestTreeStyleAfterCollect` began failing, exactly as it was written to. It had
+been tightened to require the guard's error rather than merely the absence of a
+crash, precisely so it would fail loudly rather than pass vacuously once the
+state it depended on stopped being reachable.
+
+It was split in two rather than deleted. The document-level test keeps the
+reported sequence verbatim and now asserts it completes cleanly *and* leaves
+registered == reachable. The nil guard moved to
+`crdt.TestToTreePosRejectsAChainEndingInAPurgedNode`, which drives a purged
+parent directly — the guard is defence in depth and outlives the one sequence
+known to need it, so it is pinned at the level it lives at. Both were checked to
+fail without their respective fix.
 
 ### Follow-ups this surfaced
 
