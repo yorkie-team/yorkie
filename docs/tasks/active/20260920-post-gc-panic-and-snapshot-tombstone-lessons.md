@@ -137,6 +137,35 @@ reproduction and now asserts reachability, and the guard moved down to the layer
 it actually lives at, where it can be driven directly and does not depend on any
 higher-level sequence still being able to reach it.
 
+## The two SDKs fold GC accounting differently, so "mirror it" is not enough
+
+The JS mirror of the 1b fix was briefed with an explicit instruction: push the
+pending GC pair with `gcOnlySize` undefined, because Go's `RegisterGCPair`
+leaves it nil. The agent doing the work contradicted the instruction, with
+measurement, and was right.
+
+Go splits the accounting in two. `Root.RegisterGCPair` only *adds* to
+`docSize.GC`; the debit from Live lives in a separate `AdjustDiffForGCPair`.
+The retombstone path calls both (`operations/tree_edit.go:241-242`); **the
+restore path deliberately calls only the first** (`:258`). So on Go's restore
+path Live is never debited.
+
+JS folds both halves into one `registerGCPair`: absent a `gcOnlySize` it does
+`gc += size` *and* `live -= size`. There is no separate step to omit. Following
+the instruction literally drove `live` to `{data:-4}` — debiting Live for bytes
+that were never credited, since the node had been purged before the restore.
+Setting `gcOnlySize` takes JS's early-return branch, which adds to GC only, and
+reproduces Go's net effect exactly: both SDKs then measure
+`Live{0,96}/GC{8,192}` before collection and `Live{0,96}/GC{0,0}` after, in all
+six delivery orders.
+
+Two things to carry forward. Cross-SDK parity is a property of *net observable
+behaviour*, not of the code looking alike — here identical-looking calls
+produce opposite accounting, and opposite-looking calls produce identical
+accounting. And an agent that contradicts its brief with a measurement attached
+is doing the job correctly; the brief was written from a reading of Go's
+`RegisterGCPair` that skipped which callers invoke `AdjustDiffForGCPair`.
+
 ## See Also
 
 - `docs/tasks/active/20260920-post-gc-panic-and-snapshot-tombstone-todo.md` — the

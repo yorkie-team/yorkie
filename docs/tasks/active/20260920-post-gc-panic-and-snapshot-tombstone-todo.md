@@ -79,8 +79,39 @@ available as the regression harness for #2007 and #2002.
 - [x] 1b — settle the tombstone-ticket question by experiment rather than filing it
 - [x] 1b — recreate the node tombstoned with the parent's `removedAt`
 - [x] Re-anchor the nil-guard test at the crdt level once 1b made it unreachable
-- [ ] Mirror 1b into `yorkie-js-sdk` and port the six-order ticket test
+- [x] Mirror 1b into `yorkie-js-sdk` and port the six-order ticket test
+- [x] Mirror the `toTreePos` guard into the JS SDK with its own test
+- [x] Measure cross-SDK parity on the decisive history
 - [ ] Open both PRs — one per repository
+
+## Cross-SDK parity, measured
+
+Both SDKs were driven through the same history under all six delivery orders.
+Ticket formats differ; the relationships are what must match, and they do.
+
+| | Go | JS |
+|---|---|---|
+| restored node's ticket | the higher removal's, 6/6 orders | the higher removal's, 6/6 orders |
+| equals the parent's | yes, 6/6 | yes, 6/6 |
+| equals never-purged siblings' | yes, 6/6 | yes, 6/6 |
+| registered == reachable | yes | yes |
+| docSize before collection | `Live{0,96} GC{8,192}` | identical |
+| docSize after collection | `Live{0,96} GC{0,0}` | identical |
+
+The JS mirror needed one deliberate departure from a line-for-line copy to get
+there — see the lessons file on how the two SDKs fold GC accounting — and the
+counterfactual was measured: written the other way, JS reports a negative live
+size and splits into two camps while Go stays flat.
+
+### Still unported to JS
+
+The Go side carries seven histories; JS carries the decisive one plus the guard
+test. The element/attribute-span scenario, the deeply-nested-parent scenario,
+and the three convergence scenarios are unported. The fix sits in the shared
+path — JS's non-text restore branch deep-copies `span.attrs` and calls the same
+`recreateFromSpan`, and all five anchor rungs route through the new `attach`
+closure — so the element case is covered by construction but unproven by test.
+Cheap follow-up now that the harness idiom exists on both sides.
 
 ## Review
 
