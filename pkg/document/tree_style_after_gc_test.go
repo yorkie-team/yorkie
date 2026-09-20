@@ -17,30 +17,33 @@
 package document_test
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
-// TestTreeStyleAfterCollect reproduces issue #2008. Two garbage collections
-// around an undo leave the tree holding a position whose parent chain has
-// been unlinked from the root. Styling through that position sends
-// crdt.(*Tree).toTreePos walking up from a removed node to its least alive
-// ancestor; the walk runs off the top of the detached subtree and
-// dereferences a nil Index.Parent, panicking inside Document.Update.
+// TestTreeStyleAfterCollect is the sequence reported in issue #2008, kept
+// verbatim because it is what a user actually did.
 //
-// Styling a range that no longer resolves must fail as an error, not take
-// the process down.
+// It used to take the process down with a nil dereference. Two collections
+// around an undo left a live node hanging under a parent the second collection
+// purged, so the node stayed registered in NodeMapByID with no path to the
+// root; styling through it walked off the top of the detached subtree.
 //
-// Every step below is load-bearing: dropping either GarbageCollect, the
-// second Edit, or the Undo makes the panic vanish, and a smaller seed tree
-// does not panic at all.
+// Two changes meet here. recreateFromSpan no longer places a restored node
+// live under a tombstoned parent, so the orphan is never built -- that is why
+// this now reads as an ordinary successful style rather than an error. The nil
+// guard in toTreePos is the second, and it is pinned separately in
+// crdt.TestToTreePosRejectsAChainEndingInAPurgedNode, because a document-level
+// test can no longer reach it.
+//
+// Every step is load-bearing: dropping either GarbageCollect, the second Edit,
+// or the Undo stopped the original panic, and a smaller seed tree never
+// panicked at all.
 func TestTreeStyleAfterCollect(t *testing.T) {
 	doc := document.New("repro")
 
@@ -70,31 +73,22 @@ func TestTreeStyleAfterCollect(t *testing.T) {
 	require.NoError(t, doc.Undo())
 	doc.GarbageCollect(doc.VersionVector())
 
-	// json.(*Tree).Style reports a failed style by panicking with the error
-	// it got back, so a panic alone is not the defect. The defect is *which*
-	// panic: a runtime fault from dereferencing a nil Index.Parent, raised
-	// before any error value exists. The tree layer must refuse the position
-	// and hand an error up instead.
-	var recovered any
-	func() {
-		defer func() { recovered = recover() }()
-		_ = doc.Update(func(root *json.Object, p *presence.Presence) error {
+	// The style that used to fault. json.(*Tree).Style reports failure by
+	// panicking with the error it got back, so a clean return is also the
+	// assertion that nothing was refused.
+	require.NotPanics(t, func() {
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Style(21, 22, map[string]string{"color": "2"})
 			return nil
-		})
-	}()
+		}))
+	})
 
-	if fault, ok := recovered.(runtime.Error); ok {
-		t.Fatalf("styling a collected range faulted instead of reporting an error: %v", fault)
-	}
-
-	// Assert the guard actually fired, not merely that nothing crashed. The
-	// state this test builds depends on a second defect -- an undo that
-	// restores a node under an already-tombstoned parent -- so a fix for that
-	// defect will make Style resolve normally and leave nothing to recover.
-	// Requiring the error makes this test fail loudly when that day comes,
-	// rather than passing while guarding nothing.
-	err, ok := recovered.(error)
-	require.Truef(t, ok, "expected the style to be refused, recovered %#v", recovered)
-	require.ErrorIs(t, err, crdt.ErrNodeNotFound)
+	// Every node the document still tracks has to be reachable from the root.
+	// That is the invariant the crash came from breaking, and asserting the
+	// style merely succeeded would not catch a stranded node left behind:
+	// NodeLen counts what is registered in NodeMapByID, Nodes traverses what
+	// is reachable, and the orphan was registered but not reachable.
+	tree := doc.Root().GetTree("t")
+	require.Equal(t, tree.NodeLen(), len(tree.Nodes()),
+		"every registered node must be reachable from the root")
 }

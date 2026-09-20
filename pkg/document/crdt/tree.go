@@ -1302,6 +1302,31 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			return nil, err
 		}
 		t.putNode(node)
+		// The parent has been tombstoned since this node was purged, so the
+		// node is born tombstoned rather than live. This mirrors the
+		// convention the concurrent-insert path already states ("if
+		// insertion happens during concurrent editing and parent node has
+		// been removed, make new nodes as tombstone immediately").
+		// Recreating it live would leave a node that the next Purge of the
+		// parent unlinks but never unregisters -- reachable from nothing,
+		// still in NodeMapByID -- which is what sends toTreePos off the top
+		// of a detached subtree (#2008).
+		//
+		// The stamp is the PARENT's removedAt, not executedAt: that is the
+		// ticket the removal already wrote onto every sibling it swept, so
+		// the node rejoins them carrying what it would have carried had it
+		// never been purged, and it agrees with a replica that recreated it
+		// live and then had the removal sweep it. Stamping executedAt makes
+		// those two disagree, and removedAt feeds canDelete, so they would
+		// then collect on different passes. The stamp only has to be
+		// overwritable by the eventual LWW winner, and it is: a later
+		// concurrent removal with a higher ticket reaches the tombstoned
+		// node and overwrites it.
+		if parent.IsRemoved() {
+			node.remove(parent.RemovedAt())
+			t.pendingGCPairs = append(t.pendingGCPairs, GCPair{Parent: t, Child: node})
+			return nil, nil
+		}
 		return node, nil
 	}
 
