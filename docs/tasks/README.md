@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-14
+updated: 2026-09-21
 ---
 
 # Tasks Index
@@ -20,6 +20,10 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Tree split drops the size of the element it creates (2026-09-19) | [20260919-tree-split-live-size-dropped-todo.md](./active/20260919-tree-split-live-size-dropped-todo.md) | [20260919-tree-split-live-size-dropped-lessons.md](./active/20260919-tree-split-live-size-dropped-lessons.md) |
+| A split reports no index growth to undo/redo reconciliation (2026-09-19) | [20260919-split-invisible-to-undo-reconcile-todo.md](./active/20260919-split-invisible-to-undo-reconcile-todo.md) | [20260919-split-invisible-to-undo-reconcile-lessons.md](./active/20260919-split-invisible-to-undo-reconcile-lessons.md) |
+| A split copies an attribute tombstone under the same id (2026-09-19) | [20260919-split-copies-attr-tombstone-id-todo.md](./active/20260919-split-copies-attr-tombstone-id-todo.md) | [20260919-split-copies-attr-tombstone-id-lessons.md](./active/20260919-split-copies-attr-tombstone-id-lessons.md) |
+| Precompute the daily peak sessions per channel (2026-09-17) | [20260917-peak-sessions-daily-summary-todo.md](./active/20260917-peak-sessions-daily-summary-todo.md) | [20260917-peak-sessions-daily-summary-lessons.md](./active/20260917-peak-sessions-daily-summary-lessons.md) |
 | The same document encodes to a different snapshot on every attach (2026-09-14) | [20260914-nondeterministic-snapshot-member-order-todo.md](./active/20260914-nondeterministic-snapshot-member-order-todo.md) | [20260914-nondeterministic-snapshot-member-order-lessons.md](./active/20260914-nondeterministic-snapshot-member-order-lessons.md) |
 | Undoing a container removal discards a peer's concurrent edit inside it (2026-09-12) | [20260912-undo-discards-concurrent-peer-edit-todo.md](./active/20260912-undo-discards-concurrent-peer-edit-todo.md) | - |
 | Collection changes where a later insert lands (2026-09-12) | [20260912-collection-changes-rga-insertion-todo.md](./active/20260912-collection-changes-rga-insertion-todo.md) | - |
@@ -34,5 +38,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 28
+- Archived task count: 29
 - Archive index: [archive/README.md](./archive/README.md)

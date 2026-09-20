@@ -101,7 +101,7 @@ because the gap between them is most of what this task learned.
 - [x] Mirror 1b into `yorkie-js-sdk` and port the six-order ticket test
 - [x] Mirror the `toTreePos` guard into the JS SDK with its own test
 - [x] Measure cross-SDK parity on the decisive history
-- [ ] Open both PRs — one per repository
+- [x] Open both PRs — yorkie#2009 and yorkie-js-sdk#1364
 
 ## Cross-SDK parity, measured
 
