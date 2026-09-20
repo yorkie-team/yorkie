@@ -39,14 +39,33 @@ available as the regression harness for #2007 and #2002.
 
 ## Goals
 
-- #2008: a `Tree.Style` over a collected subtree returns an error instead of
-  panicking. Scope is the nil guard only (item 1a).
+Three of these were written before the work and turned out to be wrong about
+their own subject. They are kept as stated, each with what actually happened,
+because the gap between them is most of what this task learned.
+
 - #2006: a text attribute tombstone survives a snapshot round trip, so a replica
   served from a snapshot renders the same content as one that replayed the changes.
-- Establish whether #2008's panic is reachable on the server's remote-apply path.
-  There is no `recover()` in the RPC path, so if it is reachable, one client can
-  crash the process and the guard is an urgent standalone patch.
-- Scope the follow-up for #2008's root cause (item 1b) without fixing it here.
+  **Holds as written.**
+- ~~#2008: a `Tree.Style` over a collected subtree returns an error instead of
+  panicking. Scope is the nil guard only (item 1a).~~
+  The guard removes the *nil dereference*, not the panic —
+  `json.(*Tree).Style` panics on any error the CRDT layer returns, by
+  convention. And the guard is not the fix: it left the orphaned node in place.
+  Item 1b ships here, and with it no document-level history reaches the guard
+  at all.
+- ~~Establish whether #2008's panic is reachable on the server's remote-apply
+  path. There is no `recover()` in the RPC path, so if it is reachable, one
+  client can crash the process and the guard is an urgent standalone patch.~~
+  The premise was wrong. `recover()` genuinely appears only in test files, but
+  the RPC server is an `http.Server` under `h2c`, and net/http recovers per
+  connection while HTTP/2 recovers per stream. A reachable panic breaks one
+  stream, not the process. Separately, the panic is not reachable on today's
+  server: every apply path interposes an `InternalDocument.DeepCopy()`, which
+  re-registers only nodes reachable from the index root. That protection is
+  incidental, not deliberate.
+- ~~Scope the follow-up for #2008's root cause (item 1b) without fixing it
+  here.~~ The experiment written to scope it settled it instead. See the
+  Review.
 
 ## Non-Goals
 

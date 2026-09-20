@@ -392,9 +392,20 @@ func fromTextNode(
 
 	attrs := crdt.NewRHT()
 	for key, pbAttr := range pbNode.Attributes {
+		if pbAttr == nil {
+			return nil, fmt.Errorf("text node attribute missing")
+		}
+
 		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
 		if err != nil {
 			return nil, err
+		}
+		// See fromRHT: updatedAt is what RHTNode.IDString is built from, and
+		// honouring isRemoved means a decoded attribute can now become a GC
+		// pair on this path too, so an absent ticket has to be refused here
+		// rather than faulting inside NewRoot on every later load.
+		if updatedAt == nil {
+			return nil, fmt.Errorf("text node attribute missing updatedAt")
 		}
 		// NOTE(hackerwins): SetInternal is used instead of Set to restore the
 		// `isRemoved` flag as-is. Unlike Set, it never loses to an existing
