@@ -583,7 +583,13 @@ func (t *Text) Style(
 		}
 
 		for key, value := range attributes {
-			accAttrWrite(val.attrs.Set(key, value, executedAt), node.Value(), &pairs, &diff)
+			accAttrWrite(
+				val.attrs.Set(key, value, executedAt),
+				node.Value(),
+				node.RemovedAt() == nil,
+				&pairs,
+				&diff,
+			)
 		}
 	}
 

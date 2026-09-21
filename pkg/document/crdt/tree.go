@@ -2839,7 +2839,7 @@ func (t *Tree) Style(
 			}
 
 			for key, value := range attrs {
-				accAttrWrite(node.SetAttr(key, value, editedAt), node, &pairs, &diff)
+				accAttrWrite(node.SetAttr(key, value, editedAt), node, true, &pairs, &diff)
 			}
 
 			// Propagate style to unknown split siblings so that a
@@ -2856,7 +2856,7 @@ func (t *Tree) Style(
 						break
 					}
 					for key, value := range attrs {
-						accAttrWrite(next.SetAttr(key, value, editedAt), next, &pairs, &diff)
+						accAttrWrite(next.SetAttr(key, value, editedAt), next, true, &pairs, &diff)
 					}
 					current = next
 				}
@@ -2999,10 +2999,26 @@ func (t *Tree) RemoveStyle(
 // as Start and once as End) loses LWW on the second visit and is naturally
 // deduped. Deciding from the map instead made Live depend on delivery order
 // and, where a token-type guard suppressed only one half, drove it negative.
-func accAttrWrite(w RHTWrite, parent GCParent, pairs *[]GCPair, diff *resource.DataSize) {
+func accAttrWrite(
+	w RHTWrite,
+	parent GCParent,
+	chargeLive bool,
+	pairs *[]GCPair,
+	diff *resource.DataSize,
+) {
 	if w.Revived != nil {
 		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false))
 	}
+
+	// chargeLive is false when the container does not count this node's
+	// attributes in Live at all -- a tombstoned text node, which Text.DataSize
+	// skips. Booking either half there drifts Live by the SIGNED difference
+	// between the two values' sizes, and a shrinking overwrite takes it
+	// negative.
+	if !chargeLive {
+		return
+	}
+
 	if w.Superseded != nil {
 		diff.Sub(w.Superseded.DataSize())
 	}

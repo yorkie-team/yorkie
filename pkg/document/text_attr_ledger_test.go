@@ -18,6 +18,7 @@ package document_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -334,4 +335,37 @@ func TestRemovingAnAttrFromATombstonedTextNodeBalances(t *testing.T) {
 	require.Equal(t, resourceSize{}, resourceSize{
 		Data: doc.DocSize().GC.Data, Meta: doc.DocSize().GC.Meta,
 	}, "collection left GC residue")
+}
+
+// canStyle admits a tombstoned text node, so a Style can overwrite a key on
+// one. Live never held that node's attributes -- Text.DataSize skips removed
+// nodes -- so debiting the superseded value drifts Live by the SIGNED
+// difference between the two values' sizes, and a shrinking overwrite takes it
+// negative.
+func TestStylingOverATombstonedTextNodeKeepsLiveExact(t *testing.T) {
+	doc := document.New("d")
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("k").Edit(0, 0, "abcdefghij")
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Style(4, 6, map[string]string{"b": strings.Repeat("L", 20)})
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Edit(4, 6, "")
+		return nil
+	}))
+
+	// A much shorter value over the same key, on a range that covers the
+	// tombstoned node as well as live ones.
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Style(0, 8, map[string]string{"b": "x"})
+		return nil
+	}))
+
+	require.GreaterOrEqual(t, doc.DocSize().Live.Data, 0, "Live went negative")
+	clone, err := doc.InternalDocument().DeepCopy()
+	require.NoError(t, err)
+	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live)
 }
