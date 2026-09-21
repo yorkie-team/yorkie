@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-14
+updated: 2026-09-21
 ---
 
 # Tasks Archive
@@ -8,7 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 28
+Total archived tasks: 29
+
+## 2026/09 (1 task)
+
+| Task | Todo | Lessons |
+|---|---|---|
+| Post-GC style panic and the snapshot's lost text attribute tombstone (2026-09-20) | [20260920-post-gc-panic-and-snapshot-tombstone-todo.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-todo.md) | [20260920-post-gc-panic-and-snapshot-tombstone-lessons.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-lessons.md) |
 
 ## 2026/08 (8 tasks)
 

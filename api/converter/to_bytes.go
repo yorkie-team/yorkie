@@ -264,6 +264,7 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 			attrs[node.Key()] = &api.NodeAttr{
 				Value:     node.Value(),
 				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
+				IsRemoved: node.IsRemoved(),
 			}
 		}
 

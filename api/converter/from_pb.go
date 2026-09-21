@@ -1002,6 +1002,14 @@ func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {
 		if err != nil {
 			return nil, err
 		}
+		// An attribute's updatedAt is what RHTNode.IDString is built from, and
+		// NewRoot reads it to key the GC pair a removed attribute registers.
+		// fromTimeTicket returns nil for an absent ticket, so accepting one
+		// here would fault on every later load of the document rather than on
+		// the bytes that carried it.
+		if updatedAt == nil {
+			return nil, goerrors.New("tree node attribute missing updatedAt")
+		}
 		rht.SetInternal(k, pbAttr.Value, updatedAt, pbAttr.IsRemoved)
 	}
 	return rht, nil
