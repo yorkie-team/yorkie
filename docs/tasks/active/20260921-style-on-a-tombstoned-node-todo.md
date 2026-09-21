@@ -99,20 +99,46 @@ way.
 
 ## Tasks
 
-- [ ] `canStyle` takes the change's version vector and skips a causally-known
+- [x] `canStyle` takes the change's version vector and skips a causally-known
       removal, on `RGATreeSplitNode` and on `TreeNode`
-- [ ] Correct the comment on the tree's `InsNextID` propagation loop: a split
+- [x] Correct the comment on the tree's `InsNextID` propagation loop: a split
       sibling whose *creation* the style did not know cannot have a known
       removal either, so that loop needs no separate filter
-- [ ] Route an attribute write on a tombstoned node through `docSize.GC`
+- [x] Route an attribute write on a tombstoned node through `docSize.GC`
       instead of dropping it, so registration and purge agree
-- [ ] Convergence test: concurrent style vs removal, both ticket orderings,
+- [x] Give an attribute its own size back when a revive un-registers its pair
+      — found while reviewing the above, only reachable once a style can land
+      on a tombstone
+- [x] Convergence test: concurrent style vs removal, both ticket orderings,
       over the protobuf round trip, comparing tombstone attributes rather than
       rendered content
-- [ ] Ledger test: upgrade `TestRemoteStyleOnARemovedTreeNodeKeepsLiveExact`
-      and `TestStylingOverATombstonedTextNodeKeepsLiveExact` to assert GC too
-- [ ] Mirror all of it in the JS SDK
+- [x] Ledger test: `TestRemoteStyleOnARemovedTreeNodeKeepsLiveExact` and
+      `TestStylingOverATombstonedTextNodeKeepsLiveExact` are replaced by tests
+      that assert GC as well as Live and then collect
+- [x] Mirror all of it in the JS SDK
 
 ## Review
 
-(filled in when the branch is done)
+Green: `go test ./...`, `make lint`, `make test` (integration, MongoDB up).
+Every new test was checked Red against `main` first.
+
+Cross-SDK: the JS SDK's 2607 integration tests pass against a server built
+from this branch, and the six-operation sequence from the issue now produces
+the same document on both sides.
+
+Two things this turned up that the issue did not name:
+
+1. The server did not agree with itself. `editedAt.After(removedAt)` decided
+   the concurrent case on an actor-ID tie-break while the issuing replica had
+   already applied the style unconditionally, so "add the SDK's guard to the
+   server" would not have converged either.
+2. `RegisterGCPair`'s un-register branch gave back the amount registration
+   added, which is zero for an attribute removed from a node that was already
+   a tombstone. Only reachable once a style can land on a tombstone at all,
+   and it needs three changes concurrent with one removal.
+
+Known consequence, not addressed here: a server rebuilding a document from
+its full change log with this code computes a different state for any history
+that styled a node whose removal the style had already seen. Existing
+snapshots are unaffected — changes applied on top of them keep whatever the
+old code decided — and no wire format changed.
