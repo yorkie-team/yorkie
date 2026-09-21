@@ -209,9 +209,11 @@ end-state key loss.
       its open safety questions answered. See the 2026-09-12 update above
 - [x] Check whether `Remove`'s `*crdt.Array` reverse (`Add`) and `Move`'s
       reverse have the same gating — they do not; see the same update
-- [ ] Fix in `yorkie` and `yorkie-js-sdk` together; land both before
+- [x] Fix in `yorkie` and `yorkie-js-sdk` together; land both before
       either ships, or add a version gate — **in review**: #1978 and
       `yorkie-js-sdk#1341`, each naming the other as a merge prerequisite
+
+      Landed together: yorkie `f2533292` and yorkie-js-sdk `1ad69a126`.
 - [x] Add the regression test from the reproduction sketch to both SDKs —
       `gc_restore_test.go` here, `test/unit/document/gc_containment_test.ts`
       and `test/integration/gc_containment_test.ts` there
@@ -387,19 +389,31 @@ underlying divergence.
 
 ### Tasks
 
-- [ ] Decide whether Go should adopt JS's tombstoned-node skip in
+- [x] Decide whether Go should adopt JS's tombstoned-node skip in
       `Text.Style`/`Text.RemoveStyle`, or whether JS should drop it (JS
       is the older behavior here, so the default assumption is Go should
       match JS, but confirm there isn't a reason JS's skip exists that
       would make it the one to remove)
-- [ ] Check whether `Tree.Style`/`Tree.RemoveStyle`
+
+      Decided in #2012/#1368, and as neither rule: `canStyle` now reads no removal
+      state at all, in both SDKs.
+- [x] Check whether `Tree.Style`/`Tree.RemoveStyle`
       (`pkg/document/crdt/tree.go`) have the same asymmetry, since they
       share the `canStyle`-based selection pattern
-- [ ] If Go adopts the filter, re-verify `Text.Style`/`RemoveStyle`'s
+
+      Checked: `TreeNode.canStyle` carried the same asymmetry and was rewritten
+      identically (`6731bb6c`, `pkg/document/crdt/tree.go`).
+- [x] If Go adopts the filter, re-verify `Text.Style`/`RemoveStyle`'s
       `PrevAttr` capture (`pkg/document/crdt/text.go:508`, `:604`) still
       captures from the correct (now filtered) first node
-- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+
+      No filter was adopted. The `PrevAttr` capture was re-verified regardless and
+      now starts at the first live node (`6731bb6c`, `pkg/document/crdt/text.go`).
+- [x] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
       per this document's usual rule for cross-SDK behavior changes
+
+      Landed together: yorkie `6731bb6c` (#2012) and yorkie-js-sdk `e0609c7a1`
+      (#1368).
 
 ## Related: `validateRestoreIdentities` can reject a client's own undo
 
@@ -596,17 +610,28 @@ a removed-attribute case to surface it, which nothing before did.
 
 ### Tasks
 
-- [ ] Confirm the same gap for `RGATreeSplitNode`-adjacent tombstoned
+- [x] Confirm the same gap for `RGATreeSplitNode`-adjacent tombstoned
       attributes doesn't already have separate handling elsewhere (e.g.
       GC purge of the RHT node itself, which removes it from the map
       entirely and would sidestep this — check whether that GC pass runs
       before every snapshot or is best-effort)
-- [ ] Decide the fix: add `is_removed` to the text-node attribute
+
+      Confirmed by `3891d70d`: the tombstone survives in the RHT, and
+      `api/converter/snapshot_text_attr_test.go` asserts its GC parity.
+- [x] Decide the fix: add `is_removed` to the text-node attribute
       encode/decode path on both sides, mirroring `toRHT`/`fromRHT`
-- [ ] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
+
+      Done in `3891d70d`: `to_bytes.go` writes `IsRemoved` and `from_bytes.go`
+      restores it through `SetInternal`.
+- [x] Fix in `yorkie` and `yorkie-js-sdk` together, or add a version gate,
       per this document's usual rule for cross-SDK behavior changes
-- [ ] Add regression coverage: style an attribute, remove it, snapshot
+
+      Landed together: yorkie `3891d70d` and yorkie-js-sdk `248551a15` (#1364).
+- [x] Add regression coverage: style an attribute, remove it, snapshot
       round trip, assert the attribute stays absent -- in both SDKs
+
+      Added: `api/converter/snapshot_text_attr_test.go` and the JS
+      `test/unit/api/snapshot_converter_test.ts`.
 
 ## Related: a Tree reverse can delete live neighbours when its content was born tombstoned
 
@@ -865,19 +890,32 @@ the same reasoning at the call site.
 
 ### Tasks
 
-- [ ] Raise it with the JS SDK: `element_rht.ts:99` should gate eviction on
+- [x] Raise it with the JS SDK: `element_rht.ts:99` should gate eviction on
       `getPositionedAt()`, the same anchor as the winner check below it. Task
       5's report already flagged it as "worth a note to the JS team"; this is
       that note
-- [ ] Write the cross-SDK reproduction first: one Go replica and one JS
+
+      Raised and fixed in yorkie-js-sdk `9970907cb` (#1343): the eviction moved
+      inside the `getPositionedAt()` winner branch.
+- [x] Write the cross-SDK reproduction first: one Go replica and one JS
       replica, a restored element, and a concurrent `Set` ticketed into the
       window. Assert the key's presence on both — it should be the failing
       test that motivates the JS change
-- [ ] Until JS changes, treat a key that reads absent on a JS client but
+
+      Written JS-side as `test/unit/document/crdt/element_rht_order_test.ts`
+      (`9970907cb`), red on `main`. No literal Go-replica/JS-replica harness was
+      built — the defect reproduced within one SDK.
+- [x] Until JS changes, treat a key that reads absent on a JS client but
       present on Go (or on the server's rebuilt document) as this bug, not as
       a lost write
-- [ ] Once JS is fixed, drop the "deliberate divergence" half of the comment
+
+      Moot since `9970907cb`: JS no longer has the defect, so the interim reading
+      rule no longer applies.
+- [x] Once JS is fixed, drop the "deliberate divergence" half of the comment
       on `SetWithExecutedAt` and keep only the anchor rationale
+
+      Already dropped — `pkg/document/crdt/element_rht.go` keeps only the anchor
+      rationale; the wording went in `27e31dd2`.
 
 ## Related: `refinePos` mixes `contentLen()` and `Len()` — a defect Go shares with JS
 
@@ -1015,5 +1053,8 @@ their JS-parity verification, not a local fix.
       `TreeEdit` that inserts nothing, splits nothing and removes nothing —
       assert `Observable == false` and that the redo stack survives / no
       undo change ships, matching JS
-- [ ] No JS-side change needed — JS already computes this exactly; only
+- [x] No JS-side change needed — JS already computes this exactly; only
       Go's conservative fallback would move
+
+      Verified, no action needed: `style_operation.ts` derives `opInfos` from the
+      CRDT change list.

@@ -22,6 +22,43 @@ tables, expression partitioning), Kubernetes CronJob (internal devops repo).
 
 **Spec:** `docs/design/project-stats-long-retention.md`
 
+## Status
+
+Tasks 1-6 and 8 have landed. Task 7 (base repartitioning + 90-day TTL) has not
+been started, and the one Task 8 item gated on it stays open with it. The
+branch shas quoted below are gone — every PR was squash-merged:
+
+| Task | Landed as |
+|------|-----------|
+| 1-5 | `45fe61e9` (#1961), reshaped by `c2014efb` (#1976) and `1c0f1121` (#1997) |
+| 6 | devops `19bdb24` (#347), `31f968d` (#352), `4201d61` (#359) |
+| 8 | flag flipped in devops `38aa652` (#348); rehearsal lives in `server/backend/warehouse/e2e_rehearsal_test.go` |
+
+Where the shipped shape differs from the plan below:
+
+- **6 summary tables, not 5.** `1c0f1121` added `sum_session_peak_daily`, a
+  plain `BIGINT MAX` table with no HLL sketch.
+- **11 metric methods, not 12.** `1c0f1121` removed
+  `GetPeakSessionsPerChannelCount` from `Warehouse`; the window peak is now
+  reduced in Go from the series (`server/projects/projects.go`).
+- **The builders live in a new `query.go`**, are methods on `metricDesc`, and
+  take no `summary` parameter. The flag-off path keeps the original inline SQL
+  in `starrocks.go` instead.
+- **`splitWindow` returns three ranges, not two**, and splits at the summary's
+  measured coverage (`coverage.go`) rather than at `today` — refresh lag left a
+  day in neither half, and days below the summary's floor read as zero.
+- **The fresh half carries DATE-only bounds.** `c2014efb` removed the raw
+  `timestamp` bound this plan called for: it drops the query off
+  `mv_*_hll_daily` and full-scans the base. Pinned by
+  `TestFreshHalfOmitsRawTimestampBounds`.
+- **Task 6 landed in the public `yorkie-team/devops` repo**, as the single file
+  `k8s/cluster/analytics-summary.yaml` rather than under
+  `k8s/apps/yorkie-analytics/starrocks/summary/`, because the ArgoCD app is
+  pinned at chart 0.6.0. Its runbook is that file's header plus
+  `MAINTAINING.md`, not a README.
+- The two "run to verify it fails" steps are ticked on the strength of the
+  committed green tests; a red run leaves no artifact to verify after the fact.
+
 ## Global Constraints
 
 - Apache 2.0 license header on every new Go file.
@@ -42,13 +79,13 @@ tables, expression partitioning), Kubernetes CronJob (internal devops repo).
 
 ## File Structure
 
-- `build/docker/analytics/init-create-summary.sql` — 5 summary table DDLs (local stack).
+- `build/docker/analytics/init-create-summary.sql` — 6 summary table DDLs (local stack).
 - `build/docker/analytics/init-backfill-summary.sql` — one-time backfill INSERTs.
 - `build/charts/yorkie-analytics/templates/starrocks/configmap.yaml` — same DDL for deployed clusters (mirror of the MV configmap).
 - `server/backend/warehouse/window.go` — pure window-split helper (`splitWindow`).
 - `server/backend/warehouse/window_test.go` — unit tests for `splitWindow`.
 - `server/backend/warehouse/metrics.go` — per-metric descriptor table (base table, id column, summary table, hll column, extra predicate).
-- `server/backend/warehouse/starrocks.go` — rewrite the 12 methods to dual-read via the descriptor + helper; add `SummaryEnabled`.
+- `server/backend/warehouse/starrocks.go` — rewrite the 11 metric methods to dual-read via the descriptor + helper; add `SummaryEnabled`.
 - `server/backend/warehouse/starrocks_query_test.go` — golden-string tests for the built queries (no DB).
 - `server/backend/warehouse/warehouse.go` — add `SummaryEnabled bool` to `Config`.
 - Internal devops repo `k8s/apps/yorkie-analytics/starrocks/summary/` — ingest CronJob + configmap + backfill Job (Task 6), mirroring `starrocks/mv/`.
@@ -71,7 +108,7 @@ tables, expression partitioning), Kubernetes CronJob (internal devops repo).
   `AGGREGATE KEY`, `HLL_UNION` sketch column, `PARTITION BY date_trunc('day', dt)`,
   `partition_live_number = 465`.
 
-- [ ] **Step 1: Write the DDL** mirroring `init-create-mv.sql` metric-for-metric, e.g.:
+- [x] **Step 1: Write the DDL** mirroring `init-create-mv.sql` metric-for-metric, e.g.:
 
 ```sql
 USE yorkie;
@@ -117,14 +154,14 @@ DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 ```
 
-- [ ] **Step 2: Bring up the local analytics stack** and confirm the tables exist.
+- [x] **Step 2: Bring up the local analytics stack** and confirm the tables exist.
 
 Run: `docker compose -f build/docker/analytics/docker-compose.yml up --build -d`
 then `mysql -h127.0.0.1 -P9030 -uroot -e "SHOW TABLES FROM yorkie LIKE 'sum_%'"`
-Expected: 5 `sum_*` tables. (Local stack must run StarRocks ≥3.1 for
+Expected: 6 `sum_*` tables. (Local stack must run StarRocks ≥3.1 for
 `date_trunc` expression partitioning — bump the pinned image if it is 2.5.x.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add build/docker/analytics/init-create-summary.sql build/docker/analytics/docker-compose.yml build/charts/yorkie-analytics/templates/starrocks/configmap.yaml
@@ -151,7 +188,7 @@ git commit -m "Add decoupled daily HLL summary tables for project stats"
   `hist = [from, min(to, today))`, `fresh = [max(from, today), to)`; each Empty
   when its start >= end.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```go
 func TestSplitWindow(t *testing.T) {
@@ -175,12 +212,12 @@ func TestSplitWindow(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `go test ./server/backend/warehouse/ -run TestSplitWindow -v`
 Expected: FAIL (`splitWindow` undefined).
 
-- [ ] **Step 3: Implement `splitWindow`** in `window.go` (license header + package comment).
+- [x] **Step 3: Implement `splitWindow`** in `window.go` (license header + package comment).
 
 ```go
 func splitWindow(from, to, today time.Time) (hist, fresh dayRange) {
@@ -195,12 +232,12 @@ func splitWindow(from, to, today time.Time) (hist, fresh dayRange) {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `go test ./server/backend/warehouse/ -run TestSplitWindow -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/backend/warehouse/window.go server/backend/warehouse/window_test.go
@@ -233,16 +270,16 @@ git commit -m "Add UTC day window-split helper for dual-read project stats"
   ```
   `StarRocks.summaryEnabled` read from `Config.SummaryEnabled`.
 
-- [ ] **Step 1: Write the descriptors and wire the flag.** Add `SummaryEnabled`
+- [x] **Step 1: Write the descriptors and wire the flag.** Add `SummaryEnabled`
   to `Config`, set `r.conf` already carries it; expose `func (r *StarRocks)
   summaryEnabled() bool { return r.conf.SummaryEnabled }`.
 
-- [ ] **Step 2: Build** to confirm it compiles.
+- [x] **Step 2: Build** to confirm it compiles.
 
 Run: `go build ./server/backend/warehouse/`
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/backend/warehouse/metrics.go server/backend/warehouse/warehouse.go
@@ -270,7 +307,7 @@ git commit -m "Add per-metric descriptors and SummaryEnabled warehouse flag"
   When `summary` is false, the builders return exactly today's base-only SQL
   (byte-identical to the current queries) so the flag-off path is unchanged.
 
-- [ ] **Step 1: Write failing golden tests** asserting the built SQL for each
+- [x] **Step 1: Write failing golden tests** asserting the built SQL for each
   branch. Example for the total, straddling window, summary on:
 
 ```go
@@ -298,23 +335,23 @@ Add analogous tests for `seriesQuery` (hist rows from summary + today from base,
 concatenated), the client `event_type` predicate, and `peakTotalQuery` (per
 `(dt, channel)` cardinality then `MAX`, no cross-boundary union).
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `go test ./server/backend/warehouse/ -run Query -v`
 Expected: FAIL (builders undefined).
 
-- [ ] **Step 3: Implement the builders** in `starrocks.go`, using `splitWindow`.
+- [x] **Step 3: Implement the builders** in `starrocks.go`, using `splitWindow`.
   Totals union `dayRange` halves with `HLL_UNION_AGG` per the spec's read-path
   SQL; the fresh half carries both raw-`timestamp` and `DATE(timestamp)` bounds.
   Series concatenates summary rows and today's base row. Peak reads per
   `(dt, channel)` and takes `MAX`. Summary-off returns the current SQL verbatim.
 
-- [ ] **Step 4: Run to verify they pass**
+- [x] **Step 4: Run to verify they pass**
 
 Run: `go test ./server/backend/warehouse/ -run Query -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/backend/warehouse/starrocks.go server/backend/warehouse/starrocks_query_test.go
@@ -323,32 +360,32 @@ git commit -m "Build dual-read project-stats queries splitting at today"
 
 ---
 
-### Task 5: Wire the 12 methods through the builders + fallback
+### Task 5: Wire the metric methods through the builders + fallback
 
 **Files:**
 - Modify: `server/backend/warehouse/starrocks.go`
 
 **Interfaces:**
 - Consumes: the builders from Task 4.
-- Produces: the 12 `Warehouse` methods unchanged in signature; each now calls
+- Produces: the `Warehouse` metric methods unchanged in signature; each now calls
   its builder with `today = time.Now().UTC().Truncate(24h)` and
   `summary = r.summaryEnabled()`. Behavior with the flag off is identical to
   today.
 
-- [ ] **Step 1: Replace each method body** to delegate to the builder + existing
+- [x] **Step 1: Replace each method body** to delegate to the builder + existing
   `queryMetrics`/`queryCount`. Keep the `//nolint:gosec` and NOTE comment.
 
-- [ ] **Step 2: Run the warehouse unit tests + lint**
+- [x] **Step 2: Run the warehouse unit tests + lint**
 
 Run: `go test ./server/backend/warehouse/... && make lint`
 Expected: PASS, lint clean.
 
-- [ ] **Step 3: Run the full unit suite** (no DB) to confirm nothing else broke.
+- [x] **Step 3: Run the full unit suite** (no DB) to confirm nothing else broke.
 
 Run: `go test ./...`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/backend/warehouse/starrocks.go
@@ -380,10 +417,10 @@ git commit -m "Route project-stats reads through the dual-read builders"
   which StarRocks evaluates in the session `time_zone`, default `Asia/Shanghai`):
   `WHERE DATE(timestamp) >= DATE_SUB(DATE(UTC_TIMESTAMP()), INTERVAL 7 DAY) AND DATE(timestamp) < DATE(UTC_TIMESTAMP())`.
 
-- [ ] **Step 1: Write the configmap SQL** for all 5 metrics (daily + backfill variants).
-- [ ] **Step 2: Write the CronJob and backfill Job** modeled on `starrocks/mv/job.yaml` and `tools/housekeeping-trend/cronjob.yaml`.
-- [ ] **Step 3: Write the README** (apply order: tables → backfill → validate → enable CronJob).
-- [ ] **Step 4: Commit in the devops repo** (English, per that repo's rules).
+- [x] **Step 1: Write the configmap SQL** for all 5 metrics (daily + backfill variants).
+- [x] **Step 2: Write the CronJob and backfill Job** modeled on `starrocks/mv/job.yaml` and `tools/housekeeping-trend/cronjob.yaml`.
+- [x] **Step 3: Write the README** (apply order: tables → backfill → validate → enable CronJob).
+- [x] **Step 4: Commit in the devops repo** (English, per that repo's rules).
 
 Note: no CI here; correctness is verified by the rehearsal in Task 8.
 
@@ -396,7 +433,10 @@ following the `session_events` redistribution playbook.
 
 - [ ] Create partitioned twins: `<t>_p` with `PARTITION BY date_trunc('day', timestamp)`, `partition_live_number = 90`.
 - [ ] Per table, low-ingest window: `PAUSE ROUTINE LOAD` → `INSERT INTO <t>_p SELECT *` → `ALTER TABLE ... RENAME` swap → recreate routine load on the new table → `RESUME`. `session_events` last, watching `ADMIN SHOW REPLICA STATUS` (replication_num=1).
-- [ ] `EXPLAIN` a fresh-day total: confirm it prunes to one partition with the raw-`timestamp` bound present.
+- [ ] `EXPLAIN` a fresh-day total: confirm it reads `mv_*_hll_daily`. The
+      original wording asked for a raw-`timestamp` bound to prune partitions;
+      `c2014efb` removed that bound on purpose, so partition count is no
+      longer what this check proves.
 - [ ] Confirm old partitions actually drop (3.3.x `partition_live_number` — verify against StarRocks #39341) before relying on TTL.
 - [ ] Only after summary validation is green: enable the 90-day TTL.
 
@@ -406,11 +446,11 @@ following the `session_events` redistribution playbook.
 
 **Not TDD-able** (StarRocks not in CI). Rehearse against the local stack, then dev, then prod.
 
-- [ ] Backfill locally; run the 12 dashboard queries with `SummaryEnabled=true` and again with the flag off; assert **identical results** for windows fully inside current retention (this proves the union math).
-- [ ] `EXPLAIN` + `fe.audit.log` `ScanRows` small for the six metrics on the summary path.
-- [ ] Flip `SummaryEnabled` on only after backfill + the equality check pass.
+- [x] Backfill locally; run the dashboard queries with `SummaryEnabled=true` and again with the flag off; assert **identical results** for windows fully inside current retention (this proves the union math).
+- [x] `EXPLAIN` + `fe.audit.log` `ScanRows` small for the six metrics on the summary path.
+- [x] Flip `SummaryEnabled` on only after backfill + the equality check pass.
 - [ ] After Task 7 TTL: confirm a 12-month window still returns a full series matching the summary, not collapsing to the 90-day base.
-- [ ] Capture findings in `docs/tasks/active/20260831-project-stats-long-retention-lessons.md`.
+- [x] Capture findings in `docs/tasks/active/20260831-project-stats-long-retention-lessons.md`.
 
 ---
 

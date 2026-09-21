@@ -100,12 +100,18 @@ reverse, in both SDKs.
 - [ ] Fix in `yorkie` and `yorkie-js-sdk` together. Not urgent to keep them in
       lockstep here (the stacks never reach the wire), but the port exists to
       stop the two from drifting, and a one-sided fix restarts the drift
-- [ ] Until then, consider whether `Document.Undo`'s API documentation should
+- [x] Until then, consider whether `Document.Undo`'s API documentation should
       state that a splitting edit combined with an insert or remove is not
       undoable, so callers of the new Go public API are not surprised
-- [ ] Add a Go test pinning the current behavior once the shape of the fix is
+
+      Done in `36235fd4`, the commit that filed this document:
+      `pkg/document/document.go` documents the limitation on `Undo` and links here.
+- [x] Add a Go test pinning the current behavior once the shape of the fix is
       decided, so the change from "silently loses the entry" to "undoes both
       halves" is a deliberate, visible test edit
+
+      Done in `36235fd4`: `pkg/document/tree_split_undo_test.go` pins the
+      no-reverse behavior through `UndoStackLenForTest`.
 
 ## See Also
 
