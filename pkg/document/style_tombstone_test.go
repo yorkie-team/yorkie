@@ -400,3 +400,36 @@ func TestRemoteRemoveStyleOnARemovedTreeNodeKeepsTheLedgerExact(t *testing.T) {
 	assertLedgerExact(t, d1, "on the replica that removed the node", a1, a2)
 	assertLedgerExact(t, d2, "on the replica that issued the removeStyle", a1, a2)
 }
+
+// Toggling a tree attribute on and off has to return the ledger to where it
+// started, on the CLONE as well as on the root. json.Tree's RemoveStyle
+// registered its GC pairs without ever calling AdjustDiffForGCPair -- the
+// Style path beside it does -- so the clone's Live kept every attribute a
+// removeStyle had tombstoned. Document.Update reads the clone's total against
+// MaxSizeLimit, so a rich-text editor toggling one key walks into
+// ErrDocumentSizeExceedsLimit on a document nowhere near the limit.
+//
+// The root is spared because operations.TreeStyle.Execute does call it, which
+// is why DocSize() alone cannot see this.
+func TestTogglingATreeAttributeDoesNotDriftTheCloneLedger(t *testing.T) {
+	doc := document.New("d")
+	doc.MaxSizeLimit = 2000
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
+		}})
+		return nil
+	}))
+
+	val := strings.Repeat("v", 200)
+	for i := range 40 {
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Style(0, 6, map[string]string{"b": val})
+			return nil
+		}))
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(0, 6, []string{"b"})
+			return nil
+		}), "toggle %d tripped MaxSizeLimit; the document itself is %+v", i, doc.DocSize())
+	}
+}
