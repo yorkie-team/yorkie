@@ -816,7 +816,7 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 // SetAttr sets the given attribute of the element.
 // SetAttr writes an attribute and reports what it replaced. See RHT.Set for
 // what each return means and why the caller has to act on both.
-func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) (revived, superseded *RHTNode) {
+func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) RHTWrite {
 	if n.Attrs == nil {
 		n.Attrs = NewRHT()
 	}
@@ -2839,19 +2839,7 @@ func (t *Tree) Style(
 			}
 
 			for key, value := range attrs {
-				revived, superseded := node.SetAttr(key, value, editedAt)
-				if revived != nil {
-					pairs = append(pairs, attrGCPair(node, revived, false))
-				}
-				// RHT overrides immutably, so a superseded live value is
-				// dropped outright: no tombstone, nothing to collect, but
-				// its bytes have to leave Live.
-				if superseded != nil {
-					diff.Sub(superseded.DataSize())
-				}
-				if newNode, ok := node.Attrs.nodeMapByKey[key]; ok && token.TokenType != index.End {
-					diff.Add(newNode.DataSize())
-				}
+				accAttrWrite(node.SetAttr(key, value, editedAt), node, &pairs, &diff)
 			}
 
 			// Propagate style to unknown split siblings so that a
@@ -2868,19 +2856,7 @@ func (t *Tree) Style(
 						break
 					}
 					for key, value := range attrs {
-						revived, superseded := next.SetAttr(key, value, editedAt)
-						if revived != nil {
-							pairs = append(pairs, attrGCPair(next, revived, false))
-						}
-						// RHT overrides immutably, so a superseded live value is
-						// dropped outright: no tombstone, nothing to collect, but
-						// its bytes have to leave Live.
-						if superseded != nil {
-							diff.Sub(superseded.DataSize())
-						}
-						if newNode, ok := next.Attrs.nodeMapByKey[key]; ok {
-							diff.Add(newNode.DataSize())
-						}
+						accAttrWrite(next.SetAttr(key, value, editedAt), next, &pairs, &diff)
 					}
 					current = next
 				}
@@ -3017,6 +2993,24 @@ func (t *Tree) RemoveStyle(
 // negative, at which point the document size limit stops applying at all.
 // Those go to GC alone, by the same GCOnlySize route a born-tombstoned split
 // piece takes.
+// accAttrWrite books one attribute write into the ledger. It reads only what
+// the write reported, never the map: a write that lost LWW installed nothing,
+// so it must charge nothing, and a node visited twice in one traversal (once
+// as Start and once as End) loses LWW on the second visit and is naturally
+// deduped. Deciding from the map instead made Live depend on delivery order
+// and, where a token-type guard suppressed only one half, drove it negative.
+func accAttrWrite(w RHTWrite, parent GCParent, pairs *[]GCPair, diff *resource.DataSize) {
+	if w.Revived != nil {
+		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false))
+	}
+	if w.Superseded != nil {
+		diff.Sub(w.Superseded.DataSize())
+	}
+	if w.Installed != nil {
+		diff.Add(w.Installed.DataSize())
+	}
+}
+
 // attrGCPair builds the GC pair for an attribute node, deciding which half of
 // the ledger it moves through. A node that was LIVE moves the usual way: its
 // size leaves docSize.Live and enters GC. A node that was already a tombstone

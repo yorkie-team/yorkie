@@ -17,6 +17,7 @@
 package document_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -255,4 +256,82 @@ func TestSplitCopyOfATextAttrTombstoneIsCollectable(t *testing.T) {
 	purged := doc.GarbageCollect(doc.VersionVector())
 	require.Equal(t, doc.GarbageLen(), 0, "every tombstone was collected")
 	require.Positive(t, purged)
+}
+
+// A style whose range opens inside one element and runs past its end yields
+// that element as an End token with no Start token. Both halves of the
+// per-token accounting have to agree about such a visit, or one fires without
+// the other and Live drifts by one attribute per operation -- downward, past
+// zero, without bound. MaxSizeLimit reads Live + GC, so a negative Live stops
+// the document being size-limited at all.
+//
+// The fix is to book from what the write reported rather than from the map:
+// the second visit to a node already styled at its Start loses LWW and
+// installs nothing, so it charges nothing, and no token-type guard is needed.
+func TestStyleStraddlingAnElementBoundaryKeepsLiveExact(t *testing.T) {
+	doc := document.New("d")
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
+		}})
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(0, 12, map[string]string{"b": "1"})
+		return nil
+	}))
+
+	for i := range 6 {
+		v := fmt.Sprintf("v%d", i)
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// (1,6) opens inside the first <p> and runs past its end.
+			root.GetTree("t").Style(1, 6, map[string]string{"b": v})
+			return nil
+		}))
+
+		clone, err := doc.InternalDocument().DeepCopy()
+		require.NoError(t, err)
+		require.Equal(t, clone.DocSize().Live, doc.DocSize().Live,
+			"overwrite %d drifted", i+1)
+		require.GreaterOrEqual(t, doc.DocSize().Live.Data, 0, "Live went negative")
+	}
+}
+
+// canStyle admits a tombstoned text node, so a style can land on one. But
+// Text.DataSize skips removed nodes, so those attribute bytes are not in Live
+// -- they went to GC inside the node's own charge when the node was removed.
+// Removing such an attribute must not debit Live a second time, and must not
+// charge GC a second time either.
+func TestRemovingAnAttrFromATombstonedTextNodeBalances(t *testing.T) {
+	doc := document.New("d")
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("k").Edit(0, 0, "abcdefghij")
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Style(4, 6, map[string]string{"bbbbbbbbbb": "vvvvvvvvvv"})
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Edit(4, 6, "")
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Style(0, 8, map[string]string{"bbbbbbbbbb": "vvvvvvvvvv"})
+		return nil
+	}))
+	require.NoError(t, doc.Undo())
+
+	clone, err := doc.InternalDocument().DeepCopy()
+	require.NoError(t, err)
+	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live)
+	require.Equal(t, clone.DocSize().GC, doc.DocSize().GC)
+	require.GreaterOrEqual(t, doc.DocSize().Live.Data, 0, "Live went negative")
+
+	doc.GarbageCollect(doc.VersionVector())
+	require.Equal(t, 0, doc.GarbageLen())
+	require.Equal(t, resourceSize{}, resourceSize{
+		Data: doc.DocSize().GC.Data, Meta: doc.DocSize().GC.Meta,
+	}, "collection left GC residue")
 }
