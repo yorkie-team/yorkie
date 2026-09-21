@@ -17,6 +17,7 @@
 package document_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -83,7 +84,9 @@ func newActor(t *testing.T, hex string) *document.Document {
 // Remove on the earliest concurrent tombstone does not help either -- the
 // style can still be applied before the earliest one arrives.
 //
-// Both replay orders below are causally legal, so all four have to agree.
+// S causally depends on B -- X applied B before styling -- so an order that
+// delivers S first is not legal and is not replayed. The three below are, and
+// they have to agree on the attributes AND on both halves of the ledger.
 func TestTwoConcurrentRemovalsThenStyle(t *testing.T) {
 
 	seed := newActor(t, "000000000000000000000009")
@@ -127,7 +130,6 @@ func TestTwoConcurrentRemovalsThenStyle(t *testing.T) {
 		{"C,B,S", [][]*change.Change{pC, pB, pS}},
 		{"B,S,C", [][]*change.Change{pB, pS, pC}},
 		{"B,C,S", [][]*change.Change{pB, pC, pS}},
-		{"C,S,B", [][]*change.Change{pC, pS, pB}},
 	}
 
 	var first []string
@@ -137,8 +139,10 @@ func TestTwoConcurrentRemovalsThenStyle(t *testing.T) {
 		for _, batch := range o.seq {
 			feed(t, d, batch)
 		}
-		got := nodeAttrs(t, d, "t")
-		t.Logf("%-6s %v  GC=%+v", o.name, got, d.DocSize().GC)
+		got := append(nodeAttrs(t, d, "t"),
+			fmt.Sprintf("live=%+v gc=%+v gcLen=%d",
+				d.DocSize().Live, d.DocSize().GC, d.GarbageLen()))
+		t.Logf("%-6s %v", o.name, got)
 		if first == nil {
 			first = got
 			continue

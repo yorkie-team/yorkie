@@ -276,10 +276,21 @@ charges Live for the position node it creates. Separate from the GC-pair
 question -- the running ledger is short, not the GC side -- and separate from
 this branch's subject.
 
-**JS snapshot load skips arrays.** The SDK's root scan handles `CRDTText` and
-`CRDTTree` but not `CRDTArray`, so a rebuilt SDK root does not register array
-dead position nodes where the server's does. Visible as a different
-`GarbageLen` and a different rebuilt size after a snapshot load.
+**Residual order-dependence, neither introduced nor fixed here.** Two
+mechanisms survive the contract change, both measured identically on
+`origin/main`:
+
+- *Tree style traversal reachability.* The set of nodes a style's range
+  traversal reaches depends on concurrent structural edits, which `canStyle`
+  does not control. A 300-seed fuzz still diverges on 10 seeds, always on
+  split or merged `<p>` nodes. The contract did shrink it: attribute-only
+  divergence went `main` 54/300 → 33/300 → **10/300**, and text-only
+  divergence to zero.
+- *`RHT.Remove` carries the value it replaced.* A concurrent same-key style
+  and removeStyle on a LIVE node, with no removal anywhere, leaves `b=s*` and
+  `GC{4,24}` under one order and `b=LLLL…*` and `GC{34,24}` under the other.
+  This is now the largest remaining source of attribute divergence and wants
+  its own issue.
 
 **Keeping the nicer undo semantics.** The cost of this contract is that a
 style covers text the same client already deleted. The way to avoid it without

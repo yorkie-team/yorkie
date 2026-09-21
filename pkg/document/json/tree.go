@@ -258,11 +258,11 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		panic(err)
 	}
 
-	// Registering the pair only moves the attribute INTO GC; taking it out of
-	// Live is AdjustDiffForGCPair's job, the way the Style path above does it.
-	// Without it the clone's Live keeps every attribute a removeStyle ever
-	// tombstoned -- and the clone's ledger is what MaxSizeLimit reads, so
-	// toggling one key rejects edits on a document far under the limit.
+	// RegisterGCPair moves both halves: the attribute enters GC and leaves
+	// Live in the same call. It did not always, and this path forgot the
+	// second half -- the clone's Live then kept every attribute a removeStyle
+	// ever tombstoned, and the clone's ledger is what MaxSizeLimit reads, so
+	// toggling one key rejected edits on a document far under the limit.
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
 	}
@@ -357,11 +357,11 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 		panic(err)
 	}
 
-	// Registering the pair only moves the attribute INTO GC; taking it out of
-	// Live is AdjustDiffForGCPair's job, the way the Style path above does it.
-	// Without it the clone's Live keeps every attribute a removeStyle ever
-	// tombstoned -- and the clone's ledger is what MaxSizeLimit reads, so
-	// toggling one key rejects edits on a document far under the limit.
+	// RegisterGCPair moves both halves: the attribute enters GC and leaves
+	// Live in the same call. It did not always, and this path forgot the
+	// second half -- the clone's Live then kept every attribute a removeStyle
+	// ever tombstoned, and the clone's ledger is what MaxSizeLimit reads, so
+	// toggling one key rejected edits on a document far under the limit.
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
 	}

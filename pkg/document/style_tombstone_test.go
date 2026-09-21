@@ -35,22 +35,31 @@ import (
 // canStyle decides whether a style may land on a node that has been removed.
 // The answer it gives is a convergence decision, not a rendering preference,
 // because a style is applied unconditionally on the replica that issues it --
-// the node is still live there -- and can never be retracted afterwards. So
-// either every replica applies it or the replicas hold different attributes
-// on the same node forever. That is invisible while the node is a tombstone
-// and rendered the moment the removal is undone.
+// the node is still live there, or the range would not have reached it -- and
+// can never be retracted afterwards. So either every replica applies it or
+// the replicas hold different attributes on the same node forever. That is
+// invisible while the node is a tombstone and rendered the moment the removal
+// is undone.
 //
-// The contract these tests pin:
+// THE CONTRACT THESE TESTS PIN: a style applies to every node the styling
+// change knew about, and does not ask whether that node has since been
+// removed. canStyle reads createdAt and the change's vector, nothing else.
 //
-//   - a removal the styling change had already SEEN wins, so a user never
-//     styles text they already deleted (a local change has seen every removal
-//     in its own replica, which is the whole of the local case);
-//   - a removal CONCURRENT with the style does not, so the style lands on the
-//     tombstone everywhere.
+// Two narrower rules were tried and measured, and both diverge:
 //
-// Deciding the second case on editedAt.After(removedAt) instead -- what the
-// server did -- made it turn on an actor-ID tie-break, so the same two
-// operations converged or diverged depending only on who issued them.
+//   - editedAt.After(removedAt), what the server used to do, turns the
+//     concurrent case on an actor-ID tie-break;
+//   - "skip a removal the change had already seen" looks right on a
+//     single-actor history -- it is what keeps an undo from losing the
+//     formatting a deleted run carried -- but removedAt is last-writer-wins
+//     and MUTABLE, so two clients deleting the same run concurrently make
+//     the answer depend on which removal landed first. See
+//     TestTwoConcurrentRemovalsThenStyle.
+//
+// The cost of reading nothing is that a style covers text the same client
+// already deleted, so undoing the style and then the deletion brings the text
+// back without the attributes it carried. That is deliberate; see
+// TestLocalStyleLandsOnANodeItAlreadyDeleted.
 
 // nodeAttrs dumps every node of the text under key, live and tombstoned, with
 // its attributes. Two replicas are compared on this rather than on rendered
@@ -415,15 +424,17 @@ func TestRemoteRemoveStyleOnARemovedTreeNodeKeepsTheLedgerExact(t *testing.T) {
 }
 
 // Toggling a tree attribute on and off has to return the ledger to where it
-// started, on the CLONE as well as on the root. json.Tree's RemoveStyle
-// registered its GC pairs without ever calling AdjustDiffForGCPair -- the
-// Style path beside it does -- so the clone's Live kept every attribute a
-// removeStyle had tombstoned. Document.Update reads the clone's total against
-// MaxSizeLimit, so a rich-text editor toggling one key walks into
-// ErrDocumentSizeExceedsLimit on a document nowhere near the limit.
+// started, on the CLONE as well as on the root. json.Tree's RemoveStyle used
+// to register its GC pairs without moving the same bytes out of Live -- that
+// was a second call the caller had to remember, and this one did not -- so
+// the clone's Live kept every attribute a removeStyle had tombstoned.
+// Document.Update reads the clone's total against MaxSizeLimit, so a
+// rich-text editor toggling one key walked into ErrDocumentSizeExceedsLimit
+// on a document nowhere near the limit.
 //
-// The root is spared because operations.TreeStyle.Execute does call it, which
-// is why DocSize() alone cannot see this.
+// The root was spared because the operation path did move them, which is why
+// DocSize() alone cannot see this. RegisterGCPair now does both halves, so
+// neither path can forget.
 func TestTogglingATreeAttributeDoesNotDriftTheCloneLedger(t *testing.T) {
 	doc := document.New("d")
 	doc.MaxSizeLimit = 2000
@@ -519,4 +530,58 @@ func TestUndoDoesNotRestoreATombstonesAttribute(t *testing.T) {
 		`[{"val":"efgh"},{"val":"ij"}]`,
 		doc.Root().GetText("t").Marshal(),
 		"the undo restored an attribute the visible text never carried")
+}
+
+// A rebuilt root's Live must not depend on how many dead position nodes the
+// array carries: Array.DataSize does not count them, so Array.GCPairs has to
+// mark each pair GCOnlySize -- "add to GC, take nothing out of Live". Without
+// it RegisterGCPair debits Live for bytes it never held, once per dead node.
+//
+// Moving the SAME element repeatedly keeps movedAt at a fixed count while the
+// dead-node count grows, which is what isolates the two. (The running ledger
+// is short by movedAt on every move; that is a separate, pre-existing defect
+// recorded in the task doc, and it is why this compares two rebuilds rather
+// than a rebuild against the running ledger.)
+//
+// The local move path in json.Array marks its pairs the same way. It is not
+// asserted here: it books to the CLONE, whose ledger has no observable except
+// MaxSizeLimit, and the error direction under-reports size so the limit stays
+// permissive. It is correct by symmetry with operations.Move, which this and
+// the barrier tests do cover.
+func TestArrayDeadPositionNodesAreGCOnly(t *testing.T) {
+	rebuiltLive := func(moves int) (resourceSize, int) {
+		doc := document.New("d")
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("a").AddString("one").AddString("two").AddString("three")
+			return nil
+		}))
+		for i := range moves {
+			require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				a := root.GetArray("a")
+				id := a.Get(0).CreatedAt()
+				if i%2 == 0 {
+					a.MoveLast(id)
+				} else {
+					a.MoveFront(id)
+				}
+				return nil
+			}))
+		}
+
+		clone, err := doc.InternalDocument().DeepCopy()
+		require.NoError(t, err)
+		require.Equal(t, moves, doc.GarbageLen(), "each move leaves one dead node")
+		return resourceSize{
+			Data: clone.DocSize().Live.Data,
+			Meta: clone.DocSize().Live.Meta,
+		}, doc.GarbageLen()
+	}
+
+	// Two and three moves of the same element set movedAt on the same
+	// elements; only the dead-node count differs.
+	two, twoLen := rebuiltLive(2)
+	three, threeLen := rebuiltLive(3)
+	require.NotEqual(t, twoLen, threeLen, "sanity: the dead-node count differs")
+	require.Equal(t, two, three,
+		"a rebuilt Live changed with the number of dead position nodes")
 }

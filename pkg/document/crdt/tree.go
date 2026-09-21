@@ -1266,6 +1266,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 	}
 
 	var node *TreeNode
+	var recreatedAttrPairs []GCPair
 	if span.IsText {
 		encoded := utf16.Encode([]rune(span.Value))
 		relStart := offset - span.ID.Offset
@@ -1289,7 +1290,9 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		//
 		// This runs for BOTH parents: a live one, where the node is reported
 		// as recreated, and a removed one, where it is born tombstoned below.
-		t.pendingGCPairs = append(t.pendingGCPairs, node.GCPairs()...)
+		// Buffered by attach, once the insertion has actually succeeded --
+		// a failed insert drops the node, and its pairs must go with it.
+		recreatedAttrPairs = node.GCPairs()
 	}
 
 	siblings := parent.Children(true)
@@ -1313,6 +1316,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			return nil, err
 		}
 		t.putNode(node)
+		t.pendingGCPairs = append(t.pendingGCPairs, recreatedAttrPairs...)
 		// The parent has been tombstoned since this node was purged, so the
 		// node is born tombstoned rather than live. This mirrors the
 		// convention the concurrent-insert path already states ("if
