@@ -240,7 +240,46 @@ whose removal the style had already seen. Existing snapshots are unaffected —
 changes applied on top of them keep whatever the old code decided — and no
 wire format changed.
 
+### Structural parity with the SDK
+
+Two shapes that differed for no reason, straightened so a reader following one
+implementation across to the other lands in the matching place:
+
+1. `ticketKnown` was package-private in `crdt/tree.go` but is the causality
+   primitive for `rga_tree_split.go` too. It now lives in
+   `time/version_vector.go` as `time.TicketKnown`, where the SDK keeps it.
+
+2. `RegisterGCPair` only added to GC; taking the same bytes out of Live was a
+   second call — `AdjustDiffForGCPair` — that every caller had to remember,
+   and forgetting it is not a compile error but silent drift only a rebuild
+   can see. It had already cost `json.Tree.RemoveStyle` exactly that. The SDK
+   has always done both halves in `registerGCPair`, using `gcOnlySize` to mean
+   "add to GC, take nothing out of Live". Go now does the same and
+   `AdjustDiffForGCPair` is gone, so the compiler finds every site.
+
+   Folding it in surfaced four registrations that had been relying on the
+   caller's silence to say "this was never in Live" and now have to say it
+   with `GCOnlySize`: the array dead position node (`operations/move.go`,
+   `json/array.go` ×2) and a node recreated under a removed parent
+   (`crdt/tree.go`, born tombstoned and never reported as recreated). The
+   snapshot-load scan says it through `GCPairs()`, which now marks its pairs
+   the way the SDK's `getGCPairs()` always has.
+
+   Measured after: an array move reports `live={12,144}` on both SDKs, where
+   before it was 144 on the server and 120 in the SDK.
+
 ### Deferred
+
+**The array move ledger.** Both SDKs now agree at `live={12,144}`, and both
+are 24 bytes under the truth: a rebuild says `{12,168}`. `moveAfter` never
+charges Live for the position node it creates. Separate from the GC-pair
+question -- the running ledger is short, not the GC side -- and separate from
+this branch's subject.
+
+**JS snapshot load skips arrays.** The SDK's root scan handles `CRDTText` and
+`CRDTTree` but not `CRDTArray`, so a rebuilt SDK root does not register array
+dead position nodes where the server's does. Visible as a different
+`GarbageLen` and a different rebuilt size after a snapshot load.
 
 **Keeping the nicer undo semantics.** The cost of this contract is that a
 style covers text the same client already deleted. The way to avoid it without

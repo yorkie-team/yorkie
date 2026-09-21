@@ -217,7 +217,6 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
 	t.context.Acc(size.Live)
@@ -266,7 +265,6 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	// toggling one key rejects edits on a document far under the limit.
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
 	t.context.Acc(size.Live)
@@ -314,7 +312,6 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
 	t.context.Acc(size.Live)
@@ -367,7 +364,6 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 	// toggling one key rejects edits on a document far under the limit.
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
 	t.context.Acc(size.Live)
@@ -503,7 +499,6 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
 	t.context.Acc(diff)

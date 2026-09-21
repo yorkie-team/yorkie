@@ -371,13 +371,10 @@ func (n *TreeNode) Split(
 		// split's RHT forever, uncounted and unpurgeable.
 		//
 		// TreeNode.DataSize skips removed attributes, so the split's diff
-		// never charged these to docSize.Live -- GCOnlySize sends each
-		// straight to docSize.GC, and Purge subtracts the same amount back.
-		for _, pair := range split.GCPairs() {
-			gcSize := pair.Child.DataSize()
-			pair.GCOnlySize = &gcSize
-			tree.pendingGCPairs = append(tree.pendingGCPairs, pair)
-		}
+		// never charged these to docSize.Live -- GCPairs already marks each
+		// GCOnlySize, which sends it straight to docSize.GC, and Purge
+		// subtracts the same amount back.
+		tree.pendingGCPairs = append(tree.pendingGCPairs, split.GCPairs()...)
 
 		// NOTE: A piece split off an already-tombstoned node inherits
 		// removedAt without going through remove(), so no GC pair is
@@ -870,9 +867,13 @@ func (n *TreeNode) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range n.Attrs.Nodes() {
 		if node.isRemoved {
+			// TreeNode.DataSize skips a removed attribute, so it was never in
+			// Live. See RegisterGCPair for what GCOnlySize means.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: n,
-				Child:  node,
+				Parent:     n,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 	}
@@ -1321,7 +1322,15 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		// node and overwrites it.
 		if parent.IsRemoved() {
 			node.remove(parent.RemovedAt())
-			t.pendingGCPairs = append(t.pendingGCPairs, GCPair{Parent: t, Child: node})
+			// Born tombstoned: it is not reported as recreated, so the caller
+			// never accounts it to Live. GCOnlySize is how a pair says "add to
+			// GC, take nothing out of Live" -- see Root.RegisterGCPair.
+			gcSize := node.DataSize()
+			t.pendingGCPairs = append(t.pendingGCPairs, GCPair{
+				Parent:     t,
+				Child:      node,
+				GCOnlySize: &gcSize,
+			})
 			return nil, nil
 		}
 		return node, nil
@@ -1446,9 +1455,13 @@ func (t *Tree) GCPairs() []GCPair {
 
 	for _, node := range t.Nodes() {
 		if node.removedAt != nil {
+			// Tree.DataSize skips a removed node, so this one was never in
+			// the Live the scan's root was built with.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: t,
-				Child:  node,
+				Parent:     t,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 

@@ -163,9 +163,14 @@ func (t *TextValue) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range t.attrs.Nodes() {
 		if node.isRemoved {
+			// DataSize skips a removed attribute, so the root this scan runs
+			// against never counted it into Live -- GCOnlySize is how a pair
+			// says "add to GC, take nothing out of Live". See RegisterGCPair.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: t,
-				Child:  node,
+				Parent:     t,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 	}
@@ -293,9 +298,13 @@ func (t *Text) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range t.Nodes() {
 		if node.removedAt != nil {
+			// Text.DataSize skips a removed node, so this one was never in
+			// the Live the scan's root was built with.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: t.rgaTreeSplit,
-				Child:  node,
+				Parent:     t.rgaTreeSplit,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 

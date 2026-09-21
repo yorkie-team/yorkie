@@ -649,16 +649,33 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 
 	r.gcNodePairMap[key] = pair
 
-	// NOTE: A born-removed split piece was never counted in docSize.Live,
-	// so only its net-new size is added to GC (Live is left untouched by
-	// AdjustDiffForGCPair below).
+	// GCOnlySize means the child's size was never counted in docSize.Live --
+	// it was born removed, or the snapshot-load scan registered it against a
+	// root whose Live only counted visible nodes. There is nothing to take
+	// out of Live; only the given size enters GC, and purge subtracts the
+	// child's size from GC as usual.
 	if pair.GCOnlySize != nil {
 		r.docSize.GC.Add(*pair.GCOnlySize)
 		return
 	}
 
+	// Otherwise the child WAS in Live and this registration is what moves it
+	// across. Doing both halves here, rather than leaving the Live side to a
+	// second call every caller has to remember, is what the JS SDK's
+	// registerGCPair does -- and forgetting that second call is not a compile
+	// error, it is silent drift only a rebuild can see. It cost
+	// json.Tree.RemoveStyle exactly that.
 	size := pair.Child.DataSize()
 	r.docSize.GC.Add(size)
+	r.docSize.Live.Sub(size)
+
+	// NOTE(hackerwins): In general cases, when removing a node, its size
+	// includes removedAt, so when subtracting the node size from docSize.Live,
+	// we need to subtract the removedAt size. However, RHTNode doesn't have
+	// removedAt, so we don't need to subtract it from the Live size.
+	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
+		r.docSize.Live.Meta += time.TicketSize
+	}
 }
 
 // UnregisterGCPair removes a GC pair whose child has been restored
@@ -704,26 +721,6 @@ func (r *Root) Acc(diff resource.DataSize) {
 // That is what this reports.
 func (r *Root) AccGC(diff resource.DataSize) {
 	r.docSize.GC.Add(diff)
-}
-
-// AdjustDiffForGCPair adjusts the given diff for the given GCPair.
-func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
-	// NOTE: A born-removed split piece was never in docSize.Live, so there
-	// is nothing to subtract from Live for it.
-	if pair.GCOnlySize != nil {
-		return
-	}
-
-	size := pair.Child.DataSize()
-	diff.Sub(size)
-
-	// NOTE(hackerwins): In general cases, when removing a node, its size
-	// includes removedAt, so when subtracting the node size from docSize.Live,
-	// we need to subtract the removedAt size. However, RHTNode doesn't have
-	// removedAt, so we don't need to subtract it from the Live size.
-	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
-		diff.Meta += time.TicketSize
-	}
 }
 
 // GCElementPairMap returns the gcElementPairMap for testing purposes.

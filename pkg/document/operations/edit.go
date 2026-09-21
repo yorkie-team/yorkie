@@ -178,7 +178,6 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				observable = observable || len(pairs) > 0
 				for _, pair := range pairs {
 					root.RegisterGCPair(pair)
-					root.AdjustDiffForGCPair(&diff, pair)
 				}
 				root.Acc(diff)
 			}
@@ -230,7 +229,6 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
-			root.AdjustDiffForGCPair(&diff, pair)
 		}
 		root.Acc(diff)
 		if err != nil {

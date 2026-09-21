@@ -239,7 +239,6 @@ func (e *TreeEdit) Execute(
 			diff.Add(retombstoneDiff)
 			for _, pair := range retombstonePairs {
 				root.RegisterGCPair(pair)
-				root.AdjustDiffForGCPair(&diff, pair)
 			}
 			// 2. Revive (restore) by identity. Isolating a range out of a
 			// straddling piece can split off born-removed remainders as pending
@@ -362,7 +361,6 @@ func (e *TreeEdit) Execute(
 		)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
-			root.AdjustDiffForGCPair(&diff, pair)
 		}
 		root.Acc(diff)
 		if err != nil {

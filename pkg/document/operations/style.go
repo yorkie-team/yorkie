@@ -128,7 +128,6 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 		)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
-			root.AdjustDiffForGCPair(&size.Live, pair)
 		}
 		root.Acc(size.Live)
 		root.AccGC(size.GC)
@@ -147,7 +146,6 @@ func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionV
 		pairs, size, prevAttrs, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
-			root.AdjustDiffForGCPair(&size.Live, pair)
 		}
 		root.Acc(size.Live)
 		root.AccGC(size.GC)

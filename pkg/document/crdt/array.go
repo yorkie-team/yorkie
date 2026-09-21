@@ -308,9 +308,13 @@ func (a *Array) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range a.elements.AllNodes() {
 		if node.Element() == nil && node.RemovedAt() != nil {
+			// A dead position node holds no element, so the Live this scan's
+			// root was built from never counted it. See RegisterGCPair.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: a.elements,
-				Child:  node,
+				Parent:     a.elements,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 	}

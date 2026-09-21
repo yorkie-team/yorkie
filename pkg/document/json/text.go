@@ -90,7 +90,6 @@ func (p *Text) Edit(
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
-		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
 	p.context.Acc(diff)
@@ -145,7 +144,6 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
-		p.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
 	p.context.Acc(size.Live)
