@@ -814,7 +814,9 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 }
 
 // SetAttr sets the given attribute of the element.
-func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) *RHTNode {
+// SetAttr writes an attribute and reports what it replaced. See RHT.Set for
+// what each return means and why the caller has to act on both.
+func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) RHTWrite {
 	if n.Attrs == nil {
 		n.Attrs = NewRHT()
 	}
@@ -2837,12 +2839,16 @@ func (t *Tree) Style(
 			}
 
 			for key, value := range attrs {
-				if rhtNode := node.SetAttr(key, value, editedAt); rhtNode != nil {
-					pairs = append(pairs, attrGCPair(node, rhtNode, false))
-				}
-				if newNode, ok := node.Attrs.nodeMapByKey[key]; ok && token.TokenType != index.End {
-					diff.Add(newNode.DataSize())
-				}
+				// canStyle admits a node that has since been removed, and
+				// Tree.DataSize excludes removed nodes, so Live is not
+				// holding this one's attributes either.
+				accAttrWrite(
+					node.SetAttr(key, value, editedAt),
+					node,
+					!node.IsRemoved(),
+					&pairs,
+					&diff,
+				)
 			}
 
 			// Propagate style to unknown split siblings so that a
@@ -2859,12 +2865,17 @@ func (t *Tree) Style(
 						break
 					}
 					for key, value := range attrs {
-						if rhtNode := next.SetAttr(key, value, editedAt); rhtNode != nil {
-							pairs = append(pairs, attrGCPair(next, rhtNode, false))
-						}
-						if newNode, ok := next.Attrs.nodeMapByKey[key]; ok {
-							diff.Add(newNode.DataSize())
-						}
+						// This path has no removal filter at all -- it follows
+						// InsNextID to split siblings a remote style could not
+						// have known about -- so the same question has to be
+						// asked here.
+						accAttrWrite(
+							next.SetAttr(key, value, editedAt),
+							next,
+							!next.IsRemoved(),
+							&pairs,
+							&diff,
+						)
 					}
 					current = next
 				}
@@ -3001,7 +3012,48 @@ func (t *Tree) RemoveStyle(
 // negative, at which point the document size limit stops applying at all.
 // Those go to GC alone, by the same GCOnlySize route a born-tombstoned split
 // piece takes.
-func attrGCPair(parent *TreeNode, child *RHTNode, wasLive bool) GCPair {
+// accAttrWrite books one attribute write into the ledger. It reads only what
+// the write reported, never the map: a write that lost LWW installed nothing,
+// so it must charge nothing, and a node visited twice in one traversal (once
+// as Start and once as End) loses LWW on the second visit and is naturally
+// deduped. Deciding from the map instead made Live depend on delivery order
+// and, where a token-type guard suppressed only one half, drove it negative.
+func accAttrWrite(
+	w RHTWrite,
+	parent GCParent,
+	chargeLive bool,
+	pairs *[]GCPair,
+	diff *resource.DataSize,
+) {
+	if w.Revived != nil {
+		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false))
+	}
+
+	// chargeLive is false when the container does not count this node's
+	// attributes in Live at all -- a tombstoned text node, which Text.DataSize
+	// skips. Booking either half there drifts Live by the SIGNED difference
+	// between the two values' sizes, and a shrinking overwrite takes it
+	// negative.
+	if !chargeLive {
+		return
+	}
+
+	if w.Superseded != nil {
+		diff.Sub(w.Superseded.DataSize())
+	}
+	if w.Installed != nil {
+		diff.Add(w.Installed.DataSize())
+	}
+}
+
+// attrGCPair builds the GC pair for an attribute node, deciding which half of
+// the ledger it moves through. A node that was LIVE moves the usual way: its
+// size leaves docSize.Live and enters GC. A node that was already a tombstone
+// was never in Live, so only GC is touched.
+//
+// Shared by the tree and the text halves -- both hold attributes in an RHT and
+// must answer this the same way, which they historically did not (#2007).
+func attrGCPair(parent GCParent, child *RHTNode, wasLive bool) GCPair {
 	pair := GCPair{Parent: parent, Child: child}
 	if !wasLive {
 		size := child.DataSize()

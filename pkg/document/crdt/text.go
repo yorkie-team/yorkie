@@ -95,6 +95,14 @@ func (t *TextValue) DataSize() resource.DataSize {
 	}
 
 	for _, node := range t.attrs.Nodes() {
+		// A removed attribute belongs to docSize.GC, not to Live. TreeNode
+		// .DataSize makes the same exclusion; the two halves have to answer
+		// this the same way or a document's size stops being a function of
+		// its content.
+		if node.RemovedAt() != nil {
+			continue
+		}
+
 		size := node.DataSize()
 		dataSize.Data += size.Data
 		dataSize.Meta += size.Meta
@@ -121,6 +129,41 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 		attrs: t.attrs.DeepCopy(),
 		value: t.value,
 	}
+}
+
+// textAttrGCPair decides which half of the ledger a text attribute moves
+// through. See the call site in RemoveStyle for the three cases; the tree's
+// attrGCPair covers only two because a tree node's attributes are counted by
+// TreeNode.DataSize whether or not the node itself is removed.
+func textAttrGCPair(parent GCParent, child *RHTNode, attrWasLive, nodeIsLive bool) GCPair {
+	if attrWasLive && nodeIsLive {
+		return GCPair{Parent: parent, Child: child}
+	}
+
+	size := child.DataSize()
+	if attrWasLive {
+		// Already counted inside the removed node's GC charge.
+		size = resource.DataSize{}
+	}
+
+	return GCPair{Parent: parent, Child: child, GCOnlySize: &size}
+}
+
+// removedAttrs implements gcAttrSource: it reports the tombstoned attributes
+// this value holds, which a split has just duplicated from its source.
+func (t *TextValue) removedAttrs() []*RHTNode {
+	if t.attrs == nil {
+		return nil
+	}
+
+	var removed []*RHTNode
+	for _, node := range t.attrs.Nodes() {
+		if node.RemovedAt() != nil {
+			removed = append(removed, node)
+		}
+	}
+
+	return removed
 }
 
 // Purge removes the given ticket from this value.
@@ -540,15 +583,13 @@ func (t *Text) Style(
 		}
 
 		for key, value := range attributes {
-			if rhtNode := val.attrs.Set(key, value, executedAt); rhtNode != nil {
-				pairs = append(pairs, GCPair{
-					Parent: node.Value(),
-					Child:  rhtNode,
-				})
-			}
-			if newNode, ok := val.attrs.nodeMapByKey[key]; ok {
-				diff.Add(newNode.DataSize())
-			}
+			accAttrWrite(
+				val.attrs.Set(key, value, executedAt),
+				node.Value(),
+				node.RemovedAt() == nil,
+				&pairs,
+				&diff,
+			)
 		}
 	}
 
@@ -631,13 +672,26 @@ func (t *Text) RemoveStyle(
 		}
 
 		for _, attr := range attributesToRemove {
-			rhtNodes := val.attrs.Remove(attr, executedAt)
-			for _, rhtNode := range rhtNodes {
-				pairs = append(pairs, GCPair{
-					Parent: node.Value(),
-					Child:  rhtNode,
-				})
-				diff.Add(rhtNode.DataSize())
+			// A text attribute has one case the tree's two-way split does not:
+			// the NODE holding it may already be a tombstone. canStyle admits
+			// removed nodes, so a style can land on one.
+			//
+			//   live attr on a live node  -- in Live, so move Live -> GC.
+			//   live attr on a REMOVED node -- Text.DataSize skips removed
+			//     nodes, so it is not in Live; its bytes are already inside
+			//     the GC charge taken when the node was removed. Charging
+			//     them again doubles them, and purge will subtract the node's
+			//     now-smaller size, so the pair must carry exactly zero.
+			//   attr that was already a tombstone -- never in Live, and not
+			//     inside the node's charge either, so it carries its own size.
+			attrWasLive := val.attrs.Has(attr)
+			nodeIsLive := node.RemovedAt() == nil
+			for _, rhtNode := range val.attrs.Remove(attr, executedAt) {
+				pairs = append(pairs, textAttrGCPair(node.Value(), rhtNode, attrWasLive, nodeIsLive))
+				// Only the node that replaces the live value settles the live
+				// value's bytes; a second one in the same call is the
+				// tombstone it superseded, which was never in Live.
+				attrWasLive = false
 			}
 		}
 	}

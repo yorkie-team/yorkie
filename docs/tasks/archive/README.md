@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 29
+Total archived tasks: 30
 
-## 2026/09 (1 task)
+## 2026/09 (2 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| The attribute ledger, and which SDK's representation is canonical (2026-09-21) | [20260921-attribute-ledger-and-representation-todo.md](./2026/09/20260921-attribute-ledger-and-representation-todo.md) | [20260921-attribute-ledger-and-representation-lessons.md](./2026/09/20260921-attribute-ledger-and-representation-lessons.md) |
 | Post-GC style panic and the snapshot's lost text attribute tombstone (2026-09-20) | [20260920-post-gc-panic-and-snapshot-tombstone-todo.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-todo.md) | [20260920-post-gc-panic-and-snapshot-tombstone-lessons.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-lessons.md) |
 
 ## 2026/08 (8 tasks)

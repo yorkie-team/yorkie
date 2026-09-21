@@ -121,23 +121,54 @@ func (rht *RHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k, v string, executedAt *time.Ticket) *RHTNode {
+// RHTWrite reports what a Set did, so the caller can keep docSize honest
+// without inspecting the map afterwards. Reading the map cannot distinguish a
+// write that installed a node from one that lost LWW and left the incumbent in
+// place, and charging Live for the latter makes the running size depend on
+// delivery order.
+type RHTWrite struct {
+	// Installed is the node this write put in the map, or nil when the write
+	// lost LWW and changed nothing. Its size is what enters docSize.Live.
+	Installed *RHTNode
+
+	// Revived is a tombstone this write replaced. It was registered as garbage
+	// when it was removed, so the caller re-registers the pair to cancel that
+	// registration: it is no longer collectable, it is simply gone.
+	Revived *RHTNode
+
+	// Superseded is a LIVE node this write replaced. RHT overrides immutably,
+	// so the old node is dropped with no tombstone and nothing to collect, but
+	// its bytes were counted in docSize.Live and have to leave it.
+	Superseded *RHTNode
+}
+
+// Set writes the value of the given key and reports what the write replaced.
+// See RHTWrite for what the caller has to do with each field.
+func (rht *RHT) Set(k, v string, executedAt *time.Ticket) RHTWrite {
 	node := rht.nodeMapByKey[k]
 
-	if node != nil && node.isRemoved && executedAt.After(node.updatedAt) {
-		rht.numberOfRemovedElement--
-	}
-
-	if node == nil || executedAt.After(node.updatedAt) {
-		newNode := newRHTNode(k, v, executedAt, false)
-		rht.nodeMapByKey[k] = newNode
+	if node != nil && !executedAt.After(node.updatedAt) {
+		return RHTWrite{}
 	}
 
 	if node != nil && node.isRemoved {
-		return node
+		rht.numberOfRemovedElement--
 	}
 
-	return nil
+	installed := newRHTNode(k, v, executedAt, false)
+	rht.nodeMapByKey[k] = installed
+
+	write := RHTWrite{Installed: installed}
+	if node == nil {
+		return write
+	}
+	if node.isRemoved {
+		write.Revived = node
+	} else {
+		write.Superseded = node
+	}
+
+	return write
 }
 
 // SetInternal sets the value of the given key internally.
