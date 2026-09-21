@@ -543,9 +543,12 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 		panic(err)
 	}
 	if deadNode != nil {
+		// See operations/move.go: a dead position node was never in Live.
+		gcSize := deadNode.DataSize()
 		p.context.RegisterGCPair(crdt.GCPair{
-			Parent: p.Array.RGATreeList(),
-			Child:  deadNode,
+			Parent:     p.Array.RGATreeList(),
+			Child:      deadNode,
+			GCOnlySize: &gcSize,
 		})
 	}
 }
@@ -565,9 +568,12 @@ func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 		panic(err)
 	}
 	if deadNode != nil {
+		// See operations/move.go: a dead position node was never in Live.
+		gcSize := deadNode.DataSize()
 		p.context.RegisterGCPair(crdt.GCPair{
-			Parent: p.Array.RGATreeList(),
-			Child:  deadNode,
+			Parent:     p.Array.RGATreeList(),
+			Child:      deadNode,
+			GCOnlySize: &gcSize,
 		})
 	}
 }

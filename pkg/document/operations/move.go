@@ -84,9 +84,14 @@ func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (
 	}
 
 	if deadNode != nil {
+		// A dead position node holds no element, so Array.DataSize never
+		// counted it into Live -- GCOnlySize is how a pair says "add to GC,
+		// take nothing out of Live". See Root.RegisterGCPair.
+		gcSize := deadNode.DataSize()
 		root.RegisterGCPair(crdt.GCPair{
-			Parent: obj.RGATreeList(),
-			Child:  deadNode,
+			Parent:     obj.RGATreeList(),
+			Child:      deadNode,
+			GCOnlySize: &gcSize,
 		})
 	}
 

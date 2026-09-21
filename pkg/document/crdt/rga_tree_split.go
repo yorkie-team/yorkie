@@ -356,11 +356,29 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool,
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
-	nodeExisted := s.createdAt().Lamport() <= clientLamportAtChange
-
-	return nodeExisted &&
-		(s.removedAt == nil || editedAt.After(s.removedAt))
+//
+// The only question is whether the styling change knew this node existed. It
+// deliberately does NOT ask whether the node has since been removed, and that
+// is a convergence requirement rather than a preference: a style is applied
+// unconditionally on the replica that issues it -- the node is live there, or
+// the range would not have reached it -- and can never be retracted
+// afterwards. Every other replica has to apply it too.
+//
+// Any rule that reads removedAt is delivery-order dependent, because
+// removedAt is last-writer-wins and MUTABLE: Remove overwrites it when a
+// removal the node has not seen arrives with a later ticket, while a style is
+// evaluated once, when it arrives. Two clients deleting the same run
+// concurrently plus a third styling over it is enough to make replicas
+// disagree, and no single stored ticket fixes it -- the replica cannot know
+// which of the concurrent removals the styler had seen. The predicate has to
+// not depend on removal state at all.
+//
+// The cost is that a style covers text the same client had already deleted,
+// invisibly, so undoing the style and then the deletion brings the text back
+// without the attributes it carried. That is the price of the replicas
+// agreeing.
+func (s *RGATreeSplitNode[V]) canStyle(vector time.VersionVector) bool {
+	return time.TicketKnown(vector, s.createdAt())
 }
 
 // Value returns the value of this node.

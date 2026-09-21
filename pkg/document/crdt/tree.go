@@ -371,13 +371,10 @@ func (n *TreeNode) Split(
 		// split's RHT forever, uncounted and unpurgeable.
 		//
 		// TreeNode.DataSize skips removed attributes, so the split's diff
-		// never charged these to docSize.Live -- GCOnlySize sends each
-		// straight to docSize.GC, and Purge subtracts the same amount back.
-		for _, pair := range split.GCPairs() {
-			gcSize := pair.Child.DataSize()
-			pair.GCOnlySize = &gcSize
-			tree.pendingGCPairs = append(tree.pendingGCPairs, pair)
-		}
+		// never charged these to docSize.Live -- GCPairs already marks each
+		// GCOnlySize, which sends it straight to docSize.GC, and Purge
+		// subtracts the same amount back.
+		tree.pendingGCPairs = append(tree.pendingGCPairs, split.GCPairs()...)
 
 		// NOTE: A piece split off an already-tombstoned node inherits
 		// removedAt without going through remove(), so no GC pair is
@@ -663,15 +660,10 @@ func (n *TreeNode) canDelete(removedAt *time.Ticket, creationKnown, tombstoneKno
 	return false
 }
 
-func (n *TreeNode) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
-	if n.IsText() {
-		return false
-	}
-
-	nodeExisted := n.id.CreatedAt.Lamport() <= clientLamportAtChange
-
-	return nodeExisted &&
-		(n.removedAt == nil || editedAt.After(n.removedAt))
+// canStyle checks if node is able to set style. It answers the same question
+// as RGATreeSplitNode.canStyle, the same way — see the contract there.
+func (n *TreeNode) canStyle(vector time.VersionVector) bool {
+	return !n.IsText() && time.TicketKnown(vector, n.id.CreatedAt)
 }
 
 // InsertAt inserts the given node at the given offset.
@@ -875,9 +867,13 @@ func (n *TreeNode) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range n.Attrs.Nodes() {
 		if node.isRemoved {
+			// TreeNode.DataSize skips a removed attribute, so it was never in
+			// Live. See RegisterGCPair for what GCOnlySize means.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: n,
-				Child:  node,
+				Parent:     n,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 	}
@@ -1270,6 +1266,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 	}
 
 	var node *TreeNode
+	var recreatedAttrPairs []GCPair
 	if span.IsText {
 		encoded := utf16.Encode([]rune(span.Value))
 		relStart := offset - span.ID.Offset
@@ -1281,6 +1278,21 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			attrs = span.Attributes.DeepCopy()
 		}
 		node = NewTreeNode(span.ID, span.NodeType, attrs)
+
+		// The span's attributes are a deep copy of the node's RHT, tombstones
+		// included -- they have to be, or a recreated node would resolve a
+		// concurrent style differently from a replica that never lost it. Each
+		// copied tombstone is a fresh piece of garbage that no removal path
+		// produced: without a registration it sits in the RHT forever,
+		// uncounted and unpurgeable, and TreeNode.DataSize excludes it so the
+		// node's own charge does not cover it either. GCPairs marks each
+		// GCOnlySize, which is what sends it to GC alone.
+		//
+		// This runs for BOTH parents: a live one, where the node is reported
+		// as recreated, and a removed one, where it is born tombstoned below.
+		// Buffered by attach, once the insertion has actually succeeded --
+		// a failed insert drops the node, and its pairs must go with it.
+		recreatedAttrPairs = node.GCPairs()
 	}
 
 	siblings := parent.Children(true)
@@ -1304,6 +1316,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			return nil, err
 		}
 		t.putNode(node)
+		t.pendingGCPairs = append(t.pendingGCPairs, recreatedAttrPairs...)
 		// The parent has been tombstoned since this node was purged, so the
 		// node is born tombstoned rather than live. This mirrors the
 		// convention the concurrent-insert path already states ("if
@@ -1326,7 +1339,15 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		// node and overwrites it.
 		if parent.IsRemoved() {
 			node.remove(parent.RemovedAt())
-			t.pendingGCPairs = append(t.pendingGCPairs, GCPair{Parent: t, Child: node})
+			// Born tombstoned: it is not reported as recreated, so the caller
+			// never accounts it to Live. GCOnlySize is how a pair says "add to
+			// GC, take nothing out of Live" -- see Root.RegisterGCPair.
+			gcSize := node.DataSize()
+			t.pendingGCPairs = append(t.pendingGCPairs, GCPair{
+				Parent:     t,
+				Child:      node,
+				GCOnlySize: &gcSize,
+			})
 			return nil, nil
 		}
 		return node, nil
@@ -1451,9 +1472,13 @@ func (t *Tree) GCPairs() []GCPair {
 
 	for _, node := range t.Nodes() {
 		if node.removedAt != nil {
+			// Tree.DataSize skips a removed node, so this one was never in
+			// the Live the scan's root was built with.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: t,
-				Child:  node,
+				Parent:     t,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 
@@ -2124,7 +2149,7 @@ func (t *Tree) mergedAnchorInterloperGuard(
 	declaredParent, _ := t.ToTreeNodes(pos)
 	if declaredParent == nil || !declaredParent.IsRemoved() ||
 		declaredParent.mergedInto == nil || declaredParent.removedAt == nil ||
-		ticketKnown(versionVector, declaredParent.removedAt) {
+		time.TicketKnown(versionVector, declaredParent.removedAt) {
 		return nil, nil, nil
 	}
 	target := t.resolveMergeTarget(declaredParent)
@@ -2188,21 +2213,6 @@ func stylePrevAttrs(node *TreeNode, attrs map[string]string) []PrevAttr {
 		}
 	}
 	return prevAttrs
-}
-
-// styleClientLamportAt returns the styling client's lamport for the given
-// actor: MaxLamport for local edits (empty version vector), the vector entry
-// when present, and zero for actors the client had never seen.
-func styleClientLamportAt(versionVector time.VersionVector, actorID time.ActorID) int64 {
-	if len(versionVector) == 0 {
-		// Case 1: local editing from json package
-		return time.MaxLamport
-	}
-	// Case 2: from operation with version vector(After v0.5.7)
-	if lamport, ok := versionVector.Get(actorID); ok {
-		return lamport
-	}
-	return 0
 }
 
 // reversedFromAnchorRecovery prepares the §9.4 from-side counterpart of
@@ -2443,20 +2453,6 @@ func (t *Tree) propagateMergeDeletes(
 	return pairs
 }
 
-// ticketKnown returns true if the given ticket is causally known to the
-// editor, i.e. the editor's version vector covers the ticket's lamport
-// clock for the same actor. For local operations (empty version vector),
-// all tickets are considered known.
-func ticketKnown(vv time.VersionVector, ticket *time.Ticket) bool {
-	if len(vv) == 0 {
-		return true
-	}
-	if l, ok := vv.Get(ticket.ActorID()); ok && l >= ticket.Lamport() {
-		return true
-	}
-	return false
-}
-
 // collectBetween collects nodes that are marked as removed or moved.
 func (t *Tree) collectBetween(
 	fromParent *TreeNode, fromLeft *TreeNode,
@@ -2491,7 +2487,7 @@ func (t *Tree) collectBetween(
 				// §4.3 Skip Concurrent Element Merge: the editor didn't
 				// know about this element, so crossing into it is an
 				// artifact of a concurrent split, not an intentional merge.
-				if ticketKnown(versionVector, node.id.CreatedAt) {
+				if time.TicketKnown(versionVector, node.id.CreatedAt) {
 					toBeMergedNodes = append(toBeMergedNodes, node)
 					// Include removed children (Children(true)) so tombstones
 					// move with the merge and survive as RGA anchors; a
@@ -2504,10 +2500,10 @@ func (t *Tree) collectBetween(
 			}
 
 			// NOTE(sigmaith): Determine if the node's creation event was visible.
-			creationKnown := ticketKnown(versionVector, node.id.CreatedAt)
+			creationKnown := time.TicketKnown(versionVector, node.id.CreatedAt)
 
 			// NOTE(sigmaith): Determine if existing tombstone was already causally known.
-			tombstoneKnown := node.removedAt != nil && ticketKnown(versionVector, node.removedAt)
+			tombstoneKnown := node.removedAt != nil && time.TicketKnown(versionVector, node.removedAt)
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
@@ -2533,7 +2529,7 @@ func (t *Tree) collectBetween(
 						!slices.Contains(toBeMergedNodes, node) {
 						next := t.findFloorNode(node.InsNextID)
 						for next != nil {
-							if !ticketKnown(versionVector, next.ID().CreatedAt) {
+							if !time.TicketKnown(versionVector, next.ID().CreatedAt) {
 								toBeRemoveds = append(toBeRemoveds, next)
 								// Cascade through the full subtree, not just immediate children.
 								index.TraverseNode(next.Index, func(n *index.Node[*TreeNode], _ int) {
@@ -2762,19 +2758,19 @@ func (t *Tree) StyleByIndex(
 	attributes map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DocSize, error) {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
-		return nil, resource.DataSize{}, err
+		return nil, resource.DocSize{}, err
 	}
 
 	toPos, err := t.FindPos(end)
 	if err != nil {
-		return nil, resource.DataSize{}, err
+		return nil, resource.DocSize{}, err
 	}
 
-	pairs, diff, _, err := t.Style(fromPos, toPos, attributes, editedAt, versionVector)
-	return pairs, diff, err
+	pairs, size, _, err := t.Style(fromPos, toPos, attributes, editedAt, versionVector)
+	return pairs, size, err
 }
 
 // Style applies the given attributes of the given range. Besides the GC
@@ -2788,20 +2784,20 @@ func (t *Tree) Style(
 	attrs map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []PrevAttr, error) {
-	var diff resource.DataSize
+) ([]GCPair, resource.DocSize, []PrevAttr, error) {
+	var size resource.DocSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, nil, err
+		return t.drainPendingGCPairs(), size, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
-		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, nil, err
+		size.Live.Add(diffFrom)
+		return t.drainPendingGCPairs(), size, nil, err
 	}
 
-	diff.Add(diffFrom, diffTo)
+	size.Live.Add(diffFrom, diffTo)
 
 	if fromLeft != fromParent {
 		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
@@ -2814,7 +2810,7 @@ func (t *Tree) Style(
 	recoveredParent, recoveredLeft, isRecoveredInterloper, err := t.reversedFromAnchorRecovery(
 		from, fromParent, fromLeft, toParent, toLeft, versionVector)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, nil, err
+		return t.drainPendingGCPairs(), size, nil, err
 	}
 	if recoveredParent != nil {
 		fromParent, fromLeft = recoveredParent, recoveredLeft
@@ -2826,9 +2822,8 @@ func (t *Tree) Style(
 	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		clientLamportAtChange := styleClientLamportAt(versionVector, node.id.CreatedAt.ActorID())
 
-		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
+		if node.canStyle(versionVector) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
 			}
@@ -2839,15 +2834,18 @@ func (t *Tree) Style(
 			}
 
 			for key, value := range attrs {
-				// canStyle admits a node that has since been removed, and
-				// Tree.DataSize excludes removed nodes, so Live is not
-				// holding this one's attributes either.
+				// canStyle admits a node removed CONCURRENTLY with this
+				// style, and Tree.DataSize excludes removed nodes, so Live
+				// is not holding this one's attributes -- accAttrWrite
+				// books it to GC instead. Note TreeNode.DataSize counts a
+				// live attribute either way; the exclusion is the
+				// container's.
 				accAttrWrite(
 					node.SetAttr(key, value, editedAt),
 					node,
 					!node.IsRemoved(),
 					&pairs,
-					&diff,
+					&size,
 				)
 			}
 
@@ -2861,20 +2859,22 @@ func (t *Tree) Style(
 					if next == nil || next.IsText() {
 						break
 					}
-					if ticketKnown(versionVector, next.id.CreatedAt) {
+					if time.TicketKnown(versionVector, next.id.CreatedAt) {
 						break
 					}
 					for key, value := range attrs {
-						// This path has no removal filter at all -- it follows
-						// InsNextID to split siblings a remote style could not
-						// have known about -- so the same question has to be
-						// asked here.
+						// This path needs no removal filter of its own: the
+						// loop only walks siblings whose CREATION this style
+						// did not know about, and a change cannot have known
+						// a removal of a node it did not know exists. So
+						// canStyle's answer here is always "apply", and the
+						// tombstoned ones book to GC as above.
 						accAttrWrite(
 							next.SetAttr(key, value, editedAt),
 							next,
 							!next.IsRemoved(),
 							&pairs,
-							&diff,
+							&size,
 						)
 					}
 					current = next
@@ -2882,16 +2882,16 @@ func (t *Tree) Style(
 			}
 		}
 	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, nil, err
+		return append(pairs, t.drainPendingGCPairs()...), size, nil, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, prevAttrs, nil
+	return pairs, size, prevAttrs, nil
 }
 
 // RemoveStyle removes the given attributes of the given range. Besides the
-// GC pairs and size diff, it reports the value each removed key held on the
+// GC pairs and the ledger movement (see Style), it reports the value each removed key held on the
 // first node actually visited — see PrevAttr — so a reverse operation can
 // restore it. Unlike Style, a key that did not exist on that node is simply
 // omitted (no Existed: false entry): removing an already-absent attribute
@@ -2903,20 +2903,20 @@ func (t *Tree) RemoveStyle(
 	attrs []string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []PrevAttr, error) {
-	var diff resource.DataSize
+) ([]GCPair, resource.DocSize, []PrevAttr, error) {
+	var size resource.DocSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, nil, err
+		return t.drainPendingGCPairs(), size, nil, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
-		diff.Add(diffFrom)
-		return t.drainPendingGCPairs(), diff, nil, err
+		size.Live.Add(diffFrom)
+		return t.drainPendingGCPairs(), size, nil, err
 	}
 
-	diff.Add(diffFrom, diffTo)
+	size.Live.Add(diffFrom, diffTo)
 
 	if fromLeft != fromParent {
 		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
@@ -2929,7 +2929,7 @@ func (t *Tree) RemoveStyle(
 	recoveredParent, recoveredLeft, isRecoveredInterloper, err := t.reversedFromAnchorRecovery(
 		from, fromParent, fromLeft, toParent, toLeft, versionVector)
 	if err != nil {
-		return t.drainPendingGCPairs(), diff, nil, err
+		return t.drainPendingGCPairs(), size, nil, err
 	}
 	if recoveredParent != nil {
 		fromParent, fromLeft = recoveredParent, recoveredLeft
@@ -2941,9 +2941,8 @@ func (t *Tree) RemoveStyle(
 	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		clientLamportAtChange := styleClientLamportAt(versionVector, node.id.CreatedAt.ActorID())
 
-		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
+		if node.canStyle(versionVector) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
 			}
@@ -2960,9 +2959,12 @@ func (t *Tree) RemoveStyle(
 			}
 
 			for _, attr := range attrs {
+				// canStyle admits a node removed concurrently with this
+				// change, so nodeIsLive is the third question attrGCPair asks.
 				wasLive := node.Attrs != nil && node.Attrs.Has(attr)
+				nodeIsLive := !node.IsRemoved()
 				for _, rhtNode := range node.RemoveAttr(attr, editedAt) {
-					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive))
+					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive, nodeIsLive))
 					// Only the node that replaces the live value takes a size
 					// out of Live; a second one in the same call is the
 					// tombstone it superseded.
@@ -2978,13 +2980,14 @@ func (t *Tree) RemoveStyle(
 					if next == nil || next.IsText() {
 						break
 					}
-					if ticketKnown(versionVector, next.id.CreatedAt) {
+					if time.TicketKnown(versionVector, next.id.CreatedAt) {
 						break
 					}
 					for _, attr := range attrs {
 						wasLive := next.Attrs != nil && next.Attrs.Has(attr)
+						nodeIsLive := !next.IsRemoved()
 						for _, rhtNode := range next.RemoveAttr(attr, editedAt) {
-							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive))
+							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive, nodeIsLive))
 							wasLive = false
 						}
 					}
@@ -2993,12 +2996,12 @@ func (t *Tree) RemoveStyle(
 			}
 		}
 	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), diff, nil, err
+		return append(pairs, t.drainPendingGCPairs()...), size, nil, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
 
-	return pairs, diff, prevAttrs, nil
+	return pairs, size, prevAttrs, nil
 }
 
 // attrGCPair builds the GC pair for an RHT node a style edit turned into
@@ -3021,46 +3024,68 @@ func (t *Tree) RemoveStyle(
 func accAttrWrite(
 	w RHTWrite,
 	parent GCParent,
-	chargeLive bool,
+	nodeIsLive bool,
 	pairs *[]GCPair,
-	diff *resource.DataSize,
+	size *resource.DocSize,
 ) {
 	if w.Revived != nil {
-		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false))
+		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false, nodeIsLive))
 	}
 
-	// chargeLive is false when the container does not count this node's
-	// attributes in Live at all -- a tombstoned text node, which Text.DataSize
-	// skips. Booking either half there drifts Live by the SIGNED difference
-	// between the two values' sizes, and a shrinking overwrite takes it
-	// negative.
-	if !chargeLive {
-		return
+	// nodeIsLive is false when the container does not count this node's
+	// attributes in Live at all -- a tombstoned node, which Text.DataSize and
+	// Tree.DataSize both skip. (The per-node DataSize functions do NOT skip;
+	// the exclusion lives in the container.) Booking either half to Live
+	// there drifts it
+	// by the SIGNED difference between the two values' sizes, and a shrinking
+	// overwrite takes it negative.
+	//
+	// The bytes are not nowhere, though: they are inside the GC charge the
+	// node's removal took, and collect subtracts the node's size as it stands
+	// when it is purged. So the same delta goes to GC, or registration and
+	// purge stop agreeing about that one node -- which a style concurrent
+	// with a removal reaches on the replica that receives it, see canStyle.
+	target := &size.Live
+	if !nodeIsLive {
+		target = &size.GC
 	}
 
 	if w.Superseded != nil {
-		diff.Sub(w.Superseded.DataSize())
+		target.Sub(w.Superseded.DataSize())
 	}
 	if w.Installed != nil {
-		diff.Add(w.Installed.DataSize())
+		target.Add(w.Installed.DataSize())
 	}
 }
 
 // attrGCPair builds the GC pair for an attribute node, deciding which half of
-// the ledger it moves through. A node that was LIVE moves the usual way: its
-// size leaves docSize.Live and enters GC. A node that was already a tombstone
-// was never in Live, so only GC is touched.
+// the ledger it moves through. Three cases, because the NODE holding the
+// attribute may itself be a tombstone -- canStyle admits one removed
+// concurrently with the change:
+//
+//	live attr on a live node -- in Live, so move Live -> GC the usual way.
+//	live attr on a REMOVED node -- the container skips a removed node
+//	  (Text.DataSize, Tree.DataSize), so it is not in Live; its bytes are
+//	  already inside the GC charge taken when the node was removed, and
+//	  removing the attribute shrinks that charge by exactly them. Charging
+//	  them again doubles them, so the pair carries exactly zero.
+//	attr that was already a tombstone -- never in Live, and not inside the
+//	  node's charge either, so it carries its own size.
 //
 // Shared by the tree and the text halves -- both hold attributes in an RHT and
 // must answer this the same way, which they historically did not (#2007).
-func attrGCPair(parent GCParent, child *RHTNode, wasLive bool) GCPair {
-	pair := GCPair{Parent: parent, Child: child}
-	if !wasLive {
-		size := child.DataSize()
-		pair.GCOnlySize = &size
+func attrGCPair(parent GCParent, child *RHTNode, attrWasLive, nodeIsLive bool) GCPair {
+	if attrWasLive && nodeIsLive {
+		return GCPair{Parent: parent, Child: child}
 	}
 
-	return pair
+	size := child.DataSize()
+	if attrWasLive {
+		// Already counted inside the removed node's GC charge.
+		size = resource.DataSize{}
+	}
+
+	return GCPair{Parent: parent, Child: child, GCOnlySize: &size}
 }
 
 // PosBoundary selects how a position inside a merged-away parent resolves

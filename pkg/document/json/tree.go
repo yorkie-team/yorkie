@@ -210,17 +210,17 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, size, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
-	t.context.Acc(diff)
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
@@ -253,16 +253,22 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, size, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	t.context.Acc(diff)
-
+	// RegisterGCPair moves both halves: the attribute enters GC and leaves
+	// Live in the same call. It did not always, and this path forgot the
+	// second half -- the clone's Live then kept every attribute a removeStyle
+	// ever tombstoned, and the clone's ledger is what MaxSizeLimit reads, so
+	// toggling one key rejected edits on a document far under the limit.
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
 	}
+
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	t.context.Push(operations.NewTreeStyleRemove(
 		t.CreatedAt(),
@@ -299,17 +305,17 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, size, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
-	t.context.Acc(diff)
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
@@ -346,16 +352,22 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, size, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	t.context.Acc(diff)
-
+	// RegisterGCPair moves both halves: the attribute enters GC and leaves
+	// Live in the same call. It did not always, and this path forgot the
+	// second half -- the clone's Live then kept every attribute a removeStyle
+	// ever tombstoned, and the clone's ledger is what MaxSizeLimit reads, so
+	// toggling one key rejected edits on a document far under the limit.
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
 	}
+
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	t.context.Push(operations.NewTreeStyleRemove(
 		t.CreatedAt(),
@@ -487,7 +499,6 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
 	t.context.Acc(diff)

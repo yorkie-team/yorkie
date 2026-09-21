@@ -28,12 +28,23 @@ type GCPair struct {
 	Child  GCChild
 
 	// GCOnlySize is set for a child whose size was never counted in
-	// docSize.Live: a piece born removed by splitting an already-tombstoned
-	// node. Its value is the net-new size the split created. When set,
-	// RegisterGCPair adds this to docSize.GC and AdjustDiffForGCPair leaves
-	// docSize.Live untouched, instead of the usual live->gc move. Purge
-	// subtracts the child's full size from GC; across the split's original
-	// node and its born-dead pieces these telescope back to zero.
+	// docSize.Live, and its value is what should enter docSize.GC. When set,
+	// RegisterGCPair adds it to GC and leaves Live alone, instead of the
+	// usual live->gc move. Purge always subtracts the child's full size from
+	// GC; the two telescope back to zero.
+	//
+	// Several shapes are never in Live and so set it:
+	//
+	//   - a piece born removed by splitting an already-tombstoned node, where
+	//     the value is the net-new size the split created and the rest is
+	//     inside the original node's charge;
+	//   - anything the snapshot-load scan registers, because the Live it runs
+	//     against was computed from visible content only;
+	//   - an array dead position node, which holds no element;
+	//   - a node recreated under a removed parent, born tombstoned and never
+	//     reported as recreated;
+	//   - a live attribute removed from a node that is ALREADY a tombstone,
+	//     whose bytes are inside that node's charge -- this one carries zero.
 	GCOnlySize *resource.DataSize
 }
 

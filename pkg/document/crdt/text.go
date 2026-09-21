@@ -131,24 +131,6 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 	}
 }
 
-// textAttrGCPair decides which half of the ledger a text attribute moves
-// through. See the call site in RemoveStyle for the three cases; the tree's
-// attrGCPair covers only two because a tree node's attributes are counted by
-// TreeNode.DataSize whether or not the node itself is removed.
-func textAttrGCPair(parent GCParent, child *RHTNode, attrWasLive, nodeIsLive bool) GCPair {
-	if attrWasLive && nodeIsLive {
-		return GCPair{Parent: parent, Child: child}
-	}
-
-	size := child.DataSize()
-	if attrWasLive {
-		// Already counted inside the removed node's GC charge.
-		size = resource.DataSize{}
-	}
-
-	return GCPair{Parent: parent, Child: child, GCOnlySize: &size}
-}
-
 // removedAttrs implements gcAttrSource: it reports the tombstoned attributes
 // this value holds, which a split has just duplicated from its source.
 func (t *TextValue) removedAttrs() []*RHTNode {
@@ -181,9 +163,14 @@ func (t *TextValue) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range t.attrs.Nodes() {
 		if node.isRemoved {
+			// DataSize skips a removed attribute, so the root this scan runs
+			// against never counted it into Live -- GCOnlySize is how a pair
+			// says "add to GC, take nothing out of Live". See RegisterGCPair.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: t,
-				Child:  node,
+				Parent:     t,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 	}
@@ -311,9 +298,13 @@ func (t *Text) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range t.Nodes() {
 		if node.removedAt != nil {
+			// Text.DataSize skips a removed node, so this one was never in
+			// the Live the scan's root was built with.
+			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{
-				Parent: t.rgaTreeSplit,
-				Child:  node,
+				Parent:     t.rgaTreeSplit,
+				Child:      node,
+				GCOnlySize: &gcSize,
 			})
 		}
 
@@ -504,58 +495,42 @@ type PrevAttr struct {
 }
 
 // Style applies the given attributes of the given range. Besides the GC
-// pairs and size diff, it reports, for each key in attributes, the value
-// that key held (or its absence) on the first node actually styled — see
-// PrevAttr — so a reverse Style can restore that prior state. Keys are
-// captured in sorted order so the result (and anything built from it, such
-// as a reverse operation's wire encoding) is deterministic regardless of
-// Go's randomized map iteration order.
+// pairs, it reports how the write moved the ledger — Live for a live node,
+// GC for one styled while it is a tombstone, see accAttrWrite — and, for
+// each key in attributes, the value that key held (or its absence) on the
+// first node actually styled — see PrevAttr — so a reverse Style can restore
+// that prior state. Keys are captured in sorted order so the result (and
+// anything built from it, such as a reverse operation's wire encoding) is
+// deterministic regardless of Go's randomized map iteration order.
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []PrevAttr, error) {
-	var diff resource.DataSize
+) ([]GCPair, resource.DocSize, []PrevAttr, error) {
+	var size resource.DocSize
 
 	// 01. Split nodes with from and to
 	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), size, nil, err
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		diff.Add(diffTo)
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
+		size.Live.Add(diffTo)
+		return t.rgaTreeSplit.drainPendingGCPairs(), size, nil, err
 	}
 
-	diff.Add(diffTo, diffFrom)
+	size.Live.Add(diffTo, diffFrom)
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
-	isVersionVectorEmpty := len(versionVector) == 0
 
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
-		actorID := node.id.createdAt.ActorID()
-
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			// Case 1: local editing from json package
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			// Case 2: from operation with version vector(After v0.5.7)
-			lamport, ok := versionVector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
-			}
-		}
-
-		if node.canStyle(executedAt, clientLamportAtChange) {
+		if node.canStyle(versionVector) {
 			toBeStyled = append(toBeStyled, node)
 		}
 	}
@@ -563,10 +538,27 @@ func (t *Text) Style(
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
 	captured := false
+	// The reverse operation restores what the VISIBLE text held, so the prior
+	// values come from the first LIVE node in the range. canStyle admits
+	// tombstones, and the first node in the range can be one -- capturing from
+	// it makes an undo write an attribute onto text that never carried it, out
+	// of a run the user had already deleted. The fallback to the first node
+	// keeps an all-tombstone range undoable.
+	var captureFrom *RGATreeSplitNode[*TextValue]
+	if len(toBeStyled) > 0 {
+		captureFrom = toBeStyled[0]
+		for _, node := range toBeStyled {
+			if node.RemovedAt() == nil {
+				captureFrom = node
+				break
+			}
+		}
+	}
+
 	for _, node := range toBeStyled {
 		val := node.value
 
-		if !captured {
+		if !captured && node == captureFrom {
 			keys := make([]string, 0, len(attributes))
 			for key := range attributes {
 				keys = append(keys, key)
@@ -588,67 +580,52 @@ func (t *Text) Style(
 				node.Value(),
 				node.RemovedAt() == nil,
 				&pairs,
-				&diff,
+				&size,
 			)
 		}
 	}
 
 	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
 
-	return pairs, diff, prevAttrs, nil
+	return pairs, size, prevAttrs, nil
 }
 
 // RemoveStyle removes the given attributes from the given range. Besides the
-// GC pairs and size diff, it reports the value each removed key held on the
-// first node actually visited — see PrevAttr — so a reverse operation can
-// restore it. Unlike Style, a key that did not exist on that node is simply
-// omitted (no Existed: false entry), matching JS's removeStyle: removing an
-// already-absent attribute has nothing to reverse. Keys are captured in
-// sorted order for the same determinism reason as Style.
+// GC pairs and the ledger movement (see Style), it reports the value each
+// removed key held on the first node actually visited — see PrevAttr — so a
+// reverse operation can restore it. Unlike Style, a key that did not exist on
+// that node is simply omitted (no Existed: false entry), matching JS's
+// removeStyle: removing an already-absent attribute has nothing to reverse.
+// Keys are captured in sorted order for the same determinism reason as Style.
 func (t *Text) RemoveStyle(
 	from,
 	to *RGATreeSplitNodePos,
 	attributesToRemove []string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []PrevAttr, error) {
-	var diff resource.DataSize
+) ([]GCPair, resource.DocSize, []PrevAttr, error) {
+	var size resource.DocSize
 
 	// 01. Split nodes with from and to
 	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), size, nil, err
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		diff.Add(diffTo)
-		return t.rgaTreeSplit.drainPendingGCPairs(), diff, nil, err
+		size.Live.Add(diffTo)
+		return t.rgaTreeSplit.drainPendingGCPairs(), size, nil, err
 	}
 
-	diff.Add(diffTo, diffFrom)
+	size.Live.Add(diffTo, diffFrom)
 
 	// 02. find nodes between from and to that can be styled
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
-	isVersionVectorEmpty := len(versionVector) == 0
 
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
-		actorID := node.id.createdAt.ActorID()
-
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			lamport, ok := versionVector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
-			}
-		}
-
-		if node.canStyle(executedAt, clientLamportAtChange) {
+		if node.canStyle(versionVector) {
 			toBeStyled = append(toBeStyled, node)
 		}
 	}
@@ -657,10 +634,27 @@ func (t *Text) RemoveStyle(
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
 	captured := false
+	// The reverse operation restores what the VISIBLE text held, so the prior
+	// values come from the first LIVE node in the range. canStyle admits
+	// tombstones, and the first node in the range can be one -- capturing from
+	// it makes an undo write an attribute onto text that never carried it, out
+	// of a run the user had already deleted. The fallback to the first node
+	// keeps an all-tombstone range undoable.
+	var captureFrom *RGATreeSplitNode[*TextValue]
+	if len(toBeStyled) > 0 {
+		captureFrom = toBeStyled[0]
+		for _, node := range toBeStyled {
+			if node.RemovedAt() == nil {
+				captureFrom = node
+				break
+			}
+		}
+	}
+
 	for _, node := range toBeStyled {
 		val := node.value
 
-		if !captured {
+		if !captured && node == captureFrom {
 			keys := append([]string(nil), attributesToRemove...)
 			sort.Strings(keys)
 			for _, key := range keys {
@@ -672,22 +666,13 @@ func (t *Text) RemoveStyle(
 		}
 
 		for _, attr := range attributesToRemove {
-			// A text attribute has one case the tree's two-way split does not:
-			// the NODE holding it may already be a tombstone. canStyle admits
-			// removed nodes, so a style can land on one.
-			//
-			//   live attr on a live node  -- in Live, so move Live -> GC.
-			//   live attr on a REMOVED node -- Text.DataSize skips removed
-			//     nodes, so it is not in Live; its bytes are already inside
-			//     the GC charge taken when the node was removed. Charging
-			//     them again doubles them, and purge will subtract the node's
-			//     now-smaller size, so the pair must carry exactly zero.
-			//   attr that was already a tombstone -- never in Live, and not
-			//     inside the node's charge either, so it carries its own size.
+			// canStyle admits a node removed concurrently with this change,
+			// so the NODE holding the attribute may itself be a tombstone --
+			// the third case attrGCPair asks about.
 			attrWasLive := val.attrs.Has(attr)
 			nodeIsLive := node.RemovedAt() == nil
 			for _, rhtNode := range val.attrs.Remove(attr, executedAt) {
-				pairs = append(pairs, textAttrGCPair(node.Value(), rhtNode, attrWasLive, nodeIsLive))
+				pairs = append(pairs, attrGCPair(node.Value(), rhtNode, attrWasLive, nodeIsLive))
 				// Only the node that replaces the live value settles the live
 				// value's bytes; a second one in the same call is the
 				// tombstone it superseded, which was never in Live.
@@ -698,7 +683,7 @@ func (t *Text) RemoveStyle(
 
 	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
 
-	return pairs, diff, prevAttrs, nil
+	return pairs, size, prevAttrs, nil
 }
 
 // Nodes returns the internal nodes of this Text.

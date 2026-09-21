@@ -631,13 +631,16 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	// child should be removed from the cache.
 	key := keyOf(pair)
 	if p, ok := r.gcNodePairMap[key]; ok {
-		// Subtract exactly what registration added: GCOnlySize for a
-		// born-dead split piece (only its net-new size was added to GC),
-		// the full child size otherwise.
-		if p.GCOnlySize != nil {
-			r.docSize.GC.Sub(*p.GCOnlySize)
-		} else {
+		// An attribute always contributes its own size while it is in the map
+		// -- collect reads DataSize, and nothing else's charge covers it once
+		// the write that revives it replaces it with a live node. That is not
+		// true of a born-dead split piece, whose remaining bytes are inside a
+		// sibling's charge, so that one has to give back exactly what
+		// registration added.
+		if _, isRHTNode := p.Child.(*RHTNode); isRHTNode || p.GCOnlySize == nil {
 			r.docSize.GC.Sub(p.Child.DataSize())
+		} else {
+			r.docSize.GC.Sub(*p.GCOnlySize)
 		}
 
 		delete(r.gcNodePairMap, key)
@@ -646,16 +649,33 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 
 	r.gcNodePairMap[key] = pair
 
-	// NOTE: A born-removed split piece was never counted in docSize.Live,
-	// so only its net-new size is added to GC (Live is left untouched by
-	// AdjustDiffForGCPair below).
+	// GCOnlySize means the child's size was never counted in docSize.Live --
+	// it was born removed, or the snapshot-load scan registered it against a
+	// root whose Live only counted visible nodes. There is nothing to take
+	// out of Live; only the given size enters GC, and purge subtracts the
+	// child's size from GC as usual.
 	if pair.GCOnlySize != nil {
 		r.docSize.GC.Add(*pair.GCOnlySize)
 		return
 	}
 
+	// Otherwise the child WAS in Live and this registration is what moves it
+	// across. Doing both halves here, rather than leaving the Live side to a
+	// second call every caller has to remember, is what the JS SDK's
+	// registerGCPair does -- and forgetting that second call is not a compile
+	// error, it is silent drift only a rebuild can see. It cost
+	// json.Tree.RemoveStyle exactly that.
 	size := pair.Child.DataSize()
 	r.docSize.GC.Add(size)
+	r.docSize.Live.Sub(size)
+
+	// NOTE(hackerwins): In general cases, when removing a node, its size
+	// includes removedAt, so when subtracting the node size from docSize.Live,
+	// we need to subtract the removedAt size. However, RHTNode doesn't have
+	// removedAt, so we don't need to subtract it from the Live size.
+	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
+		r.docSize.Live.Meta += time.TicketSize
+	}
 }
 
 // UnregisterGCPair removes a GC pair whose child has been restored
@@ -691,24 +711,16 @@ func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
 }
 
-// AdjustDiffForGCPair adjusts the given diff for the given GCPair.
-func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
-	// NOTE: A born-removed split piece was never in docSize.Live, so there
-	// is nothing to subtract from Live for it.
-	if pair.GCOnlySize != nil {
-		return
-	}
-
-	size := pair.Child.DataSize()
-	diff.Sub(size)
-
-	// NOTE(hackerwins): In general cases, when removing a node, its size
-	// includes removedAt, so when subtracting the node size from docSize.Live,
-	// we need to subtract the removedAt size. However, RHTNode doesn't have
-	// removedAt, so we don't need to subtract it from the Live size.
-	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
-		diff.Meta += time.TicketSize
-	}
+// AccGC accumulates the given DataSize to GC.
+//
+// docSize.GC has to stay equal to the sum of the CURRENT DataSize of every
+// registered pair's child, because collect subtracts exactly that when it
+// purges one. Registration alone cannot maintain that: writing an attribute
+// onto a node that is already a tombstone changes the size of a child that
+// was registered earlier, with no pair of its own to carry the difference.
+// That is what this reports.
+func (r *Root) AccGC(diff resource.DataSize) {
+	r.docSize.GC.Add(diff)
 }
 
 // GCElementPairMap returns the gcElementPairMap for testing purposes.
