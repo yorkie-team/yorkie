@@ -99,6 +99,28 @@ func VersionVectorFromBytes(data []byte) (VersionVector, error) {
 	return vv, nil
 }
 
+// TicketKnown reports whether the given ticket is causally known to a change
+// carrying this vector: the vector covers the ticket's lamport clock for the
+// same actor. An empty vector is a local change, which by definition has seen
+// everything in its own replica.
+//
+// This is the causality primitive the CRDTs ask "did the editor know about
+// this?" with -- whether "this" is a node's creation, its removal, or a split
+// sibling. The JS SDK keeps the same function in the same place
+// (time/version_vector.ts); the two have to answer identically or the same
+// operation is known on one side and unknown on the other.
+func TicketKnown(vv VersionVector, ticket *Ticket) bool {
+	if len(vv) == 0 {
+		return true
+	}
+
+	if l, ok := vv.Get(ticket.ActorID()); ok && l >= ticket.Lamport() {
+		return true
+	}
+
+	return false
+}
+
 // Get gets the version of the given actor.
 // Returns the version and whether the actor exists in the vector.
 func (v VersionVector) Get(id ActorID) (int64, bool) {

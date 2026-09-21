@@ -666,7 +666,7 @@ func (n *TreeNode) canDelete(removedAt *time.Ticket, creationKnown, tombstoneKno
 // canStyle checks if node is able to set style. It answers the same question
 // as RGATreeSplitNode.canStyle, the same way — see the contract there.
 func (n *TreeNode) canStyle(vector time.VersionVector) bool {
-	return !n.IsText() && ticketKnown(vector, n.id.CreatedAt)
+	return !n.IsText() && time.TicketKnown(vector, n.id.CreatedAt)
 }
 
 // InsertAt inserts the given node at the given offset.
@@ -2119,7 +2119,7 @@ func (t *Tree) mergedAnchorInterloperGuard(
 	declaredParent, _ := t.ToTreeNodes(pos)
 	if declaredParent == nil || !declaredParent.IsRemoved() ||
 		declaredParent.mergedInto == nil || declaredParent.removedAt == nil ||
-		ticketKnown(versionVector, declaredParent.removedAt) {
+		time.TicketKnown(versionVector, declaredParent.removedAt) {
 		return nil, nil, nil
 	}
 	target := t.resolveMergeTarget(declaredParent)
@@ -2423,20 +2423,6 @@ func (t *Tree) propagateMergeDeletes(
 	return pairs
 }
 
-// ticketKnown returns true if the given ticket is causally known to the
-// editor, i.e. the editor's version vector covers the ticket's lamport
-// clock for the same actor. For local operations (empty version vector),
-// all tickets are considered known.
-func ticketKnown(vv time.VersionVector, ticket *time.Ticket) bool {
-	if len(vv) == 0 {
-		return true
-	}
-	if l, ok := vv.Get(ticket.ActorID()); ok && l >= ticket.Lamport() {
-		return true
-	}
-	return false
-}
-
 // collectBetween collects nodes that are marked as removed or moved.
 func (t *Tree) collectBetween(
 	fromParent *TreeNode, fromLeft *TreeNode,
@@ -2471,7 +2457,7 @@ func (t *Tree) collectBetween(
 				// §4.3 Skip Concurrent Element Merge: the editor didn't
 				// know about this element, so crossing into it is an
 				// artifact of a concurrent split, not an intentional merge.
-				if ticketKnown(versionVector, node.id.CreatedAt) {
+				if time.TicketKnown(versionVector, node.id.CreatedAt) {
 					toBeMergedNodes = append(toBeMergedNodes, node)
 					// Include removed children (Children(true)) so tombstones
 					// move with the merge and survive as RGA anchors; a
@@ -2484,10 +2470,10 @@ func (t *Tree) collectBetween(
 			}
 
 			// NOTE(sigmaith): Determine if the node's creation event was visible.
-			creationKnown := ticketKnown(versionVector, node.id.CreatedAt)
+			creationKnown := time.TicketKnown(versionVector, node.id.CreatedAt)
 
 			// NOTE(sigmaith): Determine if existing tombstone was already causally known.
-			tombstoneKnown := node.removedAt != nil && ticketKnown(versionVector, node.removedAt)
+			tombstoneKnown := node.removedAt != nil && time.TicketKnown(versionVector, node.removedAt)
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
@@ -2513,7 +2499,7 @@ func (t *Tree) collectBetween(
 						!slices.Contains(toBeMergedNodes, node) {
 						next := t.findFloorNode(node.InsNextID)
 						for next != nil {
-							if !ticketKnown(versionVector, next.ID().CreatedAt) {
+							if !time.TicketKnown(versionVector, next.ID().CreatedAt) {
 								toBeRemoveds = append(toBeRemoveds, next)
 								// Cascade through the full subtree, not just immediate children.
 								index.TraverseNode(next.Index, func(n *index.Node[*TreeNode], _ int) {
@@ -2843,7 +2829,7 @@ func (t *Tree) Style(
 					if next == nil || next.IsText() {
 						break
 					}
-					if ticketKnown(versionVector, next.id.CreatedAt) {
+					if time.TicketKnown(versionVector, next.id.CreatedAt) {
 						break
 					}
 					for key, value := range attrs {
@@ -2964,7 +2950,7 @@ func (t *Tree) RemoveStyle(
 					if next == nil || next.IsText() {
 						break
 					}
-					if ticketKnown(versionVector, next.id.CreatedAt) {
+					if time.TicketKnown(versionVector, next.id.CreatedAt) {
 						break
 					}
 					for _, attr := range attrs {

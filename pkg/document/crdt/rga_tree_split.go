@@ -378,7 +378,7 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool,
 // without the attributes it carried. That is the price of the replicas
 // agreeing.
 func (s *RGATreeSplitNode[V]) canStyle(vector time.VersionVector) bool {
-	return ticketKnown(vector, s.createdAt())
+	return time.TicketKnown(vector, s.createdAt())
 }
 
 // Value returns the value of this node.
