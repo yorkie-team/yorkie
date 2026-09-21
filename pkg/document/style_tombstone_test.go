@@ -84,6 +84,39 @@ func nodeAttrs(t *testing.T, doc *document.Document, key string) []string {
 	return out
 }
 
+// treeNodeAttrs is nodeAttrs for a tree: every node, live and tombstoned, with
+// its attributes. ToXML renders live nodes only, so it cannot see a style that
+// landed on a tombstone -- which is the whole thing under test.
+func treeNodeAttrs(t *testing.T, doc *document.Document, key string) []string {
+	t.Helper()
+
+	tree, ok := doc.RootObject().Get(key).(*crdt.Tree)
+	require.True(t, ok, "%q should be a Tree", key)
+
+	var out []string
+	for _, node := range tree.Nodes() {
+		state := ""
+		if node.IsRemoved() {
+			state = " (removed)"
+		}
+
+		var attrs []string
+		if node.Attrs != nil {
+			for _, attr := range node.Attrs.Nodes() {
+				mark := ""
+				if attr.RemovedAt() != nil {
+					mark = "*"
+				}
+				attrs = append(attrs, fmt.Sprintf("%s=%s%s", attr.Key(), attr.Value(), mark))
+			}
+		}
+		sort.Strings(attrs)
+
+		out = append(out, fmt.Sprintf("%s%s %v", node.Type(), state, attrs))
+	}
+	return out
+}
+
 // assertLedgerExact pins both halves of docSize against a rebuild of the same
 // content, then collects and pins that nothing is left over. docSize.Live and
 // docSize.GC are running accumulators that cannot detect their own drift; a
@@ -316,6 +349,54 @@ func TestRemoteStyleOnARemovedTreeNodeKeepsTheLedgerExact(t *testing.T) {
 	wireSync(t, d1, d2)
 
 	require.Equal(t, d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+	require.Equal(t, treeNodeAttrs(t, d1, "t"), treeNodeAttrs(t, d2, "t"),
+		"the replicas disagree on the tombstoned node's attributes")
 	assertLedgerExact(t, d1, "on the replica that removed the node", a1, a2)
 	assertLedgerExact(t, d2, "on the replica that issued the style", a1, a2)
+}
+
+// The tree's RemoveStyle half of the same question. A remote removeStyle whose
+// range was decided before a concurrent split follows InsNextID to the split
+// siblings, one of which is a tombstone by the time it arrives. A live
+// attribute on a tombstoned node is not in Live -- Tree.DataSize excludes the
+// node -- so booking it out of Live walks Live down by the attribute's size,
+// without bound and into the negative, and GC ends up over a rebuild by the
+// same amount.
+func TestRemoteRemoveStyleOnARemovedTreeNodeKeepsTheLedgerExact(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcdefgh"}}},
+		}})
+		return nil
+	}))
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(0, 10, map[string]string{"b": strings.Repeat("L", 16)})
+		return nil
+	}))
+	wireSync(t, d1, d2)
+
+	// d2 removes the style over a range decided before d1 splits.
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").RemoveStyle(0, 10, []string{"b"})
+		return nil
+	}))
+
+	// d1 splits the paragraph and removes the right half.
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(5, 5, nil, 1)
+		return nil
+	}))
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(6, 11, nil, 0)
+		return nil
+	}))
+
+	wireSync(t, d1, d2)
+
+	require.Equal(t, treeNodeAttrs(t, d1, "t"), treeNodeAttrs(t, d2, "t"),
+		"the replicas disagree on the tombstoned node's attributes")
+	require.GreaterOrEqual(t, d1.DocSize().Live.Data, 0, "Live went negative")
+	assertLedgerExact(t, d1, "on the replica that removed the node", a1, a2)
+	assertLedgerExact(t, d2, "on the replica that issued the removeStyle", a1, a2)
 }

@@ -298,40 +298,43 @@ func TestStyleStraddlingAnElementBoundaryKeepsLiveExact(t *testing.T) {
 	}
 }
 
-// canStyle admits a tombstoned text node, so a style can land on one. But
-// Text.DataSize skips removed nodes, so those attribute bytes are not in Live
-// -- they went to GC inside the node's own charge when the node was removed.
-// Removing such an attribute must not debit Live a second time, and must not
-// charge GC a second time either.
+// canStyle admits a text node removed CONCURRENTLY with the change, so a
+// removeStyle can land on one. Text.DataSize skips removed nodes, so those
+// attribute bytes are not in Live -- they went to GC inside the node's own
+// charge when the node was removed. Removing such an attribute must not debit
+// Live a second time, and must not charge GC a second time either.
+//
+// The sequence has to be remote: a local style never reaches a tombstone now,
+// so the local version of this test stopped exercising the case it named.
+// A text removeStyle only exists as the reverse of a style, hence the undo.
 func TestRemovingAnAttrFromATombstonedTextNodeBalances(t *testing.T) {
-	doc := document.New("d")
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+	d1, d2, a1, a2 := newReplicas(t)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewText("k").Edit(0, 0, "abcdefghij")
 		return nil
 	}))
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 		root.GetText("k").Style(4, 6, map[string]string{"bbbbbbbbbb": "vvvvvvvvvv"})
 		return nil
 	}))
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetText("k").Edit(4, 6, "")
-		return nil
-	}))
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+	wireSync(t, d1, d2)
+
+	// d2 styles and undoes it -- the undo is the removeStyle -- while d1
+	// removes the node that style covered.
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 		root.GetText("k").Style(0, 8, map[string]string{"bbbbbbbbbb": "vvvvvvvvvv"})
 		return nil
 	}))
-	require.NoError(t, doc.Undo())
+	require.NoError(t, d2.Undo())
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("k").Edit(4, 6, "")
+		return nil
+	}))
 
-	clone, err := doc.InternalDocument().DeepCopy()
-	require.NoError(t, err)
-	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live)
-	require.Equal(t, clone.DocSize().GC, doc.DocSize().GC)
-	require.GreaterOrEqual(t, doc.DocSize().Live.Data, 0, "Live went negative")
+	wireSync(t, d1, d2)
 
-	doc.GarbageCollect(doc.VersionVector())
-	require.Equal(t, 0, doc.GarbageLen())
-	require.Equal(t, resourceSize{}, resourceSize{
-		Data: doc.DocSize().GC.Data, Meta: doc.DocSize().GC.Meta,
-	}, "collection left GC residue")
+	require.Equal(t, nodeAttrs(t, d1, "k"), nodeAttrs(t, d2, "k"))
+	require.GreaterOrEqual(t, d1.DocSize().Live.Data, 0, "Live went negative")
+	assertLedgerExact(t, d1, "on the replica that removed the node", a1, a2)
+	assertLedgerExact(t, d2, "on the replica that issued the removeStyle", a1, a2)
 }

@@ -2845,7 +2845,9 @@ func (t *Tree) Style(
 				// canStyle admits a node removed CONCURRENTLY with this
 				// style, and Tree.DataSize excludes removed nodes, so Live
 				// is not holding this one's attributes -- accAttrWrite
-				// books it to GC instead.
+				// books it to GC instead. Note TreeNode.DataSize counts a
+				// live attribute either way; the exclusion is the
+				// container's.
 				accAttrWrite(
 					node.SetAttr(key, value, editedAt),
 					node,
@@ -2897,7 +2899,7 @@ func (t *Tree) Style(
 }
 
 // RemoveStyle removes the given attributes of the given range. Besides the
-// GC pairs and size size, it reports the value each removed key held on the
+// GC pairs and the ledger movement (see Style), it reports the value each removed key held on the
 // first node actually visited — see PrevAttr — so a reverse operation can
 // restore it. Unlike Style, a key that did not exist on that node is simply
 // omitted (no Existed: false entry): removing an already-absent attribute
@@ -2966,9 +2968,12 @@ func (t *Tree) RemoveStyle(
 			}
 
 			for _, attr := range attrs {
+				// canStyle admits a node removed concurrently with this
+				// change, so nodeIsLive is the third question attrGCPair asks.
 				wasLive := node.Attrs != nil && node.Attrs.Has(attr)
+				nodeIsLive := !node.IsRemoved()
 				for _, rhtNode := range node.RemoveAttr(attr, editedAt) {
-					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive))
+					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive, nodeIsLive))
 					// Only the node that replaces the live value takes a size
 					// out of Live; a second one in the same call is the
 					// tombstone it superseded.
@@ -2989,8 +2994,9 @@ func (t *Tree) RemoveStyle(
 					}
 					for _, attr := range attrs {
 						wasLive := next.Attrs != nil && next.Attrs.Has(attr)
+						nodeIsLive := !next.IsRemoved()
 						for _, rhtNode := range next.RemoveAttr(attr, editedAt) {
-							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive))
+							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive, nodeIsLive))
 							wasLive = false
 						}
 					}
@@ -3032,12 +3038,14 @@ func accAttrWrite(
 	size *resource.DocSize,
 ) {
 	if w.Revived != nil {
-		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false))
+		*pairs = append(*pairs, attrGCPair(parent, w.Revived, false, nodeIsLive))
 	}
 
 	// nodeIsLive is false when the container does not count this node's
 	// attributes in Live at all -- a tombstoned node, which Text.DataSize and
-	// TreeNode.DataSize both skip. Booking either half to Live there drifts it
+	// Tree.DataSize both skip. (The per-node DataSize functions do NOT skip;
+	// the exclusion lives in the container.) Booking either half to Live
+	// there drifts it
 	// by the SIGNED difference between the two values' sizes, and a shrinking
 	// overwrite takes it negative.
 	//
@@ -3060,20 +3068,33 @@ func accAttrWrite(
 }
 
 // attrGCPair builds the GC pair for an attribute node, deciding which half of
-// the ledger it moves through. A node that was LIVE moves the usual way: its
-// size leaves docSize.Live and enters GC. A node that was already a tombstone
-// was never in Live, so only GC is touched.
+// the ledger it moves through. Three cases, because the NODE holding the
+// attribute may itself be a tombstone -- canStyle admits one removed
+// concurrently with the change:
+//
+//	live attr on a live node -- in Live, so move Live -> GC the usual way.
+//	live attr on a REMOVED node -- the container skips a removed node
+//	  (Text.DataSize, Tree.DataSize), so it is not in Live; its bytes are
+//	  already inside the GC charge taken when the node was removed, and
+//	  removing the attribute shrinks that charge by exactly them. Charging
+//	  them again doubles them, so the pair carries exactly zero.
+//	attr that was already a tombstone -- never in Live, and not inside the
+//	  node's charge either, so it carries its own size.
 //
 // Shared by the tree and the text halves -- both hold attributes in an RHT and
 // must answer this the same way, which they historically did not (#2007).
-func attrGCPair(parent GCParent, child *RHTNode, wasLive bool) GCPair {
-	pair := GCPair{Parent: parent, Child: child}
-	if !wasLive {
-		size := child.DataSize()
-		pair.GCOnlySize = &size
+func attrGCPair(parent GCParent, child *RHTNode, attrWasLive, nodeIsLive bool) GCPair {
+	if attrWasLive && nodeIsLive {
+		return GCPair{Parent: parent, Child: child}
 	}
 
-	return pair
+	size := child.DataSize()
+	if attrWasLive {
+		// Already counted inside the removed node's GC charge.
+		size = resource.DataSize{}
+	}
+
+	return GCPair{Parent: parent, Child: child, GCOnlySize: &size}
 }
 
 // PosBoundary selects how a position inside a merged-away parent resolves
