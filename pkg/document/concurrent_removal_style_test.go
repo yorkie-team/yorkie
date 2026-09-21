@@ -69,27 +69,22 @@ func newActor(t *testing.T, hex string) *document.Document {
 	return d
 }
 
-// KNOWN LIMITATION, pre-existing and unchanged by the canStyle contract.
-//
 // Two clients delete the same run concurrently; a third, which has seen only
-// one of the two deletions, styles a range covering it. removedAt is LWW and
-// MUTABLE -- RGATreeSplitNode.Remove overwrites it when a later concurrent
-// removal arrives (rga_tree_split.go, the !tombstoneKnown branch) -- so any
-// canStyle that reads removedAt gets a different answer depending on which of
-// the two removals has landed when the style is applied. Delivery order
-// B,S,C disagrees with the other three.
+// one of the two deletions, styles a range covering it. This is the case that
+// forces canStyle not to read removedAt.
 //
-// Measured identically on this branch and on the commit before it: the old
-// editedAt.After(removedAt) rule and the new causality rule both read the
-// same mutable field, so neither introduces nor fixes this. Settling it means
-// changing Remove's tombstone LWW policy -- converging on the EARLIEST
-// concurrent tombstone rather than the latest -- which affects every deletion
-// and needs its own analysis.
+// removedAt is last-writer-wins and MUTABLE -- Remove overwrites it when a
+// removal the node has not seen arrives with a later ticket -- while a style
+// is evaluated once, when it arrives. So any predicate over removedAt gets a
+// different answer depending on which of the two removals has landed, and
+// delivery order B,S,C disagrees with the other three. Storing more removal
+// tickets on the node does not help: the replica cannot know which of them
+// the styler had seen, because it may not hold that one yet. Converging
+// Remove on the earliest concurrent tombstone does not help either -- the
+// style can still be applied before the earliest one arrives.
 //
-// Skipped rather than deleted so the repro stays executable. Un-skip when
-// Remove's policy is settled.
+// Both replay orders below are causally legal, so all four have to agree.
 func TestTwoConcurrentRemovalsThenStyle(t *testing.T) {
-	t.Skip("known limitation: removedAt is LWW-mutable, so canStyle's input is delivery-order dependent")
 
 	seed := newActor(t, "000000000000000000000009")
 	require.NoError(t, seed.Update(func(root *json.Object, p *presence.Presence) error {

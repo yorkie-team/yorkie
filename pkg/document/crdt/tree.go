@@ -665,16 +665,8 @@ func (n *TreeNode) canDelete(removedAt *time.Ticket, creationKnown, tombstoneKno
 
 // canStyle checks if node is able to set style. It answers the same question
 // as RGATreeSplitNode.canStyle, the same way — see the contract there.
-func (n *TreeNode) canStyle(clientLamportAtChange int64, vector time.VersionVector) bool {
-	if n.IsText() {
-		return false
-	}
-
-	if n.id.CreatedAt.Lamport() > clientLamportAtChange {
-		return false
-	}
-
-	return n.removedAt == nil || !ticketKnown(vector, n.removedAt)
+func (n *TreeNode) canStyle(vector time.VersionVector) bool {
+	return !n.IsText() && ticketKnown(vector, n.id.CreatedAt)
 }
 
 // InsertAt inserts the given node at the given offset.
@@ -2193,21 +2185,6 @@ func stylePrevAttrs(node *TreeNode, attrs map[string]string) []PrevAttr {
 	return prevAttrs
 }
 
-// styleClientLamportAt returns the styling client's lamport for the given
-// actor: MaxLamport for local edits (empty version vector), the vector entry
-// when present, and zero for actors the client had never seen.
-func styleClientLamportAt(versionVector time.VersionVector, actorID time.ActorID) int64 {
-	if len(versionVector) == 0 {
-		// Case 1: local editing from json package
-		return time.MaxLamport
-	}
-	// Case 2: from operation with version vector(After v0.5.7)
-	if lamport, ok := versionVector.Get(actorID); ok {
-		return lamport
-	}
-	return 0
-}
-
 // reversedFromAnchorRecovery prepares the §9.4 from-side counterpart of
 // mergedAnchorInterloperGuard for a style range whose start position was
 // declared inside a parent that a merge unknown to the styling client
@@ -2829,9 +2806,8 @@ func (t *Tree) Style(
 	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		clientLamportAtChange := styleClientLamportAt(versionVector, node.id.CreatedAt.ActorID())
 
-		if node.canStyle(clientLamportAtChange, versionVector) && len(attrs) > 0 {
+		if node.canStyle(versionVector) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
 			}
@@ -2949,9 +2925,8 @@ func (t *Tree) RemoveStyle(
 	captured := false
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		clientLamportAtChange := styleClientLamportAt(versionVector, node.id.CreatedAt.ActorID())
 
-		if node.canStyle(clientLamportAtChange, versionVector) && len(attrs) > 0 {
+		if node.canStyle(versionVector) && len(attrs) > 0 {
 			if shouldSkipToken(token) {
 				return
 			}

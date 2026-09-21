@@ -517,28 +517,11 @@ func (t *Text) Style(
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
-	isVersionVectorEmpty := len(versionVector) == 0
 
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
-		actorID := node.id.createdAt.ActorID()
-
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			// Case 1: local editing from json package
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			// Case 2: from operation with version vector(After v0.5.7)
-			lamport, ok := versionVector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
-			}
-		}
-
-		if node.canStyle(clientLamportAtChange, versionVector) {
+		if node.canStyle(versionVector) {
 			toBeStyled = append(toBeStyled, node)
 		}
 	}
@@ -612,26 +595,11 @@ func (t *Text) RemoveStyle(
 
 	// 02. find nodes between from and to that can be styled
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
-	isVersionVectorEmpty := len(versionVector) == 0
 
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
-		actorID := node.id.createdAt.ActorID()
-
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			lamport, ok := versionVector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
-			}
-		}
-
-		if node.canStyle(clientLamportAtChange, versionVector) {
+		if node.canStyle(versionVector) {
 			toBeStyled = append(toBeStyled, node)
 		}
 	}

@@ -357,25 +357,28 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool,
 
 // canStyle checks if node is able to set style.
 //
-// A removal the styling change had already seen wins: the range was styled
-// with the deleted part known to be gone, so the tombstone keeps whatever it
-// held. A local change (empty vector) has seen every removal in its own
-// replica by definition, which is what keeps a user from styling text they
-// just deleted.
+// The only question is whether the styling change knew this node existed. It
+// deliberately does NOT ask whether the node has since been removed, and that
+// is a convergence requirement rather than a preference: a style is applied
+// unconditionally on the replica that issues it -- the node is live there, or
+// the range would not have reached it -- and can never be retracted
+// afterwards. Every other replica has to apply it too.
 //
-// A removal CONCURRENT with the style does not win. The replica that issued
-// the style applied it while the node was still live and can never retract
-// it, so every other replica has to apply it too. Deciding that on
-// editedAt.After(removedAt) instead makes the outcome turn on an actor-ID
-// tie-break, and the two replicas then hold different attributes on the same
-// node forever -- invisible while it is a tombstone, rendered the moment the
-// removal is undone.
-func (s *RGATreeSplitNode[V]) canStyle(clientLamportAtChange int64, vector time.VersionVector) bool {
-	if s.createdAt().Lamport() > clientLamportAtChange {
-		return false
-	}
-
-	return s.removedAt == nil || !ticketKnown(vector, s.removedAt)
+// Any rule that reads removedAt is delivery-order dependent, because
+// removedAt is last-writer-wins and MUTABLE: Remove overwrites it when a
+// removal the node has not seen arrives with a later ticket, while a style is
+// evaluated once, when it arrives. Two clients deleting the same run
+// concurrently plus a third styling over it is enough to make replicas
+// disagree, and no single stored ticket fixes it -- the replica cannot know
+// which of the concurrent removals the styler had seen. The predicate has to
+// not depend on removal state at all.
+//
+// The cost is that a style covers text the same client had already deleted,
+// invisibly, so undoing the style and then the deletion brings the text back
+// without the attributes it carried. That is the price of the replicas
+// agreeing.
+func (s *RGATreeSplitNode[V]) canStyle(vector time.VersionVector) bool {
+	return ticketKnown(vector, s.createdAt())
 }
 
 // Value returns the value of this node.

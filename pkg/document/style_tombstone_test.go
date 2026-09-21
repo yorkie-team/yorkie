@@ -138,13 +138,20 @@ func assertLedgerExact(t *testing.T, doc *document.Document, msg string, actors 
 }
 
 // The six operations from the issue, single actor, no sync. Step 4 styles a
-// range that spans the node step 3 deleted; the style must leave it alone,
-// so step 6 brings the text back carrying the attribute step 2 gave it.
+// range that spans the node step 3 deleted, and it lands there -- so step 5's
+// undo strips it, and step 6 brings "ef" back WITHOUT the attribute step 2
+// gave it.
 //
-// The server used to style the dead node here -- its removal is known, but
-// the style's ticket is later, which was the whole of the old test -- and
-// the "OLD" value was lost.
-func TestLocalStyleSkipsANodeItAlreadyDeleted(t *testing.T) {
+// This is the cost of canStyle not reading removedAt, and it is deliberate.
+// Skipping a removal the change already knew about reads better here -- "ef"
+// would come back carrying b="OLD" -- but it makes the predicate depend on a
+// field that Remove overwrites, and two clients deleting the same run
+// concurrently then leave replicas disagreeing for good. See
+// TestTwoConcurrentRemovalsThenStyle for the case that forces the choice.
+//
+// The local path now reaches the tombstone, so it also exercises the GC
+// routing that used to be reachable only through a concurrent removal.
+func TestLocalStyleLandsOnANodeItAlreadyDeleted(t *testing.T) {
 	doc := document.New("d1")
 	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewText("t").Edit(0, 0, "abcdefghij")
@@ -165,15 +172,21 @@ func TestLocalStyleSkipsANodeItAlreadyDeleted(t *testing.T) {
 	require.Equal(t,
 		`[{"attrs":{"b":"NEW"},"val":"abcd"},{"attrs":{"b":"NEW"},"val":"ghij"}]`,
 		doc.Root().GetText("t").Marshal())
+	require.Equal(t,
+		[]string{`"abcd" [b=NEW]`, `"ef" (removed) [b=NEW]`, `"ghij" [b=NEW]`},
+		nodeAttrs(t, doc, "t"),
+		"the dead node took the style too; RHT.Set drops the value it held")
 
 	require.NoError(t, doc.Undo())
 	require.Equal(t, `[{"val":"abcd"},{"val":"ghij"}]`, doc.Root().GetText("t").Marshal())
 
 	require.NoError(t, doc.Undo())
 	require.Equal(t,
-		`[{"val":"abcd"},{"attrs":{"b":"OLD"},"val":"ef"},{"val":"ghij"}]`,
+		`[{"val":"abcd"},{"val":"ef"},{"val":"ghij"}]`,
 		doc.Root().GetText("t").Marshal(),
-		"the restored run kept the attribute it was carrying when it was deleted")
+		"the restored run lost the attribute it was carrying: the cost of the contract")
+
+	assertLedgerExact(t, doc, "after the local style reached a tombstone", doc.ActorID())
 }
 
 // A style concurrent with a removal, on both ticket orderings. The only

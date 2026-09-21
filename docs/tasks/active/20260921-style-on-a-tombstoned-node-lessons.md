@@ -2,6 +2,24 @@
 
 **Created**: 2026-09-21
 
+## Order-independence beats the nicer rendering
+
+The contract that reads best on a single-actor history -- skip a removal the
+change already knew about, so undo brings the text back with the formatting it
+had -- reads a field that `Remove` overwrites. Two clients deleting the same
+run concurrently, plus a third styling over it, and the replicas disagree for
+good.
+
+No amount of extra state on the node repairs it: the replica cannot know which
+of the concurrent removals the styler had seen, because it may not hold that
+one yet. **Any predicate over mutable removal state is delivery-order
+dependent.** The fix is to stop reading it, and to accept the worse rendering
+as the price.
+
+Generalisable: when a CRDT predicate reads a field that a later concurrent
+operation can overwrite, the predicate is order-dependent. Check what mutates
+the inputs, not just what the inputs say.
+
 ## A two-SDK disagreement is not automatically a "pick one" question
 
 The issue read as a binary: the server styles a tombstone, the SDK does not,

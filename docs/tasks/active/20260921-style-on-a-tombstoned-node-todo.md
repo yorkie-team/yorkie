@@ -74,36 +74,100 @@ rebuilt Live{24,168} GC{8,72}
 
 ## Decision
 
-**A style skips a node whose removal the styling change already knew about,
-and applies to one removed concurrently.**
+**A style applies to every node the styling change knew about, and does not
+ask whether that node has since been removed.**
 
-- Locally (`len(versionVector) == 0`) every removal is known, so a user never
-  styles text they have already deleted. That is the JS SDK's current
-  user-visible behaviour, and it stays.
-- A concurrent removal is not known, so the style applies on every replica —
-  which is the only way the replicas can agree, because the styling replica
-  already applied it while the node was live.
+`canStyle` reduces to one question:
 
-Measured against the two alternatives (each patched into Go and run against
-the full unit suite):
+```go
+func (s *RGATreeSplitNode[V]) canStyle(vector time.VersionVector) bool {
+	return ticketKnown(vector, s.createdAt())
+}
+```
 
-| contract | concurrent convergence | six-step result | local ledger |
-|---|---|---|---|
-| drop the `removedAt` clause (always style) | both orderings | Go's current | still off |
-| add the JS guard to the server | neither ordering | — | — |
-| **skip a causally-known removal** | both orderings | JS's current | exact |
+### Why not "skip a removal the change already knew about"
 
-The concurrent case still lands a style on a tombstone — that is what
-convergence requires — so the GC charge has to follow the node's size either
-way.
+That rule reads better on the six-step history — the restored `"ef"` keeps
+`b="OLD"` — and it was the branch's first answer. It does not converge.
+
+`removedAt` is last-writer-wins and **mutable**: `Remove` overwrites it when a
+removal the node has not seen arrives with a later ticket. A style is
+evaluated once, when it arrives. So the predicate's input depends on which
+removals have landed, and two clients deleting the same run concurrently is
+enough to break it. Three actors, all changes causally legal:
+
+```
+B removes "ef"                   (concurrent with C)
+C removes "ef"                   (concurrent with B, later ticket)
+X sees B only, then Style(0, 8)  (knows B's removal, not C's)
+```
+
+| delivery order | `"ef"` under the causality rule | under this one |
+|---|---|---|
+| `C,B,S` | `(removed) [b=1]` | `(removed) [b=1]` |
+| `B,C,S` | `(removed) [b=1]` | `(removed) [b=1]` |
+| `C,S,B` | `(removed) [b=1]` | `(removed) [b=1]` |
+| **`B,S,C`** | **`(removed) []`**, `GC{4,48}` | `(removed) [b=1]`, `GC{8,72}` |
+
+Neither storing more removal tickets on the node nor converging `Remove` on
+the *earliest* concurrent tombstone repairs it:
+
+- the replica cannot know which of the concurrent removals the styler had
+  seen, because it may not hold that one yet;
+- and the style can still be applied before the earliest removal arrives.
+
+Any predicate over removal state is delivery-order dependent. The only
+order-independent rule that does not change the wire format is not to read
+removal state at all. (Expressing a local style as the live runs the user
+actually selected would also work, and would keep the nicer undo semantics,
+but that changes the operation's shape — see the follow-up note below.)
+
+### What it costs
+
+A style covers text the same client had already deleted, invisibly. Undoing
+the style and then the deletion brings the text back **without** the
+attributes it carried:
+
+| step | before | after |
+|---|---|---|
+| 6 | `[…,{"attrs":{"b":"OLD"},"val":"ef"},…]` (JS today) | `[{"val":"abcd"},{"val":"ef"},{"val":"ghij"}]` |
+
+That is the behaviour #2011 observed on the server and called a bug. #2011's
+actual complaint was the *disagreement* between the two SDKs, and this closes
+it — with the answer that converges rather than the one that renders better.
+It is a behaviour change for JS SDK users, who had the skipping behaviour.
+
+### The candidates, measured
+
+Each patched in and run against the full unit suite and the four-order replay:
+
+| contract | 2 replicas | 3 actors, 2 removals | six-step | ledger |
+|---|---|---|---|---|
+| `editedAt.After(removedAt)` (the old server rule) | diverges | diverges | `ef` plain | GC off |
+| add the SDK's guard to the server | diverges | diverges | — | — |
+| skip a causally-known removal | converges | **diverges** | `ef` keeps `OLD` | exact |
+| **never read removal state** | converges | converges | `ef` plain | exact |
+
+### The accounting half
+
+A style landing on a tombstone grows a node whose GC charge was taken when it
+was removed, and `collect` subtracts `pair.Child.DataSize()` as it stands at
+purge time. So `docSize.GC` has to follow the node's size: `accAttrWrite`
+books an attribute write on a tombstoned node to GC instead of dropping it,
+which is what `Style` and `RemoveStyle` report through `resource.DocSize`.
+#2010 fixed the Live half and named the GC half as a known limitation; this
+closes it. Under this contract the local path reaches it too, so it is no
+longer remote-only.
 
 ## Tasks
 
-- [x] `canStyle` takes the change's version vector and skips a causally-known
-      removal, on `RGATreeSplitNode` and on `TreeNode`
-- [x] Correct the comment on the tree's `InsNextID` propagation loop: a split
-      sibling whose *creation* the style did not know cannot have a known
-      removal either, so that loop needs no separate filter
+- [x] `canStyle` takes only the change's version vector and asks one question
+      -- did the change know this node existed -- on `RGATreeSplitNode` and on
+      `TreeNode`. `clientLamportAtChange` and `styleClientLamportAt` go with
+      it: they were the same predicate spelled a second way
+- [x] Correct the comment on the tree's `InsNextID` propagation loop: it walks
+      siblings the style did not know about, which is now the only question
+      `canStyle` asks
 - [x] Route an attribute write on a tombstoned node through `docSize.GC`
       instead of dropping it, so registration and purge agree
 - [x] Give an attribute its own size back when a revive un-registers its pair
@@ -131,7 +195,9 @@ Two things this turned up that the issue did not name:
 1. The server did not agree with itself. `editedAt.After(removedAt)` decided
    the concurrent case on an actor-ID tie-break while the issuing replica had
    already applied the style unconditionally, so "add the SDK's guard to the
-   server" would not have converged either.
+   server" would not have converged either. Nor did the branch's own first
+   answer, once a second concurrent removal was in play -- which is what
+   settled the contract on reading no removal state at all.
 2. `RegisterGCPair`'s un-register branch gave back the amount registration
    added, which is zero for an attribute removed from a node that was already
    a tombstone. Only reachable once a style can land on a tombstone at all,
@@ -159,41 +225,29 @@ Three findings, two fixed here:
 
 ### Known limitations
 
-**Concurrent removals.** `removedAt` is LWW and mutable: `Remove` overwrites it
-when a later concurrent removal arrives. So any `canStyle` that reads it gets a
-different answer depending on which of two concurrent removals has landed. With
-a third client that saw only one of them and styled over the node, delivery
-order `B,S,C` disagrees with `B,C,S`, `C,B,S` and `C,S,B`.
-
-Measured identically on this branch and on `6b3fa26e`, all four orders, down to
-the GC numbers — the old `editedAt.After(removedAt)` rule and the new causality
-rule both read the same mutable field, so neither introduces nor fixes it.
-Settling it means converging `Remove` on the *earliest* concurrent tombstone
-rather than the latest, which affects every deletion and needs its own
-analysis. The repro is kept executable as a skipped test,
-`TestTwoConcurrentRemovalsThenStyle`.
-
 **SDK version skew.** Clients apply remote changes with their own `canStyle`,
 so an un-upgraded SDK on the same document as an upgraded one computes
 different tombstone attributes and a different `docSize.GC` — and
 `MaxSizeLimit` is enforced client-side off that number. The server and both
-SDKs are one logical release. The skew is tolerable because the disagreement is
-invisible until an undo, but it is real and embedded SDKs cannot be
-force-upgraded.
+SDKs are one logical release. The skew is tolerable because the disagreement
+is invisible until an undo, but it is real and embedded SDKs cannot be
+force-upgraded. It is also a **behaviour** change for JS SDK users, who had
+the skipping behaviour before.
 
 **Change-log replay.** A server rebuilding a document from its full change log
 with this code computes a different state for any history that styled a node
 whose removal the style had already seen. Existing snapshots are unaffected —
-changes applied on top of them keep whatever the old code decided — and no wire
-format changed.
+changes applied on top of them keep whatever the old code decided — and no
+wire format changed.
 
 ### Deferred
 
-`clientLamportAtChange` is now fully redundant with `vector`:
-`styleClientLamportAt` returns `MaxLamport` for an empty vector, `vv[actor]`
-when present, and `0` otherwise, which is `ticketKnown` spelled out. Collapsing
-`canStyle` to two `ticketKnown` calls would delete `styleClientLamportAt` and
-~16 lines of hand-inlined duplicate in `text.go`. It is a refactor rather than
-a defect, it has a latent edge (a node whose `createdAt` lamport is 0 compares
-`0 <= 0` as known where `ticketKnown` says unknown), and it would have to land
-on both SDKs together to keep them structurally parallel. Follow-up.
+**Keeping the nicer undo semantics.** The cost of this contract is that a
+style covers text the same client already deleted. The way to avoid it without
+giving up order-independence is to stop expressing a local style as one
+`(from, to)` range that sweeps tombstones, and express it as the live runs the
+user actually selected. Then an already-dead node is outside every sub-range
+on every replica — order-independent by construction — while a node removed
+*concurrently* still sits inside a live sub-range and gets styled, which is
+what convergence needs. That changes the operation's shape and its wire
+encoding, so it is its own piece of work.
