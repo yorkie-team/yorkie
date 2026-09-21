@@ -132,7 +132,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	pairs, diff, _, err := p.Text.Style(
+	pairs, size, _, err := p.Text.Style(
 		fromPos,
 		toPos,
 		attributes,
@@ -145,10 +145,11 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
-		p.context.AdjustDiffForGCPair(&diff, pair)
+		p.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
-	p.context.Acc(diff)
+	p.context.Acc(size.Live)
+	p.context.AccGC(size.GC)
 
 	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),

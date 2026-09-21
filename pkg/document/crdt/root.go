@@ -691,6 +691,18 @@ func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
 }
 
+// AccGC accumulates the given DataSize to GC.
+//
+// docSize.GC has to stay equal to the sum of the CURRENT DataSize of every
+// registered pair's child, because collect subtracts exactly that when it
+// purges one. Registration alone cannot maintain that: writing an attribute
+// onto a node that is already a tombstone changes the size of a child that
+// was registered earlier, with no pair of its own to carry the difference.
+// That is what this reports.
+func (r *Root) AccGC(diff resource.DataSize) {
+	r.docSize.GC.Add(diff)
+}
+
 // AdjustDiffForGCPair adjusts the given diff for the given GCPair.
 func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
 	// NOTE: A born-removed split piece was never in docSize.Live, so there

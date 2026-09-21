@@ -356,11 +356,26 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool,
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
-	nodeExisted := s.createdAt().Lamport() <= clientLamportAtChange
+//
+// A removal the styling change had already seen wins: the range was styled
+// with the deleted part known to be gone, so the tombstone keeps whatever it
+// held. A local change (empty vector) has seen every removal in its own
+// replica by definition, which is what keeps a user from styling text they
+// just deleted.
+//
+// A removal CONCURRENT with the style does not win. The replica that issued
+// the style applied it while the node was still live and can never retract
+// it, so every other replica has to apply it too. Deciding that on
+// editedAt.After(removedAt) instead makes the outcome turn on an actor-ID
+// tie-break, and the two replicas then hold different attributes on the same
+// node forever -- invisible while it is a tombstone, rendered the moment the
+// removal is undone.
+func (s *RGATreeSplitNode[V]) canStyle(clientLamportAtChange int64, vector time.VersionVector) bool {
+	if s.createdAt().Lamport() > clientLamportAtChange {
+		return false
+	}
 
-	return nodeExisted &&
-		(s.removedAt == nil || editedAt.After(s.removedAt))
+	return s.removedAt == nil || !ticketKnown(vector, s.removedAt)
 }
 
 // Value returns the value of this node.

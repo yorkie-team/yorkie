@@ -130,14 +130,14 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 	var reverseAttrsToRemove []string
 
 	var pairs []crdt.GCPair
-	var diff resource.DataSize
+	var size resource.DocSize
 	var err error
 	if len(e.attributes) > 0 {
 		// A key that already held a value restores it; a key that did not
 		// exist is queued for removal instead of being set back to the
 		// empty string.
 		var prevAttrs []crdt.PrevAttr
-		pairs, diff, prevAttrs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		pairs, size, prevAttrs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 		for _, prevAttr := range prevAttrs {
 			if prevAttr.Existed {
 				reversePrevAttributes[prevAttr.Key] = prevAttr.Value
@@ -149,7 +149,7 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 		// RemoveStyle only reports keys that existed, so every entry
 		// restores a value.
 		var prevAttrs []crdt.PrevAttr
-		pairs, diff, prevAttrs, err = obj.RemoveStyle(
+		pairs, size, prevAttrs, err = obj.RemoveStyle(
 			e.from, e.to, e.attributesToRemove, e.executedAt, versionVector,
 		)
 		for _, prevAttr := range prevAttrs {
@@ -159,9 +159,10 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
-		root.AdjustDiffForGCPair(&diff, pair)
+		root.AdjustDiffForGCPair(&size.Live, pair)
 	}
-	root.Acc(diff)
+	root.Acc(size.Live)
+	root.AccGC(size.GC)
 	if err != nil {
 		return ExecutionResult{}, err
 	}

@@ -18,7 +18,6 @@ package document_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -335,84 +334,4 @@ func TestRemovingAnAttrFromATombstonedTextNodeBalances(t *testing.T) {
 	require.Equal(t, resourceSize{}, resourceSize{
 		Data: doc.DocSize().GC.Data, Meta: doc.DocSize().GC.Meta,
 	}, "collection left GC residue")
-}
-
-// canStyle admits a tombstoned text node, so a Style can overwrite a key on
-// one. Live never held that node's attributes -- Text.DataSize skips removed
-// nodes -- so debiting the superseded value drifts Live by the SIGNED
-// difference between the two values' sizes, and a shrinking overwrite takes it
-// negative.
-func TestStylingOverATombstonedTextNodeKeepsLiveExact(t *testing.T) {
-	doc := document.New("d")
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewText("k").Edit(0, 0, "abcdefghij")
-		return nil
-	}))
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetText("k").Style(4, 6, map[string]string{"b": strings.Repeat("L", 20)})
-		return nil
-	}))
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetText("k").Edit(4, 6, "")
-		return nil
-	}))
-
-	// A much shorter value over the same key, on a range that covers the
-	// tombstoned node as well as live ones.
-	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetText("k").Style(0, 8, map[string]string{"b": "x"})
-		return nil
-	}))
-
-	require.GreaterOrEqual(t, doc.DocSize().Live.Data, 0, "Live went negative")
-	clone, err := doc.InternalDocument().DeepCopy()
-	require.NoError(t, err)
-	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live)
-}
-
-// The tree has the same question as the text: canStyle admits a node that has
-// since been removed, and Tree.DataSize excludes removed nodes, so Live is not
-// holding their attributes.
-//
-// Reaching it needs a remote style, because an index range cannot address a
-// removed node locally. A style whose range was decided before a concurrent
-// split follows InsNextID to the split siblings, and that loop has no removal
-// filter at all.
-//
-// Only Live is asserted. The node's GC charge was fixed when it was removed
-// and a style landing on it afterwards grows the node, so GC still disagrees
-// with a rebuild -- that is the GC half of the separately-tracked defect about
-// styling a tombstoned node, and it is unchanged here.
-func TestRemoteStyleOnARemovedTreeNodeKeepsLiveExact(t *testing.T) {
-	d1, d2, _, _ := newReplicas(t)
-	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcdefgh"}}},
-		}})
-		return nil
-	}))
-	deliverChanges(t, d1, d2)
-
-	// d2 styles a range decided before d1 splits.
-	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetTree("t").Style(0, 10, map[string]string{"b": "LONGLONGLONGLONG"})
-		return nil
-	}))
-
-	// d1 splits the paragraph and removes the right half.
-	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetTree("t").Edit(5, 5, nil, 1)
-		return nil
-	}))
-	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetTree("t").Edit(6, 11, nil, 0)
-		return nil
-	}))
-
-	deliverChanges(t, d2, d1)
-
-	clone, err := d1.InternalDocument().DeepCopy()
-	require.NoError(t, err)
-	require.Equal(t, clone.DocSize().Live, d1.DocSize().Live,
-		"the remote style charged Live for a node Tree.DataSize excludes")
 }

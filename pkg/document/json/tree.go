@@ -210,17 +210,18 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, size, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&diff, pair)
+		t.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
-	t.context.Acc(diff)
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
@@ -253,12 +254,13 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, size, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	t.context.Acc(diff)
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
@@ -299,17 +301,18 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, size, _, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
-		t.context.AdjustDiffForGCPair(&diff, pair)
+		t.context.AdjustDiffForGCPair(&size.Live, pair)
 	}
 
-	t.context.Acc(diff)
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
@@ -346,12 +349,13 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, diff, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, size, _, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	t.context.Acc(diff)
+	t.context.Acc(size.Live)
+	t.context.AccGC(size.GC)
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
