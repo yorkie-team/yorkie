@@ -446,3 +446,46 @@ func TestTogglingATreeAttributeDoesNotDriftTheCloneLedger(t *testing.T) {
 		}), "toggle %d tripped MaxSizeLimit; the document itself is %+v", i, doc.DocSize())
 	}
 }
+
+// Restoring a PURGED tree node recreates it from the span, whose attributes
+// are a deep copy of the original RHT -- tombstones included, because a
+// recreated node has to resolve a concurrent style the way a replica that
+// never lost it would. Each copied tombstone is a fresh piece of garbage no
+// removal path produced, and TreeNode.DataSize excludes it, so without a
+// registration it sits in the RHT forever: uncounted and unpurgeable.
+//
+// Pre-existing; surfaced while giving the recreate path its GCOnlySize.
+func TestRecreateCarriesAttributeTombstones(t *testing.T) {
+	doc := document.New("d")
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+		}})
+		return nil
+	}))
+	// Style then undo it -> the reverse is a removeStyle, which tombstones
+	// the attribute on <p>.
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(0, 4, map[string]string{"bbbb": "vvvv"})
+		return nil
+	}))
+	require.NoError(t, doc.Undo())
+	t.Logf("after style+undo  gcLen=%d size=%+v", doc.GarbageLen(), doc.DocSize())
+
+	// Remove the <p>, purge it, then undo the removal so it is RECREATED.
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 4, nil, 0)
+		return nil
+	}))
+	doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+	t.Logf("after remove+gc   gcLen=%d size=%+v", doc.GarbageLen(), doc.DocSize())
+
+	require.NoError(t, doc.Undo())
+	clone, err := doc.InternalDocument().DeepCopy()
+	require.NoError(t, err)
+	t.Logf("after undo        gcLen=%d size=%+v", doc.GarbageLen(), doc.DocSize())
+	t.Logf("rebuilt           gcLen=%d size=%+v", clone.GarbageLen(), clone.DocSize())
+	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live, "Live")
+	require.Equal(t, clone.DocSize().GC, doc.DocSize().GC, "GC")
+	require.Equal(t, clone.GarbageLen(), doc.GarbageLen(), "GarbageLen")
+}

@@ -1277,6 +1277,19 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			attrs = span.Attributes.DeepCopy()
 		}
 		node = NewTreeNode(span.ID, span.NodeType, attrs)
+
+		// The span's attributes are a deep copy of the node's RHT, tombstones
+		// included -- they have to be, or a recreated node would resolve a
+		// concurrent style differently from a replica that never lost it. Each
+		// copied tombstone is a fresh piece of garbage that no removal path
+		// produced: without a registration it sits in the RHT forever,
+		// uncounted and unpurgeable, and TreeNode.DataSize excludes it so the
+		// node's own charge does not cover it either. GCPairs marks each
+		// GCOnlySize, which is what sends it to GC alone.
+		//
+		// This runs for BOTH parents: a live one, where the node is reported
+		// as recreated, and a removed one, where it is born tombstoned below.
+		t.pendingGCPairs = append(t.pendingGCPairs, node.GCPairs()...)
 	}
 
 	siblings := parent.Children(true)
