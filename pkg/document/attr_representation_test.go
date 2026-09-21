@@ -26,22 +26,20 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
-// The half of #2003 that is still open.
+// What #2003 closes, and the one case it cannot.
 //
-// The issue says it was filed here "because the question is which
-// representation is canonical -- deciding that is a protocol-level call, and
-// whichever way it goes one of the two implementations changes". That decision
-// has not been made. The JS SDK's reading and sizing were brought into line
-// with this one without it; what goes on the wire was left alone, because
-// storing strings raw there makes a caller's string '1' read back as the
-// number 1.
+// The issue was filed here "because the question is which representation is
+// canonical -- deciding that is a protocol-level call". It is now this one: the
+// JS SDK stores an ordinary string as itself, the way Style's map[string]string
+// always has, so `color="red"` puts the same three bytes on the wire from
+// either SDK and each reads back exactly what the other wrote.
 //
-// So a string attribute written by a JS client still arrives here wrapped in
-// the quotes that SDK's JSON encoding added, and this SDK has no idea it
-// should take them off -- Style takes map[string]string and stores what it is
-// given. These tests pin that, so the gap is a fact in the suite rather than a
-// sentence in a pull request, and so whoever closes it finds a failing test
-// that names exactly what changed.
+// One case is irreducible without a value-kind field on the wire. A JS string
+// that is ITSELF a JSON document -- '1', 'true', 'null' -- keeps its quotes
+// there, because stored raw it could not be told from the number or boolean it
+// encodes. This SDK sees those quotes as part of the value, and cannot express
+// the distinction at all. These tests pin that, so the gap is a fact in the
+// suite and whoever closes it gets a failing test naming what changed.
 
 // styleValue returns what the document holds for the given attribute value,
 // as an ordinary Go client would read it back.
@@ -60,29 +58,37 @@ func styleValue(t *testing.T, value string) string {
 	return doc.Root().GetTree("t").ToXML()
 }
 
-func TestAJSAuthoredStringAttributeKeepsItsQuotesHere(t *testing.T) {
-	// `red` is what this SDK stores for Style(..., {"color": "red"}).
-	require.Equal(t, `<doc><p color="red">ab</p></doc>`, styleValue(t, "red"))
-
-	// `"red"` is what the JS SDK stores for the same logical attribute: its
-	// json/ boundary JSON-encodes every value before it reaches the CRDT. This
-	// SDK renders the quotes, because to it they are part of the value.
-	//
-	// Change this assertion when the representation is unified -- and note
-	// which direction was chosen, because it decides which SDK's existing
-	// documents need rewriting.
-	require.Equal(t, `<doc><p color="\"red\"">ab</p></doc>`, styleValue(t, `"red"`))
+// An ordinary string now round-trips between the two SDKs unchanged: the JS
+// side stores `red` for the string 'red', which is exactly what this one holds
+// for map[string]string{"color": "red"}.
+func TestAnOrdinaryStringAttributeAgreesAcrossSDKs(t *testing.T) {
+	for _, value := range []string{"red", "Arial", "#fff", "bold italic"} {
+		require.Equal(t,
+			`<doc><p color="`+value+`">ab</p></doc>`,
+			styleValue(t, value),
+			"a JS client stores %q for the same attribute", value)
+	}
 }
 
-// The split is strings only, which is what makes it narrow enough to close.
-// The JS SDK stores `true` for the boolean true and `12` for the number 12 --
-// byte-identical to what this SDK holds for the equivalent string -- so those
-// already agree and need no decision.
-func TestNonStringAttributesAlreadyAgreeAcrossSDKs(t *testing.T) {
+// So does every non-string: the JS side's JSON form is byte-identical to what
+// this SDK holds for the equivalent string.
+func TestNonStringAttributesAgreeAcrossSDKs(t *testing.T) {
 	for _, value := range []string{"true", "12", "1.5", "null"} {
 		require.Equal(t,
 			`<doc><p color="`+value+`">ab</p></doc>`,
 			styleValue(t, value),
 			"a JS client stores %q for the equivalent non-string", value)
 	}
+}
+
+// THE REMAINING GAP. A JS string that is itself JSON keeps its quotes there, so
+// this SDK reads them as part of the value. Closing it needs a value-kind field
+// on the wire -- a protocol change on both SDKs and the server, which still
+// leaves a default for every value already stored.
+func TestAJSStringThatLooksLikeJSONStillDiffers(t *testing.T) {
+	// What the JS SDK stores for the STRING 'true', to keep it a string there.
+	require.Equal(t, `<doc><p color="\"true\"">ab</p></doc>`, styleValue(t, `"true"`))
+
+	// What this SDK stores for "true", and what JS stores for the BOOLEAN true.
+	require.Equal(t, `<doc><p color="true">ab</p></doc>`, styleValue(t, "true"))
 }
