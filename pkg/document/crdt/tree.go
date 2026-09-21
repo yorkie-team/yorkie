@@ -2839,7 +2839,16 @@ func (t *Tree) Style(
 			}
 
 			for key, value := range attrs {
-				accAttrWrite(node.SetAttr(key, value, editedAt), node, true, &pairs, &diff)
+				// canStyle admits a node that has since been removed, and
+				// Tree.DataSize excludes removed nodes, so Live is not
+				// holding this one's attributes either.
+				accAttrWrite(
+					node.SetAttr(key, value, editedAt),
+					node,
+					!node.IsRemoved(),
+					&pairs,
+					&diff,
+				)
 			}
 
 			// Propagate style to unknown split siblings so that a
@@ -2856,7 +2865,17 @@ func (t *Tree) Style(
 						break
 					}
 					for key, value := range attrs {
-						accAttrWrite(next.SetAttr(key, value, editedAt), next, true, &pairs, &diff)
+						// This path has no removal filter at all -- it follows
+						// InsNextID to split siblings a remote style could not
+						// have known about -- so the same question has to be
+						// asked here.
+						accAttrWrite(
+							next.SetAttr(key, value, editedAt),
+							next,
+							!next.IsRemoved(),
+							&pairs,
+							&diff,
+						)
 					}
 					current = next
 				}
