@@ -137,8 +137,63 @@ Two things this turned up that the issue did not name:
    a tombstone. Only reachable once a style can land on a tombstone at all,
    and it needs three changes concurrent with one removal.
 
-Known consequence, not addressed here: a server rebuilding a document from
-its full change log with this code computes a different state for any history
-that styled a node whose removal the style had already seen. Existing
-snapshots are unaffected — changes applied on top of them keep whatever the
-old code decided — and no wire format changed.
+### From code review
+
+Three findings, two fixed here:
+
+1. **The tree's `RemoveStyle` never got the third accounting case.**
+   `attrGCPair` took only `wasLive`, so a live attribute on a tombstoned tree
+   node was debited from Live — where it never was — and credited to GC twice.
+   Live reached **-26** on the case the new test covers. Pre-existing, but the
+   branch had just fixed the `Style` half of the same question; the two helpers
+   are now one. Both SDKs.
+
+2. **Two comments had `TreeNode.DataSize` where they meant `Tree.DataSize`.**
+   The per-node function counts a live attribute whether or not the node is
+   removed; the exclusion is the container's. That confusion is what justified
+   leaving the tree at two cases, so the comments are corrected rather than
+   reworded.
+
+3. **Two concurrent removals of the same node make `canStyle`'s input
+   delivery-order dependent** — not fixed, see below.
+
+### Known limitations
+
+**Concurrent removals.** `removedAt` is LWW and mutable: `Remove` overwrites it
+when a later concurrent removal arrives. So any `canStyle` that reads it gets a
+different answer depending on which of two concurrent removals has landed. With
+a third client that saw only one of them and styled over the node, delivery
+order `B,S,C` disagrees with `B,C,S`, `C,B,S` and `C,S,B`.
+
+Measured identically on this branch and on `6b3fa26e`, all four orders, down to
+the GC numbers — the old `editedAt.After(removedAt)` rule and the new causality
+rule both read the same mutable field, so neither introduces nor fixes it.
+Settling it means converging `Remove` on the *earliest* concurrent tombstone
+rather than the latest, which affects every deletion and needs its own
+analysis. The repro is kept executable as a skipped test,
+`TestTwoConcurrentRemovalsThenStyle`.
+
+**SDK version skew.** Clients apply remote changes with their own `canStyle`,
+so an un-upgraded SDK on the same document as an upgraded one computes
+different tombstone attributes and a different `docSize.GC` — and
+`MaxSizeLimit` is enforced client-side off that number. The server and both
+SDKs are one logical release. The skew is tolerable because the disagreement is
+invisible until an undo, but it is real and embedded SDKs cannot be
+force-upgraded.
+
+**Change-log replay.** A server rebuilding a document from its full change log
+with this code computes a different state for any history that styled a node
+whose removal the style had already seen. Existing snapshots are unaffected —
+changes applied on top of them keep whatever the old code decided — and no wire
+format changed.
+
+### Deferred
+
+`clientLamportAtChange` is now fully redundant with `vector`:
+`styleClientLamportAt` returns `MaxLamport` for an empty vector, `vv[actor]`
+when present, and `0` otherwise, which is `ticketKnown` spelled out. Collapsing
+`canStyle` to two `ticketKnown` calls would delete `styleClientLamportAt` and
+~16 lines of hand-inlined duplicate in `text.go`. It is a refactor rather than
+a defect, it has a latent edge (a node whose `createdAt` lamport is 0 compares
+`0 <= 0` as known where `ticketKnown` says unknown), and it would have to land
+on both SDKs together to keep them structurally parallel. Follow-up.
