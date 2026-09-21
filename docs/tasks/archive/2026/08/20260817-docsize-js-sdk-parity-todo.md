@@ -66,7 +66,8 @@ in that repo). This entry stays open until that PR lands.
       six fail without the source change and pass with it; the ten
       pre-existing `Document Size` tests are unaffected.
 - [x] Cross-link the resulting `yorkie-js-sdk` PR back to the Go PR.
-- [ ] Land yorkie-team/yorkie-js-sdk#1322.
+- [x] Land yorkie-team/yorkie-js-sdk#1322. Merged as yorkie-js-sdk
+      `611e6e438`.
 
 ## See Also
 
