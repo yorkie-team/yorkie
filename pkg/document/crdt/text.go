@@ -95,6 +95,14 @@ func (t *TextValue) DataSize() resource.DataSize {
 	}
 
 	for _, node := range t.attrs.Nodes() {
+		// A removed attribute belongs to docSize.GC, not to Live. TreeNode
+		// .DataSize makes the same exclusion; the two halves have to answer
+		// this the same way or a document's size stops being a function of
+		// its content.
+		if node.RemovedAt() != nil {
+			continue
+		}
+
 		size := node.DataSize()
 		dataSize.Data += size.Data
 		dataSize.Meta += size.Meta
@@ -121,6 +129,23 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 		attrs: t.attrs.DeepCopy(),
 		value: t.value,
 	}
+}
+
+// removedAttrs implements gcAttrSource: it reports the tombstoned attributes
+// this value holds, which a split has just duplicated from its source.
+func (t *TextValue) removedAttrs() []*RHTNode {
+	if t.attrs == nil {
+		return nil
+	}
+
+	var removed []*RHTNode
+	for _, node := range t.attrs.Nodes() {
+		if node.RemovedAt() != nil {
+			removed = append(removed, node)
+		}
+	}
+
+	return removed
 }
 
 // Purge removes the given ticket from this value.
@@ -540,11 +565,15 @@ func (t *Text) Style(
 		}
 
 		for key, value := range attributes {
-			if rhtNode := val.attrs.Set(key, value, executedAt); rhtNode != nil {
-				pairs = append(pairs, GCPair{
-					Parent: node.Value(),
-					Child:  rhtNode,
-				})
+			revived, superseded := val.attrs.Set(key, value, executedAt)
+			if revived != nil {
+				pairs = append(pairs, attrGCPair(node.Value(), revived, false))
+			}
+			// RHT overrides immutably, so a superseded live value is dropped
+			// outright: no tombstone, nothing to collect, but its bytes have
+			// to leave Live.
+			if superseded != nil {
+				diff.Sub(superseded.DataSize())
 			}
 			if newNode, ok := val.attrs.nodeMapByKey[key]; ok {
 				diff.Add(newNode.DataSize())
@@ -631,13 +660,13 @@ func (t *Text) RemoveStyle(
 		}
 
 		for _, attr := range attributesToRemove {
-			rhtNodes := val.attrs.Remove(attr, executedAt)
-			for _, rhtNode := range rhtNodes {
-				pairs = append(pairs, GCPair{
-					Parent: node.Value(),
-					Child:  rhtNode,
-				})
-				diff.Add(rhtNode.DataSize())
+			wasLive := val.attrs.Has(attr)
+			for _, rhtNode := range val.attrs.Remove(attr, executedAt) {
+				pairs = append(pairs, attrGCPair(node.Value(), rhtNode, wasLive))
+				// Only the node that replaces the live value takes a size out
+				// of Live; a second one in the same call is the tombstone it
+				// superseded, which was never in Live.
+				wasLive = false
 			}
 		}
 	}

@@ -121,23 +121,42 @@ func (rht *RHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k, v string, executedAt *time.Ticket) *RHTNode {
+// Set writes the value of the given key and reports what the write replaced,
+// which the caller needs in order to keep docSize honest.
+//
+// revived is a tombstone this write brought back. It was registered as garbage
+// when it was removed, so the caller re-registers the pair to cancel that
+// registration -- it is no longer collectable, it is simply gone.
+//
+// superseded is a LIVE node this write replaced. RHT overrides immutably, so
+// the old node is dropped from the map with no tombstone and nothing to
+// collect, but its bytes were counted in docSize.Live and have to leave it.
+// Reporting it is what stops every overwrite from leaking one attribute.
+//
+// Both are nil when the write loses LWW, because then nothing was replaced.
+// Returning the occupant in that case would have the caller cancel a GC
+// registration for a tombstone that is still very much registered.
+func (rht *RHT) Set(k, v string, executedAt *time.Ticket) (revived, superseded *RHTNode) {
 	node := rht.nodeMapByKey[k]
 
-	if node != nil && node.isRemoved && executedAt.After(node.updatedAt) {
-		rht.numberOfRemovedElement--
-	}
-
-	if node == nil || executedAt.After(node.updatedAt) {
-		newNode := newRHTNode(k, v, executedAt, false)
-		rht.nodeMapByKey[k] = newNode
+	if node != nil && !executedAt.After(node.updatedAt) {
+		return nil, nil
 	}
 
 	if node != nil && node.isRemoved {
-		return node
+		rht.numberOfRemovedElement--
 	}
 
-	return nil
+	rht.nodeMapByKey[k] = newRHTNode(k, v, executedAt, false)
+
+	if node == nil {
+		return nil, nil
+	}
+	if node.isRemoved {
+		return node, nil
+	}
+
+	return nil, node
 }
 
 // SetInternal sets the value of the given key internally.
