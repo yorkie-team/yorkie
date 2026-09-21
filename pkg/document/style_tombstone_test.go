@@ -240,6 +240,49 @@ func TestConcurrentStyleShrinkingAnAttributeOnATombstone(t *testing.T) {
 	assertLedgerExact(t, d2, "on the replica that issued the style", a1, a2)
 }
 
+// A tombstoned node can also have an attribute REVIVED on it: a remote
+// removeStyle tombstones the key, a later remote style sets it again. The
+// pair the first one registered carried zero -- the attribute's bytes were
+// still inside the node's charge at that point -- but the revive replaces it
+// with a live node, so the node's charge no longer covers it and the map
+// entry has to give back its own size on the way out.
+//
+// A text removeStyle only reaches a tombstone as the reverse of a style, so
+// the sequence is: style, undo, style again, all concurrent with the removal.
+func TestReviveAnAttributeOnATombstone(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("t").Edit(0, 0, "abcdefghij")
+		return nil
+	}))
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Style(4, 6, map[string]string{"b": strings.Repeat("L", 12)})
+		return nil
+	}))
+	wireSync(t, d1, d2)
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Edit(4, 6, "")
+		return nil
+	}))
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Style(0, 8, map[string]string{"b": "x"})
+		return nil
+	}))
+	require.NoError(t, d2.Undo())
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Style(0, 8, map[string]string{"b": "yy"})
+		return nil
+	}))
+
+	wireSync(t, d1, d2)
+
+	require.Equal(t, nodeAttrs(t, d1, "t"), nodeAttrs(t, d2, "t"))
+	assertLedgerExact(t, d1, "on the replica that deleted the node", a1, a2)
+	assertLedgerExact(t, d2, "on the replica that issued the styles", a1, a2)
+}
+
 // The tree half of the same contract. Reaching it needs a remote style,
 // because an index range cannot address a removed node locally: a style whose
 // range was decided before a concurrent split follows InsNextID to the split

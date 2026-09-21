@@ -631,13 +631,16 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	// child should be removed from the cache.
 	key := keyOf(pair)
 	if p, ok := r.gcNodePairMap[key]; ok {
-		// Subtract exactly what registration added: GCOnlySize for a
-		// born-dead split piece (only its net-new size was added to GC),
-		// the full child size otherwise.
-		if p.GCOnlySize != nil {
-			r.docSize.GC.Sub(*p.GCOnlySize)
-		} else {
+		// An attribute always contributes its own size while it is in the map
+		// -- collect reads DataSize, and nothing else's charge covers it once
+		// the write that revives it replaces it with a live node. That is not
+		// true of a born-dead split piece, whose remaining bytes are inside a
+		// sibling's charge, so that one has to give back exactly what
+		// registration added.
+		if _, isRHTNode := p.Child.(*RHTNode); isRHTNode || p.GCOnlySize == nil {
 			r.docSize.GC.Sub(p.Child.DataSize())
+		} else {
+			r.docSize.GC.Sub(*p.GCOnlySize)
 		}
 
 		delete(r.gcNodePairMap, key)
