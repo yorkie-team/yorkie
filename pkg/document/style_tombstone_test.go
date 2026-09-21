@@ -489,3 +489,34 @@ func TestRecreateCarriesAttributeTombstones(t *testing.T) {
 	require.Equal(t, clone.DocSize().GC, doc.DocSize().GC, "GC")
 	require.Equal(t, clone.GarbageLen(), doc.GarbageLen(), "GarbageLen")
 }
+
+// A style range that opens on a tombstone: the reverse operation's prior
+// values must come from the first LIVE node, not from the dead run the user
+// had already deleted. Capturing from the tombstone made the undo write
+// b="OLD" onto "efgh", which never carried the attribute at any point.
+func TestUndoDoesNotRestoreATombstonesAttribute(t *testing.T) {
+	doc := document.New("d")
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewText("t").Edit(0, 0, "abcdefghij")
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Style(0, 4, map[string]string{"b": "OLD"})
+		return nil
+	}))
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Edit(0, 4, "")
+		return nil
+	}))
+	require.Equal(t, `[{"val":"efghij"}]`, doc.Root().GetText("t").Marshal())
+
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetText("t").Style(0, 4, map[string]string{"b": "NEW"})
+		return nil
+	}))
+	require.NoError(t, doc.Undo())
+	require.Equal(t,
+		`[{"val":"efgh"},{"val":"ij"}]`,
+		doc.Root().GetText("t").Marshal(),
+		"the undo restored an attribute the visible text never carried")
+}

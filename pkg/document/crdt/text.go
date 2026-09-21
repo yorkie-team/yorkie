@@ -538,10 +538,27 @@ func (t *Text) Style(
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
 	captured := false
+	// The reverse operation restores what the VISIBLE text held, so the prior
+	// values come from the first LIVE node in the range. canStyle admits
+	// tombstones, and the first node in the range can be one -- capturing from
+	// it makes an undo write an attribute onto text that never carried it, out
+	// of a run the user had already deleted. The fallback to the first node
+	// keeps an all-tombstone range undoable.
+	var captureFrom *RGATreeSplitNode[*TextValue]
+	if len(toBeStyled) > 0 {
+		captureFrom = toBeStyled[0]
+		for _, node := range toBeStyled {
+			if node.RemovedAt() == nil {
+				captureFrom = node
+				break
+			}
+		}
+	}
+
 	for _, node := range toBeStyled {
 		val := node.value
 
-		if !captured {
+		if !captured && node == captureFrom {
 			keys := make([]string, 0, len(attributes))
 			for key := range attributes {
 				keys = append(keys, key)
@@ -617,10 +634,27 @@ func (t *Text) RemoveStyle(
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
 	captured := false
+	// The reverse operation restores what the VISIBLE text held, so the prior
+	// values come from the first LIVE node in the range. canStyle admits
+	// tombstones, and the first node in the range can be one -- capturing from
+	// it makes an undo write an attribute onto text that never carried it, out
+	// of a run the user had already deleted. The fallback to the first node
+	// keeps an all-tombstone range undoable.
+	var captureFrom *RGATreeSplitNode[*TextValue]
+	if len(toBeStyled) > 0 {
+		captureFrom = toBeStyled[0]
+		for _, node := range toBeStyled {
+			if node.RemovedAt() == nil {
+				captureFrom = node
+				break
+			}
+		}
+	}
+
 	for _, node := range toBeStyled {
 		val := node.value
 
-		if !captured {
+		if !captured && node == captureFrom {
 			keys := append([]string(nil), attributesToRemove...)
 			sort.Strings(keys)
 			for _, key := range keys {
