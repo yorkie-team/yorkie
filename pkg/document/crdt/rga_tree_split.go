@@ -61,6 +61,16 @@ var (
 )
 
 // RGATreeSplitValue is a value of RGATreeSplitNode.
+// gcAttrSource is implemented by a split value that carries attributes of its
+// own. Splitting deep-copies them, so the copy of a TOMBSTONED attribute is new
+// garbage sitting under a new parent, with no registration of its own -- the
+// original's pair names the original's parent. Without this the copy can never
+// be collected (#2002).
+type gcAttrSource interface {
+	GCParent
+	removedAttrs() []*RHTNode
+}
+
 type RGATreeSplitValue interface {
 	Split(offset int) RGATreeSplitValue
 	Len() int
@@ -555,6 +565,21 @@ func (s *RGATreeSplit[V]) splitNode(
 	// the split operation.
 	diff.Add(node.DataSize(), splitNode.DataSize())
 	diff.Sub(prevSize)
+
+	// A split deep-copies the value's attributes, so every tombstone among
+	// them is duplicated under the new node. The copy was never in
+	// docSize.Live -- DataSize excludes removed attributes -- so it enters GC
+	// only, and purge subtracts the same size back out.
+	if src, ok := any(splitNode.value).(gcAttrSource); ok {
+		for _, attr := range src.removedAttrs() {
+			gcSize := attr.DataSize()
+			s.pendingGCPairs = append(s.pendingGCPairs, GCPair{
+				Parent:     src,
+				Child:      attr,
+				GCOnlySize: &gcSize,
+			})
+		}
+	}
 
 	// NOTE: A piece split off an already-tombstoned node inherits
 	// removedAt without going through Remove(), so no GC pair is created
