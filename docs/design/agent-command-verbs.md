@@ -246,16 +246,33 @@ on the strength of the two gates below rather than waved away.
   human approving review, and reading that setting is what the permission buys.
   It fails closed on every error including a permissions error — a repository
   where the check cannot be answered is one where the bot does not push.
-- **Two gates, and they are the whole argument.** The PR opens as a **draft**,
-  and `main` is verified to require a human approval before anything is pushed.
-  Neither is a property of the agent; both are properties of the repository,
-  which is why they are checked at run time rather than asserted here.
+- **Two gates, and they bound what LANDS — not what the run can reach.** The PR
+  opens as a **draft**, and `main` is verified to require a human approval before
+  anything is pushed; the ruleset path also refuses a rule that names bypass
+  actors, since a rule this App is exempt from is not protection. Neither gate is
+  a property of the agent — both are properties of the repository, which is why
+  they are checked at run time rather than asserted here.
+
+  **What they do not cover.** The agent runs with an unrestricted `Bash` beside a
+  live installation token and a model credential, on text an arbitrary GitHub
+  user wrote. Both gates constrain merging; neither constrains network egress. A
+  successful prompt injection does not get code into `main`, and it does not need
+  to — it already has the token. Two things narrow it: the issue body is fetched
+  in a trusted step into a file the prompt names as untrusted input, and the
+  agent is told not to read the issue's comments, which removes the case where a
+  comment added mid-run — after a maintainer decided to dispatch — is in scope.
+  Neither is a control on egress, and the residual risk is accepted knowingly:
+  the token is installation-scoped to this repository, expires in an hour, and
+  carries no `workflows` permission. The control that would actually close the
+  channel is a runner egress policy, and it is the next thing to add here.
 - **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
   write-access check on top. An issue body is data, never instructions.
-- **Not ported:** nothing else from upstream's issue lane. The classifier comes
-  with it only because the PR ledger reads its output; its model call is moved
-  off the raw Messages API onto `ask.mjs`, since this repository authenticates
-  with `CLAUDE_CODE_OAUTH_TOKEN` and has no API key.
+- **Not ported:** upstream's issue classifier. It labels issues into a category
+  corpus, which is eval-rig machinery this document already excludes, and it
+  calls the raw Messages API with an `ANTHROPIC_API_KEY` this repository does not
+  have. If it is wanted later the model call goes through `ask.mjs`, which
+  already authenticates with `CLAUDE_CODE_OAUTH_TOKEN` and carries the read-only
+  tool invariant — not through a second, unshared HTTP path.
 - **Exit criteria:** three issues turned into PRs a maintainer merged without
   rewriting the change, and one where the agent stopped and said it could not do
   it rather than opening a PR that looks finished.

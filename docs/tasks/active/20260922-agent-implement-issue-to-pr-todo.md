@@ -22,15 +22,21 @@ a **draft** PR back to `main`. A bare `@claude` with no verb on an issue gets a
 
 ## Scope
 
-- [ ] `.github/workflows/agent-implement.yml`, ported from wafflebase and
+- [x] `.github/workflows/agent-implement.yml`, ported from wafflebase and
       adapted to the Go layout
-- [ ] `scripts/agent/classify.mjs` + tests, with the model call moved from the
-      raw Messages API onto `ask.mjs` (OAuth, not an API key)
-- [ ] The ten `agent:*` labels created deliberately rather than auto-created
-- [ ] `docs/design/agent-command-verbs.md`: Non-Goal → a phase, with the
+- [x] The `agent:*` labels created deliberately rather than auto-created —
+      eight, matching `set-state.mjs`'s six states plus `agent:managed` and
+      `agent:candidate`. Two upstream names (`agent:iterating`,
+      `agent:needs-human-review`) are LEGACY: `set-state.mjs` strips them on
+      every write, so creating them would make a stale label indistinguishable
+      from one nobody set.
+- [x] `docs/design/agent-command-verbs.md`: Non-Goal → a phase, with the
       reordering and its risk stated
-- [ ] Tests: the ISSUE-only guard already waiting in `checks.test.mjs`, plus
-      whatever the port needs
+- [x] Tests: the ISSUE-only guard already waiting in `checks.test.mjs`, plus
+      the per-job PR-comment permission rule this verb is the first exception to
+- [ ] NOT DOING: `scripts/agent/classify.mjs`. Eval-rig machinery the design
+      doc excludes, and it needs an API key this repository does not have. If it
+      returns, its model call goes through `ask.mjs` on OAuth.
 
 ## Adaptations from upstream
 
@@ -38,7 +44,8 @@ a **draft** PR back to `main`. A bare `@claude` with no verb on an issue gets a
 | --- | --- | --- |
 | pnpm + Node toolchain | Go toolchain, Node only for `scripts/agent` | different repo |
 | `pnpm verify:*` | `make lint`, `go test ./...` | `make test` needs MongoDB; CI owns it |
-| `ANTHROPIC_API_KEY` + `x-api-key` | `ask.mjs` + `CLAUDE_CODE_OAUTH_TOKEN` | this repo has no API key, and `ask.mjs` already carries the read-only tool invariant and the credential pool |
+| `ANTHROPIC_API_KEY` + `x-api-key` | the classifier is dropped | this repo has no API key; if it returns, it goes through `ask.mjs` on OAuth, not a second HTTP path |
+| agent runs `gh issue view` itself | a trusted step writes the body to a file | the agent's own fetch pulled in every comment, including ones added mid-run |
 | workflow-level `contents/pull-requests/issues: write` | job-level least privilege | matches every other agent workflow here |
 | `create-github-app-token@v1` | pinned to a commit SHA | this action handles the App private key |
 | SessionStart hook supplies the checklist | the prompt carries it | no such hook here |

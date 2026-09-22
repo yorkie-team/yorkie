@@ -452,12 +452,10 @@ test("the `fix` verb reaches exactly one workflow: issues -> implement, PRs -> f
   // "@claude fix" on an issue would also start the on-demand fixer (which would
   // then refuse for having no PR) or, worse, both would run on a PR.
   //
-  // agent-implement.yml is the ISSUE half and is not ported here
-  // (docs/design/agent-command-verbs.md defers issue → PR past every phase). The
-  // half that can be asserted without it is the one that matters more: agent-fix
-  // must claim PRs and ONLY PRs, so the issue half cannot collide with it when
-  // it eventually lands. Asserting that unconditionally is what makes this a
-  // guard rather than a note.
+  // agent-implement.yml is the ISSUE half and now exists, so both sides are
+  // asserted. The `existsSync` branch below is kept rather than simplified: the
+  // half that matters more is that agent-fix claims PRs and ONLY PRs, and that
+  // stays assertable if the issue half is ever removed again.
   const wfDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", ".github", "workflows");
   const fix = WF("agent-fix.yml");
   assert.ok(
@@ -1469,7 +1467,7 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
     // guards here made — a check matching its own explanation.
     const code = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
     const mentions = code.match(/!?github\.event\.issue\.pull_request/g) ?? [];
-    if (mentions.length > 0 && mentions.every((m) => m.startsWith("!"))) continue;
+    const issueOnly = mentions.length > 0 && mentions.every((m) => m.startsWith("!"));
     const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
     const inherited = lines.slice(0, jobsAt < 0 ? lines.length : jobsAt).some((l) => GRANTS.test(l));
     // Walk jobs: a job id sits at two-space indent under `jobs:`.
@@ -1484,9 +1482,13 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
       checked++;
       const id = lines[starts[s]].trim().replace(":", "");
       const own = code.some((l) => /^ {4}permissions:\s*$/.test(l));
-      if (!(code.some((l) => GRANTS.test(l)) || (!own && inherited))) {
-        offenders.push(`${file}:${id}`);
-      }
+      const granted = code.some((l) => GRANTS.test(l)) || (!own && inherited);
+      // Scoped to the JOB, not the file. An issue-only workflow may still
+      // contain a job that legitimately holds the grant — `implement` does —
+      // and exempting the whole file would stop guarding that job forever. Only
+      // a job WITHOUT the grant is excused, and only where the resource really
+      // is an issue.
+      if (!granted && !issueOnly) offenders.push(`${file}:${id}`);
     }
   }
 
