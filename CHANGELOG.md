@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.23] - 2026-09-22
+
+### Changed
+
+- Precompute the daily peak sessions per channel by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1997
+
+### Fixed
+
+- Charge Live only for the tree sizes it was actually holding by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2000
+- Report a split's boundary growth to undo/redo reconciliation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2001
+- Give a split's copied tree attribute tombstone its own place in GC by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2005
+- Recreate a restored node tombstoned, and carry a text attribute's removal through snapshots by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2009
+- Charge an attribute to Live only while it is the live value by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2010
+- Stop canStyle reading removal state, and charge a tombstone's style by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2012
+
 ## [v0.7.22] - 2026-09-17
 
 ### Fixed
