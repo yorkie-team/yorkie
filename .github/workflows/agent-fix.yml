@@ -83,6 +83,12 @@ jobs:
     # arriving mid-run must queue behind the first, never kill an agent that is
     # part-way through editing the branch. A cancelled fixer is the exact shape
     # that leaves a half-applied diff and no report.
+    # KEYED ON THE PR, which does NOT overlap agent-iterate-ci's
+    # `agent-iterate-<branch>` or the panel's `<…>-active`. The panel's own fix
+    # job relies on green CI as the mutex between the two pushing arms — this
+    # verb has no such requirement, so the "CI is not green" gate below is what
+    # stands in for it. Widening this group instead would need a key both
+    # workflows can compute, and neither has the other's trigger payload.
     concurrency:
       group: agent-fix-${{ github.event.issue.number }}
       cancel-in-progress: false
@@ -167,6 +173,45 @@ jobs:
           --lenses ./scripts/agent/lenses/lenses.json
           --github-output
 
+      # A SECOND GATE, on a state fix-eligible.mjs cannot see. It classifies the
+      # head's LENS check runs and never looks at CI, which is right for the
+      # question it answers ("did the panel run, and has anything landed since?")
+      # and leaves one it does not: red CI belongs to agent-iterate-ci.yml, whose
+      # fixer is checked out on the same branch with the same App identity and
+      # sits in a concurrency group this workflow cannot join. Two agents pushing
+      # the same branch means one push is rejected non-fast-forward and its round
+      # is lost — and the "did it work?" check here is `before !== after`, so the
+      # loser reports the WINNER's commit as its own success.
+      #
+      # Fails toward ineligible, like every other branch of this gate: an API
+      # error or an unreadable answer refuses rather than races.
+      - name: Refuse while CI is red (the CI-fix arm owns that state)
+        if: steps.eligible.outputs.eligible == 'true'
+        id: ci-clear
+        uses: actions/github-script@v7
+        env:
+          HEAD: ${{ steps.eligible.outputs.head }}
+        with:
+          retries: 3
+          script: |
+            const sha = process.env.HEAD;
+            if (!sha) return core.setOutput('clear', 'false');
+            try {
+              const { data } = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner, repo: context.repo.repo,
+                workflow_id: 'ci.yml', head_sha: sha, per_page: 100,
+              });
+              const runs = data.workflow_runs || [];
+              if (!runs.length) return core.setOutput('clear', 'true'); // no CI run at all: nothing owns it
+              const newest = runs.reduce((a, b) => ((b.id ?? 0) > (a.id ?? 0) ? b : a));
+              const red = newest.status === 'completed' && newest.conclusion === 'failure';
+              if (red) core.info(`CI run ${newest.id} is red on ${sha}; agent-iterate-ci owns this state.`);
+              core.setOutput('clear', String(!red));
+            } catch (e) {
+              core.warning(`Could not read CI for ${sha} (${e.message}); refusing rather than racing.`);
+              core.setOutput('clear', 'false');
+            }
+
       # Not eligible → say why and stop. A refusal is an ANSWER, not a failure:
       # the job stays green so the reason is what the maintainer sees, rather than
       # a red X that reads as a broken workflow.
@@ -176,12 +221,20 @@ jobs:
       # this was skipped along with everything downstream, leaving the PR showing
       # "🤖 Working on @claude fix…" forever next to a red X. A refusal must always
       # reach the person who asked.
+      # Covers BOTH gates. A refusal that reaches no comment leaves the
+      # placeholder saying "🤖 Working on @claude fix…" forever, which is the
+      # failure this step exists to prevent — so the CI gate added above has to
+      # be listed here too, not only where it stops the work.
       - name: Explain the refusal
-        if: always() && steps.eligible.outputs.eligible != 'true'
+        if: >-
+          always() &&
+          (steps.eligible.outputs.eligible != 'true' ||
+           steps.ci-clear.outputs.clear != 'true')
         uses: actions/github-script@v7
         env:
           COMMENT_ID: ${{ steps.placeholder.outputs.id }}
           REASON: ${{ steps.eligible.outputs.reason }}
+          CI_CLEAR: ${{ steps.ci-clear.outputs.clear }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           retries: 3
@@ -199,7 +252,11 @@ jobs:
               // REASON is empty when the gate step itself failed rather than
               // returning a decision — say that, instead of posting a blank refusal.
               body: `⏸️ \`@claude fix\` did not run.\n\n${process.env.REASON
-                || 'The eligibility check could not complete — see the [workflow run](' + process.env.RUN_URL + ').'}`,
+                || (process.env.CI_CLEAR === 'false'
+                  ? 'CI is red on this commit, and the CI-fix arm owns that state — it is already working, or has already paged. '
+                    + 'Running a second fixer on the same branch would lose one of the two pushes. '
+                    + 'Wait for it, or comment `@claude rerun` if the PR was handed to a human.'
+                  : 'The eligibility check could not complete — see the [workflow run](' + process.env.RUN_URL + ').')}`,
             });
 
       # The fixer's work list, from the SAME builder the autonomous loop uses.
@@ -208,7 +265,7 @@ jobs:
       # which is fenced and labelled as data in the prompt below.
       - name: Build the findings brief
         id: brief
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.issue.number }}
@@ -233,14 +290,14 @@ jobs:
       # nothing downstream credits a report without grounding it — it only means a
       # branch cannot produce a malformed record that the panel silently ignores.
       - name: Stage the trusted agent scripts
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         run: cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"
 
       # Resolve the branch AFTER eligibility: fix-eligible already refused forks
       # and unknown head repos, so by here this is a same-repo branch we may push.
       - name: Resolve the PR branch
         id: pr
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         uses: actions/github-script@v7
         with:
           retries: 3
@@ -254,7 +311,7 @@ jobs:
       # From here the workspace is the UNTRUSTED PR branch. Everything that
       # decides anything already ran above.
       - uses: actions/checkout@v4
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         with:
           ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
@@ -274,11 +331,11 @@ jobs:
       #
       # Keep in sync with the Makefile's `tools` target.
       - uses: actions/setup-go@v6
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         with:
           go-version: "1.25"
       - name: Install the linter (pinned here, not read from the branch)
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 
       # Read the remote tip before the agent runs, so the step after it can tell
@@ -293,7 +350,7 @@ jobs:
       # which is precisely what the precondition exists to prevent. Re-check after
       # the checkout, and refuse rather than fix the wrong tree.
       - name: Re-verify the checked-out commit is the one the panel reviewed
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         env:
           EXPECTED: ${{ steps.eligible.outputs.head }}
         run: |
@@ -306,7 +363,7 @@ jobs:
 
       - name: Record branch head before fix
         id: before-fix
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         env:
           BRANCH: ${{ steps.pr.outputs.branch }}
         run: echo "sha=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" >> "$GITHUB_OUTPUT"
@@ -331,7 +388,7 @@ jobs:
         id: cred
         # Guarded like its neighbours: an ineligible `@claude fix` must not
         # materialise the pool into a step environment on its way to refusing.
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         continue-on-error: true
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -352,7 +409,7 @@ jobs:
 
       - name: Address panel findings
         id: agent
-        if: steps.eligible.outputs.eligible == 'true'
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         # The job must reach the report/effort/outcome steps below even when the
         # agent fails — a failed fix run is exactly the one whose cost and reason
         # a maintainer needs. The final step re-reds the job.
@@ -467,7 +524,7 @@ jobs:
       # the effort comment below classifies. always(), because the failed runs are
       # the ones worth keeping.
       - name: Upload fix execution log
-        if: always() && steps.eligible.outputs.eligible == 'true'
+        if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: claude-on-demand-fix-execution
@@ -478,7 +535,7 @@ jobs:
       # addressed the panel's findings and pushed. Keeping it out would make the
       # PR's total cost quietly wrong. Fail-safe (the script exits 0 on any error).
       - name: Record agent effort metrics
-        if: always() && steps.eligible.outputs.eligible == 'true'
+        if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -490,7 +547,7 @@ jobs:
       # a 429 session limit at turn 1 looks identical from the outside to a cheap
       # successful one, and this comment is what tells the two apart.
       - name: Post fix-agent effort comment
-        if: always() && steps.eligible.outputs.eligible == 'true'
+        if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -511,7 +568,7 @@ jobs:
       # continue-on-error so the reporting above always runs, so without an
       # explicit failure here a dead fixer would report success.
       - name: Report the outcome
-        if: always() && steps.eligible.outputs.eligible == 'true'
+        if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         uses: actions/github-script@v7
         env:
           COMMENT_ID: ${{ steps.placeholder.outputs.id }}
@@ -590,7 +647,7 @@ jobs:
       # update it. Staged trusted copy (the workspace is the branch checkout);
       # absent until this script merges to main, so skip quietly.
       - name: Update loop status (on-demand fix)
-        if: always() && steps.eligible.outputs.eligible == 'true'
+        if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

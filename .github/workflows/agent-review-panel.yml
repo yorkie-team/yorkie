@@ -2489,7 +2489,19 @@ jobs:
     # already learned (see the fix job's no-commit page) that GitHub reports a
     # job wall as `cancelled`, never `failure`.
     #
-    # `fix` is the ONE job deliberately excluded from that: a fix job killed by
+    # `cancelled` is excluded from the CI-CONCLUSION clause for a different
+    # reason than it is included for the JOBS. `ci.yml` declares no
+    # `timeout-minutes` and no `concurrency`, so hand-cancelling a hung CI run is
+    # the only way to stop one — a routine maintainer action, not an anomaly. And
+    # this page writes the TERMINAL latch: the gate reads it and sets
+    # `managed=false` for every subsequent run, so the panel would never run on
+    # that PR again until someone typed `@claude rerun`. A cancelled run is also
+    # the one odd conclusion that self-recovers: re-running it fires
+    # `workflow_run` with `requested`, which the gate admits. `timed_out`,
+    # `startup_failure` and `stale` still page, because nothing is likely to
+    # follow them and nothing else is watching.
+    #
+    # `fix` is the ONE job deliberately excluded from the CANCELLED clauses: a fix job killed by
     # its own wall is already paged by its no-commit step, which exists for
     # exactly that case, and claiming it here would double-page. checks.test.mjs
     # pins the exclusion.
@@ -2515,7 +2527,8 @@ jobs:
          needs.fix.result == 'failure' ||
          (needs.ci.result == 'success' &&
           needs.ci.outputs.conclusion != 'success' &&
-          needs.ci.outputs.conclusion != 'failure'))))
+          needs.ci.outputs.conclusion != 'failure' &&
+          needs.ci.outputs.conclusion != 'cancelled'))))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

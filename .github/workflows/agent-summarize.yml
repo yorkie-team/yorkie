@@ -103,8 +103,23 @@ jobs:
 
             // Per-SHA throttle: our summary comment leads with this marker.
             const marker = `<!-- agent-summarize:${headSha} -->`;
+            // AUTHOR-CHECKED, the same rule the paged latch uses and for the
+            // same reason (rounds.mjs::isPagedLatchComment): this repository is
+            // PUBLIC and the marker is an invisible HTML comment, so a body-only
+            // test lets ANY account permanently disable the verb on a commit —
+            // silently, with no comment and no red X to show for it. Trust is an
+            // allow-listed bot login (GitHub reserves the `[bot]` suffix for
+            // Apps) or a human with write-level association.
+            const THROTTLE_AUTHORS = ['github-actions[bot]', 'yorkie-agent[bot]'];
+            const TRUSTED_ASSOC = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const oursAndMarked = (c) => {
+              if (!(c.body || '').includes(marker)) return false;
+              const u = c.user || {};
+              if (u.type === 'Bot' && THROTTLE_AUTHORS.includes(u.login)) return true;
+              return TRUSTED_ASSOC.includes(String(c.author_association ?? ''));
+            };
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr_number, per_page: 100 });
-            if (comments.some((c) => (c.body || '').includes(marker))) {
+            if (comments.some(oursAndMarked)) {
               core.info(`This commit (${headSha}) was already summarized; skipping.`);
               core.setOutput('proceed', 'false');
               return;
@@ -135,6 +150,41 @@ jobs:
               body: `<!-- agent-summarize:${process.env.HEAD_SHA} -->\n🤖 Summarizing this PR…`,
             });
             core.setOutput('id', String(data.id));
+
+  # The same release valve agent-review-on-demand.yml carries, and for the same
+  # reason: `announce` posts the throttle marker BEFORE the work, and the only
+  # job that clears it declares `environment: agent`. A declined or expired
+  # approval therefore strands a "Summarizing…" comment whose marker swallows
+  # every later `@claude summarize` on that commit, with nothing in the PR to say
+  # so. This runs when `summarize` neither succeeded nor failed — skipped or
+  # cancelled, the two shapes that leave the placeholder untouched.
+  release-throttle:
+    needs: [announce, summarize]
+    if: >-
+      always() && needs.announce.outputs.proceed == 'true' &&
+      needs.summarize.result != 'success' && needs.summarize.result != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Release the summarize throttle
+        uses: actions/github-script@v7
+        env:
+          COMMENT_ID: ${{ needs.announce.outputs.comment_id }}
+          RESULT: ${{ needs.summarize.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          retries: 3
+          script: |
+            if (!process.env.COMMENT_ID) return;
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: Number(process.env.COMMENT_ID),
+              body: `🛑 The summary never started (\`${process.env.RESULT}\`) — most often a declined or expired \`agent\` environment approval. `
+                + `Comment \`@claude summarize\` to try again on this commit. [Workflow run](${process.env.RUN_URL})`,
+            });
 
   summarize:
     needs: [route, announce]

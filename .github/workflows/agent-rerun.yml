@@ -290,16 +290,23 @@ jobs:
                     ciNote = 'Waited for the in-flight CI run to finish, then re-ran it; the review panel will run again and can promote or fix this PR.';
                   }
                 }
-              } else if (target && target.conclusion === 'failure') {
-                // The same guard as the in-flight branch above, which this one
-                // did not carry: agent-iterate-ci.yml fires on a completed
-                // `failure` and its fixer may be pushing right now, and its
-                // concurrency group is cancel-in-progress keyed on the branch —
-                // so re-running here would cancel that fixer mid-push. The guard
-                // belongs to both branches or to neither.
-                ciNote = 'CI failed, and the CI-fix arm owns that completion — re-running it here would cancel its fixer mid-push, so nothing was re-run.';
-                target = null;
               } else if (target) {
+                // NO `conclusion === 'failure'` GUARD HERE, and the asymmetry
+                // with the in-flight branch above is the whole point.
+                //
+                // That branch guards a run that completes AFTER this step
+                // started: its completion event dispatches agent-iterate-ci
+                // fresh — by then this job has already deleted the latch — and
+                // re-running would cancel that fixer mid-push.
+                //
+                // This branch is a run that completed BEFORE. agent-iterate-ci
+                // already fired for it and SKIPPED, because the paged latch was
+                // still on the PR at the time (it checks, and this job has only
+                // just removed it). Nothing is in flight, so declining to re-run
+                // would leave the PR exactly as this verb is meant to rescue it:
+                // unlatched, unlabelled, with no CI run and no push to produce
+                // one — dead. An earlier revision of this file applied the guard
+                // to both branches "for symmetry" and created that dead end.
                 ciNote = 'Re-running CI now; the review panel will run again and can promote or fix this PR.';
               }
 

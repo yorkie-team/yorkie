@@ -371,3 +371,30 @@ test("lensInfraReason: null for a model that ran, whatever else the error carrie
   // And non-null the moment the producer says the session never opened.
   assert.equal(lensInfraReason({ infra: true, kind: "api-error", status: 429 }), "[RATE_LIMITED] rate limited (HTTP 429)");
 });
+
+// --- this project's own credentials -----------------------------------------
+
+test("a yorkie project key is redacted by every field name this codebase uses", () => {
+  // A project's public and secret keys are bare `shortuuid` values — 22 base57
+  // characters, no prefix — so no shape rule can catch them and 22 is below
+  // layer 5's entropy floor. The FIELD NAME is the only net, which makes the
+  // exact spellings load-bearing: `secret_key` is the bson/json tag
+  // (api/types/project.go), and it went out verbatim while layer 4 listed only
+  // a bare `secret` — the separator class has no `_`, so the alternative that
+  // matched could never reach the value.
+  const KEY = "3Zx9KpQmRt7VnWsYbLdFgH"; // shortuuid-shaped: 22 chars, no prefix
+  for (const field of ["secret_key", "secretKey", "secret-key", "secret", "api_key", "apiKey"]) {
+    for (const line of [`${field}: ${KEY}`, `"${field}":"${KEY}"`, `${field}=${KEY}`]) {
+      const out = redactSecrets(line, { extra: [] });
+      assert.ok(!out.includes(KEY), `${JSON.stringify(line)} published the key: ${out}`);
+    }
+  }
+});
+
+test("redaction still does not swallow ordinary identifiers", () => {
+  // The other direction. A rule broad enough to catch a 22-character bare value
+  // anywhere would redact every sha, branch name and run id in a report, which
+  // is why the field name is required rather than the shape.
+  const text = "commit 3Zx9KpQmRt7VnWsYbLdFgH on branch agent/fix-tree-split, run 12345678";
+  assert.equal(redactSecrets(text, { extra: [] }), text);
+});

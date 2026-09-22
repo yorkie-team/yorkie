@@ -815,8 +815,17 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
   // "🤖 Working on @claude fix…" beside a red X forever.
   const wf = WF("agent-fix.yml");
   const refusal = wf.slice(wf.indexOf("- name: Explain the refusal"));
-  assert.match(refusal.slice(0, 200), /if: always\(\) && steps\.eligible\.outputs\.eligible != 'true'/);
-  assert.match(refusal.slice(0, 2000), /eligibility check could not complete/, "an empty reason must still say something");
+  const head = refusal.slice(0, 400);
+  assert.match(head, /always\(\)/, "the refusal must not inherit the implicit success()");
+  // EVERY gate that can stop the work must be listed here. The eligibility
+  // check is one; the "CI is red, the CI-fix arm owns this branch" gate is the
+  // other, and a refusal it does not cover strands the placeholder exactly as
+  // the eligibility one used to.
+  assert.match(head, /steps\.eligible\.outputs\.eligible != 'true'/);
+  assert.match(head, /steps\.ci-clear\.outputs\.clear != 'true'/,
+    "a CI-red refusal must reach the commenter too, or the placeholder is stranded");
+  assert.match(refusal.slice(0, 2600), /eligibility check could not complete/, "an empty reason must still say something");
+  assert.match(refusal.slice(0, 2600), /the CI-fix arm owns that state/, "...and the CI-red refusal must say which arm has the branch");
 });
 
 test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {

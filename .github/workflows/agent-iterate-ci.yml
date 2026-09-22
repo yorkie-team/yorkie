@@ -214,7 +214,14 @@ jobs:
               try { await core.summary.addRaw(md).write(); }
               catch (e) { core.warning(`step summary write failed: ${e.message}`); }
             };
-            const PAGED = '<!-- agent-paged -->';
+            // BOTH markers. This arm writes `<!-- agent-paged -->` and used to
+            // check only that one — but the review panel's own pager writes
+            // `<!-- agent-review-paged -->`, `set-state.mjs` tracks both, and
+            // `@claude rerun` clears both. So a PR the PANEL handed to a human
+            // was invisible here: the owner pushing a WIP commit that reds CI
+            // got a fixer dispatched on top of them, on a PR whose whole state
+            // says a person owns it.
+            const PAGED_MARKERS = ['<!-- agent-paged -->', '<!-- agent-review-paged -->'];
             // AUTHOR-CHECKED, same rule and same reason as the review-side
             // latch (rounds.mjs::isPagedLatchComment): this repo is PUBLIC, so
             // a body-only substring test would let ANY GitHub account post the
@@ -225,7 +232,7 @@ jobs:
             const PAGE_AUTHOR_LOGINS = ['github-actions[bot]', 'yorkie-agent[bot]'];
             const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
             const isPagedLatch = (c) => {
-              if (!String((c || {}).body ?? '').includes(PAGED)) return false;
+              if (!PAGED_MARKERS.some((m) => String((c || {}).body ?? '').includes(m))) return false;
               const user = (c || {}).user || {};
               if (user.type === 'Bot' && PAGE_AUTHOR_LOGINS.includes(user.login)) return true;
               return TRUSTED_ASSOCIATIONS.includes(String((c || {}).author_association ?? ''));
@@ -245,7 +252,7 @@ jobs:
                 // OBSERVABILITY (Phase 2): every 🛑 page carries a "Where to
                 // look" line. All three pieces come from the runner's own
                 // context, never from PR content.
-                body: `${PAGED}\n🛑 CI failed ${failedCi} times on this branch (limit ${max}) without going green. **A human needs to take a look** — the harness could not self-resolve it.\n\nWhere to look: [this run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}) → job \`iterate\`, step "Attempts guard"; the failing CI runs are on this branch's checks tab.`,
+                body: `${PAGED_MARKERS[0]}\n🛑 CI failed ${failedCi} times on this branch (limit ${max}) without going green. **A human needs to take a look** — the harness could not self-resolve it.\n\nWhere to look: [this run](${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}) → job \`iterate\`, step "Attempts guard"; the failing CI runs are on this branch's checks tab.`,
               });
               // The agent:blocked label is set by the "Set state → blocked" step
               // below (single-value state via set-state), gated on this `paged`.

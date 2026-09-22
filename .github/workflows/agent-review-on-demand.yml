@@ -102,8 +102,23 @@ jobs:
             }
 
             const marker = `<!-- agent-review:${pr.head.sha} -->`;
+            // AUTHOR-CHECKED, the same rule the paged latch uses and for the
+            // same reason (rounds.mjs::isPagedLatchComment): this repository is
+            // PUBLIC and the marker is an invisible HTML comment, so a body-only
+            // test lets ANY account permanently disable the verb on a commit —
+            // silently, with no comment and no red X to show for it. Trust is an
+            // allow-listed bot login (GitHub reserves the `[bot]` suffix for
+            // Apps) or a human with write-level association.
+            const THROTTLE_AUTHORS = ['github-actions[bot]', 'yorkie-agent[bot]'];
+            const TRUSTED_ASSOC = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const oursAndMarked = (c) => {
+              if (!(c.body || '').includes(marker)) return false;
+              const u = c.user || {};
+              if (u.type === 'Bot' && THROTTLE_AUTHORS.includes(u.login)) return true;
+              return TRUSTED_ASSOC.includes(String(c.author_association ?? ''));
+            };
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr_number, per_page: 100 });
-            if (comments.some((c) => (c.body || '').includes(marker))) {
+            if (comments.some(oursAndMarked)) {
               core.info(`This commit (${pr.head.sha}) was already reviewed; skipping.`);
               return core.setOutput('proceed', 'false');
             }

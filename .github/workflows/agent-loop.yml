@@ -229,6 +229,18 @@ jobs:
                     ciNote = '\n\nWaited for the in-flight CI run to finish, then re-ran it to engage the loop.';
                   }
                 }
+              } else if (target && target.conclusion === 'failure') {
+                // THE GUARD BELONGS HERE, unlike in agent-rerun.yml's matching
+                // branch, and the difference is the latch. `rerun` deletes a
+                // paged latch immediately before this point, which is what makes
+                // it certain agent-iterate-ci skipped and nothing is in flight.
+                // `loop` deletes nothing: the run already completed, so the CI
+                // arm already fired for it and its fixer may be pushing right
+                // now — and its concurrency group is cancel-in-progress keyed on
+                // the branch, so re-running here would cancel that fixer
+                // mid-push.
+                ciNote = '\n\nCI is red and the CI-fix arm owns that completion, so nothing was re-run here — the label is applied and the loop engages on its next run.';
+                target = null;
               } else if (target) {
                 ciNote = '\n\nRe-running CI now to engage the loop.';
               }
