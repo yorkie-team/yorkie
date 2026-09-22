@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"sync"
 	gotime "time"
 
 	"connectrpc.com/connect"
@@ -641,7 +642,7 @@ func (s *yorkieServer) Watch(
 		return err
 	}
 
-	return s.streamMergedEvents(ctx, stream, project, docSubs, channelSubs)
+	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
 }
 
 // subscribeResources subscribes to each document and channel resource in the request.
@@ -763,10 +764,11 @@ func (s *yorkieServer) subscribeChannel(
 	}, nil
 }
 
-// streamMergedEvents fans in events from all subscriptions and streams them.
+// streamMergedEvents fans in events from all subscriptions and streams them
+// through send.
 func (s *yorkieServer) streamMergedEvents(
 	ctx context.Context,
-	stream *connect.ServerStream[api.WatchResponse],
+	send func(*api.WatchResponse) error,
 	project *types.Project,
 	docSubs []docSub,
 	channelSubs []channelSub,
@@ -775,8 +777,21 @@ func (s *yorkieServer) streamMergedEvents(
 	done := make(chan struct{})
 	defer close(done)
 
+	// A subscription closes its own event channel after too many consecutive
+	// publish failures (see pubsub.Subscription.Publish), which makes the
+	// fan-in goroutine below return. Once every fan-in has returned, no event
+	// can reach merged again, so close it to end the stream instead of
+	// leaving the loop below blocked forever.
+	var wg sync.WaitGroup
+	wg.Add(len(docSubs) + len(channelSubs))
+	go func() {
+		wg.Wait()
+		close(merged)
+	}()
+
 	for _, ds := range docSubs {
 		go func(ds docSub) {
+			defer wg.Done()
 			for {
 				select {
 				case <-done:
@@ -797,6 +812,7 @@ func (s *yorkieServer) streamMergedEvents(
 	}
 	for _, cs := range channelSubs {
 		go func(cs channelSub) {
+			defer wg.Done()
 			for {
 				select {
 				case <-done:
@@ -822,7 +838,11 @@ func (s *yorkieServer) streamMergedEvents(
 			return context.Canceled
 		case <-ctx.Done():
 			return context.Canceled
-		case te := <-merged:
+		case te, ok := <-merged:
+			if !ok {
+				return nil
+			}
+
 			resp, err := s.convertTaggedEvent(te)
 			if err != nil {
 				logging.From(ctx).Errorf("failed to convert event: %v", err)
@@ -841,7 +861,7 @@ func (s *yorkieServer) streamMergedEvents(
 				)
 			}
 
-			if err := stream.Send(resp); err != nil {
+			if err := send(resp); err != nil {
 				return err
 			}
 		}
