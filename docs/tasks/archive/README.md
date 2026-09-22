@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-21
+updated: 2026-09-22
 ---
 
 # Tasks Archive
@@ -8,19 +8,26 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 30
+Total archived tasks: 37
 
-## 2026/09 (2 tasks)
+## 2026/09 (7 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| A style lands on a deleted text node in Go and not in JS (2026-09-21) | [20260921-style-on-a-tombstoned-node-todo.md](./2026/09/20260921-style-on-a-tombstoned-node-todo.md) | [20260921-style-on-a-tombstoned-node-lessons.md](./2026/09/20260921-style-on-a-tombstoned-node-lessons.md) |
 | The attribute ledger, and which SDK's representation is canonical (2026-09-21) | [20260921-attribute-ledger-and-representation-todo.md](./2026/09/20260921-attribute-ledger-and-representation-todo.md) | [20260921-attribute-ledger-and-representation-lessons.md](./2026/09/20260921-attribute-ledger-and-representation-lessons.md) |
 | Post-GC style panic and the snapshot's lost text attribute tombstone (2026-09-20) | [20260920-post-gc-panic-and-snapshot-tombstone-todo.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-todo.md) | [20260920-post-gc-panic-and-snapshot-tombstone-lessons.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-lessons.md) |
+| Tree split drops the size of the element it creates (2026-09-19) | [20260919-tree-split-live-size-dropped-todo.md](./2026/09/20260919-tree-split-live-size-dropped-todo.md) | [20260919-tree-split-live-size-dropped-lessons.md](./2026/09/20260919-tree-split-live-size-dropped-lessons.md) |
+| A split reports no index growth to undo/redo reconciliation (2026-09-19) | [20260919-split-invisible-to-undo-reconcile-todo.md](./2026/09/20260919-split-invisible-to-undo-reconcile-todo.md) | [20260919-split-invisible-to-undo-reconcile-lessons.md](./2026/09/20260919-split-invisible-to-undo-reconcile-lessons.md) |
+| A split copies an attribute tombstone under the same id (2026-09-19) | [20260919-split-copies-attr-tombstone-id-todo.md](./2026/09/20260919-split-copies-attr-tombstone-id-todo.md) | [20260919-split-copies-attr-tombstone-id-lessons.md](./2026/09/20260919-split-copies-attr-tombstone-id-lessons.md) |
+| The same document encodes to a different snapshot on every attach (2026-09-14) | [20260914-nondeterministic-snapshot-member-order-todo.md](./2026/09/20260914-nondeterministic-snapshot-member-order-todo.md) | [20260914-nondeterministic-snapshot-member-order-lessons.md](./2026/09/20260914-nondeterministic-snapshot-member-order-lessons.md) |
 
-## 2026/08 (8 tasks)
+## 2026/08 (10 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Tree: recover style ranges collapsed by a merge at the from anchor (2026-08-22) | [20260822-tree-style-from-side-anchor-todo.md](./2026/08/20260822-tree-style-from-side-anchor-todo.md) | [20260822-tree-style-from-side-anchor-lessons.md](./2026/08/20260822-tree-style-from-side-anchor-lessons.md) |
+| DocSize: port the container-removal accounting fix to the JS SDK (2026-08-17) | [20260817-docsize-js-sdk-parity-todo.md](./2026/08/20260817-docsize-js-sdk-parity-todo.md) | [20260817-docsize-js-sdk-parity-lessons.md](./2026/08/20260817-docsize-js-sdk-parity-lessons.md) |
 | CRDT: removing a non-empty container corrupts DocSize's GC total (2026-08-16) | [20260816-root-docsize-nested-container-gc-todo.md](./2026/08/20260816-root-docsize-nested-container-gc-todo.md) | [20260816-root-docsize-nested-container-gc-lessons.md](./2026/08/20260816-root-docsize-nested-container-gc-lessons.md) |
 | Undo/Redo Go SDK Port Implementation Plan (2026-08-15) | [20260815-undo-redo-go-port-todo.md](./2026/08/20260815-undo-redo-go-port-todo.md) | [20260815-undo-redo-go-port-lessons.md](./2026/08/20260815-undo-redo-go-port-lessons.md) |
 | Tree: survive two nodes sharing one TreeNodeID (2026-08-14) | [20260814-duplicate-tree-node-id-todo.md](./2026/08/20260814-duplicate-tree-node-id-todo.md) | [20260814-duplicate-tree-node-id-lessons.md](./2026/08/20260814-duplicate-tree-node-id-lessons.md) |

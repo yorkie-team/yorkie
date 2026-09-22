@@ -9,6 +9,14 @@ byte-identical before and after it. Filed separately because the repair
 changes the reported size of every snapshot-rebuilt document, which is a
 different blast radius from the accounting fix that surfaced it.
 
+## Status
+
+The fix landed in `84369d45` (#1990); the drift measured below no longer
+reproduces (0 for every tombstone count, on both rebuild routes), so the
+Problem and Measurement sections are history. One item is left, and it is a
+test gap rather than a behavior gap: the `ObjectToBytes`/`BytesToObject`
+round-trip half of the regression assertion. It will pass on first write.
+
 ## Problem
 
 `Root.RegisterRemovedElementPair` (`pkg/document/crdt/root.go`) refunds one
@@ -63,27 +71,38 @@ server-side size check sees the rebuilt figure too.
 
 ## Tasks
 
-- [ ] Decide the fix shape. The cleanest framing is to make registration
+- [x] Decide the fix shape. The cleanest framing is to make registration
       decide the bucket once, rather than add-to-Live-then-move: have
       `RegisterElement` route an element that already carries `removedAt`
       straight into GC (and into `sizeInGC`) instead of into `Live`, so
       `NewRoot` never books the ticket into `Live` and the refund never
       applies there. That keeps the "counted in exactly one of Live or GC"
       invariant a registration-time decision.
+
+      Landed as proposed in `84369d45` (#1990): `RegisterElement` is now
+      `registerLive` + `adoptTombstones` (`pkg/document/crdt/root.go`), and the
+      refund is gated on the element having actually moved.
 - [ ] Add a regression test asserting `DeepCopy()` and a
       `ObjectToBytes`/`BytesToObject` round trip both reproduce the source
       document's `DocSize` exactly, with tombstones present. Today's
       `TestDocumentSize/deep copy test` only covers documents with no
       removals, which is why this went unnoticed.
-- [ ] Check whether `RegisterGCPair`'s `gcOnlySize` path
+- [x] Check whether `RegisterGCPair`'s `gcOnlySize` path
       (`pkg/document/crdt/root.go`, and the JS twin in `crdt/root.ts`) has the
       same build-vs-edit split. PR #1294 ("Separate correction logic in
       RegisterGCPair for editing and build") fixed exactly this shape for the
       node-level pairs; the element-level pairs never got the same treatment.
-- [ ] Mirror whatever lands in `yorkie-js-sdk`: `registerRemovedElement`
+
+      Checked: `GCOnlySize` already is that split, and every `NewRoot`-scan
+      producer sets it. Residual gaps of the same shape were closed by #2000,
+      #2010 and #2012. The JS twin matches.
+- [x] Mirror whatever lands in `yorkie-js-sdk`: `registerRemovedElement`
       (`packages/sdk/src/document/crdt/root.ts`) has the same unconditional
       `docSize.live.meta += TimeTicketSize`, and `CRDTRoot`'s constructor the
       same seed-then-move pass.
+
+      Mirrored in yorkie-js-sdk `649fe5c6f` (#1350): conditional refund plus
+      `adoptTombstones` in the constructor, replacing the seed-then-move pass.
 
 ## See Also
 

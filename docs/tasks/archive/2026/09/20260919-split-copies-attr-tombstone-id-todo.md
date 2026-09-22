@@ -74,7 +74,7 @@ Measured on `main` at a23ba9b8. Identical before and after #2000 and #2001.
       attributes, so the split's diff never charged these to `docSize.Live`:
       `GCOnlySize` sends each straight to `docSize.GC`, and `collect`
       subtracts the same amount back.
-- [ ] Register the tombstones a text split copies. **Deferred behind
+- [x] Register the tombstones a text split copies. Was **deferred behind
       yorkie#2007** — two attempts to keep the ledger conserved both failed,
       and both failures trace to the root cause #2007 describes:
 
@@ -91,6 +91,12 @@ Measured on `main` at a23ba9b8. Identical before and after #2000 and #2001.
       Both are downstream of `TextValue.DataSize` counting removed attributes
       while `TreeNode.DataSize` does not. Fix that first and the registration
       is a two-line change with nothing to reconcile.
+
+      Both landed in #2010: `TextValue.DataSize` now skips removed attributes
+      (`pkg/document/crdt/text.go`), and `RGATreeSplit` pushes each copied
+      tombstone through `pendingGCPairs` with `GCOnlySize`
+      (`pkg/document/crdt/rga_tree_split.go`), pinned by
+      `TestSplitCopyOfATextAttrTombstoneIsCollectable`.
 - [x] Tests in `pkg/document/gc_attr_split_test.go`: a multi-level split, a
       split of a split, every removed attribute of a node carrying three, a
       split product born tombstoned, a later `Style` that
