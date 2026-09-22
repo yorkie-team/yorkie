@@ -89,12 +89,19 @@ jobs:
         id: app
         env:
           APP_ID: ${{ secrets.AGENT_APP_ID }}
+          APP_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
         run: |
-          if [ -n "$APP_ID" ]; then
+          # Both halves, because `create-github-app-token` needs both and a
+          # half-registered pair is a real state: the two secrets are set in two
+          # separate operations, and the private key is the half that gets
+          # rotated. Testing only the id would report "configured" for a
+          # repository that cannot mint a token — the failure then lands in the
+          # mint step, past every arm that exists to answer the commenter.
+          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::AGENT_APP_ID is unset; this verb needs the GitHub App."
+            echo "::notice::AGENT_APP_ID or AGENT_APP_PRIVATE_KEY is unset; this verb needs the GitHub App."
           fi
 
       - name: Say so, and stop

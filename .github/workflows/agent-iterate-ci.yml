@@ -122,12 +122,19 @@ jobs:
         id: app
         env:
           APP_ID: ${{ secrets.AGENT_APP_ID }}
+          APP_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
         run: |
-          if [ -n "$APP_ID" ]; then
+          # Both halves, because `create-github-app-token` needs both and a
+          # half-registered pair is a real state: the two secrets are set in two
+          # separate operations, and the private key is the half that gets
+          # rotated. Testing only the id would report "configured" for a
+          # repository that cannot mint a token — the failure then lands in the
+          # mint step, past every arm that exists to answer the commenter.
+          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::AGENT_APP_ID is unset; the CI-fix arm cannot push, so it is standing down."
+            echo "::notice::AGENT_APP_ID or AGENT_APP_PRIVATE_KEY is unset; the CI-fix arm cannot push, so it is standing down."
           fi
 
       # Auth git ops as the Claude GitHub App so the fix commit re-triggers CI
@@ -188,8 +195,17 @@ jobs:
           cp -R .trusted-agent/scripts/agent "${{ runner.temp }}/agent-tools"
           rm -rf .trusted-agent
 
+      # GATED, and this is the step that makes the stand-down real. Everything
+      # below keys off `steps.guard.outputs.*`; with no App the two steps above
+      # skip, but an ungated guard still resolved `proceed=true` and ran the
+      # whole fixing arm against a workspace that was never checked out — or,
+      # at the attempt limit, wrote the terminal paged latch and the
+      # `agent:blocked` state onto a PR the arm had just announced it was
+      # standing down from. Skipping here leaves every downstream output empty,
+      # which is what "quietly does nothing" has to mean.
       - name: Attempts guard
         id: guard
+        if: steps.app.outputs.configured == 'true'
         uses: actions/github-script@v7
         with:
           retries: 3
