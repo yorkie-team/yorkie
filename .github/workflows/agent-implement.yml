@@ -284,7 +284,9 @@ jobs:
                   );
                 }
               } catch (e) {
-                core.warning(`could not read rulesets: ${e.message}`);
+                // Same rule one level up: not being able to ASK is not an answer.
+                unreadable += 1;
+                core.warning(`could not list branch rules: ${e.message}`);
               }
             }
             // `enforce_admins` is deliberately NOT required on the classic path.
@@ -345,22 +347,30 @@ jobs:
             // issue must not swallow the refusal that explains the red X.
             const MARKER = `<!-- agent-implement-open-pr:${open.number} -->`;
             const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
+            // The dedupe lookup and the post are separated: a transient list
+            // failure must not suppress the refusal, only the deduplication of
+            // it. Saying it twice is better than a red X nobody can explain.
+            let said = false;
             try {
               const prior = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: issue, per_page: 100,
               });
-              const said = prior.some((c) => String(c.body ?? '').includes(MARKER)
+              said = prior.some((c) => String(c.body ?? '').includes(MARKER)
                 && AUTHORS.includes((c.user || {}).login));
-              if (!said) {
+            } catch (e) {
+              core.warning(`could not check for an existing refusal: ${e.message}`);
+            }
+            if (!said) {
+              try {
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: issue,
                   body: `${MARKER}\n⏸️ #${open.number} is already open from this issue on \`${open.head.ref}\`. `
                     + 'A second run would branch from `main` and collide with it. Close or merge that PR first, '
                     + 'or comment `@claude fix` on the PR itself to continue the work there.',
                 });
+              } catch (e) {
+                core.warning(`could not post the already-open refusal: ${e.message}`);
               }
-            } catch (e) {
-              core.warning(`could not post the already-open refusal: ${e.message}`);
             }
             core.setFailed(`an agent PR (#${open.number}) is already open for issue #${issue}`);
 
@@ -665,8 +675,11 @@ jobs:
       # link); no PR → the dead-run comment, worded by whether the agent step
       # failed or merely ended; lookup FAILED → a comment saying the state could
       # not be determined, never a failure claim this run did not verify.
-      # KEYED ON THE APP CHECK — the earliest thing in this job that is not
-      # itself a way for the job to stop. This step has now been rewritten three
+      # KEYED ON THE APP CHECK — the earliest gate whose failure this step can
+      # still survive. Not "the only step that cannot stop the job": the
+      # write-access check above it stops the job silently by design, and a
+      # failed App-token MINT stops it too, which is why this step no longer
+      # borrows that token. This step has now been rewritten three
       # times and each earlier key was a step that the failure being reported
       # SKIPS: on staging (so a refused protection gate was silent), then on the
       # acknowledgement (which the gate also precedes, so it was silent again).
@@ -684,13 +697,30 @@ jobs:
         uses: actions/github-script@v7
         with:
           retries: 3
-          github-token: ${{ steps.app-token.outputs.token }}
+          # GITHUB_TOKEN, NOT THE APP TOKEN, and that is the point. Both secrets
+          # can be set while the mint still fails — a rotated key, a suspended or
+          # uninstalled App, an API outage. `configured` is `true` in that state,
+          # so this step ran with an EMPTY token input, `github-script` threw
+          # before any call, and `continue-on-error` swallowed it: a red X and
+          # nothing on the issue. A reporter must not depend on the thing whose
+          # failure it reports. The job already holds `issues: write`, and the
+          # target is an issue, so nothing here needs the App.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issue = context.payload.issue.number;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const agentOutcome = '${{ steps.agent.outcome }}';
             const staged = '${{ steps.stage.outcome }}' === 'success';
-            const MARKER = '<!-- agent-implement-no-pr -->';
+            // PARAMETERIZED BY CAUSE AND RUN. A bare marker meant one no-PR
+            // report per issue EVER: a protection refusal claimed it, the
+            // maintainer fixed protection and retried exactly as that comment
+            // told them to, `npm ci` failed, and the reporter returned silently
+            // — the silence this step exists to end, on the retry it invited.
+            // The sibling refusal and the help job both already carry a
+            // parameterized marker; this was the one that did not.
+            const cause = '${{ steps.protection.outcome }}' !== 'success' ? 'protection'
+              : '${{ steps.stage.outcome }}' !== 'success' ? 'setup' : 'no-pr';
+            const MARKER = `<!-- agent-implement-no-pr:${cause}:${context.runId} -->`;
             let pr = null, lookupOk = true;
             try {
               const prs = await github.paginate(github.rest.pulls.list, {
@@ -710,10 +740,17 @@ jobs:
             // Dedupe on the marker this step writes, and only on one the BOT
             // wrote: the trust in a marker is its author, never its payload —
             // otherwise anyone can suppress this by quoting it.
-            // BY LOGIN, not by `type === 'Bot'`. Any installed bot with
-            // issues:write is a Bot — including the implement agent itself,
-            // which holds this App token and an unrestricted shell. "The trust
-            // in a marker is its author" has to mean the author's identity.
+            // BY LOGIN, not by `type === 'Bot'`, which is a species: every
+            // installed App with issues:write satisfies it. This narrows the set
+            // to the two identities that actually post here.
+            //
+            // It does NOT exclude the implement agent: that runs with this App
+            // token, so its comments are authored by `yorkie-team-agent[bot]`
+            // and are in this list. Nothing here can separate them, and a marker
+            // is not the place to try — an agent holding issues:write and a
+            // shell has louder options than suppressing one comment. The gain is
+            // against third-party Apps and ordinary users, and that is all it
+            // is claimed to be.
             const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
             const mine = (c) => String(c.body ?? '').includes(MARKER)
               && AUTHORS.includes((c.user || {}).login);
@@ -739,6 +776,13 @@ jobs:
               why = '🛑 This run stopped while setting up, after the checks passed and before any work began — '
                 + `a checkout or dependency install failed. See the [run](${runUrl}); this is usually `
                 + 'transient, so `@claude fix` is worth trying again.';
+            } else if (agentOutcome === 'skipped' || agentOutcome === '') {
+              // Between staging and the agent: Go setup, the linter install, the
+              // issue fetch, the prompt build. The branch below cites the
+              // execution transcript, and none of these produce one.
+              why = '🛑 This run stopped after setup and before the agent started — the Go toolchain, the '
+                + `linter install, or fetching the issue. See the [run](${runUrl}); there is no agent `
+                + 'transcript because nothing ran. `@claude fix` is worth trying again.';
             } else {
               why = `🛑 This run ${agentOutcome === 'failure' ? 'failed' : 'ended'} without opening a PR — no open `
                 + `\`agent/${issue}-*\` branch has one. See the [run](${runUrl}) and its \`claude-execution-output\` `

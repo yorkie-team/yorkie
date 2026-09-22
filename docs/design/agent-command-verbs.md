@@ -235,7 +235,7 @@ What the reversal actually costs, stated plainly: a PR this verb opens is
 reviewed by `@claude review` (advisory) and a human. The gating panel has not
 completed a real review yet, so the machinery that was supposed to grade
 agent-authored code is not yet grading it. That is the risk, and it is accepted
-on the strength of the two gates below rather than waved away.
+on the strength of the gate below rather than waved away.
 
 - **Lands:** `agent-implement.yml` — `route`, `implement`, `help`. The `help`
   job is not incidental: today every verb on an issue is refused by the same
@@ -261,7 +261,7 @@ on the strength of the two gates below rather than waved away.
 
   **What they do not cover.** The agent runs with an unrestricted `Bash` beside a
   live installation token and a model credential, on text an arbitrary GitHub
-  user wrote. Both gates constrain merging; neither constrains network egress. A
+  user wrote. The gate constrains merging; it does not constrain network egress. A
   successful prompt injection does not get code into `main`, and it does not need
   to — it already has the token. Two things narrow it: the issue body is fetched
   in a trusted step into a file the prompt names as untrusted input, and the

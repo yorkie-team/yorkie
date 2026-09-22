@@ -1527,9 +1527,15 @@ test("agent-implement's reporter is keyed upstream of every gate it must report"
     /steps\.app\.outputs\.configured == 'true'/,
     "the reporter must key on the App check, which precedes every gate",
   );
-  for (const downstream of ["steps.ack.outcome", "steps.stage.outcome ==", "steps.agent.outcome =="]) {
+  // ANYWHERE IN THE CONDITION, not only in first position. The first version
+  // anchored on `if: always() && <term>`, so moving the downstream term one
+  // conjunct to the right reinstated round 3's defect and passed the test —
+  // the same hole this file's other new guard had, written the same day.
+  const ifLine = /if:([^\n]*(?:\n\s{8,}[^\n]*)*)/.exec(cond);
+  assert.ok(ifLine, "could not read the reporter's condition");
+  for (const downstream of ["steps.ack.", "steps.stage.outcome ==", "steps.agent.outcome =="]) {
     assert.ok(
-      !cond.includes(`if: always() && ${downstream}`),
+      !ifLine[1].includes(downstream),
       `the reporter must not be GATED on ${downstream} — the failures it exists to report skip it`,
     );
   }
@@ -1537,9 +1543,19 @@ test("agent-implement's reporter is keyed upstream of every gate it must report"
   // Every gate that can stop the job must be distinguishable in the body, or the
   // reporter names the wrong cause — which it also did, telling an `npm ci`
   // failure that `main` was unprotected.
-  const body = wf.slice(at, wf.length);
+  // Bounded to this step. Slicing to EOF would let a later step's text satisfy
+  // these, which is one paste away from vacuous.
+  const nextStep = wf.indexOf("\n      - name:", at + 1);
+  const body = wf.slice(at, nextStep > 0 ? nextStep : wf.length);
   assert.match(body, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
   assert.match(body, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
+  // The marker must carry something that varies, or the first failure on an
+  // issue silences every later one — including the retry the message invites.
+  assert.match(
+    body,
+    /const MARKER = `<!-- agent-implement-no-pr:\$\{[^}]+\}/,
+    "the no-PR marker must be parameterized, or it dedupes across unrelated causes",
+  );
 });
 
 test("agent-implement never treats a fork's branch name as its own work", () => {
@@ -1557,16 +1573,25 @@ test("agent-implement never treats a fork's branch name as its own work", () => 
   const sites = [];
   for (let i = 0; i < lines.length; i++) {
     if (!/startsWith\(`agent\/\$\{issue\}-`\)/.test(lines[i])) continue;
-    // The predicate may wrap; read the whole `find(` expression around it.
+    // BOUNDED backward scan. Unbounded, it walked past its own step into the
+    // previous one's `.find(` and borrowed that site's guard — so deleting the
+    // guard here passed. Four lines covers a wrapped predicate and cannot reach
+    // a neighbouring step.
     let from = i;
-    while (from > 0 && !/\.find\(/.test(lines[from])) from--;
+    while (from > 0 && i - from < 4 && !/\.find\(|\bfor \(/.test(lines[from])) from--;
     sites.push(lines.slice(from, i + 1).join("\n"));
   }
   assert.ok(sites.length >= 2, `expected the agent-branch lookup in both places, found ${sites.length}`);
   for (const site of sites) {
+    // CONJUNCTIVE. Asserting the token is present says nothing about whether it
+    // constrains: `mineRepo(p) || …` contains it and disables it.
     assert.ok(
-      /mineRepo\(/.test(site) || /head\?\.repo\?\.full_name ===/.test(site),
-      `an agent-branch lookup does not require the PR to come from this repository:\n${site}`,
+      /(?:mineRepo\(p\)|head\?\.repo\?\.full_name === `[^`]+`)\s*&&/.test(site),
+      `an agent-branch lookup does not REQUIRE the PR to come from this repository:\n${site}`,
+    );
+    assert.ok(
+      !/\|\|\s*\(p\.head\?\.ref/.test(site),
+      `the same-repo check is disjunctive, so it constrains nothing:\n${site}`,
     );
   }
 });
