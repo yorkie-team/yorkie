@@ -18,7 +18,8 @@ maintainer turns it on deliberately.
 - [x] Port the module closure of the two workflows' entry points into
       `scripts/agent/` (26 modules + 22 `node:test` suites, own lockfile,
       outside the Go build).
-- [x] Drop `fix-brief.mjs`: nothing imports it and neither workflow invokes it.
+- [x] Drop `fix-brief.mjs` from the Phase 1 batch: neither advisory workflow
+      invokes it. (Phase 2 brings it back — the panel's fix job does.)
 - [x] `workflow-presence.mjs` — skip, rather than delete, the four guards whose
       workflow arrives in Phase 2 or 3. They re-arm by themselves when it lands.
 - [x] Rewrite `CLASS_RULES` for the Go layout: `.golangci.yml`, the `Makefile`
@@ -41,18 +42,20 @@ maintainer turns it on deliberately.
       by any workflow change, because several guards read `.github/workflows/`.
 - [x] Document the two verbs in `CONTRIBUTING.md`, in one table.
 
-Local: `npm test` in `scripts/agent` — 701 tests, 693 pass, 8 skipped (the
-Phase-2 guards), 0 fail. `node scripts/verify-doc-links.mjs` green.
+Counts move as phases land; run `npm test` in `scripts/agent` for the current
+number. With phases 2 and 3 installed the previously-skipped guards run, because
+their workflows now exist.
 
 ## Phase 1 — still open
 
 - [ ] **Enable it.** Set the `AGENT_PIPELINE_ENABLED` repository variable to
       `true`. Until then every workflow's first condition is false and nothing
       runs, which is the intended state for the merge itself.
-- [ ] **A token pool.** Six lenses run concurrently against one
-      `CLAUDE_CODE_OAUTH_TOKEN` today. Add `CLAUDE_CODE_OAUTH_TOKEN_<n>` if the
-      first real runs rate-limit; `pick-credential.mjs` upstream is the selector
-      to port if so.
+- [ ] **Register the token pool.** `pick-credential.mjs` is ported and every
+      model-running job is wired to it, reading `CLAUDE_CODE_OAUTH_TOKEN_1..8`.
+      None of those secrets exist yet, so every job falls back to the single
+      ambient credential and six concurrent lenses share it. Register slots if
+      the first real rounds rate-limit.
 - [ ] **The first fork PR.** Confirm the placeholder comment posts under
       `GITHUB_TOKEN`. The design doc records why it is expected to and what to
       do if it does not; the placeholder is `continue-on-error` either way.

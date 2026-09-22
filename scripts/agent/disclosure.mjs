@@ -5,10 +5,14 @@
 // can never drift apart; `harvest.mjs` imports the hand-off marker for the same
 // reason.
 //
-// `scripts/hooks/require-ai-disclosure.sh` is a shell hook and keeps its own copy
-// of the trailer string; DISCLOSURE_TRAILER here mirrors it.
+// NO HOOK MIRRORS THIS HERE. Upstream pairs the trailer with a
+// `require-ai-disclosure.sh` harness hook that enforces it at commit time; that
+// hook is not ported (this repository's only git hook is `commit-msg`, and the
+// harness hooks are a separate subsystem). So DISCLOSURE_TRAILER is currently
+// written by the fixer prompts and read by nothing that can refuse a commit —
+// the PR-body predicate below is the gate that actually holds.
 
-/** The commit trailer autonomous runs must carry (see require-ai-disclosure.sh). */
+/** The commit trailer autonomous runs carry. Advisory here — see above. */
 export const DISCLOSURE_TRAILER = "Assisted-by: Claude Code (autonomous)";
 
 /**

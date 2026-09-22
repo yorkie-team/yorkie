@@ -86,8 +86,6 @@ jobs:
     concurrency:
       group: agent-fix-${{ github.event.issue.number }}
       cancel-in-progress: false
-    env:
-      WAFFLEBASE_AGENT_AUTONOMOUS: "true"
     steps:
       # Authoritative trust gate — this verb pushes commits to the PR branch, so
       # it is maintainers only (org membership is not repo write; check the real
@@ -563,7 +561,10 @@ jobs:
             } else {
               body = '⚠️ `@claude fix` ran but the branch head did not advance, so nothing was applied. '
                 + 'It may have found nothing to change, run out of turns, hit a tool denial, or failed '
-                + `to push — see the effort comment and the [workflow run](${process.env.RUN_URL}).`;
+                + 'to push — including the one push this App simply cannot make: a commit touching '
+                + '`.github/workflows/**` is rejected, because the token is minted without '
+                + '`workflows: write` so that a fix agent can never rewrite the lanes that grade it. '
+                + `See the effort comment and the [workflow run](${process.env.RUN_URL}).`;
             }
             if (process.env.COMMENT_ID) {
               await github.rest.issues.updateComment({

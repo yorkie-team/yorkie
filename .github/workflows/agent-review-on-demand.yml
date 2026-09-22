@@ -9,12 +9,11 @@
 # Trust: the PR author OR a trusted maintainer may trigger it (read-only, low
 # risk). Throttled to one review per head SHA.
 #
-# ON THE REFERENCES BELOW. This file was ported from wafflebase, where it is the
-# advisory half of a pair; the comments still say "the twin step in
-# agent-review-panel.yml" because that is where the rationale was written and
-# where it will be again. That workflow is NOT installed here — it arrives with
-# Phase 2 (docs/design/agent-command-verbs.md), and until it does those pointers
-# resolve upstream, not in this tree. Nothing in this file depends on it.
+# ON THE REFERENCES BELOW. This file is the advisory half of a pair; the comments
+# point at "the twin step in agent-review-panel.yml" for the shared rationale.
+# That workflow IS installed here, so those pointers resolve in this tree.
+# Nothing in this file depends on it running: this panel creates no check runs
+# and gates no merge.
 #
 # Security (identical to the gating panel this was ported from): the reviewer is read-only
 # (Read/Grep/Glob), the orchestrator + lenses come from a TRUSTED `main` checkout,

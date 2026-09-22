@@ -1224,8 +1224,15 @@ jobs:
       # `always()` on purpose — a round whose panel crashed is exactly the round
       # worth saying something about, and the script renders the fail-closed case
       # explicitly rather than reporting six red lenses as findings.
+      # `!cancelled()`, not `always()`, for the reason the verdict writer above
+      # carries: a cancelled panel was SUPERSEDED, and `.agent-review` holds an
+      # arbitrary prefix of its round. Under `always()` an empty `blocked`
+      # output takes the fail-closed branch and writes "every lens fails closed"
+      # onto the dashboard — describing a failure that did not happen, at the
+      # moment a fresher round is starting.
       - name: Post this round's findings
-        if: always() && steps.pr.outputs.number != ''
+        if: >-
+          !cancelled() && steps.pr.outputs.number != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1249,8 +1256,15 @@ jobs:
       # Runs the trusted copy from .trusted with GITHUB_TOKEN — this job already
       # holds issues:write for the set-state step, and the SDK step never sees
       # this token, so the grant widens nothing.
+      # `!cancelled()`, not `always()`, for the reason the verdict writer above
+      # carries: a cancelled panel was SUPERSEDED, and `.agent-review` holds an
+      # arbitrary prefix of its round. Under `always()` an empty `blocked`
+      # output takes the fail-closed branch and writes "every lens fails closed"
+      # onto the dashboard — describing a failure that did not happen, at the
+      # moment a fresher round is starting.
       - name: Update loop status (panel verdict)
-        if: always() && steps.pr.outputs.number != ''
+        if: >-
+          !cancelled() && steps.pr.outputs.number != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1651,8 +1665,6 @@ jobs:
       pull-requests: write
       issues: write
       actions: read # the no-commit page reads the CI run's current attempt
-    env:
-      WAFFLEBASE_AGENT_AUTONOMOUS: "true"
     steps:
       # Everything below runs against UNTRUSTED PR data (commit list,
       # check-run results, PR comments), so the code deciding what to do with
@@ -1665,6 +1677,13 @@ jobs:
         with:
           ref: main
           persist-credentials: false # only reads scripts here; the fix push later uses its own App token
+
+      # This job runs the guard, the brief builder, the report reader and the
+      # metrics recorder from Node. Pinned, like every other job that does: the
+      # package's tests run on 22.x and the runner image's own version moves.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
 
       - name: Review-round guard
         id: guard
@@ -2455,6 +2474,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read # this job checks out; an unlisted scope is `none`, not inherited
       pull-requests: write
       issues: write
       actions: read # set-state reconcile reads the CI workflow-run conclusion
@@ -2550,6 +2570,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
+      - uses: actions/setup-node@v4
+        if: steps.page.outputs.pr != ''
+        with:
+          node-version: 22.x
       - name: Post agent-effort summary
         if: steps.page.outputs.pr != ''
         continue-on-error: true

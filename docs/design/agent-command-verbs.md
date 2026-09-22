@@ -144,14 +144,36 @@ that latch — deliberately, because pushing a commit does not.
 - **Lands:** the panel workflow, the round guard, the latch, the label.
 - **Requires:** a GitHub App (`AGENT_APP_ID`, `AGENT_APP_PRIVATE_KEY`), and the
   branch-protection conversation. The App is not optional the way it is in
-  Phase 1: the panel *dispatches fix rounds*, and a fix round pushes. A
-  `GITHUB_TOKEN`-authored push does not re-trigger workflows, so the commit
-  would land and no round would ever re-review it — the loop would stop
-  silently, in the direction that looks like success. Without the App
-  configured the panel still runs its lenses, records its check runs and
-  latches; only the auto-fix half is inert.
-- **Requires:** six new check runs appear on a labelled PR; whether any of them
-  is *required* to merge is a repository setting, and should start as "no".
+  Phase 1, for two separate reasons.
+
+  The first is the fix loop: a fix round pushes, and a `GITHUB_TOKEN`-authored
+  push does not re-trigger workflows, so the commit would land and no round
+  would ever re-review it — the loop stopping silently, in the direction that
+  looks like success.
+
+  The second is that **Phase 2 does not degrade gracefully without it**, and an
+  earlier draft of this document said it did. The `promote` job mints the App
+  token as an unguarded step: with the secrets unset that step fails, `promote`
+  fails, and the `stalled` job — which fires on `promote` failing — pages a
+  human and latches `agent:blocked` on every otherwise-clean PR. So Phase 2 is
+  all-or-nothing: configure the App, or leave `AGENT_PIPELINE_ENABLED` unset.
+
+- **Requires:** a docs-only PR cannot use it. `ci.yml` carries `paths-ignore`
+  for markdown, `api/docs`, `build/charts`, `design/` and `*.txt`, and the panel
+  triggers only on a CI run, so a PR confined to those paths never starts a
+  round — `@claude loop` labels it and nothing happens. `@claude review` is the
+  path for those, and the loop's confirmation comment says so.
+- **Requires:** a decision about the six new check runs that appear on a
+  labelled PR. Whether any of them is *required* to merge is a repository
+  setting, and should start as "no".
+- **Also lands:** `agent-iterate-ci.yml`. It is not optional either: `promote`
+  and `fix` both require a green CI and `stalled` deliberately excludes a red
+  one, all three on the stated grounds that this workflow owns the red-CI
+  branch. Without it an agent-managed PR whose CI goes red gets no fix, no page
+  and no label change, and nothing re-triggers — the silent stall the whole
+  design exists to avoid. Its failure diagnosis is rebuilt on `gh run view
+  --log-failed`, because the artifact upstream renders is written by a verify
+  runner this repository does not have.
 - **Fork behavior:** `loop` is same-repo only and falls back to posting
   `@claude review` on a fork PR.
 - **Exit criteria:** a PR that entered the loop reached *ready for review*

@@ -446,6 +446,87 @@ test("the `fix` verb reaches exactly one workflow: issues -> implement, PRs -> f
   }
 });
 
+test("every job that runs a pipeline script pins its Node", () => {
+  // REGRESSION GUARD, for a mistake made twice in one branch.
+  //
+  // Swapping the fixer jobs from a package manager to Go meant deleting their
+  // `setup-node` steps. The edit matched on the step name and removed every one
+  // in agent-review-panel.yml — but only one belonged to the fixer. The others
+  // served the job that runs `npm ci`, the job that runs the panel, and the
+  // promotion gate; two more went the same way in the `fix` and `stalled` jobs.
+  // Nothing failed: the YAML stayed valid, the suite stayed green, and those
+  // jobs would have run on whatever Node the runner image happens to ship.
+  //
+  // PER JOB, not per file, because that is the granularity the bug had: the
+  // panel kept a `setup-node` the whole time and still had three jobs without
+  // one.
+  //
+  // ONE EXEMPTION, and it is a property rather than a list of files: a job whose
+  // only scripts import nothing outside `node:` builtins runs correctly on the
+  // runner's own Node, which is why the routers and the loop/rerun/summarize
+  // arms carry no setup step. The allow-list below is checked against the real
+  // module graph by the test after this one, so a script that grows a dependency
+  // fails there rather than silently widening this exemption.
+  const BUILTIN_ONLY = new Set(["command.mjs", "checks.mjs", "loop-status.mjs"]);
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    let job = null;
+    const jobs = new Map();
+    for (const line of lines) {
+      const m = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+      if (m) { job = m[1]; jobs.set(job, []); continue; }
+      if (job) jobs.get(job).push(line);
+    }
+    for (const [name, body] of jobs) {
+      const text = body.join("\n");
+      const scripts = [...text.matchAll(/\bnode [^\n]*?([a-z-]+\.mjs)/g)].map((m) => m[1]);
+      const needsPin = /\bnpm (ci|test)\b/.test(text) || scripts.some((f) => !BUILTIN_ONLY.has(f));
+      if (!needsPin) continue;
+      checked++;
+      if (!/uses: actions\/setup-node@/.test(text)) offenders.push(`${file}:${name}`);
+    }
+  }
+
+  assert.ok(checked > 0, "no job was found needing a pinned Node — this guard would be vacuous");
+  assert.deepEqual(
+    offenders,
+    [],
+    `these jobs run a pipeline script on an unpinned Node:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("the scripts exempted from the Node pin really import only builtins", () => {
+  // The exemption above is only sound while it is true. A dependency added to
+  // any of these would run on the runner's Node with no node_modules beside it
+  // — a module-not-found in a job whose whole purpose is to route or to page.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const IMPORT = /^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm;
+  for (const entry of ["command.mjs", "checks.mjs", "loop-status.mjs"]) {
+    const seen = new Set();
+    const queue = [entry];
+    while (queue.length) {
+      const f = queue.shift();
+      if (seen.has(f)) continue;
+      seen.add(f);
+      const text = readFileSync(path.join(HERE, f), "utf8");
+      for (const m of text.matchAll(IMPORT)) {
+        const spec = m[1];
+        if (spec.startsWith("node:")) continue;
+        assert.ok(
+          spec.startsWith("./"),
+          `${entry} reaches the package dependency ${spec} via ${f} — it can no longer run without node_modules`,
+        );
+        queue.push(spec.slice(2));
+      }
+    }
+  }
+});
+
 test("every workflow that runs a pipeline script sets GH_REPO", () => {
   // REGRESSION GUARD for an outage this suite did not catch.
   //

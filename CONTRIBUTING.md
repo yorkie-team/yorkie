@@ -156,6 +156,8 @@ You can also ask for a machine review by commenting on the pull request. Matchin
 
 `review` and `summarize` are throttled to one run per commit; push a new commit to re-run. **None of these can approve or merge** — a maintainer's review is always required, and the loop's terminal states are *ready for review* or *handed to a human*.
 
+Type these as a **normal PR comment**, not inside an inline review thread. Only the bare-mention fallback listens to review-comment threads; a verb typed there reaches no workflow and answers nothing.
+
 One thing to know about `@claude loop`: when the loop converges it tries to flip the PR to ready for review, and one of its gates is that the PR body discloses autonomous AI authorship. A PR written from the template does not, so that gate refuses and the PR stays as it is — which is correct once the fixer has pushed commits to your branch, because the person picking it up should be told that before they read it. Add a line saying so, or mark the PR ready yourself.
 
 Nothing here runs unless a maintainer has enabled the surface for the repository. The design, the phases, and what each one needs are in [agent-command-verbs.md](docs/design/agent-command-verbs.md).

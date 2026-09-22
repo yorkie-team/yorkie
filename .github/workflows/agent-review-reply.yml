@@ -49,8 +49,16 @@ jobs:
     outputs:
       command: ${{ steps.route.outputs.command }}
     steps:
+      # `ref: main`, and this file needs it where its siblings do not. It is the
+      # only agent workflow that also subscribes to `pull_request_review_comment`,
+      # where `github.ref` is `refs/pull/<n>/merge` — so a default checkout takes
+      # the PR's own merge commit and routes every inline `@claude` mention
+      # through the BRANCH's copy of the parser. A PR editing command.mjs could
+      # then reroute mentions on itself, and a conflicted PR has no merge ref at
+      # all, which fails the checkout and kills inline mentions outright.
       - uses: actions/checkout@v4
         with:
+          ref: main
           sparse-checkout: scripts/agent/command.mjs
           sparse-checkout-cone-mode: false
           persist-credentials: false
@@ -81,8 +89,6 @@ jobs:
     concurrency:
       group: agent-review-${{ github.event.issue.number || github.event.pull_request.number }}
       cancel-in-progress: false
-    env:
-      WAFFLEBASE_AGENT_AUTONOMOUS: "true"
     steps:
       # author_association in the `if` is a weak signal (org membership ≠ repo
       # write). This is the authoritative gate — same as agent-implement.yml —
@@ -123,7 +129,7 @@ jobs:
       - name: Generate GitHub App token
         id: app-token
         if: steps.pr.outputs.is_agent == 'true'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}

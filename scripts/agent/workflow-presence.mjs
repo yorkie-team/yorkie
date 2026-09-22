@@ -6,16 +6,15 @@
 // because the failure they catch is SILENT: a drifted copy does not error, it
 // quietly stops doing its job. None of that changes here.
 //
-// What changes is which workflows exist. This repository installs the advisory
-// half of the command surface — `@claude review` and `@claude summarize` — and
-// not the gating review panel or the fix agent
-// (docs/design/agent-command-verbs.md, Phase 1 vs Phases 2 and 3). A guard
-// whose workflow is absent has nothing to drift from, so it SKIPS.
+// What changes is which workflows exist. Every phase in
+// docs/design/agent-command-verbs.md is installed today, so nothing here skips
+// — but `agent-implement.yml` (issue → PR) is still deferred, and a guard that
+// reads a workflow which is not there fails for the wrong reason.
 //
-// Skipping rather than deleting is the whole point: the guard re-arms by itself
-// the day the workflow lands, with no one having to remember it was removed.
-// Deleting them would make Phase 2 a silent regression of checks that were
-// written precisely because their failure mode is invisible.
+// Skipping rather than deleting is the whole point: a guard re-arms by itself
+// the day its workflow lands, with no one having to remember it was removed.
+// Deleting them would make that day a silent regression of checks written
+// precisely because their failure mode is invisible.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";

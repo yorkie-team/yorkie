@@ -18,12 +18,17 @@ panel installs a no-op that looks installed.
 A Go repository adopting a TypeScript monorepo's tooling sounds like the hard
 part. It was not: `scripts/agent` is a standalone npm package with its own
 lockfile that nothing in the Go build reaches, and this repository already runs
-`node --test` in CI for the doc-link checker. The workflows carried exactly one
-repository-specific line between them — a `git diff` pathspec excluding
-generated files.
+`node --test` in CI for the doc-link checker.
 
-What actually needed rewriting was the knowledge, not the code: which paths mean
-what, and what CI already proves.
+The advisory workflows carried exactly one repository-specific line between them
+— a `git diff` pathspec excluding generated files. The gating half carried more,
+because it runs a toolchain: the fixer jobs install Go and a linter instead of a
+package manager, and the diagnosis the CI-fix arm feeds its agent had to be
+rebuilt entirely, since it rendered an artifact written by a verify runner this
+repository does not have.
+
+What needed rewriting throughout was the knowledge, not the code: which paths
+mean what, and what CI already proves.
 
 ## The coverage note is the dangerous file
 
@@ -81,3 +86,33 @@ for files that were right there. Cost: a wrong conclusion about the upstream
 tree that survived two follow-up commands before `ls` contradicted it. In zsh,
 word splitting on unquoted parameters is off by default — use an explicit list
 or an array.
+
+
+## Removing a step is not the same as removing its setup
+
+Swapping the fixer jobs from pnpm to Go meant deleting the pnpm and Node setup
+steps. The script that did it matched on `setup-node` and removed all four in
+the panel — but only one belonged to the fixer. The other three served the job
+that runs `npm ci`, the job that runs the panel, and the job that runs the
+promotion gate. Nothing failed locally, because none of it runs locally; the
+suite stayed green and the YAML stayed valid.
+
+Two rounds of review caught the rest of the same mistake, in the `fix` and
+`stalled` jobs. The lesson is not "be careful with sed" — it is that a
+mechanical edit across a 2,500-line workflow needs a mechanical check of the
+property it could break. `grep -L setup-node` over every workflow that runs
+`node` would have found all five in one command, and now does.
+
+## The dependency you did not port is still a dependency
+
+`agent-iterate-ci.yml` was excluded as out of scope: it is a separate component,
+and the phase only promised the panel, the guard, the latch and the label. But
+the panel's `promote` and `fix` jobs both require a green CI, and its `stalled`
+job deliberately excludes a red one — all three commented with "the CI arm owns
+that branch."
+
+Leaving it out did not remove a feature. It removed the arm three other jobs
+delegate to, and turned the single most common failure event — CI going red —
+into the silent stall the whole design exists to prevent. Scope decisions about
+a component graph have to be checked against what the components say about each
+other, not only against what each one does.
