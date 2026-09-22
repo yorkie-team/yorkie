@@ -1427,3 +1427,58 @@ test("the CI-fix arm's attempts guard cannot run without the App", () => {
     "the attempts guard must be gated on the App-presence check",
   );
 });
+
+test("a job that comments on a PR holds pull-requests:write, not just issues:write", () => {
+  // THE PATH SAYS "issues" AND THE PERMISSION CHECK DOES NOT. Every comment the
+  // surface posts goes through `POST /repos/…/issues/{n}/comments` — the
+  // endpoint serves issues and pull requests both, and for a PULL REQUEST the
+  // permission it requires is the pull-requests one. `issues: write` is not a
+  // substitute and does not degrade gracefully: it is a 403 at the moment of
+  // publication, with `Issues: write` printed in the job's own permission log
+  // two screens up.
+  //
+  // Both advisory verbs shipped that way, which is the whole of Phase 1. The
+  // review ran, the model produced its verdict, the panel comment was built —
+  // and `Resource not accessible by integration` came back on the last line, so
+  // the verb looked like it had done nothing at all.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const COMMENTS = /issues\.(?:createComment|updateComment|deleteComment)/;
+  const offenders = [];
+  let checked = 0;
+
+  // A trailing `# why` is normal on these lines, and a workflow-level
+  // `permissions:` block is inherited by every job that declares none — both
+  // shapes are in use here, and a guard that missed either would read as a
+  // finding against four jobs that are already correct.
+  const GRANTS = /^\s+pull-requests:\s*write\s*(?:#.*)?$/;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+    const inherited = lines.slice(0, jobsAt < 0 ? lines.length : jobsAt).some((l) => GRANTS.test(l));
+    // Walk jobs: a job id sits at two-space indent under `jobs:`.
+    const starts = [];
+    for (let i = jobsAt + 1; i < lines.length; i++) {
+      if (/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[i])) starts.push(i);
+    }
+    for (let s = 0; s < starts.length; s++) {
+      const body = lines.slice(starts[s], starts[s + 1] ?? lines.length);
+      const code = body.filter((l) => !/^\s*#/.test(l));
+      if (!code.some((l) => COMMENTS.test(l))) continue;
+      checked++;
+      const id = lines[starts[s]].trim().replace(":", "");
+      const own = code.some((l) => /^ {4}permissions:\s*$/.test(l));
+      if (!(code.some((l) => GRANTS.test(l)) || (!own && inherited))) {
+        offenders.push(`${file}:${id}`);
+      }
+    }
+  }
+
+  assert.ok(checked > 0, "no commenting job found — this guard would be vacuous");
+  assert.deepEqual(
+    offenders,
+    [],
+    `these jobs comment on a PR without pull-requests:write:\n  ${offenders.join("\n  ")}`,
+  );
+});

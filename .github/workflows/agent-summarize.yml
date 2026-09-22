@@ -60,7 +60,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      pull-requests: read
+      # `pull-requests: write`, and `issues: write` is NOT a substitute. Every
+      # comment this verb posts goes through `POST /repos/…/issues/{n}/comments`,
+      # whose path says "issues" and whose permission check does not: the
+      # endpoint serves both resource types, and for a PULL REQUEST the
+      # permission it requires is the pull-requests one. With `read` here the
+      # verb ran the whole review, produced its verdict, and took a 403 on the
+      # last line — `Resource not accessible by integration`, on a token whose
+      # own log said `Issues: write`.
+      pull-requests: write
       # write, not read: the placeholder below is posted with GITHUB_TOKEN now
       # that no App token carries its own permissions into this job.
       issues: write
@@ -166,6 +174,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      # This job EDITS the placeholder comment, which is the same endpoint
+      # family and the same requirement as posting it. It had only `issues`,
+      # so the throttle it exists to release would have 403'd too.
+      pull-requests: write
       issues: write
     steps:
       - name: Release the summarize throttle
@@ -198,7 +210,15 @@ jobs:
     environment: agent
     permissions:
       contents: read # fetch the PR diff via the API
-      pull-requests: read
+      # `pull-requests: write`, and `issues: write` is NOT a substitute. Every
+      # comment this verb posts goes through `POST /repos/…/issues/{n}/comments`,
+      # whose path says "issues" and whose permission check does not: the
+      # endpoint serves both resource types, and for a PULL REQUEST the
+      # permission it requires is the pull-requests one. With `read` here the
+      # verb ran the whole review, produced its verdict, and took a 403 on the
+      # last line — `Resource not accessible by integration`, on a token whose
+      # own log said `Issues: write`.
+      pull-requests: write
       # For the edit step at the end of this job only. The model step below is
       # handed no repository credential and no shell (`--allowedTools
       # "Read,Write"`), so widening the job does not put a write-capable token
