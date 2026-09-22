@@ -477,7 +477,7 @@ test("the fixer prompt orders the report BEFORE the push", skipWithout("agent-re
   const wf = readWorkflow("agent-review-panel.yml");
   const prompt = wf.slice(wf.indexOf("The review panel requested changes on your PR."));
   const report = prompt.indexOf("fix-report.mjs post");
-  const push = prompt.indexOf("Push with `git push --no-verify`");
+  const push = prompt.indexOf("Push with `git push`");
   assert.ok(report > 0, "the prompt must tell the fixer to post a report");
   assert.ok(push > 0, "the prompt must tell the fixer how to push");
   assert.ok(report < push, "the report instruction must come BEFORE the push instruction");
