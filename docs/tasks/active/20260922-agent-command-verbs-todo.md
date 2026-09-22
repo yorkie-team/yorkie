@@ -129,6 +129,18 @@ recorded. The classes worth carrying forward:
 - [ ] **The on-demand throttle is still racy.** Two `@claude review` comments
       seconds apart can both pass the gate before either marker lands. The
       release valve added here fixes the stuck case, not the double-run one.
+- [ ] **A 60-minute credential in a 90-minute job.** An App installation token
+      lives exactly one hour and cannot be extended, so a fix round that runs
+      past it loses the credential in `.git/config` and in `github_token` — the
+      push 401s and the steps that would report that 401 too, stranding the
+      placeholder comment. Both fixer jobs carry a comment saying so. Closing it
+      means re-minting before the push and rewriting the git credential, which
+      wants the App configured and a real round to test against.
+- [ ] **The CI arm checks out a moving branch.** `agent-iterate-ci.yml` checks
+      out `workflow_run.head_branch`, not the head SHA, and has no re-check of
+      the kind `agent-fix.yml` does — so a push landing mid-run has the fixer
+      apply commit A's failure log to commit B. Bounded by the attempts counter,
+      but it wastes a round and the diagnosis is wrong.
 
 ## Not in scope
 

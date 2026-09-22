@@ -1764,6 +1764,11 @@ test("the coverage note claims only mechanisms this repo actually runs", () => {
   // on its own implies them, which would silence the whole dead-code class.
   assert.match(notEnforced, /`staticcheck` and `unused`/);
   const lintLine = N.split("\n").find((l) => l.includes("golangci-lint run"));
+  // FOUND FIRST, then read. `find` returns undefined when the bullet is reworded,
+  // `/x/.test(undefined)` tests the string "undefined", and the assertion below
+  // then passes having checked nothing — so a note that stopped mentioning
+  // golangci-lint at all would sail through the guard written to police it.
+  assert.ok(lintLine, "the note no longer has a `golangci-lint run` bullet to check");
   assert.ok(!/staticcheck|unused/.test(lintLine), `the lint claim must not imply them: ${lintLine}`);
 
   // The licence header is a CLAUDE.md convention with no lane behind it.
@@ -1774,7 +1779,14 @@ test("the coverage note claims only mechanisms this repo actually runs", () => {
   assert.match(notEnforced, /`go test -tags complex`/);
   assert.match(notEnforced, /path-gated/);
   const suiteLine = N.split("\n").find((l) => l.includes("-tags integration -race"));
-  assert.ok(suiteLine && /MongoDB/.test(N), `the suite claim must name the real lane: ${suiteLine}`);
+  assert.ok(suiteLine, "the note no longer claims the `-tags integration -race` lane");
+  // MongoDB must be named ON THAT BULLET, not merely somewhere in the note —
+  // the earlier `/MongoDB/.test(N)` was satisfied by any other mention.
+  assert.match(
+    `${suiteLine}\n${N.split("\n")[N.split("\n").indexOf(suiteLine) + 1] ?? ""}`,
+    /MongoDB/,
+    `the suite claim must name what it runs against: ${suiteLine}`,
+  );
 
   // A docs-only PR runs NONE of it. This is the gap most likely to be missed,
   // because every other bullet reads as unconditional.

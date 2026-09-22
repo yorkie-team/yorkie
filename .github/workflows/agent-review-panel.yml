@@ -1654,6 +1654,18 @@ jobs:
     # converging, and on #1047/#1052/#1053 it did so silently. `--max-turns 200`
     # below is the real backstop against a runaway; this is the cost ceiling, and
     # MAX_REVIEW_ROUNDS still bounds how many of them a PR may spend.
+    # ⚠️ 90 MINUTES, AGAINST A 60-MINUTE CREDENTIAL. A GitHub App installation
+    # token's lifetime is fixed at one hour and `create-github-app-token` cannot
+    # extend it, so a round that runs past the hour loses the credential sitting
+    # in `.git/config` and in `github_token`: the push 401s, and the reporting
+    # steps that would have said so 401 too, leaving the placeholder comment
+    # saying "Working on…" for good.
+    #
+    # The wall is NOT shortened to 55, because that would refuse exactly the
+    # rounds the reasoning below says to allow. Closing it properly means
+    # re-minting before the push and rewriting the git credential, which is a
+    # change worth making with the App actually configured and a real round to
+    # test against — see docs/tasks/active/20260922-agent-command-verbs-todo.md.
     timeout-minutes: 90
     environment: agent
     permissions:

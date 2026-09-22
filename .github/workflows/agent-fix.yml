@@ -70,6 +70,18 @@ jobs:
     # documents why it is 90. This is the path a human is told to retry on when
     # that one dies, so a tighter wall here would refuse exactly the rounds the
     # loop could not finish either.
+    # ⚠️ 90 MINUTES, AGAINST A 60-MINUTE CREDENTIAL. A GitHub App installation
+    # token's lifetime is fixed at one hour and `create-github-app-token` cannot
+    # extend it, so a round that runs past the hour loses the credential sitting
+    # in `.git/config` and in `github_token`: the push 401s, and the reporting
+    # steps that would have said so 401 too, leaving the placeholder comment
+    # saying "Working on…" for good.
+    #
+    # The wall is NOT shortened to 55, because that would refuse exactly the
+    # rounds the reasoning below says to allow. Closing it properly means
+    # re-minting before the push and rewriting the git credential, which is a
+    # change worth making with the App actually configured and a real round to
+    # test against — see docs/tasks/active/20260922-agent-command-verbs-todo.md.
     timeout-minutes: 90
     # Scope the API key to a protected Environment so a maintainer can require
     # approval before any run spends budget (configure in repo settings).
