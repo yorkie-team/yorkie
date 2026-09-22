@@ -53,8 +53,17 @@ jobs:
       # `npm ci`, not `npm install`: the committed lockfile is the point. This
       # package sits outside any workspace and pins its own transitive security
       # overrides, which only a lockfile-exact install reproduces.
+      #
+      # `--ignore-scripts` because this job installs from the PULL REQUEST's own
+      # tree, so the lockfile is whatever the contributor wrote — and an install
+      # lifecycle script in a dependency it names would otherwise run here. The
+      # job holds no secrets and only `contents: read`, so the blast radius is a
+      # runner, but the package needs no lifecycle scripts (zod and the Agent
+      # SDK are plain JavaScript) and refusing them costs nothing. The trusted
+      # `deps` job in agent-review-on-demand.yml sidesteps this differently, by
+      # installing from `ref: main`.
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --no-audit --no-fund --ignore-scripts
         working-directory: scripts/agent
 
       - name: Test
