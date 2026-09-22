@@ -113,9 +113,27 @@ jobs:
         with:
           node-version: 22.x
 
+      # WITHOUT THE APP THIS ARM DOES NOTHING, QUIETLY. One repository variable
+      # enables every workflow here, and the advisory verbs need no App — so a
+      # repository can run Phase 1 while the App is still being set up. This arm
+      # has no commenter to answer (it is `workflow_run`-triggered), so the
+      # honest behaviour is to skip and say so in the run, not to fail.
+      - name: Is the GitHub App configured?
+        id: app
+        env:
+          APP_ID: ${{ secrets.AGENT_APP_ID }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AGENT_APP_ID is unset; the CI-fix arm cannot push, so it is standing down."
+          fi
+
       # Auth git ops as the Claude GitHub App so the fix commit re-triggers CI
       # (GITHUB_TOKEN pushes do not).
       - name: Generate GitHub App token
+        if: steps.app.outputs.configured == 'true'
         id: app-token
         # Pinned to an immutable commit SHA (not the movable @v1 tag) for
         # supply-chain safety — this action handles the App private key.
@@ -133,6 +151,7 @@ jobs:
           permission-issues: write # PR conversation comments use the issues API
 
       - uses: actions/checkout@v4
+        if: steps.app.outputs.configured == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0

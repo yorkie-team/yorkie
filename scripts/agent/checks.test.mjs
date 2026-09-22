@@ -478,6 +478,77 @@ test("the `fix` verb reaches exactly one workflow: issues -> implement, PRs -> f
   }
 });
 
+test("nothing runs on an App token without first checking the App exists", () => {
+  // ONE SWITCH, TWO CREDENTIAL REGIMES. `AGENT_PIPELINE_ENABLED` turns every
+  // workflow here on at once, but `review` and `summarize` post with
+  // GITHUB_TOKEN and need no App — so a repository legitimately runs those
+  // while `AGENT_APP_ID` is still unset.
+  //
+  // In that state an unguarded mint FAILS, and the failure is not contained:
+  // `agent-loop`/`agent-rerun` die at their second step, leaving a red X in
+  // Actions and nothing in the PR thread for the person who typed the verb;
+  // and the panel's `promote` job failing makes `stalled` page a human and
+  // write the terminal `agent:blocked` latch on an otherwise clean PR. An
+  // absent credential would be reported as the loop giving up.
+  //
+  // So every step that consumes an App token must be conditional on something —
+  // usually the `app.outputs.configured` check, sometimes an eligibility or
+  // placeholder gate that already implies it. The assertion is deliberately
+  // "has a condition", not "has THIS condition": the shapes differ per
+  // workflow, and what must never exist is an unconditional consumer.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    // Walk steps: a step starts at `      - ` and runs to the next one.
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^ {6}- /.test(lines[i])) continue;
+      let end = i + 1;
+      while (end < lines.length && !/^ {6}- /.test(lines[end]) && !/^ {2}\S/.test(lines[end])) end++;
+      const step = lines.slice(i, end);
+      const code = step.filter((l) => !/^\s*#/.test(l));
+      if (!code.some((l) => l.includes("steps.app-token.outputs.token"))) continue;
+      checked++;
+      if (!code.some((l) => /^\s+if:/.test(l))) {
+        offenders.push(`${file}:${i + 1} ${step[0].trim()}`);
+      }
+    }
+  }
+
+  assert.ok(checked > 0, "no App-token consumer found — this guard would be vacuous");
+  assert.deepEqual(
+    offenders,
+    [],
+    `these steps consume an App token unconditionally:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("each verb that needs the App answers the commenter when it is missing", () => {
+  // The guard above stops the job dying; this one stops it dying SILENTLY. A
+  // verb typed by a maintainer must produce a comment either way — a skipped
+  // job with a green tick reads as "handled" for a request nothing acted on.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  for (const file of ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"]) {
+    const text = readFileSync(path.join(dir, file), "utf8");
+    assert.match(text, /id: app\b/, `${file}: no App-presence check`);
+    assert.match(
+      text,
+      /needs the `yorkie-agent` GitHub App/,
+      `${file}: must tell the commenter the App is missing, not just skip`,
+    );
+    // ...and it must come after the trust gate, so an account without write
+    // access cannot make the bot post.
+    assert.ok(
+      text.indexOf("getCollaboratorPermissionLevel") < text.indexOf("id: app\n"),
+      `${file}: the App check must follow the permission check`,
+    );
+  }
+});
+
 test("every App-token mint is pinned and narrowed, and none can push workflows", () => {
   // THE GUARANTEE THIS ENFORCES IS ONE THE PIPELINE PRINTS TO USERS.
   // agent-fix.yml's refusal message tells a contributor the token is minted

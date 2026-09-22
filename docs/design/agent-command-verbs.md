@@ -151,12 +151,18 @@ that latch — deliberately, because pushing a commit does not.
   would ever re-review it — the loop stopping silently, in the direction that
   looks like success.
 
-  The second is that **Phase 2 does not degrade gracefully without it**, and an
-  earlier draft of this document said it did. The `promote` job mints the App
-  token as an unguarded step: with the secrets unset that step fails, `promote`
-  fails, and the `stalled` job — which fires on `promote` failing — pages a
-  human and latches `agent:blocked` on every otherwise-clean PR. So Phase 2 is
-  all-or-nothing: configure the App, or leave `AGENT_PIPELINE_ENABLED` unset.
+  The second used to be that Phase 2 did not degrade gracefully without it —
+  `promote` minted the token unguarded, so with the secrets unset that job
+  failed and `stalled` paged a human and latched `agent:blocked` on every
+  otherwise-clean PR. That is fixed: every step that consumes an App token is
+  now conditional on a presence check, the three commenter-facing verbs answer
+  with "this needs the App, which is not configured" instead of dying, and the
+  CI arm stands down with a notice. Two tests hold the line — one that no step
+  consumes the token unconditionally, one that each verb still answers.
+
+  So the phases can now be enabled independently after all, through the single
+  switch: turn `AGENT_PIPELINE_ENABLED` on and Phase 1 works, while `loop`,
+  `rerun` and `fix` refuse legibly until the App exists.
 
 - **Requires:** a docs-only PR cannot use it. `ci.yml` carries `paths-ignore`
   for markdown, `api/docs`, `build/charts`, `design/` and `*.txt`, and the panel

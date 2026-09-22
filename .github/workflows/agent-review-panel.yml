@@ -1496,7 +1496,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
+      # WITHOUT THE APP, THIS JOB MUST DECLINE TO PROMOTE, NOT FAIL.
+      #
+      # One repository variable enables every workflow here, and `review` /
+      # `summarize` need no App — so a repository can run Phase 1 while the App
+      # is still being set up. In that state an unguarded mint fails, `promote`
+      # fails with it, and `stalled` — which fires on `needs.promote.result ==
+      # 'failure'` — pages a human and writes the terminal `agent:blocked` latch
+      # on an otherwise clean PR. An absent credential would be reported as the
+      # loop giving up.
+      #
+      # `secrets` is not available in a job-level `if:`, so this is a step whose
+      # output the rest of the job reads.
+      - name: Is the GitHub App configured?
+        id: app
+        env:
+          APP_ID: ${{ secrets.AGENT_APP_ID }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AGENT_APP_ID is unset — leaving the PR as it is rather than promoting it."
+          fi
+
       - name: Generate GitHub App token
+        if: steps.app.outputs.configured == 'true'
         id: app-token
         # Pinned to an immutable commit SHA (not the movable @v1 tag) for
         # supply-chain safety — this action handles the App private key.
@@ -1508,6 +1533,7 @@ jobs:
           permission-pull-requests: write
           permission-issues: write
       - name: Run ready gate
+        if: steps.app.outputs.configured == 'true'
         id: gate
         env:
           # GITHUB_TOKEN does the READS (CI runs via actions:read, check runs via
