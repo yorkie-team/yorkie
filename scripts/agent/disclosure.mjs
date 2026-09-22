@@ -29,13 +29,38 @@ export const DISCLOSURE_TRAILER = "Assisted-by: Claude Code (autonomous)";
 export const HANDOFF_MARKER = "<!-- agent-handoff -->";
 
 /**
+ * Words that turn a disclosure into its opposite. `n't` covers "wasn't".
+ *
+ * NOT AN ADVERSARIAL FILTER, and it cannot be one: this gate is a self-report,
+ * and the module header already says so — a truthful agent has no reason to
+ * hide its authorship and a dishonest one simply stays a draft. The list exists
+ * to stop a sentence that means the OPPOSITE from satisfying the gate by
+ * accident, which is a different and much smaller problem than parsing English.
+ */
+const NEGATOR = /\b(?:not|never|without|neither|nor|no|none|nothing)\b|n['\u2019]t\b/i;
+const AUTONOMOUS = /\bautonomous(?:ly)?\b/i;
+const AI_ACTOR = /\b(?:claude|ai[- ]assist(?:ed|ance)?|ai tools)\b/i;
+
+/**
  * True iff a PR body discloses autonomous AI authorship. This IS the gate
  * `mark-ready.mjs` enforces before promoting a PR to ready — keep it here so the
  * local front door validates against the exact same predicate.
+ *
+ * AFFIRMATIVE, and per CLAUSE. Testing the two terms against the whole body
+ * accepted the opposite of a disclosure: "This PR was NOT authored autonomously
+ * with Claude" contains both words and passed the gate whose entire job is to
+ * establish that an agent DID write this. Clause-level rather than body-level
+ * because a real disclosure and an unrelated "no …" can share a paragraph.
+ *
+ * Fails CLOSED on an ambiguous phrasing — "…autonomously with no human edits"
+ * is refused for the negator it happens to contain. That is the right direction
+ * for a gate that flips a PR to ready, and the refusal names the line to add
+ * (see `mark-ready.mjs`), so the cost is one edit rather than a stuck PR.
  */
 export function disclosesAiAuthorship(body) {
-  const b = String(body ?? "");
-  return /autonomous/i.test(b) && /(claude|ai[- ]assist|ai tools)/i.test(b);
+  return String(body ?? "")
+    .split(/[.;\n!?]+/)
+    .some((clause) => AUTONOMOUS.test(clause) && AI_ACTOR.test(clause) && !NEGATOR.test(clause));
 }
 
 /** True iff a single commit message carries the autonomous disclosure trailer. */
