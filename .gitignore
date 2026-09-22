@@ -83,3 +83,9 @@ output.txt
 
 # Node dependencies for scripts/agent (the only Node package here).
 node_modules/
+
+# Scratch space for the agent scripts' own tests. novelty.test.mjs creates
+# throwaway git repositories under here and says it picks the location because
+# it is ignored — an interrupted run otherwise leaves a nested .git that
+# `git add -A` commits as a gitlink.
+.harness-reports/

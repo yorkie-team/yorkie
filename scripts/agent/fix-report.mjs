@@ -422,13 +422,28 @@ export function renderFixReportBody(rec, { disputed = 0 } = {}) {
   // so persisting it would create a second, staler copy of something the panel
   // already reads first-hand from the rebuttal records.
   const n = Number.isInteger(disputed) && disputed > 0 ? disputed : 0;
-  // The VISIBLE prose sits above the payload, and `parseFixReportComment` takes
-  // the FIRST marker match in the body. A finding whose wording quotes this
-  // module's own marker would therefore be matched instead of the real record,
-  // capture prose, fail to parse, and read as "the fixer never reported anything".
-  // Same class as the ` -->` escape in `serializeFixReport`, on the other half of
-  // the comment: findings here quote the pipeline's markers as a matter of course.
-  const visible = (s) => str(s).replaceAll(FIX_REPORT_MARKER.trim(), "<!-‌- agent-fix-report");
+  // The VISIBLE prose sits above the payload, and EVERY `<!--` in it is broken,
+  // not just this module's own marker.
+  //
+  // Two problems, one fix. The narrow one: `parseFixReportComment` takes the
+  // FIRST marker match in the body, so a finding quoting `<!-- agent-fix-report`
+  // would be matched instead of the real record and read as "the fixer never
+  // reported anything".
+  //
+  // The one that matters: this comment is posted under the App identity, and
+  // `rounds.mjs::isPagedLatchComment` trusts that identity and tests the body by
+  // CONTAINMENT. The fixer is instructed to pass a finding's own wording through
+  // `--fixed`, and findings in this repository quote the pipeline's markers as a
+  // matter of course — so one finding worded "the `<!-- agent-review-paged -->`
+  // latch is never written" was enough to post a live latch under a trusted
+  // author and freeze the panel and the fixer permanently. Neutralising only the
+  // local marker left every other marker live.
+  //
+  // `rebuttal.mjs::neutral`, `severity.mjs::neutralizeMarkers` and
+  // `loop-status.mjs::neutralizeHiddenMarkers` are the same rule; the last two
+  // describe it as "the same neutering fix-report.mjs uses", which was not true
+  // until this line. ZWNJ-split, so the text still reads correctly to a human.
+  const visible = (s) => str(s).replace(/<!--/g, "<!-‌-");
   const item = (i) => `- \`${visible(i.file)}\` *(${visible(i.lens)})* — ${visible(i.summary) || "(no summary)"}`
     + (i.note ? `\n  - ${visible(i.note)}` : "");
   const lines = [

@@ -824,6 +824,24 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
   assert.match(head, /steps\.eligible\.outputs\.eligible != 'true'/);
   assert.match(head, /steps\.ci-clear\.outputs\.clear != 'true'/,
     "a CI-red refusal must reach the commenter too, or the placeholder is stranded");
+  // THE GATE ASKS "KNOWN GREEN", NOT "KNOWN RED". An earlier revision tested
+  // `completed && conclusion === 'failure'`, so a queued or in-progress run
+  // answered "clear" — and that window is exactly what the gate covers: CI
+  // concludes failure moments later, the CI arm fires, and two fixers push one
+  // branch. Same fail-toward-refusal direction as fix-eligible.mjs.
+  // JS comments stripped as well as YAML ones: the rationale below the gate
+  // quotes the wrong predicate in order to explain why it is wrong, and an
+  // assertion that reads prose as code fails on the explanation.
+  const gate = wf
+    .slice(wf.indexOf("- name: Require CI green"), wf.indexOf("- name: Explain the refusal"))
+    .split("\n")
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join("\n");
+  assert.match(gate, /conclusion === 'success'/, "the gate must require a green conclusion");
+  assert.ok(
+    !/conclusion === 'failure'/.test(gate),
+    "asking whether CI is RED lets a still-running run pass as clear",
+  );
   assert.match(refusal.slice(0, 2600), /eligibility check could not complete/, "an empty reason must still say something");
   assert.match(refusal.slice(0, 2600), /the CI-fix arm owns that state/, "...and the CI-red refusal must say which arm has the branch");
 });

@@ -173,7 +173,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-      - run: cd scripts/agent && npm ci --no-audit --no-fund
+      - run: cd scripts/agent && npm ci --no-audit --no-fund --ignore-scripts
       # Tar to preserve +x bits + symlinks that upload-artifact would strip.
       - run: cd scripts/agent && tar -czf /tmp/agent-sdk-node-modules.tgz node_modules
       - uses: actions/upload-artifact@v4

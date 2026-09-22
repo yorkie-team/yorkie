@@ -197,7 +197,7 @@ jobs:
       #
       # Fails toward ineligible, like every other branch of this gate: an API
       # error or an unreadable answer refuses rather than races.
-      - name: Refuse while CI is red (the CI-fix arm owns that state)
+      - name: Require CI green (the CI-fix arm owns every other state)
         if: steps.eligible.outputs.eligible == 'true'
         id: ci-clear
         uses: actions/github-script@v7
@@ -216,9 +216,25 @@ jobs:
               const runs = data.workflow_runs || [];
               if (!runs.length) return core.setOutput('clear', 'true'); // no CI run at all: nothing owns it
               const newest = runs.reduce((a, b) => ((b.id ?? 0) > (a.id ?? 0) ? b : a));
-              const red = newest.status === 'completed' && newest.conclusion === 'failure';
-              if (red) core.info(`CI run ${newest.id} is red on ${sha}; agent-iterate-ci owns this state.`);
-              core.setOutput('clear', String(!red));
+              // AN UNFINISHED RUN IS NOT A CLEAR ONE. Asking whether CI is RED
+              // (`completed && conclusion === 'failure'`) let a queued or
+              // in-progress run answer "clear" — and that window is exactly what
+              // this gate covers: CI concludes failure moments later,
+              // agent-iterate-ci fires, and two fixers push the same branch. The
+              // loser's `before !== after` check then reports the WINNER's
+              // commit as its own success.
+              //
+              // So the question is "is CI KNOWN GREEN on this commit?". Same
+              // fail-toward-refusal direction as fix-eligible.mjs, for the same
+              // reason: this gate authorises a bot to push to someone's branch.
+              const green = newest.status === 'completed' && newest.conclusion === 'success';
+              if (!green) {
+                core.info(
+                  `CI run ${newest.id} on ${sha} is ${newest.status}/${newest.conclusion ?? 'pending'} — `
+                  + 'not known green, so the CI-fix arm may own this branch.',
+                );
+              }
+              core.setOutput('clear', String(green));
             } catch (e) {
               core.warning(`Could not read CI for ${sha} (${e.message}); refusing rather than racing.`);
               core.setOutput('clear', 'false');
@@ -266,9 +282,9 @@ jobs:
             // out. REASON is empty only when the gate step itself failed rather
             // than returning a decision; say that, rather than posting a blank.
             const why = process.env.CI_CLEAR === 'false'
-              ? 'CI is red on this commit, and the CI-fix arm owns that state — it is already working, or has already paged. '
+              ? 'CI is not green on this commit — it is still running, or it failed and the CI-fix arm owns that state. '
                 + 'Running a second fixer on the same branch would lose one of the two pushes. '
-                + 'Wait for it, or comment `@claude rerun` if the PR was handed to a human.'
+                + 'Wait for CI, then comment `@claude fix` again — or `@claude rerun` if the PR was handed to a human.'
               : (process.env.REASON
                 || 'The eligibility check could not complete — see the [workflow run](' + process.env.RUN_URL + ').');
             await github.rest.issues.updateComment({

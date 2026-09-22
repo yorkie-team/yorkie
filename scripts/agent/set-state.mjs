@@ -48,6 +48,13 @@ export const LEGACY_LIFECYCLE_LABELS = ["agent:iterating", "agent:needs-human-re
 /** Every label computeLabelSet strips before adding the one new state label. */
 export const MANAGED_LABELS = [...LIFECYCLE_LABELS, ...LEGACY_LIFECYCLE_LABELS];
 
+/**
+ * Bot identities whose paged-latch comment `reconcile` believes. A literal copy
+ * of `rounds.mjs::PAGE_AUTHOR_LOGINS`, kept literal because this module is a CLI
+ * that must stay importable on its own; `set-state.test.mjs` pins them equal.
+ */
+export const LATCH_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-agent[bot]"]);
+
 /** "reviewing" → "agent:reviewing"; null for an unknown state. */
 export function labelFor(state) {
   return STATES.includes(state) ? `${LABEL_PREFIX}${state}` : null;
@@ -247,8 +254,22 @@ function gatherSignals(pr) {
   try {
     const pages = ghJson(["api", "--paginate", "--slurp", `repos/{owner}/{repo}/issues/${pr}/comments?per_page=100`]);
     const comments = Array.isArray(pages) ? pages.flat() : [];
-    sig.ciPagedLatch = comments.some((c) => (c.body || "").includes("<!-- agent-paged -->"));
-    sig.reviewPagedLatch = comments.some((c) => (c.body || "").includes("<!-- agent-review-paged -->"));
+    // AUTHOR-CHECKED, the last read of these markers that was not. The latch
+    // dominates `deriveState`, this repository is public, and the markers are
+    // invisible HTML comments — so a body-only test let any account stamp a PR
+    // `agent:blocked` by quoting one. Same rule as `rounds.mjs`,
+    // `loop-status.mjs` and the two throttles: trust is the AUTHOR, never the
+    // payload.
+    const TRUSTED_LATCH_ASSOC = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+    const wroteTheLatch = (c) => {
+      const o = c && typeof c === "object" ? c : {};
+      const user = o.user && typeof o.user === "object" ? o.user : {};
+      if (user.type === "Bot" && LATCH_AUTHOR_LOGINS.includes(user.login)) return true;
+      return TRUSTED_LATCH_ASSOC.has(String(o.author_association ?? ""));
+    };
+    const latches = comments.filter(wroteTheLatch);
+    sig.ciPagedLatch = latches.some((c) => (c.body || "").includes("<!-- agent-paged -->"));
+    sig.reviewPagedLatch = latches.some((c) => (c.body || "").includes("<!-- agent-review-paged -->"));
   } catch {
     complete = false; // the paged latch dominates deriveState — never guess it
   }

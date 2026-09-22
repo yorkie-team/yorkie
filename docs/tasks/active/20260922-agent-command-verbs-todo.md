@@ -1,4 +1,4 @@
-# Install the advisory half of the `@claude` command surface
+# Install the `@claude` command surface, in four phases
 
 **Created**: 2026-09-22
 
@@ -182,8 +182,42 @@ fire until the surface is enabled. Worth carrying upstream.
 - `set-state.mjs`'s label write is a read-then-PUT-whole-set, so two arms writing
   concurrently revert each other and delete any label a human added in between.
 
+### Round five added these
+
+- `review-surface.mjs` demotes on "committed after the freeze sha", not "written
+  by a fix round", so a human's own post-freeze commits stop gating the PR — a
+  `major` defect in 300 hand-written lines is laned `backlog` and the check goes
+  green.
+- `novelty.mjs`'s `samePath` matches any trailing segment, so a finding filed on
+  a bare `index.ts` adopts the line of a cited `src/legacy/index.ts:12`.
+  Reproduced. The blamed `file:line` pair was never claimed by anyone, and a
+  pre-base line there returns `relocated`, which demotes off the gate.
+- `review-round-guard.mjs` back-fills `output.text` for commits chosen by a
+  different rule than the stall detector consumes, so two `git merge main`
+  commits can spend the whole budget and convergence detection goes inert.
+- `command.mjs` has no blockquote or code-fence exclusion, so GitHub's "Quote
+  reply" on a comment containing `@claude rerun` re-fires it — and `rerun` moves
+  the `fixRoundsUsed` floor, granting a fresh round budget nobody asked for.
+- `rounds.mjs` reads its migration baseline off whichever record sorts oldest
+  now, so deleting one dispatch comment silently erases the pre-ledger history
+  and hands back rounds past the cap.
+- `agent-iterate-ci.yml` counts every red CI run the branch NAME ever produced,
+  unscoped to the PR or to opt-in time, so a human PR with prior failures is
+  paged before its first fix attempt.
+- `agent-fix.yml` never checks PR state: `@claude fix` on a merged or closed PR
+  whose branch still exists checks it out, edits it and pushes.
+- `agent-review-reply.yml` runs the agent on the untrusted tree without
+  stripping `.claude/` and `.mcp.json`, which both review jobs do with a
+  `# SECURITY:` comment.
+- `deferred-findings.mjs`, `loop-status.mjs` and `review-round-guard.mjs` ship
+  with no test file, 1,478 lines and 29 workflow invocations between them.
+
 ## Not in scope
 
-`@claude fix` on an **issue** (issue → PR, `agent-implement.yml`), the CI
-iteration workflow, the hunters, the debug reporter, and the eval rig. See the
-design document's Non-Goals.
+`@claude fix` on an **issue** (issue → PR, `agent-implement.yml`), the hunters,
+the debug reporter, and the eval rig. See the design document's Non-Goals.
+
+The CI iteration workflow WAS out of scope and is not any more: the panel's
+`promote`, `fix` and `stalled` jobs all delegate the red-CI branch to it, so
+leaving it out turned the most common failure event into a silent stall. It
+landed with the rest.

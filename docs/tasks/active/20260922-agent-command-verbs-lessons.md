@@ -164,3 +164,47 @@ was that the pin comes first and is unconditional.
 A guard written from the symptom passes as soon as the symptom is gone. Writing
 it from the property is what makes the next instance fail instead of the next
 reviewer.
+
+
+## The reviews found my fixes, not just my port
+
+By round three the findings stopped being "you translated this wrong" and became
+"the thing you added last round is wrong". Three fixes were themselves defects:
+a toolchain swap that deleted every `setup-node` in a 2,600-line workflow, a
+guard added to `rerun` "for symmetry" that dead-ended the one verb whose job is
+to rescue a stuck PR, and a CI gate that asked "is CI red?" — so a run still
+queued answered "clear", which is precisely the window the gate existed to
+cover.
+
+The pattern in all three: the fix was written from the symptom rather than from
+the property. Presence of a `setup-node` instead of "the pin comes first";
+symmetry between two branches instead of "what does the latch make true here";
+the absence of red instead of "is it known green". Each time, the version
+written from the property is the one a later round could not break.
+
+## Two reviewers disagree, and that is the argument for both
+
+CodeRabbit read the same diff and found two things four `/code-review` rounds
+had not — including a promotion gate that accepted the sentence "This PR was NOT
+authored autonomously with Claude". The lens panel found things CodeRabbit did
+not: forged latches, a fork PR that could push to the base repo, a credential
+pool materialised on an ineligible comment.
+
+That is the Phase 1 exit criterion arriving early and unasked-for. The two
+reviewers are not redundant, and the comparison the design document schedules
+for twenty PRs already has its first data point.
+
+## The line between fixing and recording
+
+Roughly thirty findings landed in vendored code this repository did not write.
+Fixing all of them would have made the next sync from upstream unaffordable;
+fixing none of them would have shipped a known-exploitable pipeline.
+
+The line drawn was: **a trust boundary gets fixed, a scoring defect gets
+recorded.** Anything a third party can reach from outside — a forged paged
+latch, an unauthenticated PR freeze, a token carrying more scope than its job
+needs — was closed here, because those fire the day the surface is enabled and
+no maintainer can be expected to audit for them. Provenance and demotion bugs
+that make the panel score badly were written down instead: they degrade a review
+rather than breach one, and they belong upstream where the rest of that logic
+lives.

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  LATCH_AUTHOR_LOGINS,
   STATES,
   LIFECYCLE_LABELS,
   labelFor,
@@ -10,6 +11,7 @@ import {
   isValidTransition,
   deriveState,
 } from "./set-state.mjs";
+import { PAGE_AUTHOR_LOGINS } from "./rounds.mjs";
 
 test("labelFor / stateFor: round-trip; non-lifecycle labels → null", () => {
   assert.equal(labelFor("reviewing"), "agent:reviewing");
@@ -117,4 +119,15 @@ test("reconcile guard: desired set differs from a drifted current → not skippe
   assert.ok(!sameLabelSet(current, desired)); // reconcile applies (collapses the stray)
   // once normalized, reconcile is a no-op
   assert.ok(sameLabelSet(desired, computeLabelSet(desired, "fixing")));
+});
+
+// --- who may latch a PR -------------------------------------------------------
+
+test("LATCH_AUTHOR_LOGINS matches the latch's own trusted authors exactly", () => {
+  // `reconcile` reads the paged markers to derive `agent:blocked`, and the latch
+  // dominates every other signal. A wider list here than rounds.mjs trusts would
+  // let a comment this module believes stamp a state the latch itself would have
+  // refused. The copy is literal because this module is a CLI that must stay
+  // importable on its own; this test is what keeps the two in step.
+  assert.deepEqual([...LATCH_AUTHOR_LOGINS], [...PAGE_AUTHOR_LOGINS]);
 });

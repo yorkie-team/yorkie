@@ -270,22 +270,26 @@ only the separate `docs.yml` link check.
 `make lint` plus `go test ./...`; the integration lane needs the docker-compose
 stack and is left to CI rather than run inside the fix job.
 
-#### 2.1 What Phase 1 actually ported
+#### 2.1 What the port actually carried
 
-The module set is the import closure of the two workflows' entry points, which
-is wider than the verbs themselves: `review-panel.mjs` imports `rounds.mjs` and
+All four phases landed on one branch, so the questions this section answered
+per-phase are answered once.
+
+The module set is the import closure of the workflows' entry points, which is
+wider than the verbs: `review-panel.mjs` imports `rounds.mjs` and
 `fix-report.mjs` directly, and the advisory panel reads the fix agent's reports
-so that its verdict matches the gating one's. Those modules ship unused rather
-than being cut out of a 3,400-line file, because surgery inside a ported module
-is what makes the next sync from upstream expensive. `fix-brief.mjs` is not
-here: nothing imports it and neither workflow invokes it.
+so that its verdict matches the gating one's. A module no verb reaches ships
+unused rather than being cut out of a 3,400-line file, because surgery inside a
+ported module is what makes the next sync from upstream expensive.
 
 Four guards in the ported suites assert that a module and a workflow carry the
-same literal. Their workflows arrive in Phases 2 and 3, so they skip rather than
-fail, through one helper (`workflow-presence.mjs`) that says why. Skipping is
-deliberate: the guards re-arm by themselves when the workflow lands, whereas
-deleting them would make Phase 2 a silent regression of checks written
-precisely because their failure mode is invisible.
+same literal. They skip when their workflow is absent, through one helper
+(`workflow-presence.mjs`) that says why — and with every phase installed, none
+of them skips today. The helper stays because `agent-implement.yml` (issue → PR)
+is still deferred, and because the arrangement is what makes adding a phase
+safe: a guard re-arms by itself when its workflow lands, whereas deleting it
+would make that day a silent regression of a check written precisely because its
+failure mode is invisible.
 
 ### 5. Where the scripts go
 
