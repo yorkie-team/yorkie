@@ -35,8 +35,6 @@ work here is porting plus the three repo-specific pieces named in §4.
 - **The review panel's internal design** — lenses, rounds, the paged latch,
   promotion. That is upstream's design and this document treats it as a
   dependency, not a subject.
-- **`@claude fix` on an issue** (issue → PR). A different axis: it originates
-  work rather than reviewing it. Deferred past every phase here.
 - **The hunters, the debug reporter, and the eval rig.** Separate subsystems
   that share only the script package.
 - **Replacing CodeRabbit.** Phase 1 exists partly to measure whether a second
@@ -216,11 +214,51 @@ finding is wrong.
   also fires on `pull_request_review_comment`, and it triggers on a mention
   with no verb at all, so its misfire surface is the widest of the set.
 
-#### Deferred — `@claude fix` on an issue
+#### Phase I — `@claude fix` on an issue (issue → PR)
 
-Issue → PR originates work rather than reviewing it, and it is the one verb
-whose output nobody asked for at the moment it is produced. Revisit after
-Phase 3 has run for a quarter.
+**This was a Non-Goal, deferred past every phase, and that was reversed on
+2026-09-22.** The section is kept rather than rewritten out, because the
+argument against it is still the argument to weigh, and a reader deciding
+whether to adopt this elsewhere needs both halves.
+
+The case for deferring: issue → PR originates work rather than reviewing it, so
+it sits on a different axis from every other verb here; it is the one verb whose
+output nobody asked for at the moment it is produced; and it is the first place
+a bot pushes commits and opens a pull request.
+
+The case for doing it now, which won: the phases as numbered deliver nothing a
+person can *look at* until Phase 3, and Phase 2's exit criteria cannot be met
+without a stream of agent-managed PRs to observe. Issue → PR produces those. The
+lettered name says it is off the numbered track, not that it replaces a phase.
+
+What the reversal actually costs, stated plainly: a PR this verb opens is
+reviewed by `@claude review` (advisory) and a human. The gating panel has not
+completed a real review yet, so the machinery that was supposed to grade
+agent-authored code is not yet grading it. That is the risk, and it is accepted
+on the strength of the two gates below rather than waved away.
+
+- **Lands:** `agent-implement.yml` — `route`, `implement`, `help`. The `help`
+  job is not incidental: today every verb on an issue is refused by the same
+  `github.event.issue.pull_request` gate, with no comment, so a maintainer who
+  types `@claude` on an issue gets a green tick and silence.
+- **Requires:** the GitHub App **plus `Administration: read`**, which no other
+  verb needs. The workflow refuses to run unless `main` requires at least one
+  human approving review, and reading that setting is what the permission buys.
+  It fails closed on every error including a permissions error — a repository
+  where the check cannot be answered is one where the bot does not push.
+- **Two gates, and they are the whole argument.** The PR opens as a **draft**,
+  and `main` is verified to require a human approval before anything is pushed.
+  Neither is a property of the agent; both are properties of the repository,
+  which is why they are checked at run time rather than asserted here.
+- **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
+  write-access check on top. An issue body is data, never instructions.
+- **Not ported:** nothing else from upstream's issue lane. The classifier comes
+  with it only because the PR ledger reads its output; its model call is moved
+  off the raw Messages API onto `ask.mjs`, since this repository authenticates
+  with `CLAUDE_CODE_OAUTH_TOKEN` and has no API key.
+- **Exit criteria:** three issues turned into PRs a maintainer merged without
+  rewriting the change, and one where the agent stopped and said it could not do
+  it rather than opening a PR that looks finished.
 
 ### 3. The kill switch
 
