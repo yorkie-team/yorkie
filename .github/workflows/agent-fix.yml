@@ -171,7 +171,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: '⏸️ `@claude fix` needs the `yorkie-agent` GitHub App, which is not configured on '
+              body: '⏸️ `@claude fix` needs the `yorkie-team-agent` GitHub App, which is not configured on '
                 + 'this repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It pushes a fix commit, and a `GITHUB_TOKEN` push does not re-trigger CI — so the round would land with nothing to review it.\n\n'
                 + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` '
                 + 'and push nothing. See `docs/design/agent-command-verbs.md`.',

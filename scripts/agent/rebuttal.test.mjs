@@ -94,7 +94,7 @@ test("a fixer claim cannot smuggle a live paged latch into the bot-authored rebu
   assert.ok(!body.includes(PAGED_LATCH), "review latch survived into the body");
   assert.ok(!body.includes(CI_PAGED_LATCH), "CI latch survived into the body");
   assert.equal(
-    isPagedLatchComment({ body, user: { type: "Bot", login: "yorkie-agent[bot]" } }),
+    isPagedLatchComment({ body, user: { type: "Bot", login: "yorkie-team-agent[bot]" } }),
     false,
   );
   // The prose still reads through — only the comment-open is ZWNJ-split — and
@@ -166,7 +166,7 @@ test("parseRebuttalComment: prose quoting the marker cannot smuggle a record", (
 });
 
 /** The fix agent's identity, as the REST comments endpoint reports it. */
-const AGENT = { login: "yorkie-agent[bot]", type: "Bot" };
+const AGENT = { login: "yorkie-team-agent[bot]", type: "Bot" };
 
 test("collectRebuttals: keeps provenance, skips everything unreadable", () => {
   const got = collectRebuttals([
@@ -191,18 +191,18 @@ test("collectRebuttals: only the fix agent may file one", () => {
   const accepted = (user) => collectRebuttals([{ id: 1, user, body }]).length;
 
   assert.equal(accepted(AGENT), 1);
-  assert.equal(accepted({ login: "app/yorkie-agent", type: "Bot" }), 1);
+  assert.equal(accepted({ login: "app/yorkie-team-agent", type: "Bot" }), 1);
 
   // A human — including a maintainer. Disputes are the fix agent's channel; a
   // person reviewing the PR has better ones.
   assert.equal(accepted({ login: "harrykim8672", type: "User" }), 0);
   // A user cannot escape by CLAIMING to be a bot: `type` is set by GitHub.
-  assert.equal(accepted({ login: "yorkie-agent[bot]", type: "User" }), 0);
+  assert.equal(accepted({ login: "yorkie-team-agent[bot]", type: "User" }), 0);
   // Another APP is not enough either — CodeRabbit reviews this very file, and a
   // comment quoting the marker format could otherwise parse as a record.
   assert.equal(accepted({ login: "coderabbitai[bot]", type: "Bot" }), 0);
   // Fails closed on an absent or malformed author.
-  for (const u of [undefined, null, {}, "yorkie-agent[bot]"]) assert.equal(accepted(u), 0);
+  for (const u of [undefined, null, {}, "yorkie-team-agent[bot]"]) assert.equal(accepted(u), 0);
 });
 
 test("fromRebuttalAuthor: both halves are load-bearing", () => {
@@ -431,7 +431,7 @@ test("readRebuttals: paginates, and degrades to [] rather than failing the panel
   let seen = null;
   const api = (argv) => {
     seen = argv;
-    return [{ id: 1, user: { login: "yorkie-agent[bot]", type: "Bot" }, body: serializeRebuttal(rebuttalFor()) }];
+    return [{ id: 1, user: { login: "yorkie-team-agent[bot]", type: "Bot" }, body: serializeRebuttal(rebuttalFor()) }];
   };
   assert.equal(readRebuttals(605, { api, log: () => {} }).length, 1);
   assert.ok(seen.includes("--paginate"), "a missed page silently means 'never disputed'");

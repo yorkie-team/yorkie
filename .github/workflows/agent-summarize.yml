@@ -110,7 +110,7 @@ jobs:
             // silently, with no comment and no red X to show for it. Trust is an
             // allow-listed bot login (GitHub reserves the `[bot]` suffix for
             // Apps) or a human with write-level association.
-            const THROTTLE_AUTHORS = ['github-actions[bot]', 'yorkie-agent[bot]'];
+            const THROTTLE_AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
             const TRUSTED_ASSOC = ['OWNER', 'MEMBER', 'COLLABORATOR'];
             const oursAndMarked = (c) => {
               if (!(c.body || '').includes(marker)) return false;

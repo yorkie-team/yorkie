@@ -53,7 +53,7 @@ export const MANAGED_LABELS = [...LIFECYCLE_LABELS, ...LEGACY_LIFECYCLE_LABELS];
  * of `rounds.mjs::PAGE_AUTHOR_LOGINS`, kept literal because this module is a CLI
  * that must stay importable on its own; `set-state.test.mjs` pins them equal.
  */
-export const LATCH_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-agent[bot]"]);
+export const LATCH_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-team-agent[bot]"]);
 
 /** "reviewing" → "agent:reviewing"; null for an unknown state. */
 export function labelFor(state) {

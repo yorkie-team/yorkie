@@ -537,7 +537,7 @@ test("each verb that needs the App answers the commenter when it is missing", ()
     assert.match(text, /id: app\b/, `${file}: no App-presence check`);
     assert.match(
       text,
-      /needs the `yorkie-agent` GitHub App/,
+      /needs the `yorkie-team-agent` GitHub App/,
       `${file}: must tell the commenter the App is missing, not just skip`,
     );
     // ...and it must come after the trust gate, so an account without write

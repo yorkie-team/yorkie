@@ -223,7 +223,7 @@ export function parseRebuttalComment(body) {
  * registered by an ordinary account, so the pair is unforgeable from outside.
  * Same shape as `PAGE_AUTHOR_LOGINS` in rounds.mjs, for the same reason.
  */
-export const REBUTTAL_AUTHOR_LOGINS = Object.freeze(["yorkie-agent[bot]", "app/yorkie-agent"]);
+export const REBUTTAL_AUTHOR_LOGINS = Object.freeze(["yorkie-team-agent[bot]", "app/yorkie-team-agent"]);
 
 /**
  * May this comment's author file a rebuttal at all?

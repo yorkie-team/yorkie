@@ -855,7 +855,7 @@ test("isOwnComment: a comment that merely QUOTES a marker is not ours", () => {
   // `<!-- agent-metrics-summary -->` while explaining the harness's comment
   // surfaces; `summarize` ran five seconds later and deleted the review. Nothing
   // failed — safeDeleteComment is best-effort — so the comment just vanished.
-  const bot = { login: "yorkie-agent[bot]", type: "Bot" };
+  const bot = { login: "yorkie-team-agent[bot]", type: "Bot" };
   const review = {
     user: bot,
     body: "<!-- agent-review:abc -->\n## Review\nThe doc enumerates every surface: "

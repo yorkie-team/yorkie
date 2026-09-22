@@ -119,7 +119,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: '⏸️ `@claude rerun` needs the `yorkie-agent` GitHub App, which is not configured on '
+              body: '⏸️ `@claude rerun` needs the `yorkie-team-agent` GitHub App, which is not configured on '
                 + 'this repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It re-engages a loop whose fix rounds push commits, and a `GITHUB_TOKEN` push does not re-trigger CI.\n\n'
                 + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` '
                 + 'and push nothing. See `docs/design/agent-command-verbs.md`.',
@@ -200,7 +200,7 @@ jobs:
             // deletion as a latch cleared. Mirrors `isPagedLatchComment`
             // (scripts/agent/rounds.mjs), which cannot be imported here: this
             // step runs before any checkout. Keep the two in step.
-            const PAGE_AUTHORS = ['github-actions[bot]', 'yorkie-agent[bot]'];
+            const PAGE_AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
             const TRUSTED_ASSOC = ['OWNER', 'MEMBER', 'COLLABORATOR'];
             const wroteTheLatch = (c) =>
               (c.user && c.user.type === 'Bot' && PAGE_AUTHORS.includes(c.user.login)) ||

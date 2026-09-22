@@ -106,7 +106,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: '⏸️ This verb needs the `yorkie-agent` GitHub App, which is not configured on this '
+              body: '⏸️ This verb needs the `yorkie-team-agent` GitHub App, which is not configured on this '
                 + 'repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It pushes commits, and a '
                 + '`GITHUB_TOKEN` push does not re-trigger CI — so the loop would stop without saying so.\n\n'
                 + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` and '
