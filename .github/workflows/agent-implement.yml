@@ -191,7 +191,21 @@ jobs:
             try {
               const { data } = await github.rest.repos.getBranchProtection({ owner, repo, branch: 'main' });
               const r = data.required_pull_request_reviews;
-              if (r && (r.required_approving_review_count || 0) >= 1) ok = true;
+              // `bypass_pull_request_allowances` is the classic equivalent of a
+              // ruleset's bypass actors: users, teams and APPS that may merge
+              // without the required approvals. Someone will eventually want the
+              // bot to self-merge and add it here, and a gate that only counted
+              // `required_approving_review_count` would keep reporting the human
+              // approval it no longer guarantees.
+              const allow = (r && r.bypass_pull_request_allowances) || {};
+              const bypassers =
+                (allow.users || []).length + (allow.teams || []).length + (allow.apps || []).length;
+              if (r && (r.required_approving_review_count || 0) >= 1 && bypassers === 0) ok = true;
+              else if (r && bypassers > 0) {
+                core.warning(
+                  `main requires a review but ${bypassers} actor(s) may bypass it; not counting it as protection.`,
+                );
+              }
             } catch (e) {
               // 404 only means "no classic protection" — a ruleset may still
               // protect main, and getBranchProtection 404s in that case. Any
@@ -231,10 +245,27 @@ jobs:
                   const { data: rs } = await github.request(
                     'GET /repos/{owner}/{repo}/rulesets/{id}', { owner, repo, id },
                   );
-                  if ((rs.bypass_actors || []).length === 0) { ok = true; break; }
+                  // ABSENCE IS NOT EMPTINESS, and reading it as emptiness
+                  // inverted this check. GitHub OMITS `bypass_actors` from the
+                  // payload when the caller is not allowed to see it — which is
+                  // the normal case for a repository-scoped token reading an
+                  // organization-sourced ruleset. `(rs.bypass_actors || [])`
+                  // then yields `[]`, and the ruleset most likely to exempt this
+                  // App is the one most likely to report itself unexempted.
+                  //
+                  // Two conditions, both required. The list must be PRESENT and
+                  // empty, and `current_user_can_bypass` — which is always in the
+                  // payload — must say this token can never bypass. Either alone
+                  // is satisfiable by a payload that simply told us less.
+                  const listVisible = Array.isArray(rs.bypass_actors);
+                  const noneListed = listVisible && rs.bypass_actors.length === 0;
+                  const cannotBypass = rs.current_user_can_bypass === 'never';
+                  const active = rs.enforcement === 'active';
+                  if (noneListed && cannotBypass && active) { ok = true; break; }
                   core.warning(
-                    `ruleset ${id} (${rs.name}) requires a review but lists ${rs.bypass_actors.length} ` +
-                    `bypass actor(s); not counting it as protection.`,
+                    `ruleset ${id} (${rs.name}) requires a review but is not counted as protection: ` +
+                    `bypass list ${listVisible ? `has ${rs.bypass_actors.length} actor(s)` : 'not visible to this token'}, ` +
+                    `current_user_can_bypass=${rs.current_user_can_bypass}, enforcement=${rs.enforcement}.`,
                   );
                 }
               } catch (e) {
@@ -254,7 +285,42 @@ jobs:
               );
             }
 
+      # RETRY IS THE DOCUMENTED PATH, AND IT COLLIDES. The concurrency group
+      # serializes two comments arriving together; it does nothing about a retry
+      # after the first run ended — which the reporter below actively invites.
+      # That second run branches from `main`, derives the same
+      # `agent/<issue>-<slug>`, and its `git push -u origin` is rejected
+      # non-fast-forward, at which point an agent holding an unrestricted `Bash`
+      # is one plausible idea away from forcing over work that is still open for
+      # review.
+      #
+      # The tail step already knows this query. Asking it BEFORE the agent runs
+      # costs one API call and turns a branch-clobbering race into a sentence.
+      - name: Refuse if this issue already has an agent PR
+        id: existing
+        if: steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue = context.payload.issue.number;
+            const { owner, repo } = context.repo;
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const open = prs.find((p) => (p.head?.ref || '').startsWith(`agent/${issue}-`));
+            if (!open) return;
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: issue,
+              body: `⏸️ #${open.number} is already open from this issue on \`${open.head.ref}\`. `
+                + 'A second run would branch from `main` and collide with it. Close or merge that PR first, '
+                + 'or comment `@claude fix` on the PR itself to continue the work there.',
+            });
+            core.setFailed(`an agent PR (#${open.number}) is already open for issue #${issue}`);
+
       - name: Acknowledge the issue
+        id: ack
         if: steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
         uses: actions/github-script@v7
         with:
@@ -345,8 +411,16 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
         run: |
           set -euo pipefail
+          # Validated HERE, in the first step that uses it, rather than in the
+          # prompt step further down — a check that runs after the value has
+          # already been used is documentation, not a check.
+          case "$ISSUE_NUMBER" in
+            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE_NUMBER'" >&2; exit 1 ;;
+          esac
+          # `// ""` because a null body renders as the literal string "null",
+          # which the agent would then read as the request.
           gh issue view "$ISSUE_NUMBER" --json number,title,body \
-            --jq '"# Issue #\(.number): \(.title)\n\n\(.body)"' > "$RUNNER_TEMP/issue.md"
+            --jq '"# Issue #\(.number): \(.title)\n\n\(.body // "")"' > "$RUNNER_TEMP/issue.md"
           echo "fetched $(wc -c < "$RUNNER_TEMP/issue.md") bytes"
 
       - name: Build the orchestration prompt
@@ -509,7 +583,7 @@ jobs:
       # run that ends without a PR is diagnosable. always(): upload even when the
       # agent step failed, which is exactly when it is wanted.
       - name: Upload agent execution log
-        if: always() && steps.stage.outcome == 'success'
+        if: always() && steps.app.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: claude-execution-output
@@ -546,15 +620,19 @@ jobs:
       # link); no PR → the dead-run comment, worded by whether the agent step
       # failed or merely ended; lookup FAILED → a comment saying the state could
       # not be determined, never a failure claim this run did not verify.
-      # `steps.stage.outcome`, not the App check. These steps read
-      # `$RUNNER_TEMP/agent-tools`, which the staging step creates — and staging
-      # is downstream of the protection gate. Keyed on the App alone, a run that
-      # the gate correctly refused still reached here, found no staged directory,
-      # and (worse) told the commenter the run "ended without opening a PR …
-      # comment `@claude fix` to retry" — a retry guaranteed to fail identically,
-      # for a repository-configuration reason the comment never mentioned.
+      # KEYED ON THE ACKNOWLEDGEMENT, not on staging, and the distinction is the
+      # whole point of this step. Once "🤖 On it" is on the issue, SOMETHING has
+      # to close it out — otherwise the thread claims a run is in progress
+      # forever. Keying this on the staged directory (which it does not read)
+      # made every failure between the ack and staging silent: a refused
+      # protection gate, a failed checkout, a failed `npm ci`.
+      #
+      # The previous round went the other way and told the commenter to retry
+      # after a gate refusal, which was guaranteed to fail identically. The fix
+      # for a comment that says the wrong thing is a comment that says the right
+      # thing, not no comment — so this now reports which of the three it was.
       - name: Report a run that ended without a PR
-        if: always() && steps.stage.outcome == 'success' && github.event_name == 'issue_comment'
+        if: always() && steps.ack.outcome == 'success' && github.event_name == 'issue_comment'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -563,7 +641,9 @@ jobs:
           script: |
             const issue = context.payload.issue.number;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const failed = '${{ steps.agent.outcome }}' === 'failure';
+            const agentOutcome = '${{ steps.agent.outcome }}';
+            const staged = '${{ steps.stage.outcome }}' === 'success';
+            const MARKER = '<!-- agent-implement-no-pr -->';
             let pr = null, lookupOk = true;
             try {
               const prs = await github.paginate(github.rest.pulls.list, {
@@ -574,15 +654,39 @@ jobs:
               lookupOk = false;
               core.warning(`could not list PRs to verify the kickoff outcome: ${e.message}`);
             }
-            if (lookupOk && pr) return;
-            const body = lookupOk
-              ? `<!-- agent-implement-no-pr -->\n🛑 The run started by this command ${failed ? 'failed' : 'ended'} without opening a PR — `
-                + `no open \`agent/${issue}-*\` branch has one. See the [run](${runUrl}) and its \`claude-execution-output\` artifact `
-                + `for the transcript. Comment \`@claude fix\` to retry.`
-              : `<!-- agent-implement-no-pr -->\n⚠️ The run started by this command has ended, but this step could not read the PR list `
-                + `to tell whether a PR was opened — check the issue's linked PRs and the [run](${runUrl}) before assuming it failed.`;
+            if (lookupOk && pr) return; // the normal flow posted the PR link
+            // Dedupe on the marker this step writes, and only on one the BOT
+            // wrote: the trust in a marker is its author, never its payload —
+            // otherwise anyone can suppress this by quoting it.
+            const mine = (c) => String(c.body ?? '').includes(MARKER)
+              && (c.user || {}).type === 'Bot';
+            try {
+              const prior = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, per_page: 100,
+              });
+              if (prior.some(mine)) return;
+            } catch (e) {
+              core.warning(`could not check for an existing report: ${e.message}`);
+            }
+            let why;
+            if (!lookupOk) {
+              why = '⚠️ This run has ended, but this step could not read the PR list to tell whether a PR was '
+                + `opened — check the issue's linked PRs and the [run](${runUrl}) before assuming it failed.`;
+            } else if (!staged) {
+              // Everything before staging: the protection gate refusing, the
+              // checkout, `npm ci`. Naming the most likely one matters, because
+              // retrying a configuration problem fails identically forever.
+              why = '🛑 This run stopped during setup, before any work began — most often because `main` is not '
+                + 'protected by a required human review, which this verb refuses to run without. '
+                + `See the [run](${runUrl}); retrying will not help until the setup step it failed on is fixed.`;
+            } else {
+              why = `🛑 This run ${agentOutcome === 'failure' ? 'failed' : 'ended'} without opening a PR — no open `
+                + `\`agent/${issue}-*\` branch has one. See the [run](${runUrl}) and its \`claude-execution-output\` `
+                + 'artifact for the transcript. Comment `@claude fix` to retry.';
+            }
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, body,
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issue,
+              body: `${MARKER}\n${why}`,
             });
 
   # EVERY `@claude` ON AN ISSUE THAT IS NOT `fix` ENDS HERE, not just a bare
@@ -641,14 +745,22 @@ jobs:
         with:
           retries: 3
           script: |
-            const MARKER = '<!-- agent-issue-help -->';
+            const typed = process.env.COMMAND;
+            // PER VERB, AND AUTHOR-CHECKED. One reply per issue ever meant a
+            // maintainer who typed `@claude review` (got help) and later
+            // `@claude summarize` got the green-tick silence this job exists to
+            // end — the same symptom, on the second mistake. And a bare payload
+            // test let ANY user pre-post the marker to suppress help on that
+            // issue permanently: the trust in a marker is its author, never its
+            // text, which is the rule the paged latch learned the hard way.
+            const MARKER = `<!-- agent-issue-help:${typed} -->`;
             const issue_number = context.payload.issue.number;
             const { owner, repo } = context.repo;
             const existing = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number, per_page: 100,
             });
-            if (existing.some((c) => String(c.body ?? '').includes(MARKER))) return;
-            const typed = process.env.COMMAND;
+            const mine = (c) => String(c.body ?? '').includes(MARKER) && (c.user || {}).type === 'Bot';
+            if (existing.some(mine)) return;
             const lead = typed === 'help'
               ? '👋 Did you mean **`@claude fix`**?'
               : `👋 \`@claude ${typed}\` works on a **pull request**, not on an issue.`;

@@ -17,8 +17,8 @@ none.
 
 `@claude fix` on an ISSUE (never a PR — the PR-side `fix` is a different verb in
 `agent-fix.yml`) dispatches an agent that plans, branches, implements, and opens
-a **draft** PR back to `main`. A bare `@claude` with no verb on an issue gets a
-`help` reply instead of silence.
+a **draft** PR back to `main`. Any `@claude` on an issue that is not `fix` — a bare
+mention and a PR-only verb alike — gets a `help` reply instead of silence.
 
 ## Scope
 

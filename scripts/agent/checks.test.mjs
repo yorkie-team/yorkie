@@ -1465,8 +1465,8 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
     // explains the distinction in a sentence containing the unnegated
     // expression, and reading that as a gate is the same mistake two earlier
     // guards here made — a check matching its own explanation.
-    const code = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
-    const mentions = code.match(/!?github\.event\.issue\.pull_request/g) ?? [];
+    const wfCode = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
+    const mentions = wfCode.match(/!?github\.event\.issue\.pull_request/g) ?? [];
     const issueOnly = mentions.length > 0 && mentions.every((m) => m.startsWith("!"));
     const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
     const inherited = lines.slice(0, jobsAt < 0 ? lines.length : jobsAt).some((l) => GRANTS.test(l));
@@ -1483,11 +1483,12 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
       const id = lines[starts[s]].trim().replace(":", "");
       const own = code.some((l) => /^ {4}permissions:\s*$/.test(l));
       const granted = code.some((l) => GRANTS.test(l)) || (!own && inherited);
-      // Scoped to the JOB, not the file. An issue-only workflow may still
-      // contain a job that legitimately holds the grant — `implement` does —
-      // and exempting the whole file would stop guarding that job forever. Only
-      // a job WITHOUT the grant is excused, and only where the resource really
-      // is an issue.
+      // The exemption is FILE-scoped, because the thing that decides the
+      // resource — the trigger predicate — is file-scoped too. Stating that
+      // plainly rather than claiming job scope the code does not have: a job
+      // added to an issue-only workflow that somehow comments on a PR
+      // conversation would be excused here, and the guard against that is the
+      // trigger, not this test.
       if (!granted && !issueOnly) offenders.push(`${file}:${id}`);
     }
   }
