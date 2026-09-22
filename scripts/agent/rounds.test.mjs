@@ -388,13 +388,13 @@ test("rerunPointFrom: a maintainer's @claude rerun moves the floor", () => {
 test("isRerunCommand: A BOT CAN NEVER RESET ITS OWN BOUND", () => {
   // The reason this reads the maintainer's COMMAND and not the workflow's result
   // marker. agent-rerun.yml posts with the App token, so the trusted identity would
-  // be yorkie-agent[bot] — the same identity the fixer and implementer post their
+  // be yorkie-team-agent[bot] — the same identity the fixer and implementer post their
   // own free-form comments under (the self-review comment on every agent PR). A
   // marker keyed on bot login let the party bounded by MAX_REVIEW_ROUNDS grant
   // itself unlimited attempts, by accident or by injection from the diff it reads.
   //
   // Structural, not a secret: no App can present as a non-Bot.
-  for (const login of ["yorkie-agent[bot]", "github-actions[bot]", "coderabbitai[bot]"]) {
+  for (const login of ["yorkie-team-agent[bot]", "github-actions[bot]", "coderabbitai[bot]"]) {
     for (const assoc of ["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"]) {
       assert.equal(
         isRerunCommand(human("@claude rerun", { user: { login, type: "Bot" }, author_association: assoc })),
@@ -403,7 +403,7 @@ test("isRerunCommand: A BOT CAN NEVER RESET ITS OWN BOUND", () => {
       );
     }
   }
-  assert.equal(rerunPointFrom([human("@claude rerun", { user: { login: "yorkie-agent[bot]", type: "Bot" } })]), null);
+  assert.equal(rerunPointFrom([human("@claude rerun", { user: { login: "yorkie-team-agent[bot]", type: "Bot" } })]), null);
 });
 
 test("isRerunCommand: a stranger cannot reset it either; junk never throws", () => {
@@ -609,7 +609,7 @@ test("a BOT is refused before any permission lookup", () => {
   // bound; a resolver must never be able to override it.
   let asked = 0;
   const c = {
-    user: { login: "yorkie-agent[bot]", type: "Bot" },
+    user: { login: "yorkie-team-agent[bot]", type: "Bot" },
     author_association: "OWNER",
     body: "@claude rerun",
     created_at: "2026-08-06T00:00:00Z",
@@ -689,11 +689,11 @@ test("an unknown round or cap degrades to a bare line, never 'undefined'", () =>
 });
 
 test("the fixer's OWN identity cannot write a dispatch record", () => {
-  // THE point of the narrower author gate. `yorkie-agent[bot]` is a trusted
+  // THE point of the narrower author gate. `yorkie-team-agent[bot]` is a trusted
   // paged-latch author AND the App identity the fix agent posts under, so
   // accepting it would let the party bounded by MAX_REVIEW_ROUNDS plant the
   // record that decides which counting rule applies to it.
-  const fixerAuthored = dispatch({ user: { login: "yorkie-agent[bot]", type: "Bot" } });
+  const fixerAuthored = dispatch({ user: { login: "yorkie-team-agent[bot]", type: "Bot" } });
   assert.equal(parseFixDispatchComment(fixerAuthored), null);
 });
 

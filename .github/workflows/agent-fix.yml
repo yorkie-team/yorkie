@@ -140,9 +140,54 @@ jobs:
           ref: main
           persist-credentials: false
 
+      # THE APP MAY NOT EXIST YET, and one repository variable turns every verb
+      # on at once. `review` and `summarize` need no App — they post with
+      # GITHUB_TOKEN — so a repository can enable those while the App is still
+      # being set up. This verb cannot: without the secrets the mint below fails,
+      # producing a red X in Actions and NOTHING in the PR thread, so the person
+      # who typed the verb sees no answer at all.
+      #
+      # `secrets` is not available in a job-level `if:`, so the check is a step
+      # that publishes an output the rest of the job reads. After the trust gate,
+      # so an account without write access cannot make the bot post.
+      - name: Is the GitHub App configured?
+        id: app
+        env:
+          APP_ID: ${{ secrets.AGENT_APP_ID }}
+          APP_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+        run: |
+          # Both halves, because `create-github-app-token` needs both and a
+          # half-registered pair is a real state: the two secrets are set in two
+          # separate operations, and the private key is the half that gets
+          # rotated. Testing only the id would report "configured" for a
+          # repository that cannot mint a token — the failure then lands in the
+          # mint step, past every arm that exists to answer the commenter.
+          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AGENT_APP_ID or AGENT_APP_PRIVATE_KEY is unset; @claude fix needs the GitHub App."
+          fi
+
+      - name: Say so, and stop
+        if: steps.app.outputs.configured != 'true'
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: '⏸️ `@claude fix` needs the `yorkie-team-agent` GitHub App, which is not configured on '
+                + 'this repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It pushes a fix commit, and a `GITHUB_TOKEN` push does not re-trigger CI — so the round would land with nothing to review it.\n\n'
+                + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` '
+                + 'and push nothing. See `docs/design/agent-command-verbs.md`.',
+            });
+
       # Human-facing comments go through the App token so the reply comes from the
       # agent rather than github-actions[bot], matching every other verb.
       - name: Generate GitHub App token
+        if: steps.app.outputs.configured == 'true'
         id: app-token
         # Pinned to an immutable commit SHA (not the movable @v1 tag) for
         # supply-chain safety — this action handles the App private key.
@@ -158,6 +203,7 @@ jobs:
           permission-issues: write # PR conversation comments use the issues API
 
       - name: Post running placeholder
+        if: steps.app.outputs.configured == 'true'
         id: placeholder
         uses: actions/github-script@v7
         with:
@@ -176,6 +222,7 @@ jobs:
       # script header. Exits 0 whether eligible or not; only a broken invocation
       # reds this step.
       - name: Check fix eligibility
+        if: steps.app.outputs.configured == 'true'
         id: eligible
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -281,8 +328,14 @@ jobs:
       # failure this step exists to prevent — so the CI gate added above has to
       # be listed here too, not only where it stops the work.
       - name: Explain the refusal
+        # `configured == 'true'` is part of the condition, not an oversight: with
+        # no App this step's `github-token` is the empty string, and
+        # actions/github-script builds Octokit before the script body runs — so
+        # it throws rather than reaching the guard below, turning a clean refusal
+        # into a red job. The "Say so, and stop" step above has already answered
+        # the commenter in that case.
         if: >-
-          always() &&
+          always() && steps.app.outputs.configured == 'true' &&
           (steps.eligible.outputs.eligible != 'true' ||
            steps.ci-clear.outputs.clear != 'true')
         uses: actions/github-script@v7

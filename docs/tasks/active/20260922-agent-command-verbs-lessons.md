@@ -208,3 +208,62 @@ no maintainer can be expected to audit for them. Provenance and demotion bugs
 that make the panel score badly were written down instead: they degrade a review
 rather than breach one, and they belong upstream where the rest of that logic
 lives.
+
+## The switch had two credential regimes, and only one was designed
+
+`AGENT_PIPELINE_ENABLED` was built as *the* switch: unset, nothing runs. That
+is true and it was tested. What no round asked was what the repository looks
+like *between* the two states — the switch on, the App not yet created. It is
+not a hypothetical window; it is the only order the setup can happen in, since
+enabling the advisory verbs (`review`, `summarize`, which post with
+`GITHUB_TOKEN` and need no App) is what makes it worth creating the App at all.
+
+In that window every App-backed verb went straight to the token mint, which
+fails the *step*, not the job. So the designed behaviour — "off means inert" —
+became "on before the App exists means a red X on a contributor's PR with a
+token error in it", and for the panel it was worse: a failed `promote` job made
+`stalled` page a human and write `agent:blocked` on a clean PR. An absent
+credential reported as the loop giving up.
+
+The general form: a feature flag with one name and two underlying capabilities
+has a partial state, and the partial state is not optional — it is the
+migration path. Design the flag for the intermediate configuration, not just
+for on and off.
+
+## A trust list can be wrong in a way that reads as a name
+
+The ported modules trusted `yorkie-agent[bot]`, and five review rounds plus
+CodeRabbit read past it. It looks like configuration; it is actually the whole
+authority model. That App belongs to the **wafflebase** organization — the
+pipeline this code was vendored from — so this repository was configured to let
+another organization's bot write paged latches, review ledgers and state
+comments that gate merges here.
+
+Nothing about the string announces that. The author gates added in rounds four
+and five were reasoned about carefully, in the abstract ("trust is the comment
+author, never the payload"), while the concrete list of who that author *is*
+travelled in from outside unexamined. When vendoring, the values inside a
+security check deserve the same read as the check — a correct predicate over a
+foreign allow-list is not a control.
+
+## A late guard gates the steps you were looking at
+
+CodeRabbit's three findings this round were one defect in three places: the
+App-presence check asked the right question and then stopped short of the thing
+it protected. Most instructive was `agent-iterate-ci`, where the mint and the
+checkout were gated and the *attempts guard* was not — and the attempts guard
+is the step that decides everything, so the arm that had just announced it was
+standing down could still write the terminal paged latch and `agent:blocked` on
+a PR.
+
+The existing test did not catch it, and the reason is the frame: it asserted
+that every consumer of `steps.app-token.outputs.token` is conditional. Follow
+the token, find the steps. But the attempts guard consumes no token — it
+consumes nothing and *produces* the decision. A guard's blast radius is not the
+set of steps that use the credential; it is the set of steps whose outcome
+changes. Those overlap, and the difference is exactly where this hid.
+
+Its half-registered sibling has the same shape one level down: the check read
+`AGENT_APP_ID` and not `AGENT_APP_PRIVATE_KEY`, so the guard was answering "was
+this configured?" with a test for "was the first of two secrets set?" — and the
+key is the half that gets rotated.

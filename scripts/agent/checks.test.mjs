@@ -478,6 +478,77 @@ test("the `fix` verb reaches exactly one workflow: issues -> implement, PRs -> f
   }
 });
 
+test("nothing runs on an App token without first checking the App exists", () => {
+  // ONE SWITCH, TWO CREDENTIAL REGIMES. `AGENT_PIPELINE_ENABLED` turns every
+  // workflow here on at once, but `review` and `summarize` post with
+  // GITHUB_TOKEN and need no App — so a repository legitimately runs those
+  // while `AGENT_APP_ID` is still unset.
+  //
+  // In that state an unguarded mint FAILS, and the failure is not contained:
+  // `agent-loop`/`agent-rerun` die at their second step, leaving a red X in
+  // Actions and nothing in the PR thread for the person who typed the verb;
+  // and the panel's `promote` job failing makes `stalled` page a human and
+  // write the terminal `agent:blocked` latch on an otherwise clean PR. An
+  // absent credential would be reported as the loop giving up.
+  //
+  // So every step that consumes an App token must be conditional on something —
+  // usually the `app.outputs.configured` check, sometimes an eligibility or
+  // placeholder gate that already implies it. The assertion is deliberately
+  // "has a condition", not "has THIS condition": the shapes differ per
+  // workflow, and what must never exist is an unconditional consumer.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    // Walk steps: a step starts at `      - ` and runs to the next one.
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^ {6}- /.test(lines[i])) continue;
+      let end = i + 1;
+      while (end < lines.length && !/^ {6}- /.test(lines[end]) && !/^ {2}\S/.test(lines[end])) end++;
+      const step = lines.slice(i, end);
+      const code = step.filter((l) => !/^\s*#/.test(l));
+      if (!code.some((l) => l.includes("steps.app-token.outputs.token"))) continue;
+      checked++;
+      if (!code.some((l) => /^\s+if:/.test(l))) {
+        offenders.push(`${file}:${i + 1} ${step[0].trim()}`);
+      }
+    }
+  }
+
+  assert.ok(checked > 0, "no App-token consumer found — this guard would be vacuous");
+  assert.deepEqual(
+    offenders,
+    [],
+    `these steps consume an App token unconditionally:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("each verb that needs the App answers the commenter when it is missing", () => {
+  // The guard above stops the job dying; this one stops it dying SILENTLY. A
+  // verb typed by a maintainer must produce a comment either way — a skipped
+  // job with a green tick reads as "handled" for a request nothing acted on.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  for (const file of ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"]) {
+    const text = readFileSync(path.join(dir, file), "utf8");
+    assert.match(text, /id: app\b/, `${file}: no App-presence check`);
+    assert.match(
+      text,
+      /needs the `yorkie-team-agent` GitHub App/,
+      `${file}: must tell the commenter the App is missing, not just skip`,
+    );
+    // ...and it must come after the trust gate, so an account without write
+    // access cannot make the bot post.
+    assert.ok(
+      text.indexOf("getCollaboratorPermissionLevel") < text.indexOf("id: app\n"),
+      `${file}: the App check must follow the permission check`,
+    );
+  }
+});
+
 test("every App-token mint is pinned and narrowed, and none can push workflows", () => {
   // THE GUARANTEE THIS ENFORCES IS ONE THE PIPELINE PRINTS TO USERS.
   // agent-fix.yml's refusal message tells a contributor the token is minted
@@ -1242,4 +1313,117 @@ test("agent-rerun / agent-loop mirror ciRunToRerun + ciRunToAwait inline, and th
       `${file}: the job wall (${Math.max(...walls)}m) must exceed the ${waitMinutes}m wait`,
     );
   }
+});
+
+test("the App-presence check tests BOTH secrets, not just the id", () => {
+  // `create-github-app-token` needs an id AND a private key, and the two are
+  // registered in two separate operations — the key being the half that gets
+  // rotated. A check that reads only the id therefore reports "configured" for
+  // a repository that cannot mint a token, and the failure surfaces in the mint
+  // step: past the commenter-facing arm, past the stand-down, as a red job with
+  // a token error in it. That is precisely the outcome the check was added to
+  // prevent, moved one step later.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  let checks = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (!/^\s+id: app$/.test(lines[i])) continue;
+      let end = i + 1;
+      while (end < lines.length && !/^ {6}- /.test(lines[end])) end++;
+      const step = lines.slice(i, end).filter((l) => !/^\s*#/.test(l)).join("\n");
+      checks++;
+      assert.match(step, /AGENT_APP_ID/, `${file}: the check does not read AGENT_APP_ID`);
+      assert.match(step, /AGENT_APP_PRIVATE_KEY/, `${file}: the check ignores AGENT_APP_PRIVATE_KEY`);
+      assert.match(
+        step,
+        /\[ -n "\$APP_ID" \] && \[ -n "\$APP_KEY" \]/,
+        `${file}: both secrets must be REQUIRED, not merely read`,
+      );
+    }
+  }
+  assert.ok(checks >= 5, `expected an App-presence check per App-backed verb, found ${checks}`);
+});
+
+test("no shell step hides a command substitution inside a double-quoted echo", () => {
+  // Backticks are markdown in a `github-script` body and COMMAND SUBSTITUTION in
+  // a `run:` block. Two notice lines carried `@claude fix` / `@claude rerun` in
+  // backticks inside double quotes, so the runner tried to execute them: the
+  // annotation rendered with a hole where the verb should be, stderr carried a
+  // "command not found", and the step still exited 0 — a message about a
+  // misconfiguration, itself quietly malformed. The rule is mechanical, so pin
+  // it mechanically rather than trusting the next author to remember which
+  // quoting regime a given block is in.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const offenders = [];
+
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    let inRun = false;
+    let runIndent = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(\s*)(?:-\s+)?run: \|/.exec(lines[i]);
+      if (m) {
+        inRun = true;
+        runIndent = m[1].length;
+        continue;
+      }
+      if (!inRun) continue;
+      if (lines[i].trim() !== "" && (lines[i].length - lines[i].trimStart().length) <= runIndent) {
+        inRun = false;
+        continue;
+      }
+      if (/^\s*#/.test(lines[i])) continue;
+      // Walk the line tracking quote state. Only an UNESCAPED backtick inside
+      // double quotes substitutes: `\\`` is a literal backtick (the workflows
+      // use it deliberately, to put markdown code spans in comment bodies built
+      // by shell), and a backtick inside '…' is literal too.
+      let dq = false;
+      let sq = false;
+      for (let c = 0; c < lines[i].length; c++) {
+        const ch = lines[i][c];
+        if (ch === "\\" && dq) {
+          c++;
+          continue;
+        }
+        if (ch === "'" && !dq) sq = !sq;
+        else if (ch === '"' && !sq) dq = !dq;
+        else if (ch === "`" && dq && !sq) {
+          offenders.push(`${file}:${i + 1} ${lines[i].trim()}`);
+          break;
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], `backticks inside a double-quoted shell string:\n  ${offenders.join("\n  ")}`);
+});
+
+test("the CI-fix arm's attempts guard cannot run without the App", () => {
+  // THE STAND-DOWN WAS ONLY TWO STEPS DEEP. `agent-iterate-ci` is
+  // `workflow_run`-triggered, so it has no commenter to answer and skips
+  // silently by design — but only the token mint and the checkout were gated.
+  // The attempts guard ran regardless, and it is the step that decides
+  // everything: below the limit it set `proceed=true` and the entire fixing arm
+  // ran against a workspace that was never checked out; at the limit it wrote
+  // the PAGED LATCH and `agent:blocked` — terminal, human-only state — onto a PR
+  // whose run had just announced it was standing down. Gating the guard leaves
+  // every `steps.guard.outputs.*` empty, so the arm really does nothing.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const text = readFileSync(path.join(HERE, "..", "..", ".github", "workflows", "agent-iterate-ci.yml"), "utf8");
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => /^\s+id: guard$/.test(l));
+  assert.ok(at > 0, "no `id: guard` step in agent-iterate-ci.yml");
+
+  let end = at + 1;
+  while (end < lines.length && !/^ {6}- /.test(lines[end])) end++;
+  const step = lines.slice(at, end).filter((l) => !/^\s*#/.test(l)).join("\n");
+  assert.match(
+    step,
+    /if: steps\.app\.outputs\.configured == 'true'/,
+    "the attempts guard must be gated on the App-presence check",
+  );
 });

@@ -1111,7 +1111,7 @@ function cmdEffort(args) {
  * `rounds.mjs`-adjacent reader that must stay importable on its own, and
  * `metrics.test.mjs` pins the two lists equal.
  */
-export const LEDGER_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-agent[bot]"]);
+export const LEDGER_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-team-agent[bot]"]);
 
 function cmdSummarize(args) {
   const pr = args.pr;

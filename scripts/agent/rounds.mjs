@@ -43,12 +43,12 @@ export const PAGED_LATCH = "<!-- agent-review-paged -->";
 /**
  * Bot identities allowed to WRITE the latch. Both are real: the guard and the
  * `stalled` job comment with `secrets.GITHUB_TOKEN` (`github-actions[bot]`),
- * while the fix job's branch-head page uses the App token (`yorkie-agent[bot]`).
+ * while the fix job's branch-head page uses the App token (`yorkie-team-agent[bot]`).
  *
  * A login allow-list is sound because GitHub reserves the `[bot]` suffix for
  * Apps — no account can register one of these names.
  */
-export const PAGE_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-agent[bot]"]);
+export const PAGE_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-team-agent[bot]"]);
 
 /**
  * Associations that mean "a human attached to this project", NOT "has write
@@ -94,7 +94,7 @@ export function isPagedLatchComment(comment) {
  *
  * The first version keyed on a hidden marker in the workflow's result comment,
  * trusted by bot login. But `agent-rerun.yml` posts with the App token, so the
- * trusted identity is `yorkie-agent[bot]` — the SAME identity the fixer and
+ * trusted identity is `yorkie-team-agent[bot]` — the SAME identity the fixer and
  * implementer post their own free-form comments under (the self-review comment on
  * every agent PR is one). That made the party bounded by `MAX_REVIEW_ROUNDS` able
  * to reset its own bound by opening a comment with the marker line: an LLM reading
@@ -284,7 +284,7 @@ export function countFailedReviewRounds(commits, requiredCheckNames, opts = {}) 
 //
 //   - `github-actions[bot]` ONLY — the guard's `secrets.GITHUB_TOKEN` identity.
 //     GitHub reserves the `[bot]` suffix for Apps, so no account can register it.
-//   - NOT `yorkie-agent[bot]`, even though it is a trusted latch author: that is
+//   - NOT `yorkie-team-agent[bot]`, even though it is a trusted latch author: that is
 //     the FIXER's own identity (the App token it holds to push and comment), and
 //     the party bounded by `MAX_REVIEW_ROUNDS` must not be able to choose the
 //     rule it is counted by. This is the same class of hole `rerunPointFrom`

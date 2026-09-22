@@ -3722,7 +3722,7 @@ test("author records in the CHECK-RUN vocabulary produce ONE uphold, not two", a
   );
   const reports = collectFixReports([{
     id: 1,
-    user: { login: "yorkie-agent[bot]", type: "Bot" },
+    user: { login: "yorkie-team-agent[bot]", type: "Bot" },
     body: serializeFixReport({ head: "abc1234", skipped: [{ ...named, note: "not changed" }] }),
   }]);
   const split = authorClaims(reports, [reb]);
