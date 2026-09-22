@@ -352,6 +352,28 @@ console.log(`Ready-gate report for PR #${prNumber} (${pr.url})`);
 for (const g of gates) {
   console.log(`  ${g.ok ? "✅" : "❌"} ${g.name}`);
 }
+
+// THE ONE GATE A HUMAN AUTHOR HITS BY DEFAULT, so it says what to do about it.
+//
+// Issue → PR is not installed in this repository, so the PRs that reach this
+// gate are human-authored ones that opted into the loop with `@claude loop` —
+// and their bodies come from .github/PULL_REQUEST_TEMPLATE.md, which says
+// nothing about AI authorship. Left as a bare ❌ the report reads as a broken
+// pipeline on every such PR, which is how a report stops being read.
+//
+// It still refuses, and the question it asks is still the right one: once the
+// fix agent has pushed to a branch, the PR carries code an agent wrote, and the
+// human being handed it should be told so before they review it rather than
+// after.
+if (!disclosure) {
+  console.error(
+    "\nThe PR body must disclose autonomous AI authorship before this promotes it.\n" +
+      "Add a line such as:\n" +
+      "  This PR was worked on autonomously by Claude Code.\n" +
+      "The predicate is in scripts/agent/disclosure.mjs. Promoting by hand is\n" +
+      "always available and is the right answer for a PR no agent has pushed to.",
+  );
+}
 if (!reviewApproved) {
   for (const c of REQUIRED_CHECKS) console.log(`      ${perCheck[c] ? "✅" : "❌"} ${c}`);
 }
