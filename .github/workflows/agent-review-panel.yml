@@ -2466,7 +2466,25 @@ jobs:
       # runs as a spent fix round, so marking a superseded round `failure` charged
       # the budget for a review that never ran. #695 paged after one real fix
       # attempt partly on the strength of one of these.
+      # THIS STEP IS WHY THE WHOLE WORKFLOW NEVER RAN. `cancelled()` is legal
+      # only in `jobs.<id>.if` and `jobs.<id>.steps.if`; naming it anywhere else
+      # — here, it was an `env:` value one step down — is not a step-level error
+      # that shows up when the step runs. GitHub rejects the FILE at load time,
+      # so every push produced a nameless, job-less failed run and this panel had
+      # not executed a single time since it was vendored. A step condition is the
+      # one place the answer is available, so that is where it is asked.
+      - name: Was the run itself cancelled?
+        id: wf
+        if: cancelled()
+        run: echo "cancelled=true" >> "$GITHUB_OUTPUT"
+
+      # `if: always()`, and it is not decoration. A cancelled run skips steps
+      # whose condition is the default `success()` — which is every step here —
+      # so the job would start (its own `if:` is `always()`) and then close
+      # nothing in the single case it was written for: the supersede. The two
+      # conditions have to agree or the superseded branch below is unreachable.
       - name: Close stuck in-progress lens checks
+        if: always()
         continue-on-error: true
         uses: actions/github-script@v7
         env:
@@ -2480,8 +2498,10 @@ jobs:
           #
           # `cancelled()` is the workflow-level question, and it is exactly the
           # one that separates them: the concurrency group cancelling this run
-          # makes it true, a job hitting its own wall leaves it false.
-          WORKFLOW_CANCELLED: ${{ cancelled() }}
+          # makes it true, a job hitting its own wall leaves it false. It is
+          # read from the step above, because GitHub allows the function ONLY in
+          # an `if:` — see that step.
+          WORKFLOW_CANCELLED: ${{ steps.wf.outputs.cancelled }}
         with:
           retries: 3
           script: |
