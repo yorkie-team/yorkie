@@ -167,13 +167,60 @@ jobs:
           path: /tmp/agent-sdk-node-modules.tgz
           retention-days: 1
 
+  # THE THROTTLE HAS TO BE RELEASABLE BY SOMETHING THAT ALWAYS RUNS.
+  #
+  # `authorize` posts the "running…" placeholder carrying the throttle marker
+  # BEFORE the work, and the gate treats any comment holding that marker as
+  # "already reviewed on this commit". The `review` job below edits it on every
+  # path it reaches — but it does not always reach one: it declares
+  # `environment: agent`, so a rejected or expired approval means the job never
+  # starts at all, and nothing edits the placeholder. Every later
+  # `@claude review` on that commit is then swallowed silently: no comment, no
+  # red X, nothing in the PR to explain it.
+  #
+  # This job is the release valve. It runs only when `review` did NOT succeed
+  # and did NOT fail — i.e. it was skipped or cancelled, the two shapes that
+  # leave the placeholder untouched — and rewrites it without the marker.
+  release-throttle:
+    needs: [authorize, review]
+    if: >-
+      always() && needs.authorize.outputs.proceed == 'true' &&
+      needs.review.result != 'success' && needs.review.result != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Release the review throttle
+        uses: actions/github-script@v7
+        env:
+          COMMENT_ID: ${{ needs.authorize.outputs.comment_id }}
+          REVIEW_RESULT: ${{ needs.review.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          retries: 3
+          script: |
+            if (!process.env.COMMENT_ID) return;
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: Number(process.env.COMMENT_ID),
+              body: `🛑 The review panel never started (\`${process.env.REVIEW_RESULT}\`) — most often a declined or expired \`agent\` environment approval. `
+                + `Comment \`@claude review\` to try again on this commit. [Workflow run](${process.env.RUN_URL})`,
+            });
+
   review:
     needs: [route, authorize, deps]
-    # always() so that if `deps` fails AFTER authorize posted the placeholder, this
-    # job still runs and the final (always()) step edits the placeholder into a
-    # fail-closed note instead of stranding a "running…" comment. The proceed gate
-    # still keeps it inert for unauthorized/throttled/non-review comments.
-    if: always() && needs.authorize.outputs.proceed == 'true'
+    # `!cancelled()` rather than `always()`. The intent is to survive a `deps`
+    # FAILURE after authorize posted the placeholder — so the final step can edit
+    # that "running…" comment into a fail-closed note instead of stranding it —
+    # and `!cancelled()` keeps all of that. What it does not keep is running
+    # after the whole run was cancelled, where `always()` would still start this
+    # job, request the `agent` environment, and burn a 45-minute panel plus a
+    # pool credential on a round nobody is waiting for. The proceed gate still
+    # keeps it inert for unauthorized/throttled/non-review comments.
+    if: >-
+      !cancelled() && needs.authorize.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # The CLAUDE_CODE_OAUTH_TOKEN lives in the protected `agent` environment. A

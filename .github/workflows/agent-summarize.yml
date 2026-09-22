@@ -240,7 +240,13 @@ jobs:
               : github.rest.issues.createComment({ owner, repo, issue_number: Number(process.env.PR), body });
             let summary = '';
             try { summary = fs.readFileSync('/tmp/summary.md', 'utf8').trim(); } catch {}
+            // NO MARKER on the failure path. The marker IS the throttle: the
+            // gate treats any comment carrying it as "already summarized", so
+            // re-emitting it after a usage-limit hit or a timeout silently kills
+            // every later `@claude summarize` on this commit — no comment, no
+            // red X. agent-review-on-demand.yml drops it on its fail-closed path
+            // for the same reason.
             const body = summary
               ? `${marker}\n${summary}`
-              : `${marker}\n🛑 No summary was produced — see the workflow run log.`;
+              : '🛑 No summary was produced — see the workflow run log. Comment `@claude summarize` to try again on this commit.';
             await publish(body);

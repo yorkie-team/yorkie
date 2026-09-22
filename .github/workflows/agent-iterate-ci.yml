@@ -117,10 +117,20 @@ jobs:
       # (GITHUB_TOKEN pushes do not).
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        # Pinned to an immutable commit SHA (not the movable @v1 tag) for
+        # supply-chain safety — this action handles the App private key.
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          # Least privilege: only what the steps below need, rather than the App
+          # installation's full permission set — this token is live in a job that
+          # later checks out and executes untrusted branch code. Notably absent:
+          # `workflows`, which is what makes "a fix agent can never rewrite the
+          # lanes that grade it" true rather than aspirational.
+          permission-contents: write # push the fix commit
+          permission-pull-requests: write # reply in the PR thread
+          permission-issues: write # PR conversation comments use the issues API
 
       - uses: actions/checkout@v4
         with:
@@ -322,10 +332,15 @@ jobs:
             DIAG="No failed-step log could be read for run $RUN_ID. Re-run the failing
           lane locally: \`make lint\`, \`make build\`, then \`go test ./...\`."
           fi
+          # A RANDOM DELIMITER, because $DIAG is a build log and a test that
+          # prints the delimiter would close the block early: the runner then
+          # rejects the whole write with "Invalid format", continue-on-error
+          # swallows it, and the fixer is dispatched with an empty diagnosis.
+          EOF_MARK="HARNESS_EOF_$(openssl rand -hex 8 2>/dev/null || date +%s%N)"
           {
-            echo "summary<<HARNESS_EOF"
+            echo "summary<<$EOF_MARK"
             printf '%s\n' "$DIAG"
-            echo "HARNESS_EOF"
+            echo "$EOF_MARK"
           } >> "$GITHUB_OUTPUT"
           printf '%s\n' "$DIAG" >> "$GITHUB_STEP_SUMMARY"
 
@@ -367,6 +382,10 @@ jobs:
       # picker can never be worse than not having one.
       - name: Pick a credential from the pool
         id: cred
+        # Guarded like its twin in agent-fix.yml: on a paged run, or one with no
+        # open PR, the nine pool secrets must not be materialised into a step
+        # environment that already holds the untrusted branch checkout.
+        if: steps.guard.outputs.proceed == 'true'
         continue-on-error: true
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

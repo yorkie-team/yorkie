@@ -457,25 +457,22 @@ jobs:
           # and a list that shrinks mid-PR would let a lens that FAILED an earlier
           # round silently stop being required, promoting an unresolved blocker.
           git diff --name-only origin/main...HEAD > /tmp/changed.txt
-          # Omit ANTLR generated *tooling* artifacts from the diff BODY only.
-          # `.interp` / `.tokens` are IDE/tooling files with no reference
-          # anywhere in src, package.json, or the build — nothing loads them at
-          # runtime, so no lens can act on their contents. On PR #521 they were
-          # 17.2 KB of a 75.6 KB diff, re-read by every lens x 2 samples x 5
-          # rounds (4 lenses then, 5 now — the multiplier only grows).
+          # Omit generated protobuf output from the diff BODY only. `buf generate`
+          # reproduces `api/yorkie/v1/*.pb.go`, the connect wrappers and the
+          # OpenAPI bundle byte for byte, and CI already fails the build job when
+          # they are stale — so a lens reading them spends its turns on machine
+          # output that a mechanical lane owns. They are large: a single proto
+          # change can move tens of thousands of generated lines, re-read by
+          # every lens x every sample x every round.
           #
-          # The generated `.ts` files are deliberately KEPT, even though they are
-          # the larger half: they are executable code shipped in the sheets
-          # package, and excluding them would leave EVERY lens (security included)
-          # with no view of a hand-edit that `Formula.g4` does not justify. The
-          # security lens raised exactly this on the PR that introduced this step,
-          # and it was right — the only compensating control is an edit-time hook
-          # that an out-of-band editor bypasses. Re-excluding them requires a
-          # regen-and-diff CI lane first (see the follow-up issue).
+          # THE CHANGED-FILE LIST ABOVE STILL CARRIES THEM, which is the half
+          # that matters — a lens can still see that codegen moved, and the
+          # blast-radius lens acts on exactly that. Only the bytes are withheld.
           #
-          # `Formula.g4` (the hand-written grammar) is never excluded. Lockfiles
-          # are never excluded either: supply-chain relevant, and measured at 0%
-          # of every agent PR diff to date.
+          # `api/**/*.proto` is NEVER excluded: it is the wire contract, the one
+          # kind of change this repository cannot walk back, and it is
+          # hand-written. `go.mod` and `go.sum` are never excluded either —
+          # supply-chain relevant, and small.
           git diff origin/main...HEAD -- . \
             ':(exclude)api/yorkie/v1/*.pb.go' \
             ':(exclude)api/yorkie/v1/v1connect/*.connect.go' \
@@ -1958,7 +1955,17 @@ jobs:
       # that always dominated it.
       - name: Page — no live credential for the fixer
         if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available == 'false'
-        continue-on-error: true
+        # NOT continue-on-error, unlike almost every other reporting step here,
+        # and the step's own comment above says why: on this path the `stalled`
+        # net cannot see the problem, because skipping the fixer leaves this job
+        # GREEN. This comment IS the page. Letting it go amber while the job goes
+        # green rebuilds exactly the "a net that dies with the thing it catches"
+        # failure — one GitHub 503 (the four-minute outage this file documents as
+        # the reason every github-script step sets `retries: 3`) and the PR
+        # strands on `agent:fixing` with nothing posted anywhere.
+        #
+        # Failing instead makes `needs.fix.result == 'failure'`, which `stalled`
+        # does see, so the page still happens from the net.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ needs.review-panel.outputs.pr }}
@@ -1980,6 +1987,7 @@ jobs:
             printf 'Where to look: [this run](%s) — the `Pick a live fixer credential` step names the slots it found.\n' "$RUN_URL"
           } > "$RUNNER_TEMP/no-credential.md"
           gh pr comment "$PR" --body-file "$RUNNER_TEMP/no-credential.md"
+          # The label is advisory and must not mask a failed comment above.
           node "$RUNNER_TEMP/agent-tools/set-state.mjs" "$PR" blocked || true
 
       - name: Record the fix-round dispatch
@@ -2411,18 +2419,31 @@ jobs:
         uses: actions/github-script@v7
         env:
           PANEL_RESULT: ${{ needs.review-panel.result }}
+          # `cancelled` alone does not mean superseded. A job killed by its own
+          # `timeout-minutes` is ALSO reported `cancelled`, and the panel's wall
+          # is 45 minutes against an orchestrator the step below calls a ~35
+          # minute run — so the wall is reachable, and calling that round
+          # "superseded by a newer commit" is a false statement that also stops
+          # the round being charged as a fix attempt.
+          #
+          # `cancelled()` is the workflow-level question, and it is exactly the
+          # one that separates them: the concurrency group cancelling this run
+          # makes it true, a job hitting its own wall leaves it false.
+          WORKFLOW_CANCELLED: ${{ cancelled() }}
         with:
           retries: 3
           script: |
             const sha = context.payload.workflow_run.head_sha;
-            const superseded = process.env.PANEL_RESULT === 'cancelled';
+            const superseded = process.env.PANEL_RESULT === 'cancelled'
+              && process.env.WORKFLOW_CANCELLED === 'true';
             const conclusion = superseded ? 'cancelled' : 'failure';
             const title = superseded ? 'superseded' : 'panel stopped';
             const summary = superseded
               ? 'A newer commit superseded this round before the lens produced a verdict. '
                 + 'The panel on the newer commit is the verdict of record; this round was not reviewed '
                 + 'and does not count as a fix attempt.'
-              : 'The review panel stopped before this lens produced a verdict.';
+              : 'The review panel stopped before this lens produced a verdict — it broke, '
+                + 'or it ran past its own time limit. Either way nobody reviewed this code.';
             const { data } = await github.rest.checks.listForRef({
               owner: context.repo.owner, repo: context.repo.repo, ref: sha, per_page: 100,
             });
@@ -2461,16 +2482,40 @@ jobs:
     # well would comment twice and latch `agent:blocked` from two places on every
     # timeout, and would page spuriously whenever a fixer's own push superseded
     # the run. Both conditions are pinned in checks.test.mjs.
+    # `cancelled` IS a failure shape here, and the distinction is free: this job
+    # runs under `!cancelled()`, which is false when the WORKFLOW was cancelled
+    # — the superseded case. So a job reporting `cancelled` while the workflow
+    # was not is a job that hit its own `timeout-minutes` wall, and the file
+    # already learned (see the fix job's no-commit page) that GitHub reports a
+    # job wall as `cancelled`, never `failure`.
+    #
+    # `fix` is the ONE job deliberately excluded from that: a fix job killed by
+    # its own wall is already paged by its no-commit step, which exists for
+    # exactly that case, and claiming it here would double-page. checks.test.mjs
+    # pins the exclusion.
+    #
+    # Without those clauses a panel killed by its 45-minute wall paged nobody:
+    # promote and fix skip on a non-successful need, `stalled` tested only
+    # `failure`/`skipped`, and close-stuck-checks stamped the lens checks
+    # "superseded by a newer commit" — a sentence that was not true, and which
+    # stops the round being charged as a fix attempt.
     if: >-
       !cancelled() &&
       (needs.gate.result == 'failure' ||
        (needs.gate.outputs.managed == 'true' &&
         (needs.deps.result == 'failure' ||
+         needs.deps.result == 'cancelled' ||
          needs.ci.result == 'failure' ||
+         needs.ci.result == 'cancelled' ||
          needs.review-panel.result == 'failure' ||
          needs.review-panel.result == 'skipped' ||
+         needs.review-panel.result == 'cancelled' ||
          needs.promote.result == 'failure' ||
-         needs.fix.result == 'failure')))
+         needs.promote.result == 'cancelled' ||
+         needs.fix.result == 'failure' ||
+         (needs.ci.result == 'success' &&
+          needs.ci.outputs.conclusion != 'success' &&
+          needs.ci.outputs.conclusion != 'failure'))))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

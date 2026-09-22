@@ -117,11 +117,26 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo, pull_number: num,
             });
             core.setOutput('ref', pr.head.ref);
-            core.setOutput('is_agent', String(pr.head.ref.startsWith('agent/')));
+            // SAME-REPO IS HALF THE TEST, and the half that matters most.
+            // `pr.head.ref` is a bare branch name, and the checkout below passes
+            // no `repository:`, so it resolves against the BASE repo. A fork PR
+            // whose branch happens to be called `agent/foo` — a name this
+            // pipeline creates routinely — would make the agent edit and push,
+            // with a write-capable App token, to the base repo's unrelated
+            // `agent/foo`. agent-loop.yml and agent-rerun.yml both carry this
+            // check; this file did not.
+            const sameRepo = pr.head.repo && pr.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`;
+            const isAgent = sameRepo && pr.head.ref.startsWith('agent/');
+            if (!sameRepo) core.notice(`PR #${num} is from a fork; the reply arm is same-repo only.`);
+            core.setOutput('is_agent', String(isAgent));
 
+      # `exit 0` ends the STEP, not the job, so this run reports green either
+      # way. A notice annotation is what puts the reason where a human looking at
+      # a green "Agent Review Reply" run will actually find it.
       - name: Skip non-agent PRs
         if: steps.pr.outputs.is_agent != 'true'
-        run: echo "Not an agent-authored branch; leaving this to the humans." && exit 0
+        run: |
+          echo "::notice::Not an agent-authored, same-repo branch - this comment is left to the humans."
 
       # Auth git ops as the Claude GitHub App, not GITHUB_TOKEN — commits pushed
       # with GITHUB_TOKEN do NOT re-trigger CI (GitHub's recursion guard), which
@@ -129,10 +144,20 @@ jobs:
       - name: Generate GitHub App token
         id: app-token
         if: steps.pr.outputs.is_agent == 'true'
+        # Pinned to an immutable commit SHA (not the movable @v1 tag) for
+        # supply-chain safety — this action handles the App private key.
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          # Least privilege: only what the steps below need, rather than the App
+          # installation's full permission set — this token is live in a job that
+          # later checks out and executes untrusted branch code. Notably absent:
+          # `workflows`, which is what makes "a fix agent can never rewrite the
+          # lanes that grade it" true rather than aspirational.
+          permission-contents: write # push the fix commit
+          permission-pull-requests: write # reply in the PR thread
+          permission-issues: write # PR conversation comments use the issues API
 
       - uses: actions/checkout@v4
         if: steps.pr.outputs.is_agent == 'true'

@@ -154,13 +154,27 @@ jobs:
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: pr_number, per_page: 100,
             });
+            // WHO WROTE IT IS PART OF THE TEST. Matching the marker alone means
+            // any account can get a comment permanently deleted by quoting it —
+            // this repository is public — and `clearedLatch` would report the
+            // deletion as a latch cleared. Mirrors `isPagedLatchComment`
+            // (scripts/agent/rounds.mjs), which cannot be imported here: this
+            // step runs before any checkout. Keep the two in step.
+            const PAGE_AUTHORS = ['github-actions[bot]', 'yorkie-agent[bot]'];
+            const TRUSTED_ASSOC = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const wroteTheLatch = (c) =>
+              (c.user && c.user.type === 'Bot' && PAGE_AUTHORS.includes(c.user.login)) ||
+              TRUSTED_ASSOC.includes(c.author_association);
             let clearedLatch = 0;
             for (const c of comments) {
               const body = c.body || '';
-              if (body.includes('<!-- agent-review-paged -->') || body.includes('<!-- agent-paged -->')) {
-                try { await github.rest.issues.deleteComment({ owner, repo, comment_id: c.id }); clearedLatch++; }
-                catch (e) { core.warning(`Could not delete paged comment ${c.id} (${e.message}).`); }
+              if (!body.includes('<!-- agent-review-paged -->') && !body.includes('<!-- agent-paged -->')) continue;
+              if (!wroteTheLatch(c)) {
+                core.notice(`Ignoring a paged marker from ${c.user?.login ?? 'unknown'} — not a latch writer.`);
+                continue;
               }
+              try { await github.rest.issues.deleteComment({ owner, repo, comment_id: c.id }); clearedLatch++; }
+              catch (e) { core.warning(`Could not delete paged comment ${c.id} (${e.message}).`); }
             }
 
             // Drop the single-value blocked label (best-effort; a fresh round re-derives
@@ -276,6 +290,15 @@ jobs:
                     ciNote = 'Waited for the in-flight CI run to finish, then re-ran it; the review panel will run again and can promote or fix this PR.';
                   }
                 }
+              } else if (target && target.conclusion === 'failure') {
+                // The same guard as the in-flight branch above, which this one
+                // did not carry: agent-iterate-ci.yml fires on a completed
+                // `failure` and its fixer may be pushing right now, and its
+                // concurrency group is cancel-in-progress keyed on the branch —
+                // so re-running here would cancel that fixer mid-push. The guard
+                // belongs to both branches or to neither.
+                ciNote = 'CI failed, and the CI-fix arm owns that completion — re-running it here would cancel its fixer mid-push, so nothing was re-run.';
+                target = null;
               } else if (target) {
                 ciNote = 'Re-running CI now; the review panel will run again and can promote or fix this PR.';
               }
