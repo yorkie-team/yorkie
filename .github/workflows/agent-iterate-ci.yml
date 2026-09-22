@@ -102,9 +102,17 @@ jobs:
     concurrency:
       group: agent-iterate-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: true
-    env:
-      WAFFLEBASE_AGENT_AUTONOMOUS: "true"
     steps:
+      # UNGATED, and first. The `setup-node` further down is gated on
+      # `proceed == 'true'` — the fixing branch — while the paging branch runs
+      # metrics, set-state and loop-status under the opposite condition, so it
+      # had no pinned Node at all. One step at the top covers both, and the
+      # test in checks.test.mjs now asserts the ordering rather than only the
+      # presence.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
       # Auth git ops as the Claude GitHub App so the fix commit re-triggers CI
       # (GITHUB_TOKEN pushes do not).
       - name: Generate GitHub App token
@@ -276,11 +284,6 @@ jobs:
           node "$RUNNER_TEMP/agent-tools/loop-status.mjs" update "$PR" --event ci-paged \
             --note "CI failed $ATTEMPTS times (limit $MAX) — the CI-fix loop paged a human." \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-
-      - uses: actions/setup-node@v4
-        if: steps.guard.outputs.proceed == 'true'
-        with:
-          node-version: 22.x
 
       # Same untrusted-setup rule as the panel's fix job and agent-fix.yml: the
       # workspace below is the PR branch and an App token is in the environment,

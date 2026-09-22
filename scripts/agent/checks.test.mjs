@@ -483,12 +483,26 @@ test("every job that runs a pipeline script pins its Node", () => {
       if (job) jobs.get(job).push(line);
     }
     for (const [name, body] of jobs) {
-      const text = body.join("\n");
+      // Prose does not run. A YAML comment explaining why `npm ci` is there
+      // matched as an invocation, and reported the step that immediately
+      // follows its own pin as out of order.
+      const code = body.filter((l) => !/^\s*#/.test(l));
+      const text = code.join("\n");
       const scripts = [...text.matchAll(/\bnode [^\n]*?([a-z-]+\.mjs)/g)].map((m) => m[1]);
       const needsPin = /\bnpm (ci|test)\b/.test(text) || scripts.some((f) => !BUILTIN_ONLY.has(f));
       if (!needsPin) continue;
       checked++;
-      if (!/uses: actions\/setup-node@/.test(text)) offenders.push(`${file}:${name}`);
+      const setup = code.findIndex((l) => /uses: actions\/setup-node@/.test(l));
+      if (setup < 0) { offenders.push(`${file}:${name} (no setup-node)`); continue; }
+      // ORDER, not just presence. agent-iterate-ci.yml had a `setup-node` gated
+      // on its fixing branch while its paging branch ran three scripts under the
+      // opposite condition — so the job contained one and still had steps
+      // running on the runner's own Node. Requiring the pin to come first makes
+      // a conditional one insufficient by construction.
+      const firstUse = code.findIndex((l) => /\bnode [^\n]*\.mjs|\bnpm (ci|test)\b/.test(l));
+      if (firstUse >= 0 && setup > firstUse) {
+        offenders.push(`${file}:${name} (setup-node comes after the first script it should pin)`);
+      }
     }
   }
 

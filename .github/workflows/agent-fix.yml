@@ -87,6 +87,14 @@ jobs:
       group: agent-fix-${{ github.event.issue.number }}
       cancel-in-progress: false
     steps:
+      # UNGATED, and first. The eligibility gate and the brief builder are both
+      # node scripts and run before any branch is checked out, so a pin placed
+      # with the toolchain further down would leave them on whatever Node the
+      # runner image ships. checks.test.mjs asserts this ordering.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
       # Authoritative trust gate — this verb pushes commits to the PR branch, so
       # it is maintainers only (org membership is not repo write; check the real
       # permission on THIS repo). author_association would be the cheap filter,
@@ -265,10 +273,6 @@ jobs:
       # a leaked credential.
       #
       # Keep in sync with the Makefile's `tools` target.
-      - uses: actions/setup-node@v4
-        if: steps.eligible.outputs.eligible == 'true'
-        with:
-          node-version: 22.x
       - uses: actions/setup-go@v6
         if: steps.eligible.outputs.eligible == 'true'
         with:
