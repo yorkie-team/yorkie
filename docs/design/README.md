@@ -56,6 +56,10 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Project Stats Long-Retention Windows](project-stats-long-retention.md): Decoupled daily HLL summary tables and a dual read that serve up-to-12-month windows after raw-event TTL is enabled
 - [Per-Project Channel Session TTL](per-project-channel-session-ttl.md): Per-project override for `ChannelSessionTTL` to tune the presence-count "feels occupied" effect
 
+### Development
+
+- [Agent Command Verbs](agent-command-verbs.md): Phased adoption of the `@claude <verb>` comment surface on issues and PRs, from a local self-review command to a gating review panel
+
 ## Maintaining the Document
 
 For significant scope and complex new features, it is recommended to write a Design Document before starting any implementation work. On the other hand, we don't need to design documentation for small, simple features and bug fixes.

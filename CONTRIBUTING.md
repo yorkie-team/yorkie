@@ -141,6 +141,27 @@ We use GitHub's pull request review feature to review code. We also use CodeRabb
 
 We require that all code is reviewed by at least one maintainer before being merged. We may ask for changes to be made to the code before it is merged.
 
+#### `@claude` commands on a pull request
+
+You can also ask for a machine review by commenting on the pull request. Matching is flexible — a comment triggers a command when it contains `@claude <verb>` anywhere, case-insensitive, so `@claude review this please` works. The verb has to follow the mention directly: `@claude please review` does not.
+
+| Comment | Who can trigger it | What it does |
+| --- | --- | --- |
+| `@claude review` | the PR author, or anyone with write access | Runs a multi-lens review panel and posts its findings as one comment. Advisory: it creates no status checks and cannot block a merge. Works on forks. |
+| `@claude summarize` | the PR author, or anyone with write access | Posts a short read-only "what this PR does / is it good to go?" comment. Works on forks. |
+| `@claude loop` | write access | Opts the PR into the autonomous review → fix → promote loop. Same-repo branches only; on a fork it falls back to `@claude review`. |
+| `@claude fix` | write access | One fix attempt against the review panel's standing verdict. Needs a panel run on the current commit, and does not clear a paged PR. |
+| `@claude rerun` | write access | Clears a PR the loop handed to a human and re-engages it. Pushing a commit does not do this. |
+| `@claude …` (anything else) | write access | Treats your comment as review feedback to address in the thread. Only on agent-authored branches — an ordinary PR's review threads are left to people. |
+
+`review` and `summarize` are throttled to one run per commit; push a new commit to re-run. **None of these can approve or merge** — a maintainer's review is always required, and the loop's terminal states are *ready for review* or *handed to a human*.
+
+Type these as a **normal PR comment**, not inside an inline review thread. Only the bare-mention fallback listens to review-comment threads; a verb typed there reaches no workflow and answers nothing.
+
+One thing to know about `@claude loop`: when the loop converges it tries to flip the PR to ready for review, and one of its gates is that the PR body discloses autonomous AI authorship. A PR written from the template does not, so that gate refuses and the PR stays as it is — which is correct once the fixer has pushed commits to your branch, because the person picking it up should be told that before they read it. Add a line saying so, or mark the PR ready yourself.
+
+Nothing here runs unless a maintainer has enabled the surface for the repository. The design, the phases, and what each one needs are in [agent-command-verbs.md](docs/design/agent-command-verbs.md).
+
 ## Contributor License Agreement (CLA)
 
 We require that all contributors sign our Contributor License Agreement ("CLA") before we can accept the contribution.

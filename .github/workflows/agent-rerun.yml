@@ -1,0 +1,388 @@
+# "@claude rerun": clear a paged/blocked agent PR and re-engage the review→fix
+# loop in one step. When the autonomous pipeline pages a human it drops a
+# `<!-- agent-review-paged -->` (or `<!-- agent-paged -->`) comment and an
+# `agent:blocked` label, and — crucially — review-round-guard.mjs LATCHES on that
+# comment, so the loop will not resume on its own even after CI re-runs. Un-sticking
+# it by hand means: delete the paged comment, remove the label, and re-run CI so the
+# panel fires again. This verb does exactly that.
+#
+# Like "@claude loop" (and unlike the read-only "@claude review"), this re-engages
+# machinery that pushes bot commits and can promote, so it is TRUSTED-AUTHOR ONLY
+# and only acts on an agent-managed same-repo PR (an `agent/` branch OR one labelled
+# `agent:managed`). A fork / unmanaged PR gets a note and nothing else.
+name: Agent Rerun
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+env:
+  # gh expands `{owner}/{repo}` via git; GH_REPO makes it skip that lookup.
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  route:
+    if: >-
+      vars.AGENT_PIPELINE_ENABLED == 'true' &&
+      github.event.comment.user.type != 'Bot' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      command: ${{ steps.route.outputs.command }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/agent/command.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Route command
+        id: route
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: node scripts/agent/command.mjs "$BODY" pr
+
+  rerun:
+    needs: [route]
+    if: needs.route.outputs.command == 'rerun'
+    runs-on: ubuntu-latest
+    # Above the 30-minute wait the re-run step may spend on an in-flight CI run,
+    # with room for the API work either side of it. A wall at or below the wait
+    # would kill the job mid-poll and re-create the dead end this verb exists to
+    # clear: latch deleted, nothing re-run, and the operator told neither.
+    timeout-minutes: 40
+    permissions:
+      # WRITE, not read. Label operations on a PULL REQUEST need
+      # `pull-requests: write`; `issues: write` covers its COMMENTS but not its
+      # labels, so with `read` the paged comments were deleted successfully and
+      # `removeLabel` failed with "Resource not accessible by integration" — while
+      # the summary below still announced it had dropped the label. Observed on #632
+      # and #648: both reported success and stayed `agent:blocked`.
+      pull-requests: write # resolve the PR, and drop agent:blocked
+      issues: write # delete the paged comment, post the note
+      actions: write # re-run CI to re-fire the panel
+      contents: read # sparse-checkout scripts/agent for the loop-status update
+      checks: read # loop-status.mjs reads per-commit check runs for the round table
+    concurrency:
+      group: agent-rerun-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      # Authoritative trust gate — rerun re-engages a loop that pushes commits and
+      # promotes, so it is maintainers only (org membership ≠ repo write; check the
+      # real permission on THIS repo).
+      - name: Verify commenter has write access
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            const actor = context.payload.comment.user.login;
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner, repo: context.repo.repo, username: actor,
+            });
+            if (!['admin', 'maintain', 'write'].includes(data.permission)) {
+              core.setFailed(`@${actor} lacks write access (permission: ${data.permission}); refusing to run.`);
+            }
+
+      # Human-facing comments go through a GitHub App token, NOT GITHUB_TOKEN: on a
+      # fork-PR-triggered run GITHUB_TOKEN is read-only, so the "not managed" note
+      # would 403. rerun runs no untrusted code (API calls only), so minting it here
+      # is safe. The block-clearing + CI re-run below stay on GITHUB_TOKEN, which is
+      # writable on the same-repo managed path where they actually execute.
+      - name: Generate GitHub App token (comments)
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-issues: write
+
+      - name: Post running placeholder
+        id: placeholder
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const { data } = await github.rest.issues.createComment({
+              owner, repo, issue_number: context.payload.issue.number,
+              body: '🤖 Working on `@claude rerun`…',
+            });
+            core.setOutput('id', String(data.id));
+
+      - name: Clear the block and re-run CI
+        id: rerun
+        env:
+          PLACEHOLDER_ID: ${{ steps.placeholder.outputs.id }}
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const pr_number = context.payload.issue.number;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pr_number });
+
+            // rerun re-engages the auto-fix/promote loop, which pushes to the PR head
+            // branch and only runs on agent-managed same-repo PRs. A fork can't be
+            // pushed to (so it never gets the loop, never gets paged); an unmanaged
+            // PR has no loop to resume. Refuse both with a note rather than re-running
+            // CI on a PR the pipeline doesn't own.
+            const isFork = !pr.head.repo || pr.head.repo.full_name !== `${owner}/${repo}`;
+            const managed = !isFork &&
+              (pr.head.ref.startsWith('agent/') ||
+               (pr.labels || []).some((l) => (l.name || l) === 'agent:managed'));
+            if (!managed) {
+              // `engaged` gates the loop-status refresh below: a REFUSED rerun
+              // changed nothing, so updating the projection would post a false
+              // "loop re-engaged" on a PR whose latches are still in place.
+              core.setOutput('engaged', 'false');
+              core.setOutput('outcome', isFork
+                ? "⚠️ `@claude rerun` only works on same-repo agent-managed PRs — a fork PR is never driven by the auto-fix loop, so there is nothing to re-run. Use **`@claude review`** for a read-only review."
+                : "⚠️ This PR isn't agent-managed (no `agent/` branch and no `agent:managed` label), so there's no paged loop to resume. Comment **`@claude loop`** to opt it into the loop.");
+              return;
+            }
+
+            // Clear the PAGED LATCH: review-round-guard.mjs stops the loop as long as
+            // an <!-- agent-review-paged --> comment exists (and set-state derives
+            // `blocked` from it OR the CI-side <!-- agent-paged -->). Delete both so
+            // the next round can proceed. Best-effort per comment.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr_number, per_page: 100,
+            });
+            // WHO WROTE IT IS PART OF THE TEST. Matching the marker alone means
+            // any account can get a comment permanently deleted by quoting it —
+            // this repository is public — and `clearedLatch` would report the
+            // deletion as a latch cleared. Mirrors `isPagedLatchComment`
+            // (scripts/agent/rounds.mjs), which cannot be imported here: this
+            // step runs before any checkout. Keep the two in step.
+            const PAGE_AUTHORS = ['github-actions[bot]', 'yorkie-agent[bot]'];
+            const TRUSTED_ASSOC = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const wroteTheLatch = (c) =>
+              (c.user && c.user.type === 'Bot' && PAGE_AUTHORS.includes(c.user.login)) ||
+              TRUSTED_ASSOC.includes(c.author_association);
+            let clearedLatch = 0;
+            for (const c of comments) {
+              const body = c.body || '';
+              if (!body.includes('<!-- agent-review-paged -->') && !body.includes('<!-- agent-paged -->')) continue;
+              if (!wroteTheLatch(c)) {
+                core.notice(`Ignoring a paged marker from ${c.user?.login ?? 'unknown'} — not a latch writer.`);
+                continue;
+              }
+              try { await github.rest.issues.deleteComment({ owner, repo, comment_id: c.id }); clearedLatch++; }
+              catch (e) { core.warning(`Could not delete paged comment ${c.id} (${e.message}).`); }
+            }
+
+            // Drop the single-value blocked label (best-effort; a fresh round re-derives
+            // the correct state). removeLabel 404s if it isn't set — that's fine.
+            //
+            // The OUTCOME IS RECORDED, not assumed. This used to warn on failure and
+            // then announce success regardless, so #632 and #648 both said "dropped
+            // agent:blocked" while staying blocked — a message a human reads and
+            // believes, contradicted by the label right next to it. A summary must
+            // report what happened, not what was attempted.
+            let labelDropped = null; // true | false | null (was not set)
+            try {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: pr_number, name: 'agent:blocked' });
+              labelDropped = true;
+            } catch (e) {
+              if (e.status === 404) labelDropped = null;
+              else {
+                labelDropped = false;
+                core.warning(`Could not remove agent:blocked (${e.message}).`);
+              }
+            }
+
+            // Re-run the latest CI run for the head SHA so the panel fires again: on
+            // green CI → review panel (promote/fix), on red CI → the CI-fix arm. Same
+            // mechanism agent-loop.yml uses to engage the loop. Best-effort — if there
+            // is nothing to re-run, the cleared latch still lets the next CI run through.
+            let reran = false;
+            let ciNote = "No CI run for this head — the panel will engage on the next CI run.";
+            try {
+              // Mirrors `ciRunToRerun` / `ciRunToAwait` in scripts/agent/checks.mjs,
+              // where the rules are unit-tested — this step runs before any
+              // checkout and cannot import them, the same constraint that makes
+              // agent-review-panel.yml mirror `ciRunDecision` inline.
+              // checks.test.mjs extracts both selections from this file and runs
+              // them against the exported functions.
+              //
+              // Exactly ONE run — the newest COMPLETED one. That is the run whose
+              // conclusion gate 1 reads, and re-running it bumps run_attempt,
+              // which is the only thing the panel's gate admits a `completed`
+              // event for. Re-running every red run instead would erode this
+              // workflow's own attempt bound (it counts current `failure`
+              // conclusions, and a re-run REPLACES one) and emit a completion per
+              // run into a cancel-in-progress group, cancelling the fixer
+              // mid-push. COMPLETED because the API answers 422 for a run still
+              // in flight.
+              const all = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner, repo, workflow_id: 'ci.yml', head_sha: pr.head.sha, per_page: 100,
+              });
+              const completed = all.filter((r) => r.status === 'completed');
+              const run = completed.reduce((n, r) => (n === null || r.id > n.id ? r : n), null);
+              // NOT completed, rather than queued/in_progress: a status this
+              // pipeline has never heard of must read as "still going", the
+              // direction where we wait and then re-run.
+              const pending = all.filter((r) => r.status !== 'completed');
+              const awaited = pending.reduce((n, r) => (n === null || r.id > n.id ? r : n), null);
+
+              let target = run;
+              if (!target && awaited) {
+                // THE DEAD ZONE THIS WAIT EXISTS FOR. An in-flight run used to end
+                // the verb with "the panel will engage on the next CI run" — and
+                // there is no next CI run. This round's one `requested` event was
+                // spent seconds after CI was created, while the paged latch we
+                // just deleted was still refusing the panel, and the panel admits
+                // a `completed` event only on `run_attempt > 1`. So the attempt 2
+                // this step declined to produce was the only thing that could
+                // re-engage the round. #1047 and #1052 both sat unreviewed for
+                // five hours that way while the comment said they were resuming.
+                target = await (async () => {
+                  const deadline = Date.now() + 30 * 60 * 1000;
+                  // Best-effort: tell the operator what the 15-minute silence is.
+                  // GITHUB_TOKEN editing an App-authored comment; if it 403s the
+                  // final edit still lands.
+                  try {
+                    await github.rest.issues.updateComment({
+                      owner, repo, comment_id: Number(process.env.PLACEHOLDER_ID),
+                      body: `🤖 \`@claude rerun\` — paged latches cleared. CI run [${awaited.id}](${awaited.html_url}) ` +
+                        'is still in flight; waiting for it to finish before re-running it (up to 30 min).',
+                    });
+                  } catch (e) { core.warning(`Could not update the placeholder (${e.message}).`); }
+                  while (Date.now() < deadline) {
+                    await new Promise((r) => setTimeout(r, 20000));
+                    // A blip must not end a thirty-minute wait: one 5xx would
+                    // otherwise throw out to the outer catch and leave the round
+                    // exactly where this change found it.
+                    try {
+                      const { data: cur } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: awaited.id });
+                      if (cur.status === 'completed') return cur;
+                    } catch (e) { core.warning(`Could not read CI run ${awaited.id} (${e.message}); still waiting.`); }
+                  }
+                  core.warning(`CI run ${awaited.id} did not finish within the wait budget.`);
+                  ciNote = `⚠️ CI run [${awaited.id}](${awaited.html_url}) was still running after 30 minutes, so nothing was re-run — comment \`@claude rerun\` again once it finishes.`;
+                  return null;
+                })();
+
+                if (target) {
+                  // A lot can land in thirteen minutes. Re-running a run whose sha
+                  // is no longer the head runs CI against a stale commit, and the
+                  // push that moved it engaged the loop on its own.
+                  const { data: fresh } = await github.rest.pulls.get({ owner, repo, pull_number: pr_number });
+                  if (fresh.head.sha !== pr.head.sha) {
+                    ciNote = 'A new commit landed while CI was running, so nothing was re-run here — that push engages the loop on its own.';
+                    target = null;
+                  } else if (target.conclusion === 'failure') {
+                    // agent-iterate-ci.yml has no attempt gate, so it fired on
+                    // this completion and its fixer may be pushing right now. Its
+                    // concurrency group is cancel-in-progress keyed on the branch,
+                    // so a second `completed/failure` event would cancel that
+                    // fixer mid-push — #648's failure mode, re-entered through the
+                    // fix for a different one.
+                    ciNote = 'CI failed, and the CI-fix arm engaged on that completion — re-running it here would cancel its fixer mid-push, so nothing was re-run.';
+                    target = null;
+                  } else {
+                    ciNote = 'Waited for the in-flight CI run to finish, then re-ran it; the review panel will run again and can promote or fix this PR.';
+                  }
+                }
+              } else if (target) {
+                // NO `conclusion === 'failure'` GUARD HERE, and the asymmetry
+                // with the in-flight branch above is the whole point.
+                //
+                // That branch guards a run that completes AFTER this step
+                // started: its completion event dispatches agent-iterate-ci
+                // fresh — by then this job has already deleted the latch — and
+                // re-running would cancel that fixer mid-push.
+                //
+                // This branch is a run that completed BEFORE. agent-iterate-ci
+                // already fired for it and SKIPPED, because the paged latch was
+                // still on the PR at the time (it checks, and this job has only
+                // just removed it). Nothing is in flight, so declining to re-run
+                // would leave the PR exactly as this verb is meant to rescue it:
+                // unlatched, unlabelled, with no CI run and no push to produce
+                // one — dead. An earlier revision of this file applied the guard
+                // to both branches "for symmetry" and created that dead end.
+                ciNote = 'Re-running CI now; the review panel will run again and can promote or fix this PR.';
+              }
+
+              if (target) {
+                await github.rest.actions.reRunWorkflow({ owner, repo, run_id: target.id });
+                reran = true;
+              }
+            } catch (e) {
+              core.warning(`Could not re-run CI (${e.message}); the loop will engage on the next CI run.`);
+              ciNote = `⚠️ Could not re-run CI (${e.message}) — re-run it by hand, or push to the branch.`;
+            }
+
+            core.setOutput('engaged', 'true');
+            core.setOutput('reran', String(reran));
+            core.setOutput('outcome',
+              `🔁 Rerun engaged — cleared ${clearedLatch} paged marker(s). ` +
+              (labelDropped === true
+                ? 'Dropped `agent:blocked`. '
+                : labelDropped === null
+                  ? '`agent:blocked` was not set. '
+                  : '⚠️ Could NOT drop `agent:blocked` — remove it by hand; the loop is otherwise unblocked. ') +
+              ciNote +
+              " The review→fix round budget restarts from here; the CI-fix arm's own" +
+              " attempt bound (counted from prior failed CI runs) is NOT reset, and a human" +
+              " approval is still required to merge.");
+
+      # Edit the placeholder into the final result. always() so a failure in the
+      # clear step still replaces the "working on it" note instead of stranding it.
+      - name: Update the running comment with the result
+        if: always() && steps.placeholder.outputs.id != ''
+        uses: actions/github-script@v7
+        env:
+          COMMENT_ID: ${{ steps.placeholder.outputs.id }}
+          OUTCOME: ${{ steps.rerun.outputs.outcome }}
+        with:
+          retries: 3
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const body = process.env.OUTCOME ||
+              '🛑 `@claude rerun` failed before it could clear the block — see the workflow run log.';
+            await github.rest.issues.updateComment({
+              owner, repo, comment_id: Number(process.env.COMMENT_ID), body,
+            });
+
+      # OBSERVABILITY (Phase 1): the rerun just deleted the paged latches, so
+      # the sticky loop-status comment's "🛑 paged" headline is now stale —
+      # refresh the projection. GATED on `engaged`: a refused rerun (fork /
+      # unmanaged) changed nothing, and posting "loop re-engaged" there would
+      # be false. This job checks nothing out, so sparse-fetch the TRUSTED
+      # main copy of scripts/agent (never a branch's); absent until the script
+      # merges to main, so the update step skips quietly.
+      - uses: actions/checkout@v4
+        if: steps.rerun.outputs.engaged == 'true'
+        continue-on-error: true
+        with:
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Update loop status (rerun)
+        if: steps.rerun.outputs.engaged == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.issue.number }}
+          # The note said "CI re-running" whether or not anything was — the same
+          # class of claim the outcome comment above was fixed for.
+          RERAN: ${{ steps.rerun.outputs.reran }}
+        run: |
+          [ -f ./scripts/agent/loop-status.mjs ] || { echo "loop-status.mjs not on main yet; skipping"; exit 0; }
+          if [ "$RERAN" = "true" ]; then
+            CI_NOTE="CI re-running"
+          else
+            CI_NOTE="no CI run was re-run — see the rerun comment for why"
+          fi
+          node ./scripts/agent/loop-status.mjs update "$PR" \
+            --event rerun \
+            --note "A maintainer ran @claude rerun — paged latches cleared, agent:blocked dropped, $CI_NOTE; the review-fix round budget restarts from here." \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
