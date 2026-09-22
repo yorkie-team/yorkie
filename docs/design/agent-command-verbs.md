@@ -142,9 +142,16 @@ and latches the PR for a human when the rounds are exhausted. `rerun` clears
 that latch — deliberately, because pushing a commit does not.
 
 - **Lands:** the panel workflow, the round guard, the latch, the label.
-- **Requires:** the branch protection conversation. Six new check runs appear
-  on a labelled PR; whether any of them is *required* to merge is a repository
-  setting and should start as "no".
+- **Requires:** a GitHub App (`AGENT_APP_ID`, `AGENT_APP_PRIVATE_KEY`), and the
+  branch-protection conversation. The App is not optional the way it is in
+  Phase 1: the panel *dispatches fix rounds*, and a fix round pushes. A
+  `GITHUB_TOKEN`-authored push does not re-trigger workflows, so the commit
+  would land and no round would ever re-review it — the loop would stop
+  silently, in the direction that looks like success. Without the App
+  configured the panel still runs its lenses, records its check runs and
+  latches; only the auto-fix half is inert.
+- **Requires:** six new check runs appear on a labelled PR; whether any of them
+  is *required* to merge is a repository setting, and should start as "no".
 - **Fork behavior:** `loop` is same-repo only and falls back to posting
   `@claude review` on a fork PR.
 - **Exit criteria:** a PR that entered the loop reached *ready for review*
@@ -164,9 +171,15 @@ verb on an agent-authored PR is treated as review feedback to evaluate, act on
 if warranted, and answer in-thread — pushing back with reasoning when the
 finding is wrong.
 
-- **Requires:** a GitHub App (`AGENT_APP_ID`, `AGENT_APP_PRIVATE_KEY`) and an
-  `agent` environment. `GITHUB_TOKEN`-authored pushes do not re-trigger
-  workflows, so the fix commit would land and nothing would re-review it.
+- **Requires:** the same GitHub App as Phase 2, and an `agent` environment.
+- **The untrusted-setup rule.** From the moment these jobs check out the PR
+  branch they hold an App token, so no setup step may execute build
+  instructions the branch wrote. `make tools` is exactly that shape — five `go
+  install` lines a PR can rewrite — so the linter is installed from a version
+  pinned in the workflow instead, and a test asserts no token-bearing job runs
+  it. The agent itself does run branch code and does hold the token, because it
+  has to push; what must not happen is the job arriving there having already
+  run the branch's Makefile for its own convenience.
 - **Cost note:** every fix commit re-runs `ci.yml`, which here means a MongoDB
   stack plus `-race` integration tests — materially more expensive per round
   than upstream's. Upstream's "the panel runs concurrently with CI, not after

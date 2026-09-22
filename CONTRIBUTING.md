@@ -147,12 +147,16 @@ You can also ask for a machine review by commenting on the pull request. Matchin
 
 | Comment | Who can trigger it | What it does |
 | --- | --- | --- |
-| `@claude review` | the PR author, or anyone with write access | Runs a multi-lens review panel and posts its findings as one comment. Advisory: it creates no status checks and cannot block a merge. |
-| `@claude summarize` | the PR author, or anyone with write access | Posts a short read-only "what this PR does / is it good to go?" comment. |
+| `@claude review` | the PR author, or anyone with write access | Runs a multi-lens review panel and posts its findings as one comment. Advisory: it creates no status checks and cannot block a merge. Works on forks. |
+| `@claude summarize` | the PR author, or anyone with write access | Posts a short read-only "what this PR does / is it good to go?" comment. Works on forks. |
+| `@claude loop` | write access | Opts the PR into the autonomous review → fix → promote loop. Same-repo branches only; on a fork it falls back to `@claude review`. |
+| `@claude fix` | write access | One fix attempt against the review panel's standing verdict. Needs a panel run on the current commit, and does not clear a paged PR. |
+| `@claude rerun` | write access | Clears a PR the loop handed to a human and re-engages it. Pushing a commit does not do this. |
+| `@claude …` (anything else) | write access | Treats your comment as review feedback to address in the thread. Only on agent-authored branches — an ordinary PR's review threads are left to people. |
 
-Both are throttled to one run per commit — push a new commit to re-run — and both work on pull requests from forks. Neither can approve or merge: a maintainer's review is still required. Nothing happens unless a maintainer has enabled the surface for the repository.
+`review` and `summarize` are throttled to one run per commit; push a new commit to re-run. **None of these can approve or merge** — a maintainer's review is always required, and the loop's terminal states are *ready for review* or *handed to a human*.
 
-The design, and the verbs that are not installed yet, are in [agent-command-verbs.md](docs/design/agent-command-verbs.md).
+Nothing here runs unless a maintainer has enabled the surface for the repository. The design, the phases, and what each one needs are in [agent-command-verbs.md](docs/design/agent-command-verbs.md).
 
 ## Contributor License Agreement (CLA)
 

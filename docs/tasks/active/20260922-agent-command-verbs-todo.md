@@ -71,8 +71,38 @@ for the panel, so the command says which reviewer it ran and refuses to report a
 round as a panel round. That asymmetry is deliberate — a local runner would need
 its own credential handling to say anything the cloud panel does not.
 
+## Phase 2 — done in this branch
+
+- [x] The remaining module closure: round guard + latch, promotion gates,
+      credential pickers, scope resolver.
+- [x] `agent-review-panel.yml`, `agent-loop.yml`, `agent-rerun.yml`.
+- [x] `CI_DEFINING_PATHS` rewritten — the inherited list named a pnpm
+      workspace's manifests and would have refused nothing here.
+- [x] The fixer verifies with `make lint` + `go test ./...`; the integration
+      lane is left to the CI run the push starts.
+- [x] The linter is installed from a version pinned in the workflow, never from
+      the branch's `make tools`, with a test asserting it.
+
+## Phase 3 — done in this branch
+
+- [x] `agent-fix.yml` and `agent-review-reply.yml`.
+- [x] Same untrusted-setup rule as the panel's fix job.
+
+## Phase 2 and 3 — still open
+
+- [ ] **The GitHub App** (`AGENT_APP_ID`, `AGENT_APP_PRIVATE_KEY`) and the
+      `agent` environment. Without them the panel still reviews, records check
+      runs and latches, but never dispatches a fixer — a `GITHUB_TOKEN`-authored
+      push does not re-trigger workflows, so the loop would stop silently.
+- [ ] **Branch protection.** Six `agent-review-*` check runs appear on a
+      labelled PR. Whether any is *required* to merge is a repository setting
+      and should start as "no".
+- [ ] **Keep the linter pin in sync** with the Makefile's `tools` target. The
+      pin going stale shows up as a lint disagreement, which is the direction
+      to fail in, but it still has to be noticed.
+
 ## Not in scope
 
-`@claude loop`, `@claude rerun`, `@claude fix`, the bare-mention `reply`
-fallback, and `@claude fix` on an issue. See the design document's phases 2, 3
-and its Non-Goals.
+`@claude fix` on an **issue** (issue → PR, `agent-implement.yml`), the CI
+iteration workflow, the hunters, the debug reporter, and the eval rig. See the
+design document's Non-Goals.
