@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
@@ -645,6 +646,13 @@ func (s *yorkieServer) Watch(
 	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
 }
 
+// ErrNoResources is returned when a Watch request carries no resource to
+// subscribe to. Such a stream has nothing to deliver, so it is rejected
+// instead of being left open.
+var ErrNoResources = errors.InvalidArgument(
+	"no resources to watch",
+).WithCode("ErrNoResources")
+
 // subscribeResources subscribes to each document and channel resource in the request.
 func (s *yorkieServer) subscribeResources(
 	ctx context.Context,
@@ -652,6 +660,10 @@ func (s *yorkieServer) subscribeResources(
 	clientID time.ActorID,
 	project *types.Project,
 ) ([]docSub, []channelSub, []*api.ResourceInit, error) {
+	if len(req.Resources) == 0 {
+		return nil, nil, nil, ErrNoResources
+	}
+
 	var docSubs []docSub
 	var channelSubs []channelSub
 	var resourceInits []*api.ResourceInit

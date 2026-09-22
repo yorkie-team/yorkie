@@ -21,12 +21,14 @@ import (
 	"testing"
 	gotime "time"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 )
 
 // runStreamMergedEvents starts streamMergedEvents for the given channel
@@ -106,4 +108,21 @@ func TestStreamMergedEventsEndsWhenSubscriptionsClose(t *testing.T) {
 				"subscription closed; the stream is a zombie")
 		}
 	})
+}
+
+// TestSubscribeResourcesRejectsEmptyRequest verifies that a Watch request
+// carrying no resource is rejected rather than accepted into a stream that
+// can never deliver an event.
+func TestSubscribeResourcesRejectsEmptyRequest(t *testing.T) {
+	s := &yorkieServer{serviceCtx: context.Background()}
+
+	_, _, _, err := s.subscribeResources(
+		context.Background(),
+		&api.WatchRequest{},
+		time.InitialActorID,
+		nil,
+	)
+
+	assert.ErrorIs(t, err, ErrNoResources)
+	assert.Equal(t, connect.CodeInvalidArgument.String(), connecthelper.CodeOf(err))
 }
