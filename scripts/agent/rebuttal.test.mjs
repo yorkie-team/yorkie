@@ -27,7 +27,7 @@ import { CI_PAGED_LATCH } from "./loop-status.mjs";
 
 const FINDING = {
   lens: "correctness",
-  file: "packages/notes/src/view/editor.ts",
+  file: "pkg/document/crdt/tree.go",
   severity: "major",
   summary: "The Mod-z handler returns true unconditionally, swallowing the shortcut when the store has nothing to undo",
   evidence: "editor.ts:88 returns true before consulting the store",
@@ -39,7 +39,7 @@ const rebuttalFor = (over = {}) => ({
   file: FINDING.file,
   summary: FINDING.summary,
   claim: "The handler consults store.canUndo() first; the unconditional return is in the redo path only.",
-  evidence: ["packages/notes/src/view/editor.ts:91"],
+  evidence: ["pkg/document/crdt/tree.go:91"],
   ...over,
 });
 
@@ -50,7 +50,7 @@ test("serializeRebuttal → parseRebuttalComment round-trips", () => {
   assert.equal(got.v, REBUTTAL_VERSION);
   assert.equal(got.lens, "correctness");
   assert.equal(got.file, FINDING.file);
-  assert.deepEqual(got.evidence, ["packages/notes/src/view/editor.ts:91"]);
+  assert.deepEqual(got.evidence, ["pkg/document/crdt/tree.go:91"]);
   assert.match(serializeRebuttal(rebuttalFor()), new RegExp(`^${REBUTTAL_MARKER}`));
 });
 
@@ -61,9 +61,9 @@ test("renderRebuttalComment: a visible header above the record, and the record s
   // Human half: what is disputed, the claim, the evidence, and the framing
   // that this is a claim awaiting adjudication — not a resolution.
   assert.match(body, /### ⚖️ Finding disputed \(adjudicated next round\)/);
-  assert.match(body, /`packages\/notes\/src\/view\/editor\.ts` \*\(correctness\)\*/);
+  assert.match(body, /`pkg\/document\/crdt\/tree\.go` \*\(correctness\)\*/);
   assert.match(body, /- Claim: The handler consults store\.canUndo\(\) first/);
-  assert.match(body, /- Evidence: `packages\/notes\/src\/view\/editor\.ts:91`/);
+  assert.match(body, /- Evidence: `pkg\/document\/crdt\/tree\.go:91`/);
   assert.match(body, /upholds by default; two upheld disputes page a human/);
   // Machine half: the full body parses to exactly the record the marker-only
   // body would have carried — the read side is unaffected by the header.
@@ -233,7 +233,7 @@ test("matchRebuttal: a different lens or file never matches", () => {
   // findingSimilarity gates on both, so this is inherited rather than re-checked —
   // but it is the property that stops one rebuttal clearing a whole PR.
   assert.equal(matchRebuttal(FINDING, [rebuttalFor({ lens: "security" })]), null);
-  assert.equal(matchRebuttal(FINDING, [rebuttalFor({ file: "packages/notes/src/other.ts" })]), null);
+  assert.equal(matchRebuttal(FINDING, [rebuttalFor({ file: "pkg/document/crdt/text.go" })]), null);
 });
 
 test("matchRebuttal: AMBIGUITY IS REFUSED — a tie clears nothing", () => {
@@ -317,7 +317,7 @@ const OVERTURN = {
   confidence: "high",
   reason: "the guard is present",
   overturnGround: "already-guarded",
-  groundedIn: ["packages/notes/src/view/editor.ts:91"],
+  groundedIn: ["pkg/document/crdt/tree.go:91"],
 };
 
 test("isOverturningVerdict: a complete, grounded, LOCATED overturn", () => {
@@ -334,7 +334,7 @@ test("isOverturningVerdict: everything short of that upholds", () => {
   no({ overturnGround: "pre-existing" }); // provenance is the novelty gate's job
   no({ groundedIn: [] });
   no({ groundedIn: ["the author is right"] }); // assertion wearing evidence's costume
-  no({ groundedIn: ["packages/notes/src/view/editor.ts"] }); // a file is not a location
+  no({ groundedIn: ["pkg/document/crdt/tree.go"] }); // a file is not a location
   // a null verdict is an errored adjudicator, and an error argues nothing
   for (const bad of [null, undefined, "x", 7, {}]) assert.equal(isOverturningVerdict(bad), false);
 });

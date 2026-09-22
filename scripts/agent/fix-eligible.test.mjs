@@ -155,33 +155,33 @@ test("FAIL DIRECTION: every refusal reports failing as an empty array, never und
 // --- readPrHead -------------------------------------------------------------
 
 test("readPrHead: same-repo PR", () => {
-  const api = () => ({ head: { sha: HEAD, repo: { full_name: "wafflebase/wafflebase" } } });
-  assert.deepEqual(readPrHead("7", { api, repo: "wafflebase/wafflebase" }), { head: HEAD, isFork: false });
+  const api = () => ({ head: { sha: HEAD, repo: { full_name: "yorkie-team/yorkie" } } });
+  assert.deepEqual(readPrHead("7", { api, repo: "yorkie-team/yorkie" }), { head: HEAD, isFork: false });
 });
 
 test("readPrHead: a fork, and a DELETED fork, both read as fork", () => {
-  const fork = () => ({ head: { sha: HEAD, repo: { full_name: "someone/wafflebase" } } });
-  assert.equal(readPrHead("7", { api: fork, repo: "wafflebase/wafflebase" }).isFork, true);
+  const fork = () => ({ head: { sha: HEAD, repo: { full_name: "someone/yorkie" } } });
+  assert.equal(readPrHead("7", { api: fork, repo: "yorkie-team/yorkie" }).isFork, true);
   // No head repo at all: unknown provenance must never resolve to "same repo".
   const deleted = () => ({ head: { sha: HEAD, repo: null } });
-  assert.equal(readPrHead("7", { api: deleted, repo: "wafflebase/wafflebase" }).isFork, true);
+  assert.equal(readPrHead("7", { api: deleted, repo: "yorkie-team/yorkie" }).isFork, true);
 });
 
 test("FAIL DIRECTION: an unknown GITHUB_REPOSITORY refuses rather than assuming same-repo", () => {
   // With nothing to compare against, provenance is unproven — and unproven must
   // not resolve to "pushable". Skipping the comparison here would make every PR
   // look same-repo the moment the env var went missing.
-  const api = () => ({ head: { sha: HEAD, repo: { full_name: "wafflebase/wafflebase" } } });
+  const api = () => ({ head: { sha: HEAD, repo: { full_name: "yorkie-team/yorkie" } } });
   assert.equal(readPrHead("7", { api, repo: "" }).isFork, true);
   // Control: the SAME response with the repo known is not a fork, so the refusal
   // above is the missing comparand and not a matcher that always says yes.
-  assert.equal(readPrHead("7", { api, repo: "wafflebase/wafflebase" }).isFork, false);
+  assert.equal(readPrHead("7", { api, repo: "yorkie-team/yorkie" }).isFork, false);
 
   // The PRODUCTION path — `repo` omitted so the default parameter reads the
   // environment. Passing `repo: undefined` does NOT test this: a default parameter
   // substitutes for `undefined`, so that call silently became "whatever
   // GITHUB_REPOSITORY happens to be" — green locally where it is unset, red in
-  // Actions where it is `wafflebase/wafflebase`. Clear it explicitly instead, and
+  // Actions where it is `yorkie-team/yorkie`. Clear it explicitly instead, and
   // restore it, so the assertion means the same thing in both places.
   const saved = process.env.GITHUB_REPOSITORY;
   try {
@@ -195,5 +195,5 @@ test("FAIL DIRECTION: an unknown GITHUB_REPOSITORY refuses rather than assuming 
 
 test("FAIL DIRECTION: an API error refuses rather than assuming same-repo", () => {
   const boom = () => { throw new Error("500"); };
-  assert.deepEqual(readPrHead("7", { api: boom, repo: "wafflebase/wafflebase", log: () => {} }), { head: "", isFork: true });
+  assert.deepEqual(readPrHead("7", { api: boom, repo: "yorkie-team/yorkie", log: () => {} }), { head: "", isFork: true });
 });

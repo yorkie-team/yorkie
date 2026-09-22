@@ -158,13 +158,13 @@ test("findingLocation: scans PAST a foreign citation to a matching one", () => {
   // them.
   assert.deepEqual(
     findingLocation({
-      file: "packages/backend/src/auth/auth.controller.ts",
+      file: "server/rpc/auth/interceptor.go",
       evidence:
-        "`CliAuthStore.createState` sets expiresAt (cli-auth.store.ts:39) and " +
-        "`githubAuthCallback` now throws for every expired state " +
-        "(auth.controller.ts:130-135).",
+        "`NewTokenCache` sets the TTL (cache.go:39) and " +
+        "`authorize` now rejects every expired token " +
+        "(interceptor.go:130-135).",
     }),
-    { file: "packages/backend/src/auth/auth.controller.ts", line: 130 },
+    { file: "server/rpc/auth/interceptor.go", line: 130 },
   );
 });
 
@@ -391,8 +391,10 @@ function makeRepo() {
 
 test("noveltyOf answers about `repo`, not an inherited GIT_DIR", async () => {
   // THE regression test for the root cause. git exports GIT_DIR into every hook
-  // it runs, and this repo's pre-push hook runs `pnpm verify:self`, which reaches
-  // this module. `cwd` does not win against GIT_DIR — the environment does.
+  // it runs, and a hook that reaches this module therefore inherits it. `cwd`
+  // does not win against GIT_DIR — the environment does. (This repository's only
+  // hook is `commit-msg` and it runs nothing that gets here; the property is
+  // about what git does to any hook, not about which hooks exist today.)
   //
   // The foreign repo must be DISTINGUISHABLE, or this proves nothing: two copies
   // of makeRepo() are byte-identical and commit within the same whole second, so

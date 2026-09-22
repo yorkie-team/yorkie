@@ -142,7 +142,7 @@ function okConfig(over = {}) {
       started_at: AT,
       app: { slug: "github-actions" },
     })),
-    files: [{ filename: "packages/sheets/src/index.ts" }],
+    files: [{ filename: "pkg/document/crdt/tree.go" }],
     fail: [],
     ...over,
   };
@@ -353,19 +353,20 @@ test("gate 1b: a branch that edits the CI definition is not promoted by its own 
   assert.ok(!promoted(unreadable.calls));
 
   // ...and an ordinary code-only PR is unaffected.
-  const ordinary = run(["7", "--promote"], okConfig({ files: [{ filename: "packages/docs/src/a.ts" }] }));
+  const ordinary = run(["7", "--promote"], okConfig({ files: [{ filename: "server/rpc/yorkie_server.go" }] }));
   assert.equal(ordinary.code, 0);
   assert.ok(promoted(ordinary.calls));
 });
 
 test("gate 1b covers the WHOLE CI-defining surface, not just .github/**", () => {
-  // `ci.yml` contains almost no test logic: it runs `pnpm verify:self` and
-  // `pnpm verify:integration`, both resolved from the MERGE REF's root
-  // `package.json` into `scripts/verify-*.mjs`, whose lane selection reads
-  // `harness.config.json`. A gate that refused only `.github/workflows|actions/**`
-  // let a branch gut CI through any of those and still auto-promote — while the
-  // hand-off comment told the human reviewer the run had executed main's CI
-  // definition. Every path here is one the agent App CAN push.
+  // `ci.yml` contains almost no test logic: it calls `make lint` and `make build`,
+  // which resolve through the MERGE REF's `Makefile` into whatever golangci-lint
+  // config the branch ships, and it grades the integration suite against a
+  // compose stack the branch also owns. A gate that refused only
+  // `.github/workflows|actions/**` let a branch gut CI through any of those and
+  // still auto-promote — while the hand-off comment told the human reviewer the
+  // run had executed main's CI definition. Every path here is one the agent App
+  // CAN push.
   for (const filename of [
     "Makefile",
     ".golangci.yml",

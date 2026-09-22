@@ -609,7 +609,7 @@ test("the on-demand reader uses THIS workflow's PR output, not the panel's", () 
 
 test("agent-fix re-verifies the commit AFTER checkout, closing the eligibility TOCTOU", () => {
   // The gate proves sha H carries the verdict; the checkout takes the branch TIP,
-  // minutes later (app token, placeholder, brief, pnpm install). Without a
+  // minutes later (app token, placeholder, brief, toolchain setup). Without a
   // re-check, an author pushing in that window has the fixer edit and push on top
   // of a commit the panel never reviewed — the exact thing the precondition exists
   // to prevent.

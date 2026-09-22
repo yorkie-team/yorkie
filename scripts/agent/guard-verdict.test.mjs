@@ -106,10 +106,10 @@ test("rerun hand-back is stated when it holds the softer pages", () => {
 test("runUrlFromEnv: a full env yields the run URL; any missing piece yields null", () => {
   const env = {
     GITHUB_SERVER_URL: "https://github.com",
-    GITHUB_REPOSITORY: "wafflebase/wafflebase",
+    GITHUB_REPOSITORY: "yorkie-team/yorkie",
     GITHUB_RUN_ID: "123457",
   };
-  assert.equal(runUrlFromEnv(env), "https://github.com/wafflebase/wafflebase/actions/runs/123457");
+  assert.equal(runUrlFromEnv(env), "https://github.com/yorkie-team/yorkie/actions/runs/123457");
   // Null, never a partial URL — ".../runs/undefined" is worse than no link.
   for (const k of Object.keys(env)) {
     assert.equal(runUrlFromEnv({ ...env, [k]: "" }), null, `${k}=""`);

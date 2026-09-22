@@ -136,7 +136,7 @@ test("redactSecrets: leaves ordinary diagnostic text completely intact", () => {
     "run 8163e7ad-d653-4f7c-b7c9-0857a0a86759 timed out after 900s",
     "error_max_structured_output_retries after 9 turns",
     "You've hit your session limit · resets 3:30pm (UTC)",
-    "at /home/runner/work/wafflebase/scripts/agent/review-panel.mjs:2611:15",
+    "at /home/runner/work/yorkie/scripts/agent/review-panel.mjs:2611:15",
     "TypeError: Cannot read properties of undefined (reading 'findings')",
     "expected 3 findings, received 0 — the lens produced no verdict",
   ];
