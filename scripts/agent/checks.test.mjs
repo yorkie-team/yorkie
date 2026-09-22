@@ -532,7 +532,7 @@ test("each verb that needs the App answers the commenter when it is missing", ()
   // job with a green tick reads as "handled" for a request nothing acted on.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
-  for (const file of ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"]) {
+  for (const file of ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml", "agent-implement.yml"]) {
     const text = readFileSync(path.join(dir, file), "utf8");
     assert.match(text, /id: app\b/, `${file}: no App-presence check`);
     assert.match(
@@ -1455,6 +1455,21 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
 
   for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
     const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    // AN ISSUE-ONLY WORKFLOW IS EXEMPT, and this is the rule rather than a hole
+    // in it: the permission follows the RESOURCE, and `!…issue.pull_request` in
+    // the router is precisely what decides the resource. A verb that can only
+    // ever be typed on an issue comments on an issue, where `issues: write` is
+    // both correct and the narrower grant. Widening it to satisfy a guard aimed
+    // at PR conversations would hand an issue-only job authority over every pull
+    // request in the repository.
+    //
+    // Decided from CODE, not from the file's prose: this workflow's own header
+    // explains the distinction in a sentence containing the unnegated
+    // expression, and reading that as a gate is the same mistake two earlier
+    // guards here made — a check matching its own explanation.
+    const code = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
+    const mentions = code.match(/!?github\.event\.issue\.pull_request/g) ?? [];
+    if (mentions.length > 0 && mentions.every((m) => m.startsWith("!"))) continue;
     const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
     const inherited = lines.slice(0, jobsAt < 0 ? lines.length : jobsAt).some((l) => GRANTS.test(l));
     // Walk jobs: a job id sits at two-space indent under `jobs:`.
