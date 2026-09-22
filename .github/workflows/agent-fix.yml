@@ -267,6 +267,10 @@ jobs:
       # a leaked credential.
       #
       # Keep in sync with the Makefile's `tools` target.
+      - uses: actions/setup-node@v4
+        if: steps.eligible.outputs.eligible == 'true'
+        with:
+          node-version: 22.x
       - uses: actions/setup-go@v6
         if: steps.eligible.outputs.eligible == 'true'
         with:

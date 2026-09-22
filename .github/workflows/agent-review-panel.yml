@@ -354,6 +354,9 @@ jobs:
           # `npm ci` below runs dependency lifecycle scripts — this is the only job
           # that executes third-party code, so don't leave the token in .git/config.
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
       - run: cd scripts/agent && npm ci --no-audit --no-fund # reproducible: exact tree from the committed lockfile
       # Tar before uploading. actions/upload-artifact does NOT preserve Unix file
       # permissions (or symlinks), so a raw node_modules upload strips the +x bit
@@ -431,6 +434,12 @@ jobs:
             });
             core.setOutput('number', prs.data[0] ? String(prs.data[0].number) : '');
 
+      - uses: actions/setup-node@v4
+        if: steps.pr.outputs.number != ''
+        with:
+          node-version: 22.x
+
+      # KEEP IN SYNC with the identical step in agent-review-on-demand.yml.
       - name: Compute diff + changed files (data for the reviewers)
         id: diff
         if: steps.pr.outputs.number != ''
@@ -1466,6 +1475,9 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v4 # default branch — only need the gate script
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
       - name: Generate GitHub App token
         id: app-token
         # Pinned to an immutable commit SHA (not the movable @v1 tag) for
