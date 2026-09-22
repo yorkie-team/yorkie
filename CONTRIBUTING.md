@@ -141,6 +141,19 @@ We use GitHub's pull request review feature to review code. We also use CodeRabb
 
 We require that all code is reviewed by at least one maintainer before being merged. We may ask for changes to be made to the code before it is merged.
 
+#### `@claude` commands on a pull request
+
+You can also ask for a machine review by commenting on the pull request. Matching is flexible — a comment triggers a command when it contains `@claude <verb>` anywhere, case-insensitive, so `@claude review this please` works. The verb has to follow the mention directly: `@claude please review` does not.
+
+| Comment | Who can trigger it | What it does |
+| --- | --- | --- |
+| `@claude review` | the PR author, or anyone with write access | Runs a multi-lens review panel and posts its findings as one comment. Advisory: it creates no status checks and cannot block a merge. |
+| `@claude summarize` | the PR author, or anyone with write access | Posts a short read-only "what this PR does / is it good to go?" comment. |
+
+Both are throttled to one run per commit — push a new commit to re-run — and both work on pull requests from forks. Neither can approve or merge: a maintainer's review is still required. Nothing happens unless a maintainer has enabled the surface for the repository.
+
+The design, and the verbs that are not installed yet, are in [agent-command-verbs.md](docs/design/agent-command-verbs.md).
+
 ## Contributor License Agreement (CLA)
 
 We require that all contributors sign our Contributor License Agreement ("CLA") before we can accept the contribution.

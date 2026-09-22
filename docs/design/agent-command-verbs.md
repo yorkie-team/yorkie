@@ -112,8 +112,20 @@ pushing a commit is what re-arms them.
   *pool* (`CLAUDE_CODE_OAUTH_TOKEN_<n>`) is wanted but not required: six lenses
   run concurrently and a single token rate-limits.
 - **Does not require:** a GitHub App. Comments post as `github-actions[bot]`
-  under `GITHUB_TOKEN`. The App becomes necessary in Phase 3 and can be
-  introduced there.
+  under `GITHUB_TOKEN`, with `issues: write` declared on the jobs that post. The
+  App becomes necessary in Phase 3 and can be introduced there.
+
+  One inherited claim is worth recording, because it is the single thing most
+  likely to fail first. Upstream mints an App token for these comments, its
+  workflow stating that a fork-PR-triggered run's `GITHUB_TOKEN` is forced
+  read-only and that `issues.createComment` answers 403. An `issue_comment` run
+  executes in the base repository with the permissions its job declares, which
+  is why `issues: write` is expected to be enough here — expected, not proven,
+  and not proven cheaply without a fork PR to try it on. So the placeholder
+  comment is `continue-on-error` and the publish step creates a fresh comment
+  when no placeholder id reaches it: a refusal costs the "running…" note, not
+  the review. If the findings comment itself 403s on a fork, the job goes red
+  rather than silent, and the remedy is to bring the App forward from Phase 3.
 - **Fork behavior:** works. Neither verb checks out or executes branch code;
   the diff and metadata are read through the API and handed to the model as
   data.
@@ -222,6 +234,23 @@ only the separate `docs.yml` link check.
 **c. The verification command the fixer runs.** `pnpm verify:fast` becomes
 `make lint` plus `go test ./...`; the integration lane needs the docker-compose
 stack and is left to CI rather than run inside the fix job.
+
+#### 2.1 What Phase 1 actually ported
+
+The module set is the import closure of the two workflows' entry points, which
+is wider than the verbs themselves: `review-panel.mjs` imports `rounds.mjs` and
+`fix-report.mjs` directly, and the advisory panel reads the fix agent's reports
+so that its verdict matches the gating one's. Those modules ship unused rather
+than being cut out of a 3,400-line file, because surgery inside a ported module
+is what makes the next sync from upstream expensive. `fix-brief.mjs` is not
+here: nothing imports it and neither workflow invokes it.
+
+Four guards in the ported suites assert that a module and a workflow carry the
+same literal. Their workflows arrive in Phases 2 and 3, so they skip rather than
+fail, through one helper (`workflow-presence.mjs`) that says why. Skipping is
+deliberate: the guards re-arm by themselves when the workflow lands, whereas
+deleting them would make Phase 2 a silent regression of checks written
+precisely because their failure mode is invisible.
 
 ### 5. Where the scripts go
 
