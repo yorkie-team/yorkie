@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  LEDGER_AUTHOR_LOGINS,
   isOwnComment,
   renderFixEffort,
   classifyFixResult,
@@ -912,3 +913,18 @@ test("both sweeps actually route through isOwnComment", async () => {
     assert.match(src, new RegExp(`isOwnComment\\(c, ${marker}\\)`), `the ${marker} sweep must use isOwnComment`);
   }
 });
+
+// --- the ledger's author boundary -------------------------------------------
+
+test("LEDGER_AUTHOR_LOGINS matches the latch's trusted authors exactly", () => {
+  // The summary this module renders is posted by `github-actions[bot]`, which
+  // `rounds.mjs::isPagedLatchComment` trusts. So the set of authors whose
+  // records may reach that body has to be the same set that may write a latch —
+  // a wider list here would let a comment this module trusts launder a marker
+  // into a comment the latch trusts. The copy is literal because importing
+  // rounds.mjs here would couple the two modules; the test is what keeps them
+  // in step.
+  assert.deepEqual([...LEDGER_AUTHOR_LOGINS], [...PAGE_AUTHOR_LOGINS]);
+});
+
+import { PAGE_AUTHOR_LOGINS } from "./rounds.mjs";

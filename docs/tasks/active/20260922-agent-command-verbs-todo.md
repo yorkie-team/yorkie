@@ -142,6 +142,46 @@ recorded. The classes worth carrying forward:
       apply commit A's failure log to commit B. Bounded by the attempts counter,
       but it wastes a round and the diagnosis is wrong.
 
+## Inherited defects, recorded not fixed
+
+The fourth review round found fifteen more, and eleven are in the vendored
+pipeline rather than in the adaptation — real, reproduced, and upstream's. They
+are listed here rather than fixed, for the reason the vendoring is split across
+two commits in the first place: surgery inside a module this repository did not
+write is what makes the next sync from upstream expensive, and none of these can
+fire until the surface is enabled. Worth carrying upstream.
+
+- `review-surface.mjs` demotes a finding whose blamed commit is an ancestor of
+  the freeze point, so a real defect in code merged from `main` after the freeze
+  stops gating. Fail-open.
+- `novelty.mjs`'s content probe accepts a whole-tree `git grep -F` hit as proof a
+  line predates the change, so newly added boilerplate drops its finding.
+- `review-round-guard.mjs` back-fills `output.text` only when absent, never when
+  the list response TRUNCATED it — so the convergence page never fires on exactly
+  the finding-heavy PRs it exists for. The module has no test file.
+- `fix-brief.mjs`'s "a brief we could not build is not an empty brief" guard
+  tests the lens count rather than whether any finding parsed, so an
+  infra-failed round dispatches the fixer with an empty work list.
+- `agent-iterate-ci.yml`'s no-commit page has no supersede guard inside a
+  `cancel-in-progress` group, so a superseded run can latch a PR that was only
+  superseded.
+- `redact.mjs`: the echo-frame layer requires a literal `value:`, which undici's
+  wording omits — a 16–23 character unprefixed credential then survives every
+  layer. Separately, layer 4's separator class accepts a bare space, so ordinary
+  prose ("OAuth token rejected", "the secret material") is mangled.
+- `panel-round-comment.mjs` renders "all N lenses passed" using the full lens
+  count while excluding non-gating ones from `blocked`, so an errored advisory
+  lens reads as green beside a red check run.
+- `fix-report.mjs` / `rebuttal.mjs` recompute `tied` per claim instead of making
+  it sticky, so a third equal-scoring claim clears a genuine ambiguity.
+- `metrics.mjs` carries embedded records forward with no size cap, so one
+  duplicated data block can push the summary past GitHub's comment limit and the
+  bail fires before the cleanup that would fix it.
+- `ai-prompt.mjs`'s `isFixable` filters on lane and severity only, so synthesised
+  infra records ("Review could not run") reach the copy-paste fix prompt.
+- `set-state.mjs`'s label write is a read-then-PUT-whole-set, so two arms writing
+  concurrently revert each other and delete any label a human added in between.
+
 ## Not in scope
 
 `@claude fix` on an **issue** (issue → PR, `agent-implement.yml`), the CI

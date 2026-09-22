@@ -198,6 +198,16 @@ jobs:
       # branch author read every credential the pool holds. Checked out AFTER the branch
       # checkout above, because `actions/checkout` cleans its target path and a root
       # checkout would delete this one.
+      # ...and it lands OUTSIDE the workspace. `path:` is relative to
+      # $GITHUB_WORKSPACE, so a checkout into `.trusted-cred` put main's copy of
+      # scripts/agent inside the tree the agent below is told to commit and push
+      # — untracked, unignored, and therefore a plausible `git add -A` away from
+      # being committed to a contributor's branch. Every sibling avoids this:
+      # agent-fix.yml and agent-review-panel.yml stage into `${{ runner.temp }}`,
+      # and agent-iterate-ci.yml removes its copy for the same reason.
+      #
+      # Two steps because `actions/checkout` will not write outside the
+      # workspace: check out, then move it clear before the agent runs.
       - name: Check out trusted main (for the credential picker)
         if: steps.pr.outputs.is_agent == 'true'
         uses: actions/checkout@v4
@@ -207,6 +217,12 @@ jobs:
           sparse-checkout: scripts/agent
           sparse-checkout-cone-mode: false
           persist-credentials: false
+
+      - name: Move the trusted copy out of the agent's workspace
+        if: steps.pr.outputs.is_agent == 'true'
+        run: |
+          rm -rf "$RUNNER_TEMP/trusted-cred"
+          mv .trusted-cred "$RUNNER_TEMP/trusted-cred"
 
       # WHICH POOL SLOT THIS JOB USES — see agent-implement.yml for the full rationale.
       # Without it this step is pinned to slot zero of the pool and one dead account
@@ -235,11 +251,11 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN_7: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_7 }}
           CLAUDE_CODE_OAUTH_TOKEN_8: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_8 }}
         run: |
-          [ -f .trusted-cred/scripts/agent/pick-credential.mjs ] || {
+          [ -f "$RUNNER_TEMP/trusted-cred/scripts/agent/pick-credential.mjs" ] || {
             echo "pick-credential.mjs is not on main yet; using the ambient credential"
             exit 0
           }
-          node .trusted-cred/scripts/agent/pick-credential.mjs
+          node "$RUNNER_TEMP/trusted-cred/scripts/agent/pick-credential.mjs"
 
       - name: Run Claude Code
         if: steps.pr.outputs.is_agent == 'true'

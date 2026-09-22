@@ -258,17 +258,23 @@ jobs:
               core.warning('No placeholder comment to update; the refusal reason is in this log only.');
               return;
             }
+            // THE CI GATE IS CHECKED FIRST, not used as a fallback for an empty
+            // REASON. `fix-eligible.mjs` writes a reason on its ELIGIBLE path
+            // too ("2 lens(es) requested changes on …"), so a `REASON || …`
+            // chain short-circuits and a maintainer blocked by red CI is told
+            // about lens findings instead — with no mention of CI and no route
+            // out. REASON is empty only when the gate step itself failed rather
+            // than returning a decision; say that, rather than posting a blank.
+            const why = process.env.CI_CLEAR === 'false'
+              ? 'CI is red on this commit, and the CI-fix arm owns that state — it is already working, or has already paged. '
+                + 'Running a second fixer on the same branch would lose one of the two pushes. '
+                + 'Wait for it, or comment `@claude rerun` if the PR was handed to a human.'
+              : (process.env.REASON
+                || 'The eligibility check could not complete — see the [workflow run](' + process.env.RUN_URL + ').');
             await github.rest.issues.updateComment({
               owner: context.repo.owner, repo: context.repo.repo,
               comment_id: Number(process.env.COMMENT_ID),
-              // REASON is empty when the gate step itself failed rather than
-              // returning a decision — say that, instead of posting a blank refusal.
-              body: `⏸️ \`@claude fix\` did not run.\n\n${process.env.REASON
-                || (process.env.CI_CLEAR === 'false'
-                  ? 'CI is red on this commit, and the CI-fix arm owns that state — it is already working, or has already paged. '
-                    + 'Running a second fixer on the same branch would lose one of the two pushes. '
-                    + 'Wait for it, or comment `@claude rerun` if the PR was handed to a human.'
-                  : 'The eligibility check could not complete — see the [workflow run](' + process.env.RUN_URL + ').')}`,
+              body: `⏸️ \`@claude fix\` did not run.\n\n${why}`,
             });
 
       # The fixer's work list, from the SAME builder the autonomous loop uses.
