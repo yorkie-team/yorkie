@@ -564,7 +564,13 @@ jobs:
             try { panel = JSON.parse(fs.readFileSync('.agent-review/panel.json', 'utf8')); } catch {}
 
             if (!panel) {
-              await publish(`${marker}\n🛑 **On-demand review could not complete** — the panel produced no verdict (failing closed). A human should review this PR.`);
+              // NO MARKER on this path, deliberately. The marker is the throttle:
+              // it is written before the work and read by the gate, so a run that
+              // produced nothing would otherwise leave it standing and swallow
+              // every retry on this commit — silently, with no comment and no red
+              // X. Dropping it costs a second panel run for someone who asks
+              // again after a failure, which is exactly who should be able to.
+              await publish(`🛑 **On-demand review could not complete** — the panel produced no verdict (failing closed). A human should review this PR. Comment \`@claude review\` to try again on this commit.`);
               return;
             }
             const manifest = JSON.parse(fs.readFileSync('.trusted/scripts/agent/lenses/lenses.json', 'utf8'));

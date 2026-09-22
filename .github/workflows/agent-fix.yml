@@ -325,6 +325,9 @@ jobs:
       # picker can never be worse than not having one.
       - name: Pick a credential from the pool
         id: cred
+        # Guarded like its neighbours: an ineligible `@claude fix` must not
+        # materialise the pool into a step environment on its way to refusing.
+        if: steps.eligible.outputs.eligible == 'true'
         continue-on-error: true
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

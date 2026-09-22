@@ -174,6 +174,7 @@ jobs:
       # checkout above, because `actions/checkout` cleans its target path and a root
       # checkout would delete this one.
       - name: Check out trusted main (for the credential picker)
+        if: steps.pr.outputs.is_agent == 'true'
         uses: actions/checkout@v4
         with:
           ref: main
@@ -192,6 +193,11 @@ jobs:
       # that follows runs against an untrusted checkout.
       - name: Pick a credential from the pool
         id: cred
+        # Guarded like every other step in this block. Without it a bare
+        # "@claude thanks!" on an ordinary PR still materialises all nine pool
+        # secrets into a step environment and then reports the job green, which
+        # reads as "handled" for a comment nothing acted on.
+        if: steps.pr.outputs.is_agent == 'true'
         continue-on-error: true
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
