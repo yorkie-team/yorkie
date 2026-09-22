@@ -1501,7 +1501,7 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
   );
 });
 
-test("agent-implement's reporter is keyed upstream of every gate it must report", () => {
+test("agent-implement's reporter keeps its approved condition, ids and shape", () => {
   // THIS DEFECT SURVIVED FIVE ROUNDS BY MOVING, and two attempts to pin it
   // survived because they were written as DENY-LISTS. The job acknowledges an
   // issue with "On it", then runs gates that can stop it; something must close
@@ -1553,14 +1553,57 @@ test("agent-implement's reporter is keyed upstream of every gate it must report"
   // which it has also done, telling an `npm ci` failure that main was unprotected.
   assert.match(step, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
   assert.match(step, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
+
+  // THE IDS MUST EXIST. A mutation run reached this step's behaviour AROUND the
+  // pinned line rather than through it: renaming `id: protection` to `protect`
+  // leaves every assertion above green while `steps.protection.outcome` becomes
+  // the empty string, so every termination reports the same wrong cause. Cheap,
+  // and not brittle — it asserts existence, not form.
+  for (const id of ["protection", "stage", "agent"]) {
+    assert.match(
+      wf,
+      new RegExp(`^ {8}id: ${id}$`, "m"),
+      `the reporter reads steps.${id}.outcome; without that id it reads an empty string`,
+    );
+  }
+
+  // The reporter must sit in the job whose steps it reads, AFTER the agent —
+  // moving it to another job, or above the gates, leaves the text identical and
+  // the outcomes empty.
+  const agentAt = wf.indexOf("        id: agent");
+  assert.ok(agentAt > 0 && agentAt < at, "the reporter must come after the agent step it reports on");
+  const jobAt = wf.lastIndexOf("\n  implement:", at);
+  const nextJobAt = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at))?.index;
+  assert.ok(jobAt > 0, "the reporter must live in the implement job");
+  assert.ok(nextJobAt === undefined || nextJobAt + at > at, "the reporter must live in the implement job");
+
+  // And nothing may return before the marker is chosen. An early
+  // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
+  // the silence without touching a single `if:` line.
+  const script = step.slice(step.indexOf("script: |"));
+  const beforeMarker = script.slice(0, script.indexOf("const MARKER_FOR"));
+  assert.ok(
+    !/^\s+if \(.*\breturn;/m.test(beforeMarker),
+    "the reporter must not short-circuit before choosing its message — that is the silence this guards",
+  );
+  // Keyed by the BRANCH TAKEN, not by `cause`: `cause` has four values and the
+  // messages have six, so three shared a bucket and a pre-agent failure
+  // suppressed the report of a real no-PR run on the retry it had advised.
   assert.match(
     step,
-    /const MARKER = `<!-- agent-implement-no-pr:\$\{cause\}/,
-    "the no-PR marker must be keyed by cause, or the first failure silences every later one",
+    /const MARKER_FOR = \(k\) => `<!-- agent-implement-no-pr:\$\{k\} -->`;/,
+    "the no-PR marker must be keyed per message, or one failure silences a different one",
   );
+  const keys = [...step.matchAll(/^\s+key = '([a-z-]+)';$/gm)].map((m) => m[1]);
+  assert.equal(
+    new Set(keys).size,
+    keys.length,
+    `two report branches share a marker key (${keys.join(", ")}), so one suppresses the other`,
+  );
+  assert.ok(keys.length >= 6, `expected a key per report branch, found ${keys.length}`);
 });
 
-test("agent-implement never treats a fork's branch name as its own work", () => {
+test("agent-implement's two agent-branch lookups keep their approved form", () => {
   // `pulls.list` returns fork PRs with a bare `head.ref`. Matching on the name
   // alone lets any outside contributor open a PR from `agent/42-anything` and
   // permanently refuse `@claude fix` on issue #42 — an unauthenticated denial of
@@ -1589,7 +1632,26 @@ test("agent-implement never treats a fork's branch name as its own work", () => 
         "if this needs to change, change REQUIRED here in the same commit and say why",
     );
   }
-  // Both lookups, and no third one that skipped the guard entirely.
-  const lookups = lines.filter((l) => /startsWith\(`agent\/\$\{issue\}-`\)/.test(l));
+  // Both lookups, and no third one that skipped the guard entirely. Counted by
+  // the BRANCH PREFIX rather than by one spelling of it: a third lookup written
+  // as `'agent/' + issue + '-'` is the same defect and left this at two.
+  const lookups = lines.filter((l) => /agent\/(?:\$\{issue\}|' \+ issue \+ ')-/.test(l) && /startsWith|indexOf/.test(l));
   assert.equal(lookups.length, 2, `expected exactly two agent-branch lookups, found ${lookups.length}`);
+
+  // HONEST LIMIT, recorded here rather than implied by the test's name. This
+  // pins the text of two predicates. It cannot see a redefinition of `owner`,
+  // `repo` or `mineRepo` elsewhere in the same script, nor a loop that rewrites
+  // `p.head.repo` before the lookup runs. A reviewer changing this file's PR
+  // lookups should read them, not trust this green.
+  // Scoped to the step that USES it. A file-wide match passed a mutation that
+  // rebound `repo` in the pre-flight step alone, because the help job's identical
+  // line kept the assertion green.
+  const preflightAt = wf.indexOf("- name: Refuse if this issue already has an agent PR");
+  assert.ok(preflightAt > 0, "the collision pre-flight step is gone");
+  const preflightEnd = wf.indexOf("\n      - name:", preflightAt + 1);
+  const preflight = wf.slice(preflightAt, preflightEnd > 0 ? preflightEnd : wf.length);
+  assert.ok(
+    preflight.includes("const { owner, repo } = context.repo;"),
+    "`mineRepo` compares against `owner`/`repo` from context; rebinding them defeats it silently",
+  );
 });

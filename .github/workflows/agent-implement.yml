@@ -319,7 +319,10 @@ jobs:
                       'guarantee a human approved this'
                     : 'main is not protected by a required human review that this App cannot bypass ' +
                       '(neither classic protection nor a ruleset provides one)';
-              core.setFailed(`${reason}. This verb opens PRs a bot wrote; refusing to run.`);
+              core.setFailed(
+                `${reason}. This verb opens PRs a bot wrote; refusing to run.` +
+                (reason.includes('may bypass it') ? '' : also),
+              );
             }
 
       # RETRY IS THE DOCUMENTED PATH, AND IT COLLIDES. The concurrency group
@@ -356,7 +359,9 @@ jobs:
             // the PR is open should not be five identical replies, and a locked
             // issue must not swallow the refusal that explains the red X.
             const MARKER = `<!-- agent-implement-open-pr:${open.number} -->`;
-            const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
+            // This step posts with the APP token, so that is the only login that
+            // writes this marker.
+            const AUTHORS = ['yorkie-team-agent[bot]'];
             // The dedupe lookup and the post are separated: a transient list
             // failure must not suppress the refusal, only the deduplication of
             // it. Saying it twice is better than a red X nobody can explain.
@@ -729,6 +734,7 @@ jobs:
             // branch protection it already had.
             const protection = '${{ steps.protection.outcome }}';
             const cause = protection === 'failure' ? 'protection'
+              : protection === 'cancelled' ? 'cancelled'
               : protection !== 'success' ? 'credential'
               : '${{ steps.stage.outcome }}' !== 'success' ? 'setup' : 'no-pr';
             // KEYED BY CAUSE, not by run. A bare marker meant one no-PR report
@@ -739,7 +745,7 @@ jobs:
             // hitting the same refusal would get three identical comments, and a
             // re-run of the same job would repeat itself. The cause is what
             // distinguishes a report worth making from one already on the page.
-            const MARKER = `<!-- agent-implement-no-pr:${cause} -->`;
+            const MARKER_FOR = (k) => `<!-- agent-implement-no-pr:${k} -->`;
             let pr = null, lookupOk = true;
             try {
               const prs = await github.paginate(github.rest.pulls.list, {
@@ -768,34 +774,45 @@ jobs:
             // own death. The two sibling lists keep both logins because those
             // steps genuinely post under either.
             const AUTHORS = ['github-actions[bot]'];
-            const mine = (c) => String(c.body ?? '').includes(MARKER)
-              && AUTHORS.includes((c.user || {}).login);
-            try {
-              const prior = await github.paginate(github.rest.issues.listComments, {
-                owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, per_page: 100,
-              });
-              if (prior.some(mine)) return;
-            } catch (e) {
-              core.warning(`could not check for an existing report: ${e.message}`);
-            }
-            let why;
+            // KEYED BY THE BRANCH TAKEN, not by `cause`. `cause` has four values
+            // and the messages below have six, so `no-pr` covered three of them:
+            // a lookup failure, a stop between staging and the agent, and a real
+            // no-PR run. Run one dies at `go install`, says "worth trying
+            // again"; the maintainer retries as instructed; run two burns ninety
+            // minutes and dies without a PR — same bucket, suppressed, and the
+            // issue keeps "On it" forever. That is the silent termination this
+            // step exists to close, reached through its own advice.
+            //
+            // Not the run id: three maintainers hitting one refusal should not
+            // get three identical comments. What distinguishes a report worth
+            // making is what it SAYS.
+            let key, why;
             if (!lookupOk) {
+              key = 'lookup';
               why = '⚠️ This run has ended, but this step could not read the PR list to tell whether a PR was '
                 + `opened — check the issue's linked PRs and the [run](${runUrl}) before assuming it failed.`;
             } else if (cause === 'protection') {
+              key = 'protection';
               why = '🛑 Refused before any work began: this verb will not open a bot-authored PR unless `main` '
                 + 'requires at least one human approving review, and that could not be confirmed. '
                 + `The [run](${runUrl}) says which check failed. Retrying will not help until the branch `
                 + 'protection on `main` is fixed.';
+            } else if (cause === 'cancelled') {
+              key = 'cancelled';
+              why = `⚠️ This run was cancelled before it started work. See the [run](${runUrl}); `
+                + '`@claude fix` again when you want it to retry.';
             } else if (cause === 'credential') {
+              key = 'credential';
               why = '🛑 The `yorkie-team-agent` GitHub App token could not be issued, so nothing ran. Both '
                 + 'secrets are set, so this is the App itself — a rotated private key, or the App suspended '
                 + `or uninstalled. See the [run](${runUrl}); branch protection is not the problem here.`;
             } else if (!staged) {
+              key = 'setup';
               why = '🛑 This run stopped while setting up, after the checks passed and before any work began — '
                 + `a checkout or dependency install failed. See the [run](${runUrl}); this is usually `
                 + 'transient, so `@claude fix` is worth trying again.';
             } else if (agentOutcome === 'skipped' || agentOutcome === '') {
+              key = 'presetup';
               // Between staging and the agent: Go setup, the linter install, the
               // issue fetch, the prompt build. The branch below cites the
               // execution transcript, and none of these produce one.
@@ -803,9 +820,22 @@ jobs:
                 + `linter install, or fetching the issue. See the [run](${runUrl}); there is no agent `
                 + 'transcript because nothing ran. `@claude fix` is worth trying again.';
             } else {
+              key = 'agent';
               why = `🛑 This run ${agentOutcome === 'failure' ? 'failed' : 'ended'} without opening a PR — no open `
                 + `\`agent/${issue}-*\` branch has one. See the [run](${runUrl}) and its \`claude-execution-output\` `
                 + 'artifact for the transcript. Comment `@claude fix` to retry.';
+            }
+            // The dedupe lookup happens AFTER the branch is chosen, because the
+            // marker it looks for depends on it.
+            const MARKER = MARKER_FOR(key);
+            try {
+              const prior = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, per_page: 100,
+              });
+              if (prior.some((c) => String(c.body ?? '').includes(MARKER)
+                && AUTHORS.includes((c.user || {}).login))) return;
+            } catch (e) {
+              core.warning(`could not check for an existing report: ${e.message}`);
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo, issue_number: issue,
@@ -882,7 +912,11 @@ jobs:
             const existing = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number, per_page: 100,
             });
-            const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
+            // GITHUB_TOKEN posts this job's reply, so that is the only login
+            // that writes this marker. The App identity was surplus here, and
+            // not harmlessly: the implement agent posts under it and could have
+            // suppressed help for a verb on an issue permanently.
+            const AUTHORS = ['github-actions[bot]'];
             const mine = (c) => String(c.body ?? '').includes(MARKER)
               && AUTHORS.includes((c.user || {}).login);
             if (existing.some(mine)) return;
