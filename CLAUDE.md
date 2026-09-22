@@ -78,9 +78,16 @@ changes go to `docs/design/<topic>.md`.
    `make lint` green and `make test` green when MongoDB is up (or at
    least `go test ./...` for unit-only changes); follow the
    commit-message convention above.
-3. **Self review** — dispatch `superpowers:requesting-code-review` (or
-   `/code-review`) over the full branch diff before pushing. Apply
-   blocking findings; note non-blocking as known limitations.
+3. **Self review** — `/self-review`: a bounded loop of review → fix →
+   re-verify over the full branch diff, **max 3 rounds, stopping at the
+   first round with no blocking findings**. Rotate what you weight per
+   round (1 correctness/tests, 2 design fit, 3 security/docs) — the same
+   reviewer asked three times mostly restates itself. When a reviewer
+   cannot be launched, say so and ask; never let a skipped round read as
+   a clean one. Log each round in `*-lessons.md`. A finding you believe
+   is wrong goes there with evidence; one merely ignored is re-raised
+   every round. Non-blocking findings become known limitations in the PR
+   body.
 4. **Sync + open PR** — `git fetch && git rebase origin/main` to
    surface conflicts before pushing. Title ≤70 chars; body =
    Summary + Test plan. CodeRabbit will comment automatically.

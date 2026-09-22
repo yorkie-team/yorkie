@@ -60,12 +60,16 @@ Phase-2 guards), 0 fail. `node scripts/verify-doc-links.mjs` green.
       compare its blocking findings against CodeRabbit's on the same diff.
       Phase 2 is justified only by that comparison.
 
-## Phase 0 — not in this branch
+## Phase 0 — done in this branch
 
-`/self-review` (a `.claude/commands/` definition) is Phase 0 in the design and
-is deliberately not here: it is a local command with no CI surface, and mixing
-it into a branch that is otherwise a workflow-and-scripts port would make both
-harder to review. It needs no infrastructure, so it can land any time.
+- [x] `.claude/commands/self-review.md` — the bounded loop, and the rule that a
+      skipped review never reads as a clean round.
+- [x] `CLAUDE.md` step 3 points at it instead of carrying one prose line.
+
+It runs the harness's own reviewer, not the six lenses: there is no local runner
+for the panel, so the command says which reviewer it ran and refuses to report a
+round as a panel round. That asymmetry is deliberate — a local runner would need
+its own credential handling to say anything the cloud panel does not.
 
 ## Not in scope
 
