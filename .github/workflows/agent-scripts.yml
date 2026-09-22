@@ -87,6 +87,17 @@ jobs:
   # `github-script` bodies and heredoc-heavy `run:` blocks that shellcheck reads
   # as its own dialect, and a lane that is noisy from its first run is a lane
   # people learn to ignore. The startup-failure class is what this exists for.
+  #
+  # SCOPED TO `agent-*.yml`, which is narrower than the paths that trigger this
+  # lane, and the asymmetry is deliberate. Pointing actionlint at the whole
+  # directory reports two findings that predate this surface and belong to other
+  # people's lanes — a `workflow_call` input in `base-docker-publish.yml` that is
+  # both `required` and defaulted, and `codecov/codecov-action@v3` in `ci.yml`
+  # being too old for current runners. Neither is a startup failure, and
+  # adopting them here would mean either fixing the Go coverage upload as a side
+  # effect of an agent change, or carrying an ignore list that quietly excuses
+  # them forever. They are worth fixing; they are not worth fixing silently, in
+  # this PR, by whoever next touches these scripts.
   lint-workflows:
     runs-on: ubuntu-latest
     steps:
@@ -95,7 +106,11 @@ jobs:
         with:
           persist-credentials: false
 
+      # `docker run` in a `run:` step rather than `uses: docker://…`, because a
+      # docker action's `args:` are passed as an argv array with no shell, so the
+      # glob below would reach actionlint as a literal filename and the lane
+      # would fail on "file not found" instead of linting anything.
       - name: Lint workflow files
-        uses: docker://rhysd/actionlint:1.7.12
-        with:
-          args: -color -shellcheck= -pyflakes=
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 \
+            -color -shellcheck= -pyflakes= .github/workflows/agent-*.yml
