@@ -1,0 +1,679 @@
+# On-demand review panel: when someone comments "@claude review" on a PR, run the
+# SAME read-only lens panel the autonomous pipeline uses (scripts/agent/review-panel.mjs)
+# and post its findings as ONE PR comment. Unlike agent-review-panel.yml this is
+# comment-triggered, works on ANY PR (including forks and human-authored branches),
+# and is purely advisory: it records NO check runs and drives NO promote/fix loop,
+# so it never touches the human-approval merge gate. "@claude loop" is the verb
+# that opts a PR into the auto-fix machinery — this one only reports.
+#
+# Trust: the PR author OR a trusted maintainer may trigger it (read-only, low
+# risk). Throttled to one review per head SHA.
+#
+# ON THE REFERENCES BELOW. This file was ported from wafflebase, where it is the
+# advisory half of a pair; the comments still say "the twin step in
+# agent-review-panel.yml" because that is where the rationale was written and
+# where it will be again. That workflow is NOT installed here — it arrives with
+# Phase 2 (docs/design/agent-command-verbs.md), and until it does those pointers
+# resolve upstream, not in this tree. Nothing in this file depends on it.
+#
+# Security (identical to the gating panel this was ported from): the reviewer is read-only
+# (Read/Grep/Glob), the orchestrator + lenses come from a TRUSTED `main` checkout,
+# the SDK is installed in a separate UNPRIVILEGED job (never in the job holding the
+# auth token), the branch checkout drops credentials + executable agent config,
+# and the reviewed SHA is pinned.
+name: Agent Review On-Demand
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+env:
+  # gh expands `{owner}/{repo}` via git; GH_REPO makes it skip that lookup.
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  route:
+    if: >-
+      vars.AGENT_PIPELINE_ENABLED == 'true' &&
+      github.event.comment.user.type != 'Bot' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      command: ${{ steps.route.outputs.command }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/agent/command.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Route command
+        id: route
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: node scripts/agent/command.mjs "$BODY" pr
+
+  # Authoritative trust + throttle, BEFORE any expensive work (SDK install, panel).
+  # Authorized = PR author OR a maintainer with write access. Throttle = skip if
+  # this head SHA was already reviewed. Unauthorized/throttled → proceed=false and
+  # everything downstream is skipped silently.
+  authorize:
+    needs: [route]
+    if: needs.route.outputs.command == 'review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+      # write, not read: the placeholder below is posted with GITHUB_TOKEN now
+      # that no App token carries its own permissions into this job.
+      issues: write
+    outputs:
+      proceed: ${{ steps.gate.outputs.proceed }}
+      pr: ${{ steps.gate.outputs.pr }}
+      head_sha: ${{ steps.gate.outputs.head_sha }}
+      comment_id: ${{ steps.placeholder.outputs.id }}
+    steps:
+      - name: Authorize and throttle
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const pr_number = context.payload.issue.number;
+            const actor = context.payload.comment.user.login;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: pr_number });
+            core.setOutput('pr', String(pr_number));
+            core.setOutput('head_sha', pr.head.sha);
+
+            let trusted = false;
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: actor });
+              trusted = ['admin', 'maintain', 'write'].includes(data.permission);
+            } catch { /* not a collaborator */ }
+            const isAuthor = pr.user && pr.user.login === actor;
+            if (!trusted && !isAuthor) {
+              core.info(`@${actor} is neither the PR author nor a maintainer; ignoring.`);
+              return core.setOutput('proceed', 'false');
+            }
+
+            const marker = `<!-- agent-review:${pr.head.sha} -->`;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr_number, per_page: 100 });
+            if (comments.some((c) => (c.body || '').includes(marker))) {
+              core.info(`This commit (${pr.head.sha}) was already reviewed; skipping.`);
+              return core.setOutput('proceed', 'false');
+            }
+            core.setOutput('proceed', 'true');
+
+      # Post the "running" placeholder now (with the throttle marker, so a repeat
+      # @claude review on this SHA is deduped) and hand its id to the review job,
+      # which edits it into the findings when the panel finishes.
+      # Posted with the default GITHUB_TOKEN. Upstream mints a GitHub App token
+      # here, having observed a fork-PR-triggered run's GITHUB_TOKEN refuse
+      # issues.createComment; this repository has no App yet (Phase 3 brings
+      # one — docs/design/agent-command-verbs.md), and an `issue_comment` run
+      # executes in the BASE repository with the permissions its job declares,
+      # which is why `issues: write` below is expected to suffice. Expected, not
+      # proven: the step is continue-on-error, and the publish step at the end of
+      # the review job creates a fresh comment when no placeholder id reaches it,
+      # so a refusal here costs the "running…" note and not the review.
+
+      - name: Post running placeholder
+        id: placeholder
+        if: steps.gate.outputs.proceed == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          HEAD_SHA: ${{ steps.gate.outputs.head_sha }}
+        with:
+          retries: 3
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const { data } = await github.rest.issues.createComment({
+              owner, repo, issue_number: context.payload.issue.number,
+              body: `<!-- agent-review:${process.env.HEAD_SHA} -->\n🤖 Review panel is running…`,
+            });
+            core.setOutput('id', String(data.id));
+
+  # Install the Agent SDK in an UNPRIVILEGED job (no secrets, no environment) and
+  # hand it to the review job as a tarball. Same #501 no-install rule as the
+  # autonomous panel: the token-holding review job must never run `npm install`.
+  deps:
+    needs: [route, authorize]
+    if: needs.authorize.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main # trusted source for package.json + lockfile
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - run: cd scripts/agent && npm ci --no-audit --no-fund
+      # Tar to preserve +x bits + symlinks that upload-artifact would strip.
+      - run: cd scripts/agent && tar -czf /tmp/agent-sdk-node-modules.tgz node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-sdk-node-modules-ondemand
+          path: /tmp/agent-sdk-node-modules.tgz
+          retention-days: 1
+
+  review:
+    needs: [route, authorize, deps]
+    # always() so that if `deps` fails AFTER authorize posted the placeholder, this
+    # job still runs and the final (always()) step edits the placeholder into a
+    # fail-closed note instead of stranding a "running…" comment. The proceed gate
+    # still keeps it inert for unauthorized/throttled/non-review comments.
+    if: always() && needs.authorize.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # The CLAUDE_CODE_OAUTH_TOKEN lives in the protected `agent` environment. A
+    # maintainer can relax that environment's protection if they want review to be
+    # self-service rather than approval-gated.
+    environment: agent
+    permissions:
+      contents: read # read-only toward the PR
+      pull-requests: read
+      checks: read # READ prior agent-review-<lens> findings (never checks:write — advisory only)
+      issues: write # post the single findings comment
+    concurrency:
+      group: agent-review-ondemand-${{ needs.authorize.outputs.pr }}
+      cancel-in-progress: false
+    steps:
+      # Pin the reviewed commit to the SHA `authorize` captured — NOT the floating
+      # refs/pull/<n>/head, which a push landing between authorize and here would
+      # move (reviewing an unattested commit and mismatching the throttle marker).
+      # Fork PR head SHAs are fetchable from the base repo. persist-credentials:false
+      # — the reviewer's cwd is untrusted branch code; keep no token in .git/config.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      # KEEP IN SYNC with the identical step in agent-review-panel.yml.
+      - name: Compute diff + changed files (data for the reviewers)
+        id: diff
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          # Same endpoint as the `...` diff below, so "what changed" and "what
+          # novelty.mjs treats as already-there" cannot disagree. See the twin
+          # step in agent-review-panel.yml.
+          echo "base=$(git merge-base origin/main HEAD)" >> "$GITHUB_OUTPUT"
+          # UNFILTERED on purpose — see the twin step in agent-review-panel.yml
+          # for why the changed-file list must never shrink.
+          git diff --name-only origin/main...HEAD > /tmp/changed.txt
+          # Generated artefacts omitted from the diff BODY only — the changed-FILE
+          # list above still carries them, so a lens can still see that codegen
+          # moved. `api/yorkie/v1/*.pb.go` and the connect wrappers are the buf
+          # output that `buf generate` reproduces byte for byte and that CI
+          # already fails on when stale, so a lens reading them spends its turns
+          # on machine output; `api/docs/**` is the generated OpenAPI bundle.
+          # `api/**/*.proto` is NEVER excluded — it is the wire contract, the one
+          # kind of change this repository cannot walk back.
+          git diff origin/main...HEAD -- . \
+            ':(exclude)api/yorkie/v1/*.pb.go' \
+            ':(exclude)api/yorkie/v1/v1connect/*.connect.go' \
+            ':(exclude)api/docs/*' > /tmp/pr.diff
+          # Regeneration-only change → filtered diff is empty and the panel
+          # fails closed. Fall back to the unfiltered diff.
+          if [ ! -s /tmp/pr.diff ]; then
+            git diff origin/main...HEAD > /tmp/pr.diff
+          fi
+
+      # Best-effort issue spec for the design-fit lens — same provenance rule as
+      # the autonomous panel (only trust an `agent:candidate`, human-authored issue
+      # referenced by "Fixes #N"); otherwise design-fit reviews without a spec.
+      - name: Fetch originating issue spec (for design-fit)
+        uses: actions/github-script@v7
+        env:
+          PR: ${{ needs.authorize.outputs.pr }}
+        with:
+          retries: 3
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const num = Number(process.env.PR);
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: num });
+            const m = (pr.body || '').match(/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i);
+            let text = '';
+            if (m) {
+              try {
+                const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: Number(m[1]) });
+                const labelled = (issue.labels || []).some((l) => (l.name || l) === 'agent:candidate');
+                const human = issue.user && issue.user.type !== 'Bot';
+                if (labelled && human) text = `# ${issue.title}\n\n${issue.body || ''}`;
+              } catch {}
+            }
+            fs.writeFileSync('/tmp/issue.txt', text);
+
+      - name: Clear stale verdicts
+        run: rm -rf .agent-review .trusted
+
+      # Trusted orchestrator + lenses from main (NOT the branch's copy).
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download Agent SDK (built by the unprivileged deps job)
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-sdk-node-modules-ondemand
+          path: /tmp/agent-sdk
+      - name: Unpack the Agent SDK into the trusted tree
+        run: |
+          mkdir -p .trusted/scripts/agent
+          tar -xzf /tmp/agent-sdk/agent-sdk-node-modules.tgz -C .trusted/scripts/agent
+
+      # SECURITY: strip branch-supplied executable agent config (.claude hooks +
+      # .mcp.json) from the reviewer's cwd. settingSources:[] is the primary guard;
+      # this is belt-and-suspenders.
+      - name: Strip untrusted agent config from the branch
+        run: rm -rf "$GITHUB_WORKSPACE/.claude" "$GITHUB_WORKSPACE/.mcp.json"
+
+      # Carry forward the AUTONOMOUS panel's prior blocking findings (stored as JSON
+      # in each `agent-review-<lens>` check run's output.text) and hand them to the
+      # panel via --prior-findings, so this advisory review RE-CHECKS them the same
+      # way the gate does. Without this, a finding the gate is still holding open
+      # can look "resolved" here just because a fresh pass happened to miss it (the
+      # divergence seen on #548). Same logic as agent-review-panel.yml's "Read prior
+      # findings". Best-effort (continue-on-error) and empty when there's no prior
+      # panel history (e.g. a non-agent PR). This review posts NO check runs, so it
+      # only READS priors and never contributes new ones.
+      #
+      # The SAME trusted script the gating panel runs, which is the point: this was
+      # the second inline copy of that logic, and two copies of a gate input is how
+      # one of them rots. Both API contracts it depends on are non-obvious and fail
+      # silently as "carried 0 findings" — see gh-checks.mjs.
+      #
+      # This review NEVER narrows its own diff: it records no check runs, so it can
+      # never write a pointer back, and a round that reviewed only a delta with no
+      # pointer to show for it would be invisible to the gating panel. Hence no
+      # review-scope step here and no --review-mode flag below.
+      - name: Read prior findings (align with the gating panel)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.authorize.outputs.pr }}
+        run: >-
+          node .trusted/scripts/agent/prior-findings.mjs "$PR"
+          --lenses .trusted/scripts/agent/lenses/lenses.json
+          --out /tmp/prior-findings.json
+
+      # Same untrusted side-channel the gating panel reads, for the same reason:
+      # an on-demand review that re-raised a finding an adjudicator has already
+      # overturned would contradict the gating panel on the same PR, and a human
+      # reading the advisory comment has no way to tell which one is current.
+      - name: Read author rebuttals (align with the gating panel)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.authorize.outputs.pr }}
+        run: node .trusted/scripts/agent/rebuttal.mjs read "$PR" --out /tmp/rebuttals.json
+
+      # And the fix agent's own reports, for the same reason as the rebuttals
+      # directly above: this advisory review must reach the SAME verdict the gating
+      # panel would, or a maintainer reading it is being told something the merge
+      # gate does not agree with. Trusted copy, fail-quiet, adjudicated not verified
+      # (see scripts/agent/fix-report.mjs).
+      #
+      # `needs.authorize.outputs.pr`, matching the rebuttal step above. This was
+      # copied from agent-review-panel.yml, where the PR number comes from a `pr`
+      # STEP — an output this workflow does not have. `steps.pr.outputs.number`
+      # therefore evaluated to the empty string, the `if` was permanently false,
+      # and the step never ran: no /tmp/fix-reports.json, review-panel.mjs
+      # tolerating the missing file, and the advisory panel silently ignoring every
+      # fix report. Fail-safe, and invisible — which is exactly the second-copy rot
+      # scripts/agent/fix-brief.mjs was extracted to prevent, reproduced in the
+      # plumbing around it.
+      - name: Read fix-agent reports (align with the gating panel)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.authorize.outputs.pr }}
+        run: node .trusted/scripts/agent/fix-report.mjs read "$PR" --out /tmp/fix-reports.json
+
+      - name: Run review panel
+        id: panel
+        # A crash must not fail the job — the aggregate step below then posts a
+        # fail-closed note instead of results.
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The credential pool. See the twin step in agent-review-panel.yml for
+          # why selection is per job, and for the invariant this relaxes: the
+          # count of credentials in an untrusted-cwd process goes from one to as
+          # many as nine. Unregistered slots arrive as "" and are dropped.
+          CLAUDE_CODE_OAUTH_TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_1 }}
+          CLAUDE_CODE_OAUTH_TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          CLAUDE_CODE_OAUTH_TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          CLAUDE_CODE_OAUTH_TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          CLAUDE_CODE_OAUTH_TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+          CLAUDE_CODE_OAUTH_TOKEN_6: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_6 }}
+          CLAUDE_CODE_OAUTH_TOKEN_7: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_7 }}
+          CLAUDE_CODE_OAUTH_TOKEN_8: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_8 }}
+          # Via env, never interpolated into the `run:` string — this step holds
+          # the Claude token. Same rule as the twin step in agent-review-panel.yml.
+          BASE_SHA: ${{ steps.diff.outputs.base }}
+          # Per-lens stage-detail capture, PASSED RAW and for parity with the twin
+          # step in agent-review-panel.yml — not as a way to switch it on. Both
+          # resolve an UNSET repo variable in the script (capture ON, diff content
+          # OFF), which is what this job already got by passing neither.
+          #
+          # Passing them is what stops the two producers from drifting once someone
+          # DOES set one: without these lines `AGENT_STAGE_DETAIL_CAPTURE=false`
+          # would silence the gating capture while this one kept writing, and
+          # `..._DIFF_CONTENT=true` would have one producer emit `lensDiff` and the
+          # other silently omit it — a difference no consumer could see in the
+          # payload.
+          STAGE_DETAIL_CAPTURE: ${{ vars.AGENT_STAGE_DETAIL_CAPTURE }}
+          STAGE_DETAIL_DIFF_CONTENT: ${{ vars.AGENT_STAGE_DETAIL_DIFF_CONTENT }}
+        # --prior-findings, --rebuttals and --fix-reports are all tolerant of a
+        # missing file (existsSync guard in review-panel.mjs → treated as []), so a
+        # skipped/failed read step above is safe.
+        run: >-
+          node .trusted/scripts/agent/review-panel.mjs
+          --diff-file /tmp/pr.diff
+          --issue-file /tmp/issue.txt
+          --changed-files /tmp/changed.txt
+          --prior-findings /tmp/prior-findings.json
+          --rebuttals /tmp/rebuttals.json
+          --fix-reports /tmp/fix-reports.json
+          --base-sha "$BASE_SHA"
+          --repo "$GITHUB_WORKSPACE"
+          --lenses-dir .trusted/scripts/agent/lenses
+          --out .agent-review
+
+      # The twin of the gating panel's step — see agent-review-panel.yml for why
+      # the artifact could not say which PR it came from and why the payload is
+      # built in a tested script rather than in YAML. Both producers upload the
+      # same capture, so `channel` is the ONLY field that can tell an advisory
+      # round from a gating one; without it a single head sha reviewed twice
+      # reads as two gating rounds.
+      #
+      # Differs from the twin in exactly four places: `--channel advisory`,
+      # `--workflow agent-review-on-demand.yml`, where the PR and head sha come
+      # from, and no `steps.pr` guard — an `issue_comment` event always carries
+      # `needs.authorize.outputs.pr`, which is the same reason the upload below
+      # has none.
+      - name: Describe the capture (attribution for the artifact below)
+        if: always()
+        continue-on-error: true
+        env:
+          PR: ${{ needs.authorize.outputs.pr }}
+          # The SHA `authorize` pinned and this job checked out — not the floating
+          # PR head, which a push landing mid-run would have moved.
+          HEAD_SHA: ${{ needs.authorize.outputs.head_sha }}
+          BASE_SHA: ${{ steps.diff.outputs.base }}
+        run: |
+          # `.trusted` is this job's `main` checkout — the reviewer's own version.
+          PANEL_SHA=$(git -C .trusted rev-parse HEAD 2>/dev/null || true)
+          node .trusted/scripts/agent/capture-meta.mjs \
+            --out .agent-review/meta.json \
+            --pr "$PR" \
+            --head-sha "$HEAD_SHA" \
+            --base-sha "$BASE_SHA" \
+            --channel advisory \
+            --workflow agent-review-on-demand.yml \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --event "$GITHUB_EVENT_NAME" \
+            --panel-sha "$PANEL_SHA"
+
+      # The SAME capture the gating panel uploads (#641), from the same writer, at
+      # the same path and retention, and now with the same `meta.json` beside it.
+      # Deliberately not a second format: the panel already wrote these files on
+      # every on-demand round and the runner then deleted them, so this is a route
+      # out, not new data.
+      #
+      # #641 listed this under "Not built", on the grounds that "advisory
+      # `@claude review` invocations are not the population a tuning corpus should
+      # be scored on". That reasoning holds for scoring the GATE and not for the
+      # measurement this feeds. Severity-weighted precision has `minor`/`nit`
+      # buckets and the independent reviewer we compare against is nit-heavy, so
+      # separating "we missed it" from "we found it and called it minor" needs the
+      # panel's NON-BLOCKING findings — and `samples` is the only channel that
+      # carries them (its sibling `verifications` is blocking-only, and every
+      # permanent channel — check-run output.text, the rendered comment — is
+      # critical/major). Measured over all 17 real on-demand comments: 249 blocking
+      # against 387 non-blocking. Advisory rounds are not scored AS gate decisions;
+      # their per-sample severities are the comparison data.
+      #
+      # Safe from this job, for reasons already established rather than new ones.
+      # upload-artifact needs no write scope, so nothing here widens what this
+      # deliberately read-only job can reach (`checks: read`, never write). The glob
+      # cannot pick up a branch-planted `.agent-review/evil/stage-detail.json`
+      # because "Clear stale verdicts" above does `rm -rf .agent-review` before the
+      # panel runs. The gating `review-panel` job has the identical property — its
+      # SDK cwd is the untrusted branch checkout too — and already uploads two
+      # artifacts.
+      #
+      # No `steps.pr` guard, unlike the gating twin: that one resolves a PR number
+      # from a workflow_run payload that may not have one, while an issue_comment
+      # event always carries `needs.authorize.outputs.pr`.
+      - name: Upload per-lens stage detail
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          # PR number in the name — a convenience for humans and for selective
+          # fetching. `meta.json` is the source of truth. See the twin step.
+          name: review-panel-stage-detail-pr-${{ needs.authorize.outputs.pr }}
+          path: |
+            .agent-review/*/stage-detail.json
+            .agent-review/meta.json
+          # REQUIRED — see the twin step in agent-review-panel.yml for the
+          # mechanism. Without it the glob's search root is the dot-directory
+          # `.agent-review`, which @actions/glob skips before reading it, and this
+          # step silently uploads nothing. The literal `meta.json` above does not
+          # escape that: its search path is a descendant of the glob's and is
+          # dropped from `getSearchPaths()`.
+          include-hidden-files: true
+          # Absent whenever capture is disabled, or every lens skipped, or the panel
+          # crashed before writing — none of which is an error here. This is also
+          # why the flag above cannot be inferred from a green run.
+          if-no-files-found: ignore
+          # 90, the maximum for a public repo. Kept in step with the gating twin:
+          # a collector reading both producers must not find one channel's
+          # captures expiring 60 days before the other's.
+          retention-days: 90
+
+      # Posted with the default GITHUB_TOKEN; the job declares `issues: write`
+      # and `pull-requests: read` (metrics.mjs summarize sizes the scope from
+      # `gh pr view`). Upstream mints a GitHub App token here instead, for the
+      # fork-PR reason recorded above the placeholder step. If this post ever
+      # 403s on a fork PR, that is the signal to bring the App forward from
+      # Phase 3 rather than to weaken the trust gate.
+
+      - name: Build the AI-agent prompt section
+        if: always()
+        continue-on-error: true
+        run: >-
+          node .trusted/scripts/agent/ai-prompt.mjs
+          --review-dir .agent-review
+          --out /tmp/ai-prompt.md
+
+      # Build the TRIAGE-layout comment region (headline counts, blocking findings
+      # expanded and first, minor/nit + prose collapsed per lens) from the SAME
+      # verdict.json findings. Presentation only — no check runs, no gate change.
+      # --blob-base makes each file:line a real link to the reviewed commit. Runs
+      # the TRUSTED main copy; continue-on-error + fail-safe empty output so the
+      # comment step falls back to the old per-lens concatenation if this is empty.
+      - name: Build the triage review comment
+        if: always()
+        continue-on-error: true
+        env:
+          BLOB_BASE: https://github.com/${{ github.repository }}/blob/${{ needs.authorize.outputs.head_sha }}
+        run: >-
+          node .trusted/scripts/agent/review-comment.mjs
+          --review-dir .agent-review
+          --lenses .trusted/scripts/agent/lenses/lenses.json
+          --blob-base "$BLOB_BASE"
+          --out /tmp/review-comment.md
+
+      # EDIT the "running" placeholder authorize posted (comment_id) into the
+      # findings — aggregate panel.json + each lens's summary.md. No check runs;
+      # advisory only. Fails closed to a note if the panel crashed. If the
+      # placeholder id is missing (its post failed), fall back to a fresh comment.
+      - name: Update the running comment with results
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          HEAD_SHA: ${{ needs.authorize.outputs.head_sha }}
+          PR: ${{ needs.authorize.outputs.pr }}
+          COMMENT_ID: ${{ needs.authorize.outputs.comment_id }}
+        with:
+          retries: 3
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const pr = Number(process.env.PR);
+            const commentId = process.env.COMMENT_ID ? Number(process.env.COMMENT_ID) : null;
+            const marker = `<!-- agent-review:${process.env.HEAD_SHA} -->`;
+            // Edit the placeholder if we have one; otherwise post a fresh comment.
+            const publish = (body) => commentId
+              ? github.rest.issues.updateComment({ owner, repo, comment_id: commentId, body })
+              : github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+
+            // Read panel.json and take the fail-closed path FIRST, before parsing
+            // the trusted manifest. If an earlier step failed and skipped the
+            // `.trusted` checkout (this job runs under always()), lenses.json is
+            // absent — reading it first would throw and strand the placeholder
+            // instead of editing it to the note below.
+            let panel = null;
+            try { panel = JSON.parse(fs.readFileSync('.agent-review/panel.json', 'utf8')); } catch {}
+
+            if (!panel) {
+              await publish(`${marker}\n🛑 **On-demand review could not complete** — the panel produced no verdict (failing closed). A human should review this PR.`);
+              return;
+            }
+            const manifest = JSON.parse(fs.readFileSync('.trusted/scripts/agent/lenses/lenses.json', 'utf8'));
+            const byId = Object.fromEntries(panel.map((p) => [p.id, p]));
+            // Overall verdict from the BLOCKING+applicable lenses (same rule as the
+            // gating panel), but rendered as advice, not a gate.
+            let blocked = false;
+            for (const lens of manifest) {
+              const p = byId[lens.id];
+              const blocking = String(lens.gating ?? 'blocking') === 'blocking';
+              const applicable = p ? p.applicable !== false : true;
+              const conclusion = p ? p.conclusion : 'failure';
+              if (blocking && applicable && conclusion !== 'success') blocked = true;
+            }
+            const header = blocked
+              ? '### 🔴 Review panel: changes suggested'
+              : '### 🟢 Review panel: looks good';
+            const bodies = manifest.map((lens) => {
+              let md = '_No summary produced._';
+              try { md = fs.readFileSync(`.agent-review/${lens.id}/summary.md`, 'utf8'); } catch {}
+              return md.trim();
+            });
+            // One line of verifier accounting, from the stats the panel already
+            // writes. Without it this path reported NOTHING about the filter —
+            // no check runs, no artifact, no metrics comment — which is why a
+            // session-limit outage that discarded every verdict on #592 was
+            // indistinguishable from a clean full review. `errored` leads
+            // because a non-zero value invalidates every number after it.
+            let tally = '';
+            try {
+              const stats = JSON.parse(fs.readFileSync('.agent-review/review-lens-stats.json', 'utf8'));
+              const sum = (f) => stats.reduce((n, s) => n + (Number(s?.verifier?.[f]) || 0), 0);
+              const sent = sum('sentToVerifier'), errored = sum('errored'), dropped = sum('dropped');
+              const lanes = (f) => stats.reduce((n, s) => n + (Number(s?.lanes?.[f]) || 0), 0);
+              if (sent > 0 || errored > 0) {
+                tally = '\n\n<sub>Verifier: ' + sent + ' sent, ' + dropped + ' dropped, '
+                  + sum('unresolved') + ' unresolved'
+                  + (errored ? ', **' + errored + ' ERRORED (unfiltered)**' : '')
+                  + ' · novelty: ' + lanes('backlog') + ' relocated, ' + lanes('unknownOrigin') + ' unplaceable</sub>';
+              }
+            } catch { /* stats absent (crash before write) — say nothing rather than guess */ }
+            // Collapsed, copy-pasteable "Prompt for AI Agents" fold — the blocking
+            // findings rendered as a fix instruction (built by the trusted
+            // ai-prompt.mjs step above). Empty when nothing blocks or the panel
+            // never ran; best-effort read so a missing file never strands the
+            // comment. It rides ABOVE `note` so the one-line disclaimer stays last,
+            // and is re-appended on truncation because it is the actionable part.
+            let promptSection = '';
+            try {
+              const p = fs.readFileSync('/tmp/ai-prompt.md', 'utf8').trim();
+              if (p) promptSection = `\n\n${p}`;
+            } catch { /* no prompt file (nothing blocked, or panel crashed) */ }
+            const note = '\n\n_Advisory only — this on-demand review records no status checks and does not gate merge; a human approval is still required._';
+            // Prefer the TRIAGE region (headline counts, blocking findings first +
+            // expanded, minor/nit + prose collapsed) built by review-comment.mjs
+            // above — it already carries its own 🔴/🟢 header and does finding-aware
+            // truncation. Best-effort: if it's empty/missing (older trusted copy or
+            // the build step failed), fall back to the original per-lens summary.md
+            // concatenation so the comment is never stranded.
+            let region = '';
+            try { region = fs.readFileSync('/tmp/review-comment.md', 'utf8').trim(); } catch { /* fall back below */ }
+            if (!region) region = `${header}\n\n${bodies.join('\n\n')}`;
+            let body = `${marker}\n${region}${tally}${promptSection}${note}`;
+            // GitHub comment hard limit is 65536 chars; trim from the tail if huge.
+            // `tally` + `promptSection` are re-appended after the cut, like `note`:
+            // a body long enough to truncate is one with many findings, which is
+            // exactly when "were these verified?" and the fix prompt matter most.
+            // (The triage region self-truncates to a budget, so this is a backstop.)
+            if (body.length > 65000) body = body.slice(0, 64900) + '\n\n… _(truncated)_' + tally + promptSection + note;
+            await publish(body);
+
+      # Record this review's cost/reliability into the PR metric ledger and post
+      # the aggregated agent-effort summary — the same ledger + renderer the
+      # autonomous panel uses, so a maintainer sees what an on-demand review cost.
+      # Only when the panel actually ran (steps.panel.outcome == 'success'): a
+      # crashed panel already stranded a fail-closed note, and there is nothing to
+      # record. Both steps run the TRUSTED main copy of metrics.mjs (never the
+      # branch's). Same GITHUB_TOKEN as the post above.
+      # metrics.mjs is fail-safe (exits 0 on any error) and both are
+      # continue-on-error, so metrics can never fail the review.
+      - name: Record on-demand review metrics
+        if: steps.panel.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ needs.authorize.outputs.pr }}
+        run: |
+          if [ -f .agent-review/review-execution.json ]; then
+            node .trusted/scripts/agent/metrics.mjs record \
+              --execution .agent-review/review-execution.json \
+              --lens-stats .agent-review/review-lens-stats.json \
+              --kind review --pr "$PR"
+          else
+            echo "no review execution log; skipping metrics"
+          fi
+
+      # NOT --final: --final is the TERMINAL promote — it strips the summary's
+      # hidden data block and sweeps every record, which on an agent-managed PR
+      # would drop the autonomous pipeline's ledger mid-flight. Plain summarize
+      # folds the ledger into the summary's data block and sweeps only the empty
+      # per-session comments it preserved there, so on-demand review cleans up the
+      # thread without losing the pipeline's history.
+      - name: Post agent-effort summary
+        if: steps.panel.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ needs.authorize.outputs.pr }}
+        run: node .trusted/scripts/agent/metrics.mjs summarize --pr "$PR"
