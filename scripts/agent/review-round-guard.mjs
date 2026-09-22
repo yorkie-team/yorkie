@@ -327,7 +327,7 @@ if (failedRounds >= max) {
 //
 // Posting from this step spends the round at the top of the `fix` job — and the
 // fixer is fourteen steps later, behind an App-token mint, a branch checkout and
-// a `pnpm install`. The panel workflow is `cancel-in-progress: true`, so any push
+// a toolchain setup. The panel workflow is `cancel-in-progress: true`, so any push
 // during those one-to-three minutes kills the run with the record already
 // written: a round consumed by a fixer that never started. That is the same shape
 // as the phantom round this whole change exists to remove (#695's cancelled panel

@@ -18,9 +18,10 @@
 //      branch that can edit that file produces a genuinely green run at the
 //      genuine path with no tests in it. Gate 1b closes that:
 //   1b. The branch supplies NO part of the CI definition — none of
-//      `CI_DEFINING_PATHS` (checks.mjs), which mirrors harness.config.json's own
-//      `ci.ciConfig` gating surface: workflows, composite actions, the verify
-//      scripts, the root and per-package manifests, the lockfile. If it touches
+//      `CI_DEFINING_PATHS` (checks.mjs): the workflows, the Makefile and
+//      `.golangci.yml` that `ci.yml` calls into, `go.mod`/`go.sum`, the buf
+//      configs the codegen gate regenerates from, and the compose stack the
+//      integration lane is graded against. If it touches
 //      any of them, CI's verdict for this SHA is evidence about the BRANCH's CI
 //      definition rather than about main's, so it is not the evidence gate 1
 //      claims to read and auto-promotion is refused. Such a PR is not blocked,
@@ -187,16 +188,37 @@ function ciPassed(sha) {
     );
     process.exit(2);
   }
-  return ciConclusion(data.workflow_runs) === "success";
+  const runs = data.workflow_runs || [];
+  // NO RUN AT ALL is reported separately, because in THIS repository it is a
+  // routine outcome rather than a broken one: `ci.yml` carries `paths-ignore`
+  // for markdown, `api/docs`, `build/charts`, `design/` and `*.txt`, so a PR
+  // touching only those produces no CI run for its head SHA and this gate can
+  // never go green.
+  //
+  // It still refuses — "no evidence CI passed" is not "CI passed", and the
+  // whole point of gate 1 is that promotion rests on evidence. What changes is
+  // that the operator is told WHICH of the two it is. A permanently red gate
+  // whose message says "CI is not green" about a run that was never required
+  // reads as a broken pipeline, and the next person debugs CI instead of
+  // reading this line.
+  if (runs.length === 0) {
+    console.error(
+      `No run of ${CI_WORKFLOW_FILE} exists for ${sha}. If this PR changes only paths\n` +
+        "ci.yml ignores (markdown, api/docs, build/charts, design/, *.txt), CI was never\n" +
+        "required and this gate cannot be satisfied — promote it by hand.",
+    );
+    return false;
+  }
+  return ciConclusion(runs) === "success";
 }
 
 const ciGate = ciPassed(pr.headRefOid);
 
 // --- gate 1b: the CI definition came from main, not from the branch ---------
 
-// Which paths count is `CI_DEFINING_PATHS` in checks.mjs, mirrored from
-// harness.config.json's `ci.ciConfig` — see `definesCi` there for why the two
-// `.github` prefixes this gate started with were nowhere near enough.
+// Which paths count is `CI_DEFINING_PATHS` in checks.mjs — see `definesCi`
+// there for why the two `.github` prefixes this gate started with were nowhere
+// near enough.
 
 // Paginated explicitly rather than with `gh api --paginate`, which concatenates
 // one JSON array per page and does not parse. A PR too large to enumerate is a
@@ -320,7 +342,7 @@ const disclosure = disclosesAiAuthorship(body);
 // --- report ----------------------------------------------------------------
 
 const gates = [
-  { name: "CI verification (verify:self ✅ + verify:integration ✅/skip)", ok: ciGate },
+  { name: "CI is green for this head SHA (lint, build, vet, -race integration)", ok: ciGate },
   { name: "CI's definition came from main (branch supplies no CI-defining path)", ok: ciDefinitionGate },
   { name: `Review panel approved (all lens checks ✅: ${REQUIRED_CHECKS.join(", ")})`, ok: reviewApproved },
   { name: "AI authorship disclosed in PR body", ok: disclosure },
@@ -403,12 +425,13 @@ const handoff = [
   "This PR was authored autonomously by Claude Code and has cleared the harness",
   "ready gate:",
   "",
-  "- ✅ CI verification (`verify:self` and `verify:integration`) is green, for this",
-  "  exact head SHA, on a PR based on the default branch — and the branch changes",
-  "  none of the paths that define what CI does (`harness.config.json`'s",
-  "  `ci.ciConfig` surface: workflows, composite actions, `scripts/verify-*.mjs`,",
-  "  the root and per-package manifests, the lockfile), so the CI definition that",
-  "  run executed came from `main` rather than from the branch.",
+  "- ✅ CI is green (golangci-lint, buf lint and breaking, codegen freshness,",
+  "  `make build`, `go vet` over the tag-gated files, and the `-race` integration",
+  "  suite against a real MongoDB) for this exact head SHA, on a PR based on the",
+  "  default branch — and the branch changes none of the paths that define what",
+  "  CI does (the workflows, the Makefile, `.golangci.yml`, `go.mod`/`go.sum`, the",
+  "  buf configs, `build/docker/**`), so the CI definition that run executed came",
+  "  from `main` rather than from the branch.",
   "  This does NOT mean every assertion CI ran is main's: a branch can still weaken",
   "  its own tests, which is what the test-adequacy lens reads the diff for.",
   `- ✅ The review panel approved with no blocking findings (${REQUIRED_CHECKS.join(", ")}).`,

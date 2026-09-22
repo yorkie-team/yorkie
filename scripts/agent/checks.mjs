@@ -87,28 +87,25 @@ export const CI_WORKFLOW_FILE = "ci.yml";
  * A `pull_request` run executes the merge ref's copy of everything CI reaches,
  * so a branch that edits any of these hands gate 1 a green run that proves
  * nothing about main's CI. `.github/workflows/ci.yml` is the obvious one and is
- * nowhere near sufficient: `ci.yml` contains almost no test logic. It runs
- * `pnpm verify:self` and `pnpm verify:integration`, both resolved from the merge
- * ref's root `package.json` into `scripts/verify-*.mjs`, whose lane selection
- * reads `harness.config.json`. Listing only the two `.github` prefixes — which an
- * earlier revision of this gate did — meant a branch could gut CI through
- * `package.json` and still auto-promote, while the hand-off comment told the
- * human reviewer the run had executed main's CI definition.
+ * nowhere near sufficient: it contains almost no test logic. It calls `make
+ * lint` and `make build`, which resolve through the merge ref's `Makefile` into
+ * whatever `golangci-lint` config the branch ships, and it grades the
+ * integration suite against a compose stack the branch also owns. Listing only
+ * the two `.github` prefixes — which an earlier revision of this gate did —
+ * meant a branch could gut CI through the `Makefile` and still auto-promote,
+ * while the hand-off comment told the human reviewer the run had executed
+ * main's CI definition.
  *
- * This list MIRRORS `harness.config.json`'s `ci.ciConfig` — the repository's own,
- * CODEOWNER-ed definition of "files that decide how much CI runs" — plus two
- * entries that list does not need and this gate does:
- *   - `.github/actions/**` — a composite action is workflow content that happens
- *     to live elsewhere; `ciConfig` omits it only because no such action exists
- *     yet.
- *   - a per-package `package.json` (one wildcard segment under `packages/`) — a
- *     package's own `test`/`typecheck` script is what `verify:self` invokes for
- *     that package, so editing it edits a lane. Spelled in prose because the
- *     glob's middle wildcard followed by a slash would close this comment.
- * `checks.test.mjs` asserts the mirror covers `ciConfig` entry for entry, so the
- * two cannot drift silently.
+ * NO SECOND LIST TO MIRROR HERE. The repository this gate was ported from keeps
+ * its own CODEOWNER-ed declaration of "files that decide how much CI runs", and
+ * a test asserts this list covers it entry for entry. This repository has no
+ * such file: `ci.yml`'s own filter declares `build: '**'`, so the lint/build/
+ * test job is unconditional and no path can shrink it. That removes the drift
+ * risk and removes the cross-check with it, which is why the entries below are
+ * commented individually — the comment is the only thing left saying why each
+ * one is on the list.
  *
- * Hard-coded here rather than read from `harness.config.json` at runtime for a
+ * Hard-coded here rather than read from a config file at runtime for a
  * provenance reason: the promote job checks out the DEFAULT BRANCH, so this
  * module is main's copy, whereas a file read would be whatever tree the caller
  * happens to be standing in. The drift test is what keeps the duplication honest.

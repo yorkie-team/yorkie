@@ -1431,7 +1431,7 @@ const CONFIDENCE_LEVELS = new Set(FINDING.properties.confidence.enum);
  * mechanically", "caught mechanically", "(mechanical)" ×2 — and `test-adequacy`
  * and `docs` said nothing at all. None of them named a single mechanism, so a
  * lens could not tell which of its candidate findings CI would catch and spent
- * turns re-deriving what `verify:self` proves for free.
+ * turns re-deriving what the mechanical lanes prove for free.
  *
  * EVERY CLAIM HERE WAS READ OFF THE REPO, not assumed, because the failure mode
  * is silent: tell a lens something is covered when it is not and that whole
@@ -2094,7 +2094,7 @@ export function createWarmupGate() {
 // claim is a lookup at a location the finding already names. The absence half of
 // that is well evidenced: on #578 the false "no CI workflow runs these tests"
 // survived precisely here, because its counterexample is real and reachable
-// (ci.yml -> `pnpm verify:self` -> verify-self.mjs -> the agent:tests lane) but
+// (upstream's ci.yml -> `pnpm verify:self` -> verify-self.mjs -> its tests lane) but
 // three hops away, and the verifier ran out of turns, so bias-to-keep confirmed a
 // false claim.
 //

@@ -4,7 +4,7 @@
  * `cwd` and `-C` do NOT decide which repository git operates on — the
  * environment does, and it wins. That matters because **git exports its
  * location variables into every hook it runs**, and this repo's `pre-push`
- * hook runs `pnpm verify:self`, which reaches these scripts. Under a hook,
+ * hook may run scripts that reach this module. Under a hook,
  * a command that looks repo-scoped silently operates on whatever `GIT_DIR`
  * names instead.
  *
@@ -19,7 +19,7 @@
  * run said a word. The loud variants (`GIT_DIR`) at least fail the tests.
  *
  * `--dry-run` IS NOT A DRY RUN for this. `git push --dry-run` runs the
- * `pre-push` hook — and therefore `pnpm verify:self` — before git decides the
+ * `pre-push` hook — and anything it runs — before git decides the
  * push is a rehearsal. One of the three incidents above was exactly that: an
  * operator being careful with `--no-verify` on every real push, then letting a
  * `--dry-run` through as obviously harmless. If you are guarding against this
