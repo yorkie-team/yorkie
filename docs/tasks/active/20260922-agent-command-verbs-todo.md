@@ -104,6 +104,32 @@ its own credential handling to say anything the cloud panel does not.
       pin going stale shows up as a lint disagreement, which is the direction
       to fail in, but it still has to be noticed.
 
+## Review rounds
+
+Two `/code-review high` passes over the branch, thirty findings, all applied or
+recorded. The classes worth carrying forward:
+
+- **Silent stalls** — red CI, a panel hitting its own wall, a CI run concluding
+  `cancelled`/`timed_out`, two never-cleared throttle markers, and the
+  no-credential pager marked `continue-on-error`. Fixed, and the `stalled` net
+  now lists the `cancelled` shapes it was missing.
+- **Token scope** — two App-token mints ported without `permission-*` narrowing
+  (one also on a mutable tag), in the two jobs that run an agent beside the
+  token. Both now match the four that were already narrow.
+- **Trust** — the reply arm derived "agent branch?" from the branch name alone
+  with no same-repo check, and the rerun arm deleted any comment carrying the
+  paged marker with no author check.
+
+## Still worth doing, not done here
+
+- [ ] **A test for the permission list.** `agent-fix.yml` tells users the App
+      cannot push `.github/workflows/**`. That is true only while every mint
+      enumerates `permission-*`; two of six did not, and nothing would have
+      caught the next one.
+- [ ] **The on-demand throttle is still racy.** Two `@claude review` comments
+      seconds apart can both pass the gate before either marker lands. The
+      release valve added here fixes the stuck case, not the double-run one.
+
 ## Not in scope
 
 `@claude fix` on an **issue** (issue → PR, `agent-implement.yml`), the CI

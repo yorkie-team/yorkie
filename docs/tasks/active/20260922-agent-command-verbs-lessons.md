@@ -1,4 +1,4 @@
-# Lessons: installing the advisory `@claude` command surface
+# Lessons: installing the `@claude` command surface
 
 **Created**: 2026-09-22
 
@@ -116,3 +116,51 @@ delegate to, and turned the single most common failure event — CI going red �
 into the silent stall the whole design exists to prevent. Scope decisions about
 a component graph have to be checked against what the components say about each
 other, not only against what each one does.
+
+
+## Every serious defect was a silent stall, and none of them failed a test
+
+Two review rounds produced thirty findings across ~5,600 lines of ported
+workflow. The ones worth the rounds all had the same shape: a path where the
+pipeline stops and tells nobody.
+
+- Red CI, because the arm three jobs delegate to was left out of scope.
+- The panel hitting its own 45-minute wall, because GitHub reports a job wall as
+  `cancelled` and the pager only listened for `failure` — while the check-run
+  closer stamped the round "superseded by a newer commit", which was false and
+  also refunded the round.
+- A CI run concluding `cancelled` or `timed_out`, which is neither the `success`
+  the promoter wants nor the `failure` the CI arm owns.
+- Two throttle markers written before the work and never cleared, so one
+  usage-limit hit or one declined environment approval swallowed every later
+  request on that commit.
+- The only pager on the no-credential path marked `continue-on-error`, which is
+  the "a net that dies with the thing it catches" failure the same file names
+  elsewhere.
+
+None of these fails a test, a lint, or a YAML parse. They are all reachable only
+by asking "what happens when this does not finish?" of every job, and the answer
+is only visible in the interaction between a job's `timeout-minutes`, what
+GitHub reports for it, and which clause of the pager's `if:` lists that word.
+
+## The port inherited guarantees it did not inherit the mechanism for
+
+`agent-fix.yml` prints, to the user, that the App token is minted without
+`workflows: write` "so a fix agent can never rewrite the lanes that grade it".
+That sentence is true of the four workflows that enumerate `permission-*` and
+false of the two that were ported without them — the CI arm and the reply arm,
+both of which check out untrusted branch code and run an agent beside the token.
+
+A guarantee stated in one file and implemented in five is a guarantee only if
+something checks the sixth. Worth a test next time the permission list changes.
+
+## Fixing the guard is part of fixing the bug
+
+The Node-pinning regression was fixed twice. The first fix asked "does this job
+have a `setup-node`?" — and two jobs had one while still running scripts before
+it, or under the opposite branch of an `if`. The property was never presence; it
+was that the pin comes first and is unconditional.
+
+A guard written from the symptom passes as soon as the symptom is gone. Writing
+it from the property is what makes the next instance fail instead of the next
+reviewer.
