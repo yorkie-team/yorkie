@@ -80,3 +80,6 @@ output.txt
 
 # worktrees
 .worktrees
+
+# Node dependencies for scripts/agent (the only Node package here).
+node_modules/

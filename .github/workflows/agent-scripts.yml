@@ -1,0 +1,62 @@
+# The test lane for `scripts/agent` — the Node package behind the `@claude`
+# command surface (docs/design/agent-command-verbs.md).
+#
+# A workflow of its own, because `ci.yml` is the Go lane: it carries
+# `paths-ignore` for markdown and gates its jobs on Go paths, so nothing there
+# would run on a change to these scripts, and adding a Node job to it would put
+# an unrelated toolchain on the critical path of every Go pull request.
+#
+# TRIGGERED BY WORKFLOW CHANGES TOO, and that is not over-collection: several of
+# these tests assert that a module and a workflow agree — the paged-latch
+# literal, the inline finding-selection copy, the upload steps that would
+# silently upload nothing without `include-hidden-files`. Those guards read
+# `.github/workflows/` at run time, so a change to any workflow can break them.
+# Scoping this to `scripts/agent/**` would leave exactly the drift the guards
+# exist to catch outside the lane that runs them.
+name: Agent Scripts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/agent/**"
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/agent/**"
+      - ".github/workflows/**"
+
+# Read-only: this job needs the tree and nothing else. No model is called here —
+# the suite is offline, and the Agent SDK is installed only because the modules
+# import it.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          # No step here talks to the API, so leaving the token in .git/config
+          # would be a credential nothing needs.
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # `npm ci`, not `npm install`: the committed lockfile is the point. This
+      # package sits outside any workspace and pins its own transitive security
+      # overrides, which only a lockfile-exact install reproduces.
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: scripts/agent
+
+      - name: Test
+        run: npm test
+        working-directory: scripts/agent
