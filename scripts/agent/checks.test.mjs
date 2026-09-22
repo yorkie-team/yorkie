@@ -400,6 +400,38 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
     "stalled must keep `!cancelled()` — a superseded panel must not page");
   assert.ok(!/needs\.fix\.result == 'cancelled'/.test(stalledIf),
     "a cancelled fix job is the no-commit page's case; claiming it here double-pages");
+
+  // ...but every OTHER job's `cancelled` must be listed, and this is the pair of
+  // facts that makes it safe: GitHub reports a job killed by its own
+  // `timeout-minutes` as `cancelled`, never `failure`, and `!cancelled()` above
+  // is false whenever the WORKFLOW was cancelled — the superseded case. So a
+  // `cancelled` reaching this expression is a job that hit its own wall, and
+  // nothing else pages for it. The panel's is the one that matters: its wall is
+  // 45 minutes against an orchestrator its own comments call a ~35 minute run.
+  for (const job of ["review-panel", "deps", "ci", "promote"]) {
+    assert.ok(
+      new RegExp(`needs\\.${job}\\.result == 'cancelled'`).test(stalledIf),
+      `a ${job} job killed by its own timeout-minutes reports 'cancelled' and would page nobody`,
+    );
+  }
+
+  // And the CI conclusions nothing else owns. `agent-iterate-ci.yml` gates on
+  // `conclusion == 'failure'`, so an ordinary red CI is its business — but a run
+  // a maintainer cancels from the Actions UI, or one that times out, concludes
+  // neither `success` nor `failure`, leaves the `ci` job GREEN, and is owned by
+  // no one.
+  assert.match(
+    stalledIf,
+    /needs\.ci\.outputs\.conclusion != 'success'/,
+    "a CI run concluding neither success nor failure must page — nothing else watches for it",
+  );
+  assert.match(stalledIf, /needs\.ci\.outputs\.conclusion != 'failure'/,
+    "...but not on an ordinary red CI, which agent-iterate-ci.yml owns");
+  // The clause is only sound because `conclusion` is a declared output that the
+  // `ci` job always sets when it succeeds. An undeclared one reads as "" and
+  // would page on every clean run.
+  assert.match(yml, /^ {4}outputs:\n {6}conclusion: /m,
+    "the ci job must declare `conclusion`, or the guard above pages on every clean run");
 });
 
 // --- "@claude fix": routing, gate order, and reporting ----------------------
