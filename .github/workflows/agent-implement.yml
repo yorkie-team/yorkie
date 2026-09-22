@@ -4,18 +4,19 @@
 # `route` job is what keeps them apart.
 #
 # This is the first verb in which a bot pushes commits and opens a pull request.
-# Two gates make that acceptable, and NEITHER is a property of the agent — both
-# are properties of the repository, checked at run time rather than asserted:
+# ONE gate makes that acceptable, and it is a property of the REPOSITORY rather
+# than of the agent: before anything is pushed, `main` is verified to require at
+# least one human approving review that this App cannot bypass. It fails closed
+# on every error, a permissions error included — a repository where the question
+# cannot be answered is one where this workflow does not run. That check is the
+# only reason the App carries `Administration: read`, and why that grant is
+# read-only: the App can see protection exists and cannot change it.
 #
-#   1. The PR opens as a DRAFT.
-#   2. `main` is verified to require at least one human approving review BEFORE
-#      anything is pushed, and the check fails closed on every error including a
-#      permissions error. A repository where the question cannot be answered is
-#      one where this workflow does not run.
-#
-# The second is the only reason the App carries `Administration: read`. It is
-# read-only on purpose: the App can see that protection exists and cannot change
-# it.
+# The PR opening as a DRAFT is NOT a second gate. It is a line in the prompt, so
+# it is a convention the agent could get wrong, and nothing here verifies it —
+# the same thing said at the refusal step below. Counting it as a gate was an
+# over-claim that survived two review rounds, and it is written down here because
+# the next reader will be tempted to make it again.
 name: Agent Implement
 
 on:
@@ -179,6 +180,7 @@ jobs:
       # survivable, so a repository that cannot answer the question does not get
       # a bot pushing to it.
       - name: Require a human approval on main
+        id: protection
         if: steps.app.outputs.configured == 'true'
         uses: actions/github-script@v7
         with:
@@ -231,6 +233,7 @@ jobs:
             // ruleset is fetched and any ruleset with bypass actors is not
             // counted. Coarse on purpose: it does not try to decide WHICH actor
             // was exempted, because getting that wrong fails open.
+            let unreadable = 0;
             if (!ok) {
               try {
                 const { data: rules } = await github.request(
@@ -242,9 +245,21 @@ jobs:
                 for (const r of candidates) {
                   const id = r.ruleset_id;
                   if (!id) continue; // cannot verify the bypass list → do not count it
-                  const { data: rs } = await github.request(
-                    'GET /repos/{owner}/{repo}/rulesets/{id}', { owner, repo, id },
-                  );
+                  let rs;
+                  try {
+                    ({ data: rs } = await github.request(
+                      'GET /repos/{owner}/{repo}/rulesets/{id}', { owner, repo, id },
+                    ));
+                  } catch (e) {
+                    // PER RULESET, not per loop. An ORG-level ruleset appears in
+                    // `rules/branches/main` but is not served by the
+                    // repository-scoped rulesets endpoint, so one unreadable
+                    // candidate used to abort every remaining one and end in a
+                    // refusal claiming the repository was unprotected.
+                    unreadable += 1;
+                    core.warning(`could not read ruleset ${id}: ${e.message}`);
+                    continue;
+                  }
                   // ABSENCE IS NOT EMPTINESS, and reading it as emptiness
                   // inverted this check. GitHub OMITS `bypass_actors` from the
                   // payload when the caller is not allowed to see it — which is
@@ -279,9 +294,19 @@ jobs:
             // bypass that IS available to it is a ruleset naming it, which is
             // what the loop above refuses.
             if (!ok) {
+              // The refusal says what was OBSERVED, not a conclusion the checks
+              // did not reach. "Unprotected" and "protected by something this
+              // token cannot read" are different repository states with the same
+              // safe answer, and telling a maintainer the first when it is the
+              // second sends them to fix something that is not broken.
               core.setFailed(
-                'main is not protected by a required human review (neither classic protection nor a ' +
-                'ruleset requires >= 1 approval). This verb opens PRs a bot wrote; refusing to run.',
+                unreadable > 0
+                  ? `main may be protected by ${unreadable} ruleset(s) this token cannot read — an ` +
+                    'organization-level ruleset is not served by the repository rulesets endpoint. ' +
+                    'Unverified protection is treated as none; refusing to run.'
+                  : 'main is not protected by a required human review that this App cannot bypass ' +
+                    '(neither classic protection nor a ruleset provides one). This verb opens PRs a ' +
+                    'bot wrote; refusing to run.',
               );
             }
 
@@ -297,7 +322,6 @@ jobs:
       # The tail step already knows this query. Asking it BEFORE the agent runs
       # costs one API call and turns a branch-clobbering race into a sentence.
       - name: Refuse if this issue already has an agent PR
-        id: existing
         if: steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
         uses: actions/github-script@v7
         with:
@@ -309,14 +333,35 @@ jobs:
             const prs = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: 'open', per_page: 100,
             });
-            const open = prs.find((p) => (p.head?.ref || '').startsWith(`agent/${issue}-`));
+            // SAME-REPO ONLY. `pulls.list` returns fork PRs with a bare
+            // `head.ref`, so without this any outside contributor could open a
+            // PR from a branch named `agent/42-anything` and permanently refuse
+            // this verb on issue #42 — an unauthenticated denial of the verb.
+            const mineRepo = (p) => p.head?.repo?.full_name === `${owner}/${repo}`;
+            const open = prs.find((p) => mineRepo(p) && (p.head?.ref || '').startsWith(`agent/${issue}-`));
             if (!open) return;
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: issue,
-              body: `⏸️ #${open.number} is already open from this issue on \`${open.head.ref}\`. `
-                + 'A second run would branch from `main` and collide with it. Close or merge that PR first, '
-                + 'or comment `@claude fix` on the PR itself to continue the work there.',
-            });
+            // Deduped and non-fatal to post: five `@claude fix` comments while
+            // the PR is open should not be five identical replies, and a locked
+            // issue must not swallow the refusal that explains the red X.
+            const MARKER = `<!-- agent-implement-open-pr:${open.number} -->`;
+            const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
+            try {
+              const prior = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: issue, per_page: 100,
+              });
+              const said = prior.some((c) => String(c.body ?? '').includes(MARKER)
+                && AUTHORS.includes((c.user || {}).login));
+              if (!said) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: issue,
+                  body: `${MARKER}\n⏸️ #${open.number} is already open from this issue on \`${open.head.ref}\`. `
+                    + 'A second run would branch from `main` and collide with it. Close or merge that PR first, '
+                    + 'or comment `@claude fix` on the PR itself to continue the work there.',
+                });
+              }
+            } catch (e) {
+              core.warning(`could not post the already-open refusal: ${e.message}`);
+            }
             core.setFailed(`an agent PR (#${open.number}) is already open for issue #${issue}`);
 
       - name: Acknowledge the issue
@@ -620,19 +665,21 @@ jobs:
       # link); no PR → the dead-run comment, worded by whether the agent step
       # failed or merely ended; lookup FAILED → a comment saying the state could
       # not be determined, never a failure claim this run did not verify.
-      # KEYED ON THE ACKNOWLEDGEMENT, not on staging, and the distinction is the
-      # whole point of this step. Once "🤖 On it" is on the issue, SOMETHING has
-      # to close it out — otherwise the thread claims a run is in progress
-      # forever. Keying this on the staged directory (which it does not read)
-      # made every failure between the ack and staging silent: a refused
-      # protection gate, a failed checkout, a failed `npm ci`.
+      # KEYED ON THE APP CHECK — the earliest thing in this job that is not
+      # itself a way for the job to stop. This step has now been rewritten three
+      # times and each earlier key was a step that the failure being reported
+      # SKIPS: on staging (so a refused protection gate was silent), then on the
+      # acknowledgement (which the gate also precedes, so it was silent again).
+      # A reporter keyed on anything downstream of a failure cannot report that
+      # failure. The only safe key is upstream of every gate.
       #
-      # The previous round went the other way and told the commenter to retry
-      # after a gate refusal, which was guaranteed to fail identically. The fix
-      # for a comment that says the wrong thing is a comment that says the right
-      # thing, not no comment — so this now reports which of the three it was.
+      # It then says which one it was, from the outcomes rather than from a
+      # guess: `protection` refused, or something between there and staging
+      # broke, or the agent ran and opened nothing. Naming the wrong cause is
+      # its own defect — the previous revision told a `npm ci` failure that
+      # `main` was unprotected.
       - name: Report a run that ended without a PR
-        if: always() && steps.ack.outcome == 'success' && github.event_name == 'issue_comment'
+        if: always() && steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -649,7 +696,12 @@ jobs:
               const prs = await github.paginate(github.rest.pulls.list, {
                 owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100,
               });
-              pr = prs.find((p) => (p.head?.ref || '').startsWith(`agent/${issue}-`)) ?? null;
+              // Same-repo only, for the same reason as the pre-flight check: a
+              // fork branch called `agent/<issue>-x` would make this report a
+              // PR that this run did not open.
+              pr = prs.find((p) =>
+                p.head?.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`
+                && (p.head?.ref || '').startsWith(`agent/${issue}-`)) ?? null;
             } catch (e) {
               lookupOk = false;
               core.warning(`could not list PRs to verify the kickoff outcome: ${e.message}`);
@@ -658,8 +710,13 @@ jobs:
             // Dedupe on the marker this step writes, and only on one the BOT
             // wrote: the trust in a marker is its author, never its payload —
             // otherwise anyone can suppress this by quoting it.
+            // BY LOGIN, not by `type === 'Bot'`. Any installed bot with
+            // issues:write is a Bot — including the implement agent itself,
+            // which holds this App token and an unrestricted shell. "The trust
+            // in a marker is its author" has to mean the author's identity.
+            const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
             const mine = (c) => String(c.body ?? '').includes(MARKER)
-              && (c.user || {}).type === 'Bot';
+              && AUTHORS.includes((c.user || {}).login);
             try {
               const prior = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, per_page: 100,
@@ -668,17 +725,20 @@ jobs:
             } catch (e) {
               core.warning(`could not check for an existing report: ${e.message}`);
             }
+            const protection = '${{ steps.protection.outcome }}';
             let why;
             if (!lookupOk) {
               why = '⚠️ This run has ended, but this step could not read the PR list to tell whether a PR was '
                 + `opened — check the issue's linked PRs and the [run](${runUrl}) before assuming it failed.`;
+            } else if (protection !== 'success') {
+              why = '🛑 Refused before any work began: this verb will not open a bot-authored PR unless `main` '
+                + 'requires at least one human approving review, and that could not be confirmed. '
+                + `The [run](${runUrl}) says which check failed. Retrying will not help until the branch `
+                + 'protection on `main` is fixed.';
             } else if (!staged) {
-              // Everything before staging: the protection gate refusing, the
-              // checkout, `npm ci`. Naming the most likely one matters, because
-              // retrying a configuration problem fails identically forever.
-              why = '🛑 This run stopped during setup, before any work began — most often because `main` is not '
-                + 'protected by a required human review, which this verb refuses to run without. '
-                + `See the [run](${runUrl}); retrying will not help until the setup step it failed on is fixed.`;
+              why = '🛑 This run stopped while setting up, after the checks passed and before any work began — '
+                + `a checkout or dependency install failed. See the [run](${runUrl}); this is usually `
+                + 'transient, so `@claude fix` is worth trying again.';
             } else {
               why = `🛑 This run ${agentOutcome === 'failure' ? 'failed' : 'ended'} without opening a PR — no open `
                 + `\`agent/${issue}-*\` branch has one. See the [run](${runUrl}) and its \`claude-execution-output\` `
@@ -759,7 +819,9 @@ jobs:
             const existing = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number, per_page: 100,
             });
-            const mine = (c) => String(c.body ?? '').includes(MARKER) && (c.user || {}).type === 'Bot';
+            const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
+            const mine = (c) => String(c.body ?? '').includes(MARKER)
+              && AUTHORS.includes((c.user || {}).login);
             if (existing.some(mine)) return;
             const lead = typed === 'help'
               ? '👋 Did you mean **`@claude fix`**?'

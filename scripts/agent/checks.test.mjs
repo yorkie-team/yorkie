@@ -1500,3 +1500,73 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
     `these jobs comment on a PR without pull-requests:write:\n  ${offenders.join("\n  ")}`,
   );
 });
+
+test("agent-implement's reporter is keyed upstream of every gate it must report", () => {
+  // THIS DEFECT SURVIVED THREE REVIEW ROUNDS BY MOVING. The job acknowledges an
+  // issue with "🤖 On it", then runs gates that can stop it; something must
+  // close that thread out or it claims a run is in progress forever.
+  //
+  // Round 1: the reporter ran whenever the App existed, so a refused protection
+  // gate produced "ended without opening a PR — comment `@claude fix` to retry",
+  // a retry guaranteed to fail identically. Round 2 keyed it on the staging step
+  // — which the gate precedes, so the refusal went silent. Round 3 keyed it on
+  // the acknowledgement — which the gate ALSO precedes, so it went silent again.
+  //
+  // The rule the three rounds were circling: a reporter keyed on anything
+  // downstream of a failure cannot report that failure. The only safe key is
+  // upstream of every gate, and in this job that is the App-presence check —
+  // the one step that is not itself a way for the job to stop.
+  const wf = WF("agent-implement.yml");
+  const at = wf.indexOf("- name: Report a run that ended without a PR");
+  assert.ok(at > 0, "agent-implement.yml has no reporter step");
+  const cond = wf.slice(at, at + 400);
+
+  assert.match(cond, /if: always\(\)/, "the reporter must not inherit the implicit success()");
+  assert.match(
+    cond,
+    /steps\.app\.outputs\.configured == 'true'/,
+    "the reporter must key on the App check, which precedes every gate",
+  );
+  for (const downstream of ["steps.ack.outcome", "steps.stage.outcome ==", "steps.agent.outcome =="]) {
+    assert.ok(
+      !cond.includes(`if: always() && ${downstream}`),
+      `the reporter must not be GATED on ${downstream} — the failures it exists to report skip it`,
+    );
+  }
+
+  // Every gate that can stop the job must be distinguishable in the body, or the
+  // reporter names the wrong cause — which it also did, telling an `npm ci`
+  // failure that `main` was unprotected.
+  const body = wf.slice(at, wf.length);
+  assert.match(body, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
+  assert.match(body, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
+});
+
+test("agent-implement never treats a fork's branch name as its own work", () => {
+  // `pulls.list` returns fork PRs with a bare `head.ref`. Matching on the name
+  // alone let any outside contributor open a PR from `agent/42-anything` and
+  // permanently refuse `@claude fix` on issue #42 — an unauthenticated denial of
+  // the verb — while the reporter read the same PR as proof the run succeeded.
+  // AT EACH USE, not by counting definitions. The first version of this test
+  // counted `full_name ===` occurrences against `startsWith` occurrences, which
+  // a mutation removing the guard from the `find` call passed cleanly — the
+  // helper that defines it was still there, unused. A guard test that a live
+  // mutation survives is worse than none, because it reports safety.
+  const wf = WF("agent-implement.yml");
+  const lines = wf.split("\n").filter((l) => !/^\s*#/.test(l) && !/^\s*\/\//.test(l));
+  const sites = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!/startsWith\(`agent\/\$\{issue\}-`\)/.test(lines[i])) continue;
+    // The predicate may wrap; read the whole `find(` expression around it.
+    let from = i;
+    while (from > 0 && !/\.find\(/.test(lines[from])) from--;
+    sites.push(lines.slice(from, i + 1).join("\n"));
+  }
+  assert.ok(sites.length >= 2, `expected the agent-branch lookup in both places, found ${sites.length}`);
+  for (const site of sites) {
+    assert.ok(
+      /mineRepo\(/.test(site) || /head\?\.repo\?\.full_name ===/.test(site),
+      `an agent-branch lookup does not require the PR to come from this repository:\n${site}`,
+    );
+  }
+});

@@ -246,12 +246,18 @@ on the strength of the two gates below rather than waved away.
   human approving review, and reading that setting is what the permission buys.
   It fails closed on every error including a permissions error — a repository
   where the check cannot be answered is one where the bot does not push.
-- **Two gates, and they bound what LANDS — not what the run can reach.** The PR
-  opens as a **draft**, and `main` is verified to require a human approval before
-  anything is pushed; the ruleset path also refuses a rule that names bypass
-  actors, since a rule this App is exempt from is not protection. Neither gate is
-  a property of the agent — both are properties of the repository, which is why
-  they are checked at run time rather than asserted here.
+- **One gate, and it bounds what LANDS — not what the run can reach.** Before
+  anything is pushed, `main` is verified to require a human approving review this
+  App cannot bypass: a ruleset whose bypass list names actors, or is not visible
+  to this token, or that reports `current_user_can_bypass` as anything but
+  `never`, is not counted; nor is classic protection carrying a
+  `bypass_pull_request_allowances` entry. Unverified protection is treated as
+  none. It is a property of the **repository**, which is why it is checked at run
+  time rather than asserted here.
+
+  The PR opening as a **draft** is not a second gate, though two earlier drafts
+  of this document said it was. It is a line in the prompt — a convention the
+  agent could get wrong, verified by nothing.
 
   **What they do not cover.** The agent runs with an unrestricted `Bash` beside a
   live installation token and a model credential, on text an arbitrary GitHub
@@ -265,6 +271,16 @@ on the strength of the two gates below rather than waved away.
   the token is installation-scoped to this repository, expires in an hour, and
   carries no `workflows` permission. The control that would actually close the
   channel is a runner egress policy, and it is the next thing to add here.
+
+- **Two things are known-unverified, and both are recorded rather than guessed.**
+  The job's ceiling is 90 minutes and an installation token lives 60, so a run
+  that passes the hour loses the ability to push — the failure is a 401 at the
+  end of the expensive part. And `current_user_can_bypass` is documented as the
+  bypass type of *the user making the request*; under an installation token there
+  is no user, and what it returns is untested here because this repository has no
+  rulesets. If it is anything but `never`, every ruleset-protected repository is
+  refused. Both fail safe. Both should be settled by observation on the first
+  runs rather than by argument.
 - **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
   write-access check on top. An issue body is data, never instructions.
 - **Not ported:** upstream's issue classifier. It labels issues into a category
