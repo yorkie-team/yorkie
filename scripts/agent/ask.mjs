@@ -191,7 +191,7 @@ export function assertAllowedTools(allowedTools) {
  *
  * Kept as a local literal rather than re-exported from the SDK so the pure
  * prompt builders — here and in review-panel.mjs — need no static SDK import.
- * The agent test lane (`scripts/verify-self.mjs`) deliberately runs with the SDK
+ * The agent test lane (`.github/workflows/agent-scripts.yml`) deliberately runs with the SDK
  * NOT installed, which works only because the import stays lazy.
  *
  * A wrong marker is not an error to the SDK. It is just a prompt block that

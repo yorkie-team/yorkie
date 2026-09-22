@@ -99,10 +99,10 @@ test("fixtureGitEnv pins the git dir AND strips the redirecting variables", () =
   }
 });
 
-// --- readHeadSha: the verify:self guard's only moving part -------------------
+// --- readHeadSha: the hook guard's only moving part --------------------------
 
 test("readHeadSha answers about `root`, not an inherited GIT_DIR", () => {
-  // The guard in verify-self.mjs is top-level script code with no test file of
+  // The equivalent guard upstream is top-level script code with no test file of
   // its own; this covers the one function that decides whether it works. A guard
   // that reads HEAD with an inherited environment watches the wrong repository
   // and is silently inert exactly under a hook, where it is needed.

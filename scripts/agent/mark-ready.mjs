@@ -156,7 +156,8 @@ const body = pr.body ?? "";
 // conclusion, so this is evidence a separate actor (GitHub Actions) produced —
 // unlike the <!-- harness-verification --> PR comment, which the author agent
 // could post itself with issues:write. A workflow run concludes "success" only
-// when every CI job (verify-self / verify-browser / verify-integration) passed.
+// when every CI job that ran passed — here `build`, plus whichever of `bench`,
+// `complex-test` and `load-test` the path filter admitted.
 function ciPassed(sha) {
   if (!sha) return false;
   let data;

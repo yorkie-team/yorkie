@@ -2353,7 +2353,7 @@ test("claimTypeOf: absence only when the finding says so", () => {
 
 test("no claim type verifies on a budget that measurement showed is too small", () => {
   // #578's false "no CI workflow runs these tests" had a real counterexample
-  // three hops away (ci.yml → verify:self → verify-self.mjs → agent:tests) and
+  // three hops away (upstream's ci.yml → verify:self → its tests lane) and
   // confirmed because the verifier ran out of turns, not because it was right.
   // That is why ABSENCE got 20.
   //

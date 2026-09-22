@@ -650,7 +650,7 @@ test("classifyResult: the fix is strictly tightening — clean successes still p
 // --- the invariant that CI depends on ----------------------------------------
 
 test("no module under scripts/agent statically imports a third-party package", () => {
-  // `verify-self.mjs`'s `agent:tests` lane runs with `scripts/agent/node_modules`
+  // The `agent-scripts.yml` lane runs with `scripts/agent/node_modules`
   // ABSENT — CI never installs it, which is what keeps the lane fast and makes the
   // pure helpers here testable without the SDK. A single static third-party import
   // breaks every test in its file AND every file importing it, with
