@@ -1577,14 +1577,35 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
   assert.ok(jobAt > 0, "the reporter must live in the implement job");
   assert.ok(nextJobAt === undefined || nextJobAt + at > at, "the reporter must live in the implement job");
 
-  // And nothing may return before the marker is chosen. An early
+  // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
   // the silence without touching a single `if:` line.
+  //
+  // The previous version of this assertion sliced the script at
+  // `const MARKER_FOR` and scanned only what came before — six `const`
+  // declarations and not one `if`, so it could not fail, and could not have
+  // failed for any early return worth writing. Every place a short-circuit
+  // would naturally go (beside the PR lookup, beside the dedupe) is BELOW that
+  // point. So: an ALLOW-LIST over the whole script, for the same reason as the
+  // condition above. Both directions are pinned — an unlisted return is a new
+  // silence, and a missing listed one means the guard is describing code that
+  // is no longer there.
   const script = step.slice(step.indexOf("script: |"));
-  const beforeMarker = script.slice(0, script.indexOf("const MARKER_FOR"));
-  assert.ok(
-    !/^\s+if \(.*\breturn;/m.test(beforeMarker),
-    "the reporter must not short-circuit before choosing its message — that is the silence this guards",
+  const SANCTIONED_RETURNS = [
+    // The success path: the kickoff opened a PR and already said so.
+    "            if (lookupOk && pr) return; // the normal flow posted the PR link",
+  ];
+  const returns = script.split("\n").filter((l) => /^\s+if \(.*\breturn;/.test(l));
+  assert.deepEqual(
+    returns.filter((l) => !SANCTIONED_RETURNS.includes(l)),
+    [],
+    "the reporter must not short-circuit before it comments — that is the silence this guards; " +
+      "if a new early return is right, add it to SANCTIONED_RETURNS in the same commit and say why",
+  );
+  assert.equal(
+    returns.length,
+    SANCTIONED_RETURNS.length,
+    `expected exactly ${SANCTIONED_RETURNS.length} sanctioned early returns, found ${returns.length}`,
   );
   // Keyed by the BRANCH TAKEN, not by `cause`: `cause` has four values and the
   // messages have six, so three shared a bucket and a pre-agent failure
@@ -1654,4 +1675,76 @@ test("agent-implement's two agent-branch lookups keep their approved form", () =
     preflight.includes("const { owner, repo } = context.repo;"),
     "`mineRepo` compares against `owner`/`repo` from context; rebinding them defeats it silently",
   );
+});
+
+test("agent-implement's inline PR lookups agree with metrics.mjs on the same fixtures", async () => {
+  // THE THREE COPIES, CHECKED AGAINST ONE RULE. The `agent/<issue>-*` question
+  // is asked in three places — the collision pre-flight, the no-PR reporter,
+  // and metrics.mjs::resolvePrByIssue, which this same job shells out to — and
+  // the third had no same-repo guard at all, so the effort record could land on
+  // an outside contributor's fork PR. `isAgentPrHead` is now the one rule; this
+  // runs the two inline copies out of the YAML against it.
+  const { isAgentPrHead } = await import("./metrics.mjs");
+  const wf = WF("agent-implement.yml");
+  const lines = wf.split("\n");
+
+  const grab = (needle) => {
+    const l = lines.find((x) => x.includes(needle));
+    assert.ok(l, `agent-implement.yml no longer contains: ${needle}`);
+    return l.slice(12);
+  };
+  const preflight = new Function(
+    "prs",
+    "owner",
+    "repo",
+    "issue",
+    `${grab("const mineRepo = (p) =>")}\n${grab("const open = prs.find((p) => mineRepo(p)")}\nreturn open ?? null;`,
+  );
+  const reporterSrc = lines
+    .slice(lines.findIndex((l) => l.includes("pr = prs.find((p) =>")))
+    .slice(0, 3)
+    .map((l) => l.slice(12))
+    .join("\n");
+  assert.match(reporterSrc, /\?\? null;$/, "could not extract the reporter's lookup");
+  const reporter = new Function("prs", "context", "issue", `let pr;\n${reporterSrc}\nreturn pr;`);
+
+  const OWNER = "yorkie-team", REPO = "yorkie";
+  const pr = (number, ref, full_name) => ({ number, head: { ref, repo: { full_name } } });
+  const ours = (n, ref) => pr(n, ref, `${OWNER}/${REPO}`);
+  const fork = (n, ref) => pr(n, ref, `someone-else/${REPO}`);
+  const CASES = [
+    { name: "our agent branch for this issue", prs: [ours(1, "agent/42-thing")], want: 1 },
+    // The denial-of-verb / false-success case: anyone may push this name to a fork.
+    { name: "a fork branch with the same name", prs: [fork(2, "agent/42-thing")], want: null },
+    { name: "a fork first, ours second", prs: [fork(2, "agent/42-x"), ours(3, "agent/42-y")], want: 3 },
+    { name: "a different issue that shares a prefix", prs: [ours(4, "agent/420-thing")], want: null },
+    { name: "the bare issue number with no slug", prs: [ours(5, "agent/42")], want: null },
+    { name: "an unrelated branch", prs: [ours(6, "feat/whatever")], want: null },
+    { name: "no open PRs at all", prs: [], want: null },
+  ];
+
+  for (const c of CASES) {
+    assert.equal(preflight(c.prs, OWNER, REPO, 42)?.number ?? null, c.want, `pre-flight disagrees on: ${c.name}`);
+    assert.equal(
+      reporter(c.prs, { repo: { owner: OWNER, repo: REPO } }, 42)?.number ?? null,
+      c.want,
+      `reporter disagrees on: ${c.name}`,
+    );
+    // The shared rule, fed the same PRs through the shapes each caller sees.
+    const shared = c.prs.find((p) =>
+      isAgentPrHead({ sameRepo: p.head.repo.full_name === `${OWNER}/${REPO}`, headRefName: p.head.ref }, 42),
+    );
+    assert.equal(shared?.number ?? null, c.want, `metrics.mjs::isAgentPrHead disagrees on: ${c.name}`);
+  }
+
+  // An unknown head repository is not a same-repo one — this is what
+  // resolvePrByIssue relies on when `gh` does not emit `isCrossRepository`.
+  assert.equal(isAgentPrHead({ headRefName: "agent/42-thing" }, 42), false);
+  assert.equal(isAgentPrHead({ sameRepo: "yes", headRefName: "agent/42-thing" }, 42), false);
+  assert.equal(isAgentPrHead({ sameRepo: true, headRefName: "agent/42-thing" }, 42), true);
+
+  // And the `--json` field that feeds it must still be requested, or every
+  // lookup there fails closed and no metrics are ever recorded.
+  const metrics = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "metrics.mjs"), "utf8");
+  assert.match(metrics, /number,headRefName,isCrossRepository/, "resolvePrByIssue must ask gh for the head repo");
 });

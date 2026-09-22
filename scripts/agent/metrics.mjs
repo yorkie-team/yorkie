@@ -963,13 +963,50 @@ export function ghJson(args) {
   return JSON.parse(gh(args));
 }
 
+/**
+ * THE ONE RULE for "is this the agent's open PR for issue N", and the reason it
+ * lives here rather than in each caller: agent-implement.yml asks the same
+ * question twice inline (the collision pre-flight and the no-PR reporter) and
+ * this job invokes `metrics.mjs record --issue`, so three copies answered it —
+ * and the third had no same-repo guard at all.
+ *
+ * `sameRepo` IS NOT OPTIONAL, and defaulting it to true is the bug this
+ * signature exists to make impossible. Both `gh pr list` and `pulls.list`
+ * return FORK pull requests, whose head ref is a bare branch name, so anyone on
+ * GitHub can push `agent/42-anything` to their own fork and open a PR from it.
+ * Read without the head repository, that PR answers "is there an agent PR for
+ * issue #42?" with yes — which permanently refuses the verb on that issue in
+ * the pre-flight, reports a run as successful in the reporter, and attaches
+ * this repository's effort metrics to an outside contributor's PR here.
+ *
+ * An UNKNOWN head repository is not a same-repo one: callers pass `sameRepo`
+ * as a strict comparison, so a missing field yields `false` and no match, which
+ * is the safe answer in all three call sites.
+ *
+ * checks.test.mjs pins the workflow's two inline copies against this function
+ * over a shared fixture table, so "the three copies disagree" is a test failure
+ * rather than a review finding.
+ */
+export function isAgentPrHead({ sameRepo, headRefName }, issue) {
+  return sameRepo === true && String(headRefName || "").startsWith(`agent/${issue}-`);
+}
+
 export function resolvePrByIssue(issue) {
   // The kickoff creates a branch `agent/<issue>-<slug>`; find the open PR for it.
   // --limit well above the default 30 so a busy repo's PR list isn't truncated
   // before ours is seen.
-  const prs = ghJson(["pr", "list", "--state", "open", "--limit", "500", "--json", "number,headRefName"]);
-  const prefix = `agent/${issue}-`;
-  const hit = prs.find((p) => (p.headRefName || "").startsWith(prefix));
+  //
+  // `isCrossRepository` is the head-repository field: `gh` reports it for every
+  // PR, and `false` means the head branch lives in THIS repository. Anything
+  // else — including an older `gh` that does not emit the field — compares
+  // unequal to `false` and is skipped, so a missing field costs a metrics
+  // record and never mislabels someone else's PR.
+  const prs = ghJson([
+    "pr", "list", "--state", "open", "--limit", "500", "--json", "number,headRefName,isCrossRepository",
+  ]);
+  const hit = prs.find((p) =>
+    isAgentPrHead({ sameRepo: p.isCrossRepository === false, headRefName: p.headRefName }, issue),
+  );
   return hit ? String(hit.number) : "";
 }
 
