@@ -2,6 +2,41 @@ apiVersion: v1
 entries:
   yorkie-analytics:
   - apiVersion: v2
+    appVersion: 0.7.23
+    created: "2026-09-22T00:33:12.074000017Z"
+    dependencies:
+    - condition: yorkie-analytics.kafka.enabled
+      name: kafka
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 31.3.1
+    - condition: yorkie-analytics.starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: 1.9.10
+    description: yorkie-analytics provides analytics system with kafka and starrocks
+      for analyzing usage of yorkie cluster
+    digest: 22cf2238bfb6883f4d93817ef54f9b02901cbc4da14830d1c893b991753fe092
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - kafka
+    - starrocks
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-analytics
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-analytics-0.7.23/yorkie-analytics-0.7.23.tgz
+    version: 0.7.23
+  - apiVersion: v2
     appVersion: 0.7.20
     created: "2026-09-09T11:30:03.699208446Z"
     dependencies:
@@ -521,6 +556,40 @@ entries:
     - yorkie-argocd-0.3.3.tgz
     version: 0.3.3
   yorkie-cluster:
+  - apiVersion: v2
+    appVersion: 0.7.23
+    created: "2026-09-22T00:33:12.288370842Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: psmdb-operator
+      repository: https://percona.github.io/percona-helm-charts/
+      version: 1.21.1
+    - alias: yorkie-mongodb
+      condition: mongodb.enabled
+      name: psmdb-db
+      repository: https://percona.github.io/percona-helm-charts/
+      version: 1.21.1
+    description: yorkie-cluster provides cluster mode for Yorkie server to handle
+      large amount of workloads with ensuring high availability, reliability, and
+      scalability.
+    digest: 8099d8cf4eca741b6588bad31cd95fc6e92842f1e62a11b9c08e81cc13fbff99
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - istio
+    kubeVersion: '>=1.28.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    name: yorkie-cluster
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-cluster-0.7.23/yorkie-cluster-0.7.23.tgz
+    version: 0.7.23
   - apiVersion: v2
     appVersion: 0.7.22
     created: "2026-09-16T18:45:59.622928363Z"
@@ -5941,4 +6010,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2026-09-16T18:45:59.623265638Z"
+generated: "2026-09-22T00:33:12.288884041Z"
