@@ -1502,96 +1502,94 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
 });
 
 test("agent-implement's reporter is keyed upstream of every gate it must report", () => {
-  // THIS DEFECT SURVIVED THREE REVIEW ROUNDS BY MOVING. The job acknowledges an
-  // issue with "🤖 On it", then runs gates that can stop it; something must
-  // close that thread out or it claims a run is in progress forever.
+  // THIS DEFECT SURVIVED FIVE ROUNDS BY MOVING, and two attempts to pin it
+  // survived because they were written as DENY-LISTS. The job acknowledges an
+  // issue with "On it", then runs gates that can stop it; something must close
+  // that thread out or it claims a run is in progress forever.
   //
-  // Round 1: the reporter ran whenever the App existed, so a refused protection
-  // gate produced "ended without opening a PR — comment `@claude fix` to retry",
-  // a retry guaranteed to fail identically. Round 2 keyed it on the staging step
-  // — which the gate precedes, so the refusal went silent. Round 3 keyed it on
-  // the acknowledgement — which the gate ALSO precedes, so it went silent again.
+  // Round 1 keyed the reporter on the App check and told a refused gate to
+  // retry. Round 2 keyed it on staging, which the gate precedes — silent. Round
+  // 3 keyed it on the acknowledgement, which the gate also precedes — silent
+  // again. Rounds 3 and 4 then wrote guards that forbade three literal spellings
+  // of a downstream term, and a mutation run found ELEVEN survivors: `!=` instead
+  // of `==`, `conclusion` instead of `outcome`, no spaces around the operator, a
+  // `contains()` call, the term wrapped onto a second line. Every one of them
+  // reinstated the silence.
   //
-  // The rule the three rounds were circling: a reporter keyed on anything
-  // downstream of a failure cannot report that failure. The only safe key is
-  // upstream of every gate, and in this job that is the App-presence check —
-  // the one step that is not itself a way for the job to stop.
+  // A deny-list of spellings cannot express "no downstream term". This is an
+  // ALLOW-list: the condition must be exactly this string. Deliberately brittle
+  // — changing it is a two-line diff that says, in review, that someone decided
+  // to change what this step is keyed on.
+  //
+  // The App check is not "the only step that cannot stop the job" — the
+  // write-access check above it stops the job silently by design, and a failed
+  // token mint stops it too, which is why the reporter no longer borrows that
+  // token. It is the earliest gate whose failure the reporter can still survive,
+  // which is the property that matters.
+  const APPROVED =
+    "        if: always() && steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'";
   const wf = WF("agent-implement.yml");
   const at = wf.indexOf("- name: Report a run that ended without a PR");
   assert.ok(at > 0, "agent-implement.yml has no reporter step");
-  const cond = wf.slice(at, at + 400);
 
-  assert.match(cond, /if: always\(\)/, "the reporter must not inherit the implicit success()");
-  assert.match(
-    cond,
-    /steps\.app\.outputs\.configured == 'true'/,
-    "the reporter must key on the App check, which precedes every gate",
+  // Bounded by the next STEP or the next JOB, whichever comes first. This is the
+  // last step of its job, so a step-only bound runs into the following job and
+  // picks up its `if:` — which is how the first version of this assertion found
+  // two conditions where the step has one.
+  const ends = [wf.indexOf("\n      - name:", at + 1), /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at))?.index]
+    .map((i, k) => (i === undefined || i < 0 ? -1 : k === 1 ? i + at : i))
+    .filter((i) => i > 0);
+  const step = wf.slice(at, ends.length ? Math.min(...ends) : wf.length);
+  const ifLines = step.split("\n").filter((l) => /^\s+if:/.test(l));
+  assert.equal(ifLines.length, 1, "the reporter must have exactly one `if:` line");
+  assert.equal(
+    ifLines[0],
+    APPROVED,
+    "the reporter's condition must be keyed upstream of every gate it reports; " +
+      "if this needs to change, change APPROVED here in the same commit and say why",
   );
-  // ANYWHERE IN THE CONDITION, not only in first position. The first version
-  // anchored on `if: always() && <term>`, so moving the downstream term one
-  // conjunct to the right reinstated round 3's defect and passed the test —
-  // the same hole this file's other new guard had, written the same day.
-  const ifLine = /if:([^\n]*(?:\n\s{8,}[^\n]*)*)/.exec(cond);
-  assert.ok(ifLine, "could not read the reporter's condition");
-  for (const downstream of ["steps.ack.", "steps.stage.outcome ==", "steps.agent.outcome =="]) {
-    assert.ok(
-      !ifLine[1].includes(downstream),
-      `the reporter must not be GATED on ${downstream} — the failures it exists to report skip it`,
-    );
-  }
 
-  // Every gate that can stop the job must be distinguishable in the body, or the
-  // reporter names the wrong cause — which it also did, telling an `npm ci`
-  // failure that `main` was unprotected.
-  // Bounded to this step. Slicing to EOF would let a later step's text satisfy
-  // these, which is one paste away from vacuous.
-  const nextStep = wf.indexOf("\n      - name:", at + 1);
-  const body = wf.slice(at, nextStep > 0 ? nextStep : wf.length);
-  assert.match(body, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
-  assert.match(body, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
-  // The marker must carry something that varies, or the first failure on an
-  // issue silences every later one — including the retry the message invites.
+  // And it must still be able to NAME the cause, or it reports the wrong one —
+  // which it has also done, telling an `npm ci` failure that main was unprotected.
+  assert.match(step, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
+  assert.match(step, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
   assert.match(
-    body,
-    /const MARKER = `<!-- agent-implement-no-pr:\$\{[^}]+\}/,
-    "the no-PR marker must be parameterized, or it dedupes across unrelated causes",
+    step,
+    /const MARKER = `<!-- agent-implement-no-pr:\$\{cause\}/,
+    "the no-PR marker must be keyed by cause, or the first failure silences every later one",
   );
 });
 
 test("agent-implement never treats a fork's branch name as its own work", () => {
   // `pulls.list` returns fork PRs with a bare `head.ref`. Matching on the name
-  // alone let any outside contributor open a PR from `agent/42-anything` and
+  // alone lets any outside contributor open a PR from `agent/42-anything` and
   // permanently refuse `@claude fix` on issue #42 — an unauthenticated denial of
-  // the verb — while the reporter read the same PR as proof the run succeeded.
-  // AT EACH USE, not by counting definitions. The first version of this test
-  // counted `full_name ===` occurrences against `startsWith` occurrences, which
-  // a mutation removing the guard from the `find` call passed cleanly — the
-  // helper that defines it was still there, unused. A guard test that a live
-  // mutation survives is worse than none, because it reports safety.
+  // the verb — while the reporter reads the same PR as proof the run succeeded.
+  //
+  // ALLOW-LIST, for the same reason as the guard above. Two earlier versions
+  // counted guard DEFINITIONS (a mutation deleting the guard from the call site
+  // passed) and then required the token plus `&&` at the call site (mutations
+  // making the helper `=> true`, or `… || true`, or a self-comparing tautology
+  // all passed — the token was present and constrained nothing). A predicate can
+  // be neutered in more ways than a test can enumerate, so the predicates are
+  // pinned verbatim instead.
   const wf = WF("agent-implement.yml");
-  const lines = wf.split("\n").filter((l) => !/^\s*#/.test(l) && !/^\s*\/\//.test(l));
-  const sites = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (!/startsWith\(`agent\/\$\{issue\}-`\)/.test(lines[i])) continue;
-    // BOUNDED backward scan. Unbounded, it walked past its own step into the
-    // previous one's `.find(` and borrowed that site's guard — so deleting the
-    // guard here passed. Four lines covers a wrapped predicate and cannot reach
-    // a neighbouring step.
-    let from = i;
-    while (from > 0 && i - from < 4 && !/\.find\(|\bfor \(/.test(lines[from])) from--;
-    sites.push(lines.slice(from, i + 1).join("\n"));
-  }
-  assert.ok(sites.length >= 2, `expected the agent-branch lookup in both places, found ${sites.length}`);
-  for (const site of sites) {
-    // CONJUNCTIVE. Asserting the token is present says nothing about whether it
-    // constrains: `mineRepo(p) || …` contains it and disables it.
+  const REQUIRED = [
+    "            const mineRepo = (p) => p.head?.repo?.full_name === `${owner}/${repo}`;",
+    "            const open = prs.find((p) => mineRepo(p) && (p.head?.ref || '').startsWith(`agent/${issue}-`));",
+    "              pr = prs.find((p) =>",
+    "                p.head?.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`",
+    "                && (p.head?.ref || '').startsWith(`agent/${issue}-`)) ?? null;",
+  ];
+  const lines = wf.split("\n");
+  for (const required of REQUIRED) {
     assert.ok(
-      /(?:mineRepo\(p\)|head\?\.repo\?\.full_name === `[^`]+`)\s*&&/.test(site),
-      `an agent-branch lookup does not REQUIRE the PR to come from this repository:\n${site}`,
-    );
-    assert.ok(
-      !/\|\|\s*\(p\.head\?\.ref/.test(site),
-      `the same-repo check is disjunctive, so it constrains nothing:\n${site}`,
+      lines.includes(required),
+      `the agent-branch lookup no longer matches its approved form:\n  expected: ${required}\n` +
+        "if this needs to change, change REQUIRED here in the same commit and say why",
     );
   }
+  // Both lookups, and no third one that skipped the guard entirely.
+  const lookups = lines.filter((l) => /startsWith\(`agent\/\$\{issue\}-`\)/.test(l));
+  assert.equal(lookups.length, 2, `expected exactly two agent-branch lookups, found ${lookups.length}`);
 });

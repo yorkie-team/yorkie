@@ -259,7 +259,7 @@ on the strength of the gate below rather than waved away.
   of this document said it was. It is a line in the prompt — a convention the
   agent could get wrong, verified by nothing.
 
-  **What they do not cover.** The agent runs with an unrestricted `Bash` beside a
+  **What it does not cover.** The agent runs with an unrestricted `Bash` beside a
   live installation token and a model credential, on text an arbitrary GitHub
   user wrote. The gate constrains merging; it does not constrain network egress. A
   successful prompt injection does not get code into `main`, and it does not need

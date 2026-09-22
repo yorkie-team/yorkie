@@ -189,6 +189,7 @@ jobs:
           script: |
             const owner = context.repo.owner, repo = context.repo.repo;
             let ok = false;
+            let bypassable = 0;
             // 1) Classic branch protection, which is what this repository uses.
             try {
               const { data } = await github.rest.repos.getBranchProtection({ owner, repo, branch: 'main' });
@@ -204,6 +205,7 @@ jobs:
                 (allow.users || []).length + (allow.teams || []).length + (allow.apps || []).length;
               if (r && (r.required_approving_review_count || 0) >= 1 && bypassers === 0) ok = true;
               else if (r && bypassers > 0) {
+                bypassable = bypassers;
                 core.warning(
                   `main requires a review but ${bypassers} actor(s) may bypass it; not counting it as protection.`,
                 );
@@ -234,6 +236,7 @@ jobs:
             // counted. Coarse on purpose: it does not try to decide WHICH actor
             // was exempted, because getting that wrong fails open.
             let unreadable = 0;
+            let listFailed = false;
             if (!ok) {
               try {
                 const { data: rules } = await github.request(
@@ -284,8 +287,11 @@ jobs:
                   );
                 }
               } catch (e) {
-                // Same rule one level up: not being able to ASK is not an answer.
-                unreadable += 1;
+                // Same rule one level up: not being able to ASK is not an
+                // answer. Tracked separately from `unreadable`, because this
+                // failure enumerated NOTHING — reporting it as "1 ruleset this
+                // token cannot read" invents both the count and the mechanism.
+                listFailed = true;
                 core.warning(`could not list branch rules: ${e.message}`);
               }
             }
@@ -301,15 +307,19 @@ jobs:
               // token cannot read" are different repository states with the same
               // safe answer, and telling a maintainer the first when it is the
               // second sends them to fix something that is not broken.
-              core.setFailed(
-                unreadable > 0
+              const reason = listFailed
+                ? 'the branch rules for main could not be listed at all, so whether it is protected is ' +
+                  'unknown. Unverified protection is treated as none'
+                : unreadable > 0
                   ? `main may be protected by ${unreadable} ruleset(s) this token cannot read — an ` +
                     'organization-level ruleset is not served by the repository rulesets endpoint. ' +
-                    'Unverified protection is treated as none; refusing to run.'
-                  : 'main is not protected by a required human review that this App cannot bypass ' +
-                    '(neither classic protection nor a ruleset provides one). This verb opens PRs a ' +
-                    'bot wrote; refusing to run.',
-              );
+                    'Unverified protection is treated as none'
+                  : bypassable > 0
+                    ? `main requires a review but ${bypassable} actor(s) may bypass it, so it does not ` +
+                      'guarantee a human approved this'
+                    : 'main is not protected by a required human review that this App cannot bypass ' +
+                      '(neither classic protection nor a ruleset provides one)';
+              core.setFailed(`${reason}. This verb opens PRs a bot wrote; refusing to run.`);
             }
 
       # RETRY IS THE DOCUMENTED PATH, AND IT COLLIDES. The concurrency group
@@ -711,16 +721,25 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const agentOutcome = '${{ steps.agent.outcome }}';
             const staged = '${{ steps.stage.outcome }}' === 'success';
-            // PARAMETERIZED BY CAUSE AND RUN. A bare marker meant one no-PR
-            // report per issue EVER: a protection refusal claimed it, the
-            // maintainer fixed protection and retried exactly as that comment
-            // told them to, `npm ci` failed, and the reporter returned silently
-            // — the silence this step exists to end, on the retry it invited.
-            // The sibling refusal and the help job both already carry a
-            // parameterized marker; this was the one that did not.
-            const cause = '${{ steps.protection.outcome }}' !== 'success' ? 'protection'
+            // `failure` and `skipped` are different answers. The gate REFUSING
+            // is `failure`; `skipped` means it never ran, and the only thing
+            // between the App check and it is the token mint — so `skipped` is a
+            // dead credential, not an unprotected branch. Collapsing both into
+            // `!== 'success'` told a rotated private key that `main` needed
+            // branch protection it already had.
+            const protection = '${{ steps.protection.outcome }}';
+            const cause = protection === 'failure' ? 'protection'
+              : protection !== 'success' ? 'credential'
               : '${{ steps.stage.outcome }}' !== 'success' ? 'setup' : 'no-pr';
-            const MARKER = `<!-- agent-implement-no-pr:${cause}:${context.runId} -->`;
+            // KEYED BY CAUSE, not by run. A bare marker meant one no-PR report
+            // per issue EVER: a protection refusal claimed it, the maintainer
+            // fixed protection and retried exactly as that comment told them to,
+            // `npm ci` failed, and the reporter returned silently. Adding the run
+            // id as well would go too far the other way — three maintainers
+            // hitting the same refusal would get three identical comments, and a
+            // re-run of the same job would repeat itself. The cause is what
+            // distinguishes a report worth making from one already on the page.
+            const MARKER = `<!-- agent-implement-no-pr:${cause} -->`;
             let pr = null, lookupOk = true;
             try {
               const prs = await github.paginate(github.rest.pulls.list, {
@@ -740,18 +759,15 @@ jobs:
             // Dedupe on the marker this step writes, and only on one the BOT
             // wrote: the trust in a marker is its author, never its payload —
             // otherwise anyone can suppress this by quoting it.
-            // BY LOGIN, not by `type === 'Bot'`, which is a species: every
-            // installed App with issues:write satisfies it. This narrows the set
-            // to the two identities that actually post here.
-            //
-            // It does NOT exclude the implement agent: that runs with this App
-            // token, so its comments are authored by `yorkie-team-agent[bot]`
-            // and are in this list. Nothing here can separate them, and a marker
-            // is not the place to try — an agent holding issues:write and a
-            // shell has louder options than suppressing one comment. The gain is
-            // against third-party Apps and ordinary users, and that is all it
-            // is claimed to be.
-            const AUTHORS = ['github-actions[bot]', 'yorkie-team-agent[bot]'];
+            // ONE LOGIN, because this step posts with GITHUB_TOKEN and nothing
+            // else writes this marker. Keeping the App identity here was surplus
+            // and not harmless: that is the login the implement agent itself
+            // posts under, it has `GITHUB_RUN_ID` in its environment, and it
+            // could therefore reconstruct this marker exactly — a run that died
+            // without a PR after writing one would suppress the report of its
+            // own death. The two sibling lists keep both logins because those
+            // steps genuinely post under either.
+            const AUTHORS = ['github-actions[bot]'];
             const mine = (c) => String(c.body ?? '').includes(MARKER)
               && AUTHORS.includes((c.user || {}).login);
             try {
@@ -762,16 +778,19 @@ jobs:
             } catch (e) {
               core.warning(`could not check for an existing report: ${e.message}`);
             }
-            const protection = '${{ steps.protection.outcome }}';
             let why;
             if (!lookupOk) {
               why = '⚠️ This run has ended, but this step could not read the PR list to tell whether a PR was '
                 + `opened — check the issue's linked PRs and the [run](${runUrl}) before assuming it failed.`;
-            } else if (protection !== 'success') {
+            } else if (cause === 'protection') {
               why = '🛑 Refused before any work began: this verb will not open a bot-authored PR unless `main` '
                 + 'requires at least one human approving review, and that could not be confirmed. '
                 + `The [run](${runUrl}) says which check failed. Retrying will not help until the branch `
                 + 'protection on `main` is fixed.';
+            } else if (cause === 'credential') {
+              why = '🛑 The `yorkie-team-agent` GitHub App token could not be issued, so nothing ran. Both '
+                + 'secrets are set, so this is the App itself — a rotated private key, or the App suspended '
+                + `or uninstalled. See the [run](${runUrl}); branch protection is not the problem here.`;
             } else if (!staged) {
               why = '🛑 This run stopped while setting up, after the checks passed and before any work began — '
                 + `a checkout or dependency install failed. See the [run](${runUrl}); this is usually `
