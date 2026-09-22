@@ -185,19 +185,38 @@ jobs:
           --lenses ./scripts/agent/lenses/lenses.json
           --github-output
 
-      # A SECOND GATE, on a state fix-eligible.mjs cannot see. It classifies the
-      # head's LENS check runs and never looks at CI, which is right for the
-      # question it answers ("did the panel run, and has anything landed since?")
-      # and leaves one it does not: red CI belongs to agent-iterate-ci.yml, whose
-      # fixer is checked out on the same branch with the same App identity and
-      # sits in a concurrency group this workflow cannot join. Two agents pushing
-      # the same branch means one push is rejected non-fast-forward and its round
-      # is lost — and the "did it work?" check here is `before !== after`, so the
-      # loser reports the WINNER's commit as its own success.
+      # MUTUAL EXCLUSION WITH THE CI-FIX ARM. Not a quality gate — this asks one
+      # question: could agent-iterate-ci.yml's fixer be working on this branch
+      # right now?
       #
-      # Fails toward ineligible, like every other branch of this gate: an API
-      # error or an unreadable answer refuses rather than races.
-      - name: Require CI green (the CI-fix arm owns every other state)
+      # It has to be asked here because fix-eligible.mjs cannot: that script
+      # classifies the head's LENS check runs and never looks at CI, which is
+      # right for the question it answers ("did the panel run, and has anything
+      # landed since?"). The CI arm's fixer is checked out on the same branch
+      # with the same App identity and sits in a concurrency group this workflow
+      # cannot join, so two agents pushing means one push is rejected
+      # non-fast-forward and its round is lost — and the "did it work?" check
+      # here is `before !== after`, so the loser reports the WINNER's commit as
+      # its own success.
+      #
+      # agent-iterate-ci fires on `workflow_run` of CI with `conclusion ==
+      # 'failure'`, and that is the whole of what makes each answer below right:
+      #
+      #   no CI run at all   → CLEAR. No workflow_run event ever fires, so the
+      #                        arm cannot have started. This is the ordinary
+      #                        state of a docs-only PR: ci.yml carries
+      #                        `paths-ignore: "**/*.md"`, so such a PR produces
+      #                        no run ever — and the `docs` lens is blocking, so
+      #                        refusing here would make `@claude fix` permanently
+      #                        unusable on exactly the PRs only it can unblock.
+      #   queued/in progress → NOT clear. The arm fires the moment it concludes
+      #                        failure, which is seconds away.
+      #   completed success  → CLEAR. The arm never fired.
+      #   completed failure  → NOT clear. The arm owns this branch.
+      #
+      # Fails toward NOT clear on anything unreadable: an API error refuses
+      # rather than races, like every other branch of this gate.
+      - name: Refuse while the CI-fix arm may own this branch
         if: steps.eligible.outputs.eligible == 'true'
         id: ci-clear
         uses: actions/github-script@v7
@@ -214,7 +233,15 @@ jobs:
                 workflow_id: 'ci.yml', head_sha: sha, per_page: 100,
               });
               const runs = data.workflow_runs || [];
-              if (!runs.length) return core.setOutput('clear', 'true'); // no CI run at all: nothing owns it
+              // No run at all → the CI arm cannot have fired. See the four
+              // states above; this is a docs-only PR's normal condition, not a
+              // gap. A reviewer has already read this branch as "proceeding
+              // before CI is known green" — it is, deliberately, because the
+              // question is ownership, not greenness.
+              if (!runs.length) {
+                core.info(`No CI run exists for ${sha}; the CI-fix arm cannot have started.`);
+                return core.setOutput('clear', 'true');
+              }
               const newest = runs.reduce((a, b) => ((b.id ?? 0) > (a.id ?? 0) ? b : a));
               // AN UNFINISHED RUN IS NOT A CLEAR ONE. Asking whether CI is RED
               // (`completed && conclusion === 'failure'`) let a queued or

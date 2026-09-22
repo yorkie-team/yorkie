@@ -833,7 +833,7 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
   // quotes the wrong predicate in order to explain why it is wrong, and an
   // assertion that reads prose as code fails on the explanation.
   const gate = wf
-    .slice(wf.indexOf("- name: Require CI green"), wf.indexOf("- name: Explain the refusal"))
+    .slice(wf.indexOf("id: ci-clear"), wf.indexOf("- name: Explain the refusal"))
     .split("\n")
     .filter((l) => !/^\s*\/\//.test(l))
     .join("\n");
@@ -842,6 +842,17 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
     !/conclusion === 'failure'/.test(gate),
     "asking whether CI is RED lets a still-running run pass as clear",
   );
+  // THE ABSENT-RUN BRANCH IS DELIBERATE, and pinned because it has already been
+  // read as a bug once. The gate asks whether agent-iterate-ci.yml's fixer could
+  // own this branch, not whether the code is good — and that arm fires only on a
+  // `workflow_run` of CI, so no run means it cannot have started. Refusing here
+  // would make `@claude fix` permanently unusable on a docs-only PR, which
+  // produces no CI run ever (`ci.yml` ignores `**/*.md`) and which the blocking
+  // `docs` lens is the only thing gating.
+  assert.match(gate, /if \(!runs\.length\)/, "the no-run case must be handled explicitly");
+  const noRun = gate.slice(gate.indexOf("if (!runs.length)"), gate.indexOf("const newest"));
+  assert.match(noRun, /setOutput\('clear', 'true'\)/,
+    "an absent CI run must read as CLEAR — the CI-fix arm cannot have fired without one");
   assert.match(refusal.slice(0, 2600), /eligibility check could not complete/, "an empty reason must still say something");
   assert.match(refusal.slice(0, 2600), /the CI-fix arm owns that state/, "...and the CI-red refusal must say which arm has the branch");
 });
