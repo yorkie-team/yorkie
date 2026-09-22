@@ -45,6 +45,24 @@ import (
 	"github.com/yorkie-team/yorkie/server/schemas"
 )
 
+var (
+	// ErrNoResources is returned when a Watch request carries no resource to
+	// subscribe to. Such a stream has nothing to deliver, so it is rejected
+	// instead of being left open.
+	ErrNoResources = errors.InvalidArgument(
+		"no resources to watch",
+	).WithCode("ErrNoResources")
+
+	// ErrUnsupportedResource is returned when a Watch request carries a
+	// resource descriptor this server cannot subscribe to: one with its
+	// resource oneof unset, or one naming a type added after this server was
+	// built. Skipping it would leave the client watching fewer resources than
+	// it asked for, with nothing saying so.
+	ErrUnsupportedResource = errors.InvalidArgument(
+		"unsupported resource descriptor",
+	).WithCode("ErrUnsupportedResource")
+)
+
 type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
@@ -646,14 +664,11 @@ func (s *yorkieServer) Watch(
 	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
 }
 
-// ErrNoResources is returned when a Watch request carries no resource to
-// subscribe to. Such a stream has nothing to deliver, so it is rejected
-// instead of being left open.
-var ErrNoResources = errors.InvalidArgument(
-	"no resources to watch",
-).WithCode("ErrNoResources")
-
-// subscribeResources subscribes to each document and channel resource in the request.
+// subscribeResources subscribes to each document and channel resource in the
+// request. Every descriptor must yield a subscription, so on success the
+// returned slices hold at least one between them: a stream with no
+// subscription ends as soon as it starts (see streamMergedEvents), which a
+// client reads as an unexpected termination rather than as a rejection.
 func (s *yorkieServer) subscribeResources(
 	ctx context.Context,
 	req *api.WatchRequest,
@@ -698,6 +713,10 @@ func (s *yorkieServer) subscribeResources(
 			}
 			channelSubs = append(channelSubs, *cs)
 			resourceInits = append(resourceInits, ri)
+
+		default:
+			cleanup()
+			return nil, nil, nil, ErrUnsupportedResource
 		}
 	}
 
