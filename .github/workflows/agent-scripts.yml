@@ -69,3 +69,33 @@ jobs:
       - name: Test
         run: npm test
         working-directory: scripts/agent
+
+  # THE TEST SUITE CANNOT CATCH THIS CLASS, AND ONE OF THEM SHIPPED.
+  # `agent-review-panel.yml` named `cancelled()` in an `env:` value, where GitHub
+  # does not allow it. That is not a step that fails when it runs — GitHub
+  # refuses to LOAD the file, so every push produced a nameless, job-less failed
+  # run and the panel never executed once. Nothing noticed: the workflow is
+  # `workflow_run`-triggered, so "no panel ran" and "no CI finished yet" look
+  # identical from the outside, and five review rounds plus CodeRabbit read the
+  # file as YAML rather than as a workflow.
+  #
+  # The suite's cross-file guards read these files as text, and a YAML parse only
+  # proves they are YAML. actionlint is the piece that checks them the way the
+  # service does: expression contexts, job graph, action inputs, `runs-on`.
+  #
+  # Shell linting is left off deliberately. These workflows carry large
+  # `github-script` bodies and heredoc-heavy `run:` blocks that shellcheck reads
+  # as its own dialect, and a lane that is noisy from its first run is a lane
+  # people learn to ignore. The startup-failure class is what this exists for.
+  lint-workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Lint workflow files
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color -shellcheck= -pyflakes=
