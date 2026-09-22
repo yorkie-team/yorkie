@@ -22,14 +22,14 @@ rewrite dropped that handling; this branch restores it for the merged path.
 
 ## How a subscription reaches the closed state
 
-`Subscription.Publish` (`server/backend/pubsub/subscription.go:126`) closes its
+`Subscription.Publish` (`server/backend/pubsub/subscription.go:127`) closes its
 own event channel after `maxConsecutivePublishFailures` (100) consecutive
 failed sends, each waiting `publishTimeout` (100ms). Added in #1833 as the only
 cleanup path for subscriptions whose stream handler never unsubscribes.
 
 The pipeline in front of it is shallow, which is what makes the trigger
 reachable: a doc subscription buffers **1** event
-(`pubsub/doc_subscription.go:34`), `merged` buffers one slot per subscription
+(`pubsub/doc_subscription.go:35`), `merged` buffers one slot per subscription
 (one, for every stream the Go SDK opens), and the `BatchPublisher` window is
 100ms. A client that stops reading fills all of it within a few events, so on
 an active document the threshold arrives in roughly 10-20 seconds — a
@@ -41,7 +41,7 @@ The handler's main loop also selects on `ctx.Done()`, so it did unblock when
 the client disconnected. Everything in its deferred cleanup was therefore
 delayed until disconnect rather than skipped — and two of those matter:
 
-- `unwatchDoc` (`yorkie_server.go:1686`) is the **only** publisher of
+- `unwatchDoc` (`yorkie_server.go:1700`) is the **only** publisher of
   `DocUnwatched`. The `BatchPublisher` reap
   (`pubsub/batch_publisher.go:141-168`) deletes the pruned subscription from
   the map but publishes nothing, so every peer kept listing the pruned client
@@ -95,8 +95,14 @@ delayed until disconnect rather than skipped — and two of those matter:
   resource, so nothing in-tree hits it; the RPC accepts a list, so something
   will. Closing it properly wants a per-resource signal in `WatchResponse`,
   which is a protocol change and not this fix.
+- **`ErrUnsupportedResource` fails a mixed request whole.** A newer SDK naming
+  a resource type this server does not know has its entire `Watch` rejected
+  rather than watching the descriptors the server does recognise. Deliberate: a
+  partial watch the client cannot detect is the failure this branch exists to
+  remove. Serving the recognised ones and naming the dropped ones wants the same
+  per-resource field in `WatchInitialization` the limitation above wants.
 - **`return nil` ends the stream gracefully, and the Go client only reconnects
-  on an error.** `client/client.go:1027` re-establishes the watch loop when
+  on an error.** `client/client.go:1029` re-establishes the watch loop when
   `stream.Err() != nil` and simply closes its buffer otherwise. So a self-prune
   now stops the application's watch channel with no error rather than
   recovering it. That is the convention `streamEvents` already set for this
