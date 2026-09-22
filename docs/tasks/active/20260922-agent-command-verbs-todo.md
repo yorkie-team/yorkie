@@ -122,10 +122,10 @@ recorded. The classes worth carrying forward:
 
 ## Still worth doing, not done here
 
-- [ ] **A test for the permission list.** `agent-fix.yml` tells users the App
-      cannot push `.github/workflows/**`. That is true only while every mint
-      enumerates `permission-*`; two of six did not, and nothing would have
-      caught the next one.
+- [x] **A test for the permission list.** Added: every
+      `create-github-app-token` mint must be SHA-pinned, must narrow at all, and
+      must not grant `workflows`. Mutation-checked — unpinning, granting
+      `workflows`, and removing the narrowing each red it.
 - [ ] **The on-demand throttle is still racy.** Two `@claude review` comments
       seconds apart can both pass the gate before either marker lands. The
       release valve added here fixes the stuck case, not the double-run one.

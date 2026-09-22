@@ -446,6 +446,63 @@ test("the `fix` verb reaches exactly one workflow: issues -> implement, PRs -> f
   }
 });
 
+test("every App-token mint is pinned and narrowed, and none can push workflows", () => {
+  // THE GUARANTEE THIS ENFORCES IS ONE THE PIPELINE PRINTS TO USERS.
+  // agent-fix.yml's refusal message tells a contributor the token is minted
+  // without `workflows: write` "so a fix agent can never rewrite the lanes that
+  // grade it". That is a property of every mint, and it was true of four of the
+  // six: the CI arm and the reply arm were ported with no `permission-*` lines
+  // at all, so their tokens carried the App installation's FULL scope into the
+  // two jobs that check out untrusted branch code and run an agent beside the
+  // token. Nothing would have caught the seventh.
+  //
+  // Three properties per mint:
+  //   1. SHA-pinned. This action handles the App private key, so a movable tag
+  //      is a supply-chain hole with the worst possible payload.
+  //   2. Narrowed at all. An omitted permission block is not "the defaults" —
+  //      it is everything the installation was granted.
+  //   3. No `workflows` permission, which is the sentence above.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  let mints = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".yml"))) {
+    const text = readFileSync(path.join(dir, file), "utf8");
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = /uses: actions\/create-github-app-token@(\S+)/.exec(lines[i]);
+      if (!m) continue;
+      mints++;
+      assert.match(
+        m[1],
+        /^[0-9a-f]{40}$/,
+        `${file}:${i + 1}: the App-token action must be pinned to a commit SHA, got ${m[1]}`,
+      );
+      // The step's `with:` block: to the next line at or left of this step's
+      // own indent that starts a new step.
+      const indent = lines[i].search(/\S/);
+      let end = i + 1;
+      while (end < lines.length) {
+        const l = lines[end];
+        if (l.trim() && l.search(/\S/) <= indent && /^\s*- /.test(l)) break;
+        end++;
+      }
+      const step = lines.slice(i, end).filter((l) => !/^\s*#/.test(l)).join("\n");
+      const perms = [...step.matchAll(/^\s*permission-([a-z-]+):/gm)].map((x) => x[1]);
+      assert.ok(
+        perms.length > 0,
+        `${file}:${i + 1}: mints an App token with no permission-* narrowing — it carries the installation's full scope`,
+      );
+      assert.ok(
+        !perms.includes("workflows"),
+        `${file}:${i + 1}: grants permission-workflows, which is exactly what agent-fix.yml promises users no agent token can do`,
+      );
+    }
+  }
+
+  assert.ok(mints >= 4, `expected the App-token mints to be found, saw ${mints}`);
+});
+
 test("every job that runs a pipeline script pins its Node", () => {
   // REGRESSION GUARD, for a mistake made twice in one branch.
   //
