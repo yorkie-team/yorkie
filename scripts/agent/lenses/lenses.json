@@ -40,7 +40,15 @@
     "gating": "blocking",
     "needsIssueSpec": true,
     "appliesWhen": [
-      "packages/**",
+      "pkg/**",
+      "server/**",
+      "client/**",
+      "admin/**",
+      "cluster/**",
+      "cmd/**",
+      "api/**",
+      "internal/**",
+      "test/**",
       "scripts/**",
       "docs/design/**"
     ],
@@ -60,7 +68,15 @@
     "gating": "blocking",
     "needsIssueSpec": false,
     "appliesWhen": [
-      "packages/**",
+      "pkg/**",
+      "server/**",
+      "client/**",
+      "admin/**",
+      "cluster/**",
+      "cmd/**",
+      "api/**",
+      "internal/**",
+      "test/**",
       "scripts/**"
     ],
     "scopeClasses": [
@@ -78,7 +94,15 @@
     "gating": "blocking",
     "needsIssueSpec": false,
     "appliesWhen": [
-      "packages/**",
+      "pkg/**",
+      "server/**",
+      "client/**",
+      "admin/**",
+      "cluster/**",
+      "cmd/**",
+      "api/**",
+      "internal/**",
+      "test/**",
       "scripts/**"
     ],
     "scopeClasses": [
@@ -100,10 +124,7 @@
       "docs/**/*.txt",
       "*.md",
       "*.txt",
-      "packages/*/README.md",
-      "packages/documentation/**/*.md",
-      "packages/documentation/**/*.mdx",
-      ".changeset/*.md"
+      "**/README.md"
     ],
     "scopeClasses": [
       "prose"

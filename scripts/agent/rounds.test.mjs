@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readWorkflow, skipWithout, skipWithoutModule } from "./workflow-presence.mjs";
 import {
   isSingleParentCommit,
   countFailedReviewRounds,
@@ -27,10 +28,9 @@ import {
 } from "./rounds.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PANEL_WORKFLOW = readFileSync(
-  path.join(HERE, "..", "..", ".github", "workflows", "agent-review-panel.yml"),
-  "utf8",
-);
+// null when the gating panel is not installed here; see workflow-presence.mjs.
+const PANEL = "agent-review-panel.yml";
+const PANEL_WORKFLOW = readWorkflow(PANEL);
 
 // --- the paged latch, shared between a module and a github-script step -------
 //
@@ -46,7 +46,7 @@ test("PAGED_LATCH is the exact marker, pinned as a literal", () => {
   assert.equal(PAGED_LATCH, "<!-- agent-review-paged -->");
 });
 
-test("the gate job's literal copy of the latch matches the module", () => {
+test("the gate job's literal copy of the latch matches the module", skipWithout(PANEL), () => {
   assert.ok(
     PANEL_WORKFLOW.includes(`const PAGED_LATCH = '${PAGED_LATCH}';`),
     "agent-review-panel.yml's gate job must carry a byte-identical copy of PAGED_LATCH",
@@ -117,7 +117,7 @@ test("isPagedLatchComment: no marker, or junk, is never a latch", () => {
   }
 });
 
-test("every site that writes the latch also says the panel has stopped", () => {
+test("every site that writes the latch also says the panel has stopped", skipWithoutModule("review-round-guard.mjs"), () => {
   // Writing the latch now freezes the agent-review-* checks, so a page that
   // does not say so leaves a human waiting for verdicts that will never come.
   // Three writers today: the guard's page() (in review-round-guard.mjs), the
@@ -624,7 +624,7 @@ test("rerunPointFrom: the NEWEST qualifying rerun wins", () => {
   assert.equal(got, "2026-08-06T04:30:47.000Z");
 });
 
-test("the guard actually passes a permission resolver to rerunPointFrom", async () => {
+test("the guard actually passes a permission resolver to rerunPointFrom", skipWithoutModule("review-round-guard.mjs"), async () => {
   // The tests above prove the predicate; they cannot prove review-round-guard.mjs
   // supplies `trusts`, because that call is top-level CLI code needing `gh`.
   // Without it the module falls back to association-only — i.e. straight back to
@@ -815,7 +815,7 @@ test("a superseded lens run does not count as a fix attempt", () => {
   assert.equal(countFailedReviewRounds(commits, ROUND_NAMES), 0);
 });
 
-test("the panel workflow does not record verdicts for a cancelled round", () => {
+test("the panel workflow does not record verdicts for a cancelled round", skipWithout(PANEL), () => {
   // Prose in a YAML comment is not a guard. `always()` here is what wrote six
   // fail-closed reds onto a commit nobody reviewed.
   const from = PANEL_WORKFLOW.indexOf("- name: Post per-lens check runs");
@@ -825,7 +825,7 @@ test("the panel workflow does not record verdicts for a cancelled round", () => 
   assert.doesNotMatch(head, /always\(\)/, "always() is exactly the bug");
 });
 
-test("close-stuck-checks distinguishes superseded from broken", () => {
+test("close-stuck-checks distinguishes superseded from broken", skipWithout(PANEL), () => {
   const job = PANEL_WORKFLOW.slice(PANEL_WORKFLOW.indexOf("close-stuck-checks:"));
   assert.match(job, /PANEL_RESULT: \$\{\{ needs\.review-panel\.result \}\}/);
   assert.match(job, /superseded \? 'cancelled' : 'failure'/);

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readWorkflow, skipWithout } from "./workflow-presence.mjs";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -522,15 +523,12 @@ test("git location vars in the environment cannot redirect this module", async (
 
 // --- workflow wiring ----------------------------------------------------------
 
-test("the panel job resolves the freeze point and hands it to review-panel.mjs", () => {
+test("the panel job resolves the freeze point and hands it to review-panel.mjs", skipWithout("agent-review-panel.yml"), () => {
   // A gate nothing invokes is inert. Each assertion below matches the ACTUAL
   // invocation or binding rather than the `[ -f ]` existence guard beside it —
   // matching the guard passes even when the `node` line is gone. Verified by
   // mutation: deleting any one of these lines from the workflow reds this test.
-  const wf = readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), "../../.github/workflows/agent-review-panel.yml"),
-    "utf8",
-  );
+  const wf = readWorkflow("agent-review-panel.yml");
   // The resolver runs, from the TRUSTED copy — the branch must not get to decide
   // where its own review surface froze.
   assert.match(wf, /node \.trusted\/scripts\/agent\/review-surface\.mjs resolve "\$PR"/);

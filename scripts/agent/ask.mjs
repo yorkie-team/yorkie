@@ -83,11 +83,16 @@ export const PERMITTED_TOOLS = Object.freeze(["Read", "Grep", "Glob"]);
  * `mcpServers`), and keeping them apart preserves the meaning of the existing
  * tests that assert no MCP name reaches a review-panel session.
  *
- * Matching is exact, so `mcp__wafflebase__exec`, `mcp__other__run` and every
- * future MCP name remain refused because they are absent — the same inversion
- * that makes the allow-list above work.
+ * Matching is exact, so every MCP name is refused because it is absent — the
+ * same inversion that makes the allow-list above work.
+ *
+ * EMPTY in this repository, and that is the whole of it: the entries this list
+ * carried upstream were the hunters' own MCP tools, and no hunter is ported
+ * here (docs/design/agent-command-verbs.md). An empty allow-list refuses every
+ * MCP name, which is the direction to fail in. Adding one is a deliberate edit
+ * to this line, not a side effect of wiring a server up somewhere else.
  */
-export const PERMITTED_MCP_TOOLS = Object.freeze(["mcp__wafflebase__run", "mcp__wafflebase__ui"]);
+export const PERMITTED_MCP_TOOLS = Object.freeze([]);
 
 const PERMITTED_SET = new Set(PERMITTED_TOOLS);
 

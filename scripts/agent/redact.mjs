@@ -208,9 +208,12 @@ export function redactSecrets(text, { extra = secretsFromEnv() } = {}) {
     /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,})(?:\s+[A-Za-z0-9_-]{8,})*/g,
     "<REDACTED_GITHUB_TOKEN>",
   );
-  // wafflebase API keys — this pipeline reviews that repo, so its keys can appear
-  // in a quoted upstream error here.
-  s = maskPrefixed(s, /\bwfb_[A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]{8,})*/g, "<REDACTED_API_KEY>");
+  // NO RULE FOR THIS PROJECT'S OWN KEYS, deliberately. A yorkie project's public
+  // and secret keys are bare `shortuuid` values (server/backend/database/
+  // project_info.go) — 22 base57 characters with no prefix, so there is no shape
+  // to match that would not also redact every commit sha and identifier in the
+  // text. Layer 4's field-name rule is what catches them when they appear as
+  // `secret: ...`, which is how they appear in a config or an error.
   // JWTs before the Bearer rule, so a bearer-carried JWT is labelled as a JWT
   // rather than swallowed by the broader pattern.
   s = s.replace(/\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g, "<REDACTED_JWT>");

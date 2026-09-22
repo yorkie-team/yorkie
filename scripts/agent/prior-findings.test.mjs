@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readWorkflow, skipWithout } from "./workflow-presence.mjs";
+
+const PANEL_WORKFLOW_NAME = "agent-review-panel.yml";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -483,11 +486,8 @@ test("carryForwardFindings: drops the synthesised infra record", () => {
 // inspection. A drifted copy does not error: the cloud and the local loop would
 // simply gate on different findings, which is the silent failure the extraction
 // exists to prevent. Mirrors the PAGED_LATCH guard in rounds.test.mjs.
-test("the panel workflow's inline copy applies both selection filters", () => {
-  const workflow = readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", ".github", "workflows", "agent-review-panel.yml"),
-    "utf8",
-  );
+test("the panel workflow's inline copy applies both selection filters", skipWithout(PANEL_WORKFLOW_NAME), () => {
+  const workflow = readWorkflow(PANEL_WORKFLOW_NAME);
   assert.ok(
     workflow.includes("norm(f.severity) === 'critical' || norm(f.severity) === 'major'"),
     "the inline copy must still carry blocking severities only",

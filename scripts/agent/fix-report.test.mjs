@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readWorkflow, skipWithout } from "./workflow-presence.mjs";
 import { readFileSync } from "node:fs";
 import {
   FIX_REPORT_MARKER,
@@ -462,7 +463,7 @@ test("cmdPost counts the disputes actually on the PR", () => {
 
 // --- the report must be posted BEFORE the push -------------------------------
 
-test("the fixer prompt orders the report BEFORE the push", () => {
+test("the fixer prompt orders the report BEFORE the push", skipWithout("agent-review-panel.yml"), () => {
   // The fixer's push re-triggers CI, CI re-triggers the panel, and the panel
   // workflow is `cancel-in-progress` — so the push cancels the job the fixer is
   // still running in, roughly 30s later. On #757 the fixer pushed on all three
@@ -473,10 +474,7 @@ test("the fixer prompt orders the report BEFORE the push", () => {
   // causes the cancellation. A prompt edit that moves the report back after the
   // push silently reintroduces the race, which is why this is a test and not a
   // comment.
-  const wf = readFileSync(
-    new URL("../../.github/workflows/agent-review-panel.yml", import.meta.url),
-    "utf8",
-  );
+  const wf = readWorkflow("agent-review-panel.yml");
   const prompt = wf.slice(wf.indexOf("The review panel requested changes on your PR."));
   const report = prompt.indexOf("fix-report.mjs post");
   const push = prompt.indexOf("Push with `git push --no-verify`");

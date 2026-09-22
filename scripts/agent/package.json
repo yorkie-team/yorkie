@@ -1,9 +1,9 @@
 {
-  "name": "@wafflebase/agent-scripts",
+  "name": "@yorkie/agent-scripts",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Autonomous-pipeline agent scripts (review panel orchestrator). Not part of the workspace build.",
+  "description": "Agent command-surface scripts (review panel orchestrator). Not built or imported by the Go module.",
   "scripts": {
     "test": "node --test-timeout=60000 --test '**/*.test.mjs'"
   },
@@ -11,7 +11,7 @@
     "@anthropic-ai/claude-agent-sdk": "0.3.217",
     "zod": "4.4.3"
   },
-  "comment": "This project has its own npm lockfile and sits outside the pnpm workspace, so the root package.json's pnpm.overrides do not reach it. Transitive security pins are duplicated here on purpose.",
+  "comment": "This project has its own npm lockfile and is the only Node package in the repository; nothing in the Go build reaches it. See docs/design/agent-command-verbs.md. Transitive security pins are duplicated here on purpose.",
   "overrides": {
     "fast-uri": "^3.1.6",
     "qs": "^6.16.0"
