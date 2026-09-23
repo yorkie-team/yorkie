@@ -1573,9 +1573,21 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
   const agentAt = wf.indexOf("        id: agent");
   assert.ok(agentAt > 0 && agentAt < at, "the reporter must come after the agent step it reports on");
   const jobAt = wf.lastIndexOf("\n  implement:", at);
-  const nextJobAt = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at))?.index;
   assert.ok(jobAt > 0, "the reporter must live in the implement job");
-  assert.ok(nextJobAt === undefined || nextJobAt + at > at, "the reporter must live in the implement job");
+  // VACUOUS UNTIL NOW, and the vacuity was arithmetic rather than a wrong
+  // pattern: the old form searched from `at` — the reporter itself — and then
+  // asserted `nextJobAt + at > at`, which holds for every non-negative match
+  // index and could not fail for any relocation. The question is whether the job
+  // header that FOLLOWS `implement:` comes after the reporter; searching from
+  // `jobAt` is what asks it. `help` sits below `implement`, so this is a real
+  // bound: move the reporter under `help` and it fails.
+  const rel = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(jobAt + 1));
+  const nextJobAt = rel ? jobAt + 1 + rel.index : wf.length;
+  assert.ok(
+    nextJobAt > at,
+    "the reporter must live in the implement job, not a later one — every steps.*.outcome it reads " +
+      "is the empty string from anywhere else",
+  );
 
   // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
@@ -1748,3 +1760,4 @@ test("agent-implement's inline PR lookups agree with metrics.mjs on the same fix
   const metrics = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "metrics.mjs"), "utf8");
   assert.match(metrics, /number,headRefName,isCrossRepository/, "resolvePrByIssue must ask gh for the head repo");
 });
+
