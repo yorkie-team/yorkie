@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Concurrent splits of one boundary sit in arrival order (2026-09-23) | [20260923-same-boundary-split-order-todo.md](./active/20260923-same-boundary-split-order-todo.md) | [20260923-same-boundary-split-order-lessons.md](./active/20260923-same-boundary-split-order-lessons.md) |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
 | Precompute the daily peak sessions per channel (2026-09-17) | [20260917-peak-sessions-daily-summary-todo.md](./active/20260917-peak-sessions-daily-summary-todo.md) | [20260917-peak-sessions-daily-summary-lessons.md](./active/20260917-peak-sessions-daily-summary-lessons.md) |
 | Undoing a container removal discards a peer's concurrent edit inside it (2026-09-12) | [20260912-undo-discards-concurrent-peer-edit-todo.md](./active/20260912-undo-discards-concurrent-peer-edit-todo.md) | - |
