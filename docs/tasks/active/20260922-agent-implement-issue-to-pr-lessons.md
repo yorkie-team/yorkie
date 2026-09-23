@@ -238,3 +238,43 @@ Four findings, two of them against a file this branch had already deleted.
 Before writing "no workflow does X" about this repository, grep the workflow
 directory for X. A claim about the installed set is a measurement, not an
 inference from the thing being designed.
+
+## Round 5 — the remediation was itself under-specified
+
+The security lens re-raised the four over-privileged workflows (correct, and
+unchanged), and added one finding that was genuinely new and genuinely
+actionable: **the fix the Non-Goal prescribes would not have worked.**
+
+- **"Trusted step" is a property of the code a step runs, not of the file it
+  sits in.** The prescription was "split the mint; every step needing
+  `pull-requests` stays a trusted step in the workflow file." But in all four
+  jobs the post-agent steps run `$RUNNER_TEMP/agent-tools/*.mjs`, copied from
+  the branch at `agent-fix.yml:408`, with the agent holding unrestricted `Bash`
+  in between (`:524-634`) and those files re-executed afterwards (`:657`,
+  `:672`, `:770`). Handing the second token to such a step hands it to whatever
+  the branch wrote there. The split and acceptance criterion 12 have to land
+  together; separately, the split just relocates the capability.
+- **A remediation written into a design doc gets reviewed as loosely as prose
+  and gets implemented as literally as code.** This one was three clauses long
+  and read as complete. What made it incomplete was in a numbered list 300 lines
+  further down, in a section about a phase that is not landed — so nobody
+  reading the Non-Goal would reach it. Cross-reference the criterion at the
+  point of prescription, not only where it was first written.
+- **Re-measure the boundary you keep citing.** The "no credential may write
+  `.github/workflows/**`" claim had been inherited across four rounds from one
+  measurement on a different file. This round pushed a one-byte change to
+  `agent-fix.yml` itself on a scratch ref and got the refusal back for that
+  exact path. Cheap, and it converts a quoted precedent into a fact about the
+  file actually under discussion.
+- **Name the compensating control's evidence, or say there is none.** The doc
+  leaned on "branch protection on `main`". There is no ruleset fixture, no
+  `CODEOWNERS` (the repository has none at all) and no assertion in
+  `checks.test.mjs` behind it. It is an assumption about a repository setting,
+  and the doc now says so rather than resting on it silently.
+
+### Standing rule this round produced
+
+When a design doc concedes an open gap, the remediation it prescribes is part
+of the claim and gets checked as hard as the gap. "Here is how to fix it" that
+does not survive the jobs as built is worse than "we do not know how to fix
+it yet" — it reads as a plan and retires the question.
