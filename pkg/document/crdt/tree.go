@@ -750,6 +750,23 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
+// DropSplitLinks clears the split-sibling links on this node and every one of
+// its descendants.
+//
+// InsPrevID/InsNextID name positions in a split chain and only SplitElement
+// may create them. A node arriving as operation content is freshly created by
+// the editing client, so it can never legitimately be a split product — but
+// the wire format carries the fields regardless, and the chain walks that
+// read them (advancePastUnknownSplitSiblings, orderSameBoundarySplit) treat
+// them as trusted structural pointers. Drop them on the way in rather than
+// let a client hand the tree a chain of its choosing.
+func (n *TreeNode) DropSplitLinks() {
+	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
+		node.Value.InsPrevID = nil
+		node.Value.InsNextID = nil
+	})
+}
+
 // ReissueIDs gives this node and every one of its descendants a fresh
 // identity, taking one ticket per node in post-order.
 //
@@ -1911,11 +1928,19 @@ func (t *Tree) Edit(
 	// Phase 2: Split Sibling Advance — advance past concurrent split
 	// products linked via InsNextID that the editor could not have seen.
 	// Skip when leftNode == parent (leftmost child position).
+	// skipActorID carries the editing actor so this resolves a same-boundary
+	// empty run exactly as the split loop does (§7.5/§7.8); without it the
+	// two sides would place the same boundary differently.
+	editActorID := editedAt.ActorID()
 	if fromLeft != fromParent {
-		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
+		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector, advanceOpts{
+			skipActorID: &editActorID,
+		})
 	}
 	if toLeft != toParent {
-		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
+		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector, advanceOpts{
+			skipActorID: &editActorID,
+		})
 	}
 
 	// Phase 3: Range Narrowing — when fromLeft and toLeft are in
@@ -1927,9 +1952,15 @@ func (t *Tree) Edit(
 	collectFromParent, collectFromLeft := fromParent, fromLeft
 	if fromLeft != fromParent && fromParent != toParent {
 		current := fromLeft
+		var walker insNextWalker
+		walker.visit(current)
 		for current.InsNextID != nil {
 			next := t.findFloorNode(current.InsNextID)
 			if next == nil || next.IsText() {
+				break
+			}
+			// Stop on a chain that loops back on itself; see insNextWalker.
+			if !walker.visit(next) {
 				break
 			}
 			if next.Index.Parent != nil &&
@@ -2671,8 +2702,13 @@ func (t *Tree) collectBetween(
 					// siblings should survive the merge.
 					if !node.IsText() && node.InsNextID != nil &&
 						!slices.Contains(toBeMergedNodes, node) {
+						var walker insNextWalker
+						walker.visit(node)
 						next := t.findFloorNode(node.InsNextID)
-						for next != nil {
+						// Stop on a chain that loops back on itself; see
+						// insNextWalker. Unbounded here would also grow
+						// toBeRemoveds without limit.
+						for next != nil && walker.visit(next) {
 							if !time.TicketKnown(versionVector, next.ID().CreatedAt) {
 								toBeRemoveds = append(toBeRemoveds, next)
 								// Cascade through the full subtree, not just immediate children.
@@ -2711,6 +2747,31 @@ type advanceOpts struct {
 	skipActorID *time.ActorID
 }
 
+// insNextWalker bounds a walk of an InsNextID chain. InsNextID is a
+// structural pointer that only SplitElement is supposed to set, but it also
+// arrives verbatim from client-supplied bytes (api/converter/from_bytes.go,
+// and — until DropSplitLinks strips it — operation contents), so a chain that
+// loops back on itself would spin the applying goroutine forever while it
+// holds the document lock. Every chain walk runs through one of these.
+type insNextWalker struct {
+	seen map[*TreeNode]struct{}
+}
+
+// visit records node and reports whether this walk had not already passed
+// through it. A false result means the chain is cyclic; stop following it.
+func (w *insNextWalker) visit(node *TreeNode) bool {
+	if w.seen == nil {
+		w.seen = make(map[*TreeNode]struct{}, 4)
+	}
+
+	if _, ok := w.seen[node]; ok {
+		return false
+	}
+	w.seen[node] = struct{}{}
+
+	return true
+}
+
 // advancePastUnknownSplitSiblings follows the InsNextID chain of the given
 // node, advancing past element-type split siblings that the editing client
 // did not know about (not in versionVector). This ensures that concurrent
@@ -2731,9 +2792,16 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 	}
 
 	current := node
+	var walker insNextWalker
+	walker.visit(current)
 	for current.InsNextID != nil {
 		next := t.findFloorNode(current.InsNextID)
 		if next == nil || next.IsText() {
+			break
+		}
+
+		// Stop on a chain that loops back on itself; see insNextWalker.
+		if !walker.visit(next) {
 			break
 		}
 
@@ -2760,10 +2828,154 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 			break
 		}
 
+		// Empty unknown siblings standing right before our own product are
+		// concurrent splits of the same boundary, ordered ahead of ours by
+		// orderSameBoundarySplit. They are not content the editor meant to
+		// keep on its left; a replica that applied them later re-parented
+		// them after the boundary (§7.4), so stay in front of them here too.
+		if o.skipActorID != nil && t.emptyRunReachesActor(next, *o.skipActorID, versionVector) {
+			break
+		}
+
 		current = next
 	}
 
 	return current
+}
+
+// emptyRunReachesActor reports whether the InsNextID chain starting at node
+// runs through empty, unknown element split siblings only and then reaches a
+// node created by actorID.
+func (t *Tree) emptyRunReachesActor(
+	node *TreeNode,
+	actorID time.ActorID,
+	versionVector time.VersionVector,
+) bool {
+	var walker insNextWalker
+	for current := node; current != nil && !current.IsText() && walker.visit(current); {
+		createdAt := current.id.CreatedAt
+		if createdAt.ActorID() == actorID {
+			return current != node
+		}
+		if len(current.Index.Children(true)) > 0 {
+			return false
+		}
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			return false
+		}
+		if current.InsNextID == nil {
+			return false
+		}
+		current = t.findFloorNode(current.InsNextID)
+	}
+
+	return false
+}
+
+// orderSameBoundarySplit (§7.8) decides which node a split at offset of parent
+// actually splits, so that concurrent splits of one node at one boundary land
+// in the same order on every replica.
+//
+// SplitElement places its product directly after the node it splits. When a
+// concurrent split of the same boundary has already been applied, that puts
+// the products in arrival order, which differs per replica. The XML still
+// matches (all but the last product are empty) but position-based operations
+// that follow do not.
+//
+// Order them by ticket instead, newest first, as RGA orders concurrent
+// inserts after the same node: skip the unknown split siblings with a newer
+// ticket and split the last of them at its start. The right half lives in
+// that sibling on this replica, so it moves into our product exactly as it
+// would have moved out of parent on a replica that applied us first.
+func (t *Tree) orderSameBoundarySplit(
+	parent *TreeNode,
+	offset int,
+	editedAt *time.Ticket,
+	versionVector time.VersionVector,
+) (*TreeNode, int) {
+	// A concurrent split of the same boundary took everything to the right of
+	// it, so only a split at the end of parent can be one.
+	if len(versionVector) == 0 || offset != len(parent.Index.Children(true)) {
+		return parent, offset
+	}
+
+	target := parent
+	var walker insNextWalker
+	walker.visit(target)
+	for target.InsNextID != nil {
+		next := t.findFloorNode(target.InsNextID)
+		if next == nil || next.IsText() || next.Index.Parent == nil {
+			break
+		}
+
+		// Stop on a chain that loops back on itself; see insNextWalker.
+		if !walker.visit(next) {
+			break
+		}
+
+		// The sibling has to belong to target's own split family. The strict
+		// parent-equality check §7.5 uses is too strong here — at a
+		// multi-level split the sibling may already sit under the next
+		// level's product — but dropping it entirely would let an InsNextID
+		// that did not come from SplitElement redirect this split onto an
+		// arbitrary element elsewhere in the tree.
+		if !t.sharesSplitFamilyParent(target, next) {
+			break
+		}
+
+		// Splitting a tombstoned sibling would make our product born
+		// tombstoned, which a replica that applied us before the concurrent
+		// split never does. Fall back to splitting parent, as that replica
+		// did, rather than diverge on liveness.
+		if next.IsRemoved() {
+			break
+		}
+
+		createdAt := next.id.CreatedAt
+		if createdAt.ActorID() == editedAt.ActorID() {
+			break
+		}
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			break
+		}
+		if !createdAt.After(editedAt) {
+			break
+		}
+
+		target = next
+	}
+
+	if target == parent {
+		return parent, offset
+	}
+	return target, 0
+}
+
+// sharesSplitFamilyParent reports whether next sits under node's parent, or
+// under a split product of that parent. A multi-level split moves a sibling
+// under the next level's product, so the two parents legitimately differ —
+// but only within one split family. Anything beyond that is not a split
+// sibling of node, whatever its InsNextID claims.
+func (t *Tree) sharesSplitFamilyParent(node, next *TreeNode) bool {
+	if node.Index.Parent == nil || next.Index.Parent == nil {
+		return false
+	}
+	if node.Index.Parent == next.Index.Parent {
+		return true
+	}
+
+	var walker insNextWalker
+	for current := node.Index.Parent.Value; current != nil && walker.visit(current); {
+		if current == next.Index.Parent.Value {
+			return true
+		}
+		if current.InsNextID == nil {
+			return false
+		}
+		current = t.findFloorNode(current.InsNextID)
+	}
+
+	return false
 }
 
 // split splits element nodes for the given splitLevel and reports the net
@@ -2825,12 +3037,22 @@ func (t *Tree) split(
 
 			offset++
 		}
-		splitDiff, err := parent.Split(t, offset, issueTimeTicket, versionVector)
+		// §7.8 Same-Boundary Ordering: a concurrent split of the same
+		// boundary may already have taken the right half; order against it.
+		target, offset := t.orderSameBoundarySplit(parent, offset, editedAt, versionVector)
+		splitDiff, err := target.Split(t, offset, issueTimeTicket, versionVector)
 		diff.Add(splitDiff)
 		if err != nil {
 			return diff, err
 		}
 
+		// Ascend from parent, not from target. A §7.8 retarget reorders our
+		// product *within* this level; the node this operation split is
+		// still parent, and the next level's boundary is "after parent" in
+		// parent's own branch. The advance at the top of the next iteration
+		// stops in front of the same-boundary empty run (§7.5), and
+		// orderSameBoundarySplit re-applies the same ticket ordering at that
+		// level, so each level orders itself against its own chain.
 		left = parent
 		parent = parent.Index.Parent.Value
 		splitCount++
@@ -2943,11 +3165,18 @@ func (t *Tree) Style(
 
 	size.Live.Add(diffFrom, diffTo)
 
+	// skipActorID for the same reason as Edit's Phase 2: a same-boundary
+	// empty run has to resolve here the way the split loop resolves it.
+	styleActorID := editedAt.ActorID()
 	if fromLeft != fromParent {
-		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
+		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector, advanceOpts{
+			skipActorID: &styleActorID,
+		})
 	}
 	if toLeft != toParent {
-		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
+		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector, advanceOpts{
+			skipActorID: &styleActorID,
+		})
 	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
@@ -2998,9 +3227,15 @@ func (t *Tree) Style(
 			// split also covers the right part of the split.
 			if token.TokenType == index.Start && !isVersionVectorEmpty {
 				current := node
+				var walker insNextWalker
+				walker.visit(current)
 				for current.InsNextID != nil {
 					next := t.findFloorNode(current.InsNextID)
 					if next == nil || next.IsText() {
+						break
+					}
+					// Stop on a chain that loops back on itself; see insNextWalker.
+					if !walker.visit(next) {
 						break
 					}
 					if time.TicketKnown(versionVector, next.id.CreatedAt) {
@@ -3062,11 +3297,18 @@ func (t *Tree) RemoveStyle(
 
 	size.Live.Add(diffFrom, diffTo)
 
+	// skipActorID for the same reason as Edit's Phase 2: a same-boundary
+	// empty run has to resolve here the way the split loop resolves it.
+	styleActorID := editedAt.ActorID()
 	if fromLeft != fromParent {
-		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
+		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector, advanceOpts{
+			skipActorID: &styleActorID,
+		})
 	}
 	if toLeft != toParent {
-		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
+		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector, advanceOpts{
+			skipActorID: &styleActorID,
+		})
 	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
@@ -3119,9 +3361,15 @@ func (t *Tree) RemoveStyle(
 			// Propagate remove-style to unknown split siblings.
 			if token.TokenType == index.Start && !isVersionVectorEmpty {
 				current := node
+				var walker insNextWalker
+				walker.visit(current)
 				for current.InsNextID != nil {
 					next := t.findFloorNode(current.InsNextID)
 					if next == nil || next.IsText() {
+						break
+					}
+					// Stop on a chain that loops back on itself; see insNextWalker.
+					if !walker.visit(next) {
 						break
 					}
 					if time.TicketKnown(versionVector, next.id.CreatedAt) {
