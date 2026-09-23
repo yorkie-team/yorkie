@@ -72,3 +72,29 @@
   bound lands on a character boundary depends on tree state, not on the
   message, so the converter can only reject a negative offset or a
   Length/Value mismatch; the slice in `recreateFromSpan` guards its own range.
+
+## Review round 3 (panel)
+
+- **A guard written for one bound belongs on both.** `isolateTextRange` read
+  the moved cut back off the piece for `from` and left `to` trusting its
+  request. A span ending inside a surrogate pair therefore isolated a node one
+  character too long — `Retombstone` deleted the emoji the span did not name.
+  The closing bound now reads the boundary back the same way and skips the
+  range when it is not `to`. The symmetry is the lesson: a forward-moved cut is
+  a property of `SplitText`, so every caller of it has to re-read its result.
+- **Put a wire check on the shared decoder, not on one caller.** The negative
+  offset was rejected in `fromTreeRestoreSpans`, which covers restore spans
+  only; `fromTreeNodeID` is what every tree id goes through — span ids, their
+  parent/sibling anchors, and the `from`/`to` `TreePos` of every TreeEdit and
+  TreeStyle. Moved it down one rung, where one check covers all of them. A
+  change is persisted before it is executed, so an unexecutable position is a
+  permanent per-document failure, not a rejected request.
+- **A clone drop is testable through `Root()` vs `RootObject()`.** The three
+  drop sites looked untestable because they need a change that applies to the
+  clone and fails on the document. `Document.Root` reads the clone and
+  `Document.RootObject` the document, so the invariant is one assertion; the
+  triggers are a clone-only element (what `Root()` writes never becomes a
+  change), a fabricated undo entry whose second operation names no parent, and
+  a remote change whose second operation targets an element the receiver has
+  collected. Each test was re-run with its own drop removed to confirm it
+  fails.

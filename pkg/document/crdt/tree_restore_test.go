@@ -604,3 +604,46 @@ func TestTreeRestoreSpanBoundInsideSurrogatePair(t *testing.T) {
 	assert.Equal(t, "<r><p>a😀b</p></r>", tree.ToXML())
 	assertLengthCacheSound(t, tree, "surrogate-pair span")
 }
+
+// TestTreeRestoreSpanEndInsideSurrogatePair is the closing-bound half of the
+// case above: the span's END, not its start, falls between the two code units
+// of a pair. SplitText moves that cut to the end of the pair as well, so the
+// piece left behind covers a whole character MORE than the span addresses --
+// re-tombstoning it would delete an emoji no wire span ever named. The bound
+// names no character boundary, so the range isolates nothing at all.
+func TestTreeRestoreSpanEndInsideSurrogatePair(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+
+	// "a😀b": UTF-16 code units a(0) D83D(1) DE00(2) b(3). Offset 2 is inside
+	// the pair, so the span [0,2) ends inside it.
+	_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "a😀b"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+	span := &crdt.TreeRestoreSpan{
+		ID:       crdt.NewTreeNodeID(text.ID().CreatedAt, 0),
+		NodeType: text.Type(),
+		IsText:   true,
+		Length:   2,
+		Value:    "a�",
+		ParentID: p.ID(),
+	}
+
+	_, _, rErr := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx))
+	assert.NoError(t, rErr)
+	assert.Equal(t, "<r><p>a😀b</p></r>", tree.ToXML(),
+		"a range that ends inside a pair removes nothing, not the whole character")
+
+	_, _, _, _, err = tree.Restore([]*crdt.TreeRestoreSpan{span})
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>a😀b</p></r>", tree.ToXML())
+	assertLengthCacheSound(t, tree, "span ending inside a surrogate pair")
+}

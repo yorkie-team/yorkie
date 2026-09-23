@@ -1105,6 +1105,17 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 		return nil, goerrors.New("tree node id has nil createdAt")
 	}
 
+	// The offset locates content inside the insertion createdAt names, so it is
+	// a count of UTF-16 code units and is never negative on any producing path.
+	// A negative one from crafted input resolves to no node at all, and every
+	// consumer of an id -- a TreePos on each TreeEdit/TreeStyle as much as a
+	// restore span -- would then carry a position no replica can execute. The
+	// change is persisted before it is ever executed, so a rejection has to
+	// happen here, at the wire, rather than at the first failing replay.
+	if pbPos.Offset < 0 {
+		return nil, goerrors.New("tree node id has negative offset")
+	}
+
 	return crdt.NewTreeNodeID(
 		createdAt,
 		int(pbPos.Offset),
@@ -1136,15 +1147,14 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 		// negative) Length from crafted input would slice out of bounds.
 		// Reject it here (parity with fromRestoreSpans' Content-length check).
 		//
-		// The offset is checked for the same reason: it is the base every
-		// window inside the span is measured from
-		// (crdt.Tree.recreateFromSpan), so a negative one shifts the whole span
-		// below zero and makes the piece walk address offsets no insertion can
-		// hold. Whether a bound lands on a UTF-16 character boundary cannot be
-		// decided here -- the windows inside a span come from the surviving
-		// pieces in the tree, not from the wire -- so that stays enforced where
-		// the slice happens, in recreateFromSpan.
-		if pbSpan.Length < 0 || id.Offset < 0 {
+		// The span's offsets -- its own, its parent's and both siblings' --
+		// are rejected for the same reason one rung down, in fromTreeNodeID,
+		// which every id on this path goes through. Whether a bound lands on a
+		// UTF-16 character boundary cannot be decided here: the windows inside
+		// a span come from the surviving pieces in the tree, not from the
+		// message, so that stays enforced where the slice happens, in
+		// recreateFromSpan.
+		if pbSpan.Length < 0 {
 			return nil, ErrInvalidRestoreSpan
 		}
 		if pbSpan.IsText && int(pbSpan.Length) != len(utf16.Encode([]rune(pbSpan.Value))) {

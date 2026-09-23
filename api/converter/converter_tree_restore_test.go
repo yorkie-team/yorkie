@@ -359,6 +359,84 @@ func TestTreeRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
 	assert.Len(t, ops, 1)
 }
 
+// TestTreeNodeIDRejectsNegativeOffset guards every offset that arrives on the
+// wire, not just a restore span's own. An offset counts UTF-16 code units
+// inside the insertion its created_at names, so a negative one addresses no
+// node on any replica: the change is stored before it is ever executed, so
+// letting one in would make the document unreplayable from then on, for
+// everyone. The check therefore lives in the shared fromTreeNodeID, which the
+// span ids, their parent/sibling anchors and the from/to TreePos of every
+// TreeEdit and TreeStyle all decode through.
+func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	t.Run("tree edit from position", func(t *testing.T) {
+		pbOps, err := converter.ToOperations([]operations.Operation{
+			operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt),
+		})
+		assert.NoError(t, err)
+		pbOps[0].GetTreeEdit().From.ParentId.Offset = -1
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
+
+	t.Run("tree edit to position", func(t *testing.T) {
+		pbOps, err := converter.ToOperations([]operations.Operation{
+			operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt),
+		})
+		assert.NoError(t, err)
+		pbOps[0].GetTreeEdit().To.LeftSiblingId.Offset = -1
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
+
+	t.Run("tree style position", func(t *testing.T) {
+		pbOps, err := converter.ToOperations([]operations.Operation{
+			operations.NewTreeStyle(seed, pos, pos, map[string]string{"b": "t"}, executedAt),
+		})
+		assert.NoError(t, err)
+		pbOps[0].GetTreeStyle().From.ParentId.Offset = -1
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
+
+	// The span's own id and every anchor it carries decode through the same
+	// helper, so all four are rejected.
+	spanFields := []struct {
+		name string
+		set  func(span *api.TreeRestoreSpan)
+	}{
+		{"span id", func(s *api.TreeRestoreSpan) { s.Id.Offset = -1 }},
+		{"parent id", func(s *api.TreeRestoreSpan) { s.ParentId.Offset = -1 }},
+		{"left sibling id", func(s *api.TreeRestoreSpan) { s.LeftSiblingId.Offset = -1 }},
+		{"right sibling id", func(s *api.TreeRestoreSpan) { s.RightSiblingId.Offset = -1 }},
+	}
+	for _, field := range spanFields {
+		t.Run(field.name, func(t *testing.T) {
+			op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+				[]*crdt.TreeRestoreSpan{{
+					ID:             crdt.NewTreeNodeID(seed, 2),
+					NodeType:       "text",
+					IsText:         true,
+					Length:         1,
+					Value:          "x",
+					ParentID:       crdt.NewTreeNodeID(seed, 0),
+					LeftSiblingID:  crdt.NewTreeNodeID(seed, 1),
+					RightSiblingID: crdt.NewTreeNodeID(seed, 3),
+				}}, crdt.RestoreModeRestore, nil)
+			pbOps, err := converter.ToOperations([]operations.Operation{op})
+			assert.NoError(t, err)
+			field.set(pbOps[0].GetTreeEdit().RestoreSpans[0])
+			_, err = converter.FromOperations(pbOps)
+			assert.Error(t, err)
+		})
+	}
+}
+
 // TestTreeEditRejectsNegativeSplitLevel guards a field that only became live
 // with the split-aware reverse operations. A split level counts the element
 // boundaries an edit creates; a negative one used to be inert, since the split

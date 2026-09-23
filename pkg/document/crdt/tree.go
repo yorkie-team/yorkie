@@ -1238,6 +1238,18 @@ func (t *Tree) isolateTextRange(
 			return nil, err
 		}
 		diff.Add(d)
+
+		// The closing bound is moved by SplitText exactly as the opening one
+		// is: a cut between the two code units of a surrogate pair goes to the
+		// end of the pair, and one that reaches the node's end splits nothing
+		// off. Either way `node` -- the LEFT piece, mutated in place -- now
+		// ends past `to`, so it covers a character the range does not address,
+		// and reviving or re-removing it would act outside the span. Read the
+		// boundary back off the piece and skip the range when it is not `to`,
+		// the same answer the opening bound gives.
+		if node.id.Offset+node.Length() != to {
+			return nil, nil
+		}
 	}
 	return node, nil
 }
@@ -1357,7 +1369,13 @@ func sliceSpanValue(span *TreeRestoreSpan, offset, length int) (string, error) {
 	// piece boundaries, and piece boundaries are where SplitText cut. Since
 	// SplitText moves a mid-surrogate-pair offset to the end of the pair, no Go
 	// replica can produce a bound that lands between the two code units of a
-	// pair, and the decode below cannot turn one into U+FFFD.
+	// pair through that route.
+	//
+	// It is not a guarantee about the window as a whole: the span's own start
+	// arrives on the wire (api.TreeRestoreSpan.id.offset), so a crafted or
+	// JS-produced one can put either bound mid-pair. That is why the range
+	// check above is unconditional rather than an assertion -- it is what
+	// keeps the slice below from panicking on any offset at all.
 	//
 	// A bound recorded by a replica that does split mid-pair is left to decode
 	// as U+FFFD rather than repaired: the recreated piece has to cover exactly
