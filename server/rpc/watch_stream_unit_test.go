@@ -241,6 +241,32 @@ func TestResolveResourcesRejectsStreamWithoutSubscription(t *testing.T) {
 	})
 }
 
+// TestResolveResourcesRejectsOversizedRequest verifies that the resource list
+// is bounded from above. Each descriptor costs a database read, a subscription
+// and a goroutine for the life of the stream, so an unbounded list lets one
+// request amplify into arbitrary server work.
+func TestResolveResourcesRejectsOversizedRequest(t *testing.T) {
+	s := &yorkieServer{serviceCtx: context.Background()}
+
+	resources := make([]*api.ResourceDescriptor, maxWatchResources+1)
+	for i := range resources {
+		resources[i] = &api.ResourceDescriptor{
+			Resource: &api.ResourceDescriptor_Channel{
+				Channel: &api.ChannelDescriptor{ChannelKey: "channel"},
+			},
+		}
+	}
+
+	_, err := s.resolveResources(
+		context.Background(),
+		&api.WatchRequest{Resources: resources},
+		nil,
+	)
+
+	assert.ErrorIs(t, err, ErrTooManyResources)
+	assert.Equal(t, connect.CodeInvalidArgument.String(), connecthelper.CodeOf(err))
+}
+
 // TestStreamMergedEventsEndsWithoutSubscriptions pins the reason
 // resolveResources rejects a request that would subscribe to nothing: such a
 // stream is already over when it starts.

@@ -46,6 +46,15 @@ import (
 	"github.com/yorkie-team/yorkie/server/schemas"
 )
 
+// maxWatchResources is the largest number of resource descriptors a single
+// Watch request may carry. Every descriptor costs a database read, a
+// subscription slot and a goroutine for the life of the stream, so an
+// unbounded list lets one request amplify into arbitrary server work. The
+// bound is well above any realistic client: the SDKs open one stream per
+// resource today, and even a client multiplexing every document it has open
+// stays far below it.
+const maxWatchResources = 100
+
 var (
 	// ErrNoResources is returned when a Watch request carries no resource to
 	// subscribe to. Such a stream has nothing to deliver, so it is rejected
@@ -53,6 +62,12 @@ var (
 	ErrNoResources = errors.InvalidArgument(
 		"no resources to watch",
 	).WithCode("ErrNoResources")
+
+	// ErrTooManyResources is returned when a Watch request carries more
+	// resource descriptors than maxWatchResources.
+	ErrTooManyResources = errors.InvalidArgument(
+		"too many resources to watch",
+	).WithCode("ErrTooManyResources")
 
 	// ErrUnsupportedResource is returned when a Watch request carries a
 	// resource descriptor this server cannot subscribe to: one with its
@@ -720,6 +735,10 @@ func (s *yorkieServer) resolveResources(
 	if len(req.Resources) == 0 {
 		return nil, ErrNoResources
 	}
+	if len(req.Resources) > maxWatchResources {
+		return nil, ErrTooManyResources
+	}
+
 	// Descriptors are checked for shape before any of them is resolved, so a
 	// request this server cannot serve in full is rejected without spending a
 	// database read on its well-formed siblings.

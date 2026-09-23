@@ -114,6 +114,11 @@ message DetachDocumentResponse {
 
 message WatchRequest {
   string client_id = 1;
+  // resources lists what the stream delivers. It must hold between 1 and 100
+  // descriptors, and the server must recognize every one of them: a request
+  // naming a resource the server cannot subscribe to is rejected whole rather
+  // than served in part, so a client never watches fewer resources than it
+  // asked for without being told.
   repeated ResourceDescriptor resources = 2;
   // actor_id is the stable actor the client stamps into its changes. When set,
   // the server subscribes the client under it so watch peer ids and

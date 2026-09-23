@@ -711,6 +711,77 @@ func RunWatchDocumentActorMismatchTest(
 	assert.NotNil(t, own.Msg())
 }
 
+// RunWatchResourceRejectionTest verifies that Watch rejects a request it
+// cannot serve in full, through the RPC rather than through the helper that
+// implements the check.
+//
+// The rejection has to reach the client as a status. Accepting the request and
+// then ending the stream would look the same from the handler's side and
+// entirely different from the client's: an empty initialization followed by a
+// close, which reads as an unexpected termination and is retried.
+func RunWatchResourceRejectionTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+) {
+	ctx := context.Background()
+
+	resp, err := testClient.ActivateClient(
+		ctx, connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+	assert.NoError(t, err)
+
+	resPack, err := testClient.AttachDocument(
+		ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: resp.Msg.ClientId,
+			ChangePack: &api.ChangePack{
+				DocumentKey: helper.TestKey(t).String(),
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			},
+		}))
+	assert.NoError(t, err)
+
+	validDesc := &api.ResourceDescriptor{
+		Resource: &api.ResourceDescriptor_Document{
+			Document: &api.DocumentDescriptor{DocumentId: resPack.Msg.DocumentId},
+		},
+	}
+
+	// One descriptor over the server's maxWatchResources, which the proto
+	// documents as the upper bound of the resources field.
+	oversized := make([]*api.ResourceDescriptor, 101)
+	for i := range oversized {
+		oversized[i] = validDesc
+	}
+
+	tests := []struct {
+		name      string
+		resources []*api.ResourceDescriptor
+		code      string
+	}{
+		{"no resource at all", nil, "ErrNoResources"},
+		{"a descriptor naming no resource", []*api.ResourceDescriptor{{}}, "ErrUnsupportedResource"},
+		{
+			"a descriptor naming no resource beside a valid one",
+			[]*api.ResourceDescriptor{validDesc, {}},
+			"ErrUnsupportedResource",
+		},
+		{"more resources than the server accepts", oversized, "ErrTooManyResources"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stream, err := testClient.Watch(ctx, connect.NewRequest(&api.WatchRequest{
+				ClientId:  resp.Msg.ClientId,
+				Resources: tc.resources,
+			}))
+			assert.NoError(t, err)
+
+			assert.False(t, stream.Receive())
+			assert.Equal(t, tc.code, converter.ErrorCodeOf(stream.Err()))
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(stream.Err()))
+		})
+	}
+}
+
 // RunMaxSubscribersPerDocumentConcurrencyTest runs the MaxSubscribersPerDocument test.
 func RunMaxSubscribersPerDocumentConcurrencyTest(
 	t *testing.T,
