@@ -20,10 +20,34 @@ none.
 a **draft** PR back to `main`. Any `@claude` on an issue that is not `fix` — a bare
 mention and a PR-only verb alike — gets a `help` reply instead of silence.
 
+## Outcome: the workflow is NOT landed, the design is
+
+The workflow was written, reviewed, and **withdrawn**. Five review lenses
+returned blocking findings against it and none of them could be fixed: no
+credential in this pipeline can write `.github/workflows/**`, which was measured
+this round, not assumed —
+
+```
+! [remote rejected] refusing to allow a GitHub App to create or update workflow
+  `.github/workflows/agent-implement.yml` without `workflows` permission
+```
+
+Deleting under that path IS permitted, which is what made withdrawal possible
+where correction was not. Shipping a workflow whose own design doc said it was
+"not safe to enable", with an unapplied patch beside it, was the alternative, and
+two rounds of that had already failed.
+
+What lands instead: `docs/design/agent-command-verbs.md` Phase I now specifies
+the verb and carries **thirteen acceptance criteria**, one per defect the review
+found, for the maintainer who writes and pushes the workflow. The three
+workflow-specific guards in `checks.test.mjs` are kept and skip through
+`workflow-presence.mjs`, so they re-arm by themselves the day the file exists.
+
 ## Scope
 
-- [x] `.github/workflows/agent-implement.yml`, ported from wafflebase and
-      adapted to the Go layout
+- [ ] `.github/workflows/agent-implement.yml`, ported from wafflebase and
+      adapted to the Go layout — **WITHDRAWN**, see above; a maintainer lands it
+      against the design doc's acceptance criteria
 - [x] The `agent:*` labels created deliberately rather than auto-created —
       eight, matching `set-state.mjs`'s six states plus `agent:managed` and
       `agent:candidate`. Two upstream names (`agent:iterating`,

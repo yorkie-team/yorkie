@@ -42,8 +42,10 @@ work here is porting plus the three repo-specific pieces named in §4.
 - **Any change to merge policy.** No workflow in any phase *calls* the approve or
   merge endpoints, and a human approval remains required throughout. That is a
   statement about what the workflows do, not about what their credentials could
-  do — see the Phase I caveat, where a token holding both scopes is treated as a
-  defect to fix rather than as covered by this line.
+  do: a token holding `contents: write` and `pull-requests: write` together can
+  approve and merge whether or not any workflow asks it to. No workflow that
+  ships today hands an agent that pair, and Phase I's acceptance criterion 1
+  makes not doing so a precondition of the one verb that would have.
 
 ## Design
 
@@ -217,12 +219,52 @@ finding is wrong.
   also fires on `pull_request_review_comment`, and it triggers on a mention
   with no verb at all, so its misfire surface is the widest of the set.
 
-#### Phase I — `@claude fix` on an issue (issue → PR)
+#### Phase I — `@claude fix` on an issue (issue → PR) — DESIGNED, NOT LANDED
 
-**This was a Non-Goal, deferred past every phase, and that was reversed on
-2026-09-22.** The section is kept rather than rewritten out, because the
-argument against it is still the argument to weigh, and a reader deciding
+> **Nothing in this phase is installed.** `.github/workflows/agent-implement.yml`
+> does not exist in this repository. This section is a specification for the
+> maintainer who lands it, not a description of running code. Everything below
+> that reads as present tense describes what the workflow **must do**, and the
+> requirements list is the acceptance criteria.
+
+**This was a Non-Goal, deferred past every phase; that was reversed on
+2026-09-22, and the implementation was then withdrawn on 2026-09-23 without
+reversing the decision.** The section is kept rather than rewritten out, because
+the argument against it is still the argument to weigh, and a reader deciding
 whether to adopt this elsewhere needs both halves.
+
+**Why a written, reviewed draft was withdrawn rather than merged.** A full
+`agent-implement.yml` was written and reviewed on this branch. Five review lenses
+returned blocking findings against it — a token that satisfied its own gate, a
+protection check that accepted an approval surviving the next push, a refusal
+path that threw instead of explaining, an entry point that skipped the collision
+guard, and issue text re-read long after the maintainer authorised it. None of
+them could be corrected, because **no credential in this pipeline can write
+`.github/workflows/**`**. That is measured, not assumed: a commit touching the
+file, pushed to a scratch ref, came back
+
+```
+! [remote rejected] refusing to allow a GitHub App to create or update workflow
+  `.github/workflows/agent-implement.yml` without `workflows` permission
+```
+
+and the Git Data API refuses the same tree. It is the intended design — the App
+holds no `Workflows` permission, `checks.test.mjs` asserts that no agent token
+may ever request one, and `agent-fix.yml` prints that property to contributors.
+Granting it would hand an agent the ability to rewrite its own gates, which is a
+worse trade than deferring the verb.
+
+Two rounds tried to route around this by committing the correction as an
+appliable patch under `docs/tasks/active/`, addressed to whoever read it. That is
+worse than it looks: `docs/**` *is* writable by every agent token, so an
+apply-me patch there launders arbitrary workflow content around the very
+permission boundary above, and the first attempt was simply never applied. The
+patch is gone. What survives is the requirements list below — prose a maintainer
+implements from, which no `git apply` can turn into a workflow nobody read.
+
+So the shape of this phase is: the design is settled and recorded here; the
+implementation is a human's to write and push, against the acceptance criteria
+below.
 
 The case for deferring: issue → PR originates work rather than reviewing it, so
 it sits on a different axis from every other verb here; it is the one verb whose
@@ -240,7 +282,7 @@ completed a real review yet, so the machinery that was supposed to grade
 agent-authored code is not yet grading it. That is the risk, and it is accepted
 on the strength of the gate below rather than waved away.
 
-- **Lands:** `agent-implement.yml` — `route`, `implement`, `help`. The `help`
+- **Would land:** `agent-implement.yml` — `route`, `implement`, `help`. The `help`
   job is not incidental: today every verb on an issue is refused by the same
   `github.event.issue.pull_request` gate, with no comment, so a maintainer who
   types `@claude` on an issue gets a green tick and silence.
@@ -259,71 +301,9 @@ on the strength of the gate below rather than waved away.
   time rather than asserted here.
 
   The PR opening as a **draft** is not a second gate, though two earlier drafts
-  of this document said it was. It is a line in the prompt — a convention the
-  agent could get wrong, verified by nothing.
-
-  > **⚠️ The gate as shipped is weaker than the paragraph above, and the verb is
-  > not safe to enable until that is fixed.** Two earlier drafts of this section
-  > described properties the workflow did not have; describing them again would
-  > be the same error a third time, so what is actually in
-  > `.github/workflows/agent-implement.yml` today is listed here:
-  >
-  > - **The gate is satisfiable by the gated party.** The App token the job mints
-  >   carries `pull-requests: write` (opening a PR needs it) beside
-  >   `contents: write`, and that pair is exactly what submits an **approving
-  >   review** and then **merges**. GitHub only blocks approving a PR the same
-  >   identity authored, so a run injected through the issue body can approve and
-  >   merge somebody else's open PR. "A human approving review this App cannot
-  >   bypass" is therefore not established.
-  > - **The gate does not require `require_last_push_approval`.** An approval
-  >   given on an agent PR stays valid across every later commit the agent pushes
-  >   to the same branch, and the PR-side `fix` and `loop` verbs do push to agent
-  >   branches.
-  > - **Its refusal path throws.** The `setFailed` call references an identifier
-  >   declared nowhere, so three of the four refusal reasons raise a
-  >   `ReferenceError` instead of printing the diagnosis. The gate still fails
-  >   closed; it just tells nobody why.
-  > - **`workflow_dispatch` skips the collision pre-flight,** which is gated on
-  >   `issue_comment`, so the dispatch entry point reaches the same pushing agent
-  >   with no duplicate-PR guard.
-  > - **The issue text is read by `gh issue view` minutes after the verb was
-  >   typed** — after the token mint, the protection calls, the checkout and two
-  >   toolchain installs. The author can edit the body in between, so the agent
-  >   can act on text no maintainer read.
-  > - **The draft PR lands mid-run.** `agent-review-panel.yml` and
-  >   `agent-iterate-ci.yml` treat any `agent/`-prefixed head branch as theirs and
-  >   dispatch fixers that push to it, so the branch has three writers while the
-  >   implement agent is still committing.
-  >
-  > The fix for all six is written, verified and committed as
-  > `docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff`: two App
-  > tokens so the agent holds no `pull-requests` scope, `require_last_push_approval`
-  > on both protection paths, the missing declaration, the pre-flight on both entry
-  > points, the issue text taken from the immutable event payload, and the PR opened
-  > by a trusted step after the agent stops. It is not applied because **no
-  > credential in this pipeline can push `.github/workflows/**`** — every agent App
-  > token is minted without `workflows`, which `checks.test.mjs` asserts and which
-  > is the property `agent-fix.yml` prints to contributors. A maintainer has to
-  > apply it.
-
-  **What it does not cover, even once that patch is applied.** The agent runs
-  with an unrestricted `Bash` beside a live installation token and a model
-  credential, on text an arbitrary GitHub user wrote. The gate constrains
-  merging; it does not constrain network egress. A successful prompt injection
-  does not need to get code into `main` — it already has the token. One narrowing
-  is mechanical and one is only a convention, and they were previously written as
-  though both were the first kind. **Enforced (once patched):** the issue title
-  and body come from the event-payload snapshot, which is the text as it stood
-  when the maintainer's comment was created, written to a file the prompt names
-  as untrusted input. **Not enforced, ever:** the prompt tells the agent not to
-  run `gh issue view` and not to read the issue's comments, and nothing stops it
-  — `--allowedTools` includes `Bash` and the agent holds a token `gh`
-  authenticates with, so a comment posted mid-run is reachable by an agent that
-  decides to look. It narrows the honest agent's behaviour and bounds nothing.
-  Neither is a control on egress, and the residual risk is accepted knowingly:
-  the token is installation-scoped to this repository, expires in an hour, and
-  carries no `workflows` permission. The control that would actually close the
-  channel is a runner egress policy, and it is the next thing to add here.
+  of this document said it was. In the withdrawn implementation it was a line in
+  the prompt — a convention the agent could get wrong, verified by nothing.
+  Criterion 9 below is what turns it into an argument the workflow passes.
 
 - **Two things are known-unverified, and both are recorded rather than guessed.**
   The job's ceiling is 90 minutes and an installation token lives 60, so a run
@@ -345,6 +325,100 @@ on the strength of the gate below rather than waved away.
 - **Exit criteria:** three issues turned into PRs a maintainer merged without
   rewriting the change, and one where the agent stopped and said it could not do
   it rather than opening a PR that looks finished.
+
+##### Acceptance criteria for the implementation
+
+Each of these is a defect the reviewed draft actually had. A maintainer landing
+this workflow should treat the list as the review checklist, and should expect
+the three `agent-implement.yml` guards in `scripts/agent/checks.test.mjs` — which
+skip today via `workflow-presence.mjs` and re-arm the moment the file exists — to
+run and to have to pass.
+
+1. **The gate must not be satisfiable by the party it gates.** One App token
+   carrying `pull-requests: write` (which opening a PR needs) beside
+   `contents: write` is exactly the pair that submits an **approving review** and
+   then **merges**; GitHub only blocks approving a PR the same identity authored,
+   so an injected run could approve and merge somebody else's. Mint **two**
+   tokens: the agent gets `contents` + `issues` and no `pull-requests`, the
+   workspace checkout persists *that* narrower one (`persist-credentials` writes
+   it into `.git/config`, which the agent reads with one `Bash` call), and every
+   step needing `pull-requests` is a trusted step in the workflow file.
+2. **The protection check must require `require_last_push_approval`** on both the
+   classic-protection and the ruleset path. Without it an approval given on an
+   agent PR stays valid across every later commit the bot pushes to the same
+   branch — and the PR-side `fix` and `loop` verbs do push to agent branches.
+3. **`contents: write` is not bounded by a check on `main` alone.** It also
+   creates tags and publishes releases, and `docker-publish.yml` fires on
+   `release: published` with Docker Hub credentials. Either the agent's token
+   must not reach releases, or that escape is an accepted, written risk.
+4. **Refusals must print their reason.** The draft's `setFailed` referenced an
+   identifier declared nowhere, so three of four refusal paths raised a
+   `ReferenceError` instead of the diagnosis. The gate failed closed and told
+   nobody why — and that it shipped at all is proof no test ever executed it.
+5. **The gate must be executed by a test, not matched as text.** More than a few
+   lines of `github-script` get extracted and run against fixture repository
+   states. A regex over the YAML asserts that somebody typed the right
+   characters, which is how (4) survived five review rounds.
+6. **Every entry point gets every guard.** The draft's duplicate-PR pre-flight
+   was conditioned on `issue_comment` while `workflow_dispatch` reached the same
+   checkout, the same branch name and the same `git push` — and dispatch is the
+   path with no concurrency group and no thread to complain on.
+7. **The pre-flight must also catch the orphan branch.** Looking only at open
+   pull requests misses the documented failure — a run that died between
+   `git push -u origin` and `gh pr create` leaves the branch with no PR, and the
+   report tells the maintainer to retry straight into it.
+8. **The authorising text must be the snapshot the maintainer read.** Take the
+   issue title and body from the immutable event payload, not from a
+   `gh issue view` that runs minutes later behind a token mint, three API calls,
+   a checkout and two toolchain installs — the author can edit the body in
+   between. (Dispatch has no payload issue and must ask the API; there the
+   dispatcher is the reader.)
+9. **The PR opens after the agent stops, from a trusted step, with `--draft`
+   passed by the workflow.** `agent-review-panel.yml` and `agent-iterate-ci.yml`
+   claim any `agent/`-prefixed head branch and dispatch fixers that push to it,
+   and both are reached only through a CI run, which fires on `pull_request`.
+   Landing the PR mid-run therefore gives the branch three writers while the
+   implement agent is still committing. Draft-ness must likewise be an argument
+   in the file, not a line in a prompt; note that `mark-ready.mjs --promote`
+   un-drafts `agent/` PRs on its own schedule.
+10. **Label the originating issue `agent:candidate`.** The panel's design-fit
+    lens resolves a PR's spec from `Fixes #N` and only trusts an issue carrying
+    that label, so without it every PR this verb opens is reviewed with no
+    knowledge of what it was asked to build.
+11. **The ambient `GITHUB_TOKEN` gets `issues: write` and `pull-requests: read`,**
+    which is what its only consumer needs — not the `contents`/`pull-requests`
+    write the draft granted it.
+12. **Staged scripts in `$RUNNER_TEMP` are not a trust boundary.** The draft
+    copied `scripts/agent` there and called it the trusted copy, then ran the
+    agent with unrestricted `Bash` in the same job and executed those files
+    afterwards with the App token. Either run trusted tooling from a path the
+    agent cannot write, or stop describing it as trusted.
+13. **The per-cause dedupe on the no-PR reporter must be acknowledgement-aware.**
+    Suppressing on the mere presence of a prior report of the same kind
+    re-creates the silence it exists to close: the "On it" acknowledgement is
+    posted on every run and never deduplicated, so a second failure of the same
+    kind leaves a fresh claim that a run is in progress with nothing to withdraw
+    it — reached through the report's own advice to retry.
+
+**What none of that covers.** Even with all thirteen satisfied, the agent runs
+with an unrestricted `Bash` beside a live installation token and a model
+credential, on text an arbitrary GitHub user wrote. The gate constrains merging;
+it does not constrain network egress. A successful prompt injection does not need
+to get code into `main` — it already has the token. Of the two narrowings, one is
+mechanical and one is only a convention, and an earlier draft of this section
+wrote both as though they were the first kind. **Mechanical:** the issue title and
+body come from the event-payload snapshot (criterion 8), which is the text as it
+stood when the maintainer's comment was created, written to a file the prompt
+names as untrusted input. **A convention, enforced by nothing:** a prompt line
+telling the agent not to run `gh issue view` and not to read the issue's comments
+is unenforceable — `--allowedTools` includes `Bash` and the agent holds a token
+`gh` authenticates with, so a comment posted mid-run is reachable by any agent
+that decides to look. It narrows the honest agent's behaviour and bounds nothing.
+Neither is a control on egress, and the residual risk is accepted knowingly: the
+token is installation-scoped to this repository, expires in an hour, and carries
+no `workflows` permission. The control that would actually close the channel is a
+runner egress policy, and it is the next thing to add here.
+
 
 ### 3. The kill switch
 
@@ -450,7 +524,7 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | `reply` last | It is the only verb with no verb: any bare `@claude` mention on an agent PR triggers it, and it also fires on inline review comments. Widest misfire surface in the set |
 | Advisory before gating | Check runs interact with branch protection and with the merge queue. Landing the reviewer first separates "is it any good?" from "does it block merges?" |
 | Keep the upstream kill-switch variable | Lets a workflow be merged inert, so review of the workflow and the decision to enable it are separate events |
-| Defer issue → PR indefinitely | It originates work. Every phase here reviews work that a human already decided to do |
+| Defer issue → PR (Phase I), after reversing that deferral once | It originates work, where every phase here reviews work a human already decided to do — and when it was tried anyway, the corrections review demanded could not be pushed, because no agent credential may write `.github/workflows/**`. The design is specified; the implementation is a human's |
 
 ## Alternatives Considered
 

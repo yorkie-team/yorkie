@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkPassed, allRequiredPassed, ciRunDecision, ciConclusion, ciRunToRerun, ciRunToAwait, definesCi, CHECK_PRODUCER_APP_SLUG, CI_DEFINING_PATHS, CI_WORKFLOW_PATH, CI_WORKFLOW_FILE, DEFAULT_REVIEW_CHECKS } from "./checks.mjs";
+import { hasWorkflow, skipWithout } from "./workflow-presence.mjs";
 
 // `DEFAULT_REVIEW_CHECKS` is the ONE lens list in the repo that does not derive
 // itself from lenses.json, so it is the one that silently rots when a lens is
@@ -530,7 +531,13 @@ test("each verb that needs the App answers the commenter when it is missing", ()
   // job with a green tick reads as "handled" for a request nothing acted on.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
-  for (const file of ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml", "agent-implement.yml"]) {
+  // `agent-implement.yml` is in the list CONDITIONALLY rather than dropped from
+  // it: the rule applies to that verb too, and hard-coding it would fail the
+  // whole file while the verb is deferred (docs/design/agent-command-verbs.md
+  // Phase I), whereas dropping it would silently stop asking the day it lands.
+  const files = ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"];
+  if (hasWorkflow("agent-implement.yml")) files.push("agent-implement.yml");
+  for (const file of files) {
     const text = readFileSync(path.join(dir, file), "utf8");
     assert.match(text, /id: app\b/, `${file}: no App-presence check`);
     assert.match(
@@ -1527,7 +1534,7 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
   // someone decided one more file no longer answers to this guard.
   assert.deepEqual(
     exempt,
-    ["agent-implement.yml"],
+    hasWorkflow("agent-implement.yml") ? ["agent-implement.yml"] : [],
     "the issue-only exemption must excuse exactly the issue-only verb; anything else means the " +
       "predicate has drifted and the guard is excusing files it should be judging",
   );
@@ -1543,7 +1550,16 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
   );
 });
 
-test("agent-implement's reporter keeps its approved condition, ids and shape", () => {
+// The three guards below read `agent-implement.yml`, which this repository does
+// not install: the verb is designed in docs/design/agent-command-verbs.md Phase
+// I and deliberately not landed, because no credential in this pipeline can push
+// `.github/workflows/**` and the reviewed draft could therefore not be corrected
+// in place. They are kept rather than deleted for the reason
+// `workflow-presence.mjs` exists — each one re-arms by itself the day a
+// maintainer lands the workflow, and each encodes a defect that was found the
+// hard way. Anyone landing that workflow should expect these to run, and to have
+// to satisfy them.
+test("agent-implement's reporter keeps its approved condition, ids and shape", skipWithout("agent-implement.yml"), () => {
   // THIS DEFECT SURVIVED FIVE ROUNDS BY MOVING, and two attempts to pin it
   // survived because they were written as DENY-LISTS. The job acknowledges an
   // issue with "On it", then runs gates that can stop it; something must close
@@ -1678,7 +1694,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
   assert.ok(keys.length >= 6, `expected a key per report branch, found ${keys.length}`);
 });
 
-test("agent-implement's two agent-branch lookups keep their approved form", () => {
+test("agent-implement's two agent-branch lookups keep their approved form", skipWithout("agent-implement.yml"), () => {
   // `pulls.list` returns fork PRs with a bare `head.ref`. Matching on the name
   // alone lets any outside contributor open a PR from `agent/42-anything` and
   // permanently refuse `@claude fix` on issue #42 — an unauthenticated denial of
@@ -1731,60 +1747,43 @@ test("agent-implement's two agent-branch lookups keep their approved form", () =
   );
 });
 
-test("agent-implement's inline PR lookups agree with metrics.mjs on the same fixtures", async () => {
-  // THE THREE COPIES, CHECKED AGAINST ONE RULE. The `agent/<issue>-*` question
-  // is asked in three places — the collision pre-flight, the no-PR reporter,
-  // and metrics.mjs::resolvePrByIssue, which this same job shells out to — and
-  // the third had no same-repo guard at all, so the effort record could land on
-  // an outside contributor's fork PR. `isAgentPrHead` is now the one rule; this
-  // runs the two inline copies out of the YAML against it.
-  const { isAgentPrHead } = await import("./metrics.mjs");
-  const wf = WF("agent-implement.yml");
-  const lines = wf.split("\n");
-
-  const grab = (needle) => {
-    const l = lines.find((x) => x.includes(needle));
-    assert.ok(l, `agent-implement.yml no longer contains: ${needle}`);
-    return l.slice(12);
-  };
-  const preflight = new Function(
-    "prs",
-    "owner",
-    "repo",
-    "issue",
-    `${grab("const mineRepo = (p) =>")}\n${grab("const open = prs.find((p) => mineRepo(p)")}\nreturn open ?? null;`,
-  );
-  const reporterSrc = lines
-    .slice(lines.findIndex((l) => l.includes("pr = prs.find((p) =>")))
-    .slice(0, 3)
-    .map((l) => l.slice(12))
-    .join("\n");
-  assert.match(reporterSrc, /\?\? null;$/, "could not extract the reporter's lookup");
-  const reporter = new Function("prs", "context", "issue", `let pr;\n${reporterSrc}\nreturn pr;`);
-
+// THE `agent/<issue>-*` RULE, AND THE COPIES OF IT. The question is asked in
+// three places — the collision pre-flight and the no-PR reporter inside
+// `agent-implement.yml`, and `metrics.mjs::resolvePrByIssue`, which that job
+// shells out to — and the third had no same-repo guard at all, so the effort
+// record could land on an outside contributor's fork PR. `isAgentPrHead` is now
+// the one rule.
+//
+// Split in two deliberately. The rule itself ships in `metrics.mjs` and is
+// exercised unconditionally below; only the agreement of the two YAML copies
+// depends on a workflow this repository does not install. Folding them together
+// would have made the shipped helper's only test skip with the deferred verb.
+const AGENT_PR_CASES = (() => {
   const OWNER = "yorkie-team", REPO = "yorkie";
   const pr = (number, ref, full_name) => ({ number, head: { ref, repo: { full_name } } });
   const ours = (n, ref) => pr(n, ref, `${OWNER}/${REPO}`);
   const fork = (n, ref) => pr(n, ref, `someone-else/${REPO}`);
-  const CASES = [
-    { name: "our agent branch for this issue", prs: [ours(1, "agent/42-thing")], want: 1 },
-    // The denial-of-verb / false-success case: anyone may push this name to a fork.
-    { name: "a fork branch with the same name", prs: [fork(2, "agent/42-thing")], want: null },
-    { name: "a fork first, ours second", prs: [fork(2, "agent/42-x"), ours(3, "agent/42-y")], want: 3 },
-    { name: "a different issue that shares a prefix", prs: [ours(4, "agent/420-thing")], want: null },
-    { name: "the bare issue number with no slug", prs: [ours(5, "agent/42")], want: null },
-    { name: "an unrelated branch", prs: [ours(6, "feat/whatever")], want: null },
-    { name: "no open PRs at all", prs: [], want: null },
-  ];
+  return {
+    OWNER,
+    REPO,
+    CASES: [
+      { name: "our agent branch for this issue", prs: [ours(1, "agent/42-thing")], want: 1 },
+      // The denial-of-verb / false-success case: anyone may push this name to a fork.
+      { name: "a fork branch with the same name", prs: [fork(2, "agent/42-thing")], want: null },
+      { name: "a fork first, ours second", prs: [fork(2, "agent/42-x"), ours(3, "agent/42-y")], want: 3 },
+      { name: "a different issue that shares a prefix", prs: [ours(4, "agent/420-thing")], want: null },
+      { name: "the bare issue number with no slug", prs: [ours(5, "agent/42")], want: null },
+      { name: "an unrelated branch", prs: [ours(6, "feat/whatever")], want: null },
+      { name: "no open PRs at all", prs: [], want: null },
+    ],
+  };
+})();
+
+test("metrics.mjs::isAgentPrHead is the one agent-branch rule, and runs", async () => {
+  const { isAgentPrHead } = await import("./metrics.mjs");
+  const { OWNER, REPO, CASES } = AGENT_PR_CASES;
 
   for (const c of CASES) {
-    assert.equal(preflight(c.prs, OWNER, REPO, 42)?.number ?? null, c.want, `pre-flight disagrees on: ${c.name}`);
-    assert.equal(
-      reporter(c.prs, { repo: { owner: OWNER, repo: REPO } }, 42)?.number ?? null,
-      c.want,
-      `reporter disagrees on: ${c.name}`,
-    );
-    // The shared rule, fed the same PRs through the shapes each caller sees.
     const shared = c.prs.find((p) =>
       isAgentPrHead({ sameRepo: p.head.repo.full_name === `${OWNER}/${REPO}`, headRefName: p.head.ref }, 42),
     );
@@ -1802,4 +1801,48 @@ test("agent-implement's inline PR lookups agree with metrics.mjs on the same fix
   const metrics = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "metrics.mjs"), "utf8");
   assert.match(metrics, /number,headRefName,isCrossRepository/, "resolvePrByIssue must ask gh for the head repo");
 });
+
+test(
+  "agent-implement's inline PR lookups agree with metrics.mjs on the same fixtures",
+  skipWithout("agent-implement.yml"),
+  async () => {
+    const { isAgentPrHead } = await import("./metrics.mjs");
+    const wf = WF("agent-implement.yml");
+    const lines = wf.split("\n");
+
+    const grab = (needle) => {
+      const l = lines.find((x) => x.includes(needle));
+      assert.ok(l, `agent-implement.yml no longer contains: ${needle}`);
+      return l.slice(12);
+    };
+    const preflight = new Function(
+      "prs",
+      "owner",
+      "repo",
+      "issue",
+      `${grab("const mineRepo = (p) =>")}\n${grab("const open = prs.find((p) => mineRepo(p)")}\nreturn open ?? null;`,
+    );
+    const reporterSrc = lines
+      .slice(lines.findIndex((l) => l.includes("pr = prs.find((p) =>")))
+      .slice(0, 3)
+      .map((l) => l.slice(12))
+      .join("\n");
+    assert.match(reporterSrc, /\?\? null;$/, "could not extract the reporter's lookup");
+    const reporter = new Function("prs", "context", "issue", `let pr;\n${reporterSrc}\nreturn pr;`);
+
+    const { OWNER, REPO, CASES } = AGENT_PR_CASES;
+    for (const c of CASES) {
+      assert.equal(preflight(c.prs, OWNER, REPO, 42)?.number ?? null, c.want, `pre-flight disagrees on: ${c.name}`);
+      assert.equal(
+        reporter(c.prs, { repo: { owner: OWNER, repo: REPO } }, 42)?.number ?? null,
+        c.want,
+        `reporter disagrees on: ${c.name}`,
+      );
+      const shared = c.prs.find((p) =>
+        isAgentPrHead({ sameRepo: p.head.repo.full_name === `${OWNER}/${REPO}`, headRefName: p.head.ref }, 42),
+      );
+      assert.equal(shared?.number ?? null, c.want, `metrics.mjs::isAgentPrHead disagrees on: ${c.name}`);
+    }
+  },
+);
 

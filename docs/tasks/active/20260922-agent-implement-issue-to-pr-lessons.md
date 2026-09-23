@@ -2,7 +2,50 @@
 
 **Created**: 2026-09-22
 
-## BLOCKED: the fix round cannot push its own workflow fix
+## Round 8: stop carrying the patch, withdraw the workflow
+
+Three rounds tried to deliver a workflow fix the pipeline cannot push. This one
+stopped trying and **removed `.github/workflows/agent-implement.yml` from the
+branch**, along with the `.diff` beside it.
+
+What made that available was one measurement nobody had taken: the App token is
+refused for *create or update* under `.github/workflows/**`, and **delete
+succeeds**. So the set of actions was never "ship it broken or stand still" — it
+was "ship it broken, stand still, or withdraw it", and only the third closes the
+findings. A probe commit to a scratch ref answered both questions in a minute;
+three rounds of standstill had assumed the answer to the second.
+
+The rest follows from that:
+
+- **An apply-me patch under `docs/` is a security defect, not a workaround.**
+  `docs/**` is writable by every agent token and `.github/workflows/**` is not —
+  a committed patch with `git apply` instructions launders content across exactly
+  that boundary. The review lens was right to call it critical, and the earlier
+  round's framing ("a patch in a comment gets scrolled past, so commit it as a
+  file") solved the wrong problem: the issue was never where the patch lived, it
+  was that a patch is the wrong artefact for a change an agent may not make.
+- **Prose requirements are the artefact that survives.** The thirteen acceptance
+  criteria now in the design doc say what the workflow must do and why, one per
+  defect the panel found. A maintainer implements from them; nothing can
+  mechanically turn them into a workflow nobody read. They also outlive the
+  specific draft, which was written against an unsafe base anyway.
+- **Keep the guards, skip them.** `workflow-presence.mjs` already existed for
+  precisely this, and the three `agent-implement.yml` tests now use it. They
+  re-arm the day the workflow lands, which is better than a green suite that has
+  quietly stopped asking.
+- **Splitting a test by what it actually covers.** The PR-lookup fixture test
+  exercised both the YAML copies *and* `metrics.mjs::isAgentPrHead`. Skipping it
+  wholesale would have taken the shipped helper's only executing test with it, so
+  it is now two tests: the rule runs unconditionally, the agreement of the copies
+  skips with the workflow.
+
+**The pipeline lesson, restated with the missing half.** A review lens pointed at
+`.github/workflows/**` produces findings the fix loop cannot close by editing.
+The loop should recognise that up front. But the fix agent also has one action it
+had not considered — *withdraw the file* — and for a file the review says must not
+ship, that is usually the correct one rather than the drastic one.
+
+## BLOCKED: the fix round could not push its own workflow fix
 
 The panel's fix job holds an installation token with no `workflows`
 permission, so `git push` is rejected outright:
@@ -35,11 +78,11 @@ round re-raised every one of them, and the lessons file was by then asserting
 mitigations the tree did not have. A patch that lives only in a comment is a
 patch that gets scrolled past.
 
-So this round commits it **as a file in the repository**:
-`20260922-agent-implement-issue-to-pr-blocked.diff`, beside this one. It applies
-cleanly to this branch's head, its header says what each hunk closes, and with
-it applied `node --test scripts/agent/checks.test.mjs` is 42/42, `make lint` is
-clean and `go test ./...` passes. Apply it and `git rm` it.
+That round committed it **as a file in the repository**,
+`20260922-agent-implement-issue-to-pr-blocked.diff`. Round 8 deleted that file:
+see the section above. A patch under `docs/` is writable by every agent token and
+carried `git apply` instructions into `.github/workflows/**`, which is the one
+path those tokens are deliberately kept out of.
 
 ### Round 7: the block is measured, not inferred
 
@@ -108,11 +151,13 @@ the same way) and simply had not been applied to the newer step.
 
 ### What each finding actually taught
 
-> Written in the present tense because that is how the change reads once it is
-> applied. Until a maintainer applies
-> `20260922-agent-implement-issue-to-pr-blocked.diff`, none of the workflow
-> behaviour below is in the tree — the previous round's version of this section
-> claimed otherwise, and a review lens correctly called it out.
+> **None of the workflow behaviour below is in the tree, and none of it will be
+> until a maintainer writes the workflow.** It is kept as the record of what each
+> review round taught, and every item has a matching acceptance criterion in
+> `docs/design/agent-command-verbs.md` Phase I. An earlier version of this
+> section wrote it in the present tense, as though a patch beside it were
+> applied; a review lens correctly called that out, and round 8 removed the patch
+> rather than the caveat.
 
 - **A guard written three times is a guard with three answers.** The
   `agent/<issue>-*` lookup was inline in the workflow twice with a same-repo
