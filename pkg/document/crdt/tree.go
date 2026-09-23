@@ -1819,9 +1819,15 @@ func (t *Tree) Edit(
 	collectFromParent, collectFromLeft := fromParent, fromLeft
 	if fromLeft != fromParent && fromParent != toParent {
 		current := fromLeft
+		var walker insNextWalker
+		walker.visit(current)
 		for current.InsNextID != nil {
 			next := t.findFloorNode(current.InsNextID)
 			if next == nil || next.IsText() {
+				break
+			}
+			// Stop on a chain that loops back on itself; see insNextWalker.
+			if !walker.visit(next) {
 				break
 			}
 			if next.Index.Parent != nil &&
@@ -2552,8 +2558,13 @@ func (t *Tree) collectBetween(
 					// siblings should survive the merge.
 					if !node.IsText() && node.InsNextID != nil &&
 						!slices.Contains(toBeMergedNodes, node) {
+						var walker insNextWalker
+						walker.visit(node)
 						next := t.findFloorNode(node.InsNextID)
-						for next != nil {
+						// Stop on a chain that loops back on itself; see
+						// insNextWalker. Unbounded here would also grow
+						// toBeRemoveds without limit.
+						for next != nil && walker.visit(next) {
 							if !time.TicketKnown(versionVector, next.ID().CreatedAt) {
 								toBeRemoveds = append(toBeRemoveds, next)
 								// Cascade through the full subtree, not just immediate children.
@@ -3072,9 +3083,15 @@ func (t *Tree) Style(
 			// split also covers the right part of the split.
 			if token.TokenType == index.Start && !isVersionVectorEmpty {
 				current := node
+				var walker insNextWalker
+				walker.visit(current)
 				for current.InsNextID != nil {
 					next := t.findFloorNode(current.InsNextID)
 					if next == nil || next.IsText() {
+						break
+					}
+					// Stop on a chain that loops back on itself; see insNextWalker.
+					if !walker.visit(next) {
 						break
 					}
 					if time.TicketKnown(versionVector, next.id.CreatedAt) {
@@ -3200,9 +3217,15 @@ func (t *Tree) RemoveStyle(
 			// Propagate remove-style to unknown split siblings.
 			if token.TokenType == index.Start && !isVersionVectorEmpty {
 				current := node
+				var walker insNextWalker
+				walker.visit(current)
 				for current.InsNextID != nil {
 					next := t.findFloorNode(current.InsNextID)
 					if next == nil || next.IsText() {
+						break
+					}
+					// Stop on a chain that loops back on itself; see insNextWalker.
+					if !walker.visit(next) {
 						break
 					}
 					if time.TicketKnown(versionVector, next.id.CreatedAt) {

@@ -426,13 +426,23 @@ split first. VV-dependent, like §7.5; without a version vector nothing
 is unknown and the split is placed as before.
 
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
-visit a node twice. The field is a trusted structural pointer that only
-`SplitElement` writes, but the wire format carries it regardless, so a
-chain that loops back on itself would otherwise spin the applying
-goroutine forever while it holds the document lock.
-`FromTreeNodesWhenEdit` drops the field from operation content for the
+visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s
+Phase 3 range narrowing, `collectBetween`'s cascade delete, and the
+`Style`/`RemoveStyle` propagation loops. The field is a trusted
+structural pointer that only `SplitElement` writes, but the wire format
+carries it regardless, so a chain that loops back on itself would
+otherwise spin the applying goroutine forever while it holds the
+document lock, and `collectBetween`'s cascade would grow its removal
+list with it.
+
+The converter drops the field from everything a client sends for the
 same reason: content is always freshly created by the editing client
-and can never be a split product.
+and can never be a split product. That is both decode paths —
+`FromTreeNodesWhenEdit` for `TreeEdit` operation content, and
+`fromElement` for the element bytes a `Set`/`Add`/`SetByIndex` carries,
+which otherwise reaches the tree through the same
+`BytesToObject`/`BytesToTree` a snapshot uses. A snapshot is server-built
+and keeps its links.
 
 The split loop ascends from `parent`, not from the retargeted node. A
 retarget reorders the product *within* one level; the node the
