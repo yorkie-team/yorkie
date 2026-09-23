@@ -2362,6 +2362,22 @@ jobs:
       # hard fixer error the no-commit step above is skipped on purpose (its
       # outcome set excludes `failure`, so the `stalled` net pages instead), so at
       # this moment the page may not exist yet — name both possible pagers.
+      # DISCLOSE, NOW THAT IT IS TRUE — same rule and same reason as
+      # agent-fix.yml: `mark-ready.mjs` refuses to promote a PR whose body does
+      # not disclose autonomous AI authorship, and nothing wrote that disclosure,
+      # so a human-opened PR an agent pushed to could never be promoted however
+      # green the panel (#2030). Fail-safe: the script exits 0 on every error and
+      # never overwrites a body that already discloses.
+      - name: Disclose agent authorship in the PR body
+        if: always() && steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.review-panel.outputs.pr }}
+        run: |
+          [ -f "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" ] || { echo "disclose-pr.mjs not staged; skipping"; exit 0; }
+          node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
+
       - name: Update loop status (fix outcome)
         if: always() && steps.guard.outputs.proceed == 'true'
         continue-on-error: true

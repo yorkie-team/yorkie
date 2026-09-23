@@ -681,6 +681,27 @@ jobs:
       # This step also decides the JOB's colour: the agent step is
       # continue-on-error so the reporting above always runs, so without an
       # explicit failure here a dead fixer would report success.
+      # DISCLOSE, NOW THAT IT IS TRUE. `mark-ready.mjs` refuses to promote a PR
+      # whose body does not disclose autonomous AI authorship, and nothing wrote
+      # that disclosure — so a human-opened PR an agent then pushed to could never
+      # be promoted, however green the panel (#2030). The disclosure belongs to
+      # whoever made the PR agent-authored, so it is written at the moment that
+      # becomes true: a commit landed.
+      #
+      # From the staged trusted copy, and fail-safe: the script exits 0 on every
+      # error and never overwrites a body that already discloses. A disclosure it
+      # cannot write leaves a PR unpromotable, which is visible and recoverable;
+      # a failure here breaking the round would lose the round's work.
+      - name: Disclose agent authorship in the PR body
+        if: always() && steps.app.outputs.configured == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR: ${{ github.event.issue.number }}
+        run: |
+          [ -f "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" ] || { echo "disclose-pr.mjs not staged; skipping"; exit 0; }
+          node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
+
       - name: Report the outcome
         if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         uses: actions/github-script@v7
