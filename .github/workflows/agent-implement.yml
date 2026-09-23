@@ -209,16 +209,25 @@ jobs:
         with:
           node-version: 22.x
 
-      # STAGE THE TRUSTED COPY NOW, WHILE THE TREE IS STILL MAIN. Every
-      # observability step after the agent runs from here, not from the
-      # workspace — the same rule agent-iterate-ci.yml and the panel's fix job
-      # apply, reached from the other direction: they stage main because the
-      # workspace is a branch, this stages main because the workspace is about
-      # to become one.
+      # STAGE MAIN'S COPY WHILE THE TREE IS STILL MAIN, so the steps after the
+      # agent run code the agent did not write into the workspace.
       #
-      # `npm ci` runs against the staged copy too, so those steps have their
-      # dependencies from main's lockfile rather than whatever the agent left in
-      # the workspace.
+      # IT IS NOT A TRUST BOUNDARY, and earlier revisions of this comment called
+      # it one. `$RUNNER_TEMP` is writable by the agent: it runs an unrestricted
+      # `Bash` in this same job, and nothing stops it touching that directory.
+      # What staging actually buys is narrower and still worth having — a step
+      # that would otherwise execute the agent's own edit to `scripts/agent/**`
+      # runs main's version instead, which covers the ordinary case of an agent
+      # that edited those files as part of its task. It does not survive an agent
+      # that sets out to defeat it.
+      #
+      # The real containment is elsewhere and was added later: the agent holds a
+      # token that cannot approve, merge or comment on a pull request. That is a
+      # property of the credential rather than of a directory, which is why it
+      # holds.
+      #
+      # `npm ci` runs against the staged copy so those steps take their
+      # dependencies from main's lockfile.
       # The gate below runs BEFORE the workspace checkout — deliberately, since it
       # decides whether this job may touch the repository at all — so its module
       # is fetched here, sparsely, from the default branch. `persist-credentials:
@@ -410,6 +419,18 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+          # THE SNAPSHOT THE MAINTAINER AUTHORISED, from the immutable event
+          # payload. A `gh issue view` here runs minutes after the comment that
+          # authorised this run — behind a token mint, three API calls, two
+          # checkouts and two toolchain installs — and the issue author can edit
+          # the body in that window. The text a maintainer read when they typed
+          # the verb is the text this run must act on.
+          #
+          # `workflow_dispatch` has no payload issue and must ask the API; there
+          # the dispatcher IS the reader, and the window does not exist.
+          PAYLOAD_TITLE: ${{ github.event.issue.title }}
+          PAYLOAD_BODY: ${{ github.event.issue.body }}
+          FROM_PAYLOAD: ${{ github.event_name == 'issue_comment' }}
         run: |
           set -euo pipefail
           # Validated HERE, in the first step that uses it, rather than in the
@@ -418,10 +439,17 @@ jobs:
           case "$ISSUE_NUMBER" in
             ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE_NUMBER'" >&2; exit 1 ;;
           esac
-          # `// ""` because a null body renders as the literal string "null",
-          # which the agent would then read as the request.
-          gh issue view "$ISSUE_NUMBER" --json number,title,body \
-            --jq '"# Issue #\(.number): \(.title)\n\n\(.body // "")"' > "$RUNNER_TEMP/issue.md"
+          if [ "$FROM_PAYLOAD" = "true" ]; then
+            {
+              printf '# Issue #%s: %s\n\n' "$ISSUE_NUMBER" "$PAYLOAD_TITLE"
+              printf '%s\n' "$PAYLOAD_BODY"
+            } > "$RUNNER_TEMP/issue.md"
+          else
+            # `// ""` because a null body renders as the literal string "null",
+            # which the agent would then read as the request.
+            gh issue view "$ISSUE_NUMBER" --json number,title,body \
+              --jq '"# Issue #\(.number): \(.title)\n\n\(.body // "")"' > "$RUNNER_TEMP/issue.md"
+          fi
           echo "fetched $(wc -c < "$RUNNER_TEMP/issue.md") bytes"
 
       - name: Build the orchestration prompt
@@ -847,8 +875,20 @@ jobs:
               const prior = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, per_page: 100,
               });
-              if (prior.some((c) => String(c.body ?? '').includes(MARKER)
-                && AUTHORS.includes((c.user || {}).login))) return;
+              // ACKNOWLEDGEMENT-AWARE. Suppressing a repeat is right only while
+              // the thread is already settled; THIS run posted its own "🤖 On
+              // it", so an identical report from a previous run does not close
+              // the acknowledgement this one left open. Dedupe against reports
+              // that came after the newest acknowledgement, not against the
+              // whole history — otherwise the second run that fails the same way
+              // leaves the issue claiming it is still working.
+              const mine = (c) => AUTHORS.includes((c.user || {}).login);
+              const lastAck = prior.reduce(
+                (at, c, i) => (mine(c) && /🤖 On it — implementing this issue/.test(String(c.body ?? '')) ? i : at),
+                -1,
+              );
+              const since = lastAck >= 0 ? prior.slice(lastAck) : prior;
+              if (since.some((c) => String(c.body ?? '').includes(MARKER) && mine(c))) return;
             } catch (e) {
               core.warning(`could not check for an existing report: ${e.message}`);
             }

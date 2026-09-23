@@ -1664,6 +1664,10 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   const SANCTIONED_RETURNS = [
     // The success path: the kickoff opened a PR and already said so.
     "            if (lookupOk && pr) return; // the normal flow posted the PR link",
+    // The dedupe, and it is acknowledgement-aware for the reason above it: it
+    // suppresses a repeat only when one was already made SINCE the newest "On
+    // it", so it can never leave this run's own acknowledgement unanswered.
+    "              if (since.some((c) => String(c.body ?? '').includes(MARKER) && mine(c))) return;",
   ];
   const returns = script.split("\n").filter((l) => /^\s+if \(.*\breturn;/.test(l));
   assert.deepEqual(
