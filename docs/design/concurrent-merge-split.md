@@ -350,6 +350,12 @@ If the advance moves `left` to a node under a different parent,
 `parent` is updated to match so `FindOffset` and `Split` operate on
 the correct subtree.
 
+The advance stops in front of a run of **empty** unknown split siblings
+that ends at the current actor's own product. Those are same-boundary
+products that §7.8 ordered ahead of ours, not content the editor meant
+to keep on its left; a replica that applied them later re-parented them
+after the boundary (§7.4, which keys on the same emptiness).
+
 ### §7.6 Recursive Split Loop: Removed-Inclusive Offset
 
 `FindOffset` in the split loop passes `includeRemoved: true` to match
@@ -373,6 +379,45 @@ Since a single actor's changes are always sequential, an "unknown"
 sibling from the same actor is always our own creation, not a
 concurrent one. This preserves clone/root consistency while still
 advancing past genuine concurrent siblings from other actors.
+
+### §7.8 Split: Same-Boundary Ordering
+
+`SplitElement` places its product directly after the node it splits.
+When a concurrent split of the same node at the same boundary has
+already been applied, the second product lands in front of the first,
+so the products sit in **arrival order** and replicas disagree:
+
+```
+<doc><p><span>abcde</span></p></doc>, both replicas split [0,1]
+XML, both:  <doc><p>...</p><p></p><p></p></doc>
+children:   d1 = [p, split(d2), split(d1)]
+            d2 = [p, split(d1), split(d2)]
+```
+
+XML and `toSortedJSON` still match, since all but the last product are
+empty, so no convergence check that compares them sees it. The first
+position-based operation that lands on the difference does: a range
+delete over the whole root then leaves an empty node on one replica for
+good, and an empty node between two halves of a split span carries
+different attributes on each replica, because it is a different node.
+The server builds snapshots the same way, in its own arrival order, so a
+replica that receives one takes a third view.
+
+`orderSameBoundarySplit` orders the products by ticket instead, newest
+first, as RGA orders concurrent inserts after the same node. A split
+that lands at the end of its node -- the right half has already left
+through a concurrent split of the same boundary -- follows the
+`InsNextID` chain over unknown element split siblings of another actor
+with a newer ticket, and splits the last of them at offset 0. The right
+half lives in that sibling on this replica, so it moves into the new
+product exactly as it would have moved out of the original on a replica
+that applied this split first. A split that is not at the end of its
+node, or whose next sibling is older, is placed as before.
+
+The parent check is relaxed for the same reason as §7.5: at a
+multi-level split the sibling may already sit under the next level's
+product. VV-dependent, like §7.5; without a version vector nothing is
+unknown and the split is placed as before.
 
 ## Phase 8: Insert
 
@@ -638,5 +683,6 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 19 | §6.1 | Move tombstones with merge to preserve RGA anchors |
 | Fix 20 | §6.3 | Flatten chained merge (P→Q→R) for redirect + snapshot consistency |
 | Fix 21 | §9.3 | Style range boundary right after merge-source tombstone |
+| Fix 22 | §7.8 + §7.5 | Order same-boundary split products by ticket |
 | Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
 | Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |

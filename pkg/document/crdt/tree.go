@@ -2616,10 +2616,103 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 			break
 		}
 
+		// Empty unknown siblings standing right before our own product are
+		// concurrent splits of the same boundary, ordered ahead of ours by
+		// orderSameBoundarySplit. They are not content the editor meant to
+		// keep on its left; a replica that applied them later re-parented
+		// them after the boundary (§7.4), so stay in front of them here too.
+		if o.skipActorID != nil && t.emptyRunReachesActor(next, *o.skipActorID, versionVector) {
+			break
+		}
+
 		current = next
 	}
 
 	return current
+}
+
+// emptyRunReachesActor reports whether the InsNextID chain starting at node
+// runs through empty, unknown element split siblings only and then reaches a
+// node created by actorID.
+func (t *Tree) emptyRunReachesActor(
+	node *TreeNode,
+	actorID time.ActorID,
+	versionVector time.VersionVector,
+) bool {
+	for current := node; current != nil && !current.IsText(); {
+		createdAt := current.id.CreatedAt
+		if createdAt.ActorID() == actorID {
+			return current != node
+		}
+		if len(current.Index.Children(true)) > 0 {
+			return false
+		}
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			return false
+		}
+		if current.InsNextID == nil {
+			return false
+		}
+		current = t.findFloorNode(current.InsNextID)
+	}
+
+	return false
+}
+
+// orderSameBoundarySplit (§7.8) decides which node a split at offset of parent
+// actually splits, so that concurrent splits of one node at one boundary land
+// in the same order on every replica.
+//
+// SplitElement places its product directly after the node it splits. When a
+// concurrent split of the same boundary has already been applied, that puts
+// the products in arrival order, which differs per replica. The XML still
+// matches (all but the last product are empty) but position-based operations
+// that follow do not.
+//
+// Order them by ticket instead, newest first, as RGA orders concurrent
+// inserts after the same node: skip the unknown split siblings with a newer
+// ticket and split the last of them at its start. The right half lives in
+// that sibling on this replica, so it moves into our product exactly as it
+// would have moved out of parent on a replica that applied us first.
+func (t *Tree) orderSameBoundarySplit(
+	parent *TreeNode,
+	offset int,
+	editedAt *time.Ticket,
+	versionVector time.VersionVector,
+) (*TreeNode, int) {
+	// A concurrent split of the same boundary took everything to the right of
+	// it, so only a split at the end of parent can be one.
+	if len(versionVector) == 0 || offset != len(parent.Index.Children(true)) {
+		return parent, offset
+	}
+
+	target := parent
+	for target.InsNextID != nil {
+		next := t.findFloorNode(target.InsNextID)
+		// No parent check: at a multi-level split the sibling may already sit
+		// under the next level's product (the same reason §7.5 relaxes it).
+		if next == nil || next.IsText() || next.Index.Parent == nil {
+			break
+		}
+
+		createdAt := next.id.CreatedAt
+		if createdAt.ActorID() == editedAt.ActorID() {
+			break
+		}
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			break
+		}
+		if !createdAt.After(editedAt) {
+			break
+		}
+
+		target = next
+	}
+
+	if target == parent {
+		return parent, offset
+	}
+	return target, 0
 }
 
 // split splits element nodes for the given splitLevel and reports the net
@@ -2681,7 +2774,10 @@ func (t *Tree) split(
 
 			offset++
 		}
-		splitDiff, err := parent.Split(t, offset, issueTimeTicket, versionVector)
+		// §7.8 Same-Boundary Ordering: a concurrent split of the same
+		// boundary may already have taken the right half; order against it.
+		target, offset := t.orderSameBoundarySplit(parent, offset, editedAt, versionVector)
+		splitDiff, err := target.Split(t, offset, issueTimeTicket, versionVector)
 		diff.Add(splitDiff)
 		if err != nil {
 			return diff, err
