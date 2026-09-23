@@ -174,6 +174,25 @@ jobs:
           permission-pull-requests: write # open the draft PR
           permission-issues: write # answer on the issue
 
+      # THE TOKEN THE AGENT GETS, AND IT IS NOT THE ONE ABOVE. `contents: write`
+      # + `pull-requests: write` in one token is the pair that submits an
+      # APPROVING REVIEW and then merges; GitHub refuses only an approval of a PR
+      # the same identity authored, and this App authors almost none of them. The
+      # agent runs an unrestricted `Bash` over text an arbitrary GitHub user
+      # wrote, and `actions/checkout` persists whatever token it is given into
+      # `.git/config`, one `git config --get` from being read back.
+      #
+      # So the agent commits and pushes, and cannot open, approve or merge
+      # anything. The PR is opened by a step in this file after it stops.
+      - name: Generate the agent's narrow token
+        if: steps.app.outputs.configured == 'true'
+        id: agent-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-contents: write # commit and push the branch, and nothing else
+
       # FAILS CLOSED, INCLUDING ON "I COULD NOT TELL". The draft flag is a
       # convention the agent could get wrong; a required human approval is
       # enforced by GitHub. This is the gate that makes "a bot opened this PR"
@@ -419,7 +438,7 @@ jobs:
         if: steps.app.outputs.configured == 'true'
         with:
           fetch-depth: 0 # full history for rebase and a full-diff self-review
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
 
       - uses: actions/setup-node@v4
         if: steps.app.outputs.configured == 'true'
@@ -544,17 +563,26 @@ jobs:
              chars saying what changed, blank line, body wrapped at 80 saying why.
              Every commit message MUST end with the trailer
              "Assisted-by: Claude Code (autonomous)".
-          4. FINALIZE EARLY — as soon as the code compiles, LAND A DRAFT PR before
-             any optional step, so the deliverable survives even if you run out of
-             turns: `git add -A`, commit (with the trailer), `git push -u origin`
-             the branch, then open a DRAFT PR to main with `gh pr create --draft`
-             following .github/PULL_REQUEST_TEMPLATE.md (title <= 70 chars; body =
-             why + a test plan drawn from the acceptance criteria; add
-             "Fixes #__ISSUE_NUMBER__"; DISCLOSE autonomous Claude Code authorship
-             and say what you could not verify). Then run
-             `node ./scripts/agent/set-state.mjs <pr> implementing` with the PR
-             number you just opened, and comment on issue #__ISSUE_NUMBER__ linking
-             the PR.
+          4. FINALIZE EARLY — as soon as the code compiles, PUSH, so the work
+             survives even if you run out of turns: `git add -A`, commit (with the
+             trailer), `git push -u origin` the branch.
+
+             DO NOT OPEN THE PULL REQUEST. You cannot: your token carries no
+             `pull-requests` permission, deliberately — a token that can open a PR
+             can also approve one, and an approval from this bot would satisfy the
+             only human control on `main`. A step in the workflow opens it as a
+             DRAFT after you stop. It waits for you on purpose: the review panel
+             and the CI-fix arm both claim any `agent/` branch that has a PR and
+             dispatch fixers that push to it, so a PR opened while you are still
+             committing gives the branch three writers.
+
+             Write what the PR should say to __PR_FILE__ instead. First line: the
+             title, 70 characters or less, no "Fixes" prefix. Then a blank line,
+             then the body, following .github/PULL_REQUEST_TEMPLATE.md — why, and
+             a test plan drawn from the acceptance criteria. Do not add
+             "Fixes #__ISSUE_NUMBER__" or an authorship disclosure; the workflow
+             adds both, so that they are true by construction rather than by your
+             remembering. Say what you could NOT verify — that part only you know.
           5. LET CI VERIFY — do NOT run `make test`, `make test-complex`,
              `make bench` or `make coverage`: they need a MongoDB stack and are far
              too slow for a one-shot headless run. `make lint` and a TARGETED
@@ -593,6 +621,7 @@ jobs:
           )
           TEMPLATE=${TEMPLATE//__ISSUE_NUMBER__/$ISSUE_NUMBER}
           TEMPLATE=${TEMPLATE//__ISSUE_FILE__/$RUNNER_TEMP\/issue.md}
+          TEMPLATE=${TEMPLATE//__PR_FILE__/$RUNNER_TEMP\/pr.md}
           TEMPLATE=${TEMPLATE//__TODAY__/$TODAY}
           {
             echo "prompt<<HARNESS_EOF"
@@ -642,7 +671,7 @@ jobs:
         uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ steps.agent-token.outputs.token }}
           prompt: ${{ steps.prep.outputs.prompt }}
           claude_args: >-
             --max-turns 150
@@ -652,6 +681,63 @@ jobs:
       # The full transcript — every turn, tool call and permission denial — so a
       # run that ends without a PR is diagnosable. always(): upload even when the
       # agent step failed, which is exactly when it is wanted.
+      # THE PR IS OPENED HERE, AFTER THE AGENT HAS STOPPED.
+      #
+      # Three reasons, and none of them is tidiness. `--draft` is an argument in
+      # this file rather than a line in a prompt, so it is a fact rather than a
+      # request. `Fixes #N` and the authorship disclosure are added by the
+      # workflow, so they are true by construction instead of by the agent
+      # remembering — and the design-fit lens resolves a PR's spec from `Fixes #N`
+      # and reviews with no knowledge of the ask without it. And the panel and the
+      # CI-fix arm both claim any `agent/` branch that HAS a PR and dispatch
+      # fixers that push to it, so opening one mid-run would give the branch three
+      # writers while the implement agent is still committing.
+      - name: Open the draft PR
+        id: open-pr
+        if: always() && steps.stage.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          case "$BRANCH" in
+            agent/"$ISSUE"-*) ;;
+            *) echo "the agent left HEAD on '$BRANCH', not agent/$ISSUE-*; not opening a PR"; exit 0 ;;
+          esac
+          git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1 || {
+            echo "nothing was pushed to $BRANCH; there is no work to open a PR for"; exit 0
+          }
+          EXISTING="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          [ -z "$EXISTING" ] || { echo "#$EXISTING is already open for $BRANCH"; exit 0; }
+          PR_FILE="$RUNNER_TEMP/pr.md"
+          [ -s "$PR_FILE" ] || { echo "the agent wrote no PR description; not opening a PR"; exit 0; }
+          TITLE="$(head -n 1 "$PR_FILE")"
+          [ -n "$TITLE" ] || { echo "the PR description has no title on its first line"; exit 0; }
+          {
+            tail -n +2 "$PR_FILE"
+            printf '\n\nFixes #%s\n' "$ISSUE"
+          } > "$RUNNER_TEMP/pr-body.md"
+          gh pr create --draft --base main --head "$BRANCH" \
+            --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
+          NUM="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          echo "number=$NUM" >> "$GITHUB_OUTPUT"
+          node "$RUNNER_TEMP/agent-tools/set-state.mjs" "$NUM" implementing || true
+          gh issue comment "$ISSUE" --body "🤖 Opened #$NUM (draft) from this issue."
+
+      # `agent:candidate` ON THE ISSUE, not the PR. The panel's design-fit lens
+      # resolves a PR's spec through `Fixes #N` and only trusts an issue carrying
+      # this label — without it every PR this verb opens is reviewed with no
+      # knowledge of what it was asked to build.
+      - name: Mark the issue as an agent candidate
+        if: always() && steps.open-pr.outputs.number != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        run: gh issue edit "$ISSUE" --add-label agent:candidate
+
       - name: Upload agent execution log
         if: always() && steps.app.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
