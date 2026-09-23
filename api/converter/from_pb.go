@@ -985,6 +985,15 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 			return nil, err
 		}
 
+		// Operation content is fully client-controlled and is always freshly
+		// created by the editing client, so it can never be a split product.
+		// Drop the split-sibling links the wire format carries anyway: the
+		// tree follows them as trusted structural pointers once Tree.Edit
+		// registers these nodes in NodeMapByID.
+		if treeNode != nil {
+			treeNode.DropSplitLinks()
+		}
+
 		treeNodes = append(treeNodes, treeNode)
 	}
 

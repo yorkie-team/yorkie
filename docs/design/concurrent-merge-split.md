@@ -416,8 +416,31 @@ node, or whose next sibling is older, is placed as before.
 
 The parent check is relaxed for the same reason as §7.5: at a
 multi-level split the sibling may already sit under the next level's
-product. VV-dependent, like §7.5; without a version vector nothing is
-unknown and the split is placed as before.
+product. Relaxed, not dropped — the sibling must still sit under the
+node's own parent or under a split product of it, because `InsNextID`
+also arrives verbatim from client-supplied bytes and an arbitrary link
+would otherwise redirect the split onto an unrelated element. A
+tombstoned sibling is not followed either: splitting it would make the
+product born tombstoned here but live on a replica that applied this
+split first. VV-dependent, like §7.5; without a version vector nothing
+is unknown and the split is placed as before.
+
+Every `InsNextID` walk runs through `insNextWalker`, which refuses to
+visit a node twice. The field is a trusted structural pointer that only
+`SplitElement` writes, but the wire format carries it regardless, so a
+chain that loops back on itself would otherwise spin the applying
+goroutine forever while it holds the document lock.
+`FromTreeNodesWhenEdit` drops the field from operation content for the
+same reason: content is always freshly created by the editing client
+and can never be a split product.
+
+The split loop ascends from `parent`, not from the retargeted node. A
+retarget reorders the product *within* one level; the node the
+operation split is still `parent`, and the next level's boundary is
+"after `parent`" in `parent`'s own branch. The §7.5 advance then stops
+in front of the same-boundary empty run and `orderSameBoundarySplit`
+re-applies the same ticket ordering at that level, so each level orders
+itself against its own chain.
 
 ## Phase 8: Insert
 
