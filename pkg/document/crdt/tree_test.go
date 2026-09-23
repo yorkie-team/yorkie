@@ -24,6 +24,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -122,24 +123,64 @@ func TestTreeNode(t *testing.T) {
 		assert.Nil(t, again)
 	})
 
-	t.Run("splitting inside a surrogate pair is reported, not applied", func(t *testing.T) {
+	t.Run("splitting inside a surrogate pair keeps the character whole", func(t *testing.T) {
 		// Offsets 2 and 4 fall between the two code units of a surrogate pair.
 		// Decoding there would turn the regional indicator into U+FFFD in both
-		// halves, so the split is refused and the node is left untouched.
+		// halves, so the split moves forward to the end of the pair instead.
+		// It must not fail: such an offset can already sit in a document's
+		// stored history, and a change that cannot replay is a document that
+		// cannot be loaded.
+		for _, tc := range []struct {
+			offset      int
+			left, right string
+			leftLen     int
+		}{
+			{offset: 2, left: "a🇰", right: "🇷b", leftLen: 3},
+			{offset: 4, left: "a🇰🇷", right: "b", leftLen: 5},
+		} {
+			para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+			assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "a🇰🇷b")))
+
+			text, err := para.Child(0)
+			assert.NoError(t, err)
+
+			right, diff, err := text.SplitText(tc.offset, 0)
+			assert.NoError(t, err, "offset %d", tc.offset)
+			require.NotNil(t, right, "offset %d", tc.offset)
+
+			assert.Equal(t, tc.left, text.Value, "offset %d", tc.offset)
+			assert.Equal(t, tc.right, right.Value, "offset %d", tc.offset)
+			assert.Equal(t, tc.leftLen, text.Len(), "offset %d", tc.offset)
+			assert.Equal(t, 6-tc.leftLen, right.Len(), "offset %d", tc.offset)
+			assert.Equal(t, 6, para.Len(), "offset %d", tc.offset)
+			assert.Len(t, para.Index.Children(), 2, "offset %d", tc.offset)
+			// The right piece is registered under the boundary the split
+			// actually took, so the next resolution of the same anchor lands
+			// on it instead of re-splitting past the left piece's end.
+			assert.Equal(t,
+				&crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: tc.leftLen}, right.ID(),
+				"offset %d", tc.offset)
+			// The split adds one node's worth of metadata, no data.
+			assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, diff, "offset %d", tc.offset)
+		}
+	})
+
+	t.Run("splitting inside the last surrogate pair of a node is a no-op", func(t *testing.T) {
+		// Moving forward from offset 2 reaches offset 3, which is the node's own
+		// end: there is nothing to split off, exactly as SplitText(3) reports.
 		para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
-		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "a🇰🇷b")))
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "a🇰")))
 
 		text, err := para.Child(0)
 		assert.NoError(t, err)
 
-		for _, offset := range []int{2, 4} {
-			split, _, err := text.SplitText(offset, 0)
-			assert.ErrorIs(t, err, crdt.ErrSplitInSurrogatePair)
-			assert.Nil(t, split)
-			assert.Equal(t, "a🇰🇷b", text.Value)
-			assert.Equal(t, 6, text.Len())
-			assert.Equal(t, 6, para.Len())
-		}
+		split, diff, err := text.SplitText(2, 0)
+		assert.NoError(t, err)
+		assert.Nil(t, split)
+		assert.Equal(t, resource.DataSize{}, diff)
+		assert.Equal(t, "a🇰", text.Value)
+		assert.Equal(t, 3, text.Len())
+		assert.Len(t, para.Index.Children(), 1)
 	})
 
 	t.Run("element node with attributes test", func(t *testing.T) {

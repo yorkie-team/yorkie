@@ -650,10 +650,23 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	return nil
 }
 
-func (d *Document) applyChanges(changes []*change.Change) error {
-	if err := d.ensureClone(); err != nil {
-		return err
+func (d *Document) applyChanges(changes []*change.Change) (err error) {
+	if cloneErr := d.ensureClone(); cloneErr != nil {
+		return cloneErr
 	}
+
+	// NOTE(hackerwins): A change that fails partway through is not a no-op on
+	// the clone: Tree.Edit applies the `from` split before it resolves `to`, so
+	// an error on the second position leaves the clone holding a split the
+	// document never took. Drop it like Update does, so the next update rebuilds
+	// the clone from the document instead of continuing from a state that
+	// diverged for the rest of the session.
+	defer func() {
+		if err != nil {
+			d.cloneRoot = nil
+			d.clonePresences = nil
+		}
+	}()
 
 	var events []DocEvent
 	for _, c := range changes {

@@ -76,14 +76,59 @@ func TestTreeEditAfterNonBMPText(t *testing.T) {
 		assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
 	})
 
+	// Offsets 9 and 11 fall between the two code units of a surrogate pair. An
+	// editor never places a caret there, but a replica whose strings can hold a
+	// lone surrogate can, so such an edit can already sit in a stored history.
+	// The edit has to apply and replay rather than fail, and it must not decode
+	// the flag into U+FFFD on either side of the split.
+	t.Run("a caret edit inside the flag applies, replays and keeps the flag", func(t *testing.T) {
+		for _, tc := range []struct {
+			offset int
+			want   string
+		}{
+			// The split moved forward to the end of the pair it landed in, so
+			// the "!" goes after that regional indicator. Both indicators
+			// survive as themselves, and no text is dropped: the caret edit
+			// stays a caret edit.
+			{offset: 9, want: "<r><p>즐거운 한가위 🇰!🇷ㅇㄹ</p></r>"},
+			{offset: 11, want: "<r><p>즐거운 한가위 🇰🇷!ㅇㄹ</p></r>"},
+		} {
+			offset := tc.offset
+			d1 := document.New("test-doc")
+			require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("t", json.TreeNode{
+					Type: "r",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: text}},
+					}},
+				})
+				return nil
+			}))
+			require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditByPath([]int{0, offset}, []int{0, offset},
+					&json.TreeNode{Type: "text", Value: "!"}, 0)
+				return nil
+			}), "offset %d", offset)
+
+			assert.Equal(t, tc.want, treeXML(t, d1), "offset %d", offset)
+			assert.NotContains(t, treeXML(t, d1), "�", "offset %d", offset)
+
+			pb, err := converter.ToChangePack(d1.CreateChangePack())
+			require.NoError(t, err, "offset %d", offset)
+			pack, err := converter.FromChangePack(pb)
+			require.NoError(t, err, "offset %d", offset)
+
+			d2 := document.New("test-doc")
+			require.NoError(t, d2.ApplyChangePack(change.NewPack(
+				pack.DocumentKey, change.NewCheckpoint(0, 0), pack.Changes, time.InitialVersionVector, nil,
+			)), "offset %d", offset)
+			assert.Equal(t, treeXML(t, d1), treeXML(t, d2), "offset %d", offset)
+		}
+	})
+
 	t.Run("edits at every offset keep the length in UTF-16 code units", func(t *testing.T) {
 		for offset := 1; offset < 14; offset++ {
-			// Offsets 9 and 11 fall inside a surrogate pair; an editor never
-			// places a caret there.
-			if offset == 9 || offset == 11 {
-				continue
-			}
-
 			doc := document.New("test-doc")
 			require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewTree("t", json.TreeNode{

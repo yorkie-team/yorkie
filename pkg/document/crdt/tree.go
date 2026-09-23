@@ -40,11 +40,6 @@ var (
 	// the node it resolves to, which means the position cannot be resolved on
 	// this replica.
 	ErrSplitOutOfRange = errors.New("split offset out of range")
-
-	// ErrSplitInSurrogatePair is returned when a position anchors between the
-	// two code units of a surrogate pair. That is not a character boundary, so
-	// the position cannot be resolved on this replica.
-	ErrSplitInSurrogatePair = errors.New("split offset inside surrogate pair")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -435,14 +430,30 @@ func (n *TreeNode) SplitText(
 
 	// An offset between the two code units of a surrogate pair names no
 	// character boundary. A Go string cannot carry the lone surrogate each half
-	// would keep, so utf16.Decode would rewrite the character as U+FFFD in both
-	// pieces and this replica would hold text no other replica has. Report it
-	// like any other position that cannot be resolved here, rather than
-	// silently losing the character.
-	if utf16.DecodeRune(rune(encoded[offset-1]), rune(encoded[offset])) != utf8.RuneError {
-		return nil, diff, fmt.Errorf(
-			"split %s at %d of %d: %w", n.IDString(), offset, n.Len(), ErrSplitInSurrogatePair,
-		)
+	// would keep, so decoding there rewrites the character as U+FFFD in both
+	// pieces and this replica ends up holding text no other replica has.
+	// Move the split forward to the end of the pair instead, which keeps the
+	// character whole on the left piece and leaves both pieces' lengths in
+	// UTF-16 code units, so every offset the tree derives from them adds up.
+	//
+	// Forward, not back: an edit resolves the same anchor twice, once for
+	// `from` and once for `to`. Moving forward puts both on the boundary that
+	// ends the pair, so the second resolution finds the piece the first one
+	// created and splits at its end -- a no-op, leaving `from` and `to` on the
+	// same anchor. Moving back would leave the second resolution anchored
+	// after the whole right piece, turning a caret edit into a deletion of it.
+	//
+	// Failing the operation is not an option, however inexact the position is:
+	// a JS replica can legitimately split mid-pair, since JS strings do hold
+	// lone surrogates, so such a split can already sit in the stored history of
+	// a document -- and a change the server refuses to replay is a document
+	// that can never be loaded again (docs/design/tree.md). Every Go replica
+	// moves the same offset to the same boundary, so they still converge on
+	// identical segmentation. Landing on the node's end is the existing
+	// "nothing to split off" no-op below.
+	if offset < len(encoded) &&
+		utf16.DecodeRune(rune(encoded[offset-1]), rune(encoded[offset])) != utf8.RuneError {
+		offset++
 	}
 
 	leftRune := utf16.Decode(encoded[0:offset])
@@ -1291,6 +1302,19 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 	var node *TreeNode
 	var recreatedAttrPairs []GCPair
 	if span.IsText {
+		// The window is the gap between two surviving pieces, so its bounds are
+		// piece boundaries, and piece boundaries are where SplitText cut. Since
+		// SplitText moves a mid-surrogate-pair offset to the end of the pair,
+		// no Go replica can produce a bound that lands between the two
+		// code units of a pair, and the decode below cannot turn one into U+FFFD.
+		//
+		// A bound recorded by a replica that does split mid-pair is left to
+		// decode as U+FFFD rather than repaired: the recreated node has to cover
+		// exactly [offset, offset+length) in UTF-16 code units or every piece
+		// offset in this insertion shifts, and U+FFFD is the one decoding that
+		// keeps that length. Refusing instead would make the restore -- already
+		// in the stored history -- unreplayable, which is worse than the two
+		// replacement characters.
 		encoded := utf16.Encode([]rune(span.Value))
 		relStart := offset - span.ID.Offset
 		val := string(utf16.Decode(encoded[relStart : relStart+length]))

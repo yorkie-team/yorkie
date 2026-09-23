@@ -211,9 +211,22 @@ SDKs, has to apply them the same way:
 
 3. **An unresolvable position fails the operation, never the process.**
    Splitting a node at an offset past its end returns `ErrSplitOutOfRange`
-   instead of slicing out of range, and an offset between the two code units
-   of a surrogate pair returns `ErrSplitInSurrogatePair` instead of decoding
-   both halves into U+FFFD.
+   instead of slicing out of range.
+
+   A position that is merely *inexact* is moved rather than refused. An offset
+   between the two code units of a surrogate pair names no character boundary,
+   and a Go string cannot hold the lone surrogate each half of such a split
+   would keep — decoding there rewrites the character as U+FFFD on both sides.
+   `SplitText` moves the split forward to the end of the pair, so the character
+   stays whole and both pieces keep their length in UTF-16 code units. Forward
+   rather than back, because an edit resolves the same anchor twice — once for
+   `from`, once for `to` — and only the forward boundary leaves the second
+   resolution on the anchor the first one created; moving back would anchor
+   `to` after the whole right piece and turn a caret edit into a deletion of
+   it. Every replica moves the same offset to the same boundary, so
+   segmentation still converges. Refusing is not available here: a replica
+   whose strings hold lone surrogates can split mid-pair, so such an offset can
+   already be in a document's stored history.
 
 Dropping content rather than rejecting the change is deliberate. Such changes
 are already in the history of existing documents, and a change the server
