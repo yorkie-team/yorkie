@@ -201,169 +201,57 @@ jobs:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
           permission-contents: write # commit and push the branch, and nothing else
+      # AHEAD OF THE GATE, because the gate runs `node`. The pin is a property of
+      # every step below that executes a pipeline script, not of the agent's own
+      # setup — and checks.test.mjs asserts the ordering rather than the presence.
+      - uses: actions/setup-node@v4
+        if: steps.app.outputs.configured == 'true'
+        with:
+          node-version: 22.x
+
+      # STAGE THE TRUSTED COPY NOW, WHILE THE TREE IS STILL MAIN. Every
+      # observability step after the agent runs from here, not from the
+      # workspace — the same rule agent-iterate-ci.yml and the panel's fix job
+      # apply, reached from the other direction: they stage main because the
+      # workspace is a branch, this stages main because the workspace is about
+      # to become one.
+      #
+      # `npm ci` runs against the staged copy too, so those steps have their
+      # dependencies from main's lockfile rather than whatever the agent left in
+      # the workspace.
+      # The gate below runs BEFORE the workspace checkout — deliberately, since it
+      # decides whether this job may touch the repository at all — so its module
+      # is fetched here, sparsely, from the default branch. `persist-credentials:
+      # false`: nothing after this reads a token from `.git/config`, and the
+      # workspace checkout further down replaces it anyway.
+      - name: Check out the protection check (trusted, from the default branch)
+        if: steps.app.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
 
       # FAILS CLOSED, INCLUDING ON "I COULD NOT TELL". The draft flag is a
       # convention the agent could get wrong; a required human approval is
       # enforced by GitHub. This is the gate that makes "a bot opened this PR"
       # survivable, so a repository that cannot answer the question does not get
       # a bot pushing to it.
+      #
+      # THE DECISION IS A MODULE, not sixty lines of `github-script`. As inline
+      # script it shipped with an identifier referenced and never declared, so
+      # three of its four refusal paths threw a ReferenceError instead of the
+      # diagnosis — a gate that failed closed and told nobody why, past five
+      # review rounds, because a YAML regex was the only thing that had ever read
+      # it. `branch-protection.mjs` is executed by tests; this step is a call.
       - name: Require a human approval on main
         id: protection
         if: steps.app.outputs.configured == 'true'
-        uses: actions/github-script@v7
-        with:
-          retries: 3
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const owner = context.repo.owner, repo = context.repo.repo;
-            let ok = false;
-            let bypassable = 0;
-            // 1) Classic branch protection, which is what this repository uses.
-            try {
-              const { data } = await github.rest.repos.getBranchProtection({ owner, repo, branch: 'main' });
-              const r = data.required_pull_request_reviews;
-              // `bypass_pull_request_allowances` is the classic equivalent of a
-              // ruleset's bypass actors: users, teams and APPS that may merge
-              // without the required approvals. Someone will eventually want the
-              // bot to self-merge and add it here, and a gate that only counted
-              // `required_approving_review_count` would keep reporting the human
-              // approval it no longer guarantees.
-              const allow = (r && r.bypass_pull_request_allowances) || {};
-              const bypassers =
-                (allow.users || []).length + (allow.teams || []).length + (allow.apps || []).length;
-              if (r && (r.required_approving_review_count || 0) >= 1 && bypassers === 0) ok = true;
-              else if (r && bypassers > 0) {
-                bypassable = bypassers;
-                core.warning(
-                  `main requires a review but ${bypassers} actor(s) may bypass it; not counting it as protection.`,
-                );
-              }
-            } catch (e) {
-              // 404 only means "no classic protection" — a ruleset may still
-              // protect main, and getBranchProtection 404s in that case. Any
-              // other status is a question we could not ask, which is fatal:
-              // a 403 here means the App lacks Administration:read, and
-              // treating that as "unprotected, carry on" would invert the gate.
-              if (e.status && e.status !== 404) {
-                core.setFailed(
-                  `Cannot read branch protection (HTTP ${e.status}). The App token needs ` +
-                  `Administration: read — see docs/design/agent-command-verbs.md, Phase I. Refusing to run.`,
-                );
-                return;
-              }
-            }
-            // 2) Rulesets — the modern mechanism getBranchProtection cannot see.
-            //
-            // A RULE THAT EXISTS IS NOT A RULE THAT APPLIES. A ruleset carries
-            // `bypass_actors`, and an App listed there is exempt from it — so
-            // "a pull_request rule requiring 1 approval exists" can be true on a
-            // repository where this very App may push to main unreviewed, which
-            // is the one configuration this gate is here to refuse. The rule's
-            // own payload does not carry the bypass list, so each candidate
-            // ruleset is fetched and any ruleset with bypass actors is not
-            // counted. Coarse on purpose: it does not try to decide WHICH actor
-            // was exempted, because getting that wrong fails open.
-            let unreadable = 0;
-            let listFailed = false;
-            if (!ok) {
-              try {
-                const { data: rules } = await github.request(
-                  'GET /repos/{owner}/{repo}/rules/branches/{branch}',
-                  { owner, repo, branch: 'main' },
-                );
-                const candidates = rules.filter((r) => r.type === 'pull_request' &&
-                  ((r.parameters && r.parameters.required_approving_review_count) || 0) >= 1);
-                for (const r of candidates) {
-                  const id = r.ruleset_id;
-                  if (!id) continue; // cannot verify the bypass list → do not count it
-                  let rs;
-                  try {
-                    ({ data: rs } = await github.request(
-                      'GET /repos/{owner}/{repo}/rulesets/{id}', { owner, repo, id },
-                    ));
-                  } catch (e) {
-                    // PER RULESET, not per loop. An ORG-level ruleset appears in
-                    // `rules/branches/main` but is not served by the
-                    // repository-scoped rulesets endpoint, so one unreadable
-                    // candidate used to abort every remaining one and end in a
-                    // refusal claiming the repository was unprotected.
-                    unreadable += 1;
-                    core.warning(`could not read ruleset ${id}: ${e.message}`);
-                    continue;
-                  }
-                  // ABSENCE IS NOT EMPTINESS, and reading it as emptiness
-                  // inverted this check. GitHub OMITS `bypass_actors` from the
-                  // payload when the caller is not allowed to see it — which is
-                  // the normal case for a repository-scoped token reading an
-                  // organization-sourced ruleset. `(rs.bypass_actors || [])`
-                  // then yields `[]`, and the ruleset most likely to exempt this
-                  // App is the one most likely to report itself unexempted.
-                  //
-                  // Two conditions, both required. The list must be PRESENT and
-                  // empty, and `current_user_can_bypass` — which is always in the
-                  // payload — must say this token can never bypass. Either alone
-                  // is satisfiable by a payload that simply told us less.
-                  const listVisible = Array.isArray(rs.bypass_actors);
-                  const noneListed = listVisible && rs.bypass_actors.length === 0;
-                  const cannotBypass = rs.current_user_can_bypass === 'never';
-                  const active = rs.enforcement === 'active';
-                  if (noneListed && cannotBypass && active) { ok = true; break; }
-                  core.warning(
-                    `ruleset ${id} (${rs.name}) requires a review but is not counted as protection: ` +
-                    `bypass list ${listVisible ? `has ${rs.bypass_actors.length} actor(s)` : 'not visible to this token'}, ` +
-                    `current_user_can_bypass=${rs.current_user_can_bypass}, enforcement=${rs.enforcement}.`,
-                  );
-                }
-              } catch (e) {
-                // Same rule one level up: not being able to ASK is not an
-                // answer. Tracked separately from `unreadable`, because this
-                // failure enumerated NOTHING — reporting it as "1 ruleset this
-                // token cannot read" invents both the count and the mechanism.
-                listFailed = true;
-                core.warning(`could not list branch rules: ${e.message}`);
-              }
-            }
-            // `enforce_admins` is deliberately NOT required on the classic path.
-            // It exempts humans holding admin permission, which is the normal
-            // configuration here and in most repositories; this App is not an
-            // admin, so that flag is not a bypass available to the agent. The
-            // bypass that IS available to it is a ruleset naming it, which is
-            // what the loop above refuses.
-            if (!ok) {
-              // The refusal says what was OBSERVED, not a conclusion the checks
-              // did not reach. "Unprotected" and "protected by something this
-              // token cannot read" are different repository states with the same
-              // safe answer, and telling a maintainer the first when it is the
-              // second sends them to fix something that is not broken.
-              const reason = listFailed
-                ? 'the branch rules for main could not be listed at all, so whether it is protected is ' +
-                  'unknown. Unverified protection is treated as none'
-                : unreadable > 0
-                  ? `main may be protected by ${unreadable} ruleset(s) this token cannot read — an ` +
-                    'organization-level ruleset is not served by the repository rulesets endpoint. ' +
-                    'Unverified protection is treated as none'
-                  : bypassable > 0
-                    ? `main requires a review but ${bypassable} actor(s) may bypass it, so it does not ` +
-                      'guarantee a human approved this'
-                    : 'main is not protected by a required human review that this App cannot bypass ' +
-                      '(neither classic protection nor a ruleset provides one)';
-              core.setFailed(
-                `${reason}. This verb opens PRs a bot wrote; refusing to run.` +
-                (reason.includes('may bypass it') ? '' : also),
-              );
-            }
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node ./scripts/agent/check-protection.mjs main
 
-      # RETRY IS THE DOCUMENTED PATH, AND IT COLLIDES. The concurrency group
-      # serializes two comments arriving together; it does nothing about a retry
-      # after the first run ended — which the reporter below actively invites.
-      # That second run branches from `main`, derives the same
-      # `agent/<issue>-<slug>`, and its `git push -u origin` is rejected
-      # non-fast-forward, at which point an agent holding an unrestricted `Bash`
-      # is one plausible idea away from forcing over work that is still open for
-      # review.
-      #
-      # The tail step already knows this query. Asking it BEFORE the agent runs
-      # costs one API call and turns a branch-clobbering race into a sentence.
       - name: Refuse if this issue already has an agent PR
         if: steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
         uses: actions/github-script@v7
@@ -449,21 +337,6 @@ jobs:
           fetch-depth: 0 # full history for rebase and a full-diff self-review
           token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
 
-      - uses: actions/setup-node@v4
-        if: steps.app.outputs.configured == 'true'
-        with:
-          node-version: 22.x
-
-      # STAGE THE TRUSTED COPY NOW, WHILE THE TREE IS STILL MAIN. Every
-      # observability step after the agent runs from here, not from the
-      # workspace — the same rule agent-iterate-ci.yml and the panel's fix job
-      # apply, reached from the other direction: they stage main because the
-      # workspace is a branch, this stages main because the workspace is about
-      # to become one.
-      #
-      # `npm ci` runs against the staged copy too, so those steps have their
-      # dependencies from main's lockfile rather than whatever the agent left in
-      # the workspace.
       - name: Stage the trusted agent scripts
         id: stage
         if: steps.app.outputs.configured == 'true'
