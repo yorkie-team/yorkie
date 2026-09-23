@@ -61,6 +61,17 @@ var (
 	ErrUnsupportedResource = errors.InvalidArgument(
 		"unsupported resource descriptor",
 	).WithCode("ErrUnsupportedResource")
+
+	// ErrSubscriptionsClosed is returned when every subscription behind a
+	// Watch stream has closed itself. That only happens through the
+	// self-prune fallback in pubsub.Subscription.Publish, which is a
+	// server-side decision that the client neither asked for nor can detect:
+	// ending the stream cleanly would read as a completed watch and no SDK
+	// would reconnect, leaving the client attached but permanently desynced.
+	// A retriable status sends it back through its reconnect path instead.
+	ErrSubscriptionsClosed = errors.Unavailable(
+		"watch subscriptions closed",
+	).WithCode("ErrSubscriptionsClosed")
 )
 
 type yorkieServer struct {
@@ -796,7 +807,14 @@ func (s *yorkieServer) subscribeChannel(
 }
 
 // streamMergedEvents fans in events from all subscriptions and streams them
-// through send.
+// through send. It ends with ErrSubscriptionsClosed once every subscription
+// has closed itself, so the client reconnects instead of treating a stream it
+// never ended as complete.
+//
+// A subscription that closes while others are still live leaves the stream
+// open and that one resource silently undelivered. Streams carry a single
+// resource today, so the two cases coincide; multiplexing several resources
+// onto one stream will have to report the partial loss on its own.
 func (s *yorkieServer) streamMergedEvents(
 	ctx context.Context,
 	send func(*api.WatchResponse) error,
@@ -871,7 +889,7 @@ func (s *yorkieServer) streamMergedEvents(
 			return context.Canceled
 		case te, ok := <-merged:
 			if !ok {
-				return nil
+				return ErrSubscriptionsClosed
 			}
 
 			resp, err := s.convertTaggedEvent(te)
