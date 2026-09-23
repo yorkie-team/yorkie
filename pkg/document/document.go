@@ -267,6 +267,12 @@ func (d *Document) Update(
 		c := ctx.ToChange()
 		result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
 		if err != nil {
+			// NOTE(hackerwins): The updater already ran to completion on the
+			// clone, so the clone holds a change the document does not. Drop it
+			// here too, or every later update continues from a clone that
+			// diverged from the document for the rest of the session.
+			d.cloneRoot = nil
+			d.clonePresences = nil
 			return err
 		}
 
@@ -381,7 +387,7 @@ func (d *Document) ClearHistory() error {
 // against the document, pushing the resulting reverse operations onto the
 // opposite stack. It is the port of the JS SDK's executeUndoRedo
 // (document.ts:2049-2165).
-func (d *Document) executeUndoRedo(isUndo bool) error {
+func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 	if d.updating.Load() {
 		return ErrRefusedDuringUpdate
 	}
@@ -402,6 +408,21 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 	if err := d.ensureClone(); err != nil {
 		return err
 	}
+
+	// NOTE(hackerwins): Everything below runs against the clone first, and a
+	// change that fails partway through is not a no-op on it: Tree.Edit applies
+	// the `from` split before it resolves `to`, so an error on the second
+	// position -- or on the document execute that follows -- leaves the clone
+	// holding work the document never took. Drop it like Update and
+	// applyChanges do, so the next update rebuilds the clone from the document
+	// instead of continuing from a state that diverged for the rest of the
+	// session.
+	defer func() {
+		if err != nil {
+			d.cloneRoot = nil
+			d.clonePresences = nil
+		}
+	}()
 
 	actorID := d.ActorID().String()
 	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)

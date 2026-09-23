@@ -551,3 +551,56 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 	assertLengthCacheSound(t, r1, "replica 1")
 	assertLengthCacheSound(t, r2, "replica 2")
 }
+
+// TestTreeRestoreSpanBoundInsideSurrogatePair covers a span bound that lands
+// between the two UTF-16 code units of a surrogate pair. Such a bound cannot
+// come from a Go replica -- SplitText moves the cut to the end of the pair --
+// but it arrives over the wire from a replica whose strings do hold lone
+// surrogates, so isolateTextRange must locate the piece the split actually
+// produced instead of probing under the requested offset: findFloorNode returns
+// the greatest id <= the probe, so a miss silently reads as the LEFT piece and
+// the caller re-tombstones (or revives) the text BEFORE the range.
+func TestTreeRestoreSpanBoundInsideSurrogatePair(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	_, _, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+
+	// "a😀b": UTF-16 code units a(0) D83D(1) DE00(2) b(3). Offset 2 is inside
+	// the pair.
+	_, _, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "a😀b"),
+	}, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>a😀b</p></r>", tree.ToXML())
+
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+	// A crafted span addressing [2,4): its start sits inside the pair. Value is
+	// what a Go string can carry for that range, and its UTF-16 length matches
+	// Length, which is all the converter can check.
+	span := &crdt.TreeRestoreSpan{
+		ID:       crdt.NewTreeNodeID(text.ID().CreatedAt, 2),
+		NodeType: text.Type(),
+		IsText:   true,
+		Length:   2,
+		Value:    "�b",
+		ParentID: p.ID(),
+	}
+
+	// Retombstone must remove only "b" -- the piece the split produced -- not
+	// the "a😀" piece that precedes the requested offset.
+	_, _, rErr := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx))
+	assert.NoError(t, rErr)
+	assert.Equal(t, "<r><p>a😀</p></r>", tree.ToXML(),
+		"only the text at or after the pair boundary is re-tombstoned")
+
+	// Restoring the same span is its mirror image: the half-pair window names no
+	// character boundary and is skipped, and "b" comes back.
+	_, _, _, _, err = tree.Restore([]*crdt.TreeRestoreSpan{span})
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>a😀b</p></r>", tree.ToXML())
+	assertLengthCacheSound(t, tree, "surrogate-pair span")
+}

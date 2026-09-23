@@ -1135,7 +1135,16 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 		// recreate path slices Value by [0, Length), so a mismatched (or
 		// negative) Length from crafted input would slice out of bounds.
 		// Reject it here (parity with fromRestoreSpans' Content-length check).
-		if pbSpan.Length < 0 {
+		//
+		// The offset is checked for the same reason: it is the base every
+		// window inside the span is measured from
+		// (crdt.Tree.recreateFromSpan), so a negative one shifts the whole span
+		// below zero and makes the piece walk address offsets no insertion can
+		// hold. Whether a bound lands on a UTF-16 character boundary cannot be
+		// decided here -- the windows inside a span come from the surviving
+		// pieces in the tree, not from the wire -- so that stays enforced where
+		// the slice happens, in recreateFromSpan.
+		if pbSpan.Length < 0 || id.Offset < 0 {
 			return nil, ErrInvalidRestoreSpan
 		}
 		if pbSpan.IsText && int(pbSpan.Length) != len(utf16.Encode([]rune(pbSpan.Value))) {

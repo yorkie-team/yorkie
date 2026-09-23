@@ -54,3 +54,21 @@
   applies the `from` split before resolving `to`, so a mid-change failure is
   not a no-op. The clone is now dropped on any error, so the next update
   rebuilds it from the document.
+- **Moving a split offset broke a caller that looked the split product up by
+  the requested offset.** `isolateTextRange` probed `findFloorNode` under
+  `from` and trusted a non-nil result. `findFloorNode` returns the greatest id
+  `<= ` the probe, so once `SplitText` moved a mid-pair cut forward, the probe
+  missed the right half and returned the LEFT piece — `Restore` and
+  `Retombstone` then acted on the text *before* the range a wire-supplied span
+  addressed. The fix reads the boundary back off the left piece (`Split`
+  mutates the node in place, so its end IS the offset the cut used) and
+  rejects a probe that does not land exactly there. A range that names no
+  character boundary at all now isolates nothing rather than the wrong node.
+- **Every path that executes on the clone first needs the same drop.**
+  `executeUndoRedo` and `Update`'s document execute had the dirty-clone bug
+  `applyChanges` was fixed for. A defer on a named return covers all of
+  `executeUndoRedo`'s exits at once.
+- **Validate at the point of use when the wire cannot decide.** Whether a span
+  bound lands on a character boundary depends on tree state, not on the
+  message, so the converter can only reject a negative offset or a
+  Length/Value mismatch; the slice in `recreateFromSpan` guards its own range.

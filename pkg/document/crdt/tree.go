@@ -40,6 +40,10 @@ var (
 	// the node it resolves to, which means the position cannot be resolved on
 	// this replica.
 	ErrSplitOutOfRange = errors.New("split offset out of range")
+
+	// ErrInvalidRestoreSpan is returned when a restore span addresses a range
+	// its own recorded value does not cover.
+	ErrInvalidRestoreSpan = errors.New("invalid restore span")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -451,7 +455,10 @@ func (n *TreeNode) SplitText(
 	// moves the same offset to the same boundary, so they still converge on
 	// identical segmentation. Landing on the node's end is the existing
 	// "nothing to split off" no-op below.
-	if offset < len(encoded) &&
+	// `offset > 0` is what keeps encoded[offset-1] in range: a split at the
+	// node's start has no preceding code unit to pair with, and it cannot fall
+	// inside a pair anyway.
+	if offset > 0 && offset < len(encoded) &&
 		utf16.DecodeRune(rune(encoded[offset-1]), rune(encoded[offset])) != utf8.RuneError {
 		offset++
 	}
@@ -1141,7 +1148,9 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 				if iErr != nil {
 					return nil, nil, nil, diff, iErr
 				}
-				if target.IsRemoved() {
+				// A nil target is a range that names no character boundary in
+				// the piece (isolateTextRange); leave it as it is.
+				if target != nil && target.IsRemoved() {
 					target.unremove()
 					untombstoned = append(untombstoned, target)
 				}
@@ -1177,20 +1186,50 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 // metadata overhead is added to diff; a removed split buffers a pending GC pair
 // internally (zero here). Requires pieceStart <= from < to <= pieceEnd. Mirrors
 // the JS CRDTTree.isolateTextRange.
+//
+// Returns (nil, nil) when the interval names no character boundary inside piece
+// — a bound recorded by a replica that splits inside a surrogate pair, which
+// SplitText moves to the end of that pair. Callers skip such a range instead of
+// acting on a node that covers text the range does not address.
 func (t *Tree) isolateTextRange(
 	piece *TreeNode, from, to int, diff *resource.DataSize,
 ) (*TreeNode, error) {
 	node := piece
 	if from > node.id.Offset {
+		prevEnd := node.id.Offset + node.Length()
 		d, err := node.Split(t, from-node.id.Offset, nil, nil)
 		if err != nil {
 			return nil, err
 		}
 		diff.Add(d)
-		// Split's right half is registered under offset `from`; pick it up.
-		node = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: from})
-		if node == nil {
+
+		// Split mutates node in place into the LEFT piece, so the left piece's
+		// end is the offset the cut actually landed on. That is `from` for
+		// every bound a Go replica records, but SplitText moves a cut that
+		// falls between the two code units of a surrogate pair forward to the
+		// end of the pair, and a span recorded by a replica that does split
+		// mid-pair can carry such a bound. Probing under the requested `from`
+		// would then find no node -- findFloorNode returns the greatest id
+		// <= the probe, so the miss reads as success and hands back the LEFT
+		// piece, and the caller revives or re-tombstones the text before the
+		// range instead of the range itself. Probe under the boundary the
+		// split reports instead, which is exact in both cases.
+		cut := node.id.Offset + node.Length()
+		if cut >= prevEnd {
+			// Nothing was split off: the cut was moved onto the piece's own end,
+			// so `from` sat inside a surrogate pair closing the piece and the
+			// range names no character boundary here. Skip it rather than hand
+			// back the left piece, which covers text the range does not address.
+			return nil, nil
+		}
+		node = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: cut})
+		if node == nil || node.id.Offset != cut {
 			return nil, ErrNodeNotFound
+		}
+		if to <= node.id.Offset {
+			// The forward-moved cut already ran past `to`, so both bounds sat
+			// inside one surrogate pair. Same as above: nothing to isolate.
+			return nil, nil
 		}
 	}
 	if to < node.id.Offset+node.Length() {
@@ -1243,6 +1282,11 @@ func (t *Tree) Retombstone(
 				if iErr != nil {
 					return nil, resource.DataSize{}, iErr
 				}
+				// A nil target is a range that names no character boundary in
+				// the piece (isolateTextRange); leave it live.
+				if target == nil {
+					continue
+				}
 			}
 			if target.remove(executedAt) {
 				pairs = append(pairs, GCPair{Parent: t, Child: target})
@@ -1290,6 +1334,42 @@ func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*
 // id-order fallback (first slot whose child id > node id — a pure function of
 // ids, identical on every replica). Parent genuinely absent → skip (B1).
 // Mirrors the JS CRDTTree.recreateFromSpan.
+// sliceSpanValue returns the UTF-16 sub-range [offset, offset+length) of a text
+// span's recorded value, as the Go string the recreated piece carries.
+func sliceSpanValue(span *TreeRestoreSpan, offset, length int) (string, error) {
+	encoded := utf16.Encode([]rune(span.Value))
+	relStart := offset - span.ID.Offset
+
+	// The window is derived from the span's own bounds, which arrive from the
+	// wire (api/converter/from_pb.go rejects a text span whose Length disagrees
+	// with Value, or whose offset is negative). Re-check the slice here anyway:
+	// this is the only place the two are multiplied together, an out-of-range
+	// pair panics rather than fails the change, and a span replayed from
+	// storage or built in-process never passes through the converter at all.
+	if relStart < 0 || length < 0 || relStart+length > len(encoded) {
+		return "", fmt.Errorf(
+			"recreate %s at [%d,%d) of %d: %w",
+			span.ID.toIDString(), relStart, relStart+length, len(encoded), ErrInvalidRestoreSpan,
+		)
+	}
+
+	// The window is the gap between two surviving pieces, so its bounds are
+	// piece boundaries, and piece boundaries are where SplitText cut. Since
+	// SplitText moves a mid-surrogate-pair offset to the end of the pair, no Go
+	// replica can produce a bound that lands between the two code units of a
+	// pair, and the decode below cannot turn one into U+FFFD.
+	//
+	// A bound recorded by a replica that does split mid-pair is left to decode
+	// as U+FFFD rather than repaired: the recreated piece has to cover exactly
+	// [offset, offset+length) in UTF-16 code units or every piece offset in this
+	// insertion shifts, and U+FFFD is the one decoding that keeps that length --
+	// a Go string cannot hold the lone surrogate the bound names. Refusing
+	// instead would make the restore -- already in the stored history --
+	// unreplayable, which is worse than the two replacement characters, and
+	// every Go replica substitutes the same ones, so they still converge.
+	return string(utf16.Decode(encoded[relStart : relStart+length])), nil
+}
+
 func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*TreeNode, error) {
 	if span.ParentID == nil {
 		return nil, nil
@@ -1302,22 +1382,10 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 	var node *TreeNode
 	var recreatedAttrPairs []GCPair
 	if span.IsText {
-		// The window is the gap between two surviving pieces, so its bounds are
-		// piece boundaries, and piece boundaries are where SplitText cut. Since
-		// SplitText moves a mid-surrogate-pair offset to the end of the pair,
-		// no Go replica can produce a bound that lands between the two
-		// code units of a pair, and the decode below cannot turn one into U+FFFD.
-		//
-		// A bound recorded by a replica that does split mid-pair is left to
-		// decode as U+FFFD rather than repaired: the recreated node has to cover
-		// exactly [offset, offset+length) in UTF-16 code units or every piece
-		// offset in this insertion shifts, and U+FFFD is the one decoding that
-		// keeps that length. Refusing instead would make the restore -- already
-		// in the stored history -- unreplayable, which is worse than the two
-		// replacement characters.
-		encoded := utf16.Encode([]rune(span.Value))
-		relStart := offset - span.ID.Offset
-		val := string(utf16.Decode(encoded[relStart : relStart+length]))
+		val, err := sliceSpanValue(span, offset, length)
+		if err != nil {
+			return nil, err
+		}
 		node = NewTreeNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset}, span.NodeType, nil, val)
 	} else {
 		var attrs *RHT
