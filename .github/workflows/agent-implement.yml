@@ -252,14 +252,19 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: node ./scripts/agent/check-protection.mjs main
 
-      - name: Refuse if this issue already has an agent PR
-        if: steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
+      - name: Refuse if this issue already has an agent branch
+        id: existing
+        # EVERY ENTRY POINT, not just the commented one. `workflow_dispatch`
+        # reaches the same checkout, derives the same branch name and runs the
+        # same push — and it is the path with no concurrency group and no thread
+        # to complain on, so it is the one that most needs this.
+        if: steps.app.outputs.configured == 'true'
         uses: actions/github-script@v7
         with:
           retries: 3
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const issue = context.payload.issue.number;
+            const issue = Number(context.payload.issue?.number || '${{ github.event.inputs.issue_number }}');
             const { owner, repo } = context.repo;
             const prs = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: 'open', per_page: 100,
@@ -270,7 +275,32 @@ jobs:
             // this verb on issue #42 — an unauthenticated denial of the verb.
             const mineRepo = (p) => p.head?.repo?.full_name === `${owner}/${repo}`;
             const open = prs.find((p) => mineRepo(p) && (p.head?.ref || '').startsWith(`agent/${issue}-`));
-            if (!open) return;
+            // AN ORPHAN BRANCH COLLIDES JUST AS HARD, and it is the documented
+            // failure: a run that died between `git push -u origin` and opening
+            // the PR leaves the branch with no PR at all, and the reporter tells
+            // the maintainer to retry straight into it. Looking only at open pull
+            // requests misses exactly the case the retry advice creates.
+            if (!open) {
+              const { data: refs } = await github.request(
+                'GET /repos/{owner}/{repo}/git/matching-refs/{ref}',
+                { owner, repo, ref: `heads/agent/${issue}-` },
+              ).catch((e) => {
+                core.warning(`could not list agent branches: ${e.message}`);
+                return { data: [] };
+              });
+              if (refs.length === 0) return;
+              const names = refs.map((r) => r.ref.replace('refs/heads/', ''));
+              core.setOutput('branch', names[0]);
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue,
+                body: `⏸️ \`${names[0]}\` already exists from this issue with no open pull request — `
+                  + 'a previous run pushed it and stopped before opening one. A second run would branch '
+                  + 'from `main` and collide with it. Open a PR from that branch, or delete it, then '
+                  + 'comment `@claude fix` again.',
+              });
+              core.setFailed(`an orphan agent branch (${names[0]}) already exists for issue #${issue}`);
+              return;
+            }
             // Deduped and non-fatal to post: five `@claude fix` comments while
             // the PR is open should not be five identical replies, and a locked
             // issue must not swallow the refusal that explains the red X.

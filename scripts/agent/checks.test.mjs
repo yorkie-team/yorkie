@@ -1737,7 +1737,7 @@ test("agent-implement's two agent-branch lookups keep their approved form", skip
   // Scoped to the step that USES it. A file-wide match passed a mutation that
   // rebound `repo` in the pre-flight step alone, because the help job's identical
   // line kept the assertion green.
-  const preflightAt = wf.indexOf("- name: Refuse if this issue already has an agent PR");
+  const preflightAt = wf.indexOf("- name: Refuse if this issue already has an agent branch");
   assert.ok(preflightAt > 0, "the collision pre-flight step is gone");
   const preflightEnd = wf.indexOf("\n      - name:", preflightAt + 1);
   const preflight = wf.slice(preflightAt, preflightEnd > 0 ? preflightEnd : wf.length);
