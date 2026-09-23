@@ -2857,7 +2857,7 @@ func (t *Tree) emptyRunReachesActor(
 		if createdAt.ActorID() == actorID {
 			return current != node
 		}
-		if len(current.Index.Children(true)) > 0 {
+		if len(current.Children(false)) > 0 {
 			return false
 		}
 		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
