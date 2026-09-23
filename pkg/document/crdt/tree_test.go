@@ -96,6 +96,32 @@ func TestTreeNode(t *testing.T) {
 		assert.Equal(t, "<p>yorkie</p>", crdt.ToXML(split))
 	})
 
+	t.Run("text node with non-BMP characters splits in UTF-16 code units", func(t *testing.T) {
+		// "a🇰🇷b" is 4 runes but 6 UTF-16 code units: the flag is two
+		// regional indicators outside the BMP, each a surrogate pair.
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "a🇰🇷b")))
+		assert.Equal(t, 6, para.Len())
+
+		left, err := para.Child(0)
+		assert.NoError(t, err)
+		right, _, err := left.SplitText(5, 0)
+		assert.NoError(t, err)
+
+		assert.Equal(t, "a🇰🇷", left.Value)
+		assert.Equal(t, "b", right.Value)
+		assert.Equal(t, 5, left.Len())
+		assert.Equal(t, 1, right.Len())
+		assert.Equal(t, 6, para.Len())
+		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 5}, right.ID())
+
+		// Resolving the same anchor again is a no-op at the left piece's end,
+		// which is what a caret edit does for its `to` after its `from`.
+		again, _, err := left.SplitText(5, 0)
+		assert.NoError(t, err)
+		assert.Nil(t, again)
+	})
+
 	t.Run("element node with attributes test", func(t *testing.T) {
 		attrs := crdt.NewRHT()
 		attrs.Set("font-weight", "bold", time.InitialTicket)
