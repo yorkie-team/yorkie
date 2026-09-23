@@ -35,11 +35,19 @@ That is the failure worth encoding, and it generalises past this repo: an
 absent marker is evidence about the marker, not about the process. The
 pitfall table now carries the one-command check.
 
-The same observation settled a question the other way round: because those
-two landed without the suffix, `--subject` must be passed through verbatim.
-GitHub does not append `(#N)` when you supply the subject explicitly — which
-is why the ≤70 budget is for the text before it, and why subjects on `main`
-reach 78 characters.
+The same observation fed a second question, and it is worth being careful
+about which part of the answer is evidence and which is inference. What is
+verified is that GitHub does not append `(#N)` to a subject you supply with
+`--subject`: `a4fdec28` was merged with the suffix in the passed subject and
+the suffix appears exactly once. That is the claim the skill makes, and it is
+the one that matters — include the suffix yourself.
+
+What is *not* verified is why `70ec0666` and `752a9831` carry no suffix. The
+commits-to-PRs endpoint links them to #2022 and #2023 but records nothing
+about the merge command; an edited title in the web UI produces the same
+result. They are consistent with the claim and they show what the mistake
+looks like when it lands, but they do not establish the mechanism on their
+own. CodeRabbit caught this overstatement on the PR.
 
 ## The GREEN run found two errors in the skill
 

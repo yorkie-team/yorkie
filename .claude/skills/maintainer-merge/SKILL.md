@@ -29,7 +29,8 @@ and the `branches/main/protection` endpoint.
 | `required_status_checks.contexts` | `[]` | **Nothing is required.** A red PR will merge. Read `gh pr checks` yourself |
 | `required_status_checks.strict` | true | Up-to-date is still required. A behind branch reports `BEHIND` and the merge refuses — rebase it. `--admin` would bypass this and merge a combination nothing tested |
 | `required_approving_review_count` | 1 | `MERGEABLE` + `BLOCKED` means the review is missing, not a check |
-| `require_last_push_approval` | false | A force-push does not dismiss the approval. Pass `--match-head-commit <newSha>` |
+| `dismiss_stale_reviews` | false | New commits do **not** dismiss an existing approval, so a rebase you push leaves the PR approved for a head nobody read |
+| `require_last_push_approval` | false | The latest push needs no approval from someone other than its pusher — it does not govern dismissal, which is the row above |
 | `enforce_admins` | false | `--admin` is available — see below before using it |
 | `delete_branch_on_merge` | true | Redundant for same-repo PRs. **Does nothing for a fork** — GitHub only auto-deletes in its own repo, so the fork branch survives; tell the contributor |
 
@@ -38,14 +39,23 @@ and the `branches/main/protection` endpoint.
 The PR branch lives on the contributor's fork and **no remote points at it**.
 To push a rebase or a conflict fix there:
 
+The branch name comes from the contributor. `$(id)` is a valid git branch
+name, so keep it in a quoted variable and never paste it into a command line:
+
 ```bash
-gh api repos/yorkie-team/yorkie/pulls/<N> -q '.maintainer_can_modify, .head.repo.full_name, .head.ref'
-git fetch git@github.com:<forkOwner>/yorkie.git <head.ref>
-git checkout -B pr-<N> FETCH_HEAD && git rebase origin/main
-git range-diff origin/main <oldSha> HEAD    # prove you rebased, not rewrote
-git push --force-with-lease=<head.ref>:<oldSha> git@github.com:<forkOwner>/yorkie.git HEAD:<head.ref>
-git ls-remote git@github.com:<forkOwner>/yorkie.git refs/heads/<head.ref>
+eval "$(gh api repos/yorkie-team/yorkie/pulls/<N> \
+  --jq '@sh "REF=\(.head.ref) FORK=\(.head.repo.full_name) OLD=\(.head.sha) MOD=\(.maintainer_can_modify)"')"
+[ "$MOD" = true ] || echo "maintainer_can_modify is false — ask the contributor to rebase"
+
+git fetch "git@github.com:$FORK.git" "refs/heads/$REF:refs/remotes/pr-<N>/head"
+git checkout -B "pr-<N>" "pr-<N>/head" && git rebase origin/main
+git range-diff origin/main "$OLD" HEAD    # prove you rebased, not rewrote
+git push --force-with-lease="$REF:$OLD" "git@github.com:$FORK.git" "HEAD:refs/heads/$REF"
+git ls-remote "git@github.com:$FORK.git" "refs/heads/$REF"
 ```
+
+(`--jq '@sh'` is what makes the values safe to `eval`; without it you are back
+to pasting contributor-controlled text into a shell.)
 
 `maintainer_can_modify` must be true; if it is false, stop and ask the
 contributor to rebase. Always confirm with `ls-remote`: SSH can linger after a
@@ -83,9 +93,10 @@ and `.githooks/commit-msg`. Two things neither tells you:
   conventional subject:
   `{ echo "<subject>"; echo; cat body.txt; } > /tmp/m && .githooks/commit-msg /tmp/m`
 - **`--subject` is used verbatim — GitHub does not append `(#N)`.** Include it
-  yourself. `70ec0666` and `752a9831` landed without it because someone did
-  not. The ≤70 budget is for the part before the suffix; landed subjects on
-  `main` run to 78 with it.
+  yourself. Verified on `a4fdec28`: the suffix appears once and is the one that
+  was passed. `70ec0666` and `752a9831` carry no suffix at all, which is what
+  the mistake looks like when it lands. The ≤70 budget is for the part before
+  the suffix; subjects on `main` run to 78 with it.
 
 ## Pitfalls
 
@@ -104,6 +115,9 @@ and `.githooks/commit-msg`. Two things neither tells you:
 ```bash
 gh pr view <N> --json mergeable,mergeStateStatus,reviewDecision,headRefOid,isCrossRepository,files
 gh pr checks <N>
-gh pr merge <N> --squash --admin \
+gh pr merge <N> --squash \
   --subject "<verb-first, ≤70> (#<N>)" --body-file <path> --match-head-commit <headRefOid>
 ```
+
+Add `--admin` only when you are deliberately merging without the required
+review, per *Merging past the required review* above.
