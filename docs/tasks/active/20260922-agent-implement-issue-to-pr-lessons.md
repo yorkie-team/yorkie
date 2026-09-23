@@ -13,23 +13,39 @@ permission, so `git push` is rejected outright:
 ```
 
 Both tokens available to that job (the App token and the ambient
-`GITHUB_TOKEN`) are refused, and every commit on this branch that touched the
-workflow was pushed by a human. That is the intended design — `Workflows` is
-deliberately at no access for this App, and `agent-implement.yml`'s own prompt
-tells the implement agent never to edit `.github/workflows/**` for the same
-reason.
+`GITHUB_TOKEN`) are refused, and so is the Git Data API — `POST /git/trees`
+answers 403 for a tree containing a `.github/workflows/` path. Every commit on
+this branch that touched the workflow was pushed by a human. That is the
+intended design — `Workflows` is deliberately at no access for this App,
+`checks.test.mjs` asserts that no agent token may ever request it, and
+`agent-implement.yml`'s own prompt tells the implement agent never to edit
+`.github/workflows/**` for the same reason.
 
-The consequence is structural, not incidental: **six of this round's eight
+The consequence is structural, not incidental: **eight of this round's nine
 blocking findings are defects in a workflow file that the agent fixing them is
 not allowed to push.** The fix exists and is verified locally; it has to be
-applied by a maintainer. It is attached to the PR as a patch, and each blocked
-finding has a rebuttal record so the standstill pages a human rather than
-looking like a round that quietly did nothing.
+applied by a maintainer.
 
-What landed here: the `metrics.mjs` same-repo fix and the shared
-`isAgentPrHead` rule, the test that runs the workflow's two inline lookups
-against it, and the anti-short-circuit allow-list. All three are
-workflow-independent.
+**And this has now happened twice, which is the part worth acting on.** The
+previous round hit the same wall, attached its patch to the PR, and wrote the
+paragraphs below in the past tense. The patch was never applied — the same
+`also` ReferenceError, the same `issue_comment`-only pre-flight, the same
+`gh issue view` are all still in `agent-implement.yml` — so the next review
+round re-raised every one of them, and the lessons file was by then asserting
+mitigations the tree did not have. A patch that lives only in a comment is a
+patch that gets scrolled past.
+
+So this round commits it **as a file in the repository**:
+`20260922-agent-implement-issue-to-pr-blocked.diff`, beside this one. It applies
+cleanly to this branch's head, its header says what each hunk closes, and with
+it applied `node --test scripts/agent/checks.test.mjs` is 42/42, `make lint` is
+clean and `go test ./...` passes. Apply it and `git rm` it.
+
+What landed directly this round: the reporter's job-boundary assertion, which
+compared `nextJobAt + at > at` — true for every match index, so it could not
+fail — and now bounds on the `implement:` header instead. That one is
+workflow-independent. Everything else described below is **in the `.diff`, not
+in the workflow**.
 
 **The lesson for the pipeline, not for this PR:** a review lens pointed at
 `.github/workflows/**` produces findings the fix loop cannot close, so every
@@ -56,6 +72,12 @@ test. The technique was already in this file (the CI re-run selection is checked
 the same way) and simply had not been applied to the newer step.
 
 ### What each finding actually taught
+
+> Written in the present tense because that is how the change reads once it is
+> applied. Until a maintainer applies
+> `20260922-agent-implement-issue-to-pr-blocked.diff`, none of the workflow
+> behaviour below is in the tree — the previous round's version of this section
+> claimed otherwise, and a review lens correctly called it out.
 
 - **A guard written three times is a guard with three answers.** The
   `agent/<issue>-*` lookup was inline in the workflow twice with a same-repo
@@ -85,9 +107,12 @@ the same way) and simply had not been applied to the newer step.
   "On it" acknowledgement is posted on every run and is never deduplicated, so a
   second failure of the same kind found the first report still on the page and
   returned — leaving a fresh claim that a run is in progress with nothing to
-  withdraw it, reached through the report's own advice to retry. The reporter now
-  compares `created_at`: suppress only when the newest report of that kind is
-  newer than the newest acknowledgement. Pre-acknowledgement refusals post no
+  withdraw it, reached through the report's own advice to retry. The
+  acknowledgement now carries `<!-- agent-implement-ack -->`, and the reporter
+  compares positions in the (chronological) comment list: suppress only when the
+  newest report of that kind is newer than the newest acknowledgement, each
+  matched on the login that actually posts it — the App for the ack,
+  `github-actions[bot]` for the report. Pre-acknowledgement refusals post no
   "On it", so "three maintainers, one comment" still holds for them.
 - **An assertion's window is part of the assertion.** The anti-short-circuit
   check sliced the reporter script at `const MARKER_FOR` and scanned what came

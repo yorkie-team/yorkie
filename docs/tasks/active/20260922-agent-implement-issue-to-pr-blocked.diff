@@ -1,0 +1,601 @@
+# BLOCKED — apply by hand, with a credential that can write workflows.
+#
+# Round 6 of the review panel raised nine blocking findings. Eight of them are
+# defects in .github/workflows/agent-implement.yml, which the panel's fix job is
+# structurally forbidden to push: its App token is minted without `workflows`
+# (checks.test.mjs asserts no agent token may ever carry it), so `git push` is
+# rejected by the pre-receive hook and the Git Data tree API answers 403.
+#
+#   ! [remote rejected] refusing to allow a GitHub App to create or update
+#     workflow `.github/workflows/agent-implement.yml` without `workflows` permission
+#
+# The fix below is written and verified locally: `node --test
+# scripts/agent/checks.test.mjs` is 42/42 with it applied, `make lint` is clean,
+# and `go test ./...` passes. Apply it and delete this file:
+#
+#   git apply docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff
+#   git rm docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff
+#
+# What it contains, finding by finding:
+#
+#   * the branch-protection gate's refusal referenced an undeclared `also`, so
+#     three of its four reasons threw a ReferenceError instead of a diagnosis —
+#     declared, and the gate is now lifted out of the YAML and EXECUTED against
+#     ten repository states (it had no test of any kind);
+#   * the gate now requires `require_last_push_approval` on both the classic and
+#     ruleset paths, so a human approval does not survive the agent's next push;
+#   * the collision pre-flight no longer skips the `workflow_dispatch` entry
+#     point, which reaches the same push;
+#   * the issue title and body come from the immutable event-payload snapshot
+#     instead of a `gh issue view` minutes after the maintainer typed the verb;
+#   * the no-PR reporter's per-cause dedupe is ack-aware, so a second failure of
+#     the same kind answers the fresh "On it" rather than returning silently;
+#   * the ambient GITHUB_TOKEN drops from contents/pull-requests write to read,
+#     and the header and design doc stop claiming the gate is unforgeable by an
+#     App token that holds the approve scope itself.
+#
+diff --git a/.github/workflows/agent-implement.yml b/.github/workflows/agent-implement.yml
+index 60397d77..08980e67 100644
+--- a/.github/workflows/agent-implement.yml
++++ b/.github/workflows/agent-implement.yml
+@@ -6,11 +6,24 @@
+ # This is the first verb in which a bot pushes commits and opens a pull request.
+ # ONE gate makes that acceptable, and it is a property of the REPOSITORY rather
+ # than of the agent: before anything is pushed, `main` is verified to require at
+-# least one human approving review that this App cannot bypass. It fails closed
+-# on every error, a permissions error included — a repository where the question
+-# cannot be answered is one where this workflow does not run. That check is the
+-# only reason the App carries `Administration: read`, and why that grant is
+-# read-only: the App can see protection exists and cannot change it.
++# least one approving review that this App cannot bypass, and to require that
++# approval of the MOST RECENT push — so an approval does not survive the next
++# commit the agent pushes to the same branch, and this App cannot supply the
++# approval for a branch it pushed last. It fails closed on every error, a
++# permissions error included — a repository where the question cannot be
++# answered is one where this workflow does not run. That check is the only reason
++# the App carries `Administration: read`, and why that grant is read-only: the
++# App can see protection exists and cannot change it.
++#
++# WHAT THE GATE DOES NOT GIVE YOU, stated here because the previous wording read
++# as though it did. The App token this job mints carries `pull-requests: write`,
++# because opening the PR needs it — and that same scope is what submitting an
++# APPROVING review needs. So the gate does not make the required approval
++# unforgeable by this App in general: for a pull request the App did NOT push to,
++# it could approve and (with `contents: write`) merge. `require_last_push_approval`
++# closes the case that matters for this verb — the agent approving the branch it
++# just wrote — and the rest is residual risk on the App credential itself, not a
++# property the gate establishes. See docs/design/agent-command-verbs.md, Phase I.
+ #
+ # The PR opening as a DRAFT is NOT a second gate. It is a line in the prompt, so
+ # it is a convention the agent could get wrong, and nothing here verifies it —
+@@ -93,9 +106,15 @@ jobs:
+       cancel-in-progress: false
+     environment: agent
+     permissions:
+-      contents: write # create the branch and push commits
+-      pull-requests: write # open the draft PR
+-      issues: write # answer on the issue
++      # THE AMBIENT TOKEN, NOT THE APP TOKEN, and it needs far less than the App
++      # does. Every git operation here — the checkout, the agent's commits, the
++      # push — runs on the App token; GITHUB_TOKEN is used by exactly one step,
++      # the tail reporter, which lists open PRs and comments on an issue. It
++      # carried `contents: write` and `pull-requests: write` for no consumer,
++      # which is a second credential able to push to a branch and merge a PR.
++      contents: read # checkout only; the branch and its commits go via the App
++      pull-requests: read # the reporter lists open PRs to see if one was opened
++      issues: write # the reporter answers on the issue
+     steps:
+       # The association check above is a pre-filter on a field the payload
+       # carries; this asks the API. Both, because `author_association` is
+@@ -190,6 +209,14 @@ jobs:
+             const owner = context.repo.owner, repo = context.repo.repo;
+             let ok = false;
+             let bypassable = 0;
++            // A REQUIRED APPROVAL THAT SURVIVES THE NEXT PUSH IS NOT A GATE ON
++            // WHAT GETS MERGED. Without `require_last_push_approval`, a human
++            // approval on an agent PR stays valid across every later commit the
++            // App pushes to the same branch — and the PR-side `@claude fix` and
++            // `@claude loop` verbs do push to agent branches. It also means the
++            // App can never approve a branch it pushed last, which is the only
++            // in-repository limit on this App approving its own work.
++            let staleApproval = false;
+             // 1) Classic branch protection, which is what this repository uses.
+             try {
+               const { data } = await github.rest.repos.getBranchProtection({ owner, repo, branch: 'main' });
+@@ -203,12 +230,20 @@ jobs:
+               const allow = (r && r.bypass_pull_request_allowances) || {};
+               const bypassers =
+                 (allow.users || []).length + (allow.teams || []).length + (allow.apps || []).length;
+-              if (r && (r.required_approving_review_count || 0) >= 1 && bypassers === 0) ok = true;
++              const reviewed = !!r && (r.required_approving_review_count || 0) >= 1;
++              const lastPush = !!r && r.require_last_push_approval === true;
++              if (reviewed && bypassers === 0 && lastPush) ok = true;
+               else if (r && bypassers > 0) {
+                 bypassable = bypassers;
+                 core.warning(
+                   `main requires a review but ${bypassers} actor(s) may bypass it; not counting it as protection.`,
+                 );
++              } else if (reviewed && !lastPush) {
++                staleApproval = true;
++                core.warning(
++                  'main requires a review but not require_last_push_approval, so an approval survives the ' +
++                  'next push; not counting it as protection.',
++                );
+               }
+             } catch (e) {
+               // 404 only means "no classic protection" — a ruleset may still
+@@ -243,8 +278,13 @@ jobs:
+                   'GET /repos/{owner}/{repo}/rules/branches/{branch}',
+                   { owner, repo, branch: 'main' },
+                 );
+-                const candidates = rules.filter((r) => r.type === 'pull_request' &&
++                const reviewRules = rules.filter((r) => r.type === 'pull_request' &&
+                   ((r.parameters && r.parameters.required_approving_review_count) || 0) >= 1);
++                // Same requirement as the classic path, for the same reason: a
++                // rule whose approval survives the agent's next push does not
++                // tell anyone a human approved what is being merged.
++                const candidates = reviewRules.filter((r) => r.parameters.require_last_push_approval === true);
++                if (candidates.length < reviewRules.length) staleApproval = true;
+                 for (const r of candidates) {
+                   const id = r.ruleset_id;
+                   if (!id) continue; // cannot verify the bypass list → do not count it
+@@ -317,11 +357,21 @@ jobs:
+                   : bypassable > 0
+                     ? `main requires a review but ${bypassable} actor(s) may bypass it, so it does not ` +
+                       'guarantee a human approved this'
+-                    : 'main is not protected by a required human review that this App cannot bypass ' +
+-                      '(neither classic protection nor a ruleset provides one)';
++                    : staleApproval
++                      ? 'main requires a review but not "Require approval of the most recent reviewable ' +
++                        'push", so an approval stays valid across every later commit this App pushes'
++                      : 'main is not protected by a required human review that this App cannot bypass ' +
++                        '(neither classic protection nor a ruleset provides one)';
++              // DECLARED, not assumed. This used to be a bare `also` that
++              // existed nowhere, so three of the four reasons above threw a
++              // ReferenceError in place of the diagnosis — the gate still failed
++              // closed, and said nothing about why.
++              const also =
++                ' If main IS protected, this token may simply not be able to see it: the App needs ' +
++                '`Administration: read`. See docs/design/agent-command-verbs.md, Phase I.';
+               core.setFailed(
+                 `${reason}. This verb opens PRs a bot wrote; refusing to run.` +
+-                (reason.includes('may bypass it') ? '' : also),
++                (reason.includes('may bypass it') || staleApproval ? '' : also),
+               );
+             }
+ 
+@@ -336,14 +386,27 @@ jobs:
+       #
+       # The tail step already knows this query. Asking it BEFORE the agent runs
+       # costs one API call and turns a branch-clobbering race into a sentence.
++      #
++      # BOTH ENTRY POINTS, and it was gated on `issue_comment` alone for a
++      # round. `workflow_dispatch` takes an `issue_number` and reaches this same
++      # pushing agent, so the dispatch path skipped the guard and reinstated
++      # exactly the branch-clobbering race described above. The issue number
++      # therefore comes from the environment rather than from
++      # `context.payload.issue`, which a dispatch run does not have.
+       - name: Refuse if this issue already has an agent PR
+-        if: steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
++        if: steps.app.outputs.configured == 'true'
+         uses: actions/github-script@v7
++        env:
++          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+         with:
+           retries: 3
+           github-token: ${{ steps.app-token.outputs.token }}
+           script: |
+-            const issue = context.payload.issue.number;
++            const issue = Number(process.env.ISSUE_NUMBER);
++            if (!Number.isInteger(issue) || issue <= 0) {
++              core.setFailed(`Invalid issue number: '${process.env.ISSUE_NUMBER}'`);
++              return;
++            }
+             const { owner, repo } = context.repo;
+             const prs = await github.paginate(github.rest.pulls.list, {
+               owner, repo, state: 'open', per_page: 100,
+@@ -398,11 +461,17 @@ jobs:
+           github-token: ${{ steps.app-token.outputs.token }}
+           script: |
+             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
++            // MARKED, and the tail reporter reads this marker. "On it" is the
++            // promise the reporter has to close out, so the reporter needs to
++            // know whether one was made after its last report — otherwise a
++            // second failure of the same kind is deduplicated away and this
++            // comment is the last word on the thread forever.
++            const ACK_MARKER = '<!-- agent-implement-ack -->';
+             try {
+               await github.rest.issues.createComment({
+                 owner: context.repo.owner, repo: context.repo.repo,
+                 issue_number: context.payload.issue.number,
+-                body: `🤖 On it — implementing this issue. [Run](${runUrl}); a draft PR will be linked here when it opens.`,
++                body: `${ACK_MARKER}\n🤖 On it — implementing this issue. [Run](${runUrl}); a draft PR will be linked here when it opens.`,
+               });
+             } catch (e) {
+               // Never fail the run over the acknowledgement: the work is worth
+@@ -457,7 +526,7 @@ jobs:
+         if: steps.app.outputs.configured == 'true'
+         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+ 
+-      # FETCH THE ISSUE HERE, ONCE, INTO A FILE — do not let the agent go get it.
++      # THE ISSUE TEXT COMES FROM THE EVENT PAYLOAD, NOT FROM A FRESH READ.
+       #
+       # The agent holds an App token and an unrestricted `Bash`, and the issue is
+       # written by anyone on GitHub. Telling it to `gh issue view` itself widened
+@@ -466,6 +535,18 @@ jobs:
+       # into a ninety-minute run was in scope, and "a maintainer read the issue
+       # before typing the verb" stopped being a control at all.
+       #
++      # Moving the fetch into this step narrowed that window and did NOT restore
++      # the control, which is what the previous revision claimed. `gh issue view`
++      # here still runs minutes after the maintainer typed the verb — after the
++      # write-access check, the token mint, four protection API calls, the
++      # collision pre-flight, the acknowledgement, a full-history checkout, two
++      # toolchain installs and a `go install` — so the author could edit the body
++      # in between and the agent would act on text no maintainer ever read.
++      # `context.payload.issue` is the snapshot GitHub took when the comment was
++      # created, and it is immutable. It is used whenever it is the issue being
++      # implemented; the API read is now only the `workflow_dispatch` fallback,
++      # where there is no comment and so no authorization moment to preserve.
++      #
+       # Written to a file rather than spliced into the prompt: interpolating
+       # attacker text into the instructions is how a delimiter becomes the attack.
+       # As a file it is unmistakably an input, and the prompt says so in words.
+@@ -474,24 +555,37 @@ jobs:
+       # read the issue to implement it, and `Bash` can reach the network. See
+       # docs/design/agent-command-verbs.md, Phase I, for what is and is not
+       # claimed here.
+-      - name: Fetch the issue text (trusted step, untrusted content)
++      - name: Take the issue text (trusted step, untrusted content)
+         if: steps.app.outputs.configured == 'true'
++        uses: actions/github-script@v7
+         env:
+-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+-        run: |
+-          set -euo pipefail
+-          # Validated HERE, in the first step that uses it, rather than in the
+-          # prompt step further down — a check that runs after the value has
+-          # already been used is documentation, not a check.
+-          case "$ISSUE_NUMBER" in
+-            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE_NUMBER'" >&2; exit 1 ;;
+-          esac
+-          # `// ""` because a null body renders as the literal string "null",
+-          # which the agent would then read as the request.
+-          gh issue view "$ISSUE_NUMBER" --json number,title,body \
+-            --jq '"# Issue #\(.number): \(.title)\n\n\(.body // "")"' > "$RUNNER_TEMP/issue.md"
+-          echo "fetched $(wc -c < "$RUNNER_TEMP/issue.md") bytes"
++        with:
++          retries: 3
++          github-token: ${{ steps.app-token.outputs.token }}
++          script: |
++            const fs = require('fs');
++            // Validated HERE, in the first step that uses it, rather than in the
++            // prompt step further down — a check that runs after the value has
++            // already been used is documentation, not a check.
++            const number = Number(process.env.ISSUE_NUMBER);
++            if (!Number.isInteger(number) || number <= 0) {
++              core.setFailed(`Invalid issue number: '${process.env.ISSUE_NUMBER}'`);
++              return;
++            }
++            let issue = context.payload.issue;
++            let source = 'the event payload';
++            if (!issue || issue.number !== number) {
++              ({ data: issue } = await github.rest.issues.get({
++                owner: context.repo.owner, repo: context.repo.repo, issue_number: number,
++              }));
++              source = 'the API (workflow_dispatch has no payload issue)';
++            }
++            // `?? ''` because a null body renders as the literal string "null",
++            // which the agent would then read as the request.
++            const text = `# Issue #${issue.number}: ${issue.title ?? ''}\n\n${issue.body ?? ''}\n`;
++            fs.writeFileSync(`${process.env.RUNNER_TEMP}/issue.md`, text);
++            core.info(`took ${Buffer.byteLength(text)} bytes from ${source}`);
+ 
+       - name: Build the orchestration prompt
+         if: steps.app.outputs.configured == 'true'
+@@ -828,15 +922,33 @@ jobs:
+             // The dedupe lookup happens AFTER the branch is chosen, because the
+             // marker it looks for depends on it.
+             const MARKER = MARKER_FOR(key);
++            // AND SCOPED TO THIS "On it", because per-cause alone reinstated the
++            // silence from the other side. Three of the messages above tell the
++            // maintainer to retry; the retry posts a fresh "On it"; the same
++            // failure recurs — and a bare per-cause dedupe found its own marker
++            // already on the page and returned without a word, leaving an
++            // unanswered acknowledgement, which is the exact state this step
++            // exists to prevent. A prior report only suppresses this one when no
++            // acknowledgement has been posted since it. Still not the run id: a
++            // re-run, or three maintainers hitting one refusal, get one comment.
++            const ACK_MARKER = '<!-- agent-implement-ack -->';
++            // The ack posts with the APP token, so that is the login to trust
++            // for it — a different list from AUTHORS above on purpose.
++            const ACK_AUTHORS = ['yorkie-team-agent[bot]'];
++            let reported = false;
+             try {
+               const prior = await github.paginate(github.rest.issues.listComments, {
+                 owner: context.repo.owner, repo: context.repo.repo, issue_number: issue, per_page: 100,
+               });
+-              if (prior.some((c) => String(c.body ?? '').includes(MARKER)
+-                && AUTHORS.includes((c.user || {}).login))) return;
++              const mine = (marker, authors) => (c) =>
++                String(c.body ?? '').includes(marker) && authors.includes((c.user || {}).login);
++              const lastAck = prior.findLastIndex(mine(ACK_MARKER, ACK_AUTHORS));
++              const lastReport = prior.findLastIndex(mine(MARKER, AUTHORS));
++              reported = lastReport >= 0 && lastReport > lastAck;
+             } catch (e) {
+               core.warning(`could not check for an existing report: ${e.message}`);
+             }
++            if (reported) return; // this cause was already answered for this "On it"
+             await github.rest.issues.createComment({
+               owner: context.repo.owner, repo: context.repo.repo, issue_number: issue,
+               body: `${MARKER}\n${why}`,
+diff --git a/docs/design/agent-command-verbs.md b/docs/design/agent-command-verbs.md
+index f332b623..f4893199 100644
+--- a/docs/design/agent-command-verbs.md
++++ b/docs/design/agent-command-verbs.md
+@@ -251,22 +251,42 @@ on the strength of the gate below rather than waved away.
+   App cannot bypass: a ruleset whose bypass list names actors, or is not visible
+   to this token, or that reports `current_user_can_bypass` as anything but
+   `never`, is not counted; nor is classic protection carrying a
+-  `bypass_pull_request_allowances` entry. Unverified protection is treated as
+-  none. It is a property of the **repository**, which is why it is checked at run
+-  time rather than asserted here.
++  `bypass_pull_request_allowances` entry. Protection that does not also require
++  approval of the most recent push is not counted either — without
++  `require_last_push_approval` an approval stays valid across every later commit
++  the agent pushes to the same branch, and the PR-side `fix` and `loop` verbs do
++  push to agent branches. Unverified protection is treated as none. It is a
++  property of the **repository**, which is why it is checked at run time rather
++  than asserted here.
+ 
+   The PR opening as a **draft** is not a second gate, though two earlier drafts
+   of this document said it was. It is a line in the prompt — a convention the
+   agent could get wrong, verified by nothing.
+ 
++  **The gate is not unforgeable by this App, and saying otherwise was the error
++  in two earlier drafts.** Opening the PR needs `pull-requests: write`, and that
++  is the same scope that submitting an **approving review** needs; with
++  `contents: write` beside it, the holder can also merge. So for a pull request
++  this App did not push to, the required approval is satisfiable by the App
++  itself. `require_last_push_approval` closes the case this verb creates — the
++  agent approving the branch it just wrote — and the remainder is residual risk
++  on the App credential, not something the gate rules out. The honest claim is:
++  *a human approving review is required, and the agent cannot supply it for its
++  own branch.* The ambient `GITHUB_TOKEN` in that job is now `contents: read` /
++  `pull-requests: read`, so it is not a second credential with that reach.
++
+   **What it does not cover.** The agent runs with an unrestricted `Bash` beside a
+   live installation token and a model credential, on text an arbitrary GitHub
+-  user wrote. The gate constrains merging; it does not constrain network egress. A
+-  successful prompt injection does not get code into `main`, and it does not need
+-  to — it already has the token. Two things narrow it: the issue body is fetched
+-  in a trusted step into a file the prompt names as untrusted input, and the
+-  agent is told not to read the issue's comments, which removes the case where a
+-  comment added mid-run — after a maintainer decided to dispatch — is in scope.
++  user wrote. The gate constrains merging; it does not constrain network egress.
++  A successful prompt injection does not need to get code into `main` — it
++  already has the token. Two things narrow it: the issue title and body are taken
++  from the **event payload snapshot** in a trusted step into a file the prompt
++  names as untrusted input, so the text the agent acts on is the text as it stood
++  when the maintainer's comment was created and cannot be swapped afterwards
++  (`workflow_dispatch`, which has no comment and so no authorization moment,
++  falls back to an API read); and the agent is told not to read the issue's
++  comments, which removes the case where a comment added mid-run — after a
++  maintainer decided to dispatch — is in scope.
+   Neither is a control on egress, and the residual risk is accepted knowingly:
+   the token is installation-scoped to this repository, expires in an hour, and
+   carries no `workflows` permission. The control that would actually close the
+diff --git a/scripts/agent/checks.test.mjs b/scripts/agent/checks.test.mjs
+index b5eb6c06..9968d84a 100644
+--- a/scripts/agent/checks.test.mjs
++++ b/scripts/agent/checks.test.mjs
+@@ -1606,6 +1606,9 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
+   const SANCTIONED_RETURNS = [
+     // The success path: the kickoff opened a PR and already said so.
+     "            if (lookupOk && pr) return; // the normal flow posted the PR link",
++    // The dedupe, which is now ack-aware: it suppresses only a report already
++    // made for THIS "On it", never one made before the retry that re-acked.
++    '            if (reported) return; // this cause was already answered for this "On it"',
+   ];
+   const returns = script.split("\n").filter((l) => /^\s+if \(.*\breturn;/.test(l));
+   assert.deepEqual(
+@@ -1627,6 +1630,25 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
+     /const MARKER_FOR = \(k\) => `<!-- agent-implement-no-pr:\$\{k\} -->`;/,
+     "the no-PR marker must be keyed per message, or one failure silences a different one",
+   );
++  // ACK-AWARE, and that is the other half of the per-cause key. Keyed on the
++  // cause alone, a second failure of the same kind found its own marker on the
++  // page and returned without a word — on a retry the message itself asked for,
++  // after a fresh "On it" had been posted. So the dedupe compares positions: a
++  // prior report suppresses this one only if no acknowledgement came after it.
++  const ackAt = wf.indexOf("- name: Acknowledge the issue");
++  assert.ok(ackAt > 0 && ackAt < at, "the acknowledgement step is gone");
++  assert.match(
++    wf.slice(ackAt, at),
++    /const ACK_MARKER = '<!-- agent-implement-ack -->';/,
++    "the acknowledgement must carry the marker the reporter keys its dedupe on",
++  );
++  assert.match(step, /const ACK_MARKER = '<!-- agent-implement-ack -->';/, "the reporter must read the ack marker");
++  assert.match(
++    step,
++    /reported = lastReport >= 0 && lastReport > lastAck;/,
++    "the dedupe must be positional against the last ack, not a bare `some(marker)`",
++  );
++
+   const keys = [...step.matchAll(/^\s+key = '([a-z-]+)';$/gm)].map((m) => m[1]);
+   assert.equal(
+     new Set(keys).size,
+@@ -1761,3 +1783,172 @@ test("agent-implement's inline PR lookups agree with metrics.mjs on the same fix
+   assert.match(metrics, /number,headRefName,isCrossRepository/, "resolvePrByIssue must ask gh for the head repo");
+ });
+ 
++test("agent-implement's branch-protection gate, run out of the YAML against fixtures", async () => {
++  // THE ONE GATE THIS WORKFLOW CALLS ITS REASON A BOT MAY PUSH, AND IT HAD NO
++  // TEST. Not a weak test — none. The proof that nothing had ever executed it:
++  // its refusal path referenced a bare `also` that is declared nowhere, so three
++  // of its four reasons threw a ReferenceError in place of the diagnosis. That
++  // is not a defect review catches by reading; it is one a single call catches.
++  //
++  // So the script is lifted out of the YAML and RUN, the same technique the PR
++  // lookups above use. `github`, `core` and `context` are the three names
++  // `actions/github-script` injects, so a `new Function` over them is the real
++  // execution environment minus the network.
++  const wf = WF("agent-implement.yml");
++  const at = wf.indexOf("- name: Require a human approval on main");
++  assert.ok(at > 0, "agent-implement.yml has no branch-protection gate");
++  const end = wf.indexOf("\n      - name:", at + 1);
++  const stepSrc = wf.slice(at, end > 0 ? end : wf.length);
++  const head = stepSrc.indexOf("script: |\n");
++  assert.ok(head > 0, "the gate no longer has an inline script");
++  const src = stepSrc
++    .slice(head + "script: |\n".length)
++    .split("\n")
++    .map((l) => (l.startsWith(" ".repeat(12)) ? l.slice(12) : l))
++    .join("\n");
++  const gate = new Function("github", "core", "context", `return (async () => {\n${src}\n})();`);
++
++  const err = (message, status) => Object.assign(new Error(message), status ? { status } : {});
++  const NOT_FOUND = err("Branch not protected", 404);
++  const run = async ({ classic, classicError, rules, rulesError, rulesets = {}, rulesetErrors = {} }) => {
++    const failures = [], warnings = [];
++    const asked = [];
++    const github = {
++      rest: {
++        repos: {
++          getBranchProtection: async () => {
++            asked.push("classic");
++            if (classicError) throw classicError;
++            return { data: classic };
++          },
++        },
++      },
++      request: async (route, params) => {
++        if (route.includes("/rules/branches/")) {
++          asked.push("rules");
++          if (rulesError) throw rulesError;
++          return { data: rules ?? [] };
++        }
++        asked.push(`ruleset:${params.id}`);
++        if (rulesetErrors[params.id]) throw rulesetErrors[params.id];
++        return { data: rulesets[params.id] };
++      },
++    };
++    const core = {
++      setFailed: (m) => failures.push(String(m)),
++      warning: (m) => warnings.push(String(m)),
++      info: () => {},
++    };
++    await gate(github, core, { repo: { owner: "yorkie-team", repo: "yorkie" } });
++    // EVERY refusal must be a sentence, not a thrown name. This is the `also`
++    // regression, asserted for all of them rather than for the one that had it.
++    for (const f of failures) assert.match(f, /refusing to run\.|Refusing to run\./, `unhelpful refusal: ${f}`);
++    return { failures, warnings, asked };
++  };
++
++  const reviews = (extra) => ({
++    required_pull_request_reviews: { required_approving_review_count: 1, require_last_push_approval: true, ...extra },
++  });
++  const ruleset = (extra) => ({
++    name: "protect main", enforcement: "active", current_user_can_bypass: "never", bypass_actors: [], ...extra,
++  });
++  const prRule = (extra) => ({
++    type: "pull_request", ruleset_id: 7,
++    parameters: { required_approving_review_count: 1, require_last_push_approval: true, ...extra },
++  });
++
++  // 1) The passing shape: classic protection, one approval, nobody may bypass,
++  //    and the approval does not survive the agent's next push.
++  assert.deepEqual((await run({ classic: reviews() })).failures, [], "clean classic protection must be accepted");
++
++  // 2) A bypass allowance is not protection — and this is the ONE reason whose
++  //    message deliberately omits the Administration:read tail, because the
++  //    repository answered clearly and the fix is to drop the allowance.
++  {
++    const { failures } = await run({
++      classic: reviews({ bypass_pull_request_allowances: { users: [], teams: [], apps: [{ slug: "agent" }] } }),
++      rules: [],
++    });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /1 actor\(s\) may bypass it/);
++    assert.equal(/Administration: read/.test(failures[0]), false, "the bypass reason must not send them to the App");
++  }
++
++  // 3) An approval that survives the next push is the agent approving its own
++  //    later commits by omission. Refused, and named as itself.
++  {
++    const { failures } = await run({ classic: reviews({ require_last_push_approval: false }), rules: [] });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /most recent reviewable push/);
++  }
++
++  // 4) A question we could not ask is not an answer: a 403 is fatal and must
++  //    NOT fall through to the ruleset probe.
++  {
++    const { failures, asked } = await run({ classicError: err("Forbidden", 403) });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /HTTP 403/);
++    assert.match(failures[0], /Administration: read/);
++    assert.deepEqual(asked, ["classic"], "a fatal classic error must stop before the rulesets");
++  }
++
++  // 5) 404 means "no classic protection", and a clean ruleset then carries it.
++  assert.deepEqual(
++    (await run({ classicError: NOT_FOUND, rules: [prRule()], rulesets: { 7: ruleset() } })).failures,
++    [],
++    "a visible, empty, never-bypassable, active ruleset must be accepted",
++  );
++
++  // 6) …and every way a ruleset stops carrying it. Each is a DIFFERENT repository
++  //    state with the same safe answer; all four used to be untested.
++  for (const [why, rs] of [
++    ["a named bypass actor", ruleset({ bypass_actors: [{ actor_id: 1 }] })],
++    ["a bypass list this token cannot see", ruleset({ bypass_actors: undefined })],
++    ["this token may bypass", ruleset({ current_user_can_bypass: "always" })],
++    ["the ruleset is only evaluating", ruleset({ enforcement: "evaluate" })],
++  ]) {
++    const { failures, warnings } = await run({
++      classicError: NOT_FOUND, rules: [prRule()], rulesets: { 7: rs },
++    });
++    assert.equal(failures.length, 1, `${why}: must refuse`);
++    assert.match(failures[0], /not protected by a required human review/, why);
++    assert.equal(warnings.length, 1, `${why}: must say which ruleset it discounted`);
++  }
++
++  // 7) A ruleset this token cannot READ is counted per ruleset, and reported as
++  //    "may be protected by something I cannot read" — not as "unprotected".
++  {
++    const { failures } = await run({
++      classicError: NOT_FOUND, rules: [prRule()], rulesetErrors: { 7: err("Not Found", 404) },
++    });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /1 ruleset\(s\) this token cannot read/);
++    assert.match(failures[0], /Administration: read/);
++  }
++
++  // 8) Failing to LIST is a third state again, and must not claim a count it
++  //    never enumerated.
++  {
++    const { failures } = await run({ classicError: NOT_FOUND, rulesError: err("boom", 500) });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /could not be listed at all/);
++    assert.equal(/ruleset\(s\) this token cannot read/.test(failures[0]), false);
++  }
++
++  // 9) A pull_request rule without require_last_push_approval is the ruleset-side
++  //    of case 3, and must be named as that rather than as "unprotected".
++  {
++    const { failures } = await run({
++      classicError: NOT_FOUND, rules: [prRule({ require_last_push_approval: false })], rulesets: { 7: ruleset() },
++    });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /most recent reviewable push/);
++  }
++
++  // 10) Nothing at all.
++  {
++    const { failures } = await run({ classicError: NOT_FOUND, rules: [] });
++    assert.equal(failures.length, 1);
++    assert.match(failures[0], /neither classic protection nor a ruleset provides one/);
++  }
++});
