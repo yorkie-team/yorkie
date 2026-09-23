@@ -98,3 +98,27 @@
   a remote change whose second operation targets an element the receiver has
   collected. Each test was re-run with its own drop removed to confirm it
   fails.
+
+## Review round 4 (panel)
+
+- **A shared decoder's new rejection is half a change; the other half is the
+  repair.** Moving the negative-offset check down into `fromTreeNodeID` put it
+  on `ChangeInfo.ToChange`, where a rejection does not bounce a request — it
+  makes the document holding that change unloadable. Round 3 moved the check
+  without the `NormalizeStoredOperations` counterpart the design doc's own
+  rule ("normalize what is read, reject what is accepted") demands. The
+  normalizer now clamps a negative offset on every id an operation carries,
+  and the rule is written down as a two-part obligation rather than an aside.
+- **Parity cuts both ways.** Hardening the tree id path made the untouched
+  `fromTextNodePos` the weakest decoder on the same message: nil `createdAt`
+  and negative offsets both flowed straight into `RGATreeSplitNodeID`, where
+  the first `Compare` dereferences them. The snapshot decoder
+  (`from_bytes.go`'s `fromTextNodeID`) already refused a nil `createdAt`; the
+  operation path now does too, paired with clamping in the normalizer.
+- **A validity rule at the wire is a liveness rule for every producer.**
+  `leftAnchorID` subtracts one from a text sibling's length, so a
+  zero-length sibling produced offset `-1` — a span the server now refuses on
+  every retry, wedging the pushing client's loop. Local edits cannot make an
+  empty text node, but a remote peer's decoded contents can, so the producer
+  has to survive one. Any new wire check needs the same sweep: what does this
+  reject that our own clients can emit?

@@ -137,4 +137,43 @@ func TestChangeInfoDecodesOperationsRejectedOnTheWire(t *testing.T) {
 		assert.Equal(t, "kept", spans[0].Attributes.Get("dated"))
 		assert.False(t, spans[0].Attributes.Has("undated"))
 	})
+
+	t.Run("stored negative tree node id offset clamps to zero test", func(t *testing.T) {
+		pbOps, treeEdit := pbTreeEdit(t)
+		treeEdit.From.ParentId.Offset = -1
+		treeEdit.To.LeftSiblingId.Offset = -2
+
+		_, err := converter.FromOperations(pbOps)
+		assert.Error(t, err)
+
+		// A negative offset floor-resolved to the insertion's head anyway, and
+		// zero is that head -- the only repair the field's own contents allow.
+		c, err := storedChange(t, pbOps).ToChange()
+		require.NoError(t, err)
+
+		edit := c.Operations()[0].(*operations.TreeEdit)
+		assert.Equal(t, 0, edit.FromPos().ParentID.Offset)
+		assert.Equal(t, 0, edit.ToPos().LeftSiblingID.Offset)
+	})
+
+	t.Run("stored negative text node pos offset clamps to zero test", func(t *testing.T) {
+		textPos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(seed, 0), 0)
+		op := operations.NewEdit(seed, textPos, textPos, "a", nil, executedAt)
+		pbOps, err := converter.ToOperations([]operations.Operation{op})
+		require.NoError(t, err)
+
+		pbEdit := pbOps[0].GetEdit()
+		pbEdit.From.Offset = -1
+		pbEdit.To.RelativeOffset = -1
+
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+
+		c, err := storedChange(t, pbOps).ToChange()
+		require.NoError(t, err)
+
+		edit := c.Operations()[0].(*operations.Edit)
+		assert.Equal(t, 0, edit.From().ID().Offset())
+		assert.Equal(t, 0, edit.To().RelativeOffset())
+	})
 }

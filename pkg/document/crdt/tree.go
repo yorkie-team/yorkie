@@ -2235,6 +2235,17 @@ func leftAnchorID(sibling *TreeNode) *TreeNodeID {
 		return sibling.id
 	}
 
+	// A text node with no characters has no last character to anchor on, and
+	// the last-char arithmetic would put the anchor one before the node's own
+	// start -- offset -1 for a node at offset 0, which the wire decoder now
+	// rejects. Local edits cannot create one (json/tree.go refuses an empty
+	// text node), but a remote peer's contents are decoded without that check,
+	// so the span builder has to survive one: the node's own ID is the closest
+	// anchor it has, and it floor-resolves to the same node.
+	if sibling.Length() == 0 {
+		return sibling.id
+	}
+
 	return NewTreeNodeID(sibling.id.CreatedAt, sibling.id.Offset+sibling.Length()-1)
 }
 

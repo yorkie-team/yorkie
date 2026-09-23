@@ -20,7 +20,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 )
 
-// NormalizeStoredOperations repairs, in place, the two shapes FromOperations
+// NormalizeStoredOperations repairs, in place, the shapes FromOperations
 // rejects that a change persisted before those checks existed could still
 // carry. It exists because FromOperations sits on two paths with opposite
 // requirements: it decodes operations arriving from a client, where rejecting
@@ -35,11 +35,28 @@ import (
 // rather than known-empty. Normalizing costs nothing if it is empty and
 // avoids an unrecoverable read failure if it is not.
 //
-// Only TreeEdit is touched because both checks live on it. Each repair
-// restores what the field meant before the check, except where that meaning
-// was itself a crash; see the individual comments.
+// Each repair restores what the field meant before the check, except where
+// that meaning was itself a crash; see the individual comments. A rejection
+// with no repair here is only correct when the accepted shape used to fault
+// on read anyway -- a nil createdAt on a tree node id or a text node pos --
+// since there is no earlier behavior left to reproduce.
 func NormalizeStoredOperations(pbOps []*api.Operation) {
 	for _, pbOp := range pbOps {
+		if pbEdit := pbOp.GetEdit(); pbEdit != nil {
+			clampTextNodePos(pbEdit.From)
+			clampTextNodePos(pbEdit.To)
+		}
+
+		if pbStyle := pbOp.GetStyle(); pbStyle != nil {
+			clampTextNodePos(pbStyle.From)
+			clampTextNodePos(pbStyle.To)
+		}
+
+		if pbTreeStyle := pbOp.GetTreeStyle(); pbTreeStyle != nil {
+			clampTreePos(pbTreeStyle.From)
+			clampTreePos(pbTreeStyle.To)
+		}
+
 		pbTreeEdit := pbOp.GetTreeEdit()
 		if pbTreeEdit == nil {
 			continue
@@ -54,8 +71,90 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 			pbTreeEdit.SplitLevel = 0
 		}
 
+		clampTreePos(pbTreeEdit.From)
+		clampTreePos(pbTreeEdit.To)
+		for _, pbNodes := range pbTreeEdit.Contents {
+			if pbNodes == nil {
+				continue
+			}
+			for _, pbNode := range pbNodes.Content {
+				clampTreeNodeIDsOf(pbNode)
+			}
+		}
+		clampSpanTreeNodeIDs(pbTreeEdit.RestoreSpans)
+		clampSpanTreeNodeIDs(pbTreeEdit.RetombstoneSpans)
+
 		dropUndatedAttrs(pbTreeEdit.RestoreSpans)
 		dropUndatedAttrs(pbTreeEdit.RetombstoneSpans)
+	}
+}
+
+// clampTreeNodeID pulls a negative tree node id offset back to zero.
+//
+// An offset counts UTF-16 code units inside the insertion its createdAt
+// names, so a negative one never resolved to anything: findFloorNode walks to
+// the first id at or below it and lands on the insertion's own head, which is
+// offset zero. Clamping states that outcome instead of leaving an id no
+// replica can execute, and it is the only repair available -- the offset
+// carries no record of what it was meant to be.
+func clampTreeNodeID(pbID *api.TreeNodeID) {
+	if pbID != nil && pbID.Offset < 0 {
+		pbID.Offset = 0
+	}
+}
+
+// clampTreePos clamps both ids a tree position is built from.
+func clampTreePos(pbPos *api.TreePos) {
+	if pbPos == nil {
+		return
+	}
+
+	clampTreeNodeID(pbPos.ParentId)
+	clampTreeNodeID(pbPos.LeftSiblingId)
+}
+
+// clampTreeNodeIDsOf clamps every id a single tree node carries, including
+// the insertion-order and merge links a snapshot-shaped node brings with it.
+func clampTreeNodeIDsOf(pbNode *api.TreeNode) {
+	if pbNode == nil {
+		return
+	}
+
+	clampTreeNodeID(pbNode.Id)
+	clampTreeNodeID(pbNode.InsPrevId)
+	clampTreeNodeID(pbNode.InsNextId)
+	clampTreeNodeID(pbNode.MergedFrom)
+}
+
+// clampSpanTreeNodeIDs clamps a restore span's own id together with the
+// parent and sibling anchors it resolves against.
+func clampSpanTreeNodeIDs(pbSpans []*api.TreeRestoreSpan) {
+	for _, pbSpan := range pbSpans {
+		if pbSpan == nil {
+			continue
+		}
+
+		clampTreeNodeID(pbSpan.Id)
+		clampTreeNodeID(pbSpan.ParentId)
+		clampTreeNodeID(pbSpan.LeftSiblingId)
+		clampTreeNodeID(pbSpan.RightSiblingId)
+	}
+}
+
+// clampTextNodePos pulls a text position's negative offsets back to zero, for
+// the same reason clampTreeNodeID does: both count UTF-16 code units into an
+// insertion, getAbsoluteID sums them, and a negative sum floor-resolves to the
+// insertion's head regardless. Zero is that head, stated explicitly.
+func clampTextNodePos(pbPos *api.TextNodePos) {
+	if pbPos == nil {
+		return
+	}
+
+	if pbPos.Offset < 0 {
+		pbPos.Offset = 0
+	}
+	if pbPos.RelativeOffset < 0 {
+		pbPos.RelativeOffset = 0
 	}
 }
 

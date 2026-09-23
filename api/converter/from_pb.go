@@ -921,6 +921,24 @@ func fromTextNodePos(
 	if err != nil {
 		return nil, err
 	}
+	// The createdAt names the insertion this position addresses, and
+	// RGATreeSplitNodeID.Compare dereferences it on every lookup, so a nil one
+	// faults deep inside the split tree rather than on the bytes that carried
+	// it. The snapshot decoder already refuses it (from_bytes.go's
+	// fromTextNodeID); this is the same refusal on the operation path.
+	if createdAt == nil {
+		return nil, goerrors.New("text node pos has nil createdAt")
+	}
+
+	// offset counts UTF-16 code units inside that insertion and
+	// relativeOffset counts further into the node the id floor-resolves to;
+	// getAbsoluteID adds the two. Neither is negative on any producing path,
+	// and a negative one addresses content no replica can locate, so reject it
+	// at the wire for the same reason fromTreeNodeID does.
+	if pbPos.Offset < 0 || pbPos.RelativeOffset < 0 {
+		return nil, goerrors.New("text node pos has negative offset")
+	}
+
 	return crdt.NewRGATreeSplitNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),

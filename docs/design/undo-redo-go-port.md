@@ -610,11 +610,13 @@ what the recovered `Attributes` field then does.
 
 ### Retroactive validation on the stored decode path
 
-Two checks this port added to `converter.FromOperations` reject an operation
-outright rather than reinterpret it: a negative `TreeEdit.splitLevel` (Task
-19) and a Tree restore-span attribute carrying no `updatedAt` (Task 21's
-Critical 3). Both are right at the boundary where a client's bytes enter the
-server. Neither is right at the other boundary that decoder serves:
+Several checks this port added to `converter.FromOperations` reject an
+operation outright rather than reinterpret it: a negative
+`TreeEdit.splitLevel` (Task 19), a Tree restore-span attribute carrying no
+`updatedAt` (Task 21's Critical 3), and a negative offset on a tree node id
+or a text node pos (Task 23). All are right at the boundary where a client's
+bytes enter the server. None is right at the other boundary that decoder
+serves:
 `ChangeInfo.ToChange` reads changes already written to storage, and there a
 rejection does not bounce a bad request — it makes every document containing
 that change permanently unloadable, including through snapshot rebuild and
@@ -629,7 +631,7 @@ still only describe the cluster at scan time, saying nothing about a lagging
 replica, a backup restored later, or a change written between the scan and
 the deploy.
 
-`converter.NormalizeStoredOperations` repairs both shapes in place, called
+`converter.NormalizeStoredOperations` repairs each shape in place, called
 only from `ChangeInfo.ToChange`:
 
 - a negative `splitLevel` clamps to `0`, which is what it already meant —
@@ -639,7 +641,20 @@ only from `ChangeInfo.ToChange`:
   deliberately does *not* restore the prior behavior, because the prior
   behavior was to reach the RHT with a nil `updatedAt` and panic on the
   first comparison. An attribute with no `updatedAt` cannot take part in
-  last-writer-wins resolution anyway.
+  last-writer-wins resolution anyway;
+- a negative offset clamps to `0`, on every id an operation can carry: both
+  ids of a `TreeEdit`/`TreeStyle` `TreePos`, the id and insertion/merge links
+  of each content `TreeNode`, a restore span's own id plus its parent and
+  sibling anchors, and the `from`/`to` `TextNodePos` of an `Edit`/`Style`
+  (offset and relative offset alike). A negative offset floor-resolved to the
+  head of the insertion its `createdAt` names, and `0` *is* that head — the
+  field carries no record of anything else it could have meant.
+
+A rejection is allowed to have no repair here only when the shape it rejects
+used to fault on read anyway, so there is no earlier behavior left to
+reproduce: that is the case for a nil `createdAt` on a tree node id or a text
+node pos, both of which are dereferenced by the first `Compare` that touches
+them.
 
 This dominates the audit rather than deferring it: it costs nothing if the
 population is empty, and if it is not, the document loads exactly as it did
