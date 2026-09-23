@@ -1960,3 +1960,29 @@ test("no agent is handed a token that can approve a pull request", () => {
       offenders.join("\n  "),
   );
 });
+
+test("a release the agent App created publishes nothing", () => {
+  // `contents: write` IS ONE PERMISSION COVERING COMMITS AND RELEASES. The token
+  // a fix agent holds to push a branch can therefore publish a release, and
+  // `docker-publish.yml` answers `release: published` with `secrets: inherit` —
+  // Docker Hub credentials. GitHub offers no narrower grant, so the escape
+  // closes at the consumer or not at all.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const onRelease = readdirSync(dir)
+    .filter((f) => f.endsWith(".yml"))
+    .filter((f) => {
+      const code = readFileSync(path.join(dir, f), "utf8").split("\n").filter((l) => !/^\s*#/.test(l));
+      const on = code.slice(0, code.findIndex((l) => /^jobs:/.test(l)));
+      return on.some((l) => /^\s+release:\s*$/.test(l));
+    });
+  assert.ok(onRelease.length > 0, "no release-triggered workflow found — this guard would be vacuous");
+  for (const file of onRelease) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    assert.match(
+      wf,
+      /github\.event\.release\.author\.login != 'yorkie-team-agent\[bot\]'/,
+      `${file} runs on a published release and would run for one the agent App created`,
+    );
+  }
+});
