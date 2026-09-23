@@ -2126,6 +2126,11 @@ jobs:
               MongoDB this job does not stand up, and the push below re-runs the
               full integration lane anyway.
 
+            DISPUTE FIRST, THEN REPORT. The report counts the disputes you wrote,
+            and it counts them by reading the files you emitted — so a report
+            written before your disputes says you disputed nothing, on exactly the
+            round where you disputed something.
+
             REPORT WHAT YOU DID — AFTER COMMITTING, BEFORE PUSHING. Required, and
             not paperwork: the next round reads this report and hands each claim to
             an independent adjudicator, so a finding you fixed in a way the

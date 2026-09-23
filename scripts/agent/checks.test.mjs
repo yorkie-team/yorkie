@@ -1986,3 +1986,24 @@ test("a release the agent App created publishes nothing", () => {
     );
   }
 });
+
+test("both fixer prompts order disputes before the report", () => {
+  // `fix-report.mjs` counts the disputes THIS round emitted by reading the
+  // files, so a prompt that says report-then-dispute produces a report claiming
+  // nothing was disputed — on exactly the round where something was. The
+  // instruction went into one prompt and not the other, and the script that made
+  // the edit printed "skip (no anchor)" for the second and was not chased.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  for (const file of ["agent-fix.yml", "agent-review-panel.yml"]) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    if (!/rebuttal\.mjs post/.test(wf)) continue;
+    const dispute = wf.indexOf("DISPUTE FIRST, THEN REPORT");
+    assert.ok(dispute > 0, `${file}: the fixer prompt does not order disputes before the report`);
+    const report = wf.search(/REPORT WHAT YOU DID/);
+    assert.ok(
+      report > dispute,
+      `${file}: the ordering instruction must come before the reporting instruction`,
+    );
+  }
+});
