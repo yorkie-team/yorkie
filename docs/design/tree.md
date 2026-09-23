@@ -211,7 +211,9 @@ SDKs, has to apply them the same way:
 
 3. **An unresolvable position fails the operation, never the process.**
    Splitting a node at an offset past its end returns `ErrSplitOutOfRange`
-   instead of slicing out of range.
+   instead of slicing out of range, and an offset between the two code units
+   of a surrogate pair returns `ErrSplitInSurrogatePair` instead of decoding
+   both halves into U+FFFD.
 
 Dropping content rather than rejecting the change is deliberate. Such changes
 are already in the history of existing documents, and a change the server

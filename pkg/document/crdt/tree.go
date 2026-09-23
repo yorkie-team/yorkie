@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -39,6 +40,11 @@ var (
 	// the node it resolves to, which means the position cannot be resolved on
 	// this replica.
 	ErrSplitOutOfRange = errors.New("split offset out of range")
+
+	// ErrSplitInSurrogatePair is returned when a position anchors between the
+	// two code units of a surrogate pair. That is not a character boundary, so
+	// the position cannot be resolved on this replica.
+	ErrSplitInSurrogatePair = errors.New("split offset inside surrogate pair")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -426,6 +432,19 @@ func (n *TreeNode) SplitText(
 	}
 
 	encoded := utf16.Encode([]rune(n.Value))
+
+	// An offset between the two code units of a surrogate pair names no
+	// character boundary. A Go string cannot carry the lone surrogate each half
+	// would keep, so utf16.Decode would rewrite the character as U+FFFD in both
+	// pieces and this replica would hold text no other replica has. Report it
+	// like any other position that cannot be resolved here, rather than
+	// silently losing the character.
+	if utf16.DecodeRune(rune(encoded[offset-1]), rune(encoded[offset])) != utf8.RuneError {
+		return nil, diff, fmt.Errorf(
+			"split %s at %d of %d: %w", n.IDString(), offset, n.Len(), ErrSplitInSurrogatePair,
+		)
+	}
+
 	leftRune := utf16.Decode(encoded[0:offset])
 	rightRune := utf16.Decode(encoded[offset:])
 

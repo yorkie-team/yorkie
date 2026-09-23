@@ -122,6 +122,26 @@ func TestTreeNode(t *testing.T) {
 		assert.Nil(t, again)
 	})
 
+	t.Run("splitting inside a surrogate pair is reported, not applied", func(t *testing.T) {
+		// Offsets 2 and 4 fall between the two code units of a surrogate pair.
+		// Decoding there would turn the regional indicator into U+FFFD in both
+		// halves, so the split is refused and the node is left untouched.
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "a🇰🇷b")))
+
+		text, err := para.Child(0)
+		assert.NoError(t, err)
+
+		for _, offset := range []int{2, 4} {
+			split, _, err := text.SplitText(offset, 0)
+			assert.ErrorIs(t, err, crdt.ErrSplitInSurrogatePair)
+			assert.Nil(t, split)
+			assert.Equal(t, "a🇰🇷b", text.Value)
+			assert.Equal(t, 6, text.Len())
+			assert.Equal(t, 6, para.Len())
+		}
+	})
+
 	t.Run("element node with attributes test", func(t *testing.T) {
 		attrs := crdt.NewRHT()
 		attrs.Set("font-weight", "bold", time.InitialTicket)
