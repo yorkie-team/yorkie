@@ -632,6 +632,39 @@ jobs:
       # CI-fix arm both claim any `agent/` branch that HAS a PR and dispatch
       # fixers that push to it, so opening one mid-run would give the branch three
       # writers while the implement agent is still committing.
+      # RE-STAGED AFTER THE AGENT, and this is the step that makes "trusted" true.
+      #
+      # The copy taken before the agent ran was staged into `$RUNNER_TEMP`, which
+      # the agent writes: it holds an unrestricted `Bash` in this same job. Every
+      # step below then executed a `.mjs` file out of that directory WITH THE
+      # WIDE TOKEN in `GH_TOKEN` — so an agent that edited one of those files got
+      # the very `pull-requests: write` the narrow mint exists to withhold. The
+      # separation was defeated by the thing meant to support it.
+      #
+      # A fresh checkout after the agent has stopped cannot be tampered with:
+      # there is no longer anything running that could write to it.
+      - name: Re-stage the trusted agent scripts (post-agent)
+        if: always() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/agent-tools"
+      - name: Check out the default branch again (post-agent)
+        if: always() && steps.stage.outcome == 'success'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted-post
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Move the post-agent copy clear of the workspace
+        if: always() && steps.stage.outcome == 'success'
+        run: |
+          set -euo pipefail
+          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
+          rm -rf .trusted-post
+          npm ci --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
+
       - name: Open the draft PR
         id: open-pr
         if: always() && steps.stage.outcome == 'success'
@@ -641,22 +674,29 @@ jobs:
           ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
         run: |
           set -euo pipefail
-          BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-          case "$BRANCH" in
-            agent/"$ISSUE"-*) ;;
-            *) echo "the agent left HEAD on '$BRANCH', not agent/$ISSUE-*; not opening a PR"; exit 0 ;;
-          esac
-          git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1 || {
-            echo "nothing was pushed to $BRANCH; there is no work to open a PR for"; exit 0
-          }
+          # THE BRANCH NAME COMES FROM THE API, NOT FROM THE WORKSPACE. Both
+          # `git rev-parse` and `git ls-remote origin` read `.git/config`, which
+          # the agent owns — and a rewritten `remote.origin.url` is command
+          # execution (`ext::sh -c …`), here in a step holding the WIDE token.
+          # The remote is the only thing that matters anyway: a branch the agent
+          # pushed exists on the server.
+          BRANCH="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/agent/$ISSUE-" \
+            --jq '.[0].ref // empty' | sed 's|^refs/heads/||')"
+          [ -n "$BRANCH" ] || { echo "nothing was pushed to agent/$ISSUE-*; there is no work to open a PR for"; exit 0; }
           EXISTING="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           [ -z "$EXISTING" ] || { echo "#$EXISTING is already open for $BRANCH"; exit 0; }
           PR_FILE="$RUNNER_TEMP/pr.md"
           [ -s "$PR_FILE" ] || { echo "the agent wrote no PR description; not opening a PR"; exit 0; }
           TITLE="$(head -n 1 "$PR_FILE")"
           [ -n "$TITLE" ] || { echo "the PR description has no title on its first line"; exit 0; }
+          # NEUTRALISE HTML COMMENTS. This file is written by the agent and posted
+          # under the App identity, and the pipeline's latches and dedupe markers
+          # are trusted BY AUTHOR — so agent-authored text carried into an
+          # App-authored body is exactly how a forged `<!-- agent-review-paged -->`
+          # gets believed. The same substitution `fix-report.mjs` makes, for the
+          # same reason.
           {
-            tail -n +2 "$PR_FILE"
+            tail -n +2 "$PR_FILE" | sed 's/<!--/<!\xe2\x80\x8c--/g'
             printf '\n\nFixes #%s\n' "$ISSUE"
           } > "$RUNNER_TEMP/pr-body.md"
           gh pr create --draft --base main --head "$BRANCH" \

@@ -63,11 +63,19 @@ export function decideProtection({ classic = null, classicError = null, rules = 
   }
 
   let unreadable = 0;
-  for (const { ruleset } of rulesets) {
+  for (const { rule, ruleset } of rulesets) {
     if (!ruleset) {
       unreadable += 1;
       continue;
     }
+    // THE COUNT COMES FROM THE RULE, and an earlier revision of this never read
+    // it — so a ruleset carrying a `pull_request` rule that requires ZERO
+    // approvals passed the gate whose entire purpose is a required human
+    // approval. `parameters` is on the rule as `/rules/branches/{branch}`
+    // returns it; the ruleset payload does not carry it, and the field this used
+    // to read did not exist at all.
+    const params = (rule && rule.parameters) || {};
+    if (Number(params.required_approving_review_count || 0) < 1) continue;
     // ABSENCE IS NOT EMPTINESS. GitHub omits `bypass_actors` when the caller may
     // not see it — the normal case for a repository-scoped token reading an
     // organization-sourced ruleset — so `(x || []).length === 0` reads "no
@@ -76,8 +84,9 @@ export function decideProtection({ classic = null, classicError = null, rules = 
     const noneListed = listVisible && ruleset.bypass_actors.length === 0;
     const cannotBypass = ruleset.current_user_can_bypass === "never";
     const active = ruleset.enforcement === "active";
-    const params = ruleset.rules_params || {};
-    const fresh = params.require_last_push_approval !== false;
+    // Same source, same reason: without it an approval survives every later
+    // push the bot makes to the branch.
+    const fresh = params.require_last_push_approval === true;
     if (noneListed && cannotBypass && active && fresh) return { ok: true, reason: "" };
     if (!fresh) staleApprovals = true;
     if (listVisible && ruleset.bypass_actors.length > 0) bypassable += ruleset.bypass_actors.length;

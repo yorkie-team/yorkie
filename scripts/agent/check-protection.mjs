@@ -49,7 +49,9 @@ function main() {
   for (const r of rules ?? []) {
     if (r.type !== "pull_request" || !r.ruleset_id) continue;
     const got = tryApi(`repos/${repo}/rulesets/${r.ruleset_id}`);
-    rulesets.push({ id: r.ruleset_id, ruleset: got.error ? null : got.data });
+    // The RULE carries the approval count and the re-approval flag; the RULESET
+    // carries the bypass list and the enforcement state. The decision needs both.
+    rulesets.push({ id: r.ruleset_id, rule: r, ruleset: got.error ? null : got.data });
   }
 
   const verdict = decideProtection({

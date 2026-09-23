@@ -675,6 +675,39 @@ jobs:
       # and the agent is not allowed to hold that — see the narrow mint above.
       # `always()`: a fixer that pushed and then died still wrote a report worth
       # reading, and the next round's adjudicator reads it.
+      # RE-STAGED AFTER THE AGENT, and this is the step that makes "trusted" true.
+      #
+      # The copy taken before the agent ran was staged into `$RUNNER_TEMP`, which
+      # the agent writes: it holds an unrestricted `Bash` in this same job. Every
+      # step below then executed a `.mjs` file out of that directory WITH THE
+      # WIDE TOKEN in `GH_TOKEN` — so an agent that edited one of those files got
+      # the very `pull-requests: write` the narrow mint exists to withhold. The
+      # separation was defeated by the thing meant to support it.
+      #
+      # A fresh checkout after the agent has stopped cannot be tampered with:
+      # there is no longer anything running that could write to it.
+      - name: Re-stage the trusted agent scripts (post-agent)
+        if: always() && steps.app.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/agent-tools"
+      - name: Check out the default branch again (post-agent)
+        if: always() && steps.app.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted-post
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Move the post-agent copy clear of the workspace
+        if: always() && steps.app.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
+          rm -rf .trusted-post
+          npm ci --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
+
       - name: Post the fix-agent report
         if: always() && steps.app.outputs.configured == 'true'
         continue-on-error: true
@@ -684,7 +717,13 @@ jobs:
         run: |
           REPORT="$RUNNER_TEMP/fix-report.md"
           [ -s "$REPORT" ] || { echo "no fix report was written; nothing to post"; exit 0; }
-          gh pr comment "$PR" --body-file "$REPORT"
+          # NEUTRALISE HTML COMMENTS before posting under the App identity. The
+          # agent renders this file, and the pipeline trusts its markers BY
+          # AUTHOR — so agent text inside an App-authored comment is how a forged
+          # paged latch gets believed. `fix-report.mjs` already does this for the
+          # finding prose it embeds; this covers the file as a whole.
+          sed 's/<!--/<!\xe2\x80\x8c--/g' "$REPORT" > "$RUNNER_TEMP/fix-report-safe.md"
+          gh pr comment "$PR" --body-file "$RUNNER_TEMP/fix-report-safe.md"
 
       - name: Upload fix execution log
         if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'

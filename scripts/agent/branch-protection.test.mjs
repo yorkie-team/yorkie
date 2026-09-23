@@ -66,22 +66,37 @@ test("a question it could not ask is never answered 'unprotected'", () => {
 });
 
 test("a ruleset counts only when every part of it is visible and binding", () => {
-  const ruleset = (over = {}) => ({
-    rules: [{ type: "pull_request", ruleset_id: 7 }],
-    rulesets: [{
-      id: 7,
-      ruleset: {
-        name: "main",
-        enforcement: "active",
-        bypass_actors: [],
-        current_user_can_bypass: "never",
-        ...over,
-      },
-    }],
-    classic: null,
-    classicError: { status: 404 },
-  });
+  // The RULE carries the approval count and the re-approval flag; the RULESET
+  // carries the bypass list and the enforcement state. Both, because an earlier
+  // revision read only the second and passed a ruleset requiring ZERO approvals
+  // — the gate's whole purpose, failing open.
+  const PARAMS = { required_approving_review_count: 1, require_last_push_approval: true };
+  const ruleset = (over = {}, params = {}) => {
+    const rule = { type: "pull_request", ruleset_id: 7, parameters: { ...PARAMS, ...params } };
+    return {
+      rules: [rule],
+      rulesets: [{
+        id: 7,
+        rule,
+        ruleset: {
+          name: "main",
+          enforcement: "active",
+          bypass_actors: [],
+          current_user_can_bypass: "never",
+          ...over,
+        },
+      }],
+      classic: null,
+      classicError: { status: 404 },
+    };
+  };
   assert.equal(decideProtection(ruleset()).ok, true);
+
+  // A `pull_request` rule that requires no approvals is not protection.
+  assert.equal(decideProtection(ruleset({}, { required_approving_review_count: 0 })).ok, false);
+  // ...nor one whose approval survives the next push the bot makes.
+  assert.equal(decideProtection(ruleset({}, { require_last_push_approval: false })).ok, false);
+  assert.equal(decideProtection(ruleset({}, { require_last_push_approval: undefined })).ok, false);
 
   // ABSENCE IS NOT EMPTINESS. GitHub omits `bypass_actors` when the caller may
   // not see it — the normal case for a repository-scoped token reading an
