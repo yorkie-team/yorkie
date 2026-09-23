@@ -43,9 +43,33 @@ work here is porting plus the three repo-specific pieces named in §4.
   merge endpoints, and a human approval remains required throughout. That is a
   statement about what the workflows do, not about what their credentials could
   do: a token holding `contents: write` and `pull-requests: write` together can
-  approve and merge whether or not any workflow asks it to. No workflow that
-  ships today hands an agent that pair, and Phase I's acceptance criterion 1
-  makes not doing so a precondition of the one verb that would have.
+  approve and merge whether or not any workflow asks it to.
+
+  **Four workflows that ship today hand an agent exactly that pair**, and saying
+  otherwise would document an invariant this repository does not hold. Each mints
+  one installation token with `contents: write` + `pull-requests: write` +
+  `issues: write` and passes it to `claude-code-action` as `github_token`, with
+  `Bash` in `--allowedTools`, in a job whose workspace is checked out from the
+  untrusted PR branch:
+
+  | Workflow | Token mint | Handed to the agent |
+  | --- | --- | --- |
+  | `agent-fix.yml` | lines 201-203 | line 536 |
+  | `agent-iterate-ci.yml` | lines 156-158 | line 456 |
+  | `agent-review-panel.yml` (fix job) | lines 1880-1882 | line 2075 |
+  | `agent-review-reply.yml` | lines 158-160 | line 268 |
+
+  So the human-approval invariant rests on **branch protection on `main`** and on
+  the fact that nothing in these workflows asks the token to approve or merge — it
+  does **not** rest on the credentials being unable to. A successful prompt
+  injection in any of the four reaches a token that can submit an approving review
+  on a PR the App did not author and then merge it. That gap is open, it is not
+  closed by anything on this branch, and it needs a human: the fix is to split the
+  mint the way Phase I's acceptance criterion 1 describes — the agent gets
+  `contents` + `issues` and no `pull-requests`, and every step needing
+  `pull-requests` stays a trusted step in the workflow file. No credential in this
+  pipeline may write `.github/workflows/**` (see Phase I below), so an agent cannot
+  land that correction; a maintainer must.
 
 ## Design
 

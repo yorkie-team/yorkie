@@ -205,3 +205,36 @@ the same way) and simply had not been applied to the newer step.
 If a workflow step contains more than a few lines of `github-script`, the test
 for it extracts and executes it. A text match on that code asserts that somebody
 typed the right characters, not that the code does anything.
+
+## Review round 6 — the invariant the doc claimed and the tree does not hold
+
+Four findings, two of them against a file this branch had already deleted.
+
+- **A Non-Goal is an invariant, and an invariant that is false is worse than
+  no invariant.** Round 5 rewrote the merge-policy Non-Goal to concede that
+  `contents: write` + `pull-requests: write` can approve and merge, then closed
+  with "No workflow that ships today hands an agent that pair." Four do:
+  `agent-fix.yml`, `agent-iterate-ci.yml`, `agent-review-panel.yml` (fix job)
+  and `agent-review-reply.yml` each mint that pair and pass it to
+  `claude-code-action` with `Bash` allowed, in a workspace checked out from the
+  untrusted branch. The sentence was written while reasoning about the *new*
+  verb and never checked against the four already installed. The Non-Goal now
+  names them in a table and says plainly that the human-approval property rests
+  on branch protection, not on credential scoping.
+- **The standstill is the same one that withdrew the workflow.** The correction
+  those four need — split the mint, keep `pull-requests` in trusted steps — is a
+  change to `.github/workflows/**`, which no credential in this pipeline may
+  write. Committing it here would have the remote reject the whole push. So it
+  is recorded as an open gap addressed to a maintainer, in the design doc and in
+  a rebuttal, rather than attempted and lost.
+- **Deleting the subject does not retract the finding; it answers it.** Two
+  findings cite `agent-implement.yml` line numbers. That file left the tree in
+  `a07cf41`, and the three guards that would have covered it skip through
+  `workflow-presence.mjs` until it returns. Both were answered with located
+  rebuttals rather than a skip, because a skip reads as a decision not to act.
+
+### Standing rule this round produced
+
+Before writing "no workflow does X" about this repository, grep the workflow
+directory for X. A claim about the installed set is a measurement, not an
+inference from the thing being designed.
