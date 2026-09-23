@@ -181,7 +181,7 @@ func TestStreamMergedEventsDeliversQueuedEvents(t *testing.T) {
 	assertEndedBySelfPrune(t, errCh)
 }
 
-// TestSubscribeResourcesRejectsStreamWithoutSubscription verifies that a Watch
+// TestResolveResourcesRejectsStreamWithoutSubscription verifies that a Watch
 // request which would subscribe to nothing is rejected rather than accepted
 // into a stream that can never deliver an event.
 //
@@ -191,42 +191,50 @@ func TestStreamMergedEventsDeliversQueuedEvents(t *testing.T) {
 // request looked well formed — and since streamMergedEvents now ends a stream
 // that holds no subscription, the client would see the stream close right
 // after initialization and retry.
-func TestSubscribeResourcesRejectsStreamWithoutSubscription(t *testing.T) {
+func TestResolveResourcesRejectsStreamWithoutSubscription(t *testing.T) {
 	s := &yorkieServer{serviceCtx: context.Background()}
 
-	subscribe := func(resources []*api.ResourceDescriptor) error {
-		_, _, _, err := s.subscribeResources(
+	// A nil project is safe here: every case below is rejected by the
+	// structural pass, which runs before the request touches the database.
+	resolve := func(resources []*api.ResourceDescriptor) error {
+		_, err := s.resolveResources(
 			context.Background(),
 			&api.WatchRequest{Resources: resources},
-			time.InitialActorID,
 			nil,
 		)
 		return err
 	}
 
 	t.Run("no resource at all", func(t *testing.T) {
-		err := subscribe(nil)
+		err := resolve(nil)
 
 		assert.ErrorIs(t, err, ErrNoResources)
 		assert.Equal(t, connect.CodeInvalidArgument.String(), connecthelper.CodeOf(err))
 	})
 
 	t.Run("a descriptor naming no resource", func(t *testing.T) {
-		err := subscribe([]*api.ResourceDescriptor{{}})
+		err := resolve([]*api.ResourceDescriptor{{}})
 
 		assert.ErrorIs(t, err, ErrUnsupportedResource)
 		assert.Equal(t, connect.CodeInvalidArgument.String(), connecthelper.CodeOf(err))
 	})
 
+	t.Run("a nil descriptor", func(t *testing.T) {
+		err := resolve([]*api.ResourceDescriptor{nil})
+
+		assert.ErrorIs(t, err, ErrUnsupportedResource)
+	})
+
 	// Such a descriptor is rejected rather than skipped even when the request
 	// also carries a valid one: a client that asked to watch two resources and
-	// silently watches one has no way to learn which.
+	// silently watches one has no way to learn which. The valid descriptor
+	// comes first so the rejection has to survive a sibling that resolves.
 	t.Run("a descriptor naming no resource beside a valid one", func(t *testing.T) {
-		err := subscribe([]*api.ResourceDescriptor{
-			{},
+		err := resolve([]*api.ResourceDescriptor{
 			{Resource: &api.ResourceDescriptor_Document{
 				Document: &api.DocumentDescriptor{DocumentId: "000000000000000000000000"},
 			}},
+			{},
 		})
 
 		assert.ErrorIs(t, err, ErrUnsupportedResource)
@@ -234,7 +242,7 @@ func TestSubscribeResourcesRejectsStreamWithoutSubscription(t *testing.T) {
 }
 
 // TestStreamMergedEventsEndsWithoutSubscriptions pins the reason
-// subscribeResources rejects a request that would subscribe to nothing: such a
+// resolveResources rejects a request that would subscribe to nothing: such a
 // stream is already over when it starts.
 func TestStreamMergedEventsEndsWithoutSubscriptions(t *testing.T) {
 	errCh := runStreamMergedEvents(nil, nil)
