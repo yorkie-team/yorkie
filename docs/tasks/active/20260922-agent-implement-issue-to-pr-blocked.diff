@@ -1,23 +1,46 @@
 # BLOCKED — apply by hand, with a credential that can write workflows.
 #
-# Round 6 of the review panel raised nine blocking findings. Eight of them are
-# defects in .github/workflows/agent-implement.yml, which the panel's fix job is
-# structurally forbidden to push: its App token is minted without `workflows`
-# (checks.test.mjs asserts no agent token may ever carry it), so `git push` is
-# rejected by the pre-receive hook and the Git Data tree API answers 403.
+# Every blocking finding this branch's review panel raised against
+# .github/workflows/agent-implement.yml is fixed below and none of it can be
+# pushed from the pipeline. That is measured, not inferred: a throwaway commit
+# touching the file, pushed to a scratch ref this round, came back
 #
 #   ! [remote rejected] refusing to allow a GitHub App to create or update
 #     workflow `.github/workflows/agent-implement.yml` without `workflows` permission
 #
-# The fix below is written and verified locally: `node --test
-# scripts/agent/checks.test.mjs` is 42/42 with it applied, `make lint` is clean,
-# and `go test ./...` passes. Apply it and delete this file:
+# Both tokens available to the panel's fix job (the App token and the ambient
+# GITHUB_TOKEN) are refused, and so is the Git Data API — POST /git/trees answers
+# 403 for a tree containing a `.github/workflows/` path. That is the intended
+# design: `Workflows` is deliberately at no access for this App,
+# `checks.test.mjs` asserts no agent token may ever request it, and
+# `agent-implement.yml`'s own prompt tells the implement agent never to edit
+# `.github/workflows/**` for the same reason. Every commit on this branch that
+# touched the workflow was pushed by a human.
+#
+# The fix below is written and verified locally: with it applied
+# `node --test scripts/agent/checks.test.mjs` is 43/43, `make lint` is clean and
+# `go test ./...` passes. Apply it and delete this file:
 #
 #   git apply docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff
 #   git rm docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff
 #
 # What it contains, finding by finding:
 #
+#   * THE GATE WAS SATISFIABLE BY THE PARTY IT GATES. One App token carried
+#     `pull-requests: write` (which submits an approving review) beside
+#     `contents: write` (which merges), and it was handed to an agent running on
+#     text an arbitrary GitHub user wrote. The job now mints TWO tokens: the
+#     agent gets `contents` + `issues` only, the workspace checkout persists that
+#     narrower one (`persist-credentials` writes it into `.git/config`, which the
+#     agent reads with one `Bash` call), and every step needing `pull-requests` is
+#     a trusted step in the file;
+#   * THE DRAFT PR NO LONGER LANDS MID-RUN. `agent-review-panel.yml` and
+#     `agent-iterate-ci.yml` claim any `agent/`-prefixed head branch and dispatch
+#     fixers that push to it, and both are reached only through a CI run — which
+#     fires on `pull_request`, not on a branch push. The agent now pushes early
+#     and writes the PR title and body to files; a trusted step opens the draft PR
+#     after the agent has stopped, so the branch has one writer and `--draft` is
+#     passed by this file rather than asked for in a prompt;
 #   * the branch-protection gate's refusal referenced an undeclared `also`, so
 #     three of its four reasons threw a ReferenceError instead of a diagnosis —
 #     declared, and the gate is now lifted out of the YAML and EXECUTED against
@@ -31,14 +54,15 @@
 #   * the no-PR reporter's per-cause dedupe is ack-aware, so a second failure of
 #     the same kind answers the fresh "On it" rather than returning silently;
 #   * the ambient GITHUB_TOKEN drops from contents/pull-requests write to read,
-#     and the header and design doc stop claiming the gate is unforgeable by an
-#     App token that holds the approve scope itself.
+#     and the header and design doc stop claiming enforcement they do not have —
+#     "do not read the issue's comments" is a prompt convention with `Bash` and an
+#     authenticated `gh` on the other side of it, and is now labelled as one.
 #
 diff --git a/.github/workflows/agent-implement.yml b/.github/workflows/agent-implement.yml
-index 60397d77..08980e67 100644
+index 60397d77..5aab54b0 100644
 --- a/.github/workflows/agent-implement.yml
 +++ b/.github/workflows/agent-implement.yml
-@@ -6,11 +6,24 @@
+@@ -6,17 +6,31 @@
  # This is the first verb in which a bot pushes commits and opens a pull request.
  # ONE gate makes that acceptable, and it is a property of the REPOSITORY rather
  # than of the agent: before anything is pushed, `main` is verified to require at
@@ -55,20 +79,32 @@ index 60397d77..08980e67 100644
 +# answered is one where this workflow does not run. That check is the only reason
 +# the App carries `Administration: read`, and why that grant is read-only: the
 +# App can see protection exists and cannot change it.
-+#
-+# WHAT THE GATE DOES NOT GIVE YOU, stated here because the previous wording read
-+# as though it did. The App token this job mints carries `pull-requests: write`,
-+# because opening the PR needs it — and that same scope is what submitting an
-+# APPROVING review needs. So the gate does not make the required approval
-+# unforgeable by this App in general: for a pull request the App did NOT push to,
-+# it could approve and (with `contents: write`) merge. `require_last_push_approval`
-+# closes the case that matters for this verb — the agent approving the branch it
-+# just wrote — and the rest is residual risk on the App credential itself, not a
-+# property the gate establishes. See docs/design/agent-command-verbs.md, Phase I.
  #
- # The PR opening as a DRAFT is NOT a second gate. It is a line in the prompt, so
- # it is a convention the agent could get wrong, and nothing here verifies it —
-@@ -93,9 +106,15 @@ jobs:
+-# The PR opening as a DRAFT is NOT a second gate. It is a line in the prompt, so
+-# it is a convention the agent could get wrong, and nothing here verifies it —
+-# the same thing said at the refusal step below. Counting it as a gate was an
+-# over-claim that survived two review rounds, and it is written down here because
+-# the next reader will be tempted to make it again.
++# A GATE THE GATED PARTY CAN SATISFY IS NOT A GATE, which is why this job mints
++# TWO App tokens. `pull-requests: write` is the scope that opens a pull request
++# and also the scope that submits an APPROVING review; beside `contents: write`
++# it merges. Handed to the agent — the one step running on text an arbitrary
++# GitHub user wrote — it made the required approval satisfiable by the very
++# party the gate is about. So the agent gets `contents` + `issues` only, and
++# every step that needs `pull-requests` (the collision pre-flight, the
++# acknowledgement, the step that opens the draft PR) is a trusted step in this
++# file. What remains is residual risk on the App credential itself rather than
++# on the agent. See docs/design/agent-command-verbs.md, Phase I.
++#
++# The PR opening as a DRAFT is not a second gate either, but it is no longer a
++# convention: the agent cannot open a PR at all, and the trusted step that does
++# passes `--draft` unconditionally. Two earlier drafts of this file called it a
++# gate while it was a line in the prompt; it is now a property of this file,
++# which is a different claim and a smaller one.
+ name: Agent Implement
+ 
+ on:
+@@ -93,9 +107,15 @@ jobs:
        cancel-in-progress: false
      environment: agent
      permissions:
@@ -87,7 +123,48 @@ index 60397d77..08980e67 100644
      steps:
        # The association check above is a pre-filter on a field the payload
        # carries; this asks the API. Both, because `author_association` is
-@@ -190,6 +209,14 @@ jobs:
+@@ -169,11 +189,38 @@ jobs:
+           # Least privilege, and `administration: read` is the one this verb adds
+           # over every other: the gate below reads branch protection. Notably
+           # absent, here as everywhere: `workflows`.
++          #
++          # THIS TOKEN IS FOR TRUSTED STEPS ONLY and never reaches the agent —
++          # see the narrower mint below. `pull-requests: write` is what opens the
++          # draft PR, and it is also what submits an APPROVING review; with
++          # `contents: write` beside it the holder can merge. Handing that pair
++          # to an agent running on text an arbitrary GitHub user wrote made the
++          # required-approval gate satisfiable by the gated party.
+           permission-administration: read # read branch protection, never write it
+-          permission-contents: write # push the branch
+-          permission-pull-requests: write # open the draft PR
++          permission-contents: write # the checkout below, and `gh pr create`
++          permission-pull-requests: write # open the draft PR (trusted step only)
+           permission-issues: write # answer on the issue
+ 
++      # THE ONLY CREDENTIAL THE AGENT HOLDS, and the difference from the mint
++      # above is the whole point: no `pull-requests` scope. Approving a review
++      # (`POST /pulls/{n}/reviews`) and merging (`PUT /pulls/{n}/merge`) both
++      # require it, so an injected run cannot approve or merge ANY pull request
++      # — not its own, and not somebody else's. What it can still do is push the
++      # branch and comment on the issue, which is the job.
++      #
++      # It is also the token `actions/checkout` persists into the workspace
++      # `.git/config`, because the agent can read that file: whichever token
++      # checks out is a token the agent holds, so it must be this one.
++      - name: Generate the agent's GitHub App token
++        if: steps.app.outputs.configured == 'true'
++        id: agent-token
++        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
++        with:
++          app-id: ${{ secrets.AGENT_APP_ID }}
++          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
++          permission-contents: write # push the branch, and nothing else
++          permission-issues: write # say on the issue that it could not do it
++
+       # FAILS CLOSED, INCLUDING ON "I COULD NOT TELL". The draft flag is a
+       # convention the agent could get wrong; a required human approval is
+       # enforced by GitHub. This is the gate that makes "a bot opened this PR"
+@@ -190,6 +237,14 @@ jobs:
              const owner = context.repo.owner, repo = context.repo.repo;
              let ok = false;
              let bypassable = 0;
@@ -102,7 +179,7 @@ index 60397d77..08980e67 100644
              // 1) Classic branch protection, which is what this repository uses.
              try {
                const { data } = await github.rest.repos.getBranchProtection({ owner, repo, branch: 'main' });
-@@ -203,12 +230,20 @@ jobs:
+@@ -203,12 +258,20 @@ jobs:
                const allow = (r && r.bypass_pull_request_allowances) || {};
                const bypassers =
                  (allow.users || []).length + (allow.teams || []).length + (allow.apps || []).length;
@@ -124,7 +201,7 @@ index 60397d77..08980e67 100644
                }
              } catch (e) {
                // 404 only means "no classic protection" — a ruleset may still
-@@ -243,8 +278,13 @@ jobs:
+@@ -243,8 +306,13 @@ jobs:
                    'GET /repos/{owner}/{repo}/rules/branches/{branch}',
                    { owner, repo, branch: 'main' },
                  );
@@ -139,7 +216,7 @@ index 60397d77..08980e67 100644
                  for (const r of candidates) {
                    const id = r.ruleset_id;
                    if (!id) continue; // cannot verify the bypass list → do not count it
-@@ -317,11 +357,21 @@ jobs:
+@@ -317,11 +385,21 @@ jobs:
                    : bypassable > 0
                      ? `main requires a review but ${bypassable} actor(s) may bypass it, so it does not ` +
                        'guarantee a human approved this'
@@ -164,7 +241,7 @@ index 60397d77..08980e67 100644
                );
              }
  
-@@ -336,14 +386,27 @@ jobs:
+@@ -336,14 +414,27 @@ jobs:
        #
        # The tail step already knows this query. Asking it BEFORE the agent runs
        # costs one API call and turns a branch-clobbering race into a sentence.
@@ -194,7 +271,7 @@ index 60397d77..08980e67 100644
              const { owner, repo } = context.repo;
              const prs = await github.paginate(github.rest.pulls.list, {
                owner, repo, state: 'open', per_page: 100,
-@@ -398,11 +461,17 @@ jobs:
+@@ -398,11 +489,17 @@ jobs:
            github-token: ${{ steps.app-token.outputs.token }}
            script: |
              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -213,7 +290,29 @@ index 60397d77..08980e67 100644
                });
              } catch (e) {
                // Never fail the run over the acknowledgement: the work is worth
-@@ -457,7 +526,7 @@ jobs:
+@@ -413,13 +510,18 @@ jobs:
+ 
+       # `main`, because the issue has no branch yet — so unlike the fix jobs,
+       # this workspace starts TRUSTED. It does not stay that way: the agent
+-      # below writes to it, including to `scripts/agent/**` if it wants to, and
+-      # every step after it still holds the App token.
++      # below writes to it, including to `scripts/agent/**` if it wants to.
++      #
++      # Checked out with the AGENT token, not the trusted one. `persist-credentials`
++      # defaults to true, so the token given here is written into
++      # `.git/config` — a file the agent reads with one `Bash` call. Using the
++      # trusted token here would have handed it the `pull-requests: write` the
++      # mint above exists to keep away from it.
+       - uses: actions/checkout@v4
+         if: steps.app.outputs.configured == 'true'
+         with:
+           fetch-depth: 0 # full history for rebase and a full-diff self-review
+-          token: ${{ steps.app-token.outputs.token }}
++          token: ${{ steps.agent-token.outputs.token }}
+ 
+       - uses: actions/setup-node@v4
+         if: steps.app.outputs.configured == 'true'
+@@ -457,7 +559,7 @@ jobs:
          if: steps.app.outputs.configured == 'true'
          run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
  
@@ -222,7 +321,7 @@ index 60397d77..08980e67 100644
        #
        # The agent holds an App token and an unrestricted `Bash`, and the issue is
        # written by anyone on GitHub. Telling it to `gh issue view` itself widened
-@@ -466,6 +535,18 @@ jobs:
+@@ -466,6 +568,18 @@ jobs:
        # into a ninety-minute run was in scope, and "a maintainer read the issue
        # before typing the verb" stopped being a control at all.
        #
@@ -241,11 +340,22 @@ index 60397d77..08980e67 100644
        # Written to a file rather than spliced into the prompt: interpolating
        # attacker text into the instructions is how a delimiter becomes the attack.
        # As a file it is unmistakably an input, and the prompt says so in words.
-@@ -474,24 +555,37 @@ jobs:
+@@ -474,24 +588,48 @@ jobs:
        # read the issue to implement it, and `Bash` can reach the network. See
        # docs/design/agent-command-verbs.md, Phase I, for what is and is not
        # claimed here.
 -      - name: Fetch the issue text (trusted step, untrusted content)
++      #
++      # AND ONLY ONE HALF OF IT IS ENFORCED. What this step establishes is that
++      # the file the prompt points at holds the text as it stood when the
++      # maintainer's comment was created — that part is mechanical. The prompt's
++      # "do NOT run `gh issue view`, do NOT read the issue's comments" is NOT:
++      # `--allowedTools` includes `Bash` and the agent holds a token `gh`
++      # authenticates with, so a mid-run comment is reachable by an agent that
++      # decides to look, and an injected one has every reason to. It is a
++      # convention that makes the honest agent's behaviour narrower, not a
++      # control that makes the dishonest one's impossible. The enforcement that
++      # would close it is an egress policy on the runner.
 +      - name: Take the issue text (trusted step, untrusted content)
          if: steps.app.outputs.configured == 'true'
 +        uses: actions/github-script@v7
@@ -294,7 +404,186 @@ index 60397d77..08980e67 100644
  
        - name: Build the orchestration prompt
          if: steps.app.outputs.configured == 'true'
-@@ -828,15 +922,33 @@ jobs:
+@@ -544,17 +682,23 @@ jobs:
+              chars saying what changed, blank line, body wrapped at 80 saying why.
+              Every commit message MUST end with the trailer
+              "Assisted-by: Claude Code (autonomous)".
+-          4. FINALIZE EARLY — as soon as the code compiles, LAND A DRAFT PR before
+-             any optional step, so the deliverable survives even if you run out of
+-             turns: `git add -A`, commit (with the trailer), `git push -u origin`
+-             the branch, then open a DRAFT PR to main with `gh pr create --draft`
+-             following .github/PULL_REQUEST_TEMPLATE.md (title <= 70 chars; body =
+-             why + a test plan drawn from the acceptance criteria; add
+-             "Fixes #__ISSUE_NUMBER__"; DISCLOSE autonomous Claude Code authorship
+-             and say what you could not verify). Then run
+-             `node ./scripts/agent/set-state.mjs <pr> implementing` with the PR
+-             number you just opened, and comment on issue #__ISSUE_NUMBER__ linking
+-             the PR.
++          4. PUSH EARLY, AND DO NOT OPEN THE PULL REQUEST YOURSELF. As soon as the
++             code compiles: `git add -A`, commit (with the trailer) and
++             `git push -u origin` the branch, so the deliverable survives even if
++             you run out of turns. Keep pushing as you go. Then write the pull
++             request for someone else to open:
++               - the title (<= 70 chars, one line, no newline) to __PR_TITLE_FILE__
++               - the body to __PR_BODY_FILE__, following
++                 .github/PULL_REQUEST_TEMPLATE.md: why + a test plan drawn from the
++                 acceptance criteria, "Fixes #__ISSUE_NUMBER__", DISCLOSE autonomous
++                 Claude Code authorship, and say what you could not verify.
++             Rewrite both files whenever the work moves on; the last version wins.
++             Do NOT run `gh pr create`, `gh pr merge`, `gh pr review` or
++             `set-state.mjs` — your token carries no pull-requests permission and
++             every one of them will fail. A trusted step opens the draft PR from
++             your branch after this run ends, links it on the issue and sets the
++             state; that is deliberate, and it is why nothing you do can approve or
++             merge a pull request.
+           5. LET CI VERIFY — do NOT run `make test`, `make test-complex`,
+              `make bench` or `make coverage`: they need a MongoDB stack and are far
+              too slow for a one-shot headless run. `make lint` and a TARGETED
+@@ -568,8 +712,8 @@ jobs:
+           Execution rules: run EVERY command in the FOREGROUND and wait for it
+           synchronously. This is a one-shot headless run with NO resume — do NOT run
+           commands in the background, and do NOT use sleep, Monitor, ScheduleWakeup,
+-          or any wait-for-later mechanism; they will strand the run before it opens
+-          the PR. If a command is slow, let it finish, or skip it per step 5.
++          or any wait-for-later mechanism; they will strand the run before it pushes.
++          If a command is slow, let it finish, or skip it per step 5.
+ 
+           Stay inside the scope of the issue. Deliver the acceptance criteria and
+           nothing beyond them: no unrequested features, refactors, abstractions, or
+@@ -582,8 +726,9 @@ jobs:
+ 
+           Hard rules: never push to main; never merge; never approve; never edit
+           .github/workflows/** (the App has no permission to push it, so the push
+-          would fail). Leave the PR a DRAFT — a human review is required before it
+-          goes anywhere.
++          would fail). The PR opens as a DRAFT and the step that opens it passes
++          `--draft` unconditionally — a human review is required before it goes
++          anywhere.
+ 
+           Generated protobuf under api/yorkie/v1/ cannot be changed from this run:
+           hand-editing it is forbidden, and `make proto` needs buf and two
+@@ -593,6 +738,8 @@ jobs:
+           )
+           TEMPLATE=${TEMPLATE//__ISSUE_NUMBER__/$ISSUE_NUMBER}
+           TEMPLATE=${TEMPLATE//__ISSUE_FILE__/$RUNNER_TEMP\/issue.md}
++          TEMPLATE=${TEMPLATE//__PR_TITLE_FILE__/$RUNNER_TEMP\/pr-title.txt}
++          TEMPLATE=${TEMPLATE//__PR_BODY_FILE__/$RUNNER_TEMP\/pr-body.md}
+           TEMPLATE=${TEMPLATE//__TODAY__/$TODAY}
+           {
+             echo "prompt<<HARNESS_EOF"
+@@ -636,19 +783,85 @@ jobs:
+         id: agent
+         # Pinned to the v1 release commit (immutable) for supply-chain safety.
+         # Re-check input names against https://code.claude.com/docs/en/github-actions
+-        # when bumping. github_token is the App token so the push re-triggers CI —
+-        # a GITHUB_TOKEN-authored push does not, which would leave the PR with no
+-        # CI at all.
++        # when bumping. github_token is the NARROW App token: an App-authored push
++        # re-triggers CI where a GITHUB_TOKEN-authored one does not, and dropping
++        # `pull-requests` from it is what stops this step — the one running on
++        # attacker-writable text — from approving or merging a pull request.
+         uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
+         with:
+           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+-          github_token: ${{ steps.app-token.outputs.token }}
++          github_token: ${{ steps.agent-token.outputs.token }}
+           prompt: ${{ steps.prep.outputs.prompt }}
+           claude_args: >-
+             --max-turns 150
+             --model claude-opus-5
+             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+ 
++      # THE PULL REQUEST IS OPENED HERE, BY THE WORKFLOW, AFTER THE AGENT HAS
++      # STOPPED. Three things follow from that, and each one closes a defect the
++      # agent-opens-it shape had:
++      #
++      #   1. The agent needs no `pull-requests` scope, so an injected run cannot
++      #      approve or merge anything (see the narrow mint above).
++      #   2. `--draft` is passed by this file rather than asked for in the prompt,
++      #      so it stops being a convention the agent could get wrong.
++      #   3. NO THIRD WRITER. `agent-review-panel.yml` and `agent-iterate-ci.yml`
++      #      both treat any `agent/`-prefixed head branch as theirs and dispatch
++      #      fixers that PUSH to it; both are reached only through a CI run, and
++      #      CI runs on `pull_request`, not on a branch push. Opening the PR
++      #      mid-run therefore started those two WHILE this agent was still
++      #      committing to the same branch. Opening it here means the branch has
++      #      exactly one writer for the whole run.
++      #
++      # always(), because a run that died at turn 149 still pushed something worth
++      # looking at; continue-on-error, because the branch is already safe on the
++      # remote and the tail reporter below says so if this fails.
++      - name: Open the draft pull request
++        id: pr
++        if: always() && steps.app.outputs.configured == 'true'
++        continue-on-error: true
++        env:
++          GH_TOKEN: ${{ steps.app-token.outputs.token }}
++          ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
++          TITLE_FILE: ${{ runner.temp }}/pr-title.txt
++          BODY_FILE: ${{ runner.temp }}/pr-body.md
++        run: |
++          set -euo pipefail
++          case "$ISSUE" in
++            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE'" >&2; exit 1 ;;
++          esac
++          BRANCH=$(git ls-remote --heads origin "agent/${ISSUE}-*" \
++            | sed 's|.*refs/heads/||' | head -n 1)
++          if [ -z "$BRANCH" ]; then
++            echo "no agent/${ISSUE}-* branch was pushed; there is nothing to open"
++            exit 0
++          fi
++          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
++          if [ -n "$EXISTING" ]; then
++            echo "number=$EXISTING" >> "$GITHUB_OUTPUT"
++            echo "#${EXISTING} is already open on ${BRANCH}"
++            exit 0
++          fi
++          # The agent writes these; both are untrusted CONTENT and neither is a
++          # command. Missing or empty is the normal out-of-turns case, not an
++          # error — a stub PR a human can read beats no PR at all.
++          TITLE=$(head -n 1 "$TITLE_FILE" 2>/dev/null | cut -c1-70 || true)
++          [ -n "$TITLE" ] || TITLE="Implement #${ISSUE}"
++          if [ ! -s "$BODY_FILE" ]; then
++            printf 'Fixes #%s\n\nOpened by the `@claude fix` issue verb after its agent run ended without\nwriting a PR body — read the branch and the run log before trusting it.\n' \
++              "$ISSUE" > "$BODY_FILE"
++          fi
++          gh pr create --draft --base main --head "$BRANCH" \
++            --title "$TITLE" --body-file "$BODY_FILE"
++          PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
++          [ -n "$PR" ] || { echo "the PR was created but could not be resolved" >&2; exit 1; }
++          echo "number=$PR" >> "$GITHUB_OUTPUT"
++          # Advisory label and the link back to the issue — neither is a gate, so
++          # neither may fail the step that has already opened the PR.
++          node "$RUNNER_TEMP/agent-tools/set-state.mjs" "$PR" implementing || true
++          gh issue comment "$ISSUE" \
++            --body "🤖 Opened #${PR} as a draft from \`${BRANCH}\`. CI and the review panel take it from here." || true
++
+       # The full transcript — every turn, tool call and permission denial — so a
+       # run that ends without a PR is diagnosable. always(): upload even when the
+       # agent step failed, which is exactly when it is wanted.
+@@ -819,24 +1032,52 @@ jobs:
+               why = '🛑 This run stopped after setup and before the agent started — the Go toolchain, the '
+                 + `linter install, or fetching the issue. See the [run](${runUrl}); there is no agent `
+                 + 'transcript because nothing ran. `@claude fix` is worth trying again.';
++            } else if ('${{ steps.pr.outcome }}' === 'failure') {
++              // The agent ran and the branch may well be on the remote; what
++              // failed is the trusted step that turns it into a pull request.
++              // Retrying re-runs the agent from `main`, which is the wrong
++              // advice here — the work already exists.
++              key = 'pr-open';
++              why = '⚠️ The agent finished, but the step that opens the draft pull request failed. Any '
++                + `\`agent/${issue}-*\` branch it pushed is still on the remote and nothing has been lost — `
++                + `open a PR from it by hand, or see the [run](${runUrl}) first. Do not \`@claude fix\` again `
++                + 'until you have checked: a second run branches from `main` and ignores that work.';
+             } else {
+               key = 'agent';
+-              why = `🛑 This run ${agentOutcome === 'failure' ? 'failed' : 'ended'} without opening a PR — no open `
+-                + `\`agent/${issue}-*\` branch has one. See the [run](${runUrl}) and its \`claude-execution-output\` `
+-                + 'artifact for the transcript. Comment `@claude fix` to retry.';
++              why = `🛑 This run ${agentOutcome === 'failure' ? 'failed' : 'ended'} without opening a PR — no `
++                + `\`agent/${issue}-*\` branch was pushed for one to be opened from. See the [run](${runUrl}) `
++                + 'and its `claude-execution-output` artifact for the transcript. Comment `@claude fix` to retry.';
+             }
              // The dedupe lookup happens AFTER the branch is chosen, because the
              // marker it looks for depends on it.
              const MARKER = MARKER_FOR(key);
@@ -331,16 +620,97 @@ index 60397d77..08980e67 100644
                owner: context.repo.owner, repo: context.repo.repo, issue_number: issue,
                body: `${MARKER}\n${why}`,
 diff --git a/docs/design/agent-command-verbs.md b/docs/design/agent-command-verbs.md
-index f332b623..f4893199 100644
+index 43b8afb6..db4f86f7 100644
 --- a/docs/design/agent-command-verbs.md
 +++ b/docs/design/agent-command-verbs.md
-@@ -251,22 +251,42 @@ on the strength of the gate below rather than waved away.
-   App cannot bypass: a ruleset whose bypass list names actors, or is not visible
-   to this token, or that reports `current_user_can_bypass` as anything but
-   `never`, is not counted; nor is classic protection carrying a
+@@ -39,11 +39,8 @@ work here is porting plus the three repo-specific pieces named in §4.
+   that share only the script package.
+ - **Replacing CodeRabbit.** Phase 1 exists partly to measure whether a second
+   machine reviewer says anything CodeRabbit does not.
+-- **Any change to merge policy.** No workflow in any phase *calls* the approve or
+-  merge endpoints, and a human approval remains required throughout. That is a
+-  statement about what the workflows do, not about what their credentials could
+-  do — see the Phase I caveat, where a token holding both scopes is treated as a
+-  defect to fix rather than as covered by this line.
++- **Any change to merge policy.** No workflow in any phase can approve or
++  merge. A human approval remains required throughout.
+ 
+ ## Design
+ 
+@@ -250,76 +247,65 @@ on the strength of the gate below rather than waved away.
+   It fails closed on every error including a permissions error — a repository
+   where the check cannot be answered is one where the bot does not push.
+ - **One gate, and it bounds what LANDS — not what the run can reach.** Before
+-  anything is pushed, `main` is verified to require an approving review this App
+-  cannot bypass: a ruleset whose bypass list names actors, or is not visible to
+-  this token, or that reports `current_user_can_bypass` as anything but `never`,
+-  is not counted; nor is classic protection carrying a
 -  `bypass_pull_request_allowances` entry. Unverified protection is treated as
 -  none. It is a property of the **repository**, which is why it is checked at run
 -  time rather than asserted here.
+-
+-  The PR opening as a **draft** is not a second gate, though two earlier drafts
+-  of this document said it was. It is a line in the prompt — a convention the
+-  agent could get wrong, verified by nothing.
+-
+-  > **⚠️ The gate as shipped is weaker than the paragraph above, and the verb is
+-  > not safe to enable until that is fixed.** Two earlier drafts of this section
+-  > described properties the workflow did not have; describing them again would
+-  > be the same error a third time, so what is actually in
+-  > `.github/workflows/agent-implement.yml` today is listed here:
+-  >
+-  > - **The gate is satisfiable by the gated party.** The App token the job mints
+-  >   carries `pull-requests: write` (opening a PR needs it) beside
+-  >   `contents: write`, and that pair is exactly what submits an **approving
+-  >   review** and then **merges**. GitHub only blocks approving a PR the same
+-  >   identity authored, so a run injected through the issue body can approve and
+-  >   merge somebody else's open PR. "A human approving review this App cannot
+-  >   bypass" is therefore not established.
+-  > - **The gate does not require `require_last_push_approval`.** An approval
+-  >   given on an agent PR stays valid across every later commit the agent pushes
+-  >   to the same branch, and the PR-side `fix` and `loop` verbs do push to agent
+-  >   branches.
+-  > - **Its refusal path throws.** The `setFailed` call references an identifier
+-  >   declared nowhere, so three of the four refusal reasons raise a
+-  >   `ReferenceError` instead of printing the diagnosis. The gate still fails
+-  >   closed; it just tells nobody why.
+-  > - **`workflow_dispatch` skips the collision pre-flight,** which is gated on
+-  >   `issue_comment`, so the dispatch entry point reaches the same pushing agent
+-  >   with no duplicate-PR guard.
+-  > - **The issue text is read by `gh issue view` minutes after the verb was
+-  >   typed** — after the token mint, the protection calls, the checkout and two
+-  >   toolchain installs. The author can edit the body in between, so the agent
+-  >   can act on text no maintainer read.
+-  > - **The draft PR lands mid-run.** `agent-review-panel.yml` and
+-  >   `agent-iterate-ci.yml` treat any `agent/`-prefixed head branch as theirs and
+-  >   dispatch fixers that push to it, so the branch has three writers while the
+-  >   implement agent is still committing.
+-  >
+-  > The fix for all six is written, verified and committed as
+-  > `docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff`: two App
+-  > tokens so the agent holds no `pull-requests` scope, `require_last_push_approval`
+-  > on both protection paths, the missing declaration, the pre-flight on both entry
+-  > points, the issue text taken from the immutable event payload, and the PR opened
+-  > by a trusted step after the agent stops. It is not applied because **no
+-  > credential in this pipeline can push `.github/workflows/**`** — every agent App
+-  > token is minted without `workflows`, which `checks.test.mjs` asserts and which
+-  > is the property `agent-fix.yml` prints to contributors. A maintainer has to
+-  > apply it.
+-
+-  **What it does not cover, even once that patch is applied.** The agent runs
+-  with an unrestricted `Bash` beside a live installation token and a model
+-  credential, on text an arbitrary GitHub user wrote. The gate constrains
+-  merging; it does not constrain network egress. A successful prompt injection
+-  does not need to get code into `main` — it already has the token. One narrowing
+-  is mechanical and one is only a convention, and they were previously written as
+-  though both were the first kind. **Enforced (once patched):** the issue title
+-  and body come from the event-payload snapshot, which is the text as it stood
+-  when the maintainer's comment was created, written to a file the prompt names
+-  as untrusted input. **Not enforced, ever:** the prompt tells the agent not to
++  anything is pushed, `main` is verified to require a human approving review this
++  App cannot bypass: a ruleset whose bypass list names actors, or is not visible
++  to this token, or that reports `current_user_can_bypass` as anything but
++  `never`, is not counted; nor is classic protection carrying a
 +  `bypass_pull_request_allowances` entry. Protection that does not also require
 +  approval of the most recent push is not counted either — without
 +  `require_last_push_approval` an approval stays valid across every later commit
@@ -348,49 +718,76 @@ index f332b623..f4893199 100644
 +  push to agent branches. Unverified protection is treated as none. It is a
 +  property of the **repository**, which is why it is checked at run time rather
 +  than asserted here.
- 
-   The PR opening as a **draft** is not a second gate, though two earlier drafts
-   of this document said it was. It is a line in the prompt — a convention the
-   agent could get wrong, verified by nothing.
- 
-+  **The gate is not unforgeable by this App, and saying otherwise was the error
-+  in two earlier drafts.** Opening the PR needs `pull-requests: write`, and that
-+  is the same scope that submitting an **approving review** needs; with
-+  `contents: write` beside it, the holder can also merge. So for a pull request
-+  this App did not push to, the required approval is satisfiable by the App
-+  itself. `require_last_push_approval` closes the case this verb creates — the
-+  agent approving the branch it just wrote — and the remainder is residual risk
-+  on the App credential, not something the gate rules out. The honest claim is:
-+  *a human approving review is required, and the agent cannot supply it for its
-+  own branch.* The ambient `GITHUB_TOKEN` in that job is now `contents: read` /
-+  `pull-requests: read`, so it is not a second credential with that reach.
 +
-   **What it does not cover.** The agent runs with an unrestricted `Bash` beside a
-   live installation token and a model credential, on text an arbitrary GitHub
--  user wrote. The gate constrains merging; it does not constrain network egress. A
--  successful prompt injection does not get code into `main`, and it does not need
--  to — it already has the token. Two things narrow it: the issue body is fetched
--  in a trusted step into a file the prompt names as untrusted input, and the
--  agent is told not to read the issue's comments, which removes the case where a
--  comment added mid-run — after a maintainer decided to dispatch — is in scope.
++  **A gate the gated party can satisfy is not a gate, and for two drafts this one
++  was.** Opening a PR needs `pull-requests: write`, which is also the scope that
++  submits an **approving review**; with `contents: write` beside it the holder
++  merges. One token carrying both, handed to the agent, made "main requires an
++  approval" circular. So the job mints **two** App tokens: the agent gets
++  `contents` + `issues` and nothing else, and every step that needs
++  `pull-requests` — the collision pre-flight, the acknowledgement, the step that
++  opens the draft PR — is a trusted step in the workflow file. The workspace
++  checkout persists the *agent's* token, because `persist-credentials` writes it
++  into `.git/config` where one `Bash` call reads it. The ambient `GITHUB_TOKEN`
++  is `contents: read` / `pull-requests: read`, so it is not a third way round.
++  What remains is residual risk on the App credential itself: a trusted step in
++  this file is not a step an injected agent runs.
++
++  The PR opening as a **draft** is still not a gate, but it is no longer a
++  convention either: the agent cannot open a pull request at all, and the trusted
++  step that does passes `--draft` unconditionally. Two earlier drafts of this
++  document called it a gate while it was a line in a prompt; this is a smaller
++  claim, and a mechanical one.
++
++  **One writer per branch, which is why the PR opens last.** An earlier prompt
++  told the agent to land the draft PR as soon as the code compiled and keep
++  working for up to ninety more minutes. `agent-review-panel.yml` and
++  `agent-iterate-ci.yml` both treat any `agent/`-prefixed head branch as theirs
++  and dispatch fixers that push to it; both are reached only through a CI run,
++  and CI runs on `pull_request`, not on a branch push. So landing the PR mid-run
++  started two more writers on a branch the implement agent was still committing
++  to — outside the mutex those two files keep between themselves. The agent now
++  pushes early (the work survives) and writes the PR title and body to files; the
++  workflow opens the PR after the agent has stopped.
++
++  **What it does not cover.** The agent runs with an unrestricted `Bash` beside a
++  live installation token and a model credential, on text an arbitrary GitHub
 +  user wrote. The gate constrains merging; it does not constrain network egress.
 +  A successful prompt injection does not need to get code into `main` — it
-+  already has the token. Two things narrow it: the issue title and body are taken
-+  from the **event payload snapshot** in a trusted step into a file the prompt
-+  names as untrusted input, so the text the agent acts on is the text as it stood
-+  when the maintainer's comment was created and cannot be swapped afterwards
++  already has the token. One thing genuinely narrows it, and one only looks like
++  it does. **Enforced:** the issue title and body are taken from the **event
++  payload snapshot** in a trusted step into a file the prompt names as untrusted
++  input, so the text the agent acts on is the text as it stood when the
++  maintainer's comment was created and cannot be swapped afterwards
 +  (`workflow_dispatch`, which has no comment and so no authorization moment,
-+  falls back to an API read); and the agent is told not to read the issue's
-+  comments, which removes the case where a comment added mid-run — after a
-+  maintainer decided to dispatch — is in scope.
++  falls back to an API read). **Not enforced:** the prompt tells the agent not to
+   run `gh issue view` and not to read the issue's comments, and nothing stops it
+   — `--allowedTools` includes `Bash` and the agent holds a token `gh`
+-  authenticates with, so a comment posted mid-run is reachable by an agent that
+-  decides to look. It narrows the honest agent's behaviour and bounds nothing.
++  authenticates with, so a comment added mid-run is reachable by an agent that
++  decides to look, which an injected one has every reason to do. It narrows the
++  honest agent's behaviour; it does not bound the dishonest one's.
    Neither is a control on egress, and the residual risk is accepted knowingly:
    the token is installation-scoped to this repository, expires in an hour, and
    carries no `workflows` permission. The control that would actually close the
 diff --git a/scripts/agent/checks.test.mjs b/scripts/agent/checks.test.mjs
-index b5eb6c06..9968d84a 100644
+index 29a68ebc..1cfb5ff4 100644
 --- a/scripts/agent/checks.test.mjs
 +++ b/scripts/agent/checks.test.mjs
-@@ -1606,6 +1606,9 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
+@@ -508,7 +508,10 @@ test("nothing runs on an App token without first checking the App exists", () =>
+       while (end < lines.length && !/^ {6}- /.test(lines[end]) && !/^ {2}\S/.test(lines[end])) end++;
+       const step = lines.slice(i, end);
+       const code = step.filter((l) => !/^\s*#/.test(l));
+-      if (!code.some((l) => l.includes("steps.app-token.outputs.token"))) continue;
++      // Both mints, because agent-implement.yml now has two: a trusted one and
++      // the narrower one the agent holds. A guard naming only the first would
++      // stop covering whichever step consumed the second.
++      if (!code.some((l) => /steps\.(?:app|agent)-token\.outputs\.token/.test(l))) continue;
+       checked++;
+       if (!code.some((l) => /^\s+if:/.test(l))) {
+         offenders.push(`${file}:${i + 1} ${step[0].trim()}`);
+@@ -1648,6 +1651,9 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
    const SANCTIONED_RETURNS = [
      // The success path: the kickoff opened a PR and already said so.
      "            if (lookupOk && pr) return; // the normal flow posted the PR link",
@@ -400,7 +797,7 @@ index b5eb6c06..9968d84a 100644
    ];
    const returns = script.split("\n").filter((l) => /^\s+if \(.*\breturn;/.test(l));
    assert.deepEqual(
-@@ -1627,6 +1630,25 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
+@@ -1669,6 +1675,25 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", (
      /const MARKER_FOR = \(k\) => `<!-- agent-implement-no-pr:\$\{k\} -->`;/,
      "the no-PR marker must be keyed per message, or one failure silences a different one",
    );
@@ -426,7 +823,7 @@ index b5eb6c06..9968d84a 100644
    const keys = [...step.matchAll(/^\s+key = '([a-z-]+)';$/gm)].map((m) => m[1]);
    assert.equal(
      new Set(keys).size,
-@@ -1761,3 +1783,172 @@ test("agent-implement's inline PR lookups agree with metrics.mjs on the same fix
+@@ -1803,3 +1828,265 @@ test("agent-implement's inline PR lookups agree with metrics.mjs on the same fix
    assert.match(metrics, /number,headRefName,isCrossRepository/, "resolvePrByIssue must ask gh for the head repo");
  });
  
@@ -598,4 +995,97 @@ index b5eb6c06..9968d84a 100644
 +    assert.equal(failures.length, 1);
 +    assert.match(failures[0], /neither classic protection nor a ruleset provides one/);
 +  }
++});
++
++test("the implement agent's own token cannot approve or merge a pull request", () => {
++  // THE GATE THIS VERB IS JUSTIFIED ON IS "main requires a human approving
++  // review". `pull-requests: write` is the scope that SUBMITS an approving
++  // review (`POST /pulls/{n}/reviews`) and, beside `contents: write`, the scope
++  // that MERGES (`PUT /pulls/{n}/merge`). GitHub only blocks approving a PR the
++  // same identity authored — so one App token carrying both, handed to an agent
++  // running with unrestricted `Bash` on text an arbitrary GitHub user wrote,
++  // made the gate satisfiable by the party it exists to constrain.
++  //
++  // Two tokens fix it, and this test is the thing that keeps them two: the agent
++  // gets `contents` + `issues`, and everything needing `pull-requests` happens in
++  // a step of this workflow. Re-merging them is a one-line change that no other
++  // assertion here would notice.
++  const wf = WF("agent-implement.yml");
++  const lines = wf.split("\n");
++  const stepAround = (i) => {
++    let start = i;
++    while (start > 0 && !/^ {6}- /.test(lines[start])) start--;
++    let end = start + 1;
++    while (end < lines.length && !/^ {6}- /.test(lines[end]) && !/^ {2}\S/.test(lines[end])) end++;
++    return lines.slice(start, end).join("\n");
++  };
++  const find = (needle, from = 0) => {
++    const i = lines.findIndex((l, k) => k >= from && l.includes(needle));
++    assert.ok(i > 0, `agent-implement.yml no longer has \`${needle}\``);
++    return i;
++  };
++  // `id: agent` is a PREFIX of `id: agent-token`, and a substring search for it
++  // finds the mint rather than the agent step — which would make the ordering
++  // assertion below pass on a workflow that had moved the agent step anywhere.
++  const findId = (id) => {
++    const i = lines.findIndex((l) => l.trim() === `id: ${id}`);
++    assert.ok(i > 0, `agent-implement.yml no longer has a step with \`id: ${id}\``);
++    return i;
++  };
++
++  const mintAt = findId("agent-token");
++  const perms = [...stepAround(mintAt).matchAll(/^\s*permission-([a-z-]+):/gm)].map((m) => m[1]).sort();
++  assert.deepEqual(
++    perms,
++    ["contents", "issues"],
++    "the agent's token must carry exactly contents+issues — `pull-requests` is approve and merge, and " +
++      "`administration` is the gate's own read",
++  );
++
++  // The action's `github_token` is what `gh` inside the agent authenticates
++  // with, so this line is the whole separation.
++  const agentStep = stepAround(find("uses: anthropics/claude-code-action@"));
++  assert.match(
++    agentStep,
++    /github_token: \$\{\{ steps\.agent-token\.outputs\.token \}\}/,
++    "the agent must be given the narrow token",
++  );
++  assert.equal(
++    /steps\.app-token\.outputs\.token/.test(agentStep),
++    false,
++    "the trusted token must not reach the agent step",
++  );
++
++  // …and the checkout, because `persist-credentials` writes whichever token it
++  // is given into `.git/config`, which the agent reads with one `Bash` call.
++  assert.match(
++    stepAround(find("uses: actions/checkout@", mintAt)),
++    /token: \$\{\{ steps\.agent-token\.outputs\.token \}\}/,
++    "the workspace checkout must persist the narrow token, or the agent holds the trusted one anyway",
++  );
++
++  // Which means the PR cannot be opened by the agent, and is not.
++  const promptEnd = wf.indexOf("\n          PROMPT\n");
++  assert.ok(promptEnd > 0, "the prompt heredoc is gone");
++  assert.match(
++    wf.slice(0, promptEnd),
++    /Do NOT run `gh pr create`/,
++    "the prompt must tell the agent the verb it no longer has, or it burns turns on a 403",
++  );
++  const opens = [...wf.matchAll(/gh pr create[^\n]*/g)].filter((m) => m.index > promptEnd);
++  assert.equal(opens.length, 1, `exactly one step may open the pull request, found ${opens.length}`);
++  assert.match(
++    opens[0][0],
++    /--draft/,
++    "the trusted step must pass --draft unconditionally — that is what stops `draft` being a prompt convention",
++  );
++  // AND IT MUST RUN AFTER THE AGENT. agent-review-panel.yml and
++  // agent-iterate-ci.yml both claim any `agent/`-prefixed head branch and
++  // dispatch fixers that PUSH to it; both are reached only through a CI run, and
++  // CI runs on `pull_request`. Opening the PR while the agent is still
++  // committing is what gives that branch three writers.
++  assert.ok(
++    findId("pr") > findId("agent"),
++    "the PR must open after the agent step, or the panel and iterate-ci push to the branch mid-run",
++  );
 +});

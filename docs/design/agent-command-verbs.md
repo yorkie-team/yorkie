@@ -39,8 +39,11 @@ work here is porting plus the three repo-specific pieces named in §4.
   that share only the script package.
 - **Replacing CodeRabbit.** Phase 1 exists partly to measure whether a second
   machine reviewer says anything CodeRabbit does not.
-- **Any change to merge policy.** No workflow in any phase can approve or
-  merge. A human approval remains required throughout.
+- **Any change to merge policy.** No workflow in any phase *calls* the approve or
+  merge endpoints, and a human approval remains required throughout. That is a
+  statement about what the workflows do, not about what their credentials could
+  do — see the Phase I caveat, where a token holding both scopes is treated as a
+  defect to fix rather than as covered by this line.
 
 ## Design
 
@@ -247,10 +250,10 @@ on the strength of the gate below rather than waved away.
   It fails closed on every error including a permissions error — a repository
   where the check cannot be answered is one where the bot does not push.
 - **One gate, and it bounds what LANDS — not what the run can reach.** Before
-  anything is pushed, `main` is verified to require a human approving review this
-  App cannot bypass: a ruleset whose bypass list names actors, or is not visible
-  to this token, or that reports `current_user_can_bypass` as anything but
-  `never`, is not counted; nor is classic protection carrying a
+  anything is pushed, `main` is verified to require an approving review this App
+  cannot bypass: a ruleset whose bypass list names actors, or is not visible to
+  this token, or that reports `current_user_can_bypass` as anything but `never`,
+  is not counted; nor is classic protection carrying a
   `bypass_pull_request_allowances` entry. Unverified protection is treated as
   none. It is a property of the **repository**, which is why it is checked at run
   time rather than asserted here.
@@ -259,14 +262,64 @@ on the strength of the gate below rather than waved away.
   of this document said it was. It is a line in the prompt — a convention the
   agent could get wrong, verified by nothing.
 
-  **What it does not cover.** The agent runs with an unrestricted `Bash` beside a
-  live installation token and a model credential, on text an arbitrary GitHub
-  user wrote. The gate constrains merging; it does not constrain network egress. A
-  successful prompt injection does not get code into `main`, and it does not need
-  to — it already has the token. Two things narrow it: the issue body is fetched
-  in a trusted step into a file the prompt names as untrusted input, and the
-  agent is told not to read the issue's comments, which removes the case where a
-  comment added mid-run — after a maintainer decided to dispatch — is in scope.
+  > **⚠️ The gate as shipped is weaker than the paragraph above, and the verb is
+  > not safe to enable until that is fixed.** Two earlier drafts of this section
+  > described properties the workflow did not have; describing them again would
+  > be the same error a third time, so what is actually in
+  > `.github/workflows/agent-implement.yml` today is listed here:
+  >
+  > - **The gate is satisfiable by the gated party.** The App token the job mints
+  >   carries `pull-requests: write` (opening a PR needs it) beside
+  >   `contents: write`, and that pair is exactly what submits an **approving
+  >   review** and then **merges**. GitHub only blocks approving a PR the same
+  >   identity authored, so a run injected through the issue body can approve and
+  >   merge somebody else's open PR. "A human approving review this App cannot
+  >   bypass" is therefore not established.
+  > - **The gate does not require `require_last_push_approval`.** An approval
+  >   given on an agent PR stays valid across every later commit the agent pushes
+  >   to the same branch, and the PR-side `fix` and `loop` verbs do push to agent
+  >   branches.
+  > - **Its refusal path throws.** The `setFailed` call references an identifier
+  >   declared nowhere, so three of the four refusal reasons raise a
+  >   `ReferenceError` instead of printing the diagnosis. The gate still fails
+  >   closed; it just tells nobody why.
+  > - **`workflow_dispatch` skips the collision pre-flight,** which is gated on
+  >   `issue_comment`, so the dispatch entry point reaches the same pushing agent
+  >   with no duplicate-PR guard.
+  > - **The issue text is read by `gh issue view` minutes after the verb was
+  >   typed** — after the token mint, the protection calls, the checkout and two
+  >   toolchain installs. The author can edit the body in between, so the agent
+  >   can act on text no maintainer read.
+  > - **The draft PR lands mid-run.** `agent-review-panel.yml` and
+  >   `agent-iterate-ci.yml` treat any `agent/`-prefixed head branch as theirs and
+  >   dispatch fixers that push to it, so the branch has three writers while the
+  >   implement agent is still committing.
+  >
+  > The fix for all six is written, verified and committed as
+  > `docs/tasks/active/20260922-agent-implement-issue-to-pr-blocked.diff`: two App
+  > tokens so the agent holds no `pull-requests` scope, `require_last_push_approval`
+  > on both protection paths, the missing declaration, the pre-flight on both entry
+  > points, the issue text taken from the immutable event payload, and the PR opened
+  > by a trusted step after the agent stops. It is not applied because **no
+  > credential in this pipeline can push `.github/workflows/**`** — every agent App
+  > token is minted without `workflows`, which `checks.test.mjs` asserts and which
+  > is the property `agent-fix.yml` prints to contributors. A maintainer has to
+  > apply it.
+
+  **What it does not cover, even once that patch is applied.** The agent runs
+  with an unrestricted `Bash` beside a live installation token and a model
+  credential, on text an arbitrary GitHub user wrote. The gate constrains
+  merging; it does not constrain network egress. A successful prompt injection
+  does not need to get code into `main` — it already has the token. One narrowing
+  is mechanical and one is only a convention, and they were previously written as
+  though both were the first kind. **Enforced (once patched):** the issue title
+  and body come from the event-payload snapshot, which is the text as it stood
+  when the maintainer's comment was created, written to a file the prompt names
+  as untrusted input. **Not enforced, ever:** the prompt tells the agent not to
+  run `gh issue view` and not to read the issue's comments, and nothing stops it
+  — `--allowedTools` includes `Bash` and the agent holds a token `gh`
+  authenticates with, so a comment posted mid-run is reachable by an agent that
+  decides to look. It narrows the honest agent's behaviour and bounds nothing.
   Neither is a control on egress, and the residual risk is accepted knowingly:
   the token is installation-scoped to this repository, expires in an hour, and
   carries no `workflows` permission. The control that would actually close the

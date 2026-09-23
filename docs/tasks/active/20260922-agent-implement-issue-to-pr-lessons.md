@@ -41,6 +41,41 @@ cleanly to this branch's head, its header says what each hunk closes, and with
 it applied `node --test scripts/agent/checks.test.mjs` is 42/42, `make lint` is
 clean and `go test ./...` passes. Apply it and `git rm` it.
 
+### Round 7: the block is measured, not inferred
+
+The wall was tested rather than assumed this round — a throwaway commit touching
+`.github/workflows/agent-implement.yml`, pushed to a scratch ref:
+
+```
+! [remote rejected] probe-wf-write -> probe-wf-write (refusing to allow a
+  GitHub App to create or update workflow `.github/workflows/agent-implement.yml`
+  without `workflows` permission)
+```
+
+So the standstill is real and is not a property of one token being expired or
+one path being wrong. Three things changed in response:
+
+1. **The patch grew to cover the two findings it did not answer.** The App token
+   handed to the agent carried `pull-requests: write` — approve and merge — so
+   the gate was satisfiable by the party it constrains. The job now mints TWO
+   tokens: the agent gets `contents` + `issues`, the workspace checkout persists
+   *that* one (`persist-credentials` writes it into `.git/config`, which the
+   agent reads with one `Bash` call), and a trusted step opens the draft PR after
+   the agent stops. Opening it after, rather than mid-run, is also what removes
+   the third writer: the panel and iterate-ci claim any `agent/`-prefixed branch
+   and only ever engage through a CI run, and CI runs on `pull_request`.
+2. **The design doc stopped describing the patch and started describing the
+   tree.** Phase I now lists the six defects that are actually shipped, in a
+   warning block, and says the verb is not safe to enable until a maintainer
+   applies the patch. A design doc that describes an unapplied patch is the same
+   failure as a lessons file written in the past tense, which this file already
+   records once.
+3. **What could land, landed.** The `pull-requests: write` guard's issue-only
+   exemption was a way for that guard to switch itself off: both of its
+   assertions still passed if the predicate matched every file. The predicate is
+   now a named function with four fixtures, the exempted files are an allow-list,
+   and the guard asserts a non-exempt commenting job still exists to judge.
+
 What landed directly this round: the reporter's job-boundary assertion, which
 compared `nextJobAt + at > at` — true for every match index, so it could not
 fail — and now bounds on the `implement:` header instead. That one is

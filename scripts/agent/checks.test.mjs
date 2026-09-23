@@ -1451,23 +1451,49 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
   // finding against four jobs that are already correct.
   const GRANTS = /^\s+pull-requests:\s*write\s*(?:#.*)?$/;
 
+  // AN ISSUE-ONLY WORKFLOW IS EXEMPT, and this is the rule rather than a hole in
+  // it: the permission follows the RESOURCE, and `!…issue.pull_request` in the
+  // router is precisely what decides the resource. A verb that can only ever be
+  // typed on an issue comments on an issue, where `issues: write` is both correct
+  // and the narrower grant. Widening it to satisfy a guard aimed at PR
+  // conversations would hand an issue-only job authority over every pull request
+  // in the repository.
+  //
+  // Decided from CODE, not from the file's prose: a workflow's header explains
+  // the distinction in a sentence containing the unnegated expression, and
+  // reading that as a gate is the same mistake two earlier guards here made — a
+  // check matching its own explanation.
+  //
+  // HOISTED AND EXERCISED, because an exemption is a way for a guard to turn
+  // itself off. Inline, the only assertions were "some job was checked" and "no
+  // offenders", and BOTH still pass if `issueOnly` is true for every file — a
+  // dropped `mentions.length > 0`, or a regex that stops matching, excuses the
+  // whole tree silently. So the predicate is a named function with fixtures, and
+  // the loop below additionally pins WHICH files it excuses and asserts that a
+  // non-exempt commenting job still exists to be judged.
+  const issueOnlyFor = (code) => {
+    const mentions = code.match(/!?github\.event\.issue\.pull_request/g) ?? [];
+    return mentions.length > 0 && mentions.every((m) => m.startsWith("!"));
+  };
+  assert.equal(issueOnlyFor("if: !github.event.issue.pull_request\n"), true, "a negated-only router is issue-only");
+  assert.equal(issueOnlyFor("if: github.event.issue.pull_request\n"), false, "a PR-only router is not issue-only");
+  assert.equal(
+    issueOnlyFor("if: !github.event.issue.pull_request\nif: github.event.issue.pull_request\n"),
+    false,
+    "a file that also reads the unnegated form reaches PR conversations and is not exempt",
+  );
+  assert.equal(issueOnlyFor("runs-on: ubuntu-latest\n"), false, "silence on the question is not an exemption");
+
+  // The files the exemption actually excused, and the commenting jobs judged in
+  // files it did not. Both are asserted after the loop.
+  const exempt = [];
+  let judged = 0;
+
   for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
     const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
-    // AN ISSUE-ONLY WORKFLOW IS EXEMPT, and this is the rule rather than a hole
-    // in it: the permission follows the RESOURCE, and `!…issue.pull_request` in
-    // the router is precisely what decides the resource. A verb that can only
-    // ever be typed on an issue comments on an issue, where `issues: write` is
-    // both correct and the narrower grant. Widening it to satisfy a guard aimed
-    // at PR conversations would hand an issue-only job authority over every pull
-    // request in the repository.
-    //
-    // Decided from CODE, not from the file's prose: this workflow's own header
-    // explains the distinction in a sentence containing the unnegated
-    // expression, and reading that as a gate is the same mistake two earlier
-    // guards here made — a check matching its own explanation.
     const wfCode = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
-    const mentions = wfCode.match(/!?github\.event\.issue\.pull_request/g) ?? [];
-    const issueOnly = mentions.length > 0 && mentions.every((m) => m.startsWith("!"));
+    const issueOnly = issueOnlyFor(wfCode);
+    if (issueOnly) exempt.push(file);
     const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
     const inherited = lines.slice(0, jobsAt < 0 ? lines.length : jobsAt).some((l) => GRANTS.test(l));
     // Walk jobs: a job id sits at two-space indent under `jobs:`.
@@ -1489,11 +1515,27 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
       // added to an issue-only workflow that somehow comments on a PR
       // conversation would be excused here, and the guard against that is the
       // trigger, not this test.
-      if (!granted && !issueOnly) offenders.push(`${file}:${id}`);
+      if (issueOnly) continue;
+      judged++;
+      if (!granted) offenders.push(`${file}:${id}`);
     }
   }
 
   assert.ok(checked > 0, "no commenting job found — this guard would be vacuous");
+  // THE EXEMPTION MUST BE EARNED, AND NAMED. An allow-list rather than a count:
+  // a new issue-only workflow is a two-line diff here that says, in review, that
+  // someone decided one more file no longer answers to this guard.
+  assert.deepEqual(
+    exempt,
+    ["agent-implement.yml"],
+    "the issue-only exemption must excuse exactly the issue-only verb; anything else means the " +
+      "predicate has drifted and the guard is excusing files it should be judging",
+  );
+  assert.ok(
+    judged > 0,
+    "every commenting job was exempted — the exemption has swallowed the guard, which is what it " +
+      "would look like if the predicate matched everything",
+  );
   assert.deepEqual(
     offenders,
     [],
