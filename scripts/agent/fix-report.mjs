@@ -29,7 +29,7 @@
 // there.
 
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
@@ -589,7 +589,23 @@ function cmdPost(pr, args) {
   // construction: `readRebuttals` degrades to `[]` on any failure, so an
   // unreadable PR renders "Disputed (0)" — the same thing it rendered before this
   // existed, and never a reason to lose the report itself.
-  const body = renderFixReportBody(rec, { disputed: readRebuttals(pr).length });
+  // COUNT THE DISPUTES THIS ROUND EMITTED, not only the ones already posted.
+  // `readRebuttals` reads PR comments, and under `--emit` nothing has been
+  // posted yet — the workflow posts both files after the agent stops. So the
+  // count was structurally zero for every emitted report, which reads as "the
+  // fixer disputed nothing" on exactly the rounds where it disputed something.
+  const emittedDisputes = (() => {
+    if (!args.emit) return 0;
+    const dir = path.join(path.dirname(String(args.emit)), "rebuttals");
+    try {
+      return readdirSync(dir).filter((f) => f.endsWith(".md")).length;
+    } catch {
+      return 0;
+    }
+  })();
+  const body = renderFixReportBody(rec, {
+    disputed: readRebuttals(pr).length + emittedDisputes,
+  });
   // Round-trip before posting. A record this module cannot read back is one the
   // panel will ignore, and the agent would never learn its report went nowhere —
   // the same silent failure the CLI exists to prevent.

@@ -44,7 +44,7 @@
 // again, and pages at two. That is the right destination for it.
 
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
@@ -591,8 +591,17 @@ function cmdPost(pr, args) {
   // pipeline has. The round-trip check above stays here, where the agent's own
   // knowledge of its dispute is; a trusted step posts the file.
   if (args.emit) {
-    writeFileSync(String(args.emit), body);
-    console.error(`rebuttal: wrote the dispute for #${pr} to ${args.emit}`);
+    // A DIRECTORY, NOT A FILE. The fixer is told to run this once per disputed
+    // finding, and an earlier revision wrote every one to the same path — so a
+    // round that disputed four findings posted the fourth and silently lost
+    // three. Each dispute gets its own file, named by the finding key so a
+    // repeat of the same dispute overwrites itself rather than duplicating.
+    const dir = String(args.emit);
+    mkdirSync(dir, { recursive: true });
+    const safe = String(rec.findingKey).replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 120);
+    const file = path.join(dir, `${safe || "dispute"}.md`);
+    writeFileSync(file, body);
+    console.error(`rebuttal: wrote the dispute for #${pr} to ${file}`);
     return;
   }
   try {

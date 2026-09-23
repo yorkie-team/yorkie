@@ -2164,7 +2164,7 @@ jobs:
 
               ```
               node ${{ runner.temp }}/agent-tools/rebuttal.mjs post ${{ needs.review-panel.outputs.pr }} \
-                --emit ${{ runner.temp }}/rebuttal.md \
+                --emit ${{ runner.temp }}/rebuttals \
                 --lens <lens-id> --file <path/from/the/finding> \
                 --summary "<the finding's own wording, copied>" \
                 --claim "<why the finding is wrong>" \
@@ -2238,6 +2238,40 @@ jobs:
       # denials, token/cost) so a round that didn't converge is debuggable —
       # e.g. why it hit the turn budget or what a denial blocked. always() so
       # it's captured even when the fixer errored.
+      # POSTED HERE, NOT BY THE AGENT — its token carries no `pull-requests`
+      # permission, and a token that can comment can also approve.
+      #
+      # POSTED VERBATIM, and that is deliberate. The CLI already neutralises the
+      # VISIBLE prose it embeds (`fix-report.mjs::visible`) while keeping the
+      # hidden `<!-- agent-fix-report … -->` / `<!-- agent-rebuttal … -->` record
+      # the next panel round parses. A blanket `sed` over `<!--` here destroyed
+      # exactly that record, so every fix claim and every dispute became
+      # invisible to the reader that needs them — a silent data loss dressed as a
+      # hardening step.
+      # RE-STAGED AFTER THE AGENT. The copy taken before it ran lives in
+      # `$RUNNER_TEMP`, which the agent writes — it holds an unrestricted `Bash`
+      # in this same job — and every step below executes a `.mjs` from there with
+      # a wide token in the environment. A fresh checkout after the agent has
+      # stopped cannot be tampered with: nothing is running that could write it.
+      - name: Re-stage the trusted agent scripts (post-agent)
+        if: always() && steps.guard.outputs.proceed == 'true'
+        run: rm -rf "$RUNNER_TEMP/agent-tools"
+      - name: Check out the default branch again (post-agent)
+        if: always() && steps.guard.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted-post
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Move the post-agent copy clear of the workspace
+        if: always() && steps.guard.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
+          rm -rf .trusted-post
+
       - name: Upload fix execution log
         if: always() && steps.guard.outputs.proceed == 'true'
         uses: actions/upload-artifact@v4
@@ -2401,40 +2435,6 @@ jobs:
           [ -f "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" ] || { echo "disclose-pr.mjs not staged; skipping"; exit 0; }
           node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
 
-      # POSTED HERE, NOT BY THE AGENT — its token carries no `pull-requests`
-      # permission, and a token that can comment can also approve.
-      #
-      # POSTED VERBATIM, and that is deliberate. The CLI already neutralises the
-      # VISIBLE prose it embeds (`fix-report.mjs::visible`) while keeping the
-      # hidden `<!-- agent-fix-report … -->` / `<!-- agent-rebuttal … -->` record
-      # the next panel round parses. A blanket `sed` over `<!--` here destroyed
-      # exactly that record, so every fix claim and every dispute became
-      # invisible to the reader that needs them — a silent data loss dressed as a
-      # hardening step.
-      # RE-STAGED AFTER THE AGENT. The copy taken before it ran lives in
-      # `$RUNNER_TEMP`, which the agent writes — it holds an unrestricted `Bash`
-      # in this same job — and every step below executes a `.mjs` from there with
-      # a wide token in the environment. A fresh checkout after the agent has
-      # stopped cannot be tampered with: nothing is running that could write it.
-      - name: Re-stage the trusted agent scripts (post-agent)
-        if: always() && steps.guard.outputs.proceed == 'true'
-        run: rm -rf "$RUNNER_TEMP/agent-tools"
-      - name: Check out the default branch again (post-agent)
-        if: always() && steps.guard.outputs.proceed == 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          path: .trusted-post
-          sparse-checkout: scripts/agent
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - name: Move the post-agent copy clear of the workspace
-        if: always() && steps.guard.outputs.proceed == 'true'
-        run: |
-          set -euo pipefail
-          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
-          rm -rf .trusted-post
-
       - name: Post the fix-agent report
         if: always() && steps.guard.outputs.proceed == 'true'
         continue-on-error: true
@@ -2473,9 +2473,14 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR: ${{ needs.review-panel.outputs.pr }}
         run: |
-          F="$RUNNER_TEMP/rebuttal.md"
-          [ -s "$F" ] || { echo "no fix-agent rebuttal was written; nothing to post"; exit 0; }
-          gh pr comment "$PR" --body-file "$F"
+          D="$RUNNER_TEMP/rebuttals"
+          [ -d "$D" ] || { echo "no fix-agent rebuttal was written; nothing to post"; exit 0; }
+          n=0
+          for F in "$D"/*.md; do
+            [ -s "$F" ] || continue
+            gh pr comment "$PR" --body-file "$F" && n=$((n+1))
+          done
+          echo "posted $n dispute(s)"
 
       - name: Update loop status (fix outcome)
         if: always() && steps.guard.outputs.proceed == 'true'
