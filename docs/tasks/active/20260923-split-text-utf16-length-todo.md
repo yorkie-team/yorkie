@@ -38,6 +38,17 @@ The JS SDK is not affected on its own: its strings are UTF-16 already.
       through protobuf on a fresh document; and a caret edit at every
       non-surrogate offset keeps each piece's length equal to `Length()`.
 - [x] Record `offset` — the left piece's length in UTF-16 code units.
+- [x] Apply the same forward move in the Text CRDT (`TextValue.Split`), which
+      decoded both halves of a mid-pair cut as U+FFFD. `RGATreeSplit.splitNode`
+      asks `SplitOffset` for the boundary first, so the node ID it derives and
+      the value it cuts agree.
+- [ ] **Mirror item (follow-up, needs the JS SDK):** `isolateTextRange` returns
+      `(nil, nil)` for a restore-span bound that falls inside a surrogate pair,
+      so `Restore`/`Retombstone` skip that range; JS isolates it exactly,
+      because its strings hold lone surrogates. Pick one rule for both — most
+      likely moving the mid-pair split forward in the SDKs too, which stops
+      such a bound from being recorded at all. Recorded under "What the rules
+      do not solve" in `docs/design/tree.md`.
 
 ## Review
 

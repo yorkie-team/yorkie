@@ -228,6 +228,12 @@ SDKs, has to apply them the same way:
    whose strings hold lone surrogates can split mid-pair, so such an offset can
    already be in a document's stored history.
 
+   `TextValue.Split` applies the same forward move to the Text CRDT, for the
+   same reason: the two halves of the document model cannot answer a mid-pair
+   offset differently. `RGATreeSplit.splitNode` asks `SplitOffset` for the
+   boundary before deriving the split node's ID from it, so the ID space stays
+   continuous with the value.
+
 Dropping content rather than rejecting the change is deliberate. Such changes
 are already in the history of existing documents, and a change the server
 refuses to replay is a document that can never be loaded again.
@@ -246,6 +252,16 @@ They contain the damage; they do not remove its sources. Two remain:
   two nodes in one change can be issued the same ID. Rule 1 has to exempt
   same-change content for exactly this reason, which is what keeps
   "one node per ID" a goal rather than an invariant.
+- **A restore span bound that names no character boundary.** The forward move
+  above is what a Go replica does with a mid-pair offset; a JS replica splits
+  there exactly, so a restore span it records can carry a mid-pair bound.
+  `isolateTextRange` cannot isolate such a range here — the split it asks for
+  lands past the bound — so `Restore` and `Retombstone` skip it, while JS
+  restores it. This is a Go-only behaviour and a **mirror item**: the rule has
+  to be chosen once and applied in both implementations (most likely by having
+  the SDKs move a mid-pair split forward as well, which removes the source
+  instead of the symptom). Until then a span recorded mid-pair by a JS replica
+  restores on JS and is left alone here.
 
 Because the drop happens on the server, a client that took the copy path keeps
 the content locally and believes the operation succeeded. It diverges until it

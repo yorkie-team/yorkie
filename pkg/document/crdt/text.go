@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -111,10 +112,52 @@ func (t *TextValue) DataSize() resource.DataSize {
 	return dataSize
 }
 
-// Split splits this value by the given offset.
+// alignSplitOffset moves a UTF-16 offset that falls between the two code units
+// of a surrogate pair forward to the end of that pair; every other offset is
+// returned unchanged.
+//
+// Such an offset names no character boundary, and a Go string cannot hold the
+// lone surrogate each half of a split there would keep -- decoding rewrites the
+// character as U+FFFD on both sides, and the replica ends up holding text no
+// other replica has. Moving forward keeps the character whole on the left piece
+// and leaves both pieces' lengths in UTF-16 code units. Forward rather than
+// back because an edit resolves the same anchor twice (once for `from`, once
+// for `to`) and only the forward boundary leaves the second resolution on the
+// boundary the first one created; see docs/design/tree.md and
+// TreeNode.SplitText, which applies the same rule to the tree's text nodes.
+//
+// Refusing such an offset is not an option: a replica whose strings hold lone
+// surrogates (JS) can legitimately split mid-pair, so the offset can already be
+// in a document's stored history, and a change the server cannot replay is a
+// document that can never be loaded again.
+//
+// The result is never mid-pair, so applying this twice is a no-op.
+// `offset > 0` is what keeps encoded[offset-1] in range.
+func alignSplitOffset(encoded []uint16, offset int) int {
+	if offset > 0 && offset < len(encoded) &&
+		utf16.DecodeRune(rune(encoded[offset-1]), rune(encoded[offset])) != utf8.RuneError {
+		return offset + 1
+	}
+
+	return offset
+}
+
+// SplitOffset returns the offset Split actually cuts at when asked to cut at
+// the given one. It differs only for an offset inside a surrogate pair, which
+// alignSplitOffset moves to the end of the pair. Callers that derive node IDs
+// or lengths from the cut must ask first, so the ID space and the value agree.
+func (t *TextValue) SplitOffset(offset int) int {
+	return alignSplitOffset(utf16.Encode([]rune(t.value)), offset)
+}
+
+// Split splits this value by the given offset. An offset inside a surrogate
+// pair is moved to the end of the pair (see alignSplitOffset), so the cut can
+// land one code unit after the requested one; RGATreeSplit.splitNode asks
+// SplitOffset for the same boundary before deriving the new node's ID.
 func (t *TextValue) Split(offset int) RGATreeSplitValue {
 	value := t.value
 	encoded := utf16.Encode([]rune(value))
+	offset = alignSplitOffset(encoded, offset)
 	t.value = string(utf16.Decode(encoded[0:offset]))
 
 	return NewTextValue(

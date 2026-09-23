@@ -242,6 +242,50 @@ func TestTextRemoveStyleReturnsPrevAttr(t *testing.T) {
 	}, prevAttrs)
 }
 
+func TestTextSplitInsideSurrogatePair(t *testing.T) {
+	// An offset between the two code units of a surrogate pair names no
+	// character boundary. Decoding the two halves there would rewrite the
+	// character as U+FFFD on both sides, leaving this replica with text no
+	// other replica has; the split is moved to the end of the pair instead,
+	// exactly as TreeNode.SplitText does.
+	const clef = "\U0001D11E" // one surrogate pair: two UTF-16 code units
+
+	t.Run("value split test", func(t *testing.T) {
+		value := crdt.NewTextValue("a"+clef+"b", crdt.NewRHT())
+		require.Equal(t, 4, value.Len())
+
+		// Offset 2 sits between the clef's two code units.
+		right := value.Split(2)
+		assert.Equal(t, 3, value.SplitOffset(2), "the cut moves to the end of the pair")
+		assert.Equal(t, "a"+clef, value.Value())
+		assert.Equal(t, "b", right.String())
+		assert.NotContains(t, value.Value()+right.String(), "�")
+		// The pieces still partition the original, in UTF-16 code units.
+		assert.Equal(t, 4, value.Len()+right.Len())
+	})
+
+	t.Run("edit at a mid-pair index test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos, err := text.CreateRange(0, 0)
+		require.NoError(t, err)
+		_, _, _, _, _, err = text.Edit(fromPos, toPos, "a"+clef+"b", nil, ctx.IssueTimeTicket(), nil)
+		require.NoError(t, err)
+
+		// Index 2 is inside the clef. The caret moves to the end of the pair,
+		// so the insertion lands after the whole character.
+		caretFrom, caretTo, err := text.CreateRange(2, 2)
+		require.NoError(t, err)
+		_, _, _, _, _, err = text.Edit(caretFrom, caretTo, "X", nil, ctx.IssueTimeTicket(), nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, "a"+clef+"Xb", text.String())
+		assert.NotContains(t, text.String(), "�")
+	})
+}
+
 func TestTextNormalizeAndRefinePos(t *testing.T) {
 	// A reverse operation anchors on a normalized position -- an absolute
 	// offset from the head -- and the anchor is remapped onto whatever the

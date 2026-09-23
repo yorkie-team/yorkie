@@ -73,6 +73,11 @@ type gcAttrSource interface {
 
 type RGATreeSplitValue interface {
 	Split(offset int) RGATreeSplitValue
+	// SplitOffset reports the offset Split will actually cut at when asked to
+	// cut at the given one. It differs only where the requested offset names no
+	// character boundary; callers that derive a node ID or a length from the cut
+	// must ask first so the two agree.
+	SplitOffset(offset int) int
 	Len() int
 	DeepCopy() RGATreeSplitValue
 	String() string
@@ -559,6 +564,14 @@ func (s *RGATreeSplit[V]) splitNode(
 		return nil, diff, fmt.Errorf("offset should be less than or equal to length: %s", s.ToTestString())
 	}
 
+	// An offset between the two code units of a surrogate pair names no
+	// character boundary, and splitting there would rewrite the character as
+	// U+FFFD in both pieces (TextValue.Split). Take the boundary the value will
+	// actually cut at before deriving the new node's ID from it, so the ID space
+	// stays continuous; landing on the node's end is the no-op below. This is
+	// the text analogue of the forward move TreeNode.SplitText makes.
+	offset = node.value.SplitOffset(offset)
+
 	if offset == 0 {
 		return node, diff, nil
 	} else if offset == node.contentLen() {
@@ -838,6 +851,13 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 
 // subValue returns a deep copy of full restricted to [from, to). full is
 // left unmodified.
+//
+// The bounds come from piece boundaries, and piece boundaries are where
+// splitNode cut, so on a Go replica they never fall inside a surrogate pair. A
+// bound recorded by a replica whose strings hold lone surrogates can, and Split
+// then moves it to the end of the pair rather than decoding a lone surrogate as
+// U+FFFD (see TextValue.Split): the fragment keeps whole characters, at the
+// cost of a bound one code unit off the one the span named.
 func subValue[V RGATreeSplitValue](full V, from, to int) V {
 	cp := full.DeepCopy()
 	tail := cp.Split(from) // cp=[0,from), tail=[from,len)

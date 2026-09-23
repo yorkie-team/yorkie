@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
-	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -455,13 +454,11 @@ func (n *TreeNode) SplitText(
 	// moves the same offset to the same boundary, so they still converge on
 	// identical segmentation. Landing on the node's end is the existing
 	// "nothing to split off" no-op below.
-	// `offset > 0` is what keeps encoded[offset-1] in range: a split at the
-	// node's start has no preceding code unit to pair with, and it cannot fall
-	// inside a pair anyway.
-	if offset > 0 && offset < len(encoded) &&
-		utf16.DecodeRune(rune(encoded[offset-1]), rune(encoded[offset])) != utf8.RuneError {
-		offset++
-	}
+	//
+	// alignSplitOffset is the same rule TextValue.Split applies to the Text
+	// CRDT: the two halves of the document model have to answer a mid-pair
+	// offset the same way.
+	offset = alignSplitOffset(encoded, offset)
 
 	leftRune := utf16.Decode(encoded[0:offset])
 	rightRune := utf16.Decode(encoded[offset:])
@@ -1201,13 +1198,20 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 // concurrent restores converge on identical text-node segmentation across
 // replicas (the tree analogue of RGATreeSplit.isolateRange). A live split's
 // metadata overhead is added to diff; a removed split buffers a pending GC pair
-// internally (zero here). Requires pieceStart <= from < to <= pieceEnd. Mirrors
-// the JS CRDTTree.isolateTextRange.
+// internally (zero here). Requires pieceStart <= from < to <= pieceEnd.
+// Otherwise follows the JS CRDTTree.isolateTextRange.
 //
-// Returns (nil, nil) when the interval names no character boundary inside piece
-// — a bound recorded by a replica that splits inside a surrogate pair, which
-// SplitText moves to the end of that pair. Callers skip such a range instead of
-// acting on a node that covers text the range does not address.
+// DIVERGENCE from the JS implementation: this returns (nil, nil) when the
+// interval names no character boundary inside piece — a bound recorded by a
+// replica that splits inside a surrogate pair, which SplitText moves to the end
+// of that pair. Callers (Restore, Retombstone) skip such a range instead of
+// acting on a node that covers text the range does not address. JS has no such
+// case to answer: its strings hold lone surrogates, so it can isolate a
+// mid-pair bound exactly, and it never produces the nil. The consequence is a
+// real one — a span whose bound a JS replica recorded mid-pair is restored
+// there and skipped here — so the two implementations have to agree on a single
+// rule; docs/design/tree.md records this as an open mirror item, tracked with
+// the SplitText forward move it follows from.
 func (t *Tree) isolateTextRange(
 	piece *TreeNode, from, to int, diff *resource.DataSize,
 ) (*TreeNode, error) {
