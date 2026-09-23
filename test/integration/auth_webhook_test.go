@@ -22,6 +22,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -674,4 +675,79 @@ func TestAuthWebhookNewToken(t *testing.T) {
 		cli.SetToken(validToken)
 		assert.NoError(t, cli.Activate(ctx))
 	})
+}
+
+// TestAuthWebhookWatchAttributes verifies that Watch asks the auth webhook
+// about the resource it would deliver.
+//
+// Without attributes the webhook is asked only "may this client watch?", with
+// no key to decide on, so a deployment authorizing per document cannot deny a
+// client that names a document it never attached — and a Watch stream hands
+// back that document's peer list, presence and broadcast payloads.
+func TestAuthWebhookWatchAttributes(t *testing.T) {
+	ctx := context.Background()
+
+	var mu sync.Mutex
+	var watchAttrs []types.AccessAttribute
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, err := types.NewAuthWebhookRequest(r.Body)
+		assert.NoError(t, err)
+
+		if req.Method == types.Watch {
+			mu.Lock()
+			watchAttrs = req.Attributes
+			mu.Unlock()
+		}
+
+		var res types.AuthWebhookResponse
+		res.Allowed = true
+		_, err = res.Write(w)
+		assert.NoError(t, err)
+	}))
+	defer authServer.Close()
+
+	svr, err := server.New(helper.TestConfig())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer func() { adminCli.Close() }()
+	project, err := adminCli.CreateProject(ctx, "watch-attributes")
+	assert.NoError(t, err)
+	project.AuthWebhookURL = authServer.URL
+	_, err = adminCli.UpdateProject(
+		ctx,
+		project.ID.String(),
+		&types.UpdatableProjectFields{
+			AuthWebhookURL:     &project.AuthWebhookURL,
+			AuthWebhookMethods: allWebhookMethods,
+		},
+	)
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(
+		svr.RPCAddr(),
+		client.WithToken("token"),
+		client.WithAPIKey(project.PublicKey),
+	)
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, cli.Close()) }()
+	assert.NoError(t, cli.Activate(ctx))
+
+	doc := document.New(helper.TestKey(t))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+
+	assert.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(watchAttrs) > 0
+	}, 5*time.Second, 50*time.Millisecond, "the Watch webhook was never called")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []types.AccessAttribute{{
+		Key:  doc.Key().String(),
+		Verb: types.Read,
+	}}, watchAttrs)
 }

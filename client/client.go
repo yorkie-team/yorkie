@@ -772,18 +772,7 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	watchCtx, cancel := context.WithCancel(ctx)
 
 	// Start the watch stream using unified Watch RPC
-	stream, err := c.client.Watch(
-		watchCtx,
-		withShardKey(connect.NewRequest(&api.WatchRequest{
-			ClientId: c.id.String(),
-			Resources: []*api.ResourceDescriptor{{
-				Resource: &api.ResourceDescriptor_Channel{
-					Channel: &api.ChannelDescriptor{
-						ChannelKey: ch.Key().String(),
-					},
-				},
-			}},
-		}), c.options.APIKey, ch.FirstKeyPath()))
+	stream, err := c.openChannelWatch(watchCtx, ch)
 	if err != nil {
 		cancel()
 		return nil, nil, err
@@ -795,54 +784,27 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 		defer cancel()
 
 		for {
-			select {
-			case <-watchCtx.Done():
+			// A stream the application did not close ended on the server's
+			// terms: the connection dropped, or the subscription behind it
+			// pruned itself. Neither means the watch is over, so re-establish
+			// it — without a new stream the channel stops delivering
+			// broadcasts and session counts for the rest of its life.
+			if !c.pumpChannelWatch(watchCtx, ch, stream, countChan) {
 				return
-			default:
-				if !stream.Receive() {
-					if err := stream.Err(); err != nil {
-						// Log error and return to exit the goroutine
-						if c.logger != nil {
-							c.logger.Error("WatchChannel stream error", zap.Error(err))
-						}
-						return
-					}
-					// Stream ended normally
-					return
-				}
+			}
+			if watchCtx.Err() != nil {
+				return
+			}
 
-				msg := stream.Msg()
-				switch body := msg.Body.(type) {
-				case *api.WatchResponse_Initialization:
-					for _, init := range body.Initialization.ResourceInits {
-						if ci, ok := init.Init.(*api.ResourceInit_ChannelInit); ok {
-							ch.UpdateSessionCount(ci.ChannelInit.SessionCount, ci.ChannelInit.Seq)
-							select {
-							case countChan <- ci.ChannelInit.SessionCount:
-							case <-watchCtx.Done():
-								return
-							}
-						}
-					}
-				case *api.WatchResponse_Event:
-					if ce, ok := body.Event.Event.(*api.WatchEvent_ChannelEvent); ok {
-						event := ce.ChannelEvent.Event
-						if event != nil {
-							// Handle broadcast events
-							if event.Type == api.ChannelEvent_TYPE_BROADCAST {
-								if handler, ok := ch.BroadcastEventHandlers()[event.Topic]; ok && handler != nil {
-									_ = handler(event.Topic, event.Publisher, event.Payload)
-								}
-							} else if ch.UpdateSessionCount(event.SessionCount, event.Seq) {
-								select {
-								case countChan <- event.SessionCount:
-								case <-watchCtx.Done():
-									return
-								}
-							}
-						}
-					}
+			// Re-establishing only follows a stream that delivered something,
+			// so a server that ends every stream at once cannot spin this
+			// loop.
+			stream, err = c.openChannelWatch(watchCtx, ch)
+			if err != nil {
+				if c.logger != nil {
+					c.logger.Error("WatchChannel re-establish failed", zap.Error(err))
 				}
+				return
 			}
 		}
 	}()
@@ -864,6 +826,86 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	}()
 
 	return countChan, closeFunc, nil
+}
+
+// openChannelWatch opens a Watch stream carrying the given channel.
+func (c *Client) openChannelWatch(
+	ctx context.Context,
+	ch *channel.Channel,
+) (*connect.ServerStreamForClient[api.WatchResponse], error) {
+	return c.client.Watch(
+		ctx,
+		withShardKey(connect.NewRequest(&api.WatchRequest{
+			ClientId: c.id.String(),
+			Resources: []*api.ResourceDescriptor{{
+				Resource: &api.ResourceDescriptor_Channel{
+					Channel: &api.ChannelDescriptor{
+						ChannelKey: ch.Key().String(),
+					},
+				},
+			}},
+		}), c.options.APIKey, ch.FirstKeyPath()))
+}
+
+// pumpChannelWatch delivers the responses of one channel watch stream until
+// the stream ends or the watch is canceled. It reports whether the stream
+// delivered at least one response, which is what tells the caller the server
+// still accepts this watch and re-establishing it is worth attempting.
+func (c *Client) pumpChannelWatch(
+	ctx context.Context,
+	ch *channel.Channel,
+	stream *connect.ServerStreamForClient[api.WatchResponse],
+	countChan chan<- int64,
+) bool {
+	delivered := false
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+			if !stream.Receive() {
+				if err := stream.Err(); err != nil && c.logger != nil {
+					c.logger.Error("WatchChannel stream error", zap.Error(err))
+				}
+				return delivered
+			}
+			delivered = true
+
+			msg := stream.Msg()
+			switch body := msg.Body.(type) {
+			case *api.WatchResponse_Initialization:
+				for _, init := range body.Initialization.ResourceInits {
+					if ci, ok := init.Init.(*api.ResourceInit_ChannelInit); ok {
+						ch.UpdateSessionCount(ci.ChannelInit.SessionCount, ci.ChannelInit.Seq)
+						select {
+						case countChan <- ci.ChannelInit.SessionCount:
+						case <-ctx.Done():
+							return false
+						}
+					}
+				}
+			case *api.WatchResponse_Event:
+				if ce, ok := body.Event.Event.(*api.WatchEvent_ChannelEvent); ok {
+					event := ce.ChannelEvent.Event
+					if event != nil {
+						// Handle broadcast events
+						if event.Type == api.ChannelEvent_TYPE_BROADCAST {
+							if handler, ok := ch.BroadcastEventHandlers()[event.Topic]; ok && handler != nil {
+								_ = handler(event.Topic, event.Publisher, event.Payload)
+							}
+						} else if ch.UpdateSessionCount(event.SessionCount, event.Seq) {
+							select {
+							case countChan <- event.SessionCount:
+							case <-ctx.Done():
+								return false
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 // Sync pushes local changes of the attached documents to the server and

@@ -509,9 +509,14 @@ func (x *DetachDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type WatchRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ClientId  string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Resources []*ResourceDescriptor  `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ClientId string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	// resources lists what the stream delivers. It must hold between 1 and 100
+	// descriptors, and the server must recognize every one of them: a request
+	// naming a resource the server cannot subscribe to is rejected whole rather
+	// than served in part, so a client never watches fewer resources than it
+	// asked for without being told.
+	Resources []*ResourceDescriptor `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty"`
 	// actor_id is the stable actor the client stamps into its changes. When set,
 	// the server subscribes the client under it so watch peer ids and
 	// watched/unwatched events match the presence CRDT keying. Old SDKs omit it

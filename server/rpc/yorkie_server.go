@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"sync"
 	gotime "time"
 
 	"connectrpc.com/connect"
@@ -29,8 +30,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -41,6 +44,50 @@ import (
 	"github.com/yorkie-team/yorkie/server/revisions"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/schemas"
+)
+
+// maxWatchResources is the largest number of resource descriptors a single
+// Watch request may carry. Every descriptor costs a database read, a
+// subscription slot and a goroutine for the life of the stream, so an
+// unbounded list lets one request amplify into arbitrary server work. The
+// bound is well above any realistic client: the SDKs open one stream per
+// resource today, and even a client multiplexing every document it has open
+// stays far below it.
+const maxWatchResources = 100
+
+var (
+	// ErrNoResources is returned when a Watch request carries no resource to
+	// subscribe to. Such a stream has nothing to deliver, so it is rejected
+	// instead of being left open.
+	ErrNoResources = errors.InvalidArgument(
+		"no resources to watch",
+	).WithCode("ErrNoResources")
+
+	// ErrTooManyResources is returned when a Watch request carries more
+	// resource descriptors than maxWatchResources.
+	ErrTooManyResources = errors.InvalidArgument(
+		"too many resources to watch",
+	).WithCode("ErrTooManyResources")
+
+	// ErrUnsupportedResource is returned when a Watch request carries a
+	// resource descriptor this server cannot subscribe to: one with its
+	// resource oneof unset, or one naming a type added after this server was
+	// built. Skipping it would leave the client watching fewer resources than
+	// it asked for, with nothing saying so.
+	ErrUnsupportedResource = errors.InvalidArgument(
+		"unsupported resource descriptor",
+	).WithCode("ErrUnsupportedResource")
+
+	// ErrSubscriptionsClosed is returned when every subscription behind a
+	// Watch stream has closed itself. That only happens through the
+	// self-prune fallback in pubsub.Subscription.Publish, which is a
+	// server-side decision that the client neither asked for nor can detect:
+	// ending the stream cleanly would read as a completed watch and no SDK
+	// would reconnect, leaving the client attached but permanently desynced.
+	// A retriable status sends it back through its reconnect path instead.
+	ErrSubscriptionsClosed = errors.Unavailable(
+		"watch subscriptions closed",
+	).WithCode("ErrSubscriptionsClosed")
 )
 
 type yorkieServer struct {
@@ -607,13 +654,28 @@ func (s *yorkieServer) Watch(
 		}
 	}
 
+	// Resources are resolved to their keys before authorization so the auth
+	// webhook can be asked about the documents and channels this stream would
+	// deliver. The request carries document ids, and only the key identifies a
+	// document to a webhook, so a deployment authorizing per document cannot
+	// decide anything until the ids are resolved.
+	targets, err := s.resolveResources(ctx, req.Msg, project)
+	if err != nil {
+		return err
+	}
+
+	keys := make([]key.Key, len(targets))
+	for i, target := range targets {
+		keys[i] = target.key()
+	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.Watch,
+		Method:     types.Watch,
+		Attributes: types.NewAccessAttributes(keys, types.Read),
 	}); err != nil {
 		return err
 	}
 
-	docSubs, channelSubs, resourceInits, err := s.subscribeResources(ctx, req.Msg, presenceID, project)
+	docSubs, channelSubs, resourceInits, err := s.subscribeResources(ctx, targets, presenceID, project)
 	if err != nil {
 		return err
 	}
@@ -641,13 +703,114 @@ func (s *yorkieServer) Watch(
 		return err
 	}
 
-	return s.streamMergedEvents(ctx, stream, project, docSubs, channelSubs)
+	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
 }
 
-// subscribeResources subscribes to each document and channel resource in the request.
-func (s *yorkieServer) subscribeResources(
+// watchTarget is a Watch resource descriptor resolved to what the rest of the
+// handler needs: the key authorization is decided on, and the identifiers the
+// subscribe step consumes. Exactly one of docInfo and channelKey is set.
+type watchTarget struct {
+	docInfo    *database.DocInfo
+	channelKey key.Key
+}
+
+// key returns the resource key the auth webhook is asked about.
+func (t watchTarget) key() key.Key {
+	if t.docInfo != nil {
+		return t.docInfo.Key
+	}
+	return t.channelKey
+}
+
+// resolveResources validates the resource descriptors of the request and
+// resolves each to its target. Every descriptor must resolve, so on success
+// the returned slice holds at least one target: a stream with no subscription
+// ends as soon as it starts (see streamMergedEvents), which a client reads as
+// an unexpected termination rather than as a rejection.
+func (s *yorkieServer) resolveResources(
 	ctx context.Context,
 	req *api.WatchRequest,
+	project *types.Project,
+) ([]watchTarget, error) {
+	if len(req.Resources) == 0 {
+		return nil, ErrNoResources
+	}
+	if len(req.Resources) > maxWatchResources {
+		return nil, ErrTooManyResources
+	}
+
+	// Descriptors are checked for shape before any of them is resolved, so a
+	// request this server cannot serve in full is rejected without spending a
+	// database read on its well-formed siblings.
+	for _, res := range req.Resources {
+		if res == nil {
+			return nil, ErrUnsupportedResource
+		}
+		switch res.Resource.(type) {
+		case *api.ResourceDescriptor_Document, *api.ResourceDescriptor_Channel:
+		default:
+			return nil, ErrUnsupportedResource
+		}
+	}
+
+	targets := make([]watchTarget, 0, len(req.Resources))
+	for _, res := range req.Resources {
+		var target watchTarget
+		var err error
+
+		switch desc := res.Resource.(type) {
+		case *api.ResourceDescriptor_Document:
+			target, err = s.resolveDocument(ctx, desc.Document.DocumentId, project)
+		case *api.ResourceDescriptor_Channel:
+			target, err = resolveChannel(desc.Channel.ChannelKey)
+		}
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+
+	return targets, nil
+}
+
+// resolveDocument resolves a document id to the target the auth webhook is
+// asked about and the subscribe step consumes.
+func (s *yorkieServer) resolveDocument(
+	ctx context.Context,
+	documentID string,
+	project *types.Project,
+) (watchTarget, error) {
+	docID, err := converter.FromDocumentID(documentID)
+	if err != nil {
+		return watchTarget{}, err
+	}
+
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
+		ProjectID: project.ID,
+		DocID:     docID,
+	})
+	if err != nil {
+		return watchTarget{}, err
+	}
+
+	return watchTarget{docInfo: docInfo}, nil
+}
+
+// resolveChannel validates a channel key and returns it as a target.
+func resolveChannel(channelKey string) (watchTarget, error) {
+	k := key.Key(channelKey)
+	if err := k.Validate(); err != nil {
+		return watchTarget{}, err
+	}
+
+	return watchTarget{channelKey: k}, nil
+}
+
+// subscribeResources subscribes to each resolved target and returns the
+// subscriptions together with the init data the stream opens with.
+func (s *yorkieServer) subscribeResources(
+	ctx context.Context,
+	targets []watchTarget,
 	clientID time.ActorID,
 	project *types.Project,
 ) ([]docSub, []channelSub, []*api.ResourceInit, error) {
@@ -666,26 +829,25 @@ func (s *yorkieServer) subscribeResources(
 		}
 	}
 
-	for _, res := range req.Resources {
-		switch desc := res.Resource.(type) {
-		case *api.ResourceDescriptor_Document:
-			ds, ri, err := s.subscribeDocument(ctx, desc, clientID, project)
+	for _, target := range targets {
+		if target.docInfo != nil {
+			ds, ri, err := s.subscribeDocument(ctx, target, clientID, project)
 			if err != nil {
 				cleanup()
 				return nil, nil, nil, err
 			}
 			docSubs = append(docSubs, *ds)
 			resourceInits = append(resourceInits, ri)
-
-		case *api.ResourceDescriptor_Channel:
-			cs, ri, err := s.subscribeChannel(ctx, desc, clientID, project)
-			if err != nil {
-				cleanup()
-				return nil, nil, nil, err
-			}
-			channelSubs = append(channelSubs, *cs)
-			resourceInits = append(resourceInits, ri)
+			continue
 		}
+
+		cs, ri, err := s.subscribeChannel(ctx, target.channelKey, clientID, project)
+		if err != nil {
+			cleanup()
+			return nil, nil, nil, err
+		}
+		channelSubs = append(channelSubs, *cs)
+		resourceInits = append(resourceInits, ri)
 	}
 
 	return docSubs, channelSubs, resourceInits, nil
@@ -694,19 +856,12 @@ func (s *yorkieServer) subscribeResources(
 // subscribeDocument subscribes to a single document and returns its subscription and init data.
 func (s *yorkieServer) subscribeDocument(
 	ctx context.Context,
-	desc *api.ResourceDescriptor_Document,
+	target watchTarget,
 	clientID time.ActorID,
 	project *types.Project,
 ) (*docSub, *api.ResourceInit, error) {
-	docID, err := converter.FromDocumentID(desc.Document.DocumentId)
-	if err != nil {
-		return nil, nil, err
-	}
-	dk := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, dk)
-	if err != nil {
-		return nil, nil, err
-	}
+	docInfo := target.docInfo
+	dk := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 
 	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
 	defer locker.Unlock()
@@ -721,10 +876,10 @@ func (s *yorkieServer) subscribeDocument(
 		pbClientIDs = append(pbClientIDs, id.String())
 	}
 
-	return &docSub{docID: docID, docKey: dk, sub: sub}, &api.ResourceInit{
+	return &docSub{docID: docInfo.ID, docKey: dk, sub: sub}, &api.ResourceInit{
 		Init: &api.ResourceInit_DocumentInit{
 			DocumentInit: &api.DocumentInit{
-				DocumentId: docID.String(),
+				DocumentId: docInfo.ID.String(),
 				ClientIds:  pbClientIDs,
 			},
 		},
@@ -734,14 +889,10 @@ func (s *yorkieServer) subscribeDocument(
 // subscribeChannel subscribes to a single channel and returns its subscription and init data.
 func (s *yorkieServer) subscribeChannel(
 	ctx context.Context,
-	desc *api.ResourceDescriptor_Channel,
+	channelKey key.Key,
 	clientID time.ActorID,
 	project *types.Project,
 ) (*channelSub, *api.ResourceInit, error) {
-	channelKey := key.Key(desc.Channel.ChannelKey)
-	if err := channelKey.Validate(); err != nil {
-		return nil, nil, err
-	}
 	refKey := types.ChannelRefKey{
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
@@ -763,10 +914,18 @@ func (s *yorkieServer) subscribeChannel(
 	}, nil
 }
 
-// streamMergedEvents fans in events from all subscriptions and streams them.
+// streamMergedEvents fans in events from all subscriptions and streams them
+// through send. It ends with ErrSubscriptionsClosed once every subscription
+// has closed itself, so the client reconnects instead of treating a stream it
+// never ended as complete.
+//
+// A subscription that closes while others are still live leaves the stream
+// open and that one resource silently undelivered. Streams carry a single
+// resource today, so the two cases coincide; multiplexing several resources
+// onto one stream will have to report the partial loss on its own.
 func (s *yorkieServer) streamMergedEvents(
 	ctx context.Context,
-	stream *connect.ServerStream[api.WatchResponse],
+	send func(*api.WatchResponse) error,
 	project *types.Project,
 	docSubs []docSub,
 	channelSubs []channelSub,
@@ -775,8 +934,21 @@ func (s *yorkieServer) streamMergedEvents(
 	done := make(chan struct{})
 	defer close(done)
 
+	// A subscription closes its own event channel after too many consecutive
+	// publish failures (see pubsub.Subscription.Publish), which makes the
+	// fan-in goroutine below return. Once every fan-in has returned, no event
+	// can reach merged again, so close it to end the stream instead of
+	// leaving the loop below blocked forever.
+	var wg sync.WaitGroup
+	wg.Add(len(docSubs) + len(channelSubs))
+	go func() {
+		wg.Wait()
+		close(merged)
+	}()
+
 	for _, ds := range docSubs {
 		go func(ds docSub) {
+			defer wg.Done()
 			for {
 				select {
 				case <-done:
@@ -797,6 +969,7 @@ func (s *yorkieServer) streamMergedEvents(
 	}
 	for _, cs := range channelSubs {
 		go func(cs channelSub) {
+			defer wg.Done()
 			for {
 				select {
 				case <-done:
@@ -822,7 +995,11 @@ func (s *yorkieServer) streamMergedEvents(
 			return context.Canceled
 		case <-ctx.Done():
 			return context.Canceled
-		case te := <-merged:
+		case te, ok := <-merged:
+			if !ok {
+				return ErrSubscriptionsClosed
+			}
+
 			resp, err := s.convertTaggedEvent(te)
 			if err != nil {
 				logging.From(ctx).Errorf("failed to convert event: %v", err)
@@ -841,7 +1018,7 @@ func (s *yorkieServer) streamMergedEvents(
 				)
 			}
 
-			if err := stream.Send(resp); err != nil {
+			if err := send(resp); err != nil {
 				return err
 			}
 		}
@@ -949,16 +1126,22 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
+	// Resolved before authorization for the same reason as in Watch: the
+	// webhook decides on the document key, which only the resolved target
+	// carries.
+	target, err := s.resolveDocument(ctx, req.Msg.DocumentId, project)
+	if err != nil {
+		return err
+	}
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.WatchDocument,
+		Method:     types.WatchDocument,
+		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
 	}); err != nil {
 		return err
 	}
 
-	desc := &api.ResourceDescriptor_Document{
-		Document: &api.DocumentDescriptor{DocumentId: req.Msg.DocumentId},
-	}
-	ds, ri, err := s.subscribeDocument(ctx, desc, clientID, project)
+	ds, ri, err := s.subscribeDocument(ctx, target, clientID, project)
 	if err != nil {
 		return err
 	}
@@ -1041,16 +1224,19 @@ func (s *yorkieServer) WatchChannel(
 		return err
 	}
 
+	target, err := resolveChannel(req.Msg.ChannelKey)
+	if err != nil {
+		return err
+	}
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.WatchChannel,
+		Method:     types.WatchChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
 	}); err != nil {
 		return err
 	}
 
-	desc := &api.ResourceDescriptor_Channel{
-		Channel: &api.ChannelDescriptor{ChannelKey: req.Msg.ChannelKey},
-	}
-	cs, ri, err := s.subscribeChannel(ctx, desc, clientID, project)
+	cs, ri, err := s.subscribeChannel(ctx, target.channelKey, clientID, project)
 	if err != nil {
 		return err
 	}

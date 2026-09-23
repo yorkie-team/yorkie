@@ -26,6 +26,12 @@ import (
 // over a stream. It blocks until the context is done, the serviceCtx is done
 // (if non-nil), or the subscription channel is closed.
 //
+// A closed subscription channel means the subscription pruned itself (see
+// pubsub.Subscription.Publish), so the stream ends with ErrSubscriptionsClosed
+// rather than cleanly: the client asked for a watch that is still supposed to
+// be running, and a clean end would leave it waiting on a stream no SDK
+// reconnects.
+//
 // The convert function transforms an event into a response. If it returns
 // (nil, nil), the event is skipped. The optional afterSend callback is called
 // after each successful send.
@@ -45,7 +51,7 @@ func streamEvents[E any, Resp any](
 			return context.Canceled
 		case event, ok := <-sub.Events():
 			if !ok {
-				return nil
+				return ErrSubscriptionsClosed
 			}
 
 			resp, err := convert(event)
