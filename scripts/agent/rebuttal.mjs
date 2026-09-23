@@ -583,6 +583,18 @@ function cmdPost(pr, args) {
     console.error("rebuttal post: the record did not round-trip; refusing to post an unreadable rebuttal.");
     process.exit(2);
   }
+  // `--emit <file>`: RENDER, DO NOT POST — the same split `fix-report.mjs`
+  // makes, for the same reason. Commenting on a pull request needs
+  // `pull-requests: write`, and this runs inside a fix agent holding an
+  // unrestricted shell over an untrusted diff. A token that can comment can also
+  // APPROVE, and an approval from the bot satisfies the only human control this
+  // pipeline has. The round-trip check above stays here, where the agent's own
+  // knowledge of its dispute is; a trusted step posts the file.
+  if (args.emit) {
+    writeFileSync(String(args.emit), body);
+    console.error(`rebuttal: wrote the dispute for #${pr} to ${args.emit}`);
+    return;
+  }
   try {
     execFileSync("gh", ["pr", "comment", String(pr), "--body", body], { encoding: "utf8" });
   } catch (err) {

@@ -738,9 +738,13 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
         run: |
-          PR="$(gh pr list --state open --json number,headRefName \
-            --jq "map(select(.headRefName | startswith(\"agent/$ISSUE-\"))) | .[0].number // empty")"
-          [ -n "$PR" ] || { echo "no agent/$ISSUE-* PR yet; nothing to disclose on"; exit 0; }
+          # SAME-REPO, like every other agent-branch lookup in this file. A fork
+          # PR from a branch named `agent/<issue>-x` is not this run's work, and
+          # disclosing agent authorship on an outside contributor's PR would be
+          # a false statement about their change.
+          PR="$(gh pr list --state open --json number,headRefName,isCrossRepository \
+            --jq "map(select(.isCrossRepository == false and (.headRefName | startswith(\"agent/$ISSUE-\")))) | .[0].number // empty")"
+          [ -n "$PR" ] || { echo "no same-repo agent/$ISSUE-* PR yet; nothing to disclose on"; exit 0; }
           node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
 
       - name: Write implement session job summary

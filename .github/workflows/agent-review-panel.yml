@@ -2145,6 +2145,7 @@ jobs:
 
             ```
             node ${{ runner.temp }}/agent-tools/fix-report.mjs post ${{ needs.review-panel.outputs.pr }} \
+              --emit ${{ runner.temp }}/fix-report.md \
               --head ${{ github.event.workflow_run.head_sha }} \
               --fixed "<lens>::<path/from/the/finding>::<the finding's own wording, copied>::<what you changed, with file:line>" \
               --skipped "<lens>::<path>::<the finding's wording>::<why you did not change it>"
@@ -2163,6 +2164,7 @@ jobs:
 
               ```
               node ${{ runner.temp }}/agent-tools/rebuttal.mjs post ${{ needs.review-panel.outputs.pr }} \
+                --emit ${{ runner.temp }}/rebuttal.md \
                 --lens <lens-id> --file <path/from/the/finding> \
                 --summary "<the finding's own wording, copied>" \
                 --claim "<why the finding is wrong>" \
@@ -2398,6 +2400,38 @@ jobs:
         run: |
           [ -f "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" ] || { echo "disclose-pr.mjs not staged; skipping"; exit 0; }
           node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
+
+      # POSTED HERE, NOT BY THE AGENT — its token carries no `pull-requests`
+      # permission, and a token that can comment can also approve. Markers are
+      # neutralised because this pipeline trusts latches BY AUTHOR, so agent text
+      # inside an App-authored comment is how a forged one gets believed.
+      - name: Post the fix-agent report
+        if: always() && steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.review-panel.outputs.pr }}
+        run: |
+          F="$RUNNER_TEMP/fix-report.md"
+          [ -s "$F" ] || { echo "no fix-agent report was written; nothing to post"; exit 0; }
+          sed 's/<!--/<!\xe2\x80\x8c--/g' "$F" > "$RUNNER_TEMP/fix-report.md.safe"
+          gh pr comment "$PR" --body-file "$RUNNER_TEMP/fix-report.md.safe"
+
+      # POSTED HERE, NOT BY THE AGENT — its token carries no `pull-requests`
+      # permission, and a token that can comment can also approve. Markers are
+      # neutralised because this pipeline trusts latches BY AUTHOR, so agent text
+      # inside an App-authored comment is how a forged one gets believed.
+      - name: Post the fix-agent rebuttal
+        if: always() && steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.review-panel.outputs.pr }}
+        run: |
+          F="$RUNNER_TEMP/rebuttal.md"
+          [ -s "$F" ] || { echo "no fix-agent rebuttal was written; nothing to post"; exit 0; }
+          sed 's/<!--/<!\xe2\x80\x8c--/g' "$F" > "$RUNNER_TEMP/rebuttal.md.safe"
+          gh pr comment "$PR" --body-file "$RUNNER_TEMP/rebuttal.md.safe"
 
       - name: Update loop status (fix outcome)
         if: always() && steps.guard.outputs.proceed == 'true'
