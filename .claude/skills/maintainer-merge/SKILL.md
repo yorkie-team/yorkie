@@ -37,10 +37,9 @@ and the `branches/main/protection` endpoint.
 ## Fork PRs
 
 The PR branch lives on the contributor's fork and **no remote points at it**.
-To push a rebase or a conflict fix there:
-
-The branch name comes from the contributor. `$(id)` is a valid git branch
-name, so keep it in a quoted variable and never paste it into a command line:
+Its name is contributor-controlled too, and `$(id)` passes
+`git check-ref-format`, so keep every value in a quoted variable rather than
+pasting it into a command line. To push a rebase or a conflict fix there:
 
 ```bash
 eval "$(gh api repos/yorkie-team/yorkie/pulls/<N> \
