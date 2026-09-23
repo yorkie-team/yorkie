@@ -811,7 +811,8 @@ jobs:
                 + 'It may have found nothing to change, run out of turns, hit a tool denial, or failed '
                 + 'to push — including the one push this App simply cannot make: a commit touching '
                 + '`.github/workflows/**` is rejected, because the token is minted without '
-                + '`workflows: write` so that a fix agent can never rewrite the lanes that grade it. '
+                + '`workflows: write`, so a fix agent cannot rewrite the lanes that grade it — though it CAN '
+                + 'delete them: the refusal covers create and update only. '
                 + `See the effort comment and the [workflow run](${process.env.RUN_URL}).`;
             }
             if (process.env.COMMENT_ID) {

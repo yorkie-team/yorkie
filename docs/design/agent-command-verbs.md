@@ -274,68 +274,37 @@ finding is wrong.
 
 #### Phase I — `@claude fix` on an issue (issue → PR) — DESIGNED, NOT LANDED
 
-> **Nothing in this phase is installed.** `.github/workflows/agent-implement.yml`
-> does not exist in this repository. This section is a specification for the
-> maintainer who lands it, not a description of running code. Everything below
-> that reads as present tense describes what the workflow **must do**, and the
-> requirements list is the acceptance criteria.
+> **This phase is installed.** `.github/workflows/agent-implement.yml` exists and
+> is live behind `AGENT_PIPELINE_ENABLED`, with one operational prerequisite that
+> is not yet met — see the gate below.
 
-**This was a Non-Goal, deferred past every phase; that was reversed on
-2026-09-22, and the implementation was then withdrawn on 2026-09-23 without
-reversing the decision.** The section is kept rather than rewritten out, because
-the argument against it is still the argument to weigh, and a reader deciding
-whether to adopt this elsewhere needs both halves.
+**This was a Non-Goal, deferred past every phase.** That was reversed on
+2026-09-22; the implementation was then withdrawn on 2026-09-23 and restored on
+the same day with the findings fixed. The section keeps the argument against it,
+because that argument is still the one to weigh and a reader deciding whether to
+adopt this elsewhere needs both halves.
 
-**Why a written, reviewed draft was withdrawn rather than merged.** A full
-`agent-implement.yml` was written and reviewed on this branch. Five review lenses
-returned blocking findings against it — a token that satisfied its own gate, a
-protection check that accepted an approval surviving the next push, a refusal
-path that threw instead of explaining, an entry point that skipped the collision
-guard, and issue text re-read long after the maintainer authorised it. None of
-them could be corrected, because **no credential in this pipeline can write
-`.github/workflows/**`**. That is measured, not assumed: a commit touching the
-file, pushed to a scratch ref, came back
+**Why it was withdrawn once, and what that taught.** Five review lenses returned
+blocking findings against the first draft, and none could be corrected *by the
+pipeline*, because **no credential here can write `.github/workflows/**`**. The
+fix agent carried the correction as an apply-me patch under `docs/**` for three
+rounds instead, and the panel then called that a defect of its own — `docs/**`
+is agent-writable, so a patch there launders workflow content across the boundary
+the missing `workflows` permission exists to hold. That reasoning is right and is
+why the withdrawal was the correct move for an agent to make.
 
-```
-! [remote rejected] refusing to allow a GitHub App to create or update workflow
-  `.github/workflows/agent-implement.yml` without `workflows` permission
-```
+Two things came out of it that outlive the episode. **The refusal covers create
+and update only: delete succeeds.** The agent removed the workflow with the same
+token that cannot edit it, which means "a fix agent can never rewrite the lanes
+that grade it" — asserted in this document, in several workflow comments and in
+the App's own description — was false. It can delete them. That is recorded here
+rather than quietly corrected, because the invariant was load-bearing in the
+argument for every phase.
 
-and the Git Data API refuses the same tree. It is the intended design — the App
-holds no `Workflows` permission, `checks.test.mjs` asserts that no agent token
-may ever request one, and `agent-fix.yml` prints that property to contributors.
-Granting it would hand an agent the ability to rewrite its own gates, which is a
-worse trade than deferring the verb.
+And the findings themselves were real. They are fixed in the restored workflow,
+each one by a mechanism rather than a promise:
 
-Two rounds tried to route around this by committing the correction as an
-appliable patch under `docs/tasks/active/`, addressed to whoever read it. That is
-worse than it looks: `docs/**` *is* writable by every agent token, so an
-apply-me patch there launders arbitrary workflow content around the very
-permission boundary above, and the first attempt was simply never applied. The
-patch is gone. What survives is the requirements list below — prose a maintainer
-implements from, which no `git apply` can turn into a workflow nobody read.
-
-So the shape of this phase is: the design is settled and recorded here; the
-implementation is a human's to write and push, against the acceptance criteria
-below.
-
-The case for deferring: issue → PR originates work rather than reviewing it, so
-it sits on a different axis from every other verb here; it is the one verb whose
-output nobody asked for at the moment it is produced; and it is the first place
-a bot pushes commits and opens a pull request.
-
-The case for doing it now, which won: the phases as numbered deliver nothing a
-person can *look at* until Phase 3, and Phase 2's exit criteria cannot be met
-without a stream of agent-managed PRs to observe. Issue → PR produces those. The
-lettered name says it is off the numbered track, not that it replaces a phase.
-
-What the reversal actually costs, stated plainly: a PR this verb opens is
-reviewed by `@claude review` (advisory) and a human. The gating panel has not
-completed a real review yet, so the machinery that was supposed to grade
-agent-authored code is not yet grading it. That is the risk, and it is accepted
-on the strength of the gate below rather than waved away.
-
-- **Would land:** `agent-implement.yml` — `route`, `implement`, `help`. The `help`
+- **Lands:** `agent-implement.yml` — `route`, `implement`, `help`. The `help`
   job is not incidental: today every verb on an issue is refused by the same
   `github.event.issue.pull_request` gate, with no comment, so a maintainer who
   types `@claude` on an issue gets a green tick and silence.
