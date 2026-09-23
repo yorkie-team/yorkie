@@ -63,13 +63,42 @@ work here is porting plus the three repo-specific pieces named in §4.
   the fact that nothing in these workflows asks the token to approve or merge — it
   does **not** rest on the credentials being unable to. A successful prompt
   injection in any of the four reaches a token that can submit an approving review
-  on a PR the App did not author and then merge it. That gap is open, it is not
-  closed by anything on this branch, and it needs a human: the fix is to split the
-  mint the way Phase I's acceptance criterion 1 describes — the agent gets
+  on a PR the App did not author and then merge it. That gap is open and it is not
+  closed by anything on this branch.
+
+  Two things about that sentence are weaker than they read, and both are recorded
+  here rather than left for the next reader to discover.
+
+  **The compensating control is unverified in this repository.** Branch protection
+  on `main` is a repository *setting*. It appears nowhere in the tree — no
+  ruleset fixture, no `CODEOWNERS`, and no test in `scripts/agent/checks.test.mjs`
+  asserts it. Nothing here would notice if it were relaxed tomorrow. Phase I's gate
+  (below) is the only place in this design that reads the setting at run time, and
+  Phase I is not landed. So the invariant currently rests on an assumption, checked
+  by nobody.
+
+  **Splitting the mint is necessary and not sufficient, as these four jobs are
+  built.** The correction is Phase I's acceptance criterion 1 — the agent gets
   `contents` + `issues` and no `pull-requests`, and every step needing
-  `pull-requests` stays a trusted step in the workflow file. No credential in this
-  pipeline may write `.github/workflows/**` (see Phase I below), so an agent cannot
-  land that correction; a maintainer must.
+  `pull-requests` becomes a trusted step in the workflow file. But "trusted step"
+  is a claim about the *code the step runs*, not about where the step sits in the
+  file, and in these jobs it does not hold yet: each copies `scripts/agent` to
+  `$RUNNER_TEMP/agent-tools` **before** the agent runs (`agent-fix.yml:408`), then
+  runs the agent with `Bash` and no filesystem confinement
+  (`agent-fix.yml:524-634`), then executes those same staged files afterwards
+  (`agent-fix.yml:657`, `:672`, `:770`). An agent that rewrites
+  `$RUNNER_TEMP/agent-tools/metrics.mjs` mid-run is executed by a later step — so
+  handing that step the `pull-requests` token would hand it to the branch. This is
+  criterion 12 ("staged scripts in `$RUNNER_TEMP` are not a trust boundary")
+  arriving in the four workflows that already shipped, and **both corrections have
+  to land together**: the split alone relocates the capability without removing it.
+
+  Neither can be landed from here. No credential in this pipeline may write
+  `.github/workflows/**` (see Phase I below) — re-measured against this exact file
+  on 2026-09-23, where a push carrying a one-byte change to `agent-fix.yml` came
+  back `refusing to allow a GitHub App to create or update workflow
+  .github/workflows/agent-fix.yml without 'workflows' permission`. A maintainer
+  must land both, and until then this is the repository's largest known open gap.
 
 ## Design
 
