@@ -188,7 +188,7 @@ func (s *yorkieServer) WatchDocument(
 ### Risks and Mitigation
 
 Subscription instances are managed in memory on the pod that owns the
-stream. Two concrete risks follow from this.
+stream. Three concrete risks follow from this.
 
 **1. Subscription leak when the stream never terminates cleanly.**
 The only cleanup path tied to a `Subscription` is the WatchDocument
@@ -209,7 +209,30 @@ top of each iteration, skips dead entries, and reaps them via
 remains the primary path; self-prune is a fallback for the dead-stream
 case.
 
-**2. In-memory state is per-pod.** A leaked subscription on pod X
+**2. A self-pruned subscription leaves its stream with nothing to
+deliver.** Self-prune closes the events channel under a stream handler
+that may still be running: a client slow enough to miss
+`defaultMaxConsecutivePublishFailures` publishes in a row is not
+necessarily gone. The fan-in goroutine in `streamMergedEvents` returns
+when that channel closes, and the handler is then parked on a channel
+no one can write to — the stream stays open, the active-stream gauge is
+never decremented, and the deferred unsubscribe never runs.
+
+*Mitigation:* the handler tracks its fan-ins with a `sync.WaitGroup`
+and closes the merged channel once the last one has returned. The
+stream then ends with `ErrSubscriptionsClosed`, a retriable status, so
+the SDK re-establishes the watch and re-subscribes. Ending cleanly
+would not do: a clean end reads as a completed watch, and neither SDK
+watch loop reconnects from one, so the client would stay attached and
+silently stop receiving remote events.
+
+A subscription that prunes while its siblings are still live is not
+covered. The stream stays open and that one resource goes quiet. Every
+stream carries a single resource today, so the cases coincide;
+multiplexing several resources onto one stream will have to report the
+partial loss per resource.
+
+**3. In-memory state is per-pod.** A leaked subscription on pod X
 cannot be reaped by anything running on pod Y. The self-prune
 mitigation runs locally on the pod that owns the stale subscription,
 which is sufficient for log-volume and CPU costs but does not provide

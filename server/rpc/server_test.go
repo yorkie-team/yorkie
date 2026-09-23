@@ -180,6 +180,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		testcases.RunWatchDocumentActorMismatchTest(t, testClient)
 	})
 
+	t.Run("watch resource rejection test", func(t *testing.T) {
+		testcases.RunWatchResourceRejectionTest(t, testClient)
+	})
+
 	t.Run("max subscribers per document test", func(t *testing.T) {
 		testcases.RunMaxSubscribersPerDocumentConcurrencyTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
