@@ -551,7 +551,7 @@ export function parseItemString(s) {
 const USAGE =
   "Usage:\n"
   + "  node fix-report.mjs read <pr> [--out <file>]\n"
-  + "  node fix-report.mjs post <pr> [--head <sha>]\n"
+  + "  node fix-report.mjs post <pr> [--head <sha>] [--emit <file>]\n"
   + `      [--fixed "lens${ITEM_SEP}file${ITEM_SEP}summary${ITEM_SEP}what you changed" ...]\n`
   + `      [--skipped "lens${ITEM_SEP}file${ITEM_SEP}summary${ITEM_SEP}why not" ...]`;
 
@@ -597,6 +597,21 @@ function cmdPost(pr, args) {
   if (!back || back.fixed.length !== Math.min(fixed.length, 40) || back.skipped.length !== Math.min(skipped.length, 40)) {
     console.error("fix-report post: the record did not round-trip; refusing to post an unreadable report.");
     process.exit(2);
+  }
+  // `--emit <file>`: RENDER, DO NOT POST. Posting a PR comment needs
+  // `pull-requests: write`, and this runs inside the fix agent — a process that
+  // reads untrusted branch content with an unrestricted shell. A token that can
+  // comment on a pull request is also a token that can APPROVE one, and an
+  // approval from the bot satisfies the only human control this pipeline has.
+  //
+  // So the agent renders the report (keeping the round-trip check above, which
+  // is the part that needs the agent's own knowledge of what it did) and a
+  // trusted step in the workflow posts the file afterwards, with the wider token
+  // the agent never sees.
+  if (args.emit) {
+    writeFileSync(String(args.emit), body);
+    console.error(`fix-report: wrote ${fixed.length} fixed / ${skipped.length} skipped to ${args.emit}`);
+    return;
   }
   try {
     execFileSync("gh", ["pr", "comment", String(pr), "--body", body], { encoding: "utf8" });

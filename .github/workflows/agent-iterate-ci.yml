@@ -157,12 +157,33 @@ jobs:
           permission-pull-requests: write # reply in the PR thread
           permission-issues: write # PR conversation comments use the issues API
 
+      # THE TOKEN THE AGENT GETS, AND IT IS NOT THE ONE ABOVE. `contents: write`
+      # + `pull-requests: write` in one token is the exact pair that submits an
+      # APPROVING REVIEW and then merges, and GitHub refuses only an approval of
+      # a PR the same identity authored — this App authors almost none of them.
+      # The agent runs an unrestricted `Bash` over untrusted branch content, and
+      # `actions/checkout` writes whatever token it is given into `.git/config`,
+      # one `git config --get` from being read back.
+      #
+      # A required human approval on `main` is the only human control in this
+      # pipeline; a bot able to supply that approval removes it. So the agent
+      # gets `contents` alone — enough to commit and push — and every step that
+      # needs more runs in this file, after the agent has stopped.
+      - name: Generate the agent's narrow token
+        if: steps.app.outputs.configured == 'true'
+        id: agent-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-contents: write # commit and push, and nothing else
+
       - uses: actions/checkout@v4
         if: steps.app.outputs.configured == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
 
       # Stage the TRUSTED main copy of the agent scripts for every step below
       # that runs one — the same rule the panel's fix job applies to its staged
@@ -453,7 +474,7 @@ jobs:
         uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ steps.agent-token.outputs.token }}
           # This loop is triggered by workflow_run from the agent's own (bot)
           # push, so the initiating actor is the App bot. claude-code-action
           # blocks bot-initiated runs unless the bot is allow-listed. Allow ONLY

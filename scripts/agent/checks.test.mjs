@@ -1846,3 +1846,84 @@ test(
   },
 );
 
+
+test("no agent is handed a token that can approve a pull request", () => {
+  // THE ONLY HUMAN CONTROL IN THIS PIPELINE IS A REQUIRED APPROVAL ON `main`,
+  // and `contents: write` + `pull-requests: write` in ONE token is the pair that
+  // supplies it: submit an approving review, then merge. GitHub refuses only an
+  // approval of a PR the same identity authored, and this App authors almost
+  // none of them.
+  //
+  // The agent reaches that token two ways, both one `Bash` call wide: the action
+  // is handed it as `github_token`, and `actions/checkout` writes whatever token
+  // it is given into `.git/config`, where `git config --get
+  // http.https://github.com/.extraheader` reads it back.
+  //
+  // Nothing mechanical held this. The mint guard next door checks SHA-pinning,
+  // narrowing and the absence of `workflows` — none of which sees the pair. A
+  // review found it by reading four workflows; this finds it by construction.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+
+    // Every mint, by step id, with the permissions it asks for.
+    const mints = new Map();
+    for (let i = 0; i < lines.length; i++) {
+      if (!/create-github-app-token@/.test(lines[i])) continue;
+      let from = i;
+      while (from > 0 && !/^ {6}- /.test(lines[from])) from--;
+      let to = i + 1;
+      while (to < lines.length && !/^ {6}- /.test(lines[to])) to++;
+      const step = lines.slice(from, to).filter((l) => !/^\s*#/.test(l));
+      const id = /^\s+id:\s*(\S+)/m.exec(step.join("\n"))?.[1];
+      if (!id) continue;
+      mints.set(id, {
+        contents: step.some((l) => /^\s+permission-contents:\s*write/.test(l)),
+        pulls: step.some((l) => /^\s+permission-pull-requests:\s*write/.test(l)),
+      });
+    }
+    if (mints.size === 0) continue;
+
+    // Where an agent can read one: the action's `github_token`, and any
+    // `actions/checkout` that is given a token without `persist-credentials: false`.
+    const reachable = [];
+    for (let i = 0; i < lines.length; i++) {
+      const tok = /steps\.([A-Za-z0-9_-]+)\.outputs\.token/.exec(lines[i]);
+      if (!tok) continue;
+      if (/github_token:/.test(lines[i])) {
+        reachable.push({ id: tok[1], why: "handed to claude-code-action", line: i + 1 });
+        continue;
+      }
+      if (!/^\s+token:/.test(lines[i])) continue;
+      let from = i;
+      while (from > 0 && !/^ {6}- /.test(lines[from])) from--;
+      let to = i + 1;
+      while (to < lines.length && !/^ {6}- /.test(lines[to])) to++;
+      const step = lines.slice(from, to);
+      if (!step.some((l) => /actions\/checkout@/.test(l))) continue;
+      if (step.some((l) => /persist-credentials:\s*false/.test(l))) continue;
+      reachable.push({ id: tok[1], why: "persisted into .git/config by checkout", line: i + 1 });
+    }
+
+    for (const { id, why, line } of reachable) {
+      const mint = mints.get(id);
+      if (!mint) continue; // not one of this file's mints
+      checked++;
+      if (mint.contents && mint.pulls) {
+        offenders.push(`${file}:${line} steps.${id} (${why}) can approve AND merge`);
+      }
+    }
+  }
+
+  assert.ok(checked > 0, "no agent-reachable token found — this guard would be vacuous");
+  assert.deepEqual(
+    offenders,
+    [],
+    "these tokens are reachable by an agent and carry contents+pull-requests write:\n  " +
+      offenders.join("\n  "),
+  );
+});
