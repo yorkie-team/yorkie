@@ -77,11 +77,22 @@ near the code that prunes. Recording them next to the threshold is what turned
 
 `return nil` closes the stream cleanly, and the Go client reconnects only when
 `stream.Err() != nil`; on a clean end it just closes the application's channel.
-So the fix converts silence into a visible stop, not into a recovered watch.
-That is the convention `streamEvents` already set, so it is not this PR's
-invention, and a closed channel beats no signal — but "the handler returns" and
-"the client keeps watching" are different claims, and only the first one is
-true here. The PR body says so rather than implying the stronger one.
+So the first version of the fix converted silence into a visible stop, not into
+a recovered watch — and it was recorded that way, as a known limitation, since
+"the handler returns" and "the client keeps watching" are different claims.
+
+The review made it a blocking finding, correctly: the whole reason the handler
+was worth fixing is that a slow-but-live client loses its watch, and a stop it
+cannot recover from is the same outcome one layer over. What made the
+limitation look acceptable was that `streamEvents` already did it — but a
+convention is only evidence about intent, not about correctness, and here it
+was the older half of the same bug. The lesson is to distrust "the existing
+code already does this" exactly when the existing code is what is being fixed.
+
+The fix is a status, not a mechanism: `ErrSubscriptionsClosed` is
+`Unavailable`, which both client watch loops already treat as retriable. A
+self-prune is a server-side decision the client never asked for, so it has to
+read as "try again", never as "you are done".
 
 ## Process: mutation-check against a committed baseline
 
@@ -104,8 +115,30 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
   error vars declared mid-file against repository convention (fixed, same
   commit); the partial-prune gap and the no-reconnect-on-clean-end behaviour
   recorded as known limitations in the PR body rather than fixed here.
-- **Rounds 2 (design fit) and 3 (security / docs): not run.** This was a
-  targeted verification pass, not the bounded `/self-review` loop, and a round
-  that did not happen must not read as a clean one. CodeRabbit's automated
-  review found exactly one issue — the same unset-oneof gap — which is
-  corroboration on correctness, not a substitute for the two rounds.
+- **Rounds 2 (design fit) and 3 (security / docs): not run before the PR.**
+  This was a targeted verification pass, not the bounded `/self-review` loop,
+  and a round that did not happen must not read as a clean one. CodeRabbit's
+  automated review found exactly one issue — the same unset-oneof gap — which
+  is corroboration on correctness, not a substitute for the two rounds.
+- **Round 2 (the review panel on #2025, five lenses).** The rounds that were
+  skipped are the ones that found something: four of the five blocking
+  findings came from the design-fit, security and blast-radius lenses, and the
+  fifth from test adequacy. Resolved as follows.
+  - *Clean end gives the SDK no error.* Fixed — see above.
+  - *Lifecycle tests only build `channelSub`.* Fixed. The two fan-in loops are
+    separate copies of the same body, so covering one proved nothing about the
+    other; dropping `wg.Done()` from the document loop now fails a test.
+  - *Resource list bounded only from below.* Fixed with `maxWatchResources`.
+    Adding the lower bound and not the upper one was the tell: the guard was
+    written to answer "can this stream deliver anything?", and nobody asked
+    the adjacent question.
+  - *Auth webhook called with no attributes.* Fixed by resolving descriptors
+    to keys before `VerifyAccess`. Pre-existing, and the reviewer said so —
+    but a pre-existing gap on the exact path a diff rewrites is still that
+    diff's to close, and fixing only the unified `Watch` would have left the
+    deprecated shims as a way around it.
+  - *Client `WatchChannel` never re-establishes.* Fixed. Also pre-existing:
+    it dropped its `countChan` on a network error too, so no channel watch
+    ever survived a disconnect.
+  - Pushed back on nothing. Two findings turned on facts the branch's own
+    notes had already recorded as limitations, which is not a defence.
