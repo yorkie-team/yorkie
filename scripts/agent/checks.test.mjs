@@ -1909,6 +1909,35 @@ test("no agent is handed a token that can approve a pull request", () => {
       reachable.push({ id: tok[1], why: "persisted into .git/config by checkout", line: i + 1 });
     }
 
+    // A CHECKOUT GIVEN NO TOKEN PERSISTS THE AMBIENT ONE, and the job's own
+    // `permissions:` decide what that can do. This is the same defect by a
+    // second route, and the mint-walking above cannot see it: there is no
+    // `steps.<id>.outputs.token` to follow.
+    for (let i = 0; i < lines.length; i++) {
+      if (!/actions\/checkout@/.test(lines[i])) continue;
+      let to = i + 1;
+      while (to < lines.length && !/^ {6}- /.test(lines[to])) to++;
+      const step = lines.slice(i, to);
+      if (step.some((l) => /^\s+token:/.test(l))) continue; // explicit; handled above
+      if (step.some((l) => /persist-credentials:\s*false/.test(l))) continue;
+      // Which job is this, and what did it grant itself?
+      let j = i;
+      while (j > 0 && !/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[j])) j--;
+      let end = j + 1;
+      while (end < lines.length && !/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[end])) end++;
+      const job = lines.slice(j, end).filter((l) => !/^\s*#/.test(l));
+      const contents = job.some((l) => /^ {6}contents:\s*write/.test(l));
+      const pulls = job.some((l) => /^ {6}pull-requests:\s*write/.test(l));
+      if (!job.some((l) => /claude-code-action@/.test(l))) continue; // no agent in this job
+      checked++;
+      if (contents && pulls) {
+        offenders.push(
+          `${file}:${i + 1} ${lines[j].trim()} persists the AMBIENT token, and the job grants ` +
+            "contents+pull-requests write",
+        );
+      }
+    }
+
     for (const { id, why, line } of reachable) {
       const mint = mints.get(id);
       if (!mint) continue; // not one of this file's mints

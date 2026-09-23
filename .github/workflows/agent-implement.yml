@@ -93,9 +93,18 @@ jobs:
       cancel-in-progress: false
     environment: agent
     permissions:
-      contents: write # create the branch and push commits
-      pull-requests: write # open the draft PR
-      issues: write # answer on the issue
+      # WHAT THE AMBIENT TOKEN'S ONLY CONSUMERS NEED, which is much less than
+      # what this job does. Every step that creates a branch, pushes, opens the
+      # PR or comments on it now carries an App token explicitly; the ambient
+      # `GITHUB_TOKEN` is left to three steps — the write-access check, the
+      # "App is not configured" reply, and the run reporter — which comment on an
+      # ISSUE and list pull requests.
+      #
+      # It is not spare capacity. `actions/checkout` persists whatever token it
+      # is given, and one that is given none persists THIS one — so a wide job
+      # grant is a second way for an agent to reach approve-and-merge.
+      issues: write # comment on the issue
+      pull-requests: read # pulls.list, to find the PR this run opened
     steps:
       # The association check above is a pre-filter on a field the payload
       # carries; this asks the API. Both, because `author_association` is
