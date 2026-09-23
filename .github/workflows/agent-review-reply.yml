@@ -330,6 +330,30 @@ jobs:
             --max-turns 40
             --model claude-opus-5
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+      # RE-STAGED AFTER THE AGENT. The copy taken before it ran lives in
+      # `$RUNNER_TEMP`, which the agent writes — it holds an unrestricted `Bash`
+      # in this same job — and every step below executes a `.mjs` from there with
+      # a wide token in the environment. A fresh checkout after the agent has
+      # stopped cannot be tampered with: nothing is running that could write it.
+      - name: Re-stage the trusted agent scripts (post-agent)
+        if: always() && steps.pr.outputs.is_agent == 'true'
+        run: rm -rf "$RUNNER_TEMP/trusted-cred/scripts/agent"
+      - name: Check out the default branch again (post-agent)
+        if: always() && steps.pr.outputs.is_agent == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted-post
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Move the post-agent copy clear of the workspace
+        if: always() && steps.pr.outputs.is_agent == 'true'
+        run: |
+          set -euo pipefail
+          mv .trusted-post/scripts/agent "$RUNNER_TEMP/trusted-cred/scripts/agent"
+          rm -rf .trusted-post
+
       - name: Post the agent's reply
         if: always() && steps.pr.outputs.is_agent == 'true'
         continue-on-error: true

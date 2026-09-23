@@ -710,9 +710,15 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
 
       # POSTED HERE, NOT BY THE AGENT — its token carries no `pull-requests`
-      # permission, and a token that can comment can also approve. Markers are
-      # neutralised because this pipeline trusts latches BY AUTHOR, so agent text
-      # inside an App-authored comment is how a forged one gets believed.
+      # permission, and a token that can comment can also approve.
+      #
+      # POSTED VERBATIM, and that is deliberate. The CLI already neutralises the
+      # VISIBLE prose it embeds (`fix-report.mjs::visible`) while keeping the
+      # hidden `<!-- agent-fix-report … -->` / `<!-- agent-rebuttal … -->` record
+      # the next panel round parses. A blanket `sed` over `<!--` here destroyed
+      # exactly that record, so every fix claim and every dispute became
+      # invisible to the reader that needs them — a silent data loss dressed as a
+      # hardening step.
       - name: Post the fix-agent rebuttal
         if: always() && steps.app.outputs.configured == 'true'
         continue-on-error: true
@@ -722,8 +728,7 @@ jobs:
         run: |
           F="$RUNNER_TEMP/rebuttal.md"
           [ -s "$F" ] || { echo "no fix-agent rebuttal was written; nothing to post"; exit 0; }
-          sed 's/<!--/<!\xe2\x80\x8c--/g' "$F" > "$RUNNER_TEMP/rebuttal.md.safe"
-          gh pr comment "$PR" --body-file "$RUNNER_TEMP/rebuttal.md.safe"
+          gh pr comment "$PR" --body-file "$F"
 
       - name: Post the fix-agent report
         if: always() && steps.app.outputs.configured == 'true'
@@ -734,13 +739,10 @@ jobs:
         run: |
           REPORT="$RUNNER_TEMP/fix-report.md"
           [ -s "$REPORT" ] || { echo "no fix report was written; nothing to post"; exit 0; }
-          # NEUTRALISE HTML COMMENTS before posting under the App identity. The
-          # agent renders this file, and the pipeline trusts its markers BY
-          # AUTHOR — so agent text inside an App-authored comment is how a forged
-          # paged latch gets believed. `fix-report.mjs` already does this for the
-          # finding prose it embeds; this covers the file as a whole.
-          sed 's/<!--/<!\xe2\x80\x8c--/g' "$REPORT" > "$RUNNER_TEMP/fix-report-safe.md"
-          gh pr comment "$PR" --body-file "$RUNNER_TEMP/fix-report-safe.md"
+          # Posted verbatim: `fix-report.mjs` neutralises the visible prose and
+          # keeps the hidden record the next round parses. A blanket sed here
+          # destroyed that record.
+          gh pr comment "$PR" --body-file "$REPORT"
 
       - name: Upload fix execution log
         if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'

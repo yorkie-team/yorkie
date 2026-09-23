@@ -609,6 +609,30 @@ jobs:
           [ -f "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" ] || { echo "disclose-pr.mjs not staged; skipping"; exit 0; }
           node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
 
+      # RE-STAGED AFTER THE AGENT. The copy taken before it ran lives in
+      # `$RUNNER_TEMP`, which the agent writes — it holds an unrestricted `Bash`
+      # in this same job — and every step below executes a `.mjs` from there with
+      # a wide token in the environment. A fresh checkout after the agent has
+      # stopped cannot be tampered with: nothing is running that could write it.
+      - name: Re-stage the trusted agent scripts (post-agent)
+        if: always() && steps.guard.outputs.proceed == 'true'
+        run: rm -rf "$RUNNER_TEMP/agent-tools"
+      - name: Check out the default branch again (post-agent)
+        if: always() && steps.guard.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted-post
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Move the post-agent copy clear of the workspace
+        if: always() && steps.guard.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
+          rm -rf .trusted-post
+
       - name: Update loop status (CI-fix outcome)
         if: always() && steps.guard.outputs.proceed == 'true'
         continue-on-error: true
