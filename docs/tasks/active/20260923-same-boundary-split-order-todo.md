@@ -48,7 +48,7 @@ paragraph split an editor makes.
       the last of them at 0.
 - [x] §7.5: stop the advance in front of a run of empty unknown split siblings
       that ends at the current actor's own product.
-- [x] Design doc §7.8, §7.5 note, Fix 22.
+- [x] Design doc §7.8, §7.5 note, Fix 24.
 - [x] Mirror in yorkie-js-sdk.
 
 ## Review

@@ -217,3 +217,66 @@ func TestTreeSameBoundarySplitOrder(t *testing.T) {
 		assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
 	})
 }
+
+// TestTreeSameBoundarySplitAfterOlderSplit covers a same-boundary split that
+// meets an older, already-known split product of one of the two actors.
+func TestTreeSameBoundarySplitAfterOlderSplit(t *testing.T) {
+	cases := []struct {
+		name  string
+		known string // why the case is skipped; empty when it converges
+		a, b  func(tree *json.Tree)
+	}{
+		{
+			name: "the older actor splits the span again",
+			a:    func(tree *json.Tree) { tree.EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1) },
+			b:    func(tree *json.Tree) { tree.EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1) },
+		},
+		{
+			name: "the older actor splits the paragraph",
+			known: "KNOWN: the other actor's empty product lands before the paragraph boundary on the replica " +
+				"that applied it first (the edit's position advance passes it) and after it on the other (§7.4 " +
+				"re-parents it next to the older product). Diverges on main too.",
+			a: func(tree *json.Tree) { tree.EditByPath([]int{0, 1}, []int{0, 1}, nil, 1) },
+			b: func(tree *json.Tree) { tree.EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1) },
+		},
+		{
+			name:  "the older actor presses Enter as two edits",
+			known: "KNOWN: same shape as the paragraph case. Diverges on main too.",
+			a: func(tree *json.Tree) {
+				tree.EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1)
+				tree.EditByPath([]int{0, 1}, []int{0, 1}, nil, 1)
+			},
+			b: func(tree *json.Tree) { tree.EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1) },
+		},
+	}
+
+	for _, tc := range cases {
+		for older := 0; older < 2; older++ {
+			t.Run(fmt.Sprintf("%s, older split by replica %d", tc.name, older), func(t *testing.T) {
+				if tc.known != "" {
+					t.Skip(tc.known)
+				}
+
+				docs := splitReplicas(t, 2)
+				require.NoError(t, docs[older].Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetTree("t").EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1)
+					return nil
+				}))
+				exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+				require.NoError(t, docs[older].Update(func(root *json.Object, p *presence.Presence) error {
+					tc.a(root.GetTree("t"))
+					return nil
+				}))
+				require.NoError(t, docs[1-older].Update(func(root *json.Object, p *presence.Presence) error {
+					tc.b(root.GetTree("t"))
+					return nil
+				}))
+				exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+				assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
+				assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
+			})
+		}
+	}
+}

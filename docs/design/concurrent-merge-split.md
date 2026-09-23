@@ -683,6 +683,6 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 19 | §6.1 | Move tombstones with merge to preserve RGA anchors |
 | Fix 20 | §6.3 | Flatten chained merge (P→Q→R) for redirect + snapshot consistency |
 | Fix 21 | §9.3 | Style range boundary right after merge-source tombstone |
-| Fix 22 | §7.8 + §7.5 | Order same-boundary split products by ticket |
 | Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
 | Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |
+| Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
