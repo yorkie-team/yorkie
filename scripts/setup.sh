@@ -18,10 +18,28 @@ GIT_DIR=$(git rev-parse --absolute-git-dir)
 # decision out loud — a maintainer editing the hooks means it; a reviewer who
 # ran `gh pr checkout` almost never does.
 #
-# Only these three paths are compared. Everything else the branch changed is
-# irrelevant to what gets PERSISTED here, and a whole-tree comparison would
-# refuse on every topic branch, which is how a guard gets exported to
-# /dev/null.
+# WHAT IS COMPARED IS WHAT THIS SCRIPT RUNS, not what it is named after — and
+# the first version of this list got that wrong. It compared `.githooks`,
+# `scripts/hooks` and `scripts/setup.sh`, while the last line below executes
+# `scripts/hooks/install.mjs`, which imports `../direct-run.mjs`. A branch whose
+# only change under the trust surface was that one file passed the guard and ran
+# its code on the reviewer's machine: arbitrary execution, one import away from
+# the pattern that named only the importers. `scripts/agent/checks.mjs` had
+# already written that exact lesson down for the CI lane (`scripts/*.mjs`
+# rather than `scripts/verify-*.mjs`, for the same import); it was not carried
+# here.
+#
+# So the glob, which covers every sibling module a future import could reach.
+# `:(glob)` magic because git's default pathspec `*` spans `/` — without it the
+# entry would silently pull in all of `scripts/agent/**` as well. The cost is a
+# false refusal on a branch that edits a verify script without touching a hook;
+# that is the safe direction and the escape hatch below is one line.
+#
+# Everything else the branch changed stays out of scope: it is irrelevant to
+# what gets PERSISTED here, and a whole-tree comparison would refuse on every
+# topic branch, which is how a guard gets exported to /dev/null.
+HOOK_SOURCES=(.githooks scripts/hooks scripts/setup.sh ':(glob)scripts/*.mjs')
+
 UPSTREAM_REF=""
 for ref in refs/remotes/origin/main refs/remotes/origin/HEAD; do
   if git -C "$REPO_ROOT" rev-parse --verify --quiet "$ref" >/dev/null; then
@@ -33,12 +51,10 @@ done
 if [ -z "$UPSTREAM_REF" ]; then
   echo "setup: no origin/main to compare the hook sources against; installing this" >&2
   echo "       worktree's copies as-is." >&2
-elif ! git -C "$REPO_ROOT" diff --quiet "$UPSTREAM_REF" -- \
-  .githooks scripts/hooks scripts/setup.sh; then
+elif ! git -C "$REPO_ROOT" diff --quiet "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}"; then
   if [ "${YORKIE_ALLOW_LOCAL_HOOKS:-}" != "1" ]; then
     echo "setup: this worktree's hook sources differ from ${UPSTREAM_REF#refs/remotes/}:" >&2
-    git -C "$REPO_ROOT" diff --stat "$UPSTREAM_REF" -- \
-      .githooks scripts/hooks scripts/setup.sh >&2
+    git -C "$REPO_ROOT" diff --stat "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}" >&2
     echo >&2
     echo "       Installing would snapshot THESE copies into \$GIT_DIR, where no later" >&2
     echo "       checkout can replace them. If this is a branch you are reviewing rather" >&2

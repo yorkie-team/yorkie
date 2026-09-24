@@ -131,9 +131,12 @@ script the branch you have checked out supplies, so a rewritten
 `pre-commit` would run the moment you committed in that checkout. The
 cost is that an improved hook reaches your clone when you next run this
 script — and because that re-run snapshots whatever the current
-worktree holds, `setup.sh` refuses when `.githooks/`, `scripts/hooks/`
-or `setup.sh` itself differ from `origin/main`. Re-run it on the
-default branch; if you are the one changing the hooks, say so with
+worktree holds, `setup.sh` refuses when anything it installs or runs
+differs from `origin/main`: `.githooks/`, `scripts/hooks/`, `setup.sh`
+itself, and the shared `scripts/*.mjs` modules the installer imports —
+the last because a branch that changes only one of those still gets its
+code executed by the install it passes. Re-run it on the default
+branch; if you are the one changing the hooks, say so with
 `YORKIE_ALLOW_LOCAL_HOOKS=1 bash scripts/setup.sh`.
 
 The snapshot pins *which* hook runs, not *what it invokes*: `make lint`
