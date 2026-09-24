@@ -986,14 +986,18 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 		}
 
 		// Operation content is fully client-controlled and is always freshly
-		// created by the editing client, so it can never be a split product
-		// nor carry a merge lineage -- Tree.Edit stamps MergedFrom/MergedAt on
-		// the content it inserts from the merge parent it resolves locally.
-		// Drop the engine-only links the wire format carries anyway: the tree
-		// follows them as trusted structural pointers once Tree.Edit registers
-		// these nodes in NodeMapByID.
+		// created by the editing client, so it can never be a split product,
+		// carry a merge lineage, or arrive already tombstoned -- Tree.Edit
+		// stamps MergedFrom/MergedAt on the content it inserts from the merge
+		// parent it resolves locally, and tombstones it itself when the parent
+		// it lands in is removed. Drop the engine-only links and the tombstone
+		// the wire format carries anyway: the tree follows the links as trusted
+		// structural pointers once Tree.Edit registers these nodes in
+		// NodeMapByID, and a node born tombstoned under a live parent is
+		// counted as live content that no GC pair will ever collect.
 		if treeNode != nil {
 			treeNode.DropEngineOnlyLinks()
+			treeNode.ClearTombstones()
 		}
 
 		treeNodes = append(treeNodes, treeNode)

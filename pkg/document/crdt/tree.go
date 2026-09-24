@@ -756,6 +756,31 @@ func (n *TreeNode) DropEngineOnlyLinks() {
 	})
 }
 
+// ClearTombstones clears the tombstone on this node and every one of its
+// descendants, restoring the index lengths a decoded tombstone suppressed.
+//
+// Like the engine-only links above, removedAt is a field the wire format
+// carries on every tree node yet operation content can never legitimately
+// hold: a TreeEdit's content is freshly created by the editing client (the
+// json layer builds new nodes, and a copy-reinsert reverse clears the
+// tombstone on every node it keeps — see CloneForReinsert), so a node
+// arriving born tombstoned is a crafted one. Left in place it is the worst of
+// both states: Edit's insert loop counts it into the live data size and
+// registers no GC pair for it under a live parent, so it is billed as live
+// content that nothing will ever collect, while IsRemoved reports it invisible
+// to every later edit.
+//
+// Cleared via unremove rather than by assignment so each node's padded length
+// is given back to its ancestors, undoing what FromTreeNodes' removed-aware
+// length pass withheld. Post-order matters: a child is revived before its
+// parent, so the parent's own padded length already includes it when the
+// parent hands its length further up.
+func (n *TreeNode) ClearTombstones() {
+	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
+		node.Value.unremove()
+	})
+}
+
 // ReissueIDs gives this node and every one of its descendants a fresh
 // identity, taking one ticket per node in post-order.
 //
