@@ -86,7 +86,8 @@ identities, and they answer exactly the questions the index space cannot.
 - [x] Treat an empty resolved range as collapsed in `reversedFromAnchorRecovery`
 - [x] Fold `Style`/`RemoveStyle` onto one `styleTargets` resolution
 - [x] Confirm no pair that converged before diverges after
-- [x] Regression tests in `pkg/document/tree_style_reached_set_test.go`
+- [x] Regression tests in `pkg/document/tree_style_reached_set_test.go`,
+      covering `RemoveStyle` as well as `Style`
 - [x] Design doc: §9.1, §9.2, new §9.5, known limitations, Fix 25
 - [ ] Port to the JS SDK so snapshots and clients agree
 
@@ -97,6 +98,10 @@ identities, and they answer exactly the questions the index space cannot.
 | split × style | 1001 | 135 → 0 | 0 → 0 |
 | merge × style | 7098 | 297 → 126 | 2879 → 1292 |
 | randomised sweep | 300 seeds | 11 → 9 | 47 → 30 diverging seeds |
+
+Scanned again with `RemoveStyle` in place of `Style` over a pre-bolded base:
+the same profile, 3311 → 1418 diverging pairs, split family closed. That is
+the point of the shared `styleTargets` — the two operations cannot drift.
 
 No pair or seed that converged before diverges after.
 

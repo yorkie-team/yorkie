@@ -150,6 +150,45 @@ func TestStyleAcrossConcurrentMerge(t *testing.T) {
 	require.Equal(t, ba, ab, "merge-then-style diverges from style-then-merge")
 }
 
+// styleScanBoldBase is styleScanBase with every paragraph already bold, so a
+// RemoveStyle has something to take off.
+func styleScanBoldBase(t *testing.T) []*change.Change {
+	t.Helper()
+
+	bold := func(text string) json.TreeNode {
+		return json.TreeNode{
+			Type:       "p",
+			Attributes: map[string]string{"b": "x"},
+			Children:   []json.TreeNode{{Type: "text", Value: text}},
+		}
+	}
+	seed := newActor(t, "000000000000000000000009")
+	require.NoError(t, seed.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{
+			Type:     "r",
+			Children: []json.TreeNode{bold("ab"), bold("cd"), bold("ef")},
+		})
+		return nil
+	}))
+
+	return grab(t, seed)
+}
+
+// RemoveStyle resolves its range exactly the way Style does, so it inherits
+// the same order dependence. It shares the resolution now; this pins that.
+func TestRemoveStyleAcrossConcurrentSplit(t *testing.T) {
+	base := styleScanBoldBase(t)
+	pA, pB := concurrentTreeChanges(t, base,
+		func(tree *json.Tree) { tree.Edit(6, 6, nil, 1) },
+		func(tree *json.Tree) { tree.RemoveStyle(5, 8, []string{"b"}) },
+	)
+
+	ab := replayStyleOrder(t, base, pA, pB)
+	ba := replayStyleOrder(t, base, pB, pA)
+	require.Equal(t, `<r><p b="x">ab</p><p>c</p><p>d</p><p b="x">ef</p></r>`, ba.xml)
+	require.Equal(t, ba, ab, "split-then-remove-style diverges from the other order")
+}
+
 // styleScanDivergences replays every (structural change, style range) pair the
 // caller generates in both orders and counts the pairs the two orders disagree
 // on, split by whether the disagreement is visible in the rendered document.
