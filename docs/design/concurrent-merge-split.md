@@ -237,12 +237,37 @@ running the same unwrap are the symmetric case (the source is the declared
 to-parent); an edit whose range starts inside the merged-away source is the
 other (the source is the declared from-parent).
 
-The positions have to be read as *declared*, through `Tree.ToTreeNodes`,
-not through the resolved `fromParent`/`toParent`: §1.1 redirects a position
-away from a merged-away parent, and that redirect is what widens the
-resolved range over the source in the first place. Nothing in the resolved
-range separates the two cases — a source the range merely spans is fully
-contained exactly as a redirected boundary is.
+"Named" means the whole declared ancestry, not just the declared parent
+(`Tree.declaredBoundaries`). An edit that merges at more than one level runs
+past the Start or End token of every element between its position and the
+common ancestor, and stops at each of them rather than covering it; keying
+the skip on the innermost one alone would tombstone the merge-moved children
+of every enclosing boundary. The walk upward prefers a node's `MergedFrom`
+over its physical parent, because a prior merge has already moved the node
+out from under the element the position was declared inside.
+
+The positions have to be read as *declared*, not through the resolved
+`fromParent`/`toParent`: §1.1 redirects a position away from a merged-away
+parent, and that redirect is what widens the resolved range over the source
+in the first place. Nothing in the resolved range separates the two cases —
+a source the range merely spans is fully contained exactly as a redirected
+boundary is.
+
+Each declared `ParentID` is resolved through `findMergeNode`, not the floor
+lookup `Tree.ToTreeNodes` uses. A floor lookup matches on `CreatedAt` alone,
+so a `ParentID` naming an element-split product this replica does not hold —
+a concurrent split not yet applied, or a client-supplied offset — resolves to
+the offset-0 element and hands the skip to a node the position never named.
+An exact element match treats the absent product as the absent lineage it is,
+the same guard §6.3 applies to `mergedInto`.
+
+What the propagation tombstones never enters Phase 5's `toBeRemoveds`, so it
+is reported separately on `TreeEditReverseInfo.Removed`/`PreTombstoned`: it
+is content the edit destroyed, and merge propagation always clears
+`SpansComplete`, so the copy-reinsert reverse built from those fields is the
+only thing that can restore it. `RemovedSize` deliberately excludes it — that
+field describes one contiguous pre-edit index range, and these nodes sit
+outside the resolved range by construction.
 
 A source the range only spans is a plain delete of everything that was
 inside it. Its children are tombstoned wherever the concurrent merge left

@@ -18,12 +18,14 @@ package document_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -61,6 +63,28 @@ func twoParagraphReplicas(t *testing.T, n int) []*document.Document {
 	exchangeInOrder(t, docs, [][]int{{}, {0}}[:n])
 
 	return docs
+}
+
+// liveTreeShape renders only the live nodes under "t", with their IDs: it is
+// treeShape minus the tombstones. Where two replicas agree on every visible
+// node's identity and order but not on where a tombstone sits among them, this
+// is the part of the convergence that does hold.
+func liveTreeShape(t *testing.T, doc *document.Document) string {
+	t.Helper()
+
+	var walk func(n *crdt.TreeNode) string
+	walk = func(n *crdt.TreeNode) string {
+		if n.IsText() {
+			return fmt.Sprintf("%s%q", n.IDString(), n.Value)
+		}
+		var children []string
+		for _, child := range n.Children() {
+			children = append(children, walk(child))
+		}
+		return fmt.Sprintf("%s#%s[%s]", n.Type(), n.IDString(), strings.Join(children, ","))
+	}
+
+	return walk(treeCRDT(t, doc).Root())
 }
 
 // editRangeOnEach applies one content-less range delete per replica and
@@ -101,6 +125,23 @@ func TestTreeUnwrapAndMergeDelete(t *testing.T) {
 		// d2's delete covered ab, so it is gone on both replicas.
 		assert.Equal(t, "<r>cd</r>", treeXML(t, docs[0]))
 		assert.Equal(t, "<r>cd</r>", treeXML(t, docs[1]))
+
+		// The replicas agree on every live node and on their order, but not
+		// on where the tombstoned ab sits among them: mergeNodes appends
+		// merge-moved children to the end of the destination, so each replica
+		// orders them by arrival -- d1 ends with [ab(x), cd] under the root
+		// and d2 with [cd, ab(x)].
+		//
+		// Pinned rather than left unasserted. Fixing it means placing merged
+		// children at the merge source's position instead of appending, which
+		// changes the outcome of every unwrap and would have to land in the JS
+		// SDK at the same moment or the two ports would stop converging with
+		// each other outright. Out of scope here; see the task's known
+		// limitations. If this NotEqual ever fails, the limitation is gone.
+		assert.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[1]))
+		assert.NotEqual(t, treeShape(t, docs[0]), treeShape(t, docs[1]),
+			"tombstone ordering now converges: replace this with the "+
+				"treeShape equality the other subtests assert")
 	})
 
 	t.Run("same unwrap on both replicas keeps the hoisted children", func(t *testing.T) {
@@ -108,15 +149,23 @@ func TestTreeUnwrapAndMergeDelete(t *testing.T) {
 
 		// The skip §6.2 still needs: both replicas run the same unwrap, so
 		// each sees the other's merge already done and must not read it as a
-		// delete of the children it moved itself.
+		// delete of the children it moved itself. Edit(4, 5) removes p2's
+		// opening token, hoisting cd into the root after p1.
 		//
-		// That p2 does not survive this is a separate, pre-existing problem:
-		// §1.1 redirects the second unwrap's to-position onto the hoisted ab,
-		// which mergeNodes appended after p2, so the range spans p2 as well.
-		// Both replicas agree on it, before this change and after.
-		editRangeOnEach(t, docs, [][2]int{{0, 1}, {0, 1}})
+		// The last paragraph, deliberately: unwrapping p1 instead drags in a
+		// separate, pre-existing §1.1 problem, where the redirect of the
+		// second unwrap's to-position onto the hoisted ab -- which mergeNodes
+		// appended after p2 -- widens that range over the untouched p2 and
+		// destroys cd. Both replicas agree on that loss, before this change
+		// and after, but asserting it here would bless it as the expected
+		// result of an unwrap and hide what this subtest is actually for.
+		editRangeOnEach(t, docs, [][2]int{{4, 5}, {4, 5}})
 
-		assert.Equal(t, "<r>ab</r>", treeXML(t, docs[0]))
+		// Without the skip the replica that unwrapped first tombstones the cd
+		// it hoisted itself, leaving <r><p>ab</p></r> against
+		// <r><p>ab</p>cd</r>.
+		assert.Equal(t, "<r><p>ab</p>cd</r>", treeXML(t, docs[0]))
+		assert.Equal(t, "<r><p>ab</p>cd</r>", treeXML(t, docs[1]))
 		assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
 	})
 

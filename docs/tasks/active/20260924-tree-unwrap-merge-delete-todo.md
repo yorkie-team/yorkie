@@ -50,12 +50,36 @@ delete.
 - [x] Update `docs/design/concurrent-merge-split.md` §6.2 and the fix
       cross-reference (Fix 26).
 
-## Known limitation
+## Known limitations
 
-The replicas converge on visible content, but the hoisted children end up in
-different sibling order: `mergeNodes` appends moved children to the end of
-the destination, so each replica orders them by arrival. On the reported
-case A ends with `[ab(x), cd]` and B with `[cd, ab(x)]` under the root.
-Fixing that means placing merged children at the source's position instead
-of appending, which changes the result of every unwrap (and would need the
-same change in the JS SDK). Out of scope here; the visible trees agree.
+**Sibling order of hoisted children.** The replicas converge on visible
+content, but the hoisted children end up in different sibling order:
+`mergeNodes` appends moved children to the end of the destination, so each
+replica orders them by arrival. On the reported case A ends with
+`[ab(x), cd]` and B with `[cd, ab(x)]` under the root. Fixing that means
+placing merged children at the source's position instead of appending, which
+changes the result of every unwrap and would have to land in the JS SDK at
+the same moment or the two ports would stop converging with each other
+outright. Out of scope here; the live nodes agree in identity and order, and
+`tree_unwrap_merge_delete_test.go` now asserts both halves of that -- the
+live-shape equality that holds and the full-shape inequality that does not --
+so the day the limitation goes, the test says so.
+
+**Unwrapping a paragraph that is not the last destroys the next one.** Two
+replicas both running `Edit(0, 1)` on `<r><p>ab</p><p>cd</p></r>` end at
+`<r>ab</r>`: §1.1 redirects the second unwrap's to-position onto the hoisted
+`ab`, which `mergeNodes` appended after `p2`, so the range spans `p2` as
+well. Pre-existing, unchanged by this fix, and convergent -- both replicas
+agree on the loss -- but it is content destruction, so the same-unwrap
+subtest deliberately unwraps the LAST paragraph rather than asserting this
+outcome as the expected result of an unwrap. Separate problem, separate fix.
+
+**Merge-propagated nodes and the reconciliation range.** `RemovedSize` still
+counts only Phase 5's set, so an edit whose §6.2 propagation tombstones
+merge-moved children under-reports its own width to the undo/redo
+reconciliation loop. Deliberate: `RemovedSize` describes ONE contiguous
+pre-edit index range starting at `PreEditFromIdx`, and the propagated nodes
+sit outside the resolved range by construction -- that is why the propagation
+has to reach them. Reporting them needs a second range, not a wider one.
+`TreeEditReverseInfo.Removed` does now carry them, so the copy-reinsert
+reverse can restore them.
