@@ -50,6 +50,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
 
+	t.Run("RunUpdateDocInfoSize test", func(t *testing.T) {
+		testcases.RunUpdateDocInfoSizeTest(t, db, projectID)
+	})
+
 	t.Run("RunFindDocInfosByKeysAndIDs test", func(t *testing.T) {
 		testcases.RunFindDocInfosByKeysAndIDsTest(t, db, projectID)
 	})

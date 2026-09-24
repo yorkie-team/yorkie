@@ -269,6 +269,17 @@ func storeSnapshot(
 		doc.Checkpoint().ServerSeq,
 	)
 
+	// 06. Persist the size measured on the document we just built. This is
+	// the only place the server materializes a document outside a
+	// threshold-crossing pull, so it is what arms the push path's size gate;
+	// the number it writes lags the document by at most one snapshot
+	// interval. See docs/design/document-size-limit.md.
+	size := doc.Root().DocSize()
+	if err := be.DB.UpdateDocInfoSize(ctx, docRefKey, int64(size.Total())); err != nil {
+		return err
+	}
+	docInfo.DocSize = int64(size.Total())
+
 	if err := storeRevision(ctx, be, docInfo, doc); err != nil {
 		return err
 	}

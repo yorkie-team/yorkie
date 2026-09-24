@@ -2217,6 +2217,35 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
+// UpdateDocInfoSize records the document's measured size in bytes.
+//
+// The update is deliberately unguarded by server_seq: the size is a lagging
+// advisory number written from the snapshot path, not part of the push path's
+// compare-and-set. The cache entry is dropped rather than patched, because
+// re-adding a DocInfo read outside DocPushKey could overwrite a fresher entry
+// and make the next CreateChangeInfos fail with ErrConflictOnUpdate.
+func (c *Client) UpdateDocInfoSize(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	docSize int64,
+) error {
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
+	}, bson.M{"$set": bson.M{"doc_size": docSize}})
+	if err != nil {
+		c.docCache.Remove(docRefKey)
+		return fmt.Errorf("update size of %s: %w", docRefKey, err)
+	}
+	if res.MatchedCount == 0 {
+		c.docCache.Remove(docRefKey)
+		return fmt.Errorf("update size of %s: %w", docRefKey, database.ErrDocumentNotFound)
+	}
+
+	c.docCache.Remove(docRefKey)
+	return nil
+}
+
 // hasVersionVectorRow reports whether any client has stored a version
 // vector row for the given document. It tells the snapshot path whether
 // any opt-in client is tracking this doc; if not, the snapshot VV can

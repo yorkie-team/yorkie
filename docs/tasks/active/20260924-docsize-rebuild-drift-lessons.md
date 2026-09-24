@@ -197,7 +197,7 @@ The equivalence is pinned by `rht_logical_size_test.go`, which asserts
 inputs as well as the ordinary ones — including the trailing-whitespace case,
 where JSON permits what the fast path must not silently charge differently.
 
-### The size-limit gap, round 4
+### The size-limit gap, round 4 (superseded by round 5)
 
 Still `--skipped`, still recorded as a standstill and not a disagreement: the
 refusal semantics of a server-side gate is a wire-protocol decision about what
@@ -211,3 +211,48 @@ the post-update `Total()` (`pkg/document/document.go:257-258`), so a stock SDK
 already refuses a *deletion* on an over-quota document. A blanket server
 refusal would not be inventing a new failure mode, only requiring a way to
 express the existing one over the wire.
+
+## Panel round 5: the standstill was cheaper than four rounds of arguing it
+
+Rounds 1–4 skipped the server-side size gate on the grounds that its refusal
+semantics were a wire-protocol decision. Round 5 wrote the gate. The thing that
+unblocked it was not new information; it was reading the option the earlier
+rounds had already written down and noticing it needs no wire change at all.
+
+Option 1 from `docs/design/document-size-limit.md` — refuse *growth*, admit
+deletions — sidesteps the deadlock that made rounds 2 and 3 call a gate
+undeliverable, and sidesteps the "no rejection message exists" problem that
+round 4 called terminal:
+
+- The deadlock argument was about `DocSize.Total()` being `Live + GC`, so a
+  deletion does not shrink it. True, and exactly why the gate must not refuse
+  deletions. It does not: `mayGrowDocument` admits `Remove`, content-free
+  `Edit`/`TreeEdit`, and presence-only changes.
+- The "client already applied it locally" argument assumed the refused client
+  is an honest one. It cannot be. The server's number is the one `storeSnapshot`
+  last measured, so it lags; the client's is exact and compares against the same
+  limit, so an honest client's own check always trips first. The only client
+  this gate ever refuses is one that skipped the local check — which is the
+  threat model, and which is owed nothing better than a terminal error.
+
+Three implementation facts that were not obvious from the design sketch:
+
+- The classification has to run on `reqPack.Changes`, not on the `ChangeInfo`s
+  that `pushPack` builds: a `ChangeInfo` carries its operations already encoded,
+  so classifying from one would mean decoding on the hot path. `pushPack` now
+  carries both slices and keeps them in step, including where an epoch mismatch
+  clears `pushables`.
+- The size write must not join the push path's compare-and-set. `UpdateDocInfoSize`
+  is a bare `$set` on `doc_size` and *removes* the `docCache` entry rather than
+  re-adding a `DocInfo` it read outside `DocPushKey` — re-adding is what the
+  NOTE at the top of `pushPack`'s locked block warns produces
+  `ErrConflictOnUpdate`.
+- Returning `connect.NewError(...)` would have silently dropped the error code.
+  `connecthelper.ToStatusError` returns an already-`connect.Error` untouched, so
+  the `ErrorInfo` metadata carrying `ErrDocumentSizeExceedsLimit` is only
+  attached if the handler returns the bare `StatusError`.
+
+The rule this leaves: a standstill recorded four times is a decision not being
+made, not a decision being deferred. When the design doc a previous round wrote
+already contains a viable option, the next round's job is to build it, not to
+re-describe why building it is hard.

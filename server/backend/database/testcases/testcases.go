@@ -195,6 +195,47 @@ func RunLeadershipTest(
 	})
 }
 
+// RunUpdateDocInfoSizeTest runs the UpdateDocInfoSize test for the given db.
+func RunUpdateDocInfoSizeTest(
+	t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("update docInfo size test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		assert.NoError(t, err)
+
+		docKey := helper.TestKey(t)
+		info, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
+		assert.NoError(t, err)
+
+		// A document that has never been measured reads as zero, which the
+		// push-path gate treats as "unknown, admit".
+		assert.Equal(t, int64(0), info.DocSize)
+
+		assert.NoError(t, db.UpdateDocInfoSize(ctx, info.RefKey(), 4096))
+		reloaded, err := db.FindDocInfoByRefKey(ctx, info.RefKey())
+		assert.NoError(t, err)
+		assert.Equal(t, int64(4096), reloaded.DocSize)
+
+		// The size is overwritten, not accumulated.
+		assert.NoError(t, db.UpdateDocInfoSize(ctx, info.RefKey(), 128))
+		reloaded, err = db.FindDocInfoByRefKey(ctx, info.RefKey())
+		assert.NoError(t, err)
+		assert.Equal(t, int64(128), reloaded.DocSize)
+	})
+
+	t.Run("update docInfo size of missing document test", func(t *testing.T) {
+		ctx := context.Background()
+		err := db.UpdateDocInfoSize(ctx, types.DocRefKey{
+			ProjectID: projectID,
+			DocID:     dummyClientID,
+		}, 1)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
+}
+
 // RunFindDocInfoTest runs the FindDocInfo test for the given db.
 func RunFindDocInfoTest(
 	t *testing.T,
