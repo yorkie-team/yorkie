@@ -19,4 +19,19 @@ set -euo pipefail
 #
 # Bypass with `git push --no-verify` when you mean to.
 
+# REFUSE RATHER THAN SKIP, because nothing reads the skip on this path.
+# `make verify-license` announces "SKIPPED" when node is absent, which is the
+# right behaviour for a person who typed it — they see the line. Here git
+# reads only the exit status, and that line scrolls past under ~35s of test
+# output. A push would then succeed with the licence gate silently absent,
+# which is the failure this hook exists to close.
+#
+# It also makes the two tools symmetric: `make verify` already hard-fails on a
+# missing golangci-lint, since make exits non-zero through `lint`.
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node not found; the licence gate cannot run. Install node," >&2
+  echo "          or push with --no-verify and let the Docs workflow check it." >&2
+  exit 1
+fi
+
 exec make verify

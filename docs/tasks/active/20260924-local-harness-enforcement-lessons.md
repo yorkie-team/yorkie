@@ -32,13 +32,19 @@ The upstream repository pairs the AI-disclosure commit trailer with a
 clean win, and `disclosure.mjs` even flags its absence: *"NO HOOK MIRRORS THIS
 HERE."*
 
-It would have been a permanent no-op. That hook is a no-op unless an
-environment variable is set, and upstream it is the local `spec-to-pr` front
-half that sets it. This repository has no local autonomous arm — every agent
-that writes the trailer runs in CI, through `claude-code-action`, which never
-sees `.claude/settings.json` at all (the panel deletes `.claude/` from the
-branch before running). The gate that actually holds here is the PR-body
-predicate, which is what `disclosure.mjs` says.
+It would have been a permanent no-op. That hook is inert unless an environment
+variable is set; upstream it is the local `spec-to-pr` front half that sets it,
+and nothing in this repository sets it at all. The gate that actually holds
+here is the PR-body predicate, which is what `disclosure.mjs` says.
+
+The first draft of that reasoning carried a second leg — that
+`claude-code-action` never reads a branch's `.claude/settings.json`. Round 2
+found it unverified, and contradicted by this repository's own
+`agent-review-panel.yml`, which deletes `.claude/` precisely because it holds
+"settings + hooks the SDK could load and run". **A correct conclusion reached
+partly by an unchecked claim is still a defect** — the next person inherits the
+claim, not the conclusion. The argument now rests only on the leg that was
+always load-bearing.
 
 Two of the five candidate items were wrong. Both were caught by reading, not
 by testing — a test would have passed.

@@ -1,20 +1,22 @@
 // Guards for the local enforcement layer: the Claude Code hooks, their wiring
 // in .claude/settings.json, and the workflow step that runs the licence gate.
 //
-// EVERY FAILURE THIS FILE CATCHES IS SILENT. `guard-generated-files.sh` fails
-// OPEN by design, so a `case` pattern that stops matching does not error — it
-// just stops guarding. A renamed hook script makes its settings.json entry a
-// no-op that Claude Code does not announce. And deleting the licence step from
-// docs.yml leaves `make verify` printing SKIPPED wherever Node is absent, with
-// nothing anywhere reporting the loss. None of the three shows up as a red
+// EVERY FAILURE THIS FILE CATCHES IS SILENT — none of them shows up as a red
 // lane, which is the whole reason they are pinned here.
+// `guard-generated-files.sh` fails OPEN by design, so a `case` pattern that
+// stops matching does not error, it stops guarding. A renamed hook script
+// makes its settings.json entry a no-op Claude Code does not announce.
+// Dropping session-prime's CI exit changes only what a CI agent is told.
+// Deleting the licence step from docs.yml, or filtering that workflow by
+// path, leaves the gate resting on a local `make verify` the contributor may
+// not be able to run.
 //
 // Unlike its sibling suites this one reads THIS repository rather than a
 // planted tree — the facts being checked are about this tree, and a planted
 // copy of them would assert only that the test file is self-consistent. It
 // stays read-only: it runs the hook with a payload on stdin and reads files.
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -106,14 +108,41 @@ test('every hook .claude/settings.json names exists and is executable', () => {
   }
 });
 
-test('docs.yml still runs both unfiltered checks', () => {
+test('session-prime says nothing in CI and speaks locally', () => {
+  // The guidance it prints is a local multi-commit workflow — plan a task doc,
+  // self-review, archive before merge. A CI fix job is told to fix the
+  // findings it was handed "and nothing else", and whether
+  // `claude-code-action` loads a branch's `.claude/` is unsettled: three
+  // workflows delete the directory on the assumption that it does. Refusing
+  // under GITHUB_ACTIONS settles it either way, and is easy to drop by
+  // accident because nothing fails when it goes.
+  const prime = path.join(REPO, 'scripts', 'hooks', 'session-prime.sh');
+
+  const inCi = spawnSync('bash', [prime], {
+    encoding: 'utf8',
+    env: { ...process.env, GITHUB_ACTIONS: 'true' },
+  });
+  assert.equal(inCi.status, 0);
+  assert.equal(inCi.stdout.trim(), '', 'session-prime must stay silent in CI');
+
+  const local = spawnSync('bash', [prime], {
+    encoding: 'utf8',
+    env: { ...process.env, GITHUB_ACTIONS: '' },
+  });
+  assert.equal(local.status, 0);
+  assert.match(local.stdout, /WORKFLOW REQUIREMENTS/);
+});
+
+test('docs.yml still runs both checks, on every pull request', () => {
   // The licence gate has two homes and neither alone is sufficient: `make
-  // verify` announces a SKIP where Node is absent, and this workflow is the
-  // only one that runs on every PR with no path filter.
+  // verify` needs Node locally, and this workflow is the only one that runs on
+  // every PR with no path filter.
   const wf = readFileSync(path.join(REPO, '.github', 'workflows', 'docs.yml'), 'utf8');
   assert.match(wf, /node scripts\/verify-license\.mjs/);
   assert.match(wf, /node scripts\/verify-doc-links\.mjs/);
-  assert.doesNotMatch(wf, /^\s*paths:/m, 'docs.yml must stay unfiltered');
+  // BOTH SPELLINGS. `paths-ignore:` holes the coverage exactly as badly as
+  // `paths:`, and the narrower pattern would have missed it.
+  assert.doesNotMatch(wf, /^\s*paths(-ignore)?:/m, 'docs.yml must stay unfiltered');
 });
 
 test('make verify reaches the licence gate', () => {
@@ -123,9 +152,5 @@ test('make verify reaches the licence gate', () => {
   const target = mk.split('\n').find((l) => l.startsWith('verify:'));
   assert.ok(target, 'the Makefile has no verify target');
   assert.match(target, /\bverify-license\b/);
-
-  // And the target it names really exists, rather than being a typo that make
-  // would report only when someone runs it.
-  const help = execFileSync('make', ['help'], { cwd: REPO, encoding: 'utf8' });
-  assert.match(help, /verify-license/);
+  assert.match(mk, /^verify-license:/m, 'verify names a target that does not exist');
 });

@@ -11,10 +11,15 @@
 // (`scripts/hooks/`, wired in `.claude/settings.json`) and three git hooks, so
 // the reason is no longer "there is nowhere to put it" — it is that the hook
 // would never fire. Upstream it is inert unless an environment variable is set,
-// and the LOCAL autonomous arm (`spec-to-pr`) is what sets it; there is no local
-// autonomous arm here. Every agent that writes this trailer runs in CI through
-// `claude-code-action`, which never reads `.claude/settings.json` — the panel
-// deletes `.claude/` from the branch before running.
+// and the LOCAL autonomous arm (`spec-to-pr`) is what sets it. There is no local
+// autonomous arm here, and nothing in this repository sets that variable, so the
+// ported hook would be present and permanently asleep.
+//
+// That leg is the whole argument, deliberately. An earlier version of this
+// paragraph also claimed `claude-code-action` never reads a branch's
+// `.claude/settings.json` — which is unverified, and `agent-review-panel.yml`
+// strips `.claude/` on the opposite assumption ("settings + hooks the SDK could
+// load and run"). The rejection does not need it.
 //
 // So DISCLOSURE_TRAILER is written by the fixer prompts and read by nothing that
 // can refuse a commit — the PR-body predicate below is the gate that holds.

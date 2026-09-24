@@ -111,12 +111,14 @@ Deliberately out of scope:
 - [x] ~~Port `require-ai-disclosure.sh`, the hook upstream pairs with the
       disclosure trailer — `disclosure.mjs` flags its absence itself.~~ It
       would be a permanent no-op. The hook does nothing unless an environment
-      variable is set, and upstream the local `spec-to-pr` arm sets it. There
-      is no local autonomous arm here: every agent that writes the trailer
-      runs in CI through `claude-code-action`, which never reads
-      `.claude/settings.json` — the panel deletes `.claude/` from the branch
-      before running. The PR-body predicate stays the gate, as that header
-      says.
+      variable is set, upstream the local `spec-to-pr` arm sets it, and
+      nothing in this repository sets it at all — so the ported hook would be
+      present and permanently asleep. The PR-body predicate stays the gate, as
+      that header says. (A first draft of this rejection also leaned on
+      `claude-code-action` not reading a branch's `.claude/settings.json`.
+      That is unverified and `agent-review-panel.yml` strips `.claude/` on the
+      opposite assumption; round 2 caught it. The env-var leg was always the
+      load-bearing one.)
 
 ## Review
 

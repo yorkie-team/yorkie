@@ -121,11 +121,12 @@ runs `make verify` (lint, licence headers and the unit tests) on push.
 The integration lane is not in them — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.
 
-Run `make tools` first. After `setup.sh`, a commit needs `golangci-lint`
-on your `PATH` and the hook refuses rather than skipping — including on
-a documentation-only commit. That is deliberate: a lint gate that
-silently does nothing when the linter is missing is the case it exists
-to prevent.
+The two gates refuse rather than skip when the tool they need is absent
+— a gate that quietly does nothing when its checker is missing is the
+case it exists to prevent. `pre-commit` needs `golangci-lint` only when
+the commit stages a `.go` file, so a documentation-only change needs no
+Go toolchain; `pre-push` needs `node` for the licence check. `make
+tools` installs the first.
 
 ### Testing
 

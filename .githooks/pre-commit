@@ -20,6 +20,23 @@ set -euo pipefail
 #
 # Bypass with `git commit --no-verify` when you mean to.
 
+# NOTHING TO LINT IS NOT THE SAME AS NO LINTER, and the two must not share an
+# answer. A commit staging no Go cannot introduce a Go lint failure, so there
+# is nothing here to refuse — and refusing anyway would mean an outside
+# contributor fixing a typo in a README, who followed CONTRIBUTING.md and ran
+# `scripts/setup.sh`, cannot commit without installing the Go toolchain.
+#
+# git's own pathspec does the filtering. A `| grep -q '\.go$'` would be the
+# obvious spelling and is a trap here: `grep -q` exits at the first match,
+# `git` takes SIGPIPE, and `set -o pipefail` then reports the pipeline as
+# FAILED — inverting the test precisely when Go files are staged.
+if [ -z "$(git diff --cached --name-only --diff-filter=ACM -- '*.go')" ]; then
+  exit 0
+fi
+
+# There IS Go to lint, so a missing linter is a refusal rather than a skip. A
+# lint gate that quietly does nothing when the linter is absent is the case it
+# exists to prevent.
 if ! command -v golangci-lint >/dev/null 2>&1; then
   echo "pre-commit: golangci-lint not found; run 'make tools'." >&2
   exit 1
