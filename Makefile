@@ -42,12 +42,16 @@ fmt: ## applies format and simplify codes
 lint: ## runs the golang-ci lint, checks for lint violations
 	golangci-lint run --timeout 2m ./...
 
-# The gate a commit has to pass before it is pushed, and the one the local
-# hooks and the fix agents call. Deliberately the two lanes that need no
-# service: `make test` needs MongoDB, so the integration lane stays in CI
-# where a container is already up. Keep this pair in step with the
-# "verification command" named in docs/design/agent-command-verbs.md.
-verify: lint verify-license ## runs the checks a commit must pass: lint and unit tests
+# The gate a commit has to pass before it is pushed, and the one `.githooks/`
+# calls. Deliberately the lanes that need no service: `make test` needs
+# MongoDB, so the integration lane stays in CI where a container is already
+# up. Keep it in step with the "verification command" named in
+# docs/design/agent-command-verbs.md §4c.
+#
+# The CI fixer prompts still spell out `make lint` and `go test ./...` rather
+# than calling this. That is a rename worth doing separately from introducing
+# the target, and §4c records it.
+verify: lint verify-license ## runs the checks a commit must pass: lint, licence headers, unit tests
 	go test ./...
 
 verify-license: ## checks every Go file carries the Apache 2.0 header
