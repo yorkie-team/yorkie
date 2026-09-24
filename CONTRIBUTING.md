@@ -126,10 +126,22 @@ installed hooks validate every commit message against the format above,
 run `make lint` on commit, and run `make verify` (lint, licence headers
 and the unit tests) on push.
 
-They are snapshots on purpose: a hook run out of the working tree is
-code the branch you have checked out supplies, so reviewing a patch
-would mean running it. The cost is that an improved hook reaches your
-clone when you next run this script.
+They are snapshots on purpose: a hook run out of the working tree is a
+script the branch you have checked out supplies, so a rewritten
+`pre-commit` would run the moment you committed in that checkout. The
+cost is that an improved hook reaches your clone when you next run this
+script — and because that re-run snapshots whatever the current
+worktree holds, `setup.sh` refuses when `.githooks/`, `scripts/hooks/`
+or `setup.sh` itself differ from `origin/main`. Re-run it on the
+default branch; if you are the one changing the hooks, say so with
+`YORKIE_ALLOW_LOCAL_HOOKS=1 bash scripts/setup.sh`.
+
+The snapshot pins *which* hook runs, not *what it invokes*: `make lint`
+and `make verify` resolve through the working tree's `Makefile`,
+`.golangci.yml` and test code. Committing or pushing inside a checkout
+of a branch you have not read therefore still runs that branch's build
+and test code — use `--no-verify` there, or read the diff of those
+files first.
 The integration lane is not in them — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.
 

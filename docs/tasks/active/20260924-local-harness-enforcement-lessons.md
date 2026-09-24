@@ -471,3 +471,60 @@ the root or not at all.
 Split in two: `.git`/`node_modules`/`vendor` at any depth, because they are
 certain wherever they sit; everything else at the root only. Both halves are
 tested, and making the root-only set match at any depth fails the suite.
+
+### The fixer cannot push the fix for a workflow finding
+
+Round 5's panel raised two findings whose only possible fix is a workflow edit,
+and the autonomous fixer holds an App token minted with `contents: write` and
+nothing else. The push is rejected outright, for the whole ref:
+
+```
+! [remote rejected] refusing to allow a GitHub App to create or update
+  workflow `.github/workflows/agent-iterate-ci.yml` without `workflows`
+  permission
+```
+
+That is the boundary `agent-review-panel.yml`'s `workflow_run` trigger rests on,
+so it is working as designed — but the loop has no way to say "authored,
+unpushable", and a finding nobody can act on is re-raised every round. Both
+changes are written out below for a maintainer to apply; the security finding in
+the same round needed no workflow file and shipped.
+
+**1. The licence gate must also run in `ci.yml`.** `agent-iterate-ci.yml`
+subscribes to `workflow_run: workflows: ["CI"]` and asserts the run's path is
+`.github/workflows/ci.yml`; the panel's `promote`/`fix` jobs read CI's
+conclusion alone. A blocking gate that exists only in `docs.yml` therefore reds
+an agent-managed PR with nothing to observe it, nothing to re-trigger and no
+page — it just stops. `docs.yml` keeps its copy (it is the unfiltered lane);
+`ci.yml` gets a second one, after `make lint`:
+
+```yaml
+      - name: Verify licence headers
+        run: node scripts/verify-license.mjs
+```
+
+`node …` rather than `make verify-license`, because that target announces
+SKIPPED when node is absent and a CI gate must not fail open. Pin it with an
+assertion in `scripts/test/harness-hooks.test.mjs` next to the `docs.yml` one,
+or deleting the copy silently restores the dead-end.
+
+**2. `bufbuild/buf-lint-action@v1` is archived and now in actionlint's scope.**
+Widening `agent-scripts.yml` from `agent-*.yml` to the whole directory put every
+third-party action in a lane that fails on an aged-out runtime — which is how
+`codecov/codecov-action@v3` was caught. actionlint 1.7.12 does not flag
+buf-lint-action today (verified: exit 0 over the whole directory), so this is
+pre-emptive, and the reason to do it early is that the failure would land on
+whichever PR next touched a workflow, where no autonomous fixer can repair it.
+Replace the step with the CLI `buf-setup-action` already installs:
+
+```yaml
+      - name: Lint proto files
+        run: buf lint
+```
+
+`buf.work.yaml` points the workspace at `api/`, which is how the `buf breaking`
+and `buf generate` steps beside it already resolve.
+
+**Rule: check what the token can push before choosing where to fix.** The fix
+that is right in the abstract and the fix that can land are not always the same
+file, and a round spent authoring an unpushable diff buys only the record of it.

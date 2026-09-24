@@ -18,6 +18,12 @@ set -euo pipefail
 # cost a temporary worktree per commit; pre-push and CI both see the real
 # thing, so the cheap approximation is the right trade here.
 #
+# SAME RESIDUE AS pre-push, stated here too because the hooks are read one at
+# a time: `make lint` resolves through the WORKING TREE's `Makefile` and
+# `.golangci.yml`. The `$GIT_DIR` snapshot `scripts/setup.sh` takes pins which
+# hook runs, not what the hook invokes, so committing inside a checkout of an
+# unread branch runs that branch's lint configuration.
+#
 # Bypass with `git commit --no-verify` when you mean to.
 
 # NOTHING TO LINT IS NOT THE SAME AS NO LINTER, and the two must not share an

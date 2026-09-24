@@ -11,7 +11,17 @@ set -euo pipefail
 # needs MongoDB, which a push cannot assume is up. CI runs it against a real
 # container.
 #
-# Bypass with `git push --no-verify` when you mean to.
+# IT RUNS THE WORKING TREE'S CODE, and that is not an accident of this
+# implementation — it is what verifying a tree means. `make verify` is the
+# branch's `Makefile`, its `.golangci.yml`, its `node scripts/verify-license.mjs`
+# and its `go test ./...`. `scripts/setup.sh` snapshots THIS FILE into
+# `$GIT_DIR` so a branch cannot rewrite the hook itself, and that is the only
+# half a snapshot can close: pushing from a checkout of a branch you have not
+# read still executes that branch's build and test code. Reviewing a pull
+# request by checking it out and committing in it is the case to watch.
+#
+# Bypass with `git push --no-verify` when you mean to — including when you are
+# standing in someone else's branch and only want the push.
 
 # REFUSE RATHER THAN SKIP, because nothing reads the skip on this path.
 # `make verify-license` announces "SKIPPED" when node is absent, which is the
