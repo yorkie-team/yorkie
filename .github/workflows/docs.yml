@@ -1,14 +1,19 @@
 # A workflow of its own, because ci.yml sets `paths-ignore: "**/*.md"` — every
-# job there is skipped on exactly the pull requests this check exists to
+# job there is skipped on exactly the pull requests these checks exist to
 # police. Adding a step to that workflow would look like coverage and provide
 # none.
 #
+# The name is narrower than the contents: this is where the Node-based
+# repository checks live that must run on EVERY pull request. Today that is
+# the documentation link graph and the licence headers.
+#
 # NO PATH FILTER, deliberately. Filtering to `**/*.md` is the obvious economy
-# and it is wrong: a link breaks when its TARGET moves, and targets are not
-# only markdown. packages/cli-style READMEs cite source files, and deleting a
-# cited `.ts` or renaming a directory breaks a link without touching a single
-# `.md`. The job installs Node and reads text — seconds — so filtering buys
-# nothing worth a hole in the one check that watches links.
+# and it is wrong for both. A link breaks when its TARGET moves, and targets
+# are not only markdown: `docs/design/` cites Go files, so deleting a cited
+# `.go` or renaming a directory breaks a link without touching a single `.md`.
+# A licence header is likewise removable by a change that `**/*.md` would
+# skip. The job installs Node and reads text — seconds — so filtering buys
+# nothing worth a hole in the only checks that watch either.
 name: Docs
 
 on:
@@ -40,6 +45,13 @@ jobs:
 
       - name: Verify documentation links
         run: node scripts/verify-doc-links.mjs
+
+      # Lives here rather than in ci.yml for the same reason the link check
+      # does: this workflow has no path filter. ci.yml would cover a new .go
+      # file, but a licence header can also be removed by a change that
+      # `paths-ignore` skips, and this job already has Node.
+      - name: Verify licence headers
+        run: node scripts/verify-license.mjs
 
       # The glob, not the directory: `node --test scripts/test/` tries to load
       # the directory as a module and dies with MODULE_NOT_FOUND.

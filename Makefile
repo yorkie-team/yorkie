@@ -47,8 +47,20 @@ lint: ## runs the golang-ci lint, checks for lint violations
 # service: `make test` needs MongoDB, so the integration lane stays in CI
 # where a container is already up. Keep this pair in step with the
 # "verification command" named in docs/design/agent-command-verbs.md.
-verify: lint ## runs the checks a commit must pass: lint and unit tests
+verify: lint verify-license ## runs the checks a commit must pass: lint and unit tests
 	go test ./...
+
+verify-license: ## checks every Go file carries the Apache 2.0 header
+# Announces the skip rather than passing quietly. Node is not otherwise
+# needed to build or test this repository, so a contributor without it must
+# be told the lane did not run — a check that reports nothing is
+# indistinguishable from a check that found nothing. The `Docs` workflow
+# runs it on every pull request regardless.
+	@if command -v node >/dev/null 2>&1; then \
+		node scripts/verify-license.mjs; \
+	else \
+		echo "[verify:license] SKIPPED - node not found; the Docs workflow still checks this."; \
+	fi
 
 coverage: ## runs coverage tests
 	go clean -testcache
@@ -104,4 +116,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build build-binaries fmt lint verify test test-complex coverage bench docker docker-latest start stop swagger help
+.PHONY: tools proto build build-binaries fmt lint verify verify-license test test-complex coverage bench docker docker-latest start stop swagger help

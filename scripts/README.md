@@ -17,6 +17,7 @@ Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
 | Script | Invoked as | Role |
 |---|---|---|
+| `verify-license.mjs` | `node scripts/verify-license.mjs`, or `make verify-license` | Fails on any `.go` file that does not carry the Apache 2.0 grant clause within its first 40 lines. Matches the clause alone, not the copyright year or the comment style, since the tree has years from 2020 on. Generated files are in scope — `buf generate` reproduces the header, so a plugin change that dropped it is exactly what this should catch. `make verify` runs it, announcing a skip if Node is absent; the `Docs` workflow runs it unconditionally. |
 | `verify-doc-links.mjs` | `node scripts/verify-doc-links.mjs` | Walks the documentation graph from `CLAUDE.md`, `AGENTS.md`, and `README.md`, and fails on a link that resolves to nothing. Archived task records are reached but not walked — a finished task's citations are a record of what was true then. Run by the `Docs` workflow, which exists separately from `ci.yml` because that one ignores `**/*.md`. |
 
 ## Setup
