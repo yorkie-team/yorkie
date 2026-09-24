@@ -1950,8 +1950,9 @@ jobs:
         id: before-fix
         if: steps.guard.outputs.proceed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: echo "sha=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       # SPEND THE ROUND HERE — the LAST step before the fixer, not back at the
       # guard where the record is written.
@@ -2357,7 +2358,7 @@ jobs:
           CI_RUN_ID: ${{ github.event.workflow_run.id }}
           CI_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         run: |
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)"
           # Only trust a "re-triggered" conclusion when BOTH remote heads
           # resolved AND they differ. `git ls-remote | cut` masks a failed
           # lookup (network error, missing branch) as an empty string and the
@@ -2498,7 +2499,7 @@ jobs:
           MAX_ROUNDS: ${{ env.MAX_REVIEW_ROUNDS }}
         run: |
           [ -f "$RUNNER_TEMP/agent-tools/loop-status.mjs" ] || { echo "loop-status.mjs not on main yet; skipping"; exit 0; }
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)"
           if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
             EVENT=fix-pushed
             NOTE="Fixer pushed \`${AFTER:0:9}\` — CI and a fresh panel round run on it next."

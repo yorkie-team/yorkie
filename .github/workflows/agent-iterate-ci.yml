@@ -414,8 +414,9 @@ jobs:
         id: before-fix
         if: steps.guard.outputs.proceed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: echo "sha=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       # Single-value state: a CI-fix round is in flight → agent:fixing. Repo is
       # already checked out above; best-effort, advisory.
@@ -590,7 +591,7 @@ jobs:
           BEFORE: ${{ steps.before-fix.outputs.sha }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)"
           # Only trust a "CI will re-run" conclusion when BOTH remote heads
           # resolved AND they differ. `git ls-remote | cut` masks a failed
           # lookup (network error, missing branch) as an empty string and the
@@ -643,7 +644,7 @@ jobs:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           [ -f "$RUNNER_TEMP/agent-tools/loop-status.mjs" ] || { echo "loop-status.mjs not on main yet; skipping"; exit 0; }
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)"
           if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
             EVENT=ci-fix-pushed
             NOTE="CI-fix pushed \`${AFTER:0:9}\` — CI re-runs on it."

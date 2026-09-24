@@ -506,8 +506,9 @@ jobs:
         id: before-fix
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ steps.pr.outputs.branch }}
-        run: echo "sha=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       # WHICH POOL SLOT THIS JOB USES. `claude-code-action` takes one credential and
       # cannot consult `token-pool.mjs`, so without this the step below is pinned to
