@@ -64,38 +64,38 @@ Deliberately out of scope:
 
 ### Gate 1 — the local enforcement layer
 
-- [ ] `make verify` = `make lint` + `go test ./...`, added to `.PHONY` and to
+- [x] `make verify` = `make lint` + `go test ./...`, added to `.PHONY` and to
       `CLAUDE.md`'s command table.
-- [ ] `.githooks/pre-commit` runs `make lint`.
-- [ ] `.githooks/pre-push` runs `make verify`.
-- [ ] `scripts/hooks/session-prime.sh` — SessionStart, non-blocking, states the
+- [x] `.githooks/pre-commit` runs `make lint`.
+- [x] `.githooks/pre-push` runs `make verify`.
+- [x] `scripts/hooks/session-prime.sh` — SessionStart, non-blocking, states the
       workflow requirements that `CLAUDE.md` may not be read far enough to
       reach.
-- [ ] `scripts/hooks/guard-generated-files.sh` — PreToolUse(Edit|Write), exit 2
+- [x] `scripts/hooks/guard-generated-files.sh` — PreToolUse(Edit|Write), exit 2
       on `api/yorkie/v1/**/*.pb.go` and `*.connect.go`, printing `make proto`.
-- [ ] `.claude/settings.json` wiring both hooks.
+- [x] `.claude/settings.json` wiring both hooks.
 
 ### Gate 2 — the license header, which §4b says nothing enforces
 
-- [ ] Backfill the 17 files. Copyright year from each file's first commit.
-- [ ] `scripts/verify-license.mjs`, wired into `make verify` and CI.
+- [x] Backfill the 17 files. Copyright year from each file's first commit.
+- [x] `scripts/verify-license.mjs`, wired into `make verify` and CI.
 
 ### Defects found in the same survey
 
-- [ ] **Inline `@claude <verb>` is silent.** `pull_request_review_comment` is
+- [x] **Inline `@claude <verb>` is silent.** `pull_request_review_comment` is
       subscribed to by `agent-review-reply.yml` alone, whose job requires
       `command == 'reply'`. Typing `@claude review` in an inline thread routes
       to `review`, the job skips, and nothing else listens — no comment, no
       failed check. Add a `help` arm modelled on `agent-implement.yml`'s.
-- [ ] **`dependabot.yml` does not cover npm.** `scripts/agent/package-lock.json`
+- [x] **`dependabot.yml` does not cover npm.** `scripts/agent/package-lock.json`
       pins the Agent SDK and carries hand-written `overrides` for `fast-uri`
       and `qs`; nothing updates them.
-- [ ] **`ci.yml` installs `@anthropic-ai/claude-code` unversioned** in a job
+- [x] **`ci.yml` installs `@anthropic-ai/claude-code` unversioned** in a job
       holding `contents: write` and `CLAUDE_CODE_OAUTH_TOKEN`. Pin it.
-- [ ] **actionlint covers `agent-*.yml` only** while `agent-scripts.yml`
+- [x] **actionlint covers `agent-*.yml` only** while `agent-scripts.yml`
       triggers on all of `.github/workflows/**`. Verify the excluded findings
       are still live, then widen or record why not.
-- [ ] **Stale justification.** `agent-review-panel.yml` cites "`ci.yml`'s
+- [x] **Stale justification.** `agent-review-panel.yml` cites "`ci.yml`'s
       `.harness-reports/` upload" as precedent for `include-hidden-files`.
       `ci.yml` has no upload step; `.harness-reports/` here is a gitignored
       test scratch dir. Correct the comment.
@@ -108,7 +108,58 @@ Deliberately out of scope:
       works by reading pool state a panel recorded, "these jobs have no panel
       before them and no artifact to read", and liveness cannot be known
       without spending a call. Not a low-cost fix; see the lessons file.
+- [x] ~~Port `require-ai-disclosure.sh`, the hook upstream pairs with the
+      disclosure trailer — `disclosure.mjs` flags its absence itself.~~ It
+      would be a permanent no-op. The hook does nothing unless an environment
+      variable is set, and upstream the local `spec-to-pr` arm sets it. There
+      is no local autonomous arm here: every agent that writes the trailer
+      runs in CI through `claude-code-action`, which never reads
+      `.claude/settings.json` — the panel deletes `.claude/` from the branch
+      before running. The PR-body predicate stays the gate, as that header
+      says.
 
 ## Review
 
-(pending)
+Eleven commits, +1086/−36 across 38 files. Three groups:
+
+**The local layer (Gate 1).** `make verify`, `pre-commit`, `pre-push`, and two
+Claude Code hooks. The split between the two git hooks was chosen from
+measurement, not preference — lint 5.5 s, unit tests 35 s — so the per-commit
+gate stays cheap enough to keep. Both hooks were proved by breaking them: a
+deliberate `lll` violation is refused at commit, and the generated-file guard
+was run against nine payloads covering both directions.
+
+**The licence header (Gate 2).** The checker landed after the backfill so no
+commit is red in between. It matches the grant clause alone, deliberately: the
+tree carries years from 2020 to 2026 and two comment styles, and a stricter
+checker would spend its findings on formatting. Eight test cases, including
+the one that matters — a mention of the clause past the scan window is not a
+header.
+
+**Five defects.** Each verified live before it was touched. The two actionlint
+findings were confirmed with the lane's own flags first, fixed separately,
+and only then was the scope widened, because the comment being replaced asked
+for exactly that order. The inline-help arm ships with two guards, both
+confirmed by breaking them — the defect existed because nothing compared the
+verb table against the workflows consuming it, so a fix without a guard would
+have left the class open.
+
+Two survey items were rejected on reading, above. Both would have passed any
+test written for them, which is the argument for reading the target before
+trusting a finding about it.
+
+Known limitations, deliberate:
+
+- The codecov v3 → v5 move is verified only as far as actionlint's input
+  database reaches. Whether the upload succeeds is observable only from a run
+  on `main`.
+- The pinned Claude CLI version is not auto-updatable — dependabot's npm
+  ecosystem reads manifests, and this is an argument in a `run:` step. The
+  comment says so rather than leaving the next reader to assume otherwise.
+- `pre-commit` lints the working tree, not the index, so a `git add -p` commit
+  can pass on code it is not committing. Linting an index-only checkout costs
+  a temporary worktree per commit; `pre-push` and CI both see the real tree.
+- The largest gap found in the survey is untouched: there is no Go equivalent
+  of the upstream `verify-self` lane runner, so `agent-iterate-ci` still
+  diagnoses CI failures from `gh run view --log-failed | tail -c 40000`. It
+  needs its own task.
