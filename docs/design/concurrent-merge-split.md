@@ -506,13 +506,37 @@ but require two additional mechanisms for concurrent split handling.
 ### §9.1 End-Token Split Sibling Guard
 
 When processing an End token, skip styling if the node has an
-`InsNextID` split sibling not in the editor's version vector. The End
-token is in the range only because a concurrent split extended the
+`InsNextID` split sibling not in the editor's version vector **and**
+the styling change's range ended inside the node. Only then is the End
+token in the range solely because a concurrent split extended the
 traversal past the original element boundary.
 
-Helper: `hasUnknownSplitSibling(node, vv)` — follows `InsNextID`,
+Helpers: `hasUnknownSplitSibling(node, vv)` — follows `InsNextID`,
 checks the sibling is an element whose `CreatedAt` is not covered
-by VV. Omits parent-equality check (same rationale as §7.5).
+by VV; omits the parent-equality check (same rationale as §7.5).
+`endsInside(node, declaredToParent)` — walks up from the element the
+range-end position named as its parent and asks whether it reaches
+`node`. The ancestry it walks is the *current* one, and a split moves
+every child after the split point into the new right half, so each
+ancestor is matched through its split lineage (`isSplitProductOf`,
+backward along `InsPrevID`) rather than by identity: any product of
+splitting `node` stands for `node`, which is what that ancestry looked
+like when the change declared the position. Matching by identity alone
+made the guard fail *open* whenever the range-end position named a
+descendant the split had moved — the one direction a guard must not
+fail in, since a wrongly-styled live node cannot be retracted.
+
+**Why the second condition** (Fix 25): the first one alone cannot tell
+the two histories apart. "This End token is in the range only because
+of the split" and "this End token was in the range anyway" look
+identical in the index space, and the guard assumed the first. A style
+whose range genuinely ran past the paragraph's end — `Style(5, 8)`
+over `<r><p>ab</p><p>cd</p><p>ef</p></r>` — then lost the style
+entirely on any replica that applied a concurrent split of that
+paragraph first, while the opposite order kept it on both halves. The
+range-end position is carried by the change and never moves, so it
+settles the question the index space cannot: if the change's range
+ended inside the node, its End token was never in that range.
 
 **Why End-token guard over range clamping**: Clamping works for
 text-level ranges but fails for element-level ranges where the
@@ -526,11 +550,11 @@ handles both uniformly:
   skipped → child Start token still styled via `canStyle`. Matches
   the unsplit behavior (child was in the original range).
 
-### §9.2 Style Propagation to Split Siblings
+### §9.2 Style Propagation Over Split Lineage
 
-After styling a node via its Start token, follow the `InsNextID`
-chain and apply the same style/remove-style to unknown split siblings
-(those whose `CreatedAt` is not covered by the editor's VV).
+After styling a node, follow the `InsNextID` chain and apply the same
+style/remove-style to unknown split siblings (those whose `CreatedAt`
+is not covered by the editor's VV).
 
 This ensures that a style operation whose range was determined before
 a concurrent split also covers the right part. Without this
@@ -538,8 +562,39 @@ propagation, the client that splits first misses the style on the
 right node, while the client that styles first copies it via the
 attribute deep-copy in §7.2 — causing divergence.
 
-Helper: `ticketKnown(vv, ticket)` — reused for the unknown-sibling
-check.
+Helpers: `unknownSplitSiblings(node, vv)` forward along `InsNextID`,
+`splitFamilyOf(node, vv)` backward along `InsPrevID`.
+
+**Which token reaches the node does not decide this** (Fix 25). The
+propagation used to run only from a Start token, which drops the case
+§9.1 exists for: a range that begins inside the paragraph and runs
+past its end reaches the paragraph through its End token alone, and
+the right half then stayed unstyled. It now runs from whichever token
+reaches the node first — once per node, tracked by the caller, which
+also matches the pre-existing `RHT` behaviour of rejecting a second
+write at the same ticket.
+
+The mirror case needs the chain walked the other way. When the split
+point falls before the range start, the traversal reaches only the
+*right* half, whose creation `canStyle` rejects; the left half — the
+node the change actually styled — is outside the resolved range. On an
+End token the range genuinely ran past (§9.1), `splitFamilyOf` walks
+`InsPrevID` back to the first node whose creation the change knew and
+styles the whole family from there. A chain that reaches no such node
+is a node simply new to the change, and is left alone.
+
+The family enters through that one known node, so it is that node the
+§9.1 guard judges: when the guard excludes it, the split is the only
+reason this End token is in the range at all, and the family is
+dropped whole. Without that check the two halves of the fix
+contradict each other — the guard skips the left half on its own End
+token and `splitFamilyOf` immediately re-adds it from the right.
+
+`splitFamilyOf` collects backwards and reverses once rather than
+prepending per link: the chain length is chosen by whoever authored
+the splits, and prepending copies the slice each time. The caller also
+skips a node it has already resolved, so a chain of *k* products costs
+one walk, not one per member.
 
 ### §9.3 Range Boundary at Merged-Away Anchors
 
@@ -629,10 +684,234 @@ removal tombstone on both replicas — it must be recorded even for a
 missing key, because it arbitrates a concurrent `SetAttr` with an
 earlier ticket.
 
+### §9.5 Reached Set from the Change's Own Positions
+
+§9.1–§9.4 all reconstruct, after the fact and from index positions,
+which nodes the styling replica would have reached. Some of that is not
+recoverable from indices at all, and each predicate closed one family
+of histories while leaving another. Fix 25 moves the part that *is*
+recoverable off the index space entirely.
+
+A token traversal reaches an element through a single token exactly
+when the element is a boundary of the range: the ancestors of the
+range-start position, whose End tokens the range ran past, and the
+ancestors of the range-end position, whose Start tokens it ran past —
+each chain stopping below the common ancestor of the two. Elements
+strictly between the two positions are reached through both tokens.
+
+Both positions are carried by the change and never move, so
+`boundaryElements(from, to)` computes that set identically on every
+replica, whatever a concurrent merge did to the index space. Without a
+concurrent merge the traversal has already found every one of them and
+they add nothing; with one they are the nodes the resolved range can no
+longer see. A merge that empties one paragraph into another pulls the
+range-end anchor back inside the range-start paragraph, and the
+resolved range then stops short of the End token it ran past before —
+permanently, and on that replica only.
+
+These elements are writes, so they answer to the same questions the
+traversal's tokens do, and each is carried with the token the range
+ran past (End for the range-start chain, Start for the range-end
+chain) so it can be asked. The skip predicate splits in two for this:
+`skipReached` is about the *change* — the §9.1 End-token guard and the
+§9.4 merged-anchor interloper filter — and holds for every node a
+style writes to, however it was found; `skipToken` adds the one
+restriction that belongs to the index traversal alone, the §9.4
+from-side recovery's rule that a re-anchored traversal may touch only
+the interlopers it positively identified. Boundary elements come from
+the change's own positions, are not in that widened span, and answer
+to `skipReached` only. Putting them through the whole of `skipToken`
+costs 150 pairs on the merge scan for no gain in safety.
+
+Two ranges get no boundary elements at all
+(`boundaryRangeCovers`). A range whose two positions are equal covers
+nothing on any replica. A range that resolves *backwards* covers
+nothing here either, and `traverseInPosRange` already returns early on
+it — but a merge is exactly what makes a forward range resolve
+backwards, and repairing that is what these elements are for. The
+distinguishing question is *why*: only a removal can collapse a range,
+so an inversion whose declared ancestry is live on both ends was
+declared backwards by the caller and gets nothing, while one with a
+removed ancestor is the merge case and is repaired. Gating on the
+resolved order alone instead costs 108 pairs on the merge scan.
+`StyleByPath`/`RemoveStyleByPath` now reject a backwards range up
+front, the way `Style`/`RemoveStyle` always have.
+
+`styleTargets` puts the whole resolution in one place: it runs
+Phase 1–2 position resolution, the §9.3/§9.4 machinery, the traversal,
+the §9.2 lineage closure and this boundary set, and hands `Style` and
+`RemoveStyle` one ordered, duplicate-free node list. The two operations
+are one range resolution asked to write two different things, and the
+reached set is now shared code rather than two copies kept identical by
+hand.
+
+`reversedFromAnchorRecovery` (§9.4) also treats a range that resolves
+*empty* as collapsed, not just one that resolves backwards: a merge can
+leave the start anchor exactly on the end one, and covering nothing
+loses the client's range as completely as covering it backwards. A
+change whose own range was empty is excluded, so an empty style stays
+empty.
+
+**What this does not close.** Attributes on *tombstones*. Elements the
+change covered strictly between its two anchors are still resolved in
+the current index space, and a merge can move a removed one out of
+reach, so the two orders book a different amount of attribute metadata
+onto removed nodes while rendering the same document. Recovering those
+needs the range resolved in an index space filtered by the change's
+version vector — nodes the change could not have known contributing
+zero width, nodes it knew contributing their width regardless of later
+structural edits — which has to land on the server and the JS SDK
+together.
+
+### §9.6 Range-Start Guard at Merged Anchors
+
+§9.1 asks of an End token in the range "was the range-end position
+declared inside this element, or did a concurrent split push the anchor
+here". §9.6 is the same question on the other side, and it is what
+closed the merge family.
+
+A token traversal reaches an element through its End token *alone*
+exactly when the range begins inside it: the resolved from-parent and
+its ancestors, and nothing else — every other element reached on an End
+token was reached on its Start token first. So the applying replica's
+answer to "which elements does my range begin inside" is that chain,
+and the change's own answer is the ancestry of the element its
+range-start position named as its parent. `beginsInside` compares them.
+
+When a merge removes a paragraph's opening tag, its children move into
+the element before it, and a range-start anchored among those children
+resolves inside that element — whose End token is then in the range
+purely because of the merge. Styling it writes an attribute on a **live**
+node that the replica applying the style first never touched, which is
+the failure with no way back. `Style(6, 8)` over
+`<r><p>ab</p><p>cd</p><p>ef</p></r>` against a concurrent
+`Edit(1, 5)` is the minimal case: the style covered only the second
+paragraph, which the merge turns into a tombstone, so nothing should
+render as styled — and before this guard the merge-first order rendered
+`<p b="x">cd</p>`. This shape is 126 of the 297 rendered divergences the
+merge scan started from, and all 126 of what was left after §9.1–§9.5.
+
+`beginsInside` matches a declared ancestor to the node in **both**
+directions along the split lineage, which `endsInside` deliberately does
+not: a split of the element the range began inside leaves the start
+anchor in whichever half now holds it, so the resolved from-parent may
+be a *product* of the declared one. Accepting only `endsInside`'s
+direction costs 45 rendered divergences on the split scan — the guard
+then fires on the very element the change named. Accepting the extra
+direction in `endsInside` is not symmetric-and-therefore-fine: that
+guard excludes nodes, so extra matches make it fail open, which §9.1
+records as the direction a guard must not fail in.
+
+This also closes the §9.4 limitation recorded as "a range end whose
+left sibling is the merge-source tombstone under a surviving parent
+styles the merge target one-sidedly" (PBT counterexample
+`RemoveStyle(6, 8)` against `Edit(1, 5)`): the target is styled there
+because the range START moved into it, which is the question this guard
+asks. `pkg/document/tree_style_reached_set_test.go` pins both that pair
+and the `Style` mirror of it.
+
+Measured over the exhaustive scans in
+`pkg/document/tree_style_reached_set_test.go`
+(`<r><p>ab</p><p>cd</p><p>ef</p></r>`, one structural change against one
+style, both delivery orders):
+
+| scan | pairs | rendered divergences | tombstone-only |
+|---|---|---|---|
+| split × style | 1001 | 135 → **0** | 0 → **0** |
+| merge × style | 7098 | 297 → **0** | 2879 → **1292** |
+
+The same numbers hold for `RemoveStyle` over a pre-bolded base, on
+every count, which is what sharing one range resolution has to mean.
+No pair that converged before diverges after, in either scan or in a
+300-seed randomised sweep.
+
+**Cross-implementation.** §9.1, §9.2, §9.5 and §9.6 change *which
+nodes* a `Tree.Style`/`Tree.RemoveStyle` writes to, and only the Go
+implementation has them. Until the JS SDK carries the same four rules,
+a JS client and the server disagree on the reached set for exactly the
+concurrent split/merge shapes above: the server's snapshot
+(`server/packs/snapshot.go` rebuilds through this code) then holds
+attributes a JS client applying the same changes locally does not, and
+the disagreement survives until that client reloads from a snapshot.
+This is a narrowing, not a widening — every shape listed here already
+diverged *between two Go replicas* by delivery order, which is strictly
+worse, and the two implementations agreed only in the sense that both
+were order-dependent. The scans quantify what moved: split × style 135
+rendered divergences → 0, merge × style 297 → 0. Porting is the
+follow-up tracked on the task; the Go-side fix is not held for it
+because leaving it out keeps Go replicas diverging from each other.
+
+Landing a reached-set rule Go-first is how this series has always
+worked, not a new exception. Fix 11 (§9.1), Fix 12 (§9.2), Fix 21
+(§9.3), Fix 22 and Fix 23 (§9.4) each changed which nodes a
+`Tree.Style` writes to, and each landed in this repository alone
+(#1909, #1928, #1954). Fix 10 in the same table is recorded as
+"JS-only". The cross-reference ledger tracks the two implementations
+converging fix by fix rather than commit by commit, because they sit in
+different repositories and one of them cannot be held while the other
+keeps replicas of a single implementation diverging from each other.
+What the issue says "has to land on the server and the JS SDK
+together" is the *durable shape* it proposes — the range resolved in a
+version-vector-filtered index space, which touches position resolution
+for `Edit` as well. That approach is not taken here; it is the open
+item at the end of §9.5, and it is the one that has to land as a pair.
+
+**Port specification.** The JS SDK is a separate repository
+(`yorkie-team/yorkie-js-sdk`), so the port cannot land in the same
+commit; it can land against a fixed spec. The four rules are stated
+here without reference to Go identifiers, each with the invariant that
+makes it decidable on any replica, so a port is a transcription rather
+than a re-derivation:
+
+1. **§9.1 End-token guard.** An element reached through its End token
+   is skipped when the element has a split sibling the change could not
+   have known (its creation ticket is not covered by the change's
+   version vector) *and* the change's range-end position named that
+   element — or a node in its split lineage — as its parent. When the
+   range ran past the element's end, the End token was in the range
+   before any split existed and the element is kept.
+2. **§9.2 Split-lineage closure.** A node the change reached stands for
+   every product of splitting it, forwards and backwards along the
+   split lineage, token type not consulted.
+3. **§9.5 Boundary elements.** Independently of the traversal, the
+   reached set includes the ancestors of the change's own range-start
+   position (carried as End tokens) and of its range-end position
+   (carried as Start tokens), each chain stopping below the two
+   positions' common ancestor. These are computed from the positions
+   the change carries, never from the resolved index range, and are put
+   through the change-level skips (1, 2, §9.4's interloper filter) only
+   — not through the traversal-local from-side recovery restriction.
+   Skipped entirely when the two positions are equal, or when the range
+   resolves backwards with both declared ancestries live (a caller's
+   backwards range, not a merge-collapsed one).
+4. **§9.6 Range-start guard.** An element reached through its End token
+   alone — i.e. the resolved from-parent or one of its ancestors — is
+   skipped unless the change's range-start position named that element
+   as its parent. Matching runs in *both* directions along the split
+   lineage here, unlike §9.1: both halves of a split element are the
+   element the change began inside.
+
+Acceptance vectors, all replayable without a server:
+`TestStyleReachedSetMatchesComplexSuite` in
+`pkg/document/tree_style_reached_set_test.go` is thirteen two-change
+cases with rendered goldens and, where Marshal hides the answer, the
+attribute entries each live node must end up holding; the exhaustive
+scans in the same file fix the counts in the table above. A port that
+reproduces those numbers over the same base tree has the same reached
+set. Until it does, the divergence is the one described above.
+
 **Known limitations** (tracked as follow-ups):
 
+- The JS SDK has not yet been ported (see **Cross-implementation**
+  above), so server and JS clients resolve different reached sets for
+  concurrent split/merge shapes.
 - An edit-only divergence independent of styling (concurrent unwrap
   versus merge-delete of the same paragraph) remains open.
+- Attributes still land on a different set of TOMBSTONES in the two
+  delivery orders (1292 of the merge scan's 7098 pairs): a removed
+  element the style covered strictly between its two anchors is still
+  resolved in the current index space, and a merge can move it out of
+  the resolved range. Nothing renders differently; see §9.5.
 - Within a collapsed from-side range, any *stamped* node fails open in
   the other direction: a merge-moved element child at or after the
   original from anchor (probe shape `<p>c<b/></p>`), an insert declared
@@ -648,10 +927,6 @@ earlier ticket.
   and is styled on the merged replica only; the guard's direct-child
   shape restriction deliberately excludes this shape (reproduces at
   base, before Fix 23).
-- A range *end* whose left sibling is the merge-source tombstone under
-  a surviving parent resolves past the merge target's End token on the
-  applying replica and styles the target itself one-sidedly
-  (PBT counterexample: `RemoveStyle(6,8)` against `Edit(1,5)`).
 - The recovery inherits the guard's direct-child shape restriction, so
   a from-anchor collapsed by a *chained* merge (declared parent's
   tombstone left under an intermediate source) gets no recovery and
@@ -757,3 +1032,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
 | Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
+| Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
