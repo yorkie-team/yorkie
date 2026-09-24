@@ -3,17 +3,28 @@
 # police. Adding a step to that workflow would look like coverage and provide
 # none.
 #
-# The name is narrower than the contents: this is where the Node-based
-# repository checks live that must run on EVERY pull request. Today that is
-# the documentation link graph and the licence headers.
+# The name — and the `doc-links` job id — are narrower than the contents: this
+# is where the Node-based repository checks live that must run on EVERY pull
+# request. Today that is the documentation link graph and the licence headers.
+# Renaming would churn a status-check context for no gain, so the comment
+# carries the correction instead.
 #
-# NO PATH FILTER, deliberately. Filtering to `**/*.md` is the obvious economy
-# and it is wrong for both. A link breaks when its TARGET moves, and targets
-# are not only markdown: `docs/design/` cites Go files, so deleting a cited
-# `.go` or renaming a directory breaks a link without touching a single `.md`.
-# A licence header is likewise removable by a change that `**/*.md` would
-# skip. The job installs Node and reads text — seconds — so filtering buys
-# nothing worth a hole in the only checks that watch either.
+# NO PATH FILTER, deliberately, and for both checks.
+#
+# A link breaks when its TARGET moves, and targets are not only markdown.
+# Walked with the checker's own `linkTargets` from its three roots, the graph
+# reaches 155 markdown files and 39 non-markdown ones: 35 images under
+# `docs/design/media/`, three script directories reached through their
+# READMEs, and this workflow file. Renaming or deleting any of those breaks a
+# link without touching a single `.md`. (There are no relative `.go` targets —
+# every Go citation in `docs/design/` is an absolute GitHub URL, which the
+# checker skips as a scheme. An earlier version of this comment claimed
+# otherwise and was not checked.)
+#
+# A licence header is likewise removable by a change `**/*.md` would skip.
+#
+# The job installs Node and reads text — seconds — so filtering buys nothing
+# worth a hole in the only checks that watch either.
 name: Docs
 
 on:
