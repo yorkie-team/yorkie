@@ -48,7 +48,7 @@ delete.
 - [x] Integration test in `test/integration/tree_test.go` mirroring the
       issue's reproduction.
 - [x] Update `docs/design/concurrent-merge-split.md` §6.2 and the fix
-      cross-reference (Fix 25).
+      cross-reference (Fix 26).
 
 ## Known limitation
 

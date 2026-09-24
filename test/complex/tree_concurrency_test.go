@@ -625,6 +625,17 @@ func TestTreeConcurrencyInsertIntoRemovedRangeMultiInsert(t *testing.T) {
 		d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML(), d3.Root().GetTree("t").ToXML())
 }
 
+// The merge x style cases below pin which nodes a style may and may not
+// reach across a concurrent merge. This lane is gated behind the `complex`
+// build tag AND a `test/complex/**` path filter, so a change to the reached
+// set in pkg/document/crdt/tree.go does not run them. Every one of them is
+// therefore mirrored, server-free, in
+// pkg/document/tree_style_reached_set_test.go
+// (TestStyleReachedSetMatchesComplexSuite), which runs in the unit lane on
+// every change: same base tree, same two changes, same rendered golden, and
+// for the RemoveStyle cases the same internal attribute entries, which
+// Marshal hides. Move a golden here and you must move it there.
+//
 // TestTreeConcurrencyStyleAcrossMergedAnchor verifies that a concurrent
 // Tree.Style whose range ends inside a merge-removed paragraph does not
 // style a node concurrently inserted at the merged anchor.

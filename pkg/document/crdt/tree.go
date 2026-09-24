@@ -2348,7 +2348,7 @@ func stylePrevAttrs(node *TreeNode, attrs map[string]string) []PrevAttr {
 // in the span stay out of reach and fail open unstyled — see the
 // §9.4 known limitations in docs/design/concurrent-merge-split.md.
 func (t *Tree) reversedFromAnchorRecovery(
-	from *TreePos,
+	from, to *TreePos,
 	fromParent, fromLeft, toParent, toLeft *TreeNode,
 	versionVector time.VersionVector,
 ) (*TreeNode, *TreeNode, func(*TreeNode) bool, error) {
@@ -2358,7 +2358,11 @@ func (t *Tree) reversedFromAnchorRecovery(
 	}
 	// Only a range that actually collapsed needs recovery: when both
 	// anchors moved with the merge, the resolved range stays ordered and
-	// still covers what the styling client covered.
+	// still covers what the styling client covered. A range that resolved
+	// empty counts as collapsed too — the merge can leave the start anchor
+	// exactly on the end one, and covering nothing loses the client's range
+	// just as completely as covering it backwards. Unless the client's own
+	// range was empty, in which case covering nothing is right.
 	fromIdx, err := t.ToIndex(fromParent, fromLeft)
 	if err != nil {
 		return nil, nil, nil, err
@@ -2367,7 +2371,7 @@ func (t *Tree) reversedFromAnchorRecovery(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if fromIdx <= toIdx {
+	if fromIdx < toIdx || (fromIdx == toIdx && from.Equal(to)) {
 		return nil, nil, nil, nil
 	}
 	anchorLeft := target
@@ -2382,33 +2386,170 @@ func (t *Tree) reversedFromAnchorRecovery(
 	return target, anchorLeft, isInterloper, nil
 }
 
+// isSplitProductOf reports whether node is origin itself or a piece a split
+// cut off origin, by walking back along InsPrevID. Only SplitElement sets
+// InsPrevID, so the chain is exactly the split lineage; the walker stops a
+// crafted chain that loops back on itself, and a text link cuts it because an
+// element is never split off a text node.
+func (t *Tree) isSplitProductOf(node, origin *TreeNode) bool {
+	current := node
+	var walker insNextWalker
+	walker.visit(current)
+	for current != nil {
+		if current == origin {
+			return true
+		}
+		if current.InsPrevID == nil {
+			return false
+		}
+		prev := t.findFloorNode(current.InsPrevID)
+		if prev == nil || prev.IsText() || !walker.visit(prev) {
+			return false
+		}
+		current = prev
+	}
+
+	return false
+}
+
+// declaredAncestryHas walks the CURRENT ancestry of the element a position
+// named as its parent, from that element up to the root, and reports whether
+// any of them matches. Both callers below ask "was this position declared
+// inside node", differing only in how an ancestor is matched to node.
+func (t *Tree) declaredAncestryHas(declaredParent *TreeNode, match func(*TreeNode) bool) bool {
+	for current := declaredParent; current != nil; {
+		if match(current) {
+			return true
+		}
+		if current.Index.Parent == nil {
+			return false
+		}
+		current = current.Index.Parent.Value
+	}
+
+	return false
+}
+
+// endsInside reports whether the change's range ended inside node, i.e.
+// whether node is the element the range-end position named as its parent, or
+// an ancestor of it. That is the one question the index space cannot answer
+// after a concurrent split: node's End token is in the resolved range either
+// because the range genuinely ran past node's end, or because the split
+// pushed the end anchor into a sibling. The range-end position is carried by
+// the change and never moves, so it separates the two.
+//
+// The ancestry walked is the CURRENT one, and a concurrent split moves the
+// children after the split point into the new right half — so the declared
+// parent can now sit under a piece of node instead of under node. Each
+// ancestor is therefore matched through its split lineage rather than by
+// identity: every product of splitting node stands for node, which is what
+// the ancestry looked like when the change declared the position.
+func (t *Tree) endsInside(node, declaredToParent *TreeNode) bool {
+	return t.declaredAncestryHas(declaredToParent, func(ancestor *TreeNode) bool {
+		return t.isSplitProductOf(ancestor, node)
+	})
+}
+
+// beginsInside is the same question for the range-START position (§9.6): was
+// the change's range start declared inside node, so that node's End token was
+// in the range on the replica that issued the change.
+//
+// It matches a declared ancestor to node in BOTH directions along the split
+// lineage, which endsInside deliberately does not. A split of the element the
+// range began inside leaves the start anchor in whichever half now holds it,
+// so the resolved from-parent can be a product of the declared one — the
+// direction endsInside does not accept, because there the extra matches would
+// make a guard that must not fail open do exactly that. Here the two halves
+// are one element as far as the change is concerned: it declared a position
+// inside the element that was split, and both halves are that element.
+func (t *Tree) beginsInside(node, declaredFromParent *TreeNode) bool {
+	return t.declaredAncestryHas(declaredFromParent, func(ancestor *TreeNode) bool {
+		return t.isSplitProductOf(ancestor, node) || t.isSplitProductOf(node, ancestor)
+	})
+}
+
 // styleSkipPredicate builds the per-token skip checks shared by Style and
-// RemoveStyle: the End-token unknown-split-sibling exclusion and the §9.4
-// merged-anchor interloper filter for the range-end position.
+// RemoveStyle, as two predicates over the same state.
+//
+// skipReached answers "did the change reach this node at all": the End-token
+// unknown-split-sibling exclusion (§9.1), the §9.6 range-start guard and the
+// §9.4 merged-anchor interloper filter for the range-end position. It is
+// about the change, so it holds for every node a style writes to, however
+// that node was found.
+//
+// skipToken adds the one restriction that belongs to the index traversal
+// alone — the §9.4 from-side recovery re-anchors the traversal start over
+// nodes the change never covered, so a recovered traversal may touch only the
+// interlopers the recovery positively identified. Nodes derived from the
+// change's own positions are not in that widened span and answer to
+// skipReached only.
+//
+// beganInside is the set of elements THIS replica's resolved range begins
+// inside — the resolved from-parent and its ancestors, the only elements a
+// token traversal reaches through their End token alone. Every other element
+// the traversal reaches on an End token was reached on its Start token first.
 func (t *Tree) styleSkipPredicate(
-	to *TreePos,
+	from, to *TreePos,
+	fromParent *TreeNode,
 	versionVector time.VersionVector,
 	recoveredInterloper func(*TreeNode) bool,
-) func(index.TreeToken[*TreeNode]) bool {
+) (skipToken, skipReached func(index.TreeToken[*TreeNode]) bool) {
 	isVersionVectorEmpty := len(versionVector) == 0
 	isAnchorInterloper, _, _ := t.mergedAnchorInterloperGuard(to, versionVector)
-	return func(token index.TreeToken[*TreeNode]) bool {
-		// Skip styling via End token when the node has an unknown
-		// split sibling. The End token is in the range only because
-		// a concurrent split extended the range into the sibling.
+	declaredToParent, _ := t.ToTreeNodes(to)
+	declaredFromParent, _ := t.ToTreeNodes(from)
+
+	beganInside := map[*TreeNode]bool{}
+	for current := fromParent; current != nil; {
+		beganInside[current] = true
+		if current.Index.Parent == nil {
+			break
+		}
+		current = current.Index.Parent.Value
+	}
+
+	skipReached = func(token index.TreeToken[*TreeNode]) bool {
+		// Skip styling via End token when the node has an unknown split
+		// sibling AND the change's range ended inside the node. Only then is
+		// the End token in the range solely because a concurrent split
+		// extended the range into the sibling. When the range ran past the
+		// node's end the End token was in it before any split existed, and
+		// skipping it loses the style on every replica that applies the
+		// split first — the same style the opposite order keeps.
 		if token.TokenType == index.End && !isVersionVectorEmpty &&
+			(declaredToParent == nil || t.endsInside(token.Node, declaredToParent)) &&
 			t.hasUnknownSplitSibling(token.Node, versionVector) {
 			return true
 		}
-		// §9.4 from-side: a recovered traversal may only touch nodes the
-		// collapsed range lost, the positively identified interlopers.
-		if recoveredInterloper != nil && !recoveredInterloper(token.Node) {
+		// §9.6, the mirror of §9.1 on the range-start side. This replica's
+		// range begins inside the node, so only its End token is in the
+		// range; the change reached it that way only if the change's own
+		// range-start position was declared inside it. When a merge removes
+		// a paragraph's opening tag its children move into the merge target,
+		// and the start anchor resolves inside that target — an element the
+		// change never entered, whose End token is in the range solely
+		// because of the merge. Styling it puts the attribute on a LIVE node
+		// the replica that styled first left alone.
+		if token.TokenType == index.End && !isVersionVectorEmpty &&
+			beganInside[token.Node] && declaredFromParent != nil &&
+			!t.beginsInside(token.Node, declaredFromParent) {
 			return true
 		}
 		// §9.4: the node is in the range only because an unknown merge
 		// pulled the range-end anchor past it.
 		return isAnchorInterloper != nil && isAnchorInterloper(token.Node)
 	}
+
+	skipToken = func(token index.TreeToken[*TreeNode]) bool {
+		if skipReached(token) {
+			return true
+		}
+		// §9.4 from-side: a recovered traversal may only touch nodes the
+		// collapsed range lost, the positively identified interlopers.
+		return recoveredInterloper != nil && !recoveredInterloper(token.Node)
+	}
+
+	return skipToken, skipReached
 }
 
 // resolveMergeTarget follows the mergedInto forwarding chain from the given
@@ -3052,6 +3193,39 @@ func (t *Tree) split(
 	return diff, nil
 }
 
+// unknownSplitSiblings returns the element nodes a split concurrent with this
+// change produced from node: its InsNextID chain, stopped at the first
+// sibling the change already knew about. A style that covered node covered
+// these too, because the change resolved its range while node was still one
+// piece.
+func (t *Tree) unknownSplitSiblings(
+	node *TreeNode,
+	versionVector time.VersionVector,
+) []*TreeNode {
+	var siblings []*TreeNode
+
+	current := node
+	var walker insNextWalker
+	walker.visit(current)
+	for current.InsNextID != nil {
+		next := t.findFloorNode(current.InsNextID)
+		if next == nil || next.IsText() {
+			break
+		}
+		// Stop on a chain that loops back on itself; see insNextWalker.
+		if !walker.visit(next) {
+			break
+		}
+		if time.TicketKnown(versionVector, next.id.CreatedAt) {
+			break
+		}
+		siblings = append(siblings, next)
+		current = next
+	}
+
+	return siblings
+}
+
 // hasUnknownSplitSibling checks whether the given element node has a split
 // sibling (via InsNextID) whose creation the editor did not know about. This
 // is used to prevent styling an element via its End token when the End token
@@ -3130,31 +3304,43 @@ func (t *Tree) StyleByIndex(
 	return pairs, size, err
 }
 
-// Style applies the given attributes of the given range. Besides the GC
-// pairs and size diff, it reports, for each key in attrs, the value that key
-// held (or its absence) on the first node actually styled — see PrevAttr —
-// so a reverse Style can restore that prior state. Keys are captured in
-// sorted order so the result is deterministic regardless of Go's randomized
-// map iteration order.
-func (t *Tree) Style(
+// styleTargets resolves the nodes a Style or RemoveStyle applies to, in
+// document order and without repeats, along with the size the boundary text
+// splits added to Live.
+//
+// Style and RemoveStyle have to reach the same nodes — they are one range
+// resolution asked to write two different things — so the resolution lives
+// here once instead of in two copies that have to be kept identical by hand.
+//
+// A node is reported at most once even though a fully covered element is
+// visited twice, on its Start token and on its End token. The second write
+// was already a no-op: RHT.Set and RHT.Remove both reject a ticket that is
+// not After the one they hold, which is the same ticket on the second visit.
+//
+// NOTE(cross-implementation): the set this returns is a replicated contract,
+// not a local detail — every SDK has to reach the same nodes for the same
+// change. The rules are stated without reference to Go identifiers, with
+// replayable acceptance vectors, under "Port specification" in
+// docs/design/concurrent-merge-split.md; change them here and that section
+// and the yorkie-js-sdk port have to move with them.
+func (t *Tree) styleTargets(
 	from, to *TreePos,
-	attrs map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DocSize, []PrevAttr, error) {
-	var size resource.DocSize
+) ([]*TreeNode, resource.DataSize, error) {
+	var diff resource.DataSize
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
-		return t.drainPendingGCPairs(), size, nil, err
+		return nil, diff, err
 	}
+	diff.Add(diffFrom)
+
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
 	if err != nil {
-		size.Live.Add(diffFrom)
-		return t.drainPendingGCPairs(), size, nil, err
+		return nil, diff, err
 	}
-
-	size.Live.Add(diffFrom, diffTo)
+	diff.Add(diffTo)
 
 	// skipActorID for the same reason as Edit's Phase 2: a same-boundary
 	// empty run has to resolve here the way the split loop resolves it.
@@ -3172,92 +3358,318 @@ func (t *Tree) Style(
 
 	isVersionVectorEmpty := len(versionVector) == 0
 	recoveredParent, recoveredLeft, isRecoveredInterloper, err := t.reversedFromAnchorRecovery(
-		from, fromParent, fromLeft, toParent, toLeft, versionVector)
+		from, to, fromParent, fromLeft, toParent, toLeft, versionVector)
 	if err != nil {
-		return t.drainPendingGCPairs(), size, nil, err
+		return nil, diff, err
 	}
 	if recoveredParent != nil {
 		fromParent, fromLeft = recoveredParent, recoveredLeft
 	}
-	shouldSkipToken := t.styleSkipPredicate(to, versionVector, isRecoveredInterloper)
+	shouldSkipToken, shouldSkipReached := t.styleSkipPredicate(
+		from, to, fromParent, versionVector, isRecoveredInterloper)
+	declaredToParent, _ := t.ToTreeNodes(to)
 
-	var pairs []GCPair
-	var prevAttrs []PrevAttr
-	captured := false
-	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
-		node := token.Node
+	var targets []*TreeNode
+	seen := make(map[*TreeNode]bool)
+	add := func(node *TreeNode) {
+		if seen[node] {
+			return
+		}
+		seen[node] = true
+		targets = append(targets, node)
+	}
 
-		if node.canStyle(versionVector) && len(attrs) > 0 {
+	if err := t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
+		func(token index.TreeToken[*TreeNode], _ bool) {
+			node := token.Node
+			// A fully covered element arrives twice, on its Start token and
+			// on its End token. Everything below depends only on the node,
+			// so the second visit would redo the lineage walks to add what
+			// the first already added — quadratic over a split chain whose
+			// every member the traversal visits.
+			if seen[node] {
+				return
+			}
 			if shouldSkipToken(token) {
 				return
 			}
 
-			if !captured {
-				prevAttrs = stylePrevAttrs(node, attrs)
-				captured = true
+			if node.canStyle(versionVector) {
+				add(node)
+				// Carry the style onto split products the change could not
+				// have known, so a range resolved before the split still
+				// covers the piece the split cut off. Which token reached
+				// the node does not decide this: a node the range covered
+				// whole arrives on its Start token, or on its End token
+				// alone when the range began inside it.
+				for _, sibling := range t.unknownSplitSiblings(node, versionVector) {
+					add(sibling)
+				}
+				return
 			}
 
-			for key, value := range attrs {
-				// canStyle admits a node removed CONCURRENTLY with this
-				// style, and Tree.DataSize excludes removed nodes, so Live
-				// is not holding this one's attributes -- accAttrWrite
-				// books it to GC instead. Note TreeNode.DataSize counts a
-				// live attribute either way; the exclusion is the
-				// container's.
-				accAttrWrite(
-					node.SetAttr(key, value, editedAt),
-					node,
-					!node.IsRemoved(),
-					&pairs,
-					&size,
-				)
-			}
-
-			// Propagate style to unknown split siblings so that a
-			// style operation whose range was determined before the
-			// split also covers the right part of the split.
-			if token.TokenType == index.Start && !isVersionVectorEmpty {
-				current := node
-				var walker insNextWalker
-				walker.visit(current)
-				for current.InsNextID != nil {
-					next := t.findFloorNode(current.InsNextID)
-					if next == nil || next.IsText() {
-						break
+			// The change did not know this node was created, so it cannot
+			// have named it — unless a concurrent split produced it from one
+			// the change did name. An End token the range genuinely ran past
+			// says the change styled that element while it was still one
+			// piece, so the whole split family carries the style, including
+			// the half the change knew and the traversal no longer reaches.
+			if token.TokenType == index.End && !isVersionVectorEmpty &&
+				declaredToParent != nil && !t.endsInside(node, declaredToParent) {
+				family := t.splitFamilyOf(node, versionVector)
+				// The family is reached only through the node the change
+				// knew, which is the one the End-token guard judges. When
+				// that guard excludes it, the split is the only reason this
+				// token is in the range at all, and re-adding the family here
+				// would style the very node the guard just skipped.
+				if len(family) > 0 && !shouldSkipToken(
+					index.TreeToken[*TreeNode]{Node: family[0], TokenType: index.End},
+				) {
+					for _, member := range family {
+						add(member)
 					}
-					// Stop on a chain that loops back on itself; see insNextWalker.
-					if !walker.visit(next) {
-						break
-					}
-					if time.TicketKnown(versionVector, next.id.CreatedAt) {
-						break
-					}
-					for key, value := range attrs {
-						// This path needs no removal filter of its own: the
-						// loop only walks siblings whose CREATION this style
-						// did not know about, and a change cannot have known
-						// a removal of a node it did not know exists. So
-						// canStyle's answer here is always "apply", and the
-						// tombstoned ones book to GC as above.
-						accAttrWrite(
-							next.SetAttr(key, value, editedAt),
-							next,
-							!next.IsRemoved(),
-							&pairs,
-							&size,
-						)
-					}
-					current = next
 				}
 			}
-		}
-	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), size, nil, err
+		}); err != nil {
+		return nil, diff, err
 	}
 
-	pairs = append(pairs, t.drainPendingGCPairs()...)
+	// Add back the boundary elements the change itself reached. Without a
+	// concurrent merge the traversal has already found every one of them and
+	// these add nothing; with one, they are the nodes the resolved range can
+	// no longer see.
+	//
+	// This supplements a traversal that writes nothing for a range the change
+	// declared empty and nothing for one that runs backwards
+	// (traverseInPosRange returns early on fromIdx > toIdx), so it must not
+	// write there either. Both are reachable from outside: a remote change
+	// carries whatever positions the wire gave it.
+	covers, err := t.boundaryRangeCovers(from, to, fromParent, fromLeft, toParent, toLeft)
+	if err != nil {
+		return nil, diff, err
+	}
+	if covers {
+		for _, token := range t.boundaryElements(from, to) {
+			// The §9.4 interloper filters and the End-token split guard are
+			// about which nodes the change reached, not about how the
+			// traversal found them, so a boundary element answers to them too.
+			if shouldSkipReached(token) {
+				continue
+			}
+			if token.Node.canStyle(versionVector) {
+				add(token.Node)
+			}
+		}
+	}
 
-	return pairs, size, prevAttrs, nil
+	return targets, diff, nil
+}
+
+// boundaryRangeCovers reports whether the change declared a range that
+// covers at least one element, so that reconstructing its boundary elements
+// is repair rather than invention.
+//
+// Two ranges cover nothing. A range whose two positions are equal covers
+// nothing anywhere, on any replica — there is no boundary to rebuild. A
+// range that resolves backwards covers nothing here, and traverseInPosRange
+// already returns early on it; the question is whether it was declared
+// backwards or was collapsed by a change this replica has and the styling
+// client did not. Only a removal collapses a range, so an inversion with a
+// live declared ancestry on both ends is the caller's own, and the boundary
+// elements would write attributes where the traversal writes none.
+func (t *Tree) boundaryRangeCovers(
+	from, to *TreePos,
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
+) (bool, error) {
+	if from.Equal(to) {
+		return false, nil
+	}
+
+	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	if err != nil {
+		return false, err
+	}
+	toIdx, err := t.ToIndex(toParent, toLeft)
+	if err != nil {
+		return false, err
+	}
+	if fromIdx <= toIdx {
+		return true, nil
+	}
+
+	return t.declaredAncestryRemoved(from) || t.declaredAncestryRemoved(to), nil
+}
+
+// declaredAncestryRemoved reports whether the element a position named as
+// its parent, or any ancestor of it, has been removed — the only way a range
+// the styling client declared forwards can resolve backwards here.
+func (t *Tree) declaredAncestryRemoved(pos *TreePos) bool {
+	parent, _ := t.ToTreeNodes(pos)
+	for current := parent; current != nil; {
+		if current.IsRemoved() {
+			return true
+		}
+		if current.Index.Parent == nil {
+			return false
+		}
+		current = current.Index.Parent.Value
+	}
+
+	return false
+}
+
+// boundaryElements returns the elements the change reached through a single
+// token on the replica that issued it: the ancestors of the range-start
+// position, whose End tokens the range ran past, and the ancestors of the
+// range-end position, whose Start tokens it ran past — each chain stopping
+// below the common ancestor of the two. Elements strictly between the two
+// positions are reached through both tokens and need no reconstruction; the
+// index traversal still finds them.
+//
+// Each element is returned with the token the range ran past, so the caller
+// can put it through the same per-token skip checks the traversal applies.
+//
+// These come from the positions the change carries, which never move, so
+// every replica computes the same set whatever a concurrent merge did to the
+// index space. That is what the index space cannot supply: a merge that
+// empties one parent into another pulls the range-end anchor back inside the
+// range-start parent, and the resolved range then stops short of the End
+// token it ran past before — permanently, on that replica only.
+func (t *Tree) boundaryElements(from, to *TreePos) []index.TreeToken[*TreeNode] {
+	fromParent, _ := t.ToTreeNodes(from)
+	toParent, _ := t.ToTreeNodes(to)
+	if fromParent == nil || toParent == nil {
+		return nil
+	}
+
+	depth := map[*TreeNode]int{}
+	for current, i := fromParent, 0; current != nil; i++ {
+		depth[current] = i
+		if current.Index.Parent == nil {
+			break
+		}
+		current = current.Index.Parent.Value
+	}
+
+	// The common ancestor is the first ancestor of the range-end position
+	// that also sits above the range-start position.
+	var common *TreeNode
+	var tokens []index.TreeToken[*TreeNode]
+	for current := toParent; current != nil; {
+		if _, ok := depth[current]; ok {
+			common = current
+			break
+		}
+		// The range ran past this element's Start token.
+		tokens = append(tokens, index.TreeToken[*TreeNode]{Node: current, TokenType: index.Start})
+		if current.Index.Parent == nil {
+			break
+		}
+		current = current.Index.Parent.Value
+	}
+	if common == nil {
+		return nil
+	}
+
+	var elements []index.TreeToken[*TreeNode]
+	for current := fromParent; current != common; {
+		// The range ran past this element's End token.
+		elements = append(elements, index.TreeToken[*TreeNode]{Node: current, TokenType: index.End})
+		if current.Index.Parent == nil {
+			break
+		}
+		current = current.Index.Parent.Value
+	}
+
+	return append(elements, tokens...)
+}
+
+// splitFamilyOf walks back along InsPrevID from an element whose creation the
+// change did not know, collecting the products a concurrent split made of a
+// node it did know. It returns the family in document order, that known node
+// first, or nil when the chain reaches no such node — a node that is simply
+// new to the change, not a piece of one it styled.
+//
+// The walk collects backwards and reverses once at the end: prepending each
+// link instead would copy the whole slice per link, which is quadratic in a
+// chain length the change's own author chooses.
+func (t *Tree) splitFamilyOf(
+	node *TreeNode,
+	versionVector time.VersionVector,
+) []*TreeNode {
+	reversed := []*TreeNode{node}
+
+	current := node
+	var walker insNextWalker
+	walker.visit(current)
+	for current.InsPrevID != nil {
+		prev := t.findFloorNode(current.InsPrevID)
+		if prev == nil || prev.IsText() {
+			return nil
+		}
+		// Stop on a chain that loops back on itself; see insNextWalker.
+		if !walker.visit(prev) {
+			return nil
+		}
+		reversed = append(reversed, prev)
+		if prev.canStyle(versionVector) {
+			slices.Reverse(reversed)
+			return reversed
+		}
+		current = prev
+	}
+
+	return nil
+}
+
+// Style applies the given attributes of the given range. Besides the GC
+// pairs and size diff, it reports, for each key in attrs, the value that key
+// held (or its absence) on the first node actually styled — see PrevAttr —
+// so a reverse Style can restore that prior state. Keys are captured in
+// sorted order so the result is deterministic regardless of Go's randomized
+// map iteration order.
+func (t *Tree) Style(
+	from, to *TreePos,
+	attrs map[string]string,
+	editedAt *time.Ticket,
+	versionVector time.VersionVector,
+) ([]GCPair, resource.DocSize, []PrevAttr, error) {
+	var size resource.DocSize
+
+	targets, diff, err := t.styleTargets(from, to, editedAt, versionVector)
+	size.Live.Add(diff)
+	if err != nil {
+		return t.drainPendingGCPairs(), size, nil, err
+	}
+	if len(attrs) == 0 {
+		return t.drainPendingGCPairs(), size, nil, nil
+	}
+
+	var pairs []GCPair
+	var prevAttrs []PrevAttr
+	for i, node := range targets {
+		if i == 0 {
+			prevAttrs = stylePrevAttrs(node, attrs)
+		}
+
+		for key, value := range attrs {
+			// canStyle admits a node removed CONCURRENTLY with this
+			// style, and Tree.DataSize excludes removed nodes, so Live
+			// is not holding this one's attributes -- accAttrWrite
+			// books it to GC instead. Note TreeNode.DataSize counts a
+			// live attribute either way; the exclusion is the
+			// container's.
+			accAttrWrite(
+				node.SetAttr(key, value, editedAt),
+				node,
+				!node.IsRemoved(),
+				&pairs,
+				&size,
+			)
+		}
+	}
+
+	return append(pairs, t.drainPendingGCPairs()...), size, prevAttrs, nil
 }
 
 // RemoveStyle removes the given attributes of the given range. Besides the
@@ -3276,115 +3688,44 @@ func (t *Tree) RemoveStyle(
 ) ([]GCPair, resource.DocSize, []PrevAttr, error) {
 	var size resource.DocSize
 
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
+	targets, diff, err := t.styleTargets(from, to, editedAt, versionVector)
+	size.Live.Add(diff)
 	if err != nil {
 		return t.drainPendingGCPairs(), size, nil, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, BoundaryRange)
-	if err != nil {
-		size.Live.Add(diffFrom)
-		return t.drainPendingGCPairs(), size, nil, err
+	if len(attrs) == 0 {
+		return t.drainPendingGCPairs(), size, nil, nil
 	}
-
-	size.Live.Add(diffFrom, diffTo)
-
-	// skipActorID for the same reason as Edit's Phase 2: a same-boundary
-	// empty run has to resolve here the way the split loop resolves it.
-	styleActorID := editedAt.ActorID()
-	if fromLeft != fromParent {
-		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector, advanceOpts{
-			skipActorID: &styleActorID,
-		})
-	}
-	if toLeft != toParent {
-		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector, advanceOpts{
-			skipActorID: &styleActorID,
-		})
-	}
-
-	isVersionVectorEmpty := len(versionVector) == 0
-	recoveredParent, recoveredLeft, isRecoveredInterloper, err := t.reversedFromAnchorRecovery(
-		from, fromParent, fromLeft, toParent, toLeft, versionVector)
-	if err != nil {
-		return t.drainPendingGCPairs(), size, nil, err
-	}
-	if recoveredParent != nil {
-		fromParent, fromLeft = recoveredParent, recoveredLeft
-	}
-	shouldSkipToken := t.styleSkipPredicate(to, versionVector, isRecoveredInterloper)
 
 	var pairs []GCPair
 	var prevAttrs []PrevAttr
-	captured := false
-	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
-		node := token.Node
-
-		if node.canStyle(versionVector) && len(attrs) > 0 {
-			if shouldSkipToken(token) {
-				return
-			}
-
-			if !captured {
-				keys := append([]string(nil), attrs...)
-				sort.Strings(keys)
-				for _, key := range keys {
-					if node.Attrs != nil && node.Attrs.Has(key) {
-						prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
-					}
-				}
-				captured = true
-			}
-
-			for _, attr := range attrs {
-				// canStyle admits a node removed concurrently with this
-				// change, so nodeIsLive is the third question attrGCPair asks.
-				wasLive := node.Attrs != nil && node.Attrs.Has(attr)
-				nodeIsLive := !node.IsRemoved()
-				for _, rhtNode := range node.RemoveAttr(attr, editedAt) {
-					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive, nodeIsLive))
-					// Only the node that replaces the live value takes a size
-					// out of Live; a second one in the same call is the
-					// tombstone it superseded.
-					wasLive = false
-				}
-			}
-
-			// Propagate remove-style to unknown split siblings.
-			if token.TokenType == index.Start && !isVersionVectorEmpty {
-				current := node
-				var walker insNextWalker
-				walker.visit(current)
-				for current.InsNextID != nil {
-					next := t.findFloorNode(current.InsNextID)
-					if next == nil || next.IsText() {
-						break
-					}
-					// Stop on a chain that loops back on itself; see insNextWalker.
-					if !walker.visit(next) {
-						break
-					}
-					if time.TicketKnown(versionVector, next.id.CreatedAt) {
-						break
-					}
-					for _, attr := range attrs {
-						wasLive := next.Attrs != nil && next.Attrs.Has(attr)
-						nodeIsLive := !next.IsRemoved()
-						for _, rhtNode := range next.RemoveAttr(attr, editedAt) {
-							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive, nodeIsLive))
-							wasLive = false
-						}
-					}
-					current = next
+	for i, node := range targets {
+		if i == 0 {
+			keys := append([]string(nil), attrs...)
+			sort.Strings(keys)
+			for _, key := range keys {
+				if node.Attrs != nil && node.Attrs.Has(key) {
+					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})
 				}
 			}
 		}
-	}); err != nil {
-		return append(pairs, t.drainPendingGCPairs()...), size, nil, err
+
+		for _, attr := range attrs {
+			// canStyle admits a node removed concurrently with this
+			// change, so nodeIsLive is the third question attrGCPair asks.
+			wasLive := node.Attrs != nil && node.Attrs.Has(attr)
+			nodeIsLive := !node.IsRemoved()
+			for _, rhtNode := range node.RemoveAttr(attr, editedAt) {
+				pairs = append(pairs, attrGCPair(node, rhtNode, wasLive, nodeIsLive))
+				// Only the node that replaces the live value takes a size
+				// out of Live; a second one in the same call is the
+				// tombstone it superseded.
+				wasLive = false
+			}
+		}
 	}
 
-	pairs = append(pairs, t.drainPendingGCPairs()...)
-
-	return pairs, size, prevAttrs, nil
+	return append(pairs, t.drainPendingGCPairs()...), size, prevAttrs, nil
 }
 
 // attrGCPair builds the GC pair for an RHT node a style edit turned into
