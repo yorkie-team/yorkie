@@ -538,10 +538,9 @@ func TestUndoDoesNotRestoreATombstonesAttribute(t *testing.T) {
 // it RegisterGCPair debits Live for bytes it never held, once per dead node.
 //
 // Moving the SAME element repeatedly keeps movedAt at a fixed count while the
-// dead-node count grows, which is what isolates the two. (The running ledger
-// is short by movedAt on every move; that is a separate, pre-existing defect
-// recorded in the task doc, and it is why this compares two rebuilds rather
-// than a rebuild against the running ledger.)
+// dead-node count grows, which is what isolates the two. The running ledger now
+// carries movedAt as well (yorkie#2017), so it is asserted against the rebuild
+// here rather than one rebuild against another.
 //
 // The local move path in json.Array marks its pairs the same way. It is not
 // asserted here: it books to the CLONE, whose ledger has no observable except
@@ -571,6 +570,8 @@ func TestArrayDeadPositionNodesAreGCOnly(t *testing.T) {
 		clone, err := doc.InternalDocument().DeepCopy()
 		require.NoError(t, err)
 		require.Equal(t, moves, doc.GarbageLen(), "each move leaves one dead node")
+		require.Equal(t, clone.DocSize().Live, doc.DocSize().Live,
+			"the running ledger has to hold what the rebuild recomputes")
 		return resourceSize{
 			Data: clone.DocSize().Live.Data,
 			Meta: clone.DocSize().Live.Meta,
