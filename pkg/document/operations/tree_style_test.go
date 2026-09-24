@@ -205,6 +205,12 @@ func TestTreeStyle(t *testing.T) {
 		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
+		// A reverse is built without an executedAt; document.go stamps one
+		// (Document.applyUndo) before the undo change is pushed, and the
+		// converter now rejects an operation whose executed_at is absent.
+		// Stamp it here so the round trip mirrors the real wire form.
+		reverse.SetExecutedAt(time.NewTicket(3, 0, actor))
+
 		pbOps, err := converter.ToOperations([]operations.Operation{reverse})
 		assert.NoError(t, err)
 		decodedOps, err := converter.FromOperations(pbOps)

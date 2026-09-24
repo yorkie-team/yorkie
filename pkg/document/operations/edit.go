@@ -174,7 +174,10 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 
 			// 1. Re-remove the content the reversed edit inserted (by identity).
 			if len(toRetombstone) > 0 {
-				pairs, diff := obj.Retombstone(toRetombstone, e.executedAt)
+				pairs, diff, err := obj.Retombstone(toRetombstone, e.executedAt)
+				if err != nil {
+					return ExecutionResult{}, err
+				}
 				observable = observable || len(pairs) > 0
 				for _, pair := range pairs {
 					root.RegisterGCPair(pair)
@@ -184,8 +187,11 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 
 			// 2. Revive the content the reversed edit removed (by identity).
 			if len(toRestore) > 0 {
-				untombstoned, recreated, stillTombstoned := obj.Restore(
+				untombstoned, recreated, stillTombstoned, err := obj.Restore(
 					toRestore, e.executedAt, e.from)
+				if err != nil {
+					return ExecutionResult{}, err
+				}
 				observable = observable || len(untombstoned) > 0 || len(recreated) > 0
 
 				// Register the still-tombstoned split remainders (which include
