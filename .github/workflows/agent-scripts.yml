@@ -88,16 +88,18 @@ jobs:
   # as its own dialect, and a lane that is noisy from its first run is a lane
   # people learn to ignore. The startup-failure class is what this exists for.
   #
-  # SCOPED TO `agent-*.yml`, which is narrower than the paths that trigger this
-  # lane, and the asymmetry is deliberate. Pointing actionlint at the whole
-  # directory reports two findings that predate this surface and belong to other
-  # people's lanes — a `workflow_call` input in `base-docker-publish.yml` that is
-  # both `required` and defaulted, and `codecov/codecov-action@v3` in `ci.yml`
-  # being too old for current runners. Neither is a startup failure, and
-  # adopting them here would mean either fixing the Go coverage upload as a side
-  # effect of an agent change, or carrying an ignore list that quietly excuses
-  # them forever. They are worth fixing; they are not worth fixing silently, in
-  # this PR, by whoever next touches these scripts.
+  # SCOPED TO THE WHOLE DIRECTORY, which is what triggers this lane. It was
+  # narrower once: pointing actionlint at everything reported two findings that
+  # belonged to other people's lanes — a `workflow_call` input in
+  # `base-docker-publish.yml` that was both `required` and defaulted, and
+  # `codecov/codecov-action@v3` in `ci.yml` being too old for current runners —
+  # and the choice then was to leave them visible rather than fix them silently
+  # inside an agent change. Both are fixed, so the scope now matches the
+  # trigger, with no ignore list.
+  #
+  # That symmetry is the point going forward: the startup-failure class this
+  # lane exists for is not specific to `agent-*.yml`, and a `ci.yml` GitHub
+  # refuses to load takes the Go lane down the same way it took the panel down.
   lint-workflows:
     runs-on: ubuntu-latest
     steps:
@@ -113,4 +115,4 @@ jobs:
       - name: Lint workflow files
         run: |
           docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 \
-            -color -shellcheck= -pyflakes= .github/workflows/agent-*.yml
+            -color -shellcheck= -pyflakes= .github/workflows/*.yml
