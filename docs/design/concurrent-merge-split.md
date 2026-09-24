@@ -229,8 +229,26 @@ When a merge-source is deleted (not merged), its former children —
 now in the merge target — must also be tombstoned. Children are
 identified via `child.MergedFrom == source.id`.
 
-Skip propagation when `mergedInto == fromParent`: this indicates a
-concurrent merge (both sides merged into each other), not a delete.
+Skip propagation when `mergedInto` is this edit's own merge destination
+**and** one of the edit's own positions named that source: the concurrent
+merge then moved the children exactly where this edit would have, and
+tombstoning them would undo a merge the edit itself asks for. Two replicas
+running the same unwrap are the symmetric case (the source is the declared
+to-parent); an edit whose range starts inside the merged-away source is the
+other (the source is the declared from-parent).
+
+The positions have to be read as *declared*, through `Tree.ToTreeNodes`,
+not through the resolved `fromParent`/`toParent`: §1.1 redirects a position
+away from a merged-away parent, and that redirect is what widens the
+resolved range over the source in the first place. Nothing in the resolved
+range separates the two cases — a source the range merely spans is fully
+contained exactly as a redirected boundary is.
+
+A source the range only spans is a plain delete of everything that was
+inside it. Its children are tombstoned wherever the concurrent merge left
+them; otherwise the replica that merged first keeps them alive while the
+replica that deleted first does not (#1956: an `Edit(0, 1)` unwrap of `p1`
+against a concurrent `Edit(0, 5)` that deletes `p1` whole).
 
 ### §6.3 Chained-Merge Flattening
 
@@ -757,3 +775,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
 | Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
+| Fix 25 | §6.2 | Skip merge-delete propagation only at a declared boundary |

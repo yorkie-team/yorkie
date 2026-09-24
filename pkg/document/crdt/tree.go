@@ -1988,7 +1988,7 @@ func (t *Tree) Edit(
 
 	// §6.2: Propagate deletes to children moved by prior merges.
 	mergePairs := t.propagateMergeDeletes(
-		fromParent, toBeRemoveds, toBeMergedNodes, editedAt,
+		fromParent, from, to, toBeRemoveds, toBeMergedNodes, editedAt,
 	)
 	pairs = append(pairs, mergePairs...)
 
@@ -2533,12 +2533,15 @@ func (t *Tree) mergeNodes(
 
 // propagateMergeDeletes tombstones children that were moved by prior
 // merges when the merge-source node is fully deleted (not a merge
-// boundary). It skips when mergedInto points to the merge destination,
-// which indicates a concurrent merge rather than a delete. The list of
-// moved children is recomputed on the fly from the merge target's
-// children filtered by MergedFrom.
+// boundary). It skips a source whose children a concurrent merge already
+// moved into this edit's own destination AND that one of this edit's own
+// positions named: there the concurrent merge moved them where this edit
+// would have, so they are not part of what this edit deletes. The list of
+// moved children is recomputed on the fly from the merge target's children
+// filtered by MergedFrom.
 func (t *Tree) propagateMergeDeletes(
 	fromParent *TreeNode,
+	from, to *TreePos,
 	toBeRemoveds []*TreeNode,
 	toBeMergedNodes []*TreeNode,
 	editedAt *time.Ticket,
@@ -2548,12 +2551,34 @@ func (t *Tree) propagateMergeDeletes(
 	// chained merge (dest != fromParent) must recognize a concurrent-merge
 	// boundary by dest to skip it here.
 	dest := t.resolveMergeTarget(fromParent)
+	// The parents the edit's own positions name, resolved lazily: §1.1
+	// redirects a position away from a merged-away parent, so fromParent and
+	// toParent no longer say which boundaries the edit asked for. Only the
+	// same-destination branch below needs them.
+	var declaredFrom, declaredTo *TreeNode
+	declaredResolved := false
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
 		if node.mergedInto == nil ||
-			slices.Contains(toBeMergedNodes, node) ||
-			node.mergedInto.Equal(dest.id) {
+			slices.Contains(toBeMergedNodes, node) {
 			continue
+		}
+		// A source whose children already sit in this edit's own destination
+		// stands for a merge the edit itself asks for only when one of the
+		// edit's positions named that source: the edit's range then stops at
+		// the source instead of covering it, and keeping the children is what
+		// makes the two replicas agree (§6.2). A source the range merely spans
+		// is a plain delete of everything that was inside it, so its children
+		// are tombstoned wherever the concurrent merge left them.
+		if node.mergedInto.Equal(dest.id) {
+			if !declaredResolved {
+				declaredFrom, _ = t.ToTreeNodes(from)
+				declaredTo, _ = t.ToTreeNodes(to)
+				declaredResolved = true
+			}
+			if node == declaredFrom || node == declaredTo {
+				continue
+			}
 		}
 		// The destination has to be the node mergedInto names exactly, and an
 		// element: this loop tombstones that node's children, so a floor
