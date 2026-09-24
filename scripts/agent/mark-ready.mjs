@@ -73,6 +73,15 @@ import { allRequiredPassed, ciConclusion, CI_WORKFLOW_FILE, definesCi, DEFAULT_R
 import { computeLabelSet } from "./set-state.mjs";
 import { disclosesAiAuthorship, HANDOFF_MARKER } from "./disclosure.mjs";
 
+// `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
+// blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
+// error, not an empty result, a CRASH — and the caller reports it as whatever
+// its own failure means. On #2026 that was the review-round guard dying and the
+// pipeline announcing "the fixer agent failed", which it had not: it never ran.
+// A PR accumulates comments as it is reviewed, so this gets MORE likely the
+// longer a PR is worked on, which is exactly backwards.
+const GH_MAX_BUFFER = 64 * 1024 * 1024;
+
 const prNumber = process.argv[2];
 const promote = process.argv.includes("--promote");
 
@@ -112,7 +121,7 @@ if (REQUIRED_CHECKS.length === 0 && !process.argv.includes("--allow-no-checks"))
 }
 
 function gh(args) {
-  return execFileSync("gh", args, { encoding: "utf8" });
+  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: GH_MAX_BUFFER });
 }
 
 function ghJson(args) {
@@ -128,7 +137,7 @@ function ghJson(args) {
 function ghMutate(args) {
   const token = process.env.GH_MUTATION_TOKEN;
   const env = token ? { ...process.env, GH_TOKEN: token } : process.env;
-  return execFileSync("gh", args, { encoding: "utf8", env });
+  return execFileSync("gh", args, { encoding: "utf8", env, maxBuffer: GH_MAX_BUFFER });
 }
 
 // --- gather PR state -------------------------------------------------------

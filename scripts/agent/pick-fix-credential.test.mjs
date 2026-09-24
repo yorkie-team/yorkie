@@ -250,11 +250,17 @@ test("no fix-job step reads from a path the fix job never creates", () => {
 
   // The staging step is what makes the path real.
   assert.match(fixJob, /cp -R \.\/scripts\/agent "\$\{\{ runner\.temp \}\}\/agent-tools"/);
+  // ...and so is the post-agent one, which is what admits `.trusted-post` below.
+  assert.match(fixJob, /path: \.trusted-post/, "the exempted path must be one this job checks out");
 
-  // And nothing in the job may reference `.trusted`, in a run: line or a guard.
+  // And nothing in the job may reference a `.trusted` path it does not create.
+  // The post-agent re-stage DOES create one — `.trusted-post`, checked out after
+  // the agent stops precisely because `$RUNNER_TEMP` is agent-writable — so that
+  // name is admitted and every other one is still a reference to nothing.
+  const CREATED = /\.trusted-post\b/;
   const offenders = fixJob
     .split("\n")
-    .filter((l) => l.includes(".trusted") && !/^\s*#/.test(l));
+    .filter((l) => l.includes(".trusted") && !/^\s*#/.test(l) && !CREATED.test(l));
   assert.deepEqual(offenders, [], `fix-job steps reference .trusted, which this job never creates:\n${offenders.join("\n")}`);
 });
 

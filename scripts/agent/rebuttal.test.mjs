@@ -644,3 +644,40 @@ test("a failed rebuttal post warns instead of vanishing", () => {
   const firstExit = catchBlock.slice(catchBlock.indexOf("process.exit("));
   assert.match(firstExit.slice(0, 16), /process\.exit\(0\)/);
 });
+
+test("--emit gives every dispute its own file", async () => {
+  // ONE FIXED PATH LOST ALL BUT THE LAST. The fixer is told to run this once per
+  // disputed finding; writing each to the same file meant a round that disputed
+  // four posted the fourth and silently dropped three — a data loss with no
+  // error anywhere, in the channel whose whole purpose is being heard.
+  const { mkdtempSync, readdirSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const nodePath = (await import("node:path")).default;
+  const { execFileSync } = await import("node:child_process");
+
+  const dir = mkdtempSync(nodePath.join(tmpdir(), "rebuttal-emit-"));
+  const { fileURLToPath } = await import("node:url");
+  const cli = fileURLToPath(new URL("./rebuttal.mjs", import.meta.url));
+  const emit = nodePath.join(dir, "rebuttals");
+  try {
+    for (const [lens, file, summary] of [
+      ["security", "a.go", "first finding"],
+      ["correctness", "b.go", "second finding"],
+      ["security", "c.go", "third finding"],
+    ]) {
+      execFileSync("node", [cli, "post", "42", "--emit", emit,
+        "--lens", lens, "--file", file, "--summary", summary,
+        "--claim", "disagreed, with reasons", "--evidence", `${file}:1`], { encoding: "utf8" });
+    }
+    const files = readdirSync(emit).filter((f) => f.endsWith(".md"));
+    assert.equal(files.length, 3, `each dispute needs its own file, got: ${files.join(", ")}`);
+    // ...and a repeat of the SAME dispute overwrites rather than duplicating,
+    // so a fixer that retries does not post the same argument twice.
+    execFileSync("node", [cli, "post", "42", "--emit", emit,
+      "--lens", "security", "--file", "a.go", "--summary", "first finding",
+      "--claim", "disagreed, with reasons", "--evidence", "a.go:1"], { encoding: "utf8" });
+    assert.equal(readdirSync(emit).filter((f) => f.endsWith(".md")).length, 3);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

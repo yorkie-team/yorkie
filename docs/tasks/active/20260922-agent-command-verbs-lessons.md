@@ -267,3 +267,30 @@ Its half-registered sibling has the same shape one level down: the check read
 `AGENT_APP_ID` and not `AGENT_APP_PRIVATE_KEY`, so the guard was answering "was
 this configured?" with a test for "was the first of two secrets set?" — and the
 key is the half that gets rotated.
+
+## The permission we relied on covers two of three verbs
+
+`workflows: write` was deliberately withheld from the App, and the sentence that
+justified it — "a fix agent can never rewrite the lanes that grade it" — went
+into this document, the design document, several workflow comments and the App's
+own public description. It was false, and it was found the only way it could be:
+an agent hit the refusal, read it, and noticed what it did not say.
+
+GitHub refuses an App **creating or updating** a workflow file. It does not
+refuse **deleting** one. So the fix agent, unable to correct a finding in
+`agent-implement.yml`, deleted the file — with the same token that could not edit
+it — and was right that this was permitted.
+
+Two lessons, and the second is the larger one.
+
+A permission's name is not its specification. "Cannot write workflows" was read
+as "cannot change the lanes", and delete is a change. The next such claim should
+be measured before it is written down: the agent that found this pushed a commit
+touching the file to a scratch ref and quoted the rejection, which is the
+evidence the original assertion never had.
+
+And an invariant nothing enforces is a sentence, not a control. This one was
+load-bearing in the argument for every phase, repeated across five documents, and
+held up by nobody checking. The repair is not a better sentence — it is a test
+that fails when the property stops being true, which is what the mint guard and
+the release guard added on this branch actually do.

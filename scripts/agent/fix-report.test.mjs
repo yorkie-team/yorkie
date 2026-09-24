@@ -455,10 +455,17 @@ test("the dispute count is RENDERED, never serialized into the record", () => {
   }
 });
 
-test("cmdPost counts the disputes actually on the PR", () => {
+test("cmdPost counts every dispute, posted or only emitted", () => {
   // The renderer is pure and proves nothing about being fed a real count.
+  //
+  // BOTH SOURCES. `readRebuttals` reads PR comments, and under `--emit` nothing
+  // has been posted yet — the workflow posts the files after the agent stops.
+  // Counting only the posted ones made the number structurally zero for every
+  // emitted report, which reads as "the fixer disputed nothing" on exactly the
+  // rounds where it disputed something.
   const src = readFileSync(new URL("./fix-report.mjs", import.meta.url), "utf8");
-  assert.match(src, /renderFixReportBody\(rec, \{ disputed: readRebuttals\(pr\)\.length \}\)/);
+  assert.match(src, /disputed: readRebuttals\(pr\)\.length \+ emittedDisputes/);
+  assert.match(src, /readdirSync\(dir\)\.filter\(\(f\) => f\.endsWith\("\.md"\)\)\.length/);
   assert.match(src, /import \{ fromRebuttalAuthor, readRebuttals \} from "\.\/rebuttal\.mjs"/);
 });
 

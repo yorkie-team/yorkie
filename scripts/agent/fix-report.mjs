@@ -29,11 +29,20 @@
 // there.
 
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { fromRebuttalAuthor, readRebuttals } from "./rebuttal.mjs";
+
+// `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
+// blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
+// error, not an empty result, a CRASH — and the caller reports it as whatever
+// its own failure means. On #2026 that was the review-round guard dying and the
+// pipeline announcing "the fixer agent failed", which it had not: it never ran.
+// A PR accumulates comments as it is reviewed, so this gets MORE likely the
+// longer a PR is worked on, which is exactly backwards.
+const GH_MAX_BUFFER = 64 * 1024 * 1024;
 
 /** Hidden-comment marker, mirroring metrics.mjs's `METRIC_PREFIX`. */
 export const FIX_REPORT_MARKER = "<!-- agent-fix-report ";
@@ -551,7 +560,7 @@ export function parseItemString(s) {
 const USAGE =
   "Usage:\n"
   + "  node fix-report.mjs read <pr> [--out <file>]\n"
-  + "  node fix-report.mjs post <pr> [--head <sha>]\n"
+  + "  node fix-report.mjs post <pr> [--head <sha>] [--emit <file>]\n"
   + `      [--fixed "lens${ITEM_SEP}file${ITEM_SEP}summary${ITEM_SEP}what you changed" ...]\n`
   + `      [--skipped "lens${ITEM_SEP}file${ITEM_SEP}summary${ITEM_SEP}why not" ...]`;
 
@@ -589,7 +598,23 @@ function cmdPost(pr, args) {
   // construction: `readRebuttals` degrades to `[]` on any failure, so an
   // unreadable PR renders "Disputed (0)" — the same thing it rendered before this
   // existed, and never a reason to lose the report itself.
-  const body = renderFixReportBody(rec, { disputed: readRebuttals(pr).length });
+  // COUNT THE DISPUTES THIS ROUND EMITTED, not only the ones already posted.
+  // `readRebuttals` reads PR comments, and under `--emit` nothing has been
+  // posted yet — the workflow posts both files after the agent stops. So the
+  // count was structurally zero for every emitted report, which reads as "the
+  // fixer disputed nothing" on exactly the rounds where it disputed something.
+  const emittedDisputes = (() => {
+    if (!args.emit) return 0;
+    const dir = path.join(path.dirname(String(args.emit)), "rebuttals");
+    try {
+      return readdirSync(dir).filter((f) => f.endsWith(".md")).length;
+    } catch {
+      return 0;
+    }
+  })();
+  const body = renderFixReportBody(rec, {
+    disputed: readRebuttals(pr).length + emittedDisputes,
+  });
   // Round-trip before posting. A record this module cannot read back is one the
   // panel will ignore, and the agent would never learn its report went nowhere —
   // the same silent failure the CLI exists to prevent.
@@ -598,8 +623,23 @@ function cmdPost(pr, args) {
     console.error("fix-report post: the record did not round-trip; refusing to post an unreadable report.");
     process.exit(2);
   }
+  // `--emit <file>`: RENDER, DO NOT POST. Posting a PR comment needs
+  // `pull-requests: write`, and this runs inside the fix agent — a process that
+  // reads untrusted branch content with an unrestricted shell. A token that can
+  // comment on a pull request is also a token that can APPROVE one, and an
+  // approval from the bot satisfies the only human control this pipeline has.
+  //
+  // So the agent renders the report (keeping the round-trip check above, which
+  // is the part that needs the agent's own knowledge of what it did) and a
+  // trusted step in the workflow posts the file afterwards, with the wider token
+  // the agent never sees.
+  if (args.emit) {
+    writeFileSync(String(args.emit), body);
+    console.error(`fix-report: wrote ${fixed.length} fixed / ${skipped.length} skipped to ${args.emit}`);
+    return;
+  }
   try {
-    execFileSync("gh", ["pr", "comment", String(pr), "--body", body], { encoding: "utf8" });
+    execFileSync("gh", ["pr", "comment", String(pr), "--body", body], { encoding: "utf8", maxBuffer: GH_MAX_BUFFER });
   } catch (err) {
     // Author-side and best-effort: a report that cannot be posted leaves every
     // finding to be re-verified without context, which is the pre-existing

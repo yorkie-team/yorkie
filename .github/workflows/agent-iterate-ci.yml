@@ -157,12 +157,33 @@ jobs:
           permission-pull-requests: write # reply in the PR thread
           permission-issues: write # PR conversation comments use the issues API
 
+      # THE TOKEN THE AGENT GETS, AND IT IS NOT THE ONE ABOVE. `contents: write`
+      # + `pull-requests: write` in one token is the exact pair that submits an
+      # APPROVING REVIEW and then merges, and GitHub refuses only an approval of
+      # a PR the same identity authored — this App authors almost none of them.
+      # The agent runs an unrestricted `Bash` over untrusted branch content, and
+      # `actions/checkout` writes whatever token it is given into `.git/config`,
+      # one `git config --get` from being read back.
+      #
+      # A required human approval on `main` is the only human control in this
+      # pipeline; a bot able to supply that approval removes it. So the agent
+      # gets `contents` alone — enough to commit and push — and every step that
+      # needs more runs in this file, after the agent has stopped.
+      - name: Generate the agent's narrow token
+        if: steps.app.outputs.configured == 'true'
+        id: agent-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-contents: write # commit and push, and nothing else
+
       - uses: actions/checkout@v4
         if: steps.app.outputs.configured == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
 
       # Stage the TRUSTED main copy of the agent scripts for every step below
       # that runs one — the same rule the panel's fix job applies to its staged
@@ -393,8 +414,9 @@ jobs:
         id: before-fix
         if: steps.guard.outputs.proceed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: echo "sha=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       # Single-value state: a CI-fix round is in flight → agent:fixing. Repo is
       # already checked out above; best-effort, advisory.
@@ -453,7 +475,7 @@ jobs:
         uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ steps.agent-token.outputs.token }}
           # This loop is triggered by workflow_run from the agent's own (bot)
           # push, so the initiating actor is the App bot. claude-code-action
           # blocks bot-initiated runs unless the bot is allow-listed. Allow ONLY
@@ -512,6 +534,30 @@ jobs:
       # Diagnostics: keep the fixer's transcript (turns, tool calls, permission
       # denials, token/cost) so a round that didn't converge is debuggable.
       # always() so it's captured even when the fixer errored.
+      # RE-STAGED AFTER THE AGENT. The copy taken before it ran lives in
+      # `$RUNNER_TEMP`, which the agent writes — it holds an unrestricted `Bash`
+      # in this same job — and every step below executes a `.mjs` from there with
+      # a wide token in the environment. A fresh checkout after the agent has
+      # stopped cannot be tampered with: nothing is running that could write it.
+      - name: Re-stage the trusted agent scripts (post-agent)
+        if: always() && steps.guard.outputs.proceed == 'true'
+        run: rm -rf "$RUNNER_TEMP/agent-tools"
+      - name: Check out the default branch again (post-agent)
+        if: always() && steps.guard.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .trusted-post
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Move the post-agent copy clear of the workspace
+        if: always() && steps.guard.outputs.proceed == 'true'
+        run: |
+          set -euo pipefail
+          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
+          rm -rf .trusted-post
+
       - name: Upload fix execution log
         if: always() && steps.guard.outputs.proceed == 'true'
         uses: actions/upload-artifact@v4
@@ -545,7 +591,7 @@ jobs:
           BEFORE: ${{ steps.before-fix.outputs.sha }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)"
           # Only trust a "CI will re-run" conclusion when BOTH remote heads
           # resolved AND they differ. `git ls-remote | cut` masks a failed
           # lookup (network error, missing branch) as an empty string and the
@@ -572,6 +618,22 @@ jobs:
       # loop-status comment — pushed (CI re-runs) or paged (the step above
       # posted the page). Pre-fixer snapshot, NOT the workspace copy — the
       # fixer can rewrite the workspace; skip quietly where absent.
+      # DISCLOSE, NOW THAT IT IS TRUE — same rule and same reason as
+      # agent-fix.yml: `mark-ready.mjs` refuses to promote a PR whose body does
+      # not disclose autonomous AI authorship, and nothing wrote that disclosure,
+      # so a human-opened PR an agent pushed to could never be promoted however
+      # green the panel (#2030). Fail-safe: the script exits 0 on every error and
+      # never overwrites a body that already discloses.
+      - name: Disclose agent authorship in the PR body
+        if: always() && steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.guard.outputs.pr }}
+        run: |
+          [ -f "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" ] || { echo "disclose-pr.mjs not staged; skipping"; exit 0; }
+          node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
+
       - name: Update loop status (CI-fix outcome)
         if: always() && steps.guard.outputs.proceed == 'true'
         continue-on-error: true
@@ -582,7 +644,7 @@ jobs:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           [ -f "$RUNNER_TEMP/agent-tools/loop-status.mjs" ] || { echo "loop-status.mjs not on main yet; skipping"; exit 0; }
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha 2>/dev/null || true)"
           if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
             EVENT=ci-fix-pushed
             NOTE="CI-fix pushed \`${AFTER:0:9}\` — CI re-runs on it."

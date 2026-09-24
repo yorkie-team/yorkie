@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkPassed, allRequiredPassed, ciRunDecision, ciConclusion, ciRunToRerun, ciRunToAwait, definesCi, CHECK_PRODUCER_APP_SLUG, CI_DEFINING_PATHS, CI_WORKFLOW_PATH, CI_WORKFLOW_FILE, DEFAULT_REVIEW_CHECKS } from "./checks.mjs";
+import { hasWorkflow, skipWithout } from "./workflow-presence.mjs";
 
 // `DEFAULT_REVIEW_CHECKS` is the ONE lens list in the repo that does not derive
 // itself from lenses.json, so it is the one that silently rots when a lens is
@@ -452,12 +453,10 @@ test("the `fix` verb reaches exactly one workflow: issues -> implement, PRs -> f
   // "@claude fix" on an issue would also start the on-demand fixer (which would
   // then refuse for having no PR) or, worse, both would run on a PR.
   //
-  // agent-implement.yml is the ISSUE half and is not ported here
-  // (docs/design/agent-command-verbs.md defers issue → PR past every phase). The
-  // half that can be asserted without it is the one that matters more: agent-fix
-  // must claim PRs and ONLY PRs, so the issue half cannot collide with it when
-  // it eventually lands. Asserting that unconditionally is what makes this a
-  // guard rather than a note.
+  // agent-implement.yml is the ISSUE half and now exists, so both sides are
+  // asserted. The `existsSync` branch below is kept rather than simplified: the
+  // half that matters more is that agent-fix claims PRs and ONLY PRs, and that
+  // stays assertable if the issue half is ever removed again.
   const wfDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", ".github", "workflows");
   const fix = WF("agent-fix.yml");
   assert.ok(
@@ -532,7 +531,13 @@ test("each verb that needs the App answers the commenter when it is missing", ()
   // job with a green tick reads as "handled" for a request nothing acted on.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
-  for (const file of ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"]) {
+  // `agent-implement.yml` is in the list CONDITIONALLY rather than dropped from
+  // it: the rule applies to that verb too, and hard-coding it would fail the
+  // whole file while the verb is deferred (docs/design/agent-command-verbs.md
+  // Phase I), whereas dropping it would silently stop asking the day it lands.
+  const files = ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"];
+  if (hasWorkflow("agent-implement.yml")) files.push("agent-implement.yml");
+  for (const file of files) {
     const text = readFileSync(path.join(dir, file), "utf8");
     assert.match(text, /id: app\b/, `${file}: no App-presence check`);
     assert.match(
@@ -1453,8 +1458,49 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
   // finding against four jobs that are already correct.
   const GRANTS = /^\s+pull-requests:\s*write\s*(?:#.*)?$/;
 
+  // AN ISSUE-ONLY WORKFLOW IS EXEMPT, and this is the rule rather than a hole in
+  // it: the permission follows the RESOURCE, and `!…issue.pull_request` in the
+  // router is precisely what decides the resource. A verb that can only ever be
+  // typed on an issue comments on an issue, where `issues: write` is both correct
+  // and the narrower grant. Widening it to satisfy a guard aimed at PR
+  // conversations would hand an issue-only job authority over every pull request
+  // in the repository.
+  //
+  // Decided from CODE, not from the file's prose: a workflow's header explains
+  // the distinction in a sentence containing the unnegated expression, and
+  // reading that as a gate is the same mistake two earlier guards here made — a
+  // check matching its own explanation.
+  //
+  // HOISTED AND EXERCISED, because an exemption is a way for a guard to turn
+  // itself off. Inline, the only assertions were "some job was checked" and "no
+  // offenders", and BOTH still pass if `issueOnly` is true for every file — a
+  // dropped `mentions.length > 0`, or a regex that stops matching, excuses the
+  // whole tree silently. So the predicate is a named function with fixtures, and
+  // the loop below additionally pins WHICH files it excuses and asserts that a
+  // non-exempt commenting job still exists to be judged.
+  const issueOnlyFor = (code) => {
+    const mentions = code.match(/!?github\.event\.issue\.pull_request/g) ?? [];
+    return mentions.length > 0 && mentions.every((m) => m.startsWith("!"));
+  };
+  assert.equal(issueOnlyFor("if: !github.event.issue.pull_request\n"), true, "a negated-only router is issue-only");
+  assert.equal(issueOnlyFor("if: github.event.issue.pull_request\n"), false, "a PR-only router is not issue-only");
+  assert.equal(
+    issueOnlyFor("if: !github.event.issue.pull_request\nif: github.event.issue.pull_request\n"),
+    false,
+    "a file that also reads the unnegated form reaches PR conversations and is not exempt",
+  );
+  assert.equal(issueOnlyFor("runs-on: ubuntu-latest\n"), false, "silence on the question is not an exemption");
+
+  // The files the exemption actually excused, and the commenting jobs judged in
+  // files it did not. Both are asserted after the loop.
+  const exempt = [];
+  let judged = 0;
+
   for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
     const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    const wfCode = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
+    const issueOnly = issueOnlyFor(wfCode);
+    if (issueOnly) exempt.push(file);
     const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
     const inherited = lines.slice(0, jobsAt < 0 ? lines.length : jobsAt).some((l) => GRANTS.test(l));
     // Walk jobs: a job id sits at two-space indent under `jobs:`.
@@ -1469,16 +1515,583 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
       checked++;
       const id = lines[starts[s]].trim().replace(":", "");
       const own = code.some((l) => /^ {4}permissions:\s*$/.test(l));
-      if (!(code.some((l) => GRANTS.test(l)) || (!own && inherited))) {
-        offenders.push(`${file}:${id}`);
-      }
+      const granted = code.some((l) => GRANTS.test(l)) || (!own && inherited);
+      // The exemption is FILE-scoped, because the thing that decides the
+      // resource — the trigger predicate — is file-scoped too. Stating that
+      // plainly rather than claiming job scope the code does not have: a job
+      // added to an issue-only workflow that somehow comments on a PR
+      // conversation would be excused here, and the guard against that is the
+      // trigger, not this test.
+      if (issueOnly) continue;
+      judged++;
+      if (!granted) offenders.push(`${file}:${id}`);
     }
   }
 
   assert.ok(checked > 0, "no commenting job found — this guard would be vacuous");
+  // THE EXEMPTION MUST BE EARNED, AND NAMED. An allow-list rather than a count:
+  // a new issue-only workflow is a two-line diff here that says, in review, that
+  // someone decided one more file no longer answers to this guard.
+  assert.deepEqual(
+    exempt,
+    hasWorkflow("agent-implement.yml") ? ["agent-implement.yml"] : [],
+    "the issue-only exemption must excuse exactly the issue-only verb; anything else means the " +
+      "predicate has drifted and the guard is excusing files it should be judging",
+  );
+  assert.ok(
+    judged > 0,
+    "every commenting job was exempted — the exemption has swallowed the guard, which is what it " +
+      "would look like if the predicate matched everything",
+  );
   assert.deepEqual(
     offenders,
     [],
     `these jobs comment on a PR without pull-requests:write:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+// The three guards below read `agent-implement.yml`, which this repository does
+// not install: the verb is designed in docs/design/agent-command-verbs.md Phase
+// I and deliberately not landed, because no credential in this pipeline can push
+// `.github/workflows/**` and the reviewed draft could therefore not be corrected
+// in place. They are kept rather than deleted for the reason
+// `workflow-presence.mjs` exists — each one re-arms by itself the day a
+// maintainer lands the workflow, and each encodes a defect that was found the
+// hard way. Anyone landing that workflow should expect these to run, and to have
+// to satisfy them.
+test("agent-implement's reporter keeps its approved condition, ids and shape", skipWithout("agent-implement.yml"), () => {
+  // THIS DEFECT SURVIVED FIVE ROUNDS BY MOVING, and two attempts to pin it
+  // survived because they were written as DENY-LISTS. The job acknowledges an
+  // issue with "On it", then runs gates that can stop it; something must close
+  // that thread out or it claims a run is in progress forever.
+  //
+  // Round 1 keyed the reporter on the App check and told a refused gate to
+  // retry. Round 2 keyed it on staging, which the gate precedes — silent. Round
+  // 3 keyed it on the acknowledgement, which the gate also precedes — silent
+  // again. Rounds 3 and 4 then wrote guards that forbade three literal spellings
+  // of a downstream term, and a mutation run found ELEVEN survivors: `!=` instead
+  // of `==`, `conclusion` instead of `outcome`, no spaces around the operator, a
+  // `contains()` call, the term wrapped onto a second line. Every one of them
+  // reinstated the silence.
+  //
+  // A deny-list of spellings cannot express "no downstream term". This is an
+  // ALLOW-list: the condition must be exactly this string. Deliberately brittle
+  // — changing it is a two-line diff that says, in review, that someone decided
+  // to change what this step is keyed on.
+  //
+  // The App check is not "the only step that cannot stop the job" — the
+  // write-access check above it stops the job silently by design, and a failed
+  // token mint stops it too, which is why the reporter no longer borrows that
+  // token. It is the earliest gate whose failure the reporter can still survive,
+  // which is the property that matters.
+  const APPROVED =
+    "        if: always() && steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'";
+  const wf = WF("agent-implement.yml");
+  const at = wf.indexOf("- name: Report a run that ended without a PR");
+  assert.ok(at > 0, "agent-implement.yml has no reporter step");
+
+  // Bounded by the next STEP or the next JOB, whichever comes first. This is the
+  // last step of its job, so a step-only bound runs into the following job and
+  // picks up its `if:` — which is how the first version of this assertion found
+  // two conditions where the step has one.
+  const ends = [wf.indexOf("\n      - name:", at + 1), /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at))?.index]
+    .map((i, k) => (i === undefined || i < 0 ? -1 : k === 1 ? i + at : i))
+    .filter((i) => i > 0);
+  const step = wf.slice(at, ends.length ? Math.min(...ends) : wf.length);
+  const ifLines = step.split("\n").filter((l) => /^\s+if:/.test(l));
+  assert.equal(ifLines.length, 1, "the reporter must have exactly one `if:` line");
+  assert.equal(
+    ifLines[0],
+    APPROVED,
+    "the reporter's condition must be keyed upstream of every gate it reports; " +
+      "if this needs to change, change APPROVED here in the same commit and say why",
+  );
+
+  // And it must still be able to NAME the cause, or it reports the wrong one —
+  // which it has also done, telling an `npm ci` failure that main was unprotected.
+  assert.match(step, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
+  assert.match(step, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
+
+  // THE IDS MUST EXIST. A mutation run reached this step's behaviour AROUND the
+  // pinned line rather than through it: renaming `id: protection` to `protect`
+  // leaves every assertion above green while `steps.protection.outcome` becomes
+  // the empty string, so every termination reports the same wrong cause. Cheap,
+  // and not brittle — it asserts existence, not form.
+  for (const id of ["protection", "stage", "agent"]) {
+    assert.match(
+      wf,
+      new RegExp(`^ {8}id: ${id}$`, "m"),
+      `the reporter reads steps.${id}.outcome; without that id it reads an empty string`,
+    );
+  }
+
+  // The reporter must sit in the job whose steps it reads, AFTER the agent —
+  // moving it to another job, or above the gates, leaves the text identical and
+  // the outcomes empty.
+  const agentAt = wf.indexOf("        id: agent");
+  assert.ok(agentAt > 0 && agentAt < at, "the reporter must come after the agent step it reports on");
+  const jobAt = wf.lastIndexOf("\n  implement:", at);
+  assert.ok(jobAt > 0, "the reporter must live in the implement job");
+  // VACUOUS UNTIL NOW, and the vacuity was arithmetic rather than a wrong
+  // pattern: the old form searched from `at` — the reporter itself — and then
+  // asserted `nextJobAt + at > at`, which holds for every non-negative match
+  // index and could not fail for any relocation. The question is whether the job
+  // header that FOLLOWS `implement:` comes after the reporter; searching from
+  // `jobAt` is what asks it. `help` sits below `implement`, so this is a real
+  // bound: move the reporter under `help` and it fails.
+  const rel = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(jobAt + 1));
+  const nextJobAt = rel ? jobAt + 1 + rel.index : wf.length;
+  assert.ok(
+    nextJobAt > at,
+    "the reporter must live in the implement job, not a later one — every steps.*.outcome it reads " +
+      "is the empty string from anywhere else",
+  );
+
+  // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
+  // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
+  // the silence without touching a single `if:` line.
+  //
+  // The previous version of this assertion sliced the script at
+  // `const MARKER_FOR` and scanned only what came before — six `const`
+  // declarations and not one `if`, so it could not fail, and could not have
+  // failed for any early return worth writing. Every place a short-circuit
+  // would naturally go (beside the PR lookup, beside the dedupe) is BELOW that
+  // point. So: an ALLOW-LIST over the whole script, for the same reason as the
+  // condition above. Both directions are pinned — an unlisted return is a new
+  // silence, and a missing listed one means the guard is describing code that
+  // is no longer there.
+  const script = step.slice(step.indexOf("script: |"));
+  const SANCTIONED_RETURNS = [
+    // The success path: the kickoff opened a PR and already said so.
+    "            if (lookupOk && pr) return; // the normal flow posted the PR link",
+    // The dedupe, and it is acknowledgement-aware for the reason above it: it
+    // suppresses a repeat only when one was already made SINCE the newest "On
+    // it", so it can never leave this run's own acknowledgement unanswered.
+    "              if (since.some((c) => String(c.body ?? '').includes(MARKER) && mine(c))) return;",
+  ];
+  const returns = script.split("\n").filter((l) => /^\s+if \(.*\breturn;/.test(l));
+  assert.deepEqual(
+    returns.filter((l) => !SANCTIONED_RETURNS.includes(l)),
+    [],
+    "the reporter must not short-circuit before it comments — that is the silence this guards; " +
+      "if a new early return is right, add it to SANCTIONED_RETURNS in the same commit and say why",
+  );
+  assert.equal(
+    returns.length,
+    SANCTIONED_RETURNS.length,
+    `expected exactly ${SANCTIONED_RETURNS.length} sanctioned early returns, found ${returns.length}`,
+  );
+  // Keyed by the BRANCH TAKEN, not by `cause`: `cause` has four values and the
+  // messages have six, so three shared a bucket and a pre-agent failure
+  // suppressed the report of a real no-PR run on the retry it had advised.
+  assert.match(
+    step,
+    /const MARKER_FOR = \(k\) => `<!-- agent-implement-no-pr:\$\{k\} -->`;/,
+    "the no-PR marker must be keyed per message, or one failure silences a different one",
+  );
+  const keys = [...step.matchAll(/^\s+key = '([a-z-]+)';$/gm)].map((m) => m[1]);
+  assert.equal(
+    new Set(keys).size,
+    keys.length,
+    `two report branches share a marker key (${keys.join(", ")}), so one suppresses the other`,
+  );
+  assert.ok(keys.length >= 6, `expected a key per report branch, found ${keys.length}`);
+});
+
+test("agent-implement's two agent-branch lookups keep their approved form", skipWithout("agent-implement.yml"), () => {
+  // `pulls.list` returns fork PRs with a bare `head.ref`. Matching on the name
+  // alone lets any outside contributor open a PR from `agent/42-anything` and
+  // permanently refuse `@claude fix` on issue #42 — an unauthenticated denial of
+  // the verb — while the reporter reads the same PR as proof the run succeeded.
+  //
+  // ALLOW-LIST, for the same reason as the guard above. Two earlier versions
+  // counted guard DEFINITIONS (a mutation deleting the guard from the call site
+  // passed) and then required the token plus `&&` at the call site (mutations
+  // making the helper `=> true`, or `… || true`, or a self-comparing tautology
+  // all passed — the token was present and constrained nothing). A predicate can
+  // be neutered in more ways than a test can enumerate, so the predicates are
+  // pinned verbatim instead.
+  const wf = WF("agent-implement.yml");
+  const REQUIRED = [
+    "            const mineRepo = (p) => p.head?.repo?.full_name === `${owner}/${repo}`;",
+    "            const open = prs.find((p) => mineRepo(p) && (p.head?.ref || '').startsWith(`agent/${issue}-`));",
+    "              pr = prs.find((p) =>",
+    "                p.head?.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`",
+    "                && (p.head?.ref || '').startsWith(`agent/${issue}-`)) ?? null;",
+  ];
+  const lines = wf.split("\n");
+  for (const required of REQUIRED) {
+    assert.ok(
+      lines.includes(required),
+      `the agent-branch lookup no longer matches its approved form:\n  expected: ${required}\n` +
+        "if this needs to change, change REQUIRED here in the same commit and say why",
+    );
+  }
+  // Both lookups, and no third one that skipped the guard entirely. Counted by
+  // the BRANCH PREFIX rather than by one spelling of it: a third lookup written
+  // as `'agent/' + issue + '-'` is the same defect and left this at two.
+  const lookups = lines.filter((l) => /agent\/(?:\$\{issue\}|' \+ issue \+ ')-/.test(l) && /startsWith|indexOf/.test(l));
+  assert.equal(lookups.length, 2, `expected exactly two agent-branch lookups, found ${lookups.length}`);
+
+  // HONEST LIMIT, recorded here rather than implied by the test's name. This
+  // pins the text of two predicates. It cannot see a redefinition of `owner`,
+  // `repo` or `mineRepo` elsewhere in the same script, nor a loop that rewrites
+  // `p.head.repo` before the lookup runs. A reviewer changing this file's PR
+  // lookups should read them, not trust this green.
+  // Scoped to the step that USES it. A file-wide match passed a mutation that
+  // rebound `repo` in the pre-flight step alone, because the help job's identical
+  // line kept the assertion green.
+  const preflightAt = wf.indexOf("- name: Refuse if this issue already has an agent branch");
+  assert.ok(preflightAt > 0, "the collision pre-flight step is gone");
+  const preflightEnd = wf.indexOf("\n      - name:", preflightAt + 1);
+  const preflight = wf.slice(preflightAt, preflightEnd > 0 ? preflightEnd : wf.length);
+  assert.ok(
+    preflight.includes("const { owner, repo } = context.repo;"),
+    "`mineRepo` compares against `owner`/`repo` from context; rebinding them defeats it silently",
+  );
+});
+
+// THE `agent/<issue>-*` RULE, AND THE COPIES OF IT. The question is asked in
+// three places — the collision pre-flight and the no-PR reporter inside
+// `agent-implement.yml`, and `metrics.mjs::resolvePrByIssue`, which that job
+// shells out to — and the third had no same-repo guard at all, so the effort
+// record could land on an outside contributor's fork PR. `isAgentPrHead` is now
+// the one rule.
+//
+// Split in two deliberately. The rule itself ships in `metrics.mjs` and is
+// exercised unconditionally below; only the agreement of the two YAML copies
+// depends on a workflow this repository does not install. Folding them together
+// would have made the shipped helper's only test skip with the deferred verb.
+const AGENT_PR_CASES = (() => {
+  const OWNER = "yorkie-team", REPO = "yorkie";
+  const pr = (number, ref, full_name) => ({ number, head: { ref, repo: { full_name } } });
+  const ours = (n, ref) => pr(n, ref, `${OWNER}/${REPO}`);
+  const fork = (n, ref) => pr(n, ref, `someone-else/${REPO}`);
+  return {
+    OWNER,
+    REPO,
+    CASES: [
+      { name: "our agent branch for this issue", prs: [ours(1, "agent/42-thing")], want: 1 },
+      // The denial-of-verb / false-success case: anyone may push this name to a fork.
+      { name: "a fork branch with the same name", prs: [fork(2, "agent/42-thing")], want: null },
+      { name: "a fork first, ours second", prs: [fork(2, "agent/42-x"), ours(3, "agent/42-y")], want: 3 },
+      { name: "a different issue that shares a prefix", prs: [ours(4, "agent/420-thing")], want: null },
+      { name: "the bare issue number with no slug", prs: [ours(5, "agent/42")], want: null },
+      { name: "an unrelated branch", prs: [ours(6, "feat/whatever")], want: null },
+      { name: "no open PRs at all", prs: [], want: null },
+    ],
+  };
+})();
+
+test("metrics.mjs::isAgentPrHead is the one agent-branch rule, and runs", async () => {
+  const { isAgentPrHead } = await import("./metrics.mjs");
+  const { OWNER, REPO, CASES } = AGENT_PR_CASES;
+
+  for (const c of CASES) {
+    const shared = c.prs.find((p) =>
+      isAgentPrHead({ sameRepo: p.head.repo.full_name === `${OWNER}/${REPO}`, headRefName: p.head.ref }, 42),
+    );
+    assert.equal(shared?.number ?? null, c.want, `metrics.mjs::isAgentPrHead disagrees on: ${c.name}`);
+  }
+
+  // An unknown head repository is not a same-repo one — this is what
+  // resolvePrByIssue relies on when `gh` does not emit `isCrossRepository`.
+  assert.equal(isAgentPrHead({ headRefName: "agent/42-thing" }, 42), false);
+  assert.equal(isAgentPrHead({ sameRepo: "yes", headRefName: "agent/42-thing" }, 42), false);
+  assert.equal(isAgentPrHead({ sameRepo: true, headRefName: "agent/42-thing" }, 42), true);
+
+  // And the `--json` field that feeds it must still be requested, or every
+  // lookup there fails closed and no metrics are ever recorded.
+  const metrics = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "metrics.mjs"), "utf8");
+  assert.match(metrics, /number,headRefName,isCrossRepository/, "resolvePrByIssue must ask gh for the head repo");
+});
+
+test(
+  "agent-implement's inline PR lookups agree with metrics.mjs on the same fixtures",
+  skipWithout("agent-implement.yml"),
+  async () => {
+    const { isAgentPrHead } = await import("./metrics.mjs");
+    const wf = WF("agent-implement.yml");
+    const lines = wf.split("\n");
+
+    const grab = (needle) => {
+      const l = lines.find((x) => x.includes(needle));
+      assert.ok(l, `agent-implement.yml no longer contains: ${needle}`);
+      return l.slice(12);
+    };
+    const preflight = new Function(
+      "prs",
+      "owner",
+      "repo",
+      "issue",
+      `${grab("const mineRepo = (p) =>")}\n${grab("const open = prs.find((p) => mineRepo(p)")}\nreturn open ?? null;`,
+    );
+    const reporterSrc = lines
+      .slice(lines.findIndex((l) => l.includes("pr = prs.find((p) =>")))
+      .slice(0, 3)
+      .map((l) => l.slice(12))
+      .join("\n");
+    assert.match(reporterSrc, /\?\? null;$/, "could not extract the reporter's lookup");
+    const reporter = new Function("prs", "context", "issue", `let pr;\n${reporterSrc}\nreturn pr;`);
+
+    const { OWNER, REPO, CASES } = AGENT_PR_CASES;
+    for (const c of CASES) {
+      assert.equal(preflight(c.prs, OWNER, REPO, 42)?.number ?? null, c.want, `pre-flight disagrees on: ${c.name}`);
+      assert.equal(
+        reporter(c.prs, { repo: { owner: OWNER, repo: REPO } }, 42)?.number ?? null,
+        c.want,
+        `reporter disagrees on: ${c.name}`,
+      );
+      const shared = c.prs.find((p) =>
+        isAgentPrHead({ sameRepo: p.head.repo.full_name === `${OWNER}/${REPO}`, headRefName: p.head.ref }, 42),
+      );
+      assert.equal(shared?.number ?? null, c.want, `metrics.mjs::isAgentPrHead disagrees on: ${c.name}`);
+    }
+  },
+);
+
+
+test("no agent is handed a token that can approve a pull request", () => {
+  // THE ONLY HUMAN CONTROL IN THIS PIPELINE IS A REQUIRED APPROVAL ON `main`,
+  // and `contents: write` + `pull-requests: write` in ONE token is the pair that
+  // supplies it: submit an approving review, then merge. GitHub refuses only an
+  // approval of a PR the same identity authored, and this App authors almost
+  // none of them.
+  //
+  // The agent reaches that token two ways, both one `Bash` call wide: the action
+  // is handed it as `github_token`, and `actions/checkout` writes whatever token
+  // it is given into `.git/config`, where `git config --get
+  // http.https://github.com/.extraheader` reads it back.
+  //
+  // Nothing mechanical held this. The mint guard next door checks SHA-pinning,
+  // narrowing and the absence of `workflows` — none of which sees the pair. A
+  // review found it by reading four workflows; this finds it by construction.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const offenders = [];
+  let checked = 0;
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+
+    // Every mint, by step id, with the permissions it asks for.
+    const mints = new Map();
+    for (let i = 0; i < lines.length; i++) {
+      if (!/create-github-app-token@/.test(lines[i])) continue;
+      let from = i;
+      while (from > 0 && !/^ {6}- /.test(lines[from])) from--;
+      let to = i + 1;
+      while (to < lines.length && !/^ {6}- /.test(lines[to])) to++;
+      const step = lines.slice(from, to).filter((l) => !/^\s*#/.test(l));
+      const id = /^\s+id:\s*(\S+)/m.exec(step.join("\n"))?.[1];
+      if (!id) continue;
+      mints.set(id, {
+        contents: step.some((l) => /^\s+permission-contents:\s*write/.test(l)),
+        pulls: step.some((l) => /^\s+permission-pull-requests:\s*write/.test(l)),
+      });
+    }
+    if (mints.size === 0) continue;
+
+    // Where an agent can read one: the action's `github_token`, and any
+    // `actions/checkout` that is given a token without `persist-credentials: false`.
+    const reachable = [];
+    for (let i = 0; i < lines.length; i++) {
+      const tok = /steps\.([A-Za-z0-9_-]+)\.outputs\.token/.exec(lines[i]);
+      if (!tok) continue;
+      if (/github_token:/.test(lines[i])) {
+        reachable.push({ id: tok[1], why: "handed to claude-code-action", line: i + 1 });
+        continue;
+      }
+      if (!/^\s+token:/.test(lines[i])) continue;
+      let from = i;
+      while (from > 0 && !/^ {6}- /.test(lines[from])) from--;
+      let to = i + 1;
+      while (to < lines.length && !/^ {6}- /.test(lines[to])) to++;
+      const step = lines.slice(from, to);
+      if (!step.some((l) => /actions\/checkout@/.test(l))) continue;
+      if (step.some((l) => /persist-credentials:\s*false/.test(l))) continue;
+      reachable.push({ id: tok[1], why: "persisted into .git/config by checkout", line: i + 1 });
+    }
+
+    // A CHECKOUT GIVEN NO TOKEN PERSISTS THE AMBIENT ONE, and the job's own
+    // `permissions:` decide what that can do. This is the same defect by a
+    // second route, and the mint-walking above cannot see it: there is no
+    // `steps.<id>.outputs.token` to follow.
+    for (let i = 0; i < lines.length; i++) {
+      if (!/actions\/checkout@/.test(lines[i])) continue;
+      let to = i + 1;
+      while (to < lines.length && !/^ {6}- /.test(lines[to])) to++;
+      const step = lines.slice(i, to);
+      if (step.some((l) => /^\s+token:/.test(l))) continue; // explicit; handled above
+      if (step.some((l) => /persist-credentials:\s*false/.test(l))) continue;
+      // Which job is this, and what did it grant itself?
+      let j = i;
+      while (j > 0 && !/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[j])) j--;
+      let end = j + 1;
+      while (end < lines.length && !/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[end])) end++;
+      const job = lines.slice(j, end).filter((l) => !/^\s*#/.test(l));
+      const contents = job.some((l) => /^ {6}contents:\s*write/.test(l));
+      const pulls = job.some((l) => /^ {6}pull-requests:\s*write/.test(l));
+      if (!job.some((l) => /claude-code-action@/.test(l))) continue; // no agent in this job
+      checked++;
+      if (contents && pulls) {
+        offenders.push(
+          `${file}:${i + 1} ${lines[j].trim()} persists the AMBIENT token, and the job grants ` +
+            "contents+pull-requests write",
+        );
+      }
+    }
+
+    for (const { id, why, line } of reachable) {
+      const mint = mints.get(id);
+      if (!mint) continue; // not one of this file's mints
+      checked++;
+      if (mint.contents && mint.pulls) {
+        offenders.push(`${file}:${line} steps.${id} (${why}) can approve AND merge`);
+      }
+    }
+  }
+
+  assert.ok(checked > 0, "no agent-reachable token found — this guard would be vacuous");
+  assert.deepEqual(
+    offenders,
+    [],
+    "these tokens are reachable by an agent and carry contents+pull-requests write:\n  " +
+      offenders.join("\n  "),
+  );
+});
+
+test("a release the agent App created publishes nothing", () => {
+  // `contents: write` IS ONE PERMISSION COVERING COMMITS AND RELEASES. The token
+  // a fix agent holds to push a branch can therefore publish a release, and
+  // `docker-publish.yml` answers `release: published` with `secrets: inherit` —
+  // Docker Hub credentials. GitHub offers no narrower grant, so the escape
+  // closes at the consumer or not at all.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const onRelease = readdirSync(dir)
+    .filter((f) => f.endsWith(".yml"))
+    .filter((f) => {
+      const code = readFileSync(path.join(dir, f), "utf8").split("\n").filter((l) => !/^\s*#/.test(l));
+      const on = code.slice(0, code.findIndex((l) => /^jobs:/.test(l)));
+      return on.some((l) => /^\s+release:\s*$/.test(l));
+    });
+  assert.ok(onRelease.length > 0, "no release-triggered workflow found — this guard would be vacuous");
+  for (const file of onRelease) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    assert.match(
+      wf,
+      /github\.event\.release\.author\.login != 'yorkie-team-agent\[bot\]'/,
+      `${file} runs on a published release and would run for one the agent App created`,
+    );
+  }
+});
+
+test("both fixer prompts order disputes before the report", () => {
+  // `fix-report.mjs` counts the disputes THIS round emitted by reading the
+  // files, so a prompt that says report-then-dispute produces a report claiming
+  // nothing was disputed — on exactly the round where something was. The
+  // instruction went into one prompt and not the other, and the script that made
+  // the edit printed "skip (no anchor)" for the second and was not chased.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  for (const file of ["agent-fix.yml", "agent-review-panel.yml"]) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    if (!/rebuttal\.mjs post/.test(wf)) continue;
+    const dispute = wf.indexOf("DISPUTE FIRST, THEN REPORT");
+    assert.ok(dispute > 0, `${file}: the fixer prompt does not order disputes before the report`);
+    const report = wf.search(/REPORT WHAT YOU DID/);
+    assert.ok(
+      report > dispute,
+      `${file}: the ordering instruction must come before the reporting instruction`,
+    );
+  }
+});
+
+test("no `gh` invocation runs on node's default 1 MiB buffer", () => {
+  // IT GETS MORE LIKELY THE LONGER A PR IS REVIEWED, which is exactly backwards.
+  // `gh api --paginate` over a PR's comments grows with the thread, and node's
+  // default `maxBuffer` is 1 MiB. Past it `execFileSync` throws ENOBUFS — not an
+  // API error, not an empty result, a crash — and the caller reports it as
+  // whatever its own failure means.
+  //
+  // On #2026 that was `review-round-guard.mjs` dying and the pipeline announcing
+  // "the fixer agent failed, and the branch head is unchanged", then writing the
+  // terminal paged latch. The fixer had not failed; it never ran. Nine call
+  // sites across seven modules shared the defect.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE);
+  const offenders = [];
+
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))) {
+    const src = readFileSync(path.join(dir, file), "utf8");
+    for (const m of src.matchAll(/execFileSync\(\s*"gh"\s*,/g)) {
+      // Read to the end of this call's argument list.
+      const seg = src.slice(m.index, m.index + 400);
+      const end = seg.indexOf(");");
+      const call = end > 0 ? seg.slice(0, end) : seg;
+      if (!/maxBuffer/.test(call)) {
+        offenders.push(`${file}:${src.slice(0, m.index).split("\n").length}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these \`gh\` calls run on the default 1 MiB buffer and will ENOBUFS on a busy PR:\n  ${offenders.join("\n  ")}`,
+  );
+});
+
+test("nothing an agent wrote is posted verbatim under the App identity", () => {
+  // THE CHANNEL THE NARROW TOKEN WAS MINTED TO CLOSE. The agent emits its report
+  // and disputes to files and a trusted step posts them — under the App, whose
+  // comments this pipeline trusts BY AUTHOR for latches, ledgers and dedupe
+  // markers. Posting the file verbatim hands an agent that reads untrusted input
+  // an arbitrary App-authored comment, which is the capability the whole token
+  // split exists to withhold. The agent holds a `Write` tool, so "it used the
+  // CLI, and the CLI neutralises its arguments" is not a property anything
+  // enforces.
+  //
+  // `post-emitted.mjs` parses the hidden record in trusted, post-agent code and
+  // posts its own render of it — or refuses. A `--body-file` pointing at an
+  // agent-written path is the defect this catches.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const AGENT_WRITTEN = /\$(?:RUNNER_TEMP|\{\{ runner\.temp \}\})\/(?:fix-report|rebuttal|reply|pr)/;
+  const offenders = [];
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*#/.test(lines[i])) continue;
+      if (!/gh pr comment .*--body-file/.test(lines[i])) continue;
+      // Resolve the variable it posts, looking back a few lines for its binding.
+      // COMMENTS STRIPPED. The step that does this correctly explains itself in
+      // a comment naming `post-emitted.mjs`, so a lookback including prose finds
+      // the safe spelling in the text above a defect and clears it — the fourth
+      // guard in this file to read its own explanation as code.
+      const near = lines
+        .slice(Math.max(0, i - 8), i + 1)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (!AGENT_WRITTEN.test(near)) continue;
+      // TWO WAYS TO BE SAFE, and which one applies depends on the content.
+      // A report or a dispute carries a hidden record the next round parses, so
+      // it is re-rendered from that record and a blanket substitution would
+      // destroy it. A reply is free prose with no record, so neutralising every
+      // marker wholesale is both sufficient and the only option.
+      const rerendered = /post-emitted\.mjs/.test(near);
+      const neutralised = /sed 's\/<!--/.test(near) && /-safe\./.test(lines[i]);
+      if (!rerendered && !neutralised) {
+        offenders.push(`${file}:${i + 1} ${lines[i].trim()}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "these steps post an agent-written file verbatim under the App identity:\n  " + offenders.join("\n  "),
   );
 });
