@@ -183,16 +183,12 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
 
-      # Stage the TRUSTED main copy of the agent scripts for every step below
-      # that runs one — the same rule the panel's fix job applies to its staged
-      # tools. The branch's own copy is attacker-influenceable code, and those
-      # steps run it with a GITHUB_TOKEN carrying contents:write; main's copy is
-      # not. Staged into RUNNER_TEMP before the fixer and the .trusted-agent dir
-      # removed from the workspace so the fixer cannot commit it. This does NOT
-      # protect against the fixer itself rewriting RUNNER_TEMP mid-job — nothing
-      # executed after the fixer in the same job can be (the panel fix job's
-      # staged metrics step shares exactly this posture) — it removes the
-      # "branch code with a write token" half.
+      # Stage the TRUSTED main copy of the agent scripts for the steps BEFORE
+      # the fixer that run one — the branch's own copy is attacker-influenceable
+      # code, and those steps hold a GITHUB_TOKEN that can comment and label.
+      # Staged into RUNNER_TEMP and the .trusted-agent dir removed from the
+      # workspace so the fixer cannot commit it. Nothing after the fixer runs in
+      # this job at all: the `report` job does that, from its own checkout.
       #
       # STRICT, and it has to be. This was best-effort — `continue-on-error` plus
       # an `if [ -d ]` — because the only things it staged were observability
@@ -573,9 +569,6 @@ jobs:
         if: always()
         with:
           node-version: 22.x
-      - name: Install the agent scripts' dependencies
-        if: always()
-        run: npm ci --no-audit --no-fund --ignore-scripts --prefix scripts/agent
 
       - name: Collect the agent's output (untrusted data)
         if: always()

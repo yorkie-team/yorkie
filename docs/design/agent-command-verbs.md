@@ -519,8 +519,8 @@ Four guards in the ported suites assert that a module and a workflow carry the
 same literal. They skip when their workflow is absent, through one helper
 (`workflow-presence.mjs`) that says why — and with every phase installed, none
 of them skips today. The helper stays because `agent-implement.yml` (issue → PR)
-is still deferred, and because the arrangement is what makes adding a phase
-safe: a guard re-arms by itself when its workflow lands, whereas deleting it
+was withdrawn once and may be again, and because the arrangement is what makes
+adding a phase safe: a guard re-arms by itself when its workflow lands, whereas deleting it
 would make that day a silent regression of a check written precisely because its
 failure mode is invisible.
 
@@ -553,7 +553,7 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | `reply` last | It is the only verb with no verb: any bare `@claude` mention on an agent PR triggers it, and it also fires on inline review comments. Widest misfire surface in the set |
 | Advisory before gating | Check runs interact with branch protection and with the merge queue. Landing the reviewer first separates "is it any good?" from "does it block merges?" |
 | Keep the upstream kill-switch variable | Lets a workflow be merged inert, so review of the workflow and the decision to enable it are separate events |
-| Defer issue → PR (Phase I), after reversing that deferral once | It originates work, where every phase here reviews work a human already decided to do — and when it was tried anyway, the corrections review demanded could not be pushed, because no agent credential may write `.github/workflows/**`. The design is specified; the implementation is a human's |
+| Land issue → PR (Phase I) after deferring it, withdrawing it once, and restoring it | It originates work, where every phase here reviews work a human already decided to do — and when it was first tried, the corrections review demanded could not be pushed, because no agent credential may write `.github/workflows/**`. It is installed behind a gate a repository setting must satisfy (`require_last_push_approval` on `main`), and its workflow changes are a human's to push |
 
 ## Alternatives Considered
 

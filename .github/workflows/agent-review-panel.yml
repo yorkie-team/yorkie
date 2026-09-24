@@ -1697,9 +1697,10 @@ jobs:
     # ⚠️ 90 MINUTES, AGAINST A 60-MINUTE CREDENTIAL. A GitHub App installation
     # token's lifetime is fixed at one hour and `create-github-app-token` cannot
     # extend it, so a round that runs past the hour loses the credential sitting
-    # in `.git/config` and in `github_token`: the push 401s, and the reporting
-    # steps that would have said so 401 too, leaving the placeholder comment
-    # saying "Working on…" for good.
+    # in `.git/config` and in `github_token`: the push 401s. The reporting
+    # survives it — it runs in a separate job that mints its own token — so the
+    # round is reported as one that pushed nothing, rather than left saying
+    # "Working on…" for good.
     #
     # The wall is NOT shortened to 55, because that would refuse exactly the
     # rounds the reasoning below says to allow. Closing it properly means
@@ -2296,9 +2297,6 @@ jobs:
         if: always()
         with:
           node-version: 22.x
-      - name: Install the agent scripts' dependencies
-        if: always()
-        run: npm ci --no-audit --no-fund --ignore-scripts --prefix scripts/agent
 
       - name: Collect the agent's output (untrusted data)
         if: always()
@@ -2650,7 +2648,7 @@ jobs:
             }
 
   stalled:
-    needs: [gate, ci, deps, review-panel, promote, fix]
+    needs: [gate, ci, deps, review-panel, promote, fix, fix-report]
     # `!cancelled()`, NOT `always()`. This changed with the concurrency guard at
     # the top of the file: a superseded run is now cancelled mid-flight, and under
     # `always()` this job still fired — a panel cancelled before it started reports
@@ -2666,9 +2664,9 @@ jobs:
     #
     # AND `needs.fix.result == 'cancelled'` DOES NOT BELONG IN THE LIST BELOW,
     # tempting as it looks: that is a fix round killed by its own
-    # `timeout-minutes`, and the `fix` job's "Page if the fix produced no
-    # commit" step now owns it from inside the cancellation grace window, where it
-    # can read the branch head and stay silent on a supersede. Claiming it here as
+    # `timeout-minutes`, and the `fix-report` job's "Page if the fix produced no
+    # commit" step owns it — that job is `always()`, reads the branch head from
+    # the API, and stays silent on a supersede. Claiming it here as
     # well would comment twice and latch `agent:blocked` from two places on every
     # timeout, and would page spuriously whenever a fixer's own push superseded
     # the run. Both conditions are pinned in checks.test.mjs.
@@ -2692,9 +2690,16 @@ jobs:
     # follow them and nothing else is watching.
     #
     # `fix` is the ONE job deliberately excluded from the CANCELLED clauses: a fix job killed by
-    # its own wall is already paged by its no-commit step, which exists for
-    # exactly that case, and claiming it here would double-page. checks.test.mjs
-    # pins the exclusion.
+    # its own wall is already paged by `fix-report`'s no-commit step, which
+    # exists for exactly that case, and claiming it here would double-page.
+    # checks.test.mjs pins the exclusion.
+    #
+    # `fix-report` FAILING is listed, because the no-commit page moved there and
+    # a net must not die with the thing it catches: a failed mint, checkout or
+    # page comment in that job would otherwise leave a stalled PR with no page.
+    # Its failure cannot also mean its page posted — every step after the page
+    # is continue-on-error — except when setup failed and the page still ran,
+    # which is a rare double page and the right side to err on.
     #
     # Without those clauses a panel killed by its 45-minute wall paged nobody:
     # promote and fix skip on a non-successful need, `stalled` tested only
@@ -2715,6 +2720,7 @@ jobs:
          needs.promote.result == 'failure' ||
          needs.promote.result == 'cancelled' ||
          needs.fix.result == 'failure' ||
+         needs.fix-report.result == 'failure' ||
          (needs.ci.result == 'success' &&
           needs.ci.outputs.conclusion != 'success' &&
           needs.ci.outputs.conclusion != 'failure' &&
@@ -2739,6 +2745,7 @@ jobs:
           PANEL_RESULT: ${{ needs.review-panel.result }}
           PROMOTE_RESULT: ${{ needs.promote.result }}
           FIX_RESULT: ${{ needs.fix.result }}
+          FIX_REPORT_RESULT: ${{ needs.fix-report.result }}
         with:
           retries: 3
           script: |
@@ -2753,12 +2760,13 @@ jobs:
             const r = {
               deps: process.env.DEPS_RESULT, ci: process.env.CI_RESULT, panel: process.env.PANEL_RESULT,
               promote: process.env.PROMOTE_RESULT, fix: process.env.FIX_RESULT,
+              fixReport: process.env.FIX_REPORT_RESULT,
             };
             // Did the branch move? `workflow_run.head_sha` is the sha this panel
             // reviewed; `pr.head.sha` is the branch NOW. A fix job can fail with
-            // the changes already pushed — its own commit landed and a later step
-            // died, or (before the concurrency guard above) a duplicate run pushed
-            // while this one burned its turn ceiling.
+            // the changes already pushed — its own commit landed and the agent
+            // then died, or (before the concurrency guard above) a duplicate run
+            // pushed while this one burned its turn ceiling.
             //
             // On #648 the flat "the requested changes were not applied" was simply
             // FALSE: `102e0fa73` was on the branch and CI-green three minutes
@@ -2790,6 +2798,7 @@ jobs:
             // First matching cause wins (fix/promote are downstream of the panel).
             const reason =
               r.fix === 'failure' ? fixReason
+              : r.fixReport === 'failure' ? "the job that reports a fix round failed, so its report, disputes or no-commit page may be missing — check the `fix-report` job in this run and the branch head before assuming the round did nothing"
               : r.promote === 'failure' ? 'the ready-gate (promotion) step errored'
               : r.panel === 'failure' ? 'the review-panel job failed to complete'
               : (r.panel === 'skipped' || r.deps === 'failure') ? 'the review panel could not start (dependency setup failed)'

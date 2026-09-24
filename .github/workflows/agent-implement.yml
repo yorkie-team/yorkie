@@ -186,9 +186,12 @@ jobs:
           # Least privilege, and `administration: read` is the one this verb adds
           # over every other: the gate below reads branch protection. Notably
           # absent, here as everywhere: `workflows`.
+          # And NOT `contents: write` or `pull-requests: write`: this token lives
+          # in the job the agent runs in, the push uses the narrow token below, and
+          # the PR is opened by the `finish` job with a token minted there.
           permission-administration: read # read branch protection, never write it
-          permission-contents: write # push the branch
-          permission-pull-requests: write # open the draft PR
+          permission-contents: read # read rulesets and branches
+          permission-pull-requests: read # the pre-flight lists open PRs
           permission-issues: write # answer on the issue
 
       # THE TOKEN THE AGENT GETS, AND IT IS NOT THE ONE ABOVE. `contents: write`
@@ -200,7 +203,7 @@ jobs:
       # `.git/config`, one `git config --get` from being read back.
       #
       # So the agent commits and pushes, and cannot open, approve or merge
-      # anything. The PR is opened by a step in this file after it stops.
+      # anything. The PR is opened by the `finish` job after it stops.
       - name: Generate the agent's narrow token
         if: steps.app.outputs.configured == 'true'
         id: agent-token
@@ -674,10 +677,6 @@ jobs:
         if: always() && needs.implement.outputs.staged == 'success'
         with:
           node-version: 22.x
-      - name: Install the agent scripts' dependencies
-        id: tools
-        if: always() && needs.implement.outputs.staged == 'success'
-        run: npm ci --no-audit --no-fund --ignore-scripts --prefix scripts/agent
 
       - name: Collect the agent's output (untrusted data)
         if: always() && needs.implement.outputs.staged == 'success'
@@ -689,7 +688,7 @@ jobs:
 
       - name: Generate GitHub App token
         id: app-token
-        if: always() && steps.tools.outcome == 'success'
+        if: always() && needs.implement.outputs.staged == 'success'
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
@@ -724,7 +723,8 @@ jobs:
           #
           # EXACTLY ONE, OR NONE. The pre-flight gate refused to start while any
           # `agent/$ISSUE-*` branch existed, and the job's concurrency group
-          # admits one run per issue, so every match here was pushed by THIS run.
+          # admits one `implement` run per issue — and this job runs only after
+          # that one — so every match here was pushed by THIS run.
           # More than one means the agent pushed several and there is no honest
           # way to pick; say so rather than open a PR from the wrong one.
           REFS="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/agent/$ISSUE-" --jq '.[].ref')"
@@ -798,7 +798,7 @@ jobs:
         run: node scripts/agent/disclose-pr.mjs "$PR"
 
       - name: Write implement session job summary
-        if: always() && steps.tools.outcome == 'success'
+        if: always() && needs.implement.outputs.staged == 'success'
         continue-on-error: true
         run: |
           node scripts/agent/session-job-summary.mjs \
@@ -806,18 +806,20 @@ jobs:
             --kind implement \
             --title "Implement agent session"
 
-      # Resolved by the `agent/<issue>-…` branch rather than by a number, so a
-      # run that opened no PR still records what it cost.
+      # Onto the PR this job opened when it opened one; otherwise resolved from
+      # an open `agent/<issue>-…` PR. A run that opened no PR has no ledger to
+      # record into, and the script says so and exits 0.
       - name: Record agent effort metrics
         if: always() && steps.app-token.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
-        run: >-
-          node scripts/agent/metrics.mjs record
-          --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json"
-          --kind implement --issue "$ISSUE"
+          PR: ${{ steps.open-pr.outputs.number }}
+        run: |
+          node scripts/agent/metrics.mjs record \
+            --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" \
+            --kind implement ${PR:+--pr "$PR"} --issue "$ISSUE"
 
       # THE ONE SILENT TERMINATION LEFT. The run dies, or exhausts its turns,
       # before opening a PR — and the issue keeps the "On it" acknowledgement

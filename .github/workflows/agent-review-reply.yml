@@ -310,7 +310,7 @@ jobs:
       # GitHub permission that grants commenting without approving.
       #
       # So the agent is given the thread explicitly, writes its answer to a file,
-      # and a trusted step below posts it. The thread context tag mode supplied
+      # and the `report` job posts it. The thread context tag mode supplied
       # for free is passed in; the capability it needed is not.
       - name: Run Claude Code
         id: agent

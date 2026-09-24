@@ -76,9 +76,10 @@ jobs:
     # ⚠️ 90 MINUTES, AGAINST A 60-MINUTE CREDENTIAL. A GitHub App installation
     # token's lifetime is fixed at one hour and `create-github-app-token` cannot
     # extend it, so a round that runs past the hour loses the credential sitting
-    # in `.git/config` and in `github_token`: the push 401s, and the reporting
-    # steps that would have said so 401 too, leaving the placeholder comment
-    # saying "Working on…" for good.
+    # in `.git/config` and in `github_token`: the push 401s. The reporting
+    # survives it — it runs in a separate job that mints its own token — so the
+    # round is reported as one that pushed nothing, rather than left saying
+    # "Working on…" for good.
     #
     # The wall is NOT shortened to 55, because that would refuse exactly the
     # rounds the reasoning below says to allow. Closing it properly means
@@ -214,11 +215,11 @@ jobs:
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
-          # Least privilege: only what the steps below need, rather than the
-          # App installation's full permission set — this token is live in a job
-          # that later checks out and executes untrusted branch code.
-          permission-contents: write # push the fix commit
-          permission-pull-requests: write # reply in the PR review thread
+          # ONLY what the two pre-agent comments need — the placeholder and the
+          # refusal — and NOT `contents: write`. This token lives in the job the
+          # agent runs in, for an hour: the push uses the narrow token below, and
+          # everything else is minted afresh in the `report` job.
+          permission-pull-requests: write # comment on the PR conversation
           permission-issues: write # PR conversation comments use the issues API
 
       # THE TOKEN THE AGENT GETS, AND IT IS NOT THE ONE ABOVE.
@@ -237,8 +238,8 @@ jobs:
       #
       # So the agent gets `contents` alone — enough to commit and push, and
       # nothing that can review, merge, or comment on a pull request. Every step
-      # that needs more is a step in this file, running after the agent has
-      # stopped.
+      # that needs more after the agent runs in the `report` job, on a runner the
+      # agent never had a shell on.
       - name: Generate the agent's narrow token
         if: steps.app.outputs.configured == 'true'
         id: agent-token
@@ -571,9 +572,9 @@ jobs:
       - name: Address panel findings
         id: agent
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
-        # The job must reach the report/effort/outcome steps below even when the
-        # agent fails — a failed fix run is exactly the one whose cost and reason
-        # a maintainer needs. The final step re-reds the job.
+        # The job must reach the handoff below even when the agent fails — a
+        # failed fix run is exactly the one whose cost and reason a maintainer
+        # needs. The `report` job's outcome step re-reds the run.
         continue-on-error: true
         # Pinned to the v1 release commit (immutable). github_token is the App
         # token so the fix push re-triggers CI (and a fresh review panel).
@@ -749,9 +750,6 @@ jobs:
         if: always()
         with:
           node-version: 22.x
-      - name: Install the agent scripts' dependencies
-        if: always()
-        run: npm ci --no-audit --no-fund --ignore-scripts --prefix scripts/agent
 
       # Absent when the agent died before writing anything; every consumer
       # below treats a missing file as "nothing to post".

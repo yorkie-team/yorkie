@@ -778,3 +778,12 @@ test("no record field can carry a live marker through republish", async () => {
     }
   }
 });
+
+test("republish counts every dispute it did not post, by reason", async () => {
+  const { republishRebuttals: rep, serializeRebuttal: ser } = await import("./rebuttal.mjs");
+  const one = ser({ lens: "security", file: "a.go", summary: "s1", claim: "c", evidence: [] });
+  const two = ser({ lens: "security", file: "b.go", summary: "s2", claim: "c", evidence: [] });
+  const out = rep({ "1.md": one, "2.md": one, "3.md": "junk", "4.md": two }, { max: 1 });
+  assert.equal(out.length, 1);
+  assert.deepEqual(out.dropped, { unreadable: 1, duplicate: 1, overCap: 1 });
+});

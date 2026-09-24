@@ -671,7 +671,11 @@ function cmdPost(pr, args) {
  */
 export const MAX_REPUBLISHED_REBUTTALS = 40;
 
-/** The largest single emitted dispute `republish` will read. */
+/**
+ * The largest single emitted dispute `republish` will read. Smaller than
+ * `fix-report.mjs`'s cap on purpose: one dispute is one capped record
+ * (`serializeRebuttal` holds it to ~20 KiB), where one report is up to 80 items.
+ */
 const MAX_EMITTED_BYTES = 64 * 1024;
 
 /**
@@ -693,15 +697,26 @@ const MAX_EMITTED_BYTES = 64 * 1024;
 export function republishRebuttals(files, { max = MAX_REPUBLISHED_REBUTTALS } = {}) {
   const out = [];
   const seen = new Set();
+  // What was NOT posted, and why — so the caller can say so. A dispute dropped
+  // silently reads exactly like a fixer that agreed.
+  out.dropped = { unreadable: 0, duplicate: 0, overCap: 0 };
   const names = Object.keys(files && typeof files === "object" ? files : {}).sort();
   for (const name of names) {
-    if (out.length >= max) break;
     const r = parseRebuttalComment(files[name]);
-    if (!r) continue;
+    const body = r ? renderRebuttalComment({ ...r, findingKey: findingKeyOf(r) }) : null;
+    if (!body) {
+      out.dropped.unreadable++;
+      continue;
+    }
     const findingKey = findingKeyOf({ lens: r.lens, file: r.file, summary: r.summary });
-    if (seen.has(findingKey)) continue;
-    const body = renderRebuttalComment({ ...r, findingKey });
-    if (!body) continue;
+    if (seen.has(findingKey)) {
+      out.dropped.duplicate++;
+      continue;
+    }
+    if (out.length >= max) {
+      out.dropped.overCap++;
+      continue;
+    }
     seen.add(findingKey);
     out.push({ findingKey, body });
   }
@@ -739,6 +754,18 @@ function readEmittedDir(dir) {
  */
 function cmdRepublish(pr, args) {
   const bodies = republishRebuttals(args.from ? readEmittedDir(String(args.from)) : {});
+  const { unreadable, duplicate, overCap } = bodies.dropped;
+  if (unreadable + overCap > 0) {
+    // LOUD, like the post failure below: a dispute file that carries no record
+    // is agent text this step refuses to post, and one past the cap is a
+    // dispute nobody will adjudicate. Duplicates are the same argument filed
+    // twice and are only logged.
+    emitBestEffortWarning(
+      `rebuttal republish for #${pr}: ${unreadable} emitted dispute file(s) carried no readable record and ` +
+        `${overCap} exceeded the cap of ${MAX_REPUBLISHED_REBUTTALS} — those disputes were NOT filed`,
+    );
+  }
+  if (duplicate > 0) console.error(`rebuttal: ${duplicate} duplicate dispute file(s) collapsed`);
   if (args.out) {
     mkdirSync(String(args.out), { recursive: true });
     bodies.forEach(({ body }, i) => writeFileSync(path.join(String(args.out), `${i}.md`), body));

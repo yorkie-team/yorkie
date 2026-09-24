@@ -341,3 +341,24 @@ removed; it now builds a real tie and was mutation-checked.
 
 Stated, not fixed: the sudo/runner-memory path to the App key and to the wide
 token minted before the agent. In the design doc and the PR body.
+
+### Self-review round 2 (design fit), after porting onto the merged `main`
+
+#2026 merged mid-session with its own verbatim-post fix (`post-emitted.mjs`);
+this work was ported onto it as one commit and `republish` replaced that
+script. Round 2 found two blocking:
+
+- The pre-agent wide tokens in `agent-fix` and `agent-implement` still carried
+  `contents: write` for a push that the narrow token now makes. Both mints
+  are cut to what their pre-agent steps use, so no token in an agent's job
+  holds the approve+merge pair.
+- The panel's `stalled` net watched `fix`, but the no-commit page had moved to
+  `fix-report` — a failed mint or comment there paged nobody. `stalled` now
+  needs `fix-report` and pages on its failure.
+
+Non-blocking, fixed: `npm ci` dropped from the trusted jobs (none of their
+scripts has a third-party import, and in `finish` it sat on the path to
+opening the PR); a dropped or over-cap dispute now warns; a guard pins each
+handoff artifact's name to its download; stale single-job comments and two
+design-doc rows. Left as drift, deliberately: the five trusted jobs read the
+head three slightly different ways, and two keep artifacts for 7 days.

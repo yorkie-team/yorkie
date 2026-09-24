@@ -408,6 +408,12 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
     "stalled must keep `!cancelled()` — a superseded panel must not page");
   assert.ok(!/needs\.fix\.result == 'cancelled'/.test(stalledIf),
     "a cancelled fix job is the no-commit page's case; claiming it here double-pages");
+  // The no-commit page lives in `fix-report`, so the net must watch that job
+  // too — or a failed mint or comment there strands the PR with no page at all.
+  assert.match(yml, /^ {2}stalled:\n {4}needs: \[[^\]]*\bfix-report\b[^\]]*\]$/m,
+    "stalled must depend on fix-report to see it fail");
+  assert.match(stalledIf, /needs\.fix-report\.result == 'failure'/,
+    "a failed fix-report is a page that may never have been posted");
 
   // ...but every OTHER job's `cancelled` must be listed, and this is the pair of
   // facts that makes it safe: GitHub reports a job killed by its own
@@ -2024,9 +2030,6 @@ test("the trusted job posts disputes before the report it counts them in", () =>
     const report = wf.indexOf("run: node scripts/agent/fix-report.mjs republish");
     assert.ok(disputes > 0 && report > 0, `${file}: both must be republished by the trusted job`);
     assert.ok(disputes < report, `${file}: the disputes must be posted before the report that counts them`);
-    // And never posted as written: the files came from the agent.
-    assert.doesNotMatch(wf, /gh pr comment "\$PR" --body-file "\$(?:F|REPORT)"/,
-      `${file}: an agent-written file must not be posted verbatim`);
   }
 });
 
@@ -2193,4 +2196,38 @@ test("nothing an agent wrote is posted verbatim under the App identity", () => {
     [],
     "these steps post an agent-written file verbatim under the App identity:\n  " + offenders.join("\n  "),
   );
+});
+
+test("each trusted job downloads exactly the artifact its agent job uploaded", () => {
+  // The download is `continue-on-error` — an agent that died before writing
+  // anything must not red the report — so a renamed artifact on either side
+  // would not fail anything. It would post no report, no disputes and no cost,
+  // silently, on every run. Pin the names to each other.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const JOBS = {
+    "agent-fix.yml": ["fix", "report"],
+    "agent-iterate-ci.yml": ["iterate", "report"],
+    "agent-review-reply.yml": ["reply", "report"],
+    "agent-review-panel.yml": ["fix", "fix-report"],
+    "agent-implement.yml": ["implement", "finish"],
+  };
+  const jobText = (wf, id) => {
+    const at = wf.indexOf(`\n  ${id}:\n`);
+    assert.ok(at >= 0, `no ${id} job`);
+    const next = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at + 1));
+    return wf.slice(at, next ? at + 1 + next.index : wf.length);
+  };
+  const names = (text, action) => [...text.matchAll(
+    new RegExp(`uses: actions/${action}@v\\d+\\n(?: {8}.*\\n)*? {10}name: (\\S+)`, "g"),
+  )].map((m) => m[1]);
+  for (const [file, [agentJob, trustedJob]] of Object.entries(JOBS)) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    const up = names(jobText(wf, agentJob), "upload-artifact");
+    const down = names(jobText(wf, trustedJob), "download-artifact");
+    assert.equal(up.length, 1, `${file} ${agentJob}: expected one handoff upload, got ${up.join(", ")}`);
+    assert.deepEqual(down, up, `${file}: ${trustedJob} must download what ${agentJob} uploaded`);
+    assert.match(jobText(wf, trustedJob), new RegExp(`needs: \\[[^\\]]*\\b${agentJob}\\b`),
+      `${file}: ${trustedJob} must wait for ${agentJob}`);
+  }
 });
