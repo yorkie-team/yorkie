@@ -244,3 +244,57 @@ commit without `golangci-lint`, including documentation-only ones, and
 CONTRIBUTING.md defended it with an argument about a missing linter. "Nothing
 to lint" and "no linter" are different conditions; answering both by refusing
 meant an outside contributor fixing a typo needed the Go toolchain to commit.
+
+### Round 3 — weighted to security, documentation and design-doc consistency
+
+No Critical. Two Important, eleven Minor; all fixed.
+
+**The security question resolved in the branch's favour, more strongly than
+the branch argued it.** Tracking `.claude/settings.json` grants a PR branch no
+capability it did not already have: the three workflows that check out an
+untrusted branch without stripping `.claude/` already hand the agent an
+unrestricted `Bash` tool, and all three are gated to same-repo branches. The
+two workflows that *restrict* the agent to read-only lenses are exactly the two
+that `rm -rf .claude`. The design was coherent before and after. Worth
+recording because round 2 had left this as an open worry and the honest answer
+turned out to be better than the cautious one — the `GITHUB_ACTIONS` exit in
+`session-prime.sh` stays anyway, because it costs nothing and the question of
+what a CI agent should be *told* is separate from what it can *do*.
+
+**The gate had a second silent-skip hole, in the half added to close the
+first.** `pre-commit` filtered staged paths with `--diff-filter=ACM`, which
+drops `R` — and git reports a rename-with-edit as one `R` entry above ~50%
+similarity. Such a commit stages Go and skipped the lint entirely. The obvious
+repair, `ACMR`, is also wrong: it drops `D`, and deleting a Go file breaks
+compilation for everything that referenced it. The filter is gone.
+
+**Rule: when you narrow a check's input, enumerate what the narrowing
+excludes.** Both narrowings here read as obviously safe and neither was. The
+same reflex that caught the OpenAPI bundles before the guard shipped did not
+fire on a `--diff-filter` flag, because a flag does not look like a policy.
+
+### The defect class this branch could not stop committing
+
+Round 1: four places asserting a gap the branch had closed. Round 1 again: a
+replacement justification with no relative `.go` targets behind it. Round 2: an
+assumption about `claude-code-action` contradicted by this repository's own
+workflow. Round 3: a security note claiming "everything else here is pinned:
+actions by SHA" — two of seventeen are, and the file it was written in has
+eight, all tags.
+
+Four instances, across three rounds, in a branch whose lessons file names the
+class in its own heading. Writing a justification is a different act from
+checking one, and the gap between them does not close by knowing about it. What
+did work, eventually: **numbers**. A claim carrying a measured count is one a
+reviewer can falsify in a single command, and three of the four were caught
+exactly that way. The counts that then went stale were the ones nothing
+recomputes — so they are gone, and the breakdowns that do not move are what
+remain.
+
+### Outcome of the bounded loop
+
+All three rounds raised blocking findings, so the loop ends at its bound rather
+than at a clean round. Per `.claude/commands/self-review.md` that means stop,
+open the PR, and get a human — not run a fourth round. Recorded here rather
+than silently continuing, because "three rounds, still finding things" is
+information a reviewer should have.
