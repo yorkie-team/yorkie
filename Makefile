@@ -42,6 +42,14 @@ fmt: ## applies format and simplify codes
 lint: ## runs the golang-ci lint, checks for lint violations
 	golangci-lint run --timeout 2m ./...
 
+# The gate a commit has to pass before it is pushed, and the one the local
+# hooks and the fix agents call. Deliberately the two lanes that need no
+# service: `make test` needs MongoDB, so the integration lane stays in CI
+# where a container is already up. Keep this pair in step with the
+# "verification command" named in docs/design/agent-command-verbs.md.
+verify: lint ## runs the checks a commit must pass: lint and unit tests
+	go test ./...
+
 coverage: ## runs coverage tests
 	go clean -testcache
 	go test -tags integration -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
@@ -96,4 +104,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest start stop swagger help
+.PHONY: tools proto build build-binaries fmt lint verify test test-complex coverage bench docker docker-latest start stop swagger help
