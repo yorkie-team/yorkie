@@ -555,8 +555,8 @@ func (s *RGATreeSplit[V]) splitNode(
 ) (*RGATreeSplitNode[V], resource.DataSize, error) {
 	var diff resource.DataSize
 
-	if offset > node.contentLen() {
-		return nil, diff, fmt.Errorf("offset should be less than or equal to length: %s", s.ToTestString())
+	if offset < 0 || offset > node.contentLen() {
+		return nil, diff, fmt.Errorf("offset should be within the range of length: %s", s.ToTestString())
 	}
 
 	if offset == 0 {

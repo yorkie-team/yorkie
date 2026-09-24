@@ -921,6 +921,10 @@ func fromTextNodePos(
 	if err != nil {
 		return nil, err
 	}
+	if createdAt == nil {
+		return nil, goerrors.New("text node pos has nil createdAt")
+	}
+
 	return crdt.NewRGATreeSplitNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
