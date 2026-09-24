@@ -20,6 +20,13 @@ set -euo pipefail
 # from editing anything is worse, and CI's freshness check is the backstop
 # either way.
 #
+# IT COVERS Edit AND Write, NOT Bash. A `sed -i` on a .pb.go walks straight
+# through, and widening the matcher to Bash would mean parsing shell to find
+# the paths a command writes — which is the kind of guard that fails open on
+# the cases that matter and blocks the ones that do not. The reach is "the
+# tools an agent normally edits with", not "every path to the file"; CI's
+# freshness check is what actually closes the set.
+#
 # Protocol: the hook payload arrives as JSON on stdin. exit 0 allows, exit 2
 # blocks and feeds stderr back to Claude as context.
 

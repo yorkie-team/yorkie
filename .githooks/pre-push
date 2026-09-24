@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The full local gate: lint plus the unit tests, run once per push.
+# The full local gate — lint, licence headers, unit tests — once per push.
 #
 # This is the last point at which a failure costs only local time. Past it a
 # red lane is a CI run, a PR comment, and on an agent-managed branch a fix

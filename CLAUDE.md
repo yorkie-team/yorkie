@@ -12,7 +12,7 @@ make tools         # Install dev tools (run periodically)
 make build         # Build binary to bin/yorkie
 make fmt           # gofmt
 make lint          # golangci-lint
-make verify        # lint + unit tests — the gate every commit must pass
+make verify        # lint + licence headers + unit tests — the commit gate
 make proto         # Regenerate protobuf via buf
 make test          # Integration tests (-tags integration, MongoDB required)
 make test-complex  # Long-running complex tests (-tags complex)

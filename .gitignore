@@ -89,3 +89,8 @@ node_modules/
 # it is ignored — an interrupted run otherwise leaves a nested .git that
 # `git add -A` commits as a gitlink.
 .harness-reports/
+
+# Claude Code's per-user settings, which sit beside the tracked
+# .claude/settings.json. It holds `permissions.allow` grants; committing one by
+# accident widens the permission set for every contributor, silently.
+.claude/settings.local.json

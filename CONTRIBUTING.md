@@ -117,9 +117,15 @@ bash scripts/setup.sh
 
 This points `core.hooksPath` at `.githooks/`, which then validates every
 commit message against the format above, runs `make lint` on commit, and
-runs `make verify` (lint plus the unit tests) on push. The integration
-lane is not in them — it needs MongoDB, so CI runs it. Any of the three
-can be bypassed with `--no-verify` when you mean to.
+runs `make verify` (lint, licence headers and the unit tests) on push.
+The integration lane is not in them — it needs MongoDB, so CI runs it.
+Any of the three can be bypassed with `--no-verify` when you mean to.
+
+Run `make tools` first. After `setup.sh`, a commit needs `golangci-lint`
+on your `PATH` and the hook refuses rather than skipping — including on
+a documentation-only commit. That is deliberate: a lint gate that
+silently does nothing when the linter is missing is the case it exists
+to prevent.
 
 ### Testing
 
