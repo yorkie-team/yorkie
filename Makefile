@@ -54,12 +54,10 @@ lint: ## runs the golang-ci lint, checks for lint violations
 verify: lint verify-license ## runs the checks a commit must pass: lint, licence headers, unit tests
 	go test ./...
 
+# Node is not otherwise needed to build or test this repository, so the skip
+# is announced rather than silent. `.githooks/pre-push` refuses outright —
+# there, nothing reads the line.
 verify-license: ## checks every Go file carries the Apache 2.0 header
-# Announces the skip rather than passing quietly. Node is not otherwise
-# needed to build or test this repository, so a contributor without it must
-# be told the lane did not run — a check that reports nothing is
-# indistinguishable from a check that found nothing. The `Docs` workflow
-# runs it on every pull request regardless.
 	@if command -v node >/dev/null 2>&1; then \
 		node scripts/verify-license.mjs; \
 	else \

@@ -27,8 +27,8 @@ docker compose -f build/docker/docker-compose.yml up --build -d
 ## Commit Messages
 
 Per `CONTRIBUTING.md`: subject ≤70 chars (what changed), blank line,
-body wrapped at 80 chars (why). Enable the local commit-msg validator
-once with `bash scripts/setup.sh`.
+body wrapped at 80 chars (why). `bash scripts/setup.sh`, once per clone,
+installs the hooks that check this and the gates in step 2 below.
 
 ```text
 Skip leadership write when active leader exists

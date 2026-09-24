@@ -108,11 +108,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # `docker run` in a `run:` step rather than `uses: docker://…`, because a
-      # docker action's `args:` are passed as an argv array with no shell, so the
-      # glob below would reach actionlint as a literal filename and the lane
-      # would fail on "file not found" instead of linting anything.
+      # NO PATH ARGUMENTS. Given none, actionlint lints every workflow in
+      # `.github/workflows/` by definition — which is both simpler than a glob
+      # and strictly wider: `*.yml` silently misses a future `.yaml`, a
+      # spelling GitHub accepts. Verified by planting one and watching the
+      # glob form report nothing.
       - name: Lint workflow files
-        run: |
-          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 \
-            -color -shellcheck= -pyflakes= .github/workflows/*.yml
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=

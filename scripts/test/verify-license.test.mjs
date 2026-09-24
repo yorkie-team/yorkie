@@ -4,7 +4,14 @@
 // the OS temp directory, created per test and removed after. Nothing touches
 // the repository and nothing shells out to git.
 
-import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
@@ -154,12 +161,39 @@ test('a tree with no Go files is a finding, not a silent pass', () => {
  * the tree. That is also the property the wrong-root guard above protects, so
  * exercising it here keeps the two honest about each other.
  */
-function runCliIn(root) {
-  mkdirSync(path.join(root, 'scripts'), { recursive: true });
-  const planted = path.join(root, 'scripts', 'verify-license.mjs');
-  copyFileSync(SCRIPT, planted);
-  return spawnSync(process.execPath, [planted], { encoding: 'utf8' });
+function runCliIn(root, { throughSymlink = false } = {}) {
+  const scripts = path.join(root, 'scripts');
+  mkdirSync(scripts, { recursive: true });
+  copyFileSync(SCRIPT, path.join(scripts, 'verify-license.mjs'));
+  // Its sibling import, without which the planted copy will not load.
+  copyFileSync(
+    fileURLToPath(new URL('../direct-run.mjs', import.meta.url)),
+    path.join(scripts, 'direct-run.mjs'),
+  );
+
+  let entry = path.join(scripts, 'verify-license.mjs');
+  if (throughSymlink) {
+    const link = path.join(root, 'link-to-scripts');
+    symlinkSync(scripts, link, 'dir');
+    entry = path.join(link, 'verify-license.mjs');
+  }
+  return spawnSync(process.execPath, [entry], { encoding: 'utf8' });
 }
+
+test('the CLI runs when invoked through a symlinked path', () => {
+  // THE SYMLINK IS EXPLICIT, not inherited from the OS. This guards
+  // `isDirectRun` comparing realpaths: as plain strings, `process.argv[1]`
+  // (what the caller typed) and `import.meta.url` (resolved by the loader)
+  // differ here, the CLI block never runs, and the process exits 0 having
+  // checked nothing. It happens to reproduce via macOS's /tmp, which is a
+  // link to /private/tmp — but on the Linux runner where this actually runs,
+  // /tmp is a real directory and the guard would pass while testing nothing.
+  withTree({ 'pkg/a.go': 'package a\n' }, (root) => {
+    const r = runCliIn(root, { throughSymlink: true });
+    assert.equal(r.status, 1, `the CLI did not run: ${JSON.stringify(r.stdout)}`);
+    assert.match(r.stdout, /pkg\/a\.go has no Apache 2\.0 header/);
+  });
+});
 
 test('the CLI exits 1 and names each file when a header is missing', () => {
   withTree({ 'pkg/a.go': 'package a\n', 'pkg/ok.go': LINE_HEADER }, (root) => {

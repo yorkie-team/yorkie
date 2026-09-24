@@ -35,9 +35,11 @@
 // planted directory, and so a file that is about to be committed is checked
 // before it is staged rather than after.
 
-import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { isDirectRun } from './direct-run.mjs';
 
 const PREFIX = '[verify:license]';
 
@@ -128,31 +130,16 @@ export function collectFindings(repoRoot) {
   return findings;
 }
 
-// REALPATH BOTH SIDES. `import.meta.url` is already resolved through symlinks
-// by the loader; `process.argv[1]` is whatever the caller typed. Invoke this
-// through a symlinked path — `/tmp/...` on macOS, which is a link to
-// `/private/tmp` — and the two strings differ, the block below never runs, and
-// the process exits 0 having checked nothing. That is the same silent pass
-// `collectFindings` was just taught to refuse, arriving by a different door.
-const isDirectRun = (() => {
-  if (!process.argv[1]) return false;
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-})();
 
-if (isDirectRun) {
+if (isDirectRun(import.meta.url)) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const checked = goFiles(repoRoot);
   const findings = collectFindings(repoRoot);
   if (findings.length === 0) {
     // The count is in the success line on purpose: "every Go file" is true of
     // a tree with none, and the number is what makes a collapsed scan visible
     // in a log nobody reads closely.
-    console.log(
-      `${PREFIX} Every Go file (${goFiles(repoRoot).length}) carries the Apache 2.0 header.`,
-    );
+    console.log(`${PREFIX} Every Go file (${checked.length}) carries the Apache 2.0 header.`);
   } else {
     for (const finding of findings) console.log(`${PREFIX}   ${finding}`);
     console.log(`${PREFIX} ${findings.length} file(s) missing the header.`);
