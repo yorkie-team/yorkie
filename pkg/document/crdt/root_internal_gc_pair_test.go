@@ -64,3 +64,36 @@ func TestRegisterElementBooksInternalTombstones(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 }
+
+// TestRegisterElementSkipsTombstonedTreeRoot pins that the tree ROOT is never
+// booked as a GC pair, however it arrived tombstoned.
+//
+// Purging is detachment from a parent, and the root has none. The root is not
+// legitimately removable, but removedAt on it is not a server invariant: the
+// element payload of a Set/Add/ArraySet is read by the same BytesTo* reader a
+// snapshot is, so a crafted one can mark it removed. Booked, it would take
+// GarbageCollect through a nil parent deref on the server.
+func TestRegisterElementSkipsTombstonedTreeRoot(t *testing.T) {
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+
+	treeRoot := crdt.NewTreeNode(crdt.NewTreeNodeID(ctx.IssueTimeTicket(), 0), "r", nil)
+	para := crdt.NewTreeNode(crdt.NewTreeNodeID(ctx.IssueTimeTicket(), 0), "p", nil)
+	require.NoError(t, treeRoot.Append(para))
+
+	// A crafted payload marks every node removed, the root included.
+	treeRoot.SetRemovedAt(ctx.IssueTimeTicket())
+	para.SetRemovedAt(ctx.IssueTimeTicket())
+
+	tree := crdt.NewTree(treeRoot, ctx.IssueTimeTicket())
+	root.Object().Set("tree", tree)
+
+	before := root.GarbageLen()
+	root.RegisterElement(tree, root.Object())
+	assert.Equal(t, before+1, root.GarbageLen(),
+		"only the parented tombstone is booked, never the root")
+
+	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+}

@@ -1045,6 +1045,21 @@ func (t *Tree) rebuildMergeState() {
 			return
 		}
 
+		// findFloorNode is a floor lookup: it answers with the node that
+		// *contains* the offset, which is what a position inside a split node
+		// needs, but a merge source is recorded by mergeNodes as the parent's
+		// exact ID. Requiring the exact ID back matters because MergedFrom is
+		// client-supplied on an element payload (Set/Add/ArraySet), where the
+		// floor is the only thing standing between a made-up offset and a
+		// forwarding pointer planted on an unrelated live node -- one that a
+		// later, innocent delete would follow in propagateMergeDeletes to
+		// cascade-tombstone that node's namesakes. A source that is a text
+		// node is rejected for the same reason the destination is below: a
+		// merge only ever moves children out of an element parent.
+		if !src.id.Equal(child.MergedFrom) || src.IsText() {
+			return
+		}
+
 		// A merge moves children under an element parent, so a child sitting
 		// under a text node cannot be one a merge moved. Only a snapshot is
 		// guaranteed well-formed here: an element payload (Set/Add/ArraySet)
@@ -1099,6 +1114,15 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
+
+	// A parentless node cannot be detached: purging is removal from a parent's
+	// child list. GCPairs never books one, but a pair outlives the tree state
+	// it was booked against (it sits in gcNodePairMap until the minimum synced
+	// version passes it), so a node detached in between reaches here. Dropping
+	// it keeps GarbageCollect advancing instead of panicking on the deref.
+	if node.Index == nil || node.Index.Parent == nil {
+		return nil
+	}
 
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err
@@ -1555,7 +1579,15 @@ func (t *Tree) GCPairs() []GCPair {
 	var pairs []GCPair
 
 	for _, node := range t.Nodes() {
-		if node.removedAt != nil {
+		// t.Nodes() walks from the index root down, so the ROOT node itself is
+		// in the list. Purge detaches a node from its parent, and the root has
+		// none -- booking a pair for it would nil-deref inside GarbageCollect.
+		// The root is never legitimately removed, but removedAt on it is not a
+		// server invariant: an element payload (Set/Add/ArraySet) is read by
+		// the same BytesTo* reader a snapshot is, so a crafted one can mark the
+		// root removed. Leave it unbooked; it is unreachable garbage either
+		// way, and the tree element that holds it is collected as a whole.
+		if node.removedAt != nil && node.Index != nil && node.Index.Parent != nil {
 			// Tree.DataSize skips a removed node, so this one was never in
 			// the Live the scan's root was built with.
 			gcSize := node.DataSize()
@@ -2394,12 +2426,20 @@ func (t *Tree) styleSkipPredicate(
 // P->Q), the children must flow to that parent's final destination so the
 // merge chain stays flat (P->R, not P->Q) and both replicas converge. The
 // seen set guards against cycles from a concurrent mutual merge.
+//
+// A text node is never a merge destination: mergeNodes moves children into an
+// element parent, and a text node cannot hold children at all. The chain is
+// therefore cut at one, for the same reason FindTreeNodesWithSplitText checks
+// its own resolution -- mergedInto is derived from the MergedFrom an element
+// payload keeps, so a crafted one can name a text node here, and mergeNodes
+// hands what this returns straight to MoveChild. Stopping at the last
+// well-formed link treats the crafted tail as the absent lineage it is.
 func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
 	target := node
 	seen := map[*TreeNode]bool{target: true}
 	for target.IsRemoved() && target.mergedInto != nil {
 		next := t.findFloorNode(target.mergedInto)
-		if next == nil || seen[next] {
+		if next == nil || seen[next] || next.IsText() {
 			break
 		}
 		seen[next] = true
