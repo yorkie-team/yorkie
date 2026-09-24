@@ -443,3 +443,103 @@ jobs:
             exit 0
           fi
           node scripts/agent/disclose-pr.mjs "$PR"
+
+  # AN INLINE THREAD ANSWERS ONLY THE BARE MENTION, and answered everything
+  # else with nothing at all.
+  #
+  # This file is the sole subscriber to `pull_request_review_comment`, and its
+  # `reply` job requires `command == 'reply'`. So `@claude review` typed inside
+  # a code-review thread routes to `review`, that job's `if` is false, and no
+  # other workflow is listening — the verb workflows are all `issue_comment`.
+  # The result was silence: no comment, no failed check, no annotation. The
+  # same mistake on an ISSUE has been answered since agent-implement.yml grew
+  # its `help` job; this is that job for the other surface where a verb can be
+  # typed and cannot work.
+  #
+  # Gated on the five real verbs, not on `!= 'reply'`: `none` reaches here too
+  # (the router's `if` matches the literal "@claude" anywhere in the body,
+  # including inside a code block or the word "@claudette"), and answering
+  # that would be noise on a thread nobody addressed to the bot.
+  #
+  # `AGENT_PIPELINE_ENABLED` is not repeated — `route` carries it, and a
+  # skipped `route` skips this too.
+  help:
+    needs: [route]
+    if: >-
+      github.event_name == 'pull_request_review_comment' &&
+      contains(fromJSON('["fix","review","summarize","loop","rerun"]'), needs.route.outputs.command)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # One reply in flight per PR. Twenty inline mentions are otherwise twenty
+    # runs racing the marker check below, which would each read an empty list
+    # and each post.
+    concurrency:
+      group: agent-inline-help-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      # The reply goes to /pulls/{n}/comments/{id}/replies, which is a
+      # pull-requests scope — unlike the issue surface's help, where the target
+      # really is an issue and `issues: write` is the right grant.
+      pull-requests: write
+    steps:
+      # ASKS THE API, like the issue-surface help does and for the same reason:
+      # `author_association` is not permission. MEMBER is any organization
+      # member and COLLABORATOR is anyone invited to the repository, so
+      # gating on it would let a read-only account make the bot talk at will.
+      - name: Verify actor has write access
+        id: trust
+        uses: actions/github-script@v7
+        with:
+          retries: 3
+          script: |
+            const actor = context.payload.comment.user.login;
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner, repo: context.repo.repo, username: actor,
+            });
+            const ok = ['admin', 'maintain', 'write'].includes(data.permission);
+            if (!ok) core.info(`@${actor} lacks write access (${data.permission}); staying quiet.`);
+            core.setOutput('ok', ok ? 'true' : 'false');
+
+      - name: Reply in the thread
+        if: steps.trust.outputs.ok == 'true'
+        uses: actions/github-script@v7
+        env:
+          COMMAND: ${{ needs.route.outputs.command }}
+        with:
+          retries: 3
+          script: |
+            const typed = process.env.COMMAND;
+            // PER VERB, AND AUTHOR-CHECKED, for the reasons the issue-surface
+            // help records: one reply per PR ever means a maintainer who typed
+            // `@claude review` and later `@claude summarize` gets the silence
+            // this job exists to end, on the second mistake; and a marker test
+            // that trusts the TEXT lets any user pre-post it to suppress help
+            // permanently. The trust in a marker is its author.
+            const MARKER = `<!-- agent-inline-help:${typed} -->`;
+            const pull_number = context.payload.pull_request.number;
+            const { owner, repo } = context.repo;
+            const existing = await github.paginate(github.rest.pulls.listReviewComments, {
+              owner, repo, pull_number, per_page: 100,
+            });
+            // GITHUB_TOKEN posts this reply, so that login is the only one
+            // that writes this marker. The App identity is surplus here, and
+            // not harmlessly: the fix agents post under it and could suppress
+            // help for a verb on a PR permanently.
+            const AUTHORS = ['github-actions[bot]'];
+            const mine = (c) => String(c.body ?? '').includes(MARKER)
+              && AUTHORS.includes((c.user || {}).login);
+            if (existing.some(mine)) return;
+            await github.rest.pulls.createReplyForReviewComment({
+              owner, repo, pull_number,
+              comment_id: context.payload.comment.id,
+              body: [
+                MARKER,
+                `👋 \`@claude ${typed}\` does not run from an inline review thread.`,
+                '',
+                'Here, the only thing I answer is a bare **`@claude`** mention, which',
+                'means "address this feedback".',
+                '',
+                `To run \`${typed}\`, post **\`@claude ${typed}\`** as a top-level comment on the`,
+                'pull request instead.',
+              ].join('\n'),
+            });
