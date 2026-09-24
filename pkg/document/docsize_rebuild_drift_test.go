@@ -176,3 +176,60 @@ func TestAttributeTombstoneDoesNotDependOnDeliveryOrder(t *testing.T) {
 	gc := d1.DocSize().GC
 	assert.Zero(t, (&gc).Total(), "nothing left charged to GC")
 }
+
+// TestAttributeTombstoneRacesTheNodesRemoval is the same invariant where the
+// attribute's removal races the removal of the node carrying it, which is how
+// the value the tombstone used to copy could end up charged to GC rather than
+// to Live.
+//
+// The GC half of that compensation is pinned directly, at the CRDT layer, by
+// TestRemoveStyleOnATombstonedNodeDebitsGC: the Tree's range traversal does not
+// reach a node its own replica has already tombstoned, so this document-level
+// shape exercises convergence and the rebuild, not that branch.
+func TestAttributeTombstoneRacesTheNodesRemoval(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{
+			Type: "doc",
+			Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "world"}}},
+			},
+		})
+		return nil
+	}))
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Style(0, 7, map[string]string{"b": "a-long-attribute-value"})
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	// Concurrent: d1 deletes the styled paragraph, d2 strips the attribute
+	// from it. d2's removal reaches d1 after the node is already a tombstone.
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 7, nil, 0)
+		return nil
+	}))
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").RemoveStyle(0, 7, []string{"b"})
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	require.Equal(t, d1.Marshal(), d2.Marshal(), "sanity: the replicas converged")
+	assertRebuildsSame(t, d1, "the attribute was stripped from a tombstone")
+	assertRebuildsSame(t, d2, "the node was tombstoned under a stripped attribute")
+
+	vv := d1.VersionVector().DeepCopy()
+	for _, actor := range []time.ActorID{a1, a2} {
+		if v := d2.VersionVector().VersionOf(actor); v > vv.VersionOf(actor) {
+			vv.Set(actor, v)
+		}
+	}
+	d1.GarbageCollect(vv)
+	d2.GarbageCollect(vv)
+	assert.Equal(t, 0, d1.GarbageLen())
+	gc := d1.DocSize().GC
+	assert.Zero(t, (&gc).Total(), "collection must not leave the dropped value behind")
+}

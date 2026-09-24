@@ -156,3 +156,46 @@ func TestRHTRemoveMintsAValuelessTombstone(t *testing.T) {
 	assert.Equal(t, resource.DataSize{}, absentRemoval.ValueDropped,
 		"an absent key was charging nothing to drop")
 }
+
+// TestRemoveStyleOnATombstonedNodeDebitsGC pins the other ledger the dropped
+// value can leave. canStyle admits a node removed concurrently with the change,
+// so the node holding the attribute may itself be a tombstone -- and there the
+// value's bytes were being carried by that node's GC charge, taken when the
+// node was removed and the attribute was still live. Dropping the value from
+// the tombstone without taking them back out of GC would strand them there,
+// where only collection makes them visible.
+func TestRemoveStyleOnATombstonedNodeDebitsGC(t *testing.T) {
+	const value = "a-long-attribute-value"
+
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+	from, to, err := text.CreateRange(0, 0)
+	require.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(from, to, "Hello", nil, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	// The range a concurrent editor holds: resolved before the delete, so it
+	// still addresses the node after it becomes a tombstone.
+	from, to, err = text.CreateRange(0, 5)
+	require.NoError(t, err)
+
+	styleFrom, styleTo, err := text.CreateRange(0, 5)
+	require.NoError(t, err)
+	_, _, _, err = text.Style(styleFrom, styleTo, map[string]string{"b": value}, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	delFrom, delTo, err := text.CreateRange(0, 5)
+	require.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(delFrom, delTo, "", nil, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	_, size, _, err := text.RemoveStyle(from, to, []string{"b"}, ctx.IssueTimeTicket(), nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, -len(value)*2, size.GC.Data,
+		"the value the tombstone no longer carries has to leave the GC charge holding it")
+	assert.Equal(t, resource.DataSize{}, size.Live,
+		"Live never held it: the node was already a tombstone")
+}
