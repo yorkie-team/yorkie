@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { disclosesAiAuthorship, hasDisclosureTrailer, DISCLOSURE_TRAILER, HANDOFF_MARKER } from "./disclosure.mjs";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { disclosesAiAuthorship, hasDisclosureTrailer, ensureDisclosed, DISCLOSURE_TRAILER, DISCLOSURE_SENTENCE, DISCLOSURE_BLOCK_MARKER, HANDOFF_MARKER } from "./disclosure.mjs";
 
 // --- the promotion gate's self-report -----------------------------------------
 //
@@ -91,4 +94,88 @@ test("the constants are pinned — both are contracts with something outside thi
   // no error anywhere — the reader simply finds nothing.
   assert.equal(DISCLOSURE_TRAILER, "Assisted-by: Claude Code (autonomous)");
   assert.equal(HANDOFF_MARKER, "<!-- agent-handoff -->");
+});
+
+// --- the sentence the pipeline writes ----------------------------------------
+
+test("the sentence this pipeline writes satisfies the gate that reads it", () => {
+  // THE WHOLE POINT OF PAIRING THEM IN ONE MODULE. The writer and the gate were
+  // two independent readings of the same English and they disagreed: the house
+  // attribution line is "🤖 Generated with Claude Code", which names the actor
+  // and never says `autonomous`, so every agent-pushed PR failed a gate nobody
+  // could see failing until one sat unpromotable with six green lenses (#2030).
+  // If someone edits either the sentence or the predicate, this fails.
+  assert.equal(disclosesAiAuthorship(DISCLOSURE_SENTENCE), true, DISCLOSURE_SENTENCE);
+  assert.equal(disclosesAiAuthorship(`${DISCLOSURE_SENTENCE}.`), true);
+});
+
+test("the sentence survives being appended to a real PR body", () => {
+  // Not the same assertion as above. The predicate splits on `.`, `;`, `\n`,
+  // `!` and `?`, so a sentence that discloses on its own can stop disclosing
+  // once it sits next to other text — and every body this is appended to ends
+  // with a markdown link whose URL contains dots.
+  const body = [
+    "## What this does",
+    "",
+    "Fixes the split order. See https://example.com/a.b.c for context.",
+    "",
+    "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+  ].join("\n");
+  const { changed, body: next } = ensureDisclosed(body);
+  assert.equal(changed, true, "a body with only the house attribution line must gain the disclosure");
+  assert.equal(disclosesAiAuthorship(next), true, `the appended body must satisfy the gate:\n${next}`);
+  assert.ok(next.startsWith(body.trimEnd()), "the original body must be preserved verbatim");
+});
+
+test("ensureDisclosed never speaks twice, and never over-writes a human", () => {
+  const { body: once } = ensureDisclosed("## Summary\n\nsomething");
+  assert.equal(ensureDisclosed(once).changed, false, "appending must be idempotent");
+  // A human who wrote their own disclosure keeps their words.
+  const mine = "I ran this autonomously with Claude Code and checked it by hand";
+  assert.equal(ensureDisclosed(mine).changed, false);
+  assert.equal(ensureDisclosed(mine).body, mine);
+  // The marker alone also stops a second append, in case the predicate is ever
+  // narrowed: the block is still there and saying it again helps nobody.
+  const marked = `x\n\n${DISCLOSURE_BLOCK_MARKER}\nsomething else entirely`;
+  assert.equal(ensureDisclosed(marked).changed, false);
+});
+
+test("junk in, unchanged out — this runs beside a fix round that must not break", () => {
+  for (const junk of [null, undefined, 42, [], {}]) {
+    const r = ensureDisclosed(junk);
+    assert.equal(typeof r.body, "string", JSON.stringify(junk));
+  }
+  assert.equal(ensureDisclosed("").changed, true, "an empty body still needs the disclosure");
+  assert.equal(disclosesAiAuthorship(ensureDisclosed("").body), true);
+});
+
+test("every job that pushes a fix also discloses", () => {
+  // THE DEAD END WAS STRUCTURAL, not a one-off. Three jobs push commits to a
+  // PR — the on-demand fixer, the panel's fix round, and the CI-fix arm — and a
+  // PR that any of them touches needs the disclosure before it can ever be
+  // promoted. A fourth pushing job added without this step recreates the dead
+  // end silently: the panel goes green and `promote` refuses forever.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  // DERIVED, not listed. "Can push" is "mints a token with contents: write" —
+  // that is the capability, and it is one line in the file that grants it. An
+  // earlier version of this test keyed on the presence of `claude-code-action`
+  // and was wrong in both directions: it missed nothing, but it flagged
+  // agent-summarize.yml, which runs a model with `contents: read` and
+  // `--allowedTools "Read,Write"` and cannot push at all. It did find a real
+  // fourth pusher the author had missed — agent-review-reply.yml — which is why
+  // the rule is derived rather than maintained by hand.
+  const pushers = readdirSync(dir)
+    .filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))
+    .filter((f) => /^\s+permission-contents: write/m.test(readFileSync(path.join(dir, f), "utf8")));
+  assert.ok(pushers.length >= 4, `expected the pushing workflows to be found, got: ${pushers.join(", ")}`);
+  for (const file of pushers) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    assert.match(
+      wf,
+      /- name: Disclose agent authorship in the PR body/,
+      `${file} can push commits to a PR but never discloses, so that PR can never be promoted`,
+    );
+    assert.match(wf, /disclose-pr\.mjs"? "\$(?:PR|\{PR\})"/, `${file}: the disclosure step must run the CLI`);
+  }
 });

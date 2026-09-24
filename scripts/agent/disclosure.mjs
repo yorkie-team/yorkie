@@ -63,6 +63,51 @@ export function disclosesAiAuthorship(body) {
     .some((clause) => AUTONOMOUS.test(clause) && AI_ACTOR.test(clause) && !NEGATOR.test(clause));
 }
 
+/**
+ * Hidden marker on the block `ensureDisclosed` appends to a PR body.
+ *
+ * Its job is idempotence and attribution: the agent may push to one PR many
+ * times, and a human reading the diff of their own PR body deserves to see which
+ * part they did not write.
+ */
+export const DISCLOSURE_BLOCK_MARKER = "<!-- agent-authorship -->";
+
+/**
+ * The exact sentence the pipeline writes when it discloses its own authorship.
+ *
+ * IT IS PAIRED WITH THE PREDICATE ABOVE, and a test asserts the pairing —
+ * `disclosesAiAuthorship(DISCLOSURE_SENTENCE)` must be true. Without that, the
+ * writer and the gate are two independent readings of the same English and can
+ * drift apart silently, which is the whole failure this constant exists to end:
+ * every agent-pushed PR satisfied the house attribution line
+ * ("Generated with Claude Code") and none of them satisfied the gate, so a PR an
+ * agent had worked on could never be promoted. No URL and no abbreviation in the
+ * sentence, deliberately — the predicate splits on `.`, so a link would break the
+ * clause in half and neither half would disclose anything.
+ */
+export const DISCLOSURE_SENTENCE =
+  "Commits on this pull request were written autonomously by Claude Code";
+
+/**
+ * Append the disclosure to a PR body, unless it already discloses.
+ *
+ * Idempotent on BOTH halves: a body that already satisfies the predicate is
+ * returned untouched (a human may have written their own sentence, and
+ * overwriting it would be rude and pointless), and so is one already carrying
+ * this block.
+ *
+ * @param {string} body the current PR body
+ * @returns {{changed: boolean, body: string}}
+ */
+export function ensureDisclosed(body) {
+  const current = String(body ?? "");
+  if (disclosesAiAuthorship(current) || current.includes(DISCLOSURE_BLOCK_MARKER)) {
+    return { changed: false, body: current };
+  }
+  const block = `${DISCLOSURE_BLOCK_MARKER}\n${DISCLOSURE_SENTENCE}.`;
+  return { changed: true, body: current.trimEnd() === "" ? block : `${current.trimEnd()}\n\n${block}` };
+}
+
 /** True iff a single commit message carries the autonomous disclosure trailer. */
 export function hasDisclosureTrailer(message) {
   return String(message ?? "").includes(DISCLOSURE_TRAILER);

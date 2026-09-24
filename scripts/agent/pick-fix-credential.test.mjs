@@ -244,14 +244,16 @@ test("no fix-job step reads from a path the fix job never creates", () => {
   // workflow fails loudly here instead of silently checking the wrong region.
   const start = wf.indexOf("\n  fix:\n");
   assert.ok(start > 0, "could not locate the fix job");
-  const after = wf.indexOf("\n  close-stuck-checks:\n", start);
-  assert.ok(after > start, "could not locate the job after fix");
-  const fixJob = wf.slice(start, after);
+  // Up to the NEXT job header, whichever it is: `fix-report` follows `fix` now,
+  // and its steps run from its own checkout, not from anything `fix` staged.
+  const next = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(start + 1));
+  assert.ok(next, "could not locate the job after fix");
+  const fixJob = wf.slice(start, start + 1 + next.index);
 
   // The staging step is what makes the path real.
   assert.match(fixJob, /cp -R \.\/scripts\/agent "\$\{\{ runner\.temp \}\}\/agent-tools"/);
 
-  // And nothing in the job may reference `.trusted`, in a run: line or a guard.
+  // And nothing in the job may reference a `.trusted` path — it creates none.
   const offenders = fixJob
     .split("\n")
     .filter((l) => l.includes(".trusted") && !/^\s*#/.test(l));

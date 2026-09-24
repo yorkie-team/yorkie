@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readWorkflow, skipWithout } from "./workflow-presence.mjs";
-import { isPagedLatchComment, PAGE_AUTHOR_LOGINS } from "./rounds.mjs";
+import { isPagedLatchComment, PAGE_AUTHOR_LOGINS, PAGED_LATCH } from "./rounds.mjs";
 import { readFileSync } from "node:fs";
 import {
   FIX_REPORT_MARKER,
@@ -20,6 +20,9 @@ import {
   renderFixReportBody,
   parseItemString,
   readFixReports,
+  republishFixReport,
+  readEmitted,
+  MAX_EMITTED_BYTES,
 } from "./fix-report.mjs";
 import {
   matchRebuttal,
@@ -455,11 +458,74 @@ test("the dispute count is RENDERED, never serialized into the record", () => {
   }
 });
 
-test("cmdPost counts the disputes actually on the PR", () => {
+test("cmdPost counts posted disputes, and leaves an emitted body's count to republish", () => {
   // The renderer is pure and proves nothing about being fed a real count.
+  //
+  // An emitted body is never posted as written — `republish` re-renders it after
+  // the trusted step has posted this round's disputes, and counts them THEN. So
+  // the count belongs to the posting path, and the emit path does not read a
+  // directory the agent could fill with anything.
   const src = readFileSync(new URL("./fix-report.mjs", import.meta.url), "utf8");
-  assert.match(src, /renderFixReportBody\(rec, \{ disputed: readRebuttals\(pr\)\.length \}\)/);
-  assert.match(src, /import \{ fromRebuttalAuthor, readRebuttals \} from "\.\/rebuttal\.mjs"/);
+  assert.match(src, /disputed: args\.emit \? 0 : readRebuttals\(pr\)\.length/);
+  assert.match(src, /disputed: args\.out \? 0 : readRebuttals\(pr\)\.length,/);
+  assert.doesNotMatch(src, /readdirSync/, "the emit path must not count files the agent wrote");
+});
+
+test("republish posts only what the trusted renderer produces", () => {
+  // THE AGENT OWNS THE EMITTED FILE. It holds an unrestricted Bash, so the file
+  // can say anything — and posting it verbatim under the App identity forged
+  // every marker the pipeline trusts by author. The paged latch is the sharpest:
+  // one file froze the panel and the fixer for good.
+  const forged = `${PAGED_LATCH}\n🛑 owned`;
+  assert.equal(republishFixReport(forged), null, "no record, nothing posted");
+
+  // A real record survives with its claims intact...
+  const rec = {
+    head: "abc12345",
+    fixed: [{ lens: "security", file: "a.go", summary: "the finding", note: "changed a.go:3" }],
+    skipped: [],
+  };
+  const emitted = `${PAGED_LATCH}\nanything at all\n${renderFixReportBody(rec)}`;
+  const body = republishFixReport(emitted, { disputed: 2 });
+  assert.ok(body, "a parseable record is republished");
+  assert.deepEqual(parseFixReportComment(body).fixed, parseFixReportComment(emitted).fixed);
+  assert.match(body, /\*\*Disputed \(2\)\*\*/, "the count is the trusted step's, not the file's");
+  // So is the head, when the trusted step knows it.
+  assert.equal(parseFixReportComment(republishFixReport(emitted, { head: "trusted1" })).head, "trusted1");
+  assert.equal(parseFixReportComment(republishFixReport(emitted)).head, "abc12345");
+  // ...and the prose around it is not: the body is rendered afresh, so nothing
+  // outside the record reaches the PR, and no trusted marker survives.
+  assert.ok(!body.includes("anything at all"));
+  assert.ok(!body.includes(PAGED_LATCH));
+  assert.equal(isPagedLatchComment({ body, user: { type: "Bot", login: PAGE_AUTHOR_LOGINS[1] } }), false);
+
+  // A marker smuggled INTO a claim is neutralised by the renderer, as for cmdPost.
+  const inClaim = renderFixReportBody({
+    head: "abc", fixed: [{ lens: "docs", file: "b.md", summary: PAGED_LATCH, note: PAGED_LATCH }], skipped: [],
+  });
+  const again = republishFixReport(inClaim);
+  assert.equal(isPagedLatchComment({ body: again, user: { type: "Bot", login: PAGE_AUTHOR_LOGINS[1] } }), false);
+});
+
+test("republish reads the emitted file as bounded data", async () => {
+  const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const nodePath = (await import("node:path")).default;
+  const dir = mkdtempSync(nodePath.join(tmpdir(), "fix-report-emit-"));
+  try {
+    assert.equal(readEmitted(nodePath.join(dir, "missing.md")), null);
+    const sub = nodePath.join(dir, "a-directory");
+    mkdirSync(sub);
+    assert.equal(readEmitted(sub), null, "a directory is not a report");
+    const big = nodePath.join(dir, "big.md");
+    writeFileSync(big, "x".repeat(MAX_EMITTED_BYTES + 1));
+    assert.equal(readEmitted(big), null, "an oversized file is refused, not read");
+    const ok = nodePath.join(dir, "ok.md");
+    writeFileSync(ok, "report");
+    assert.equal(readEmitted(ok), "report");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // --- the report must be posted BEFORE the push -------------------------------

@@ -59,8 +59,9 @@ import (
 // execute fine. That one does have a repair, and it has to, or the new
 // rejection would strand a change that was previously harmless.
 //
-// Apart from it, only clamps -- which have exactly one defensible value --
-// appear below.
+// Apart from it, what appears below is clamps -- which have exactly one
+// defensible value -- and the two drops, withoutEmptyContents and
+// dropUndatedAttrs, whose prior behavior was itself a crash.
 func NormalizeStoredOperations(pbOps []*api.Operation) {
 	for _, pbOp := range pbOps {
 		if pbEdit := pbOp.GetEdit(); pbEdit != nil {
@@ -96,6 +97,7 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 			pbTreeEdit.SplitLevel = 0
 		}
 
+		pbTreeEdit.Contents = withoutEmptyContents(pbTreeEdit.Contents)
 		clampTreePos(pbTreeEdit.From)
 		clampTreePos(pbTreeEdit.To)
 		for _, pbNodes := range pbTreeEdit.Contents {
@@ -205,6 +207,36 @@ func clampTextNodePos(pbPos *api.TextNodePos) {
 	if pbPos.RelativeOffset < 0 {
 		pbPos.RelativeOffset = 0
 	}
+}
+
+// withoutEmptyContents removes the content groups holding no tree node.
+//
+// Like dropUndatedAttrs, this does not reproduce the prior behavior, because
+// that behavior was itself a crash: FromTreeNodes reports an absent or empty
+// group as a nil root, the nil used to be carried into the operation's content
+// slice, and TreeEdit.Execute dereferences each content to deep-copy it — a
+// nil-pointer panic on apply, both in the server replaying the change and on
+// every replica it is forwarded to. Dropping the group loses nothing a
+// well-formed change carried (every group ToTreeNodesWhenEdit writes holds at
+// least the root of one content node), and leaves an edit that inserts the
+// groups that are intact. All-empty collapses to no content at all, which is
+// an ordinary deletion — the same edit the operation already described, since
+// the empty group named nothing to insert.
+func withoutEmptyContents(pbGroups []*api.TreeNodes) []*api.TreeNodes {
+	kept := make([]*api.TreeNodes, 0, len(pbGroups))
+	for _, pbGroup := range pbGroups {
+		if pbGroup == nil || len(pbGroup.Content) == 0 {
+			continue
+		}
+
+		kept = append(kept, pbGroup)
+	}
+
+	if len(kept) == 0 {
+		return nil
+	}
+
+	return kept
 }
 
 // dropUndatedAttrs removes restore-span attributes carrying no updatedAt.

@@ -4,6 +4,15 @@ on:
     types: [published]
 jobs:
   call-base-docker-publish:
+    # NOT FOR A RELEASE THE AGENT APP CREATED. `contents: write` is one
+    # permission covering commits AND releases, so the token the fix agents hold
+    # to push a branch can also publish a release — and this workflow answers
+    # that with `secrets: inherit`, which is Docker Hub credentials. There is no
+    # narrower grant to ask for; the escape closes here, at the consumer, or it
+    # does not close. Nothing legitimate publishes a release as the App, so the
+    # condition costs nothing today and refuses the one thing it exists to
+    # refuse. See docs/design/agent-command-verbs.md, Phase I.
+    if: github.event.release.author.login != 'yorkie-team-agent[bot]'
     uses: ./.github/workflows/base-docker-publish.yml
     secrets: inherit
     with:

@@ -27,12 +27,11 @@ on:
     workflows: ["CI"]
     types: [completed]
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write # comment + label the PR (issues API covers PR comments/labels)
-  actions: read # count prior failed CI runs (unforgeable attempt bound)
-  checks: read # loop-status.mjs reads per-commit check runs for the round table
+# Per job, and NEVER the approve+merge pair on the job the agent runs in. This was
+# workflow-wide `contents: write` + `pull-requests: write`, so the GITHUB_TOKEN of
+# the job holding the agent could merge — whatever the narrow App token below
+# withheld.
+permissions: {}
 
 env:
   # gh expands `{owner}/{repo}` via git; GH_REPO makes it skip that lookup.
@@ -102,6 +101,24 @@ jobs:
     concurrency:
       group: agent-iterate-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: true
+    # GITHUB_TOKEN for the pre-agent steps only: the guard reads CI history and
+    # comments, the paged path comments and labels, and the diagnosis reads a
+    # log. A PR conversation comment needs `pull-requests: write`; nothing here
+    # needs `contents: write` — the push uses the narrow App token — so the
+    # ambient token of the job the agent runs in cannot merge.
+    permissions:
+      contents: read
+      pull-requests: write # the paged path comments on the PR
+      issues: write
+      actions: read # count prior failed CI runs; read the failed-step log
+      checks: read # loop-status.mjs reads per-commit check runs
+    # Everything the `report` job needs, from steps that ran BEFORE the agent —
+    # see agent-fix.yml's handoff step for why nothing later in this job counts.
+    outputs:
+      proceed: ${{ steps.guard.outputs.proceed }}
+      pr: ${{ steps.guard.outputs.pr }}
+      before: ${{ steps.before-fix.outputs.sha }}
+      agent: ${{ steps.agent.outcome }}
     steps:
       # UNGATED, and first. The `setup-node` further down is gated on
       # `proceed == 'true'` — the fixing branch — while the paging branch runs
@@ -137,43 +154,41 @@ jobs:
             echo "::notice::AGENT_APP_ID or AGENT_APP_PRIVATE_KEY is unset; the CI-fix arm cannot push, so it is standing down."
           fi
 
-      # Auth git ops as the Claude GitHub App so the fix commit re-triggers CI
-      # (GITHUB_TOKEN pushes do not).
-      - name: Generate GitHub App token
+      # THE ONLY APP TOKEN THIS JOB MINTS. Auth git ops as the App so the fix
+      # commit re-triggers CI (GITHUB_TOKEN pushes do not). `contents: write` +
+      # `pull-requests: write` in one token is the exact pair that submits an
+      # APPROVING REVIEW and then merges, and GitHub refuses only an approval of
+      # a PR the same identity authored — this App authors almost none of them.
+      # The agent runs an unrestricted `Bash` over untrusted branch content, and
+      # `actions/checkout` writes whatever token it is given into `.git/config`,
+      # one `git config --get` from being read back.
+      #
+      # A required human approval on `main` is the only human control in this
+      # pipeline; a bot able to supply that approval removes it. So the agent
+      # gets `contents` alone — enough to commit and push — and the wider token
+      # is minted only in the `report` job, on a runner the agent never touched.
+      - name: Generate the agent's narrow token
         if: steps.app.outputs.configured == 'true'
-        id: app-token
-        # Pinned to an immutable commit SHA (not the movable @v1 tag) for
-        # supply-chain safety — this action handles the App private key.
+        id: agent-token
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
-          # Least privilege: only what the steps below need, rather than the App
-          # installation's full permission set — this token is live in a job that
-          # later checks out and executes untrusted branch code. Notably absent:
-          # `workflows`, which is what makes "a fix agent can never rewrite the
-          # lanes that grade it" true rather than aspirational.
-          permission-contents: write # push the fix commit
-          permission-pull-requests: write # reply in the PR thread
-          permission-issues: write # PR conversation comments use the issues API
+          permission-contents: write # commit and push, and nothing else
 
       - uses: actions/checkout@v4
         if: steps.app.outputs.configured == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
 
-      # Stage the TRUSTED main copy of the agent scripts for every step below
-      # that runs one — the same rule the panel's fix job applies to its staged
-      # tools. The branch's own copy is attacker-influenceable code, and those
-      # steps run it with a GITHUB_TOKEN carrying contents:write; main's copy is
-      # not. Staged into RUNNER_TEMP before the fixer and the .trusted-agent dir
-      # removed from the workspace so the fixer cannot commit it. This does NOT
-      # protect against the fixer itself rewriting RUNNER_TEMP mid-job — nothing
-      # executed after the fixer in the same job can be (the panel fix job's
-      # staged metrics step shares exactly this posture) — it removes the
-      # "branch code with a write token" half.
+      # Stage the TRUSTED main copy of the agent scripts for the steps BEFORE
+      # the fixer that run one — the branch's own copy is attacker-influenceable
+      # code, and those steps hold a GITHUB_TOKEN that can comment and label.
+      # Staged into RUNNER_TEMP and the .trusted-agent dir removed from the
+      # workspace so the fixer cannot commit it. Nothing after the fixer runs in
+      # this job at all: the `report` job does that, from its own checkout.
       #
       # STRICT, and it has to be. This was best-effort — `continue-on-error` plus
       # an `if [ -d ]` — because the only things it staged were observability
@@ -345,6 +360,11 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         with:
           go-version: "1.25"
+          # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
+          # build cache after the agent ran, with whatever the agent left there,
+          # under a key the agent controls through `go.sum` — and `ci.yml` and the
+          # Docker publish restore by the same key on `main`.
+          cache: false
       - name: Install the linter (pinned here, not read from the branch)
         if: steps.guard.outputs.proceed == 'true'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
@@ -393,8 +413,9 @@ jobs:
         id: before-fix
         if: steps.guard.outputs.proceed == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: echo "sha=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
       # Single-value state: a CI-fix round is in flight → agent:fixing. Repo is
       # already checked out above; best-effort, advisory.
@@ -447,13 +468,14 @@ jobs:
           node "$RUNNER_TEMP/agent-tools/pick-credential.mjs"
 
       - name: Run Claude Code
+        id: agent
         if: steps.guard.outputs.proceed == 'true'
         # Pinned to the v1 release commit (immutable) for supply-chain safety.
         # github_token is the App token so the fix push re-triggers CI.
         uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ steps.app-token.outputs.token }}
+          github_token: ${{ steps.agent-token.outputs.token }}
           # This loop is triggered by workflow_run from the agent's own (bot)
           # push, so the initiating actor is the App bot. claude-code-action
           # blocks bot-initiated runs unless the bot is allow-listed. Allow ONLY
@@ -502,17 +524,24 @@ jobs:
               can report non-zero even though the ref advanced. If the remote head
               did not advance, fix the cause and push again before your turn ends.
 
-            Then reply in the PR's verification thread noting what you fixed. Do not
-            merge.
+            Do not try to comment on the PR: your token carries no `pull-requests`
+            permission, deliberately, because a token that can comment on a pull
+            request can also approve one. The workflow records the outcome — the
+            commit you pushed — on the PR's loop-status comment for you. Say what
+            you fixed in the commit message. Do not merge.
           claude_args: >-
             --max-turns 80
             --model claude-opus-5
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
 
-      # Diagnostics: keep the fixer's transcript (turns, tool calls, permission
-      # denials, token/cost) so a round that didn't converge is debuggable.
-      # always() so it's captured even when the fixer errored.
-      - name: Upload fix execution log
+      # EVERYTHING AFTER THE AGENT RUNS IN THE `report` JOB BELOW, on a fresh
+      # runner — agent-fix.yml's handoff step documents why: the agent can
+      # rewrite `$GITHUB_ENV` / `$GITHUB_PATH`, `~/.gitconfig` and this
+      # workspace's `.git/config` (a `remote.origin.url` of `ext::sh -c …` is
+      # command execution for the next `git ls-remote origin`), and all of it
+      # applies to every later step of this job. Only DATA crosses: the
+      # transcript, which the report job reads with main's code.
+      - name: Hand the agent's output to the report job
         if: always() && steps.guard.outputs.proceed == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -520,86 +549,152 @@ jobs:
           path: ${{ runner.temp }}/claude-execution-output.json
           if-no-files-found: warn
 
-      # OBSERVABILITY (Phase 1): the CI-fix session's turns/cost/outcome on the
-      # run page. Pre-fixer snapshot, NOT the workspace copy — the fixer step
-      # above can rewrite the workspace (see the staging step's comment).
-      - name: Write CI-fix session job summary
-        if: always() && steps.guard.outputs.proceed == 'true'
+  # THE TRUSTED HALF: main's scripts, a fresh runner, and the wide App token
+  # minted here and nowhere the agent ran. `always()`, because this loop has no
+  # stalled net — a fixer that errored or was cancelled must still page here.
+  report:
+    needs: [iterate]
+    if: always() && needs.iterate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write # loop-status comments on the PR (GITHUB_TOKEN)
+      issues: write # loop-status comment (GITHUB_TOKEN)
+      checks: read # loop-status reads per-commit check runs
+    steps:
+      - uses: actions/checkout@v4
+        if: always()
+        with:
+          ref: main
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: always()
+        with:
+          node-version: 22.x
+
+      - name: Collect the agent's output (untrusted data)
+        if: always()
         continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: claude-ci-fix-execution-output
+          path: ${{ runner.temp }}/agent-output
+
+      - name: Generate GitHub App token
+        if: always()
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-contents: read # read the branch head
+          permission-pull-requests: write # the disclosure edits the PR body
+          permission-issues: write # the page and the effort record
+
+      # The branch head AFTER the round, from the API. Never from a checkout:
+      # the agent owned the old one's `.git/config`, and this job has none.
+      - name: Read the branch head after the fix
+        if: always() && steps.app-token.outcome == 'success'
+        id: after
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          BEFORE: ${{ needs.iterate.outputs.before }}
         run: |
-          [ -f "$RUNNER_TEMP/agent-tools/session-job-summary.mjs" ] || { echo "session-job-summary.mjs not on main yet; skipping"; exit 0; }
-          node "$RUNNER_TEMP/agent-tools/session-job-summary.mjs" --execution "$RUNNER_TEMP/claude-execution-output.json" --kind ci-fix --title "CI-fix agent session"
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || echo '')"
+          echo "sha=$AFTER" >> "$GITHUB_OUTPUT"
+          # Only a new commit when BOTH heads resolved AND they differ. An empty
+          # value on either side means we could NOT establish that one landed.
+          if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
+            echo "advanced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "advanced=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # OBSERVABILITY (Phase 1): the CI-fix session's turns/cost/outcome on the
+      # run page.
+      - name: Write CI-fix session job summary
+        if: always()
+        continue-on-error: true
+        run: node scripts/agent/session-job-summary.mjs --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" --kind ci-fix --title "CI-fix agent session"
 
       # GAP FIX: a CI-fix round that pushes NO commit dead-ends the loop silently
       # — no new commit → no new CI → no next round, and the attempts guard's
       # failed-CI counter never advances, so it never trips. Detect "fixer ran
       # but the branch head didn't advance" and page a human via the same
-      # agent-paged latch. always(): this loop has no stalled net, so a hard
-      # fixer error must page here too. We do NOT blind-retry — the fixer just
-      # failed to converge, so re-running the same config would burn budget.
+      # agent-paged latch. This job is `always()`: this loop has no stalled net,
+      # so a hard fixer error must page here too. We do NOT blind-retry — the
+      # fixer just failed to converge, so re-running the same config would burn
+      # budget.
       - name: Page if the fix produced no commit
-        if: always() && steps.guard.outputs.proceed == 'true'
+        if: always() && steps.after.outputs.advanced != 'true'
+        env:
+          # GITHUB_TOKEN when the mint failed: this job has no stalled net, so
+          # the page must not depend on the one credential that just broke.
+          # `github-actions[bot]` is an author the latch readers trust.
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.iterate.outputs.pr }}
+          BEFORE: ${{ needs.iterate.outputs.before }}
+          AFTER: ${{ steps.after.outputs.sha }}
+        run: |
+          echo "Branch head did not advance (before='$BEFORE' after='$AFTER') — paging a human." >&2
+          # Also covers a hard fixer error or an earlier failed step — keep the
+          # cause generic, don't assert turn-budget/denials (which would
+          # mislabel those cases).
+          printf '%s\n' \
+            '<!-- agent-paged -->' \
+            '🛑 The CI-fix round did not advance the branch head, so CI stays red and the loop cannot re-trigger itself (no new push → no new CI). This can mean the fixer produced no new commit, did not converge within its turn budget, hit tool-permission denials, could not push, the branch head could not be determined, or an earlier step errored — see the run log and the `claude-ci-fix-execution-output` artifact. **A human should take over** on this PR.' \
+            '' \
+            "Where to look: [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) → job \`iterate\`; a fixer transcript, when one was captured, is in the \`claude-ci-fix-execution-output\` artifact (its upload warns instead of failing when the fixer died before writing one)." \
+            | gh pr comment "$PR" --body-file -
+          node scripts/agent/set-state.mjs "$PR" blocked || true
+
+      # DISCLOSE, NOW THAT IT IS TRUE — same rule and same reason as
+      # agent-fix.yml: `mark-ready.mjs` refuses to promote a PR whose body does
+      # not disclose autonomous AI authorship (#2030). ONLY when a commit
+      # landed: this arm also runs on human PRs opted in with `@claude loop`,
+      # and a round that pushed nothing must not write "commits on this pull
+      # request were written autonomously" onto somebody else's change.
+      - name: Disclose agent authorship in the PR body
+        if: always() && steps.after.outputs.advanced == 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR: ${{ steps.guard.outputs.pr }}
-          BEFORE: ${{ steps.before-fix.outputs.sha }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: |
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
-          # Only trust a "CI will re-run" conclusion when BOTH remote heads
-          # resolved AND they differ. `git ls-remote | cut` masks a failed
-          # lookup (network error, missing branch) as an empty string and the
-          # before-fix step may have been skipped, so an empty BEFORE or AFTER
-          # means we could NOT establish that a new commit landed — fail safe
-          # and page rather than assume progress and let the loop dead-end.
-          if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
-            echo "A new commit reached the branch ($AFTER) — CI will re-run."
-          else
-            echo "Branch head did not advance (before='$BEFORE' after='$AFTER') — paging a human." >&2
-            # This step runs under always(), so it also covers a hard fixer error
-            # or an earlier failed step — keep the cause generic, don't assert
-            # turn-budget/denials (which would mislabel those cases).
-            printf '%s\n' \
-              '<!-- agent-paged -->' \
-              '🛑 The CI-fix round did not advance the branch head, so CI stays red and the loop cannot re-trigger itself (no new push → no new CI). This can mean the fixer produced no new commit, did not converge within its turn budget, hit tool-permission denials, could not push, the branch head could not be determined, or an earlier step errored — see the run log and the `claude-ci-fix-execution-output` artifact. **A human should take over** on this PR.' \
-              '' \
-              "Where to look: [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) → job \`iterate\`; a fixer transcript, when one was captured, is in the \`claude-ci-fix-execution-output\` artifact (its upload warns instead of failing when the fixer died before writing one)." \
-              | gh pr comment "$PR" --body-file -
-            node "$RUNNER_TEMP/agent-tools/set-state.mjs" "$PR" blocked || true
-          fi
+          PR: ${{ needs.iterate.outputs.pr }}
+        run: node scripts/agent/disclose-pr.mjs "$PR"
 
       # OBSERVABILITY (Phase 1): reflect the CI-fix outcome on the sticky
       # loop-status comment — pushed (CI re-runs) or paged (the step above
-      # posted the page). Pre-fixer snapshot, NOT the workspace copy — the
-      # fixer can rewrite the workspace; skip quietly where absent.
+      # posted the page).
       - name: Update loop status (CI-fix outcome)
-        if: always() && steps.guard.outputs.proceed == 'true'
+        if: always() && steps.after.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ steps.guard.outputs.pr }}
-          BEFORE: ${{ steps.before-fix.outputs.sha }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          PR: ${{ needs.iterate.outputs.pr }}
+          ADVANCED: ${{ steps.after.outputs.advanced }}
+          AFTER: ${{ steps.after.outputs.sha }}
         run: |
-          [ -f "$RUNNER_TEMP/agent-tools/loop-status.mjs" ] || { echo "loop-status.mjs not on main yet; skipping"; exit 0; }
-          AFTER="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
-          if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ]; then
+          if [ "$ADVANCED" = "true" ]; then
             EVENT=ci-fix-pushed
             NOTE="CI-fix pushed \`${AFTER:0:9}\` — CI re-runs on it."
           else
             EVENT=paged
             NOTE="The CI-fix round did not advance the branch — paged to a human (see the page comment)."
           fi
-          node "$RUNNER_TEMP/agent-tools/loop-status.mjs" update "$PR" --event "$EVENT" --note "$NOTE" \
+          node scripts/agent/loop-status.mjs update "$PR" --event "$EVENT" --note "$NOTE" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
       # Record this session's effort into the PR metrics ledger (fail-safe:
       # continue-on-error + the script exits 0 on any error, so metrics never
       # break the iterate loop).
       - name: Record agent effort metrics
-        if: always() && steps.guard.outputs.proceed == 'true'
+        if: always() && steps.app-token.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR: ${{ steps.guard.outputs.pr }}
-        run: node "$RUNNER_TEMP/agent-tools/metrics.mjs" record --execution "$RUNNER_TEMP/claude-execution-output.json" --kind ci-fix --pr "$PR"
+          PR: ${{ needs.iterate.outputs.pr }}
+        run: node scripts/agent/metrics.mjs record --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" --kind ci-fix --pr "$PR"

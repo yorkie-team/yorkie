@@ -5,6 +5,15 @@ on:
       - main
 jobs:
   call-base-docker-publish:
+    # NOT FOR A PUSH THE AGENT APP MADE — the twin of docker-publish.yml's
+    # release guard. `main` requires a human approving review, so the App cannot
+    # push there directly; but `contents: write`, which every fix agent holds to
+    # push its branch, also reaches the MERGE endpoint, and merging a PR that a
+    # human already approved is a push to `main` authored by the App. This
+    # workflow answers such a push with `secrets: inherit` — Docker Hub
+    # credentials. Nothing legitimate merges as the App, so the condition costs
+    # nothing and closes the one path it exists to close.
+    if: github.actor != 'yorkie-team-agent[bot]'
     uses: ./.github/workflows/base-docker-publish.yml
     secrets: inherit
     with:

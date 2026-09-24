@@ -59,6 +59,12 @@
 // hand-off comment. The final review + merge stay human, enforced by branch
 // protection.
 //
+// Each of those three guards on its OWN state, not on draft state: a PR that is
+// already out of draft (a human `agent:managed` PR, an `@claude loop` opt-in —
+// only the loop's own PRs start as drafts) still needs the label and the
+// hand-off. Skipping them on `!isDraft` is what stranded #2033 on
+// `agent:reviewing` after a clean panel round.
+//
 // Usage:
 //   node ./scripts/agent/mark-ready.mjs <pr-number> [--promote] [--require-checks a,b,c]
 //     (default is a dry run that only reports gate status and exits non-zero if
@@ -72,6 +78,15 @@ import { execFileSync } from "node:child_process";
 import { allRequiredPassed, ciConclusion, CI_WORKFLOW_FILE, definesCi, DEFAULT_REVIEW_CHECKS } from "./checks.mjs";
 import { computeLabelSet } from "./set-state.mjs";
 import { disclosesAiAuthorship, HANDOFF_MARKER } from "./disclosure.mjs";
+
+// `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
+// blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
+// error, not an empty result, a CRASH — and the caller reports it as whatever
+// its own failure means. On #2026 that was the review-round guard dying and the
+// pipeline announcing "the fixer agent failed", which it had not: it never ran.
+// A PR accumulates comments as it is reviewed, so this gets MORE likely the
+// longer a PR is worked on, which is exactly backwards.
+const GH_MAX_BUFFER = 64 * 1024 * 1024;
 
 const prNumber = process.argv[2];
 const promote = process.argv.includes("--promote");
@@ -112,7 +127,7 @@ if (REQUIRED_CHECKS.length === 0 && !process.argv.includes("--allow-no-checks"))
 }
 
 function gh(args) {
-  return execFileSync("gh", args, { encoding: "utf8" });
+  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: GH_MAX_BUFFER });
 }
 
 function ghJson(args) {
@@ -128,7 +143,7 @@ function ghJson(args) {
 function ghMutate(args) {
   const token = process.env.GH_MUTATION_TOKEN;
   const env = token ? { ...process.env, GH_TOKEN: token } : process.env;
-  return execFileSync("gh", args, { encoding: "utf8", env });
+  return execFileSync("gh", args, { encoding: "utf8", env, maxBuffer: GH_MAX_BUFFER });
 }
 
 // --- gather PR state -------------------------------------------------------
@@ -356,9 +371,9 @@ for (const g of gates) {
 
 // THE ONE GATE A HUMAN AUTHOR HITS BY DEFAULT, so it says what to do about it.
 //
-// Issue → PR is not installed in this repository, so the PRs that reach this
-// gate are human-authored ones that opted into the loop with `@claude loop` —
-// and their bodies come from .github/PULL_REQUEST_TEMPLATE.md, which says
+// Issue → PR discloses in the body it opens, so the PRs that reach this gate
+// without one are human-authored ones that opted into the loop with `@claude
+// loop` — and their bodies come from .github/PULL_REQUEST_TEMPLATE.md, which says
 // nothing about AI authorship. Left as a bare ❌ the report reads as a broken
 // pipeline on every such PR, which is how a report stops being read.
 //
@@ -391,28 +406,39 @@ if (!promote) {
   process.exit(0);
 }
 
-if (!pr.isDraft) {
-  console.log("\nPR is already marked ready — nothing to do.");
-  process.exit(0);
-}
-
 // --- promote ---------------------------------------------------------------
 
-// Flip draft → ready. This is the one mutation the default GITHUB_TOKEN can't
-// do; a failure here is a permission/tooling problem, NOT a gate failure — exit
-// 3 (distinct from the exit-1 "gates not satisfied") with a clear message so the
-// workflow surfaces it loudly (and the stalled net pages a human) instead of
-// silently leaving the PR a draft.
-try {
-  ghMutate(["pr", "ready", prNumber]);
-} catch (err) {
-  console.error(
-    `\nAll ready-gates passed, but flipping PR #${prNumber} to ready FAILED: ${err.message}\n` +
-      "This is a permission/tooling problem, not a gate failure. The promote job " +
-      "must pass a GitHub App token via GH_MUTATION_TOKEN that can mark a PR ready — " +
-      "the default GITHUB_TOKEN cannot (markPullRequestReadyForReview).",
-  );
-  process.exit(3);
+// Promotion is THREE mutations — flip draft → ready, set `agent:ready`, post the
+// hand-off — and only the first one is about draft state. This used to return
+// early on `!pr.isDraft`, reading "not a draft" as "already promoted", which is
+// only true for the PRs the loop itself opened: those start as drafts, so out of
+// draft does mean this script had already run.
+//
+// Every OTHER way into the loop opens a PR that is not a draft — a human PR
+// labelled `agent:managed`, an `@claude loop` opt-in — and for those the early
+// return skipped the two mutations that had never run. #2033 cleared all four
+// gates on round 7 and sat on `agent:reviewing` with no hand-off until it was
+// merged by hand; the promote job exited 0 and reported `promoted`, so nothing
+// said otherwise. Each step now guards on ITS OWN state instead.
+if (pr.isDraft) {
+  // The one mutation the default GITHUB_TOKEN can't do; a failure here is a
+  // permission/tooling problem, NOT a gate failure — exit 3 (distinct from the
+  // exit-1 "gates not satisfied") with a clear message so the workflow surfaces
+  // it loudly (and the stalled net pages a human) instead of silently leaving
+  // the PR a draft.
+  try {
+    ghMutate(["pr", "ready", prNumber]);
+  } catch (err) {
+    console.error(
+      `\nAll ready-gates passed, but flipping PR #${prNumber} to ready FAILED: ${err.message}\n` +
+        "This is a permission/tooling problem, not a gate failure. The promote job " +
+        "must pass a GitHub App token via GH_MUTATION_TOKEN that can mark a PR ready — " +
+        "the default GITHUB_TOKEN cannot (markPullRequestReadyForReview).",
+    );
+    process.exit(3);
+  }
+} else {
+  console.log("\nPR is not a draft — no flip needed; labelling and handing off.");
 }
 
 // Single-value state → `agent:ready` (best-effort; a label hiccup must not abort
@@ -465,12 +491,40 @@ const handoff = [
   "requires. Merge, release, and deploy remain manual.",
 ].join("\n");
 
-// Best-effort: the PR is already flipped to ready; don't fail the promotion if
-// the hand-off comment can't be posted.
-try {
-  ghMutate(["pr", "comment", prNumber, "--body", handoff]);
-} catch (err) {
-  console.warn(`PR flipped to ready, but posting the hand-off comment failed: ${err.message}`);
+// IDEMPOTENCE, which the draft flip used to provide for free: a PR could only
+// leave draft once, so this line could only be reached once. A non-draft PR has
+// no such latch — it can clear the gates on every green panel round — so the
+// marker carries it instead.
+//
+// A read failure POSTS. The two outcomes are a duplicate comment and a missing
+// hand-off, and only one of them loses information; "I could not tell" must not
+// be resolved as "it is already there".
+function handoffAlreadyPosted() {
+  try {
+    const pages = ghJson([
+      "api",
+      "--paginate",
+      "--slurp",
+      `repos/{owner}/{repo}/issues/${prNumber}/comments?per_page=100`,
+    ]);
+    const comments = Array.isArray(pages) ? pages.flat() : [];
+    return comments.some((c) => (c?.body ?? "").includes(HANDOFF_MARKER));
+  } catch (err) {
+    console.warn(`Could not read the PR's comments to de-duplicate the hand-off: ${err.message}`);
+    return false;
+  }
+}
+
+// Best-effort: the PR is already ready; don't fail the promotion if the hand-off
+// comment can't be posted.
+if (handoffAlreadyPosted()) {
+  console.log("Hand-off comment already present — not re-posting it.");
+} else {
+  try {
+    ghMutate(["pr", "comment", prNumber, "--body", handoff]);
+  } catch (err) {
+    console.warn(`PR marked ready, but posting the hand-off comment failed: ${err.message}`);
+  }
 }
 
 console.log(`\nPromoted PR #${prNumber} to ready and requested human review.`);
