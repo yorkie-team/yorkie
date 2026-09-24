@@ -32,6 +32,31 @@
   no-op is what let `styleTargets` return a deduplicated node list without
   changing any ledger arithmetic.
 
+- **An "agree with yourself" scan is not a correctness scan.** Review round 1
+  pointed out that `styleScanDivergences` compared the two delivery orders
+  and nothing else, so an implementation that styled every node — or none —
+  scored zero divergences. The scan now also carries absolute counts
+  (`styledPairs`, `styledNodes`) and counts the pairs neither order could
+  apply, which is the arm that used to drop pairs in silence. Both scans were
+  already passing; the counts are what makes passing mean something.
+
+- **A guard copied from the traversal can undo the fix.** The review asked
+  for the range-order check `traverseInPosRange` applies to also cover
+  `boundaryElements`. Gating on the *resolved* index order costs 108 more
+  diverging pairs, because a range collapsed by a concurrent merge is exactly
+  the case those elements exist to repair. The gate that works asks *why* the
+  range is backwards: only a removal can collapse one, so an inversion with a
+  live declared ancestry on both ends is the caller's own and gets nothing.
+  Same for the skip predicate — splitting it into "did the change reach this
+  node" and "may this re-anchored traversal touch it" let the boundary set
+  answer the first without the second, which costs 150 pairs.
+
+- **Measure each guard separately before keeping any of them.** Four review
+  fixes went in together and the merge scan's tombstone count went 1292 →
+  1550. Toggling them one at a time attributed 108 to one gate and 150 to
+  another and cleared the other two; guessing which one was at fault would
+  have been wrong, because the two cheap-looking ones were free.
+
 - **Half a fix, measured, beats a whole fix, asserted.** The durable shape the
   issue asks for — the range resolved in a version-vector-filtered index space
   — has to ship with the JS SDK. What lands here closes the split family

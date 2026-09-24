@@ -17,6 +17,8 @@
 package json
 
 import (
+	"slices"
+
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -291,6 +293,12 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 		panic(ErrEmptyPath)
 	}
 
+	// Same contract as Style: a range given backwards is a caller error, not
+	// an empty range. Paths of equal length compare in document order.
+	if slices.Compare(fromPath, toPath) > 0 {
+		panic(ErrIndexBoundary)
+	}
+
 	if len(attributes) == 0 {
 		return true
 	}
@@ -336,6 +344,12 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 
 	if len(fromPath) == 0 || len(toPath) == 0 {
 		panic(ErrEmptyPath)
+	}
+
+	// Same contract as RemoveStyle: a range given backwards is a caller
+	// error, not an empty range.
+	if slices.Compare(fromPath, toPath) > 0 {
+		panic(ErrIndexBoundary)
 	}
 
 	if len(attributesToRemove) == 0 {

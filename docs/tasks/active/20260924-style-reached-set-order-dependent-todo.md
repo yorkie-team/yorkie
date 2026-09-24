@@ -89,7 +89,9 @@ identities, and they answer exactly the questions the index space cannot.
 - [x] Regression tests in `pkg/document/tree_style_reached_set_test.go`,
       covering `RemoveStyle` as well as `Style`
 - [x] Design doc: §9.1, §9.2, new §9.5, known limitations, Fix 25
-- [ ] Port to the JS SDK so snapshots and clients agree
+- [ ] Port to the JS SDK so snapshots and clients agree — **blast radius
+      of landing Go-only is recorded under "Known limitation" below and in
+      `docs/design/concurrent-merge-split.md` (Cross-implementation)**
 
 ## Result
 
@@ -106,6 +108,22 @@ the point of the shared `styleTargets` — the two operations cannot drift.
 No pair or seed that converged before diverges after.
 
 ## Known limitation
+
+**The JS SDK is not ported.** §9.1, §9.2 and §9.5 move which nodes a
+`Tree.Style`/`Tree.RemoveStyle` reaches, in the Go CRDT only.
+`server/packs/snapshot.go` rebuilds snapshots through this code, so until the
+port lands a JS client and the server resolve different reached sets for the
+concurrent split/merge shapes here, and a JS client only picks up the server's
+answer when it reloads from a snapshot.
+
+Landing Go-first is deliberate. Every one of those shapes already diverged
+*between two Go replicas* by delivery order — 135 split×style and 297
+merge×style rendered divergences on the scan base — which is the worse
+failure, because it is two replicas of the same implementation disagreeing
+with no way back. Holding the Go fix for the port keeps that. The two
+implementations were never in agreement to preserve: both were
+order-dependent, so "agreement" meant agreeing only when the orders happened
+to match.
 
 Elements a style covered *strictly between* its two anchors are still resolved
 in the current index space. A merge can move them out of reach — deleting a

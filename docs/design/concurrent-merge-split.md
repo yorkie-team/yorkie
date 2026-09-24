@@ -516,7 +516,15 @@ checks the sibling is an element whose `CreatedAt` is not covered
 by VV; omits the parent-equality check (same rationale as §7.5).
 `endsInside(node, declaredToParent)` — walks up from the element the
 range-end position named as its parent and asks whether it reaches
-`node`.
+`node`. The ancestry it walks is the *current* one, and a split moves
+every child after the split point into the new right half, so each
+ancestor is matched through its split lineage (`isSplitProductOf`,
+backward along `InsPrevID`) rather than by identity: any product of
+splitting `node` stands for `node`, which is what that ancestry looked
+like when the change declared the position. Matching by identity alone
+made the guard fail *open* whenever the range-end position named a
+descendant the split had moved — the one direction a guard must not
+fail in, since a wrongly-styled live node cannot be retracted.
 
 **Why the second condition** (Fix 25): the first one alone cannot tell
 the two histories apart. "This End token is in the range only because
@@ -574,6 +582,19 @@ End token the range genuinely ran past (§9.1), `splitFamilyOf` walks
 `InsPrevID` back to the first node whose creation the change knew and
 styles the whole family from there. A chain that reaches no such node
 is a node simply new to the change, and is left alone.
+
+The family enters through that one known node, so it is that node the
+§9.1 guard judges: when the guard excludes it, the split is the only
+reason this End token is in the range at all, and the family is
+dropped whole. Without that check the two halves of the fix
+contradict each other — the guard skips the left half on its own End
+token and `splitFamilyOf` immediately re-adds it from the right.
+
+`splitFamilyOf` collects backwards and reverses once rather than
+prepending per link: the chain length is chosen by whoever authored
+the splits, and prepending copies the slice each time. The caller also
+skips a node it has already resolved, so a chain of *k* products costs
+one walk, not one per member.
 
 ### §9.3 Range Boundary at Merged-Away Anchors
 
@@ -688,6 +709,34 @@ range-end anchor back inside the range-start paragraph, and the
 resolved range then stops short of the End token it ran past before —
 permanently, and on that replica only.
 
+These elements are writes, so they answer to the same questions the
+traversal's tokens do, and each is carried with the token the range
+ran past (End for the range-start chain, Start for the range-end
+chain) so it can be asked. The skip predicate splits in two for this:
+`skipReached` is about the *change* — the §9.1 End-token guard and the
+§9.4 merged-anchor interloper filter — and holds for every node a
+style writes to, however it was found; `skipToken` adds the one
+restriction that belongs to the index traversal alone, the §9.4
+from-side recovery's rule that a re-anchored traversal may touch only
+the interlopers it positively identified. Boundary elements come from
+the change's own positions, are not in that widened span, and answer
+to `skipReached` only. Putting them through the whole of `skipToken`
+costs 150 pairs on the merge scan for no gain in safety.
+
+Two ranges get no boundary elements at all
+(`boundaryRangeCovers`). A range whose two positions are equal covers
+nothing on any replica. A range that resolves *backwards* covers
+nothing here either, and `traverseInPosRange` already returns early on
+it — but a merge is exactly what makes a forward range resolve
+backwards, and repairing that is what these elements are for. The
+distinguishing question is *why*: only a removal can collapse a range,
+so an inversion whose declared ancestry is live on both ends was
+declared backwards by the caller and gets nothing, while one with a
+removed ancestor is the merge case and is repaired. Gating on the
+resolved order alone instead costs 108 pairs on the merge scan.
+`StyleByPath`/`RemoveStyleByPath` now reject a backwards range up
+front, the way `Style`/`RemoveStyle` always have.
+
 `styleTargets` puts the whole resolution in one place: it runs
 Phase 1–2 position resolution, the §9.3/§9.4 machinery, the traversal,
 the §9.2 lineage closure and this boundary set, and hands `Style` and
@@ -727,8 +776,27 @@ style, both delivery orders):
 No pair that converged before diverges after, in either scan or in a
 300-seed randomised sweep (47 → 30 diverging seeds).
 
+**Cross-implementation.** §9.1, §9.2 and §9.5 change *which nodes* a
+`Tree.Style`/`Tree.RemoveStyle` writes to, and only the Go
+implementation has them. Until the JS SDK carries the same three rules,
+a JS client and the server disagree on the reached set for exactly the
+concurrent split/merge shapes above: the server's snapshot
+(`server/packs/snapshot.go` rebuilds through this code) then holds
+attributes a JS client applying the same changes locally does not, and
+the disagreement survives until that client reloads from a snapshot.
+This is a narrowing, not a widening — every shape listed here already
+diverged *between two Go replicas* by delivery order, which is strictly
+worse, and the two implementations agreed only in the sense that both
+were order-dependent. The scans quantify what moved: split × style 135
+rendered divergences → 0, merge × style 297 → 126. Porting is the
+follow-up tracked on the task; the Go-side fix is not held for it
+because leaving it out keeps Go replicas diverging from each other.
+
 **Known limitations** (tracked as follow-ups):
 
+- The JS SDK has not yet been ported (see **Cross-implementation**
+  above), so server and JS clients resolve different reached sets for
+  concurrent split/merge shapes.
 - An edit-only divergence independent of styling (concurrent unwrap
   versus merge-delete of the same paragraph) remains open.
 - Elements a style covered strictly between its two anchors are lost
