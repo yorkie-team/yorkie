@@ -120,6 +120,25 @@ Deliberately out of scope:
       opposite assumption; round 2 caught it. The env-var leg was always the
       load-bearing one.)
 
+## Alternative considered for the licence gate
+
+`go install github.com/google/addlicense` in `make tools`, then
+`addlicense -check ./...`. One line, no second ecosystem in the local gate, no
+skip path at all, and it can *fix* as well as check — which would have made the
+17-file backfill a single command.
+
+Not taken, but it is close. Node is already in this repository's workflow
+(`verify-doc-links.mjs`, the whole of `scripts/agent/`), the `Docs` workflow was
+the right home for an unfiltered check and already had Node, and matching the
+grant clause alone is more forgiving than `addlicense`'s template comparison
+across a tree with two comment styles and copyright years from 2020 to 2026.
+
+The honest cost of the choice is the skip path: `make verify` cannot run the
+licence check without Node, where `addlicense` would have been installed by
+`make tools` alongside everything else. That is why `pre-push` refuses outright
+rather than inheriting the Makefile's announced skip. If the Node dependency
+ever becomes a burden for contributors, `addlicense` is the swap to make.
+
 ## Review
 
 Eleven commits, +1086/−36 across 38 files. Three groups:

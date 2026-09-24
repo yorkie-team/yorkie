@@ -196,3 +196,51 @@ settings.json entry a no-op; and deleting the `docs.yml` step leaves
 `make verify` printing SKIPPED where Node is absent. The generated set
 is derived from the tree rather than listed, so `api/yorkie/v2/` is
 covered the day it appears. Seven mutations, seven failures.
+
+### Round 2 — weighted to design fit, simplification and blast radius
+
+No Critical. Three Important, nine Minor; all fixed. The design-fit verdict
+was that the shape is right — Node in `make verify` is not a new dependency in
+spirit, and the `Docs` workflow was the correct home for an unfiltered check.
+
+**The one that mattered was blast radius, and it was mine.** To justify not
+porting a hook, `disclosure.mjs` claimed `claude-code-action` never reads a
+branch's `.claude/settings.json`. I had not checked it, and this repository's
+own `agent-review-panel.yml` strips `.claude/` on precisely the opposite
+assumption — "settings + hooks the SDK could load and run". Four workflows run
+that action against the branch *without* stripping it. So the branch may have
+been handing every CI fix job a SessionStart hook telling it to write a task
+document and run a self-review loop, against a prompt that says "fix the
+findings and nothing else".
+
+Two lessons, and the second is the sharper one:
+
+1. **Tracking `.claude/settings.json` is not a local-only change.** The
+   directory was previously `commands/` and `skills/` — readable, inert.
+   Adding executable hook wiring to it changes what a branch can do to a job
+   that checks it out. `session-prime.sh` now exits under `GITHUB_ACTIONS`,
+   which settles the question whichever way the underlying answer falls;
+   `guard-generated-files.sh` deliberately does not, because refusing a
+   hand-edit to a generated file is as right in CI as it is locally.
+2. **A correct conclusion reached partly by an unchecked claim is still a
+   defect.** The rejection was right — nothing in this repository sets the
+   variable that hook needs. But the unchecked leg was written down in three
+   places, and what the next reader inherits is the claim, not the conclusion.
+   The repair is not "add a caveat": it is to delete the leg and let the
+   argument stand on the one that was load-bearing all along.
+
+### A skip nobody reads is a pass
+
+`make verify-license` announces `SKIPPED` when Node is absent — the right
+behaviour for a person who typed the command and sees the line. `pre-push`
+runs `exec make verify` and git reads only the exit status, so that line
+scrolled past under 35 seconds of test output and the push succeeded with the
+gate silently absent. **Where a check is consumed decides whether announcing
+is enough.** The hook now refuses, which also matches what already happened
+for a missing `golangci-lint`.
+
+The mirror-image finding landed the same round: `pre-commit` refused *every*
+commit without `golangci-lint`, including documentation-only ones, and
+CONTRIBUTING.md defended it with an argument about a missing linter. "Nothing
+to lint" and "no linter" are different conditions; answering both by refusing
+meant an outside contributor fixing a typo needed the Go toolchain to commit.

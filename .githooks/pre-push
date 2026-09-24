@@ -7,12 +7,6 @@ set -euo pipefail
 # red lane is a CI run, a PR comment, and on an agent-managed branch a fix
 # round that `agent-iterate-ci` spends out of a bound of four.
 #
-# Unconditional on purpose. Deriving "which lanes could this push affect"
-# needs the upstream ref, which a first push of a branch does not have, and
-# a filter that guesses wrong here fails in the expensive direction — it
-# skips a lane that would have caught something. ~40s buys not having to be
-# right about that.
-#
 # `make test` (integration, -tags integration) is deliberately NOT here: it
 # needs MongoDB, which a push cannot assume is up. CI runs it against a real
 # container.

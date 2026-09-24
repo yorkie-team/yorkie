@@ -1446,12 +1446,9 @@ jobs:
           # and a guard in the agent suite asserts both still do — the failure
           # is a green step that uploaded nothing, which no run reports.
           #
-          # This paragraph used to cite `ci.yml`'s `.harness-reports/` upload as
-          # the precedent. There is no such upload: `ci.yml` has no
-          # `upload-artifact` step at all, and `.harness-reports/` here is a
-          # gitignored scratch directory that `novelty.test.mjs` writes. Both the
-          # precedent and the issue number came over with the port and were never
-          # true in this repository. The mechanism above is; it was measured here.
+          # Do not look for a `ci.yml` precedent: it has no `upload-artifact`
+          # step at all, and `.harness-reports/` here is a gitignored scratch
+          # directory `novelty.test.mjs` writes, not a reports sink.
           #
           # The literal `.agent-review/meta.json` above is NOT immune the way the
           # execution log's literal paths are, and that is measured rather than

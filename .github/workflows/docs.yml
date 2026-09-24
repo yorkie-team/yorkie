@@ -16,10 +16,9 @@
 # reaches 155 markdown files and 39 non-markdown ones: 35 images under
 # `docs/design/media/`, three script directories reached through their
 # READMEs, and this workflow file. Renaming or deleting any of those breaks a
-# link without touching a single `.md`. (There are no relative `.go` targets —
+# link without touching a single `.md`. There are no relative `.go` targets:
 # every Go citation in `docs/design/` is an absolute GitHub URL, which the
-# checker skips as a scheme. An earlier version of this comment claimed
-# otherwise and was not checked.)
+# checker skips as a scheme.
 #
 # A licence header is likewise removable by a change `**/*.md` would skip.
 #
