@@ -1223,34 +1223,6 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
-// dropSplitLinksInElement strips the split-sibling links from every tree
-// reachable from elem.
-//
-// A Set/Add/SetByIndex payload arrives as element bytes and is decoded by the
-// same BytesToObject/BytesToArray/BytesToTree that reads a server-built
-// snapshot, but unlike a snapshot it is entirely client-supplied and always
-// freshly created by the editing client: none of its nodes can be a split
-// product. The wire format carries InsPrevID/InsNextID regardless and the tree
-// follows them as trusted structural pointers, so drop them here for the same
-// reason FromTreeNodesWhenEdit drops them from operation content. Removed
-// members are walked too — they are still registered in NodeMapByID.
-func dropSplitLinksInElement(elem crdt.Element) {
-	switch e := elem.(type) {
-	case *crdt.Tree:
-		if root := e.Root(); root != nil {
-			root.DropSplitLinks()
-		}
-	case *crdt.Object:
-		for _, node := range e.RHTNodes() {
-			dropSplitLinksInElement(node.Element())
-		}
-	case *crdt.Array:
-		for _, node := range e.AllRGANodes() {
-			dropSplitLinksInElement(node.Element())
-		}
-	}
-}
-
 // sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
 // from every tree the decoded element carries, or passes the error through.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
@@ -1258,7 +1230,7 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 		return nil, err
 	}
 
-	dropSplitLinksInElement(elem)
+	crdt.DropSplitLinksInElement(elem)
 
 	return elem, nil
 }
