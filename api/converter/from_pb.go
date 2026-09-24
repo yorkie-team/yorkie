@@ -986,12 +986,14 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 		}
 
 		// Operation content is fully client-controlled and is always freshly
-		// created by the editing client, so it can never be a split product.
-		// Drop the split-sibling links the wire format carries anyway: the
-		// tree follows them as trusted structural pointers once Tree.Edit
-		// registers these nodes in NodeMapByID.
+		// created by the editing client, so it can never be a split product
+		// nor carry a merge lineage -- Tree.Edit stamps MergedFrom/MergedAt on
+		// the content it inserts from the merge parent it resolves locally.
+		// Drop the engine-only links the wire format carries anyway: the tree
+		// follows them as trusted structural pointers once Tree.Edit registers
+		// these nodes in NodeMapByID.
 		if treeNode != nil {
-			treeNode.DropSplitLinks()
+			treeNode.DropEngineOnlyLinks()
 		}
 
 		treeNodes = append(treeNodes, treeNode)
@@ -1223,14 +1225,15 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
-// sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
-// from every tree the decoded element carries, or passes the error through.
+// sanitizeElement adapts a BytesTo* result: it drops the engine-only links
+// (the split chain and the merge lineage) from every tree the decoded element
+// carries, or passes the error through.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	if err != nil {
 		return nil, err
 	}
 
-	crdt.DropSplitLinksInElement(elem)
+	crdt.DropEngineOnlyLinksInElement(elem)
 
 	return elem, nil
 }

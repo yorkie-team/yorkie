@@ -709,20 +709,29 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
-// DropSplitLinks clears the split-sibling links on this node and every one of
-// its descendants.
+// DropEngineOnlyLinks clears the engine-only links on this node and every one
+// of its descendants: the split-sibling chain and the merge lineage.
 //
 // InsPrevID/InsNextID name positions in a split chain and only SplitElement
-// may create them. A node arriving as operation content is freshly created by
-// the editing client, so it can never legitimately be a split product — but
-// the wire format carries the fields regardless, and the chain walks that
-// read them (advancePastUnknownSplitSiblings, orderSameBoundarySplit) treat
-// them as trusted structural pointers. Drop them on the way in rather than
-// let a client hand the tree a chain of its choosing.
-func (n *TreeNode) DropSplitLinks() {
+// may create them; MergedFrom/MergedAt name the parent a node was moved out of
+// and only a merge may stamp them (Edit restamps them on the content it
+// inserts, from the merge parent it resolves locally). A node arriving as
+// operation content or inside an element payload is freshly created by the
+// editing client, so it can never legitimately be either — but the wire format
+// carries all four regardless, and the walks that read them
+// (advancePastUnknownSplitSiblings, orderSameBoundarySplit, the §1.1 redirect
+// and §6.2 propagation) treat them as trusted structural pointers. Drop them
+// on the way in rather than let a client hand the tree a lineage of its
+// choosing. mergedInto goes with them: NewTree derives it from MergedFrom
+// while decoding, so leaving it would keep a source parent pointing at a
+// destination no field records any more.
+func (n *TreeNode) DropEngineOnlyLinks() {
 	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.InsPrevID = nil
 		node.Value.InsNextID = nil
+		node.Value.MergedFrom = nil
+		node.Value.MergedAt = nil
+		node.Value.mergedInto = nil
 	})
 }
 
@@ -2606,8 +2615,8 @@ type advanceOpts struct {
 // insNextWalker bounds a walk of an InsNextID chain. InsNextID is a
 // structural pointer that only SplitElement is supposed to set, but it also
 // arrives verbatim from client-supplied bytes (api/converter/from_bytes.go,
-// and — until DropSplitLinks strips it — operation contents), so a chain that
-// loops back on itself would spin the applying goroutine forever while it
+// and — until DropEngineOnlyLinks strips it — operation contents), so a chain
+// that loops back on itself would spin the applying goroutine forever while it
 // holds the document lock. Every chain walk runs through one of these.
 type insNextWalker struct {
 	seen map[*TreeNode]struct{}

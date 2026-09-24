@@ -114,8 +114,9 @@ func withSplitTree(t *testing.T) *document.Document {
 // A Set/Add/ArraySet reverse captures its value with DeepCopy, and that copy
 // keeps the split-sibling links of the tree it was taken from. Undo executes
 // it directly, while every other replica -- and the server -- decodes the same
-// operation through dropSplitLinksInElement. Unless the copy is stripped too,
-// the replica that ran the undo is the only one left holding the links.
+// operation through crdt.DropEngineOnlyLinksInElement. Unless the copy is
+// stripped too, the replica that ran the undo is the only one left holding the
+// links.
 func TestTreeSplitLinksInReverseOperationPayload(t *testing.T) {
 	t.Run("the tree a split leaves behind does carry them", func(t *testing.T) {
 		assert.NotEmpty(t, splitLinks(t, withSplitTree(t)))
@@ -133,7 +134,11 @@ func TestTreeSplitLinksInReverseOperationPayload(t *testing.T) {
 		replica := replicate(t, doc)
 		assert.Equal(t, restored, doc.Root().GetTree("t").ToXML())
 		assert.Equal(t, restored, replica.Root().GetTree("t").ToXML())
-		assert.Equal(t, splitLinks(t, replica), splitLinks(t, doc))
+		// Stripped, not merely agreed on: the replica decodes this payload
+		// through the converter and can only ever report none, so comparing
+		// the two would still hold if the undoing side kept its links.
+		assert.Empty(t, splitLinks(t, doc))
+		assert.Empty(t, splitLinks(t, replica))
 	})
 
 	t.Run("an undone Delete restores the same links here and on a replica", func(t *testing.T) {
@@ -148,6 +153,7 @@ func TestTreeSplitLinksInReverseOperationPayload(t *testing.T) {
 		replica := replicate(t, doc)
 		assert.Equal(t, restored, doc.Root().GetTree("t").ToXML())
 		assert.Equal(t, restored, replica.Root().GetTree("t").ToXML())
-		assert.Equal(t, splitLinks(t, replica), splitLinks(t, doc))
+		assert.Empty(t, splitLinks(t, doc))
+		assert.Empty(t, splitLinks(t, replica))
 	})
 }

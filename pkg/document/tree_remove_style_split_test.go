@@ -85,7 +85,14 @@ func TestTreeRemoveStyleOverAConcurrentlySplitBoundary(t *testing.T) {
 		}))
 		exchangeInOrder(t, docs, [][]int{{1}, {0}})
 
-		assert.Equal(t, docs[0].Root().GetTree("t").ToXML(), docs[1].Root().GetTree("t").ToXML())
+		// The removal was issued against the unsplit span, so the advance has
+		// to carry its right anchor past the split product the other replica
+		// made: both halves come back unbolded, on both replicas. Pinning the
+		// content rather than only replica-to-replica equality is what makes a
+		// removal that quietly stops removing fail here.
+		const want = `<doc><p><span>abc</span><span>de</span></p></doc>`
+		assert.Equal(t, want, docs[0].Root().GetTree("t").ToXML())
+		assert.Equal(t, want, docs[1].Root().GetTree("t").ToXML())
 	})
 
 	t.Run("both replicas split and one removes the style", func(t *testing.T) {
@@ -101,6 +108,12 @@ func TestTreeRemoveStyleOverAConcurrentlySplitBoundary(t *testing.T) {
 		}))
 		exchangeInOrder(t, docs, [][]int{{1}, {0}})
 
-		assert.Equal(t, docs[0].Root().GetTree("t").ToXML(), docs[1].Root().GetTree("t").ToXML())
+		// Here the removal saw its own split first, so its range covers only
+		// the left product: the right one keeps the style. The two concurrent
+		// splits of the one boundary order by ticket and leave an empty middle
+		// product, and both replicas have to land on that same shape.
+		const want = `<doc><p><span>abc</span><span></span><span bold="true">de</span></p></doc>`
+		assert.Equal(t, want, docs[0].Root().GetTree("t").ToXML())
+		assert.Equal(t, want, docs[1].Root().GetTree("t").ToXML())
 	})
 }

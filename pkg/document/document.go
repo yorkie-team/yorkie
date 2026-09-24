@@ -433,18 +433,19 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 		entry.Op.SetExecutedAt(ticket)
 
 		// A Set/Add/ArraySet reverse carries a DeepCopy of the value it
-		// restores, and that copy keeps the split-sibling links of the tree
-		// it was taken from. Every other replica decodes this same operation
-		// through crdt.DropSplitLinksInElement, so without this the replica
-		// that ran the undo is the only one left holding the links, and the
-		// two disagree from the next same-boundary split on.
+		// restores, and that copy keeps the split-sibling links and the merge
+		// lineage of the tree it was taken from. Every other replica decodes
+		// this same operation through crdt.DropEngineOnlyLinksInElement, so
+		// without this the replica that ran the undo is the only one left
+		// holding them, and the two disagree from the next same-boundary
+		// split on.
 		switch op := entry.Op.(type) {
 		case *operations.Set:
-			crdt.DropSplitLinksInElement(op.Value())
+			crdt.DropEngineOnlyLinksInElement(op.Value())
 		case *operations.Add:
-			crdt.DropSplitLinksInElement(op.Value())
+			crdt.DropEngineOnlyLinksInElement(op.Value())
 		case *operations.ArraySet:
-			crdt.DropSplitLinksInElement(op.Value())
+			crdt.DropEngineOnlyLinksInElement(op.Value())
 		}
 
 		// NOTE(hackerwins): Both an Add reverse (acting as UndoRemove,

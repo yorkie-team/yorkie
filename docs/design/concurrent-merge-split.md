@@ -444,6 +444,15 @@ which otherwise reaches the tree through the same
 `BytesToObject`/`BytesToTree` a snapshot uses. A snapshot is server-built
 and keeps its links.
 
+`MergedFrom`/`MergedAt` ride the same wire and are dropped on the same
+two paths, by the same `DropEngineOnlyLinks`. They are engine-only too:
+`Tree.Edit` stamps them on the content it inserts, from the merge parent
+it resolves locally on every replica, so a value a client sends can only
+disagree with what the applying replica computes — and would steer the
+§1.1 redirect and §6.2 propagation at a parent of the client's choosing.
+The derived `mergedInto` goes with them, since `NewTree` rebuilds it from
+`MergedFrom` while decoding.
+
 The split loop ascends from `parent`, not from the retargeted node. A
 retarget reorders the product *within* one level; the node the
 operation split is still `parent`, and the next level's boundary is
