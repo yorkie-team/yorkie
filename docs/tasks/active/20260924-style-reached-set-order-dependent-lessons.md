@@ -92,3 +92,27 @@
   1292 keys, not a coincidental total. Dumping keys rather than counts is what
   made "no pair that converged before diverges after" checkable again, and a
   300-seed randomised sweep returned the identical seed list before and after.
+
+## Review panel round 3
+
+- **A golden behind a path filter is a golden nothing checks.** The panel's
+  blocking finding was not that the `test/complex` merge × style goldens were
+  wrong — replayed without a server they all still hold under §9.6 — but that
+  nothing in the pipeline would have said so: the lane is gated on both the
+  `complex` build tag and a `test/complex/**` path filter, and this change
+  touches only `pkg/document/crdt`. The unit mirror existed and covered 6 of
+  the cases; it now covers all 13, including the from-side ones §9.6 is
+  about. For the `RemoveStyle` cases the mirror reads the attribute entries
+  off the CRDT the way the complex suite does, because Marshal shows neither
+  an empty container nor a removal tombstone — the exact state #1942 reports
+  diverging. Coverage that only runs when its own file changes is coverage of
+  the file, not of the behaviour.
+
+- **A port to another repository is specified, not promised.** The second
+  finding — that the reached-set rules land Go-only while the issue asks for
+  server and JS SDK together — cannot be closed here: `yorkie-js-sdk` is a
+  separate repository. What was missing was not the code but a spec: the four
+  rules are now written up without Go identifiers, each with the invariant
+  that makes it decidable on any replica, plus the acceptance vectors a port
+  has to reproduce (the 13 mirror cases and the scan counts). "Tracked as a
+  follow-up" is a note; a rule statement plus a test vector is a task.

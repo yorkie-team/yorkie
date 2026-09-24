@@ -18,12 +18,15 @@ package document_test
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -68,9 +71,12 @@ type styleReplayResult struct {
 	err  string
 }
 
-// replayStyleOrder applies the batches in the given order onto a fresh
-// replica of the base and reports what it ends up with.
-func replayStyleOrder(t *testing.T, base []*change.Change, batches ...[]*change.Change) styleReplayResult {
+// replayStyleInto applies the batches in the given order onto a fresh replica
+// of the base and hands the replica back, so a caller that needs more than
+// the rendered document can read the internal state directly.
+func replayStyleInto(
+	t *testing.T, base []*change.Change, batches ...[]*change.Change,
+) (*document.Document, error) {
 	t.Helper()
 
 	d := newActor(t, "00000000000000000000000a")
@@ -79,8 +85,21 @@ func replayStyleOrder(t *testing.T, base []*change.Change, batches ...[]*change.
 		if err := d.ApplyChangePack(change.NewPack(
 			"d", change.NewCheckpoint(0, 0), batch, time.InitialVersionVector, nil,
 		)); err != nil {
-			return styleReplayResult{err: err.Error()}
+			return nil, err
 		}
+	}
+
+	return d, nil
+}
+
+// replayStyleOrder applies the batches in the given order onto a fresh
+// replica of the base and reports what it ends up with.
+func replayStyleOrder(t *testing.T, base []*change.Change, batches ...[]*change.Change) styleReplayResult {
+	t.Helper()
+
+	d, err := replayStyleInto(t, base, batches...)
+	if err != nil {
+		return styleReplayResult{err: err.Error()}
 	}
 
 	return styleReplayResult{
@@ -435,12 +454,57 @@ func TestRemoveStyleAcrossEverySplit(t *testing.T) {
 // styleConvergence is a two-client concurrency case: one client's structural
 // change against another's style, converging on one document whichever
 // arrives first.
+//
+// pre is a structural change folded into the base, i.e. one both clients have
+// already seen when they diverge. wantAttrs, when set, pins the attribute
+// entries every LIVE element ends up holding — the half of the state Marshal
+// hides, which is where a RemoveStyle that reached one node too many shows up
+// (an empty container, or a removal tombstone, on a node the other order left
+// untouched).
 type styleConvergence struct {
-	name string
-	base json.TreeNode
-	a    func(tree *json.Tree)
-	b    func(tree *json.Tree)
-	want string
+	name      string
+	base      json.TreeNode
+	pre       func(tree *json.Tree)
+	a         func(tree *json.Tree)
+	b         func(tree *json.Tree)
+	want      string
+	wantAttrs []string
+}
+
+// liveAttrDescs renders the attribute entries of every live element under the
+// root as sorted descriptors. withTicket adds the entry's update ticket, which
+// carries the identity two replicas can disagree on while still rendering and
+// counting the same — the internal divergence #1942 reports.
+func liveAttrDescs(t *testing.T, d *document.Document, withTicket bool) []string {
+	t.Helper()
+
+	tree, ok := d.RootObject().Members()["t"].(*crdt.Tree)
+	require.True(t, ok, "tree not found")
+
+	descs := []string{}
+	var walk func(node *crdt.TreeNode)
+	walk = func(node *crdt.TreeNode) {
+		for _, child := range node.Children() {
+			if child.IsText() {
+				continue
+			}
+			if child.Attrs != nil {
+				for _, entry := range child.Attrs.Nodes() {
+					desc := fmt.Sprintf("%s %s=%q removed=%t",
+						child.Type(), entry.Key(), entry.Value(), entry.IsRemoved())
+					if withTicket {
+						desc += " updatedAt=" + entry.UpdatedAt().Key()
+					}
+					descs = append(descs, desc)
+				}
+			}
+			walk(child)
+		}
+	}
+	walk(tree.Root())
+	sort.Strings(descs)
+
+	return descs
 }
 
 // The §9.4 merge cases live in test/complex, which is gated behind a build
@@ -521,6 +585,100 @@ func TestStyleReachedSetMatchesComplexSuite(t *testing.T) {
 			tr.Style(0, 6, bold)
 		},
 		want: `<r><p><b></b></p>cd</r>`,
+	}, {
+		// TestTreeConcurrencyStyleAcrossMergedAnchor: the range ends inside
+		// the merged-away paragraph, so the interloper the merge pulls next
+		// to that anchor stays out of the reached set.
+		name: "across-merged-anchor",
+		base: twoParagraphs,
+		a:    func(tr *json.Tree) { tr.Edit(0, 5, nil, 0) },
+		b: func(tr *json.Tree) {
+			tr.Edit(8, 8, &json.TreeNode{Type: "p"}, 0)
+			tr.Style(0, 5, bold)
+		},
+		want:      `<r><p></p>cd</r>`,
+		wantAttrs: []string{},
+	}, {
+		// TestTreeConcurrencyRemoveStyleAcrossMergedAnchor: the same range as
+		// a RemoveStyle, which must not leave an attribute container behind
+		// on the interloper either.
+		name: "remove-style-across-merged-anchor",
+		base: twoParagraphs,
+		a:    func(tr *json.Tree) { tr.Edit(0, 5, nil, 0) },
+		b: func(tr *json.Tree) {
+			tr.Edit(8, 8, &json.TreeNode{Type: "p"}, 0)
+			tr.RemoveStyle(0, 5, []string{"bold"})
+		},
+		want:      `<r><p></p>cd</r>`,
+		wantAttrs: []string{},
+	}, {
+		// TestTreeConcurrencyRemoveStyleAfterMovedAnchor: the §9.4 to-side
+		// case as a RemoveStyle. No attribute entry may materialize on the
+		// node the merge moved next to the range end.
+		name: "remove-style-after-moved-anchor",
+		base: twoParagraphs,
+		a:    func(tr *json.Tree) { tr.Edit(0, 5, nil, 0) },
+		b: func(tr *json.Tree) {
+			tr.Edit(8, 8, &json.TreeNode{Type: "p"}, 0)
+			tr.RemoveStyle(0, 6, []string{"bold"})
+		},
+		want:      `<r><p></p>cd</r>`,
+		wantAttrs: []string{},
+	}, {
+		// TestTreeConcurrencyStyleCoversEarlierMergedChild: <i> arrived in
+		// <p> through a merge both clients have seen, so a range covering it
+		// still reaches it when a second merge lifts it into the root.
+		name: "covers-earlier-merged-child",
+		base: json.TreeNode{Type: "r", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "s", Children: []json.TreeNode{{Type: "i"}}},
+		}},
+		pre:       func(tr *json.Tree) { tr.Edit(3, 5, nil, 0) },
+		a:         func(tr *json.Tree) { tr.Edit(0, 1, nil, 0) },
+		b:         func(tr *json.Tree) { tr.Style(0, 5, bold) },
+		want:      `<r>ab<i bold="x"></i></r>`,
+		wantAttrs: []string{`i bold="x" removed=false`},
+	}, {
+		// TestTreeConcurrencyStyleFromSideMovedAnchor: the §9.6 from-side
+		// case. The merge collapses the range, and the recovery hands back
+		// exactly the writer's own insert — which the range ended inside, so
+		// it is styled.
+		name: "style-from-side-moved-anchor",
+		base: twoParagraphs,
+		a:    func(tr *json.Tree) { tr.Edit(0, 5, nil, 0) },
+		b: func(tr *json.Tree) {
+			tr.Edit(8, 8, &json.TreeNode{Type: "p", Children: []json.TreeNode{}}, 0)
+			tr.Style(6, 9, bold)
+		},
+		want:      `<r><p bold="x"></p>cd</r>`,
+		wantAttrs: []string{`p bold="x" removed=false`},
+	}, {
+		// TestTreeConcurrencyRemoveStyleFromSideMovedAnchor: the same pair as
+		// a RemoveStyle. The removal entry that arbitrates a later SetAttr
+		// must land on the surviving <p> in both orders, with one identity.
+		name: "remove-style-from-side-moved-anchor",
+		base: twoParagraphs,
+		a:    func(tr *json.Tree) { tr.Edit(0, 5, nil, 0) },
+		b: func(tr *json.Tree) {
+			tr.Edit(8, 8, &json.TreeNode{Type: "p", Children: []json.TreeNode{}}, 0)
+			tr.RemoveStyle(6, 9, []string{"bold"})
+		},
+		want:      `<r><p></p>cd</r>`,
+		wantAttrs: []string{`p bold="" removed=true`},
+	}, {
+		// TestTreeConcurrencyStyleFromSideOrderedRange: both anchors sit
+		// inside the merged paragraph, so the resolved range moves with the
+		// merge and stays ordered — the recovery must not widen it onto the
+		// writer's insert.
+		name: "style-from-side-ordered-range",
+		base: twoParagraphs,
+		a:    func(tr *json.Tree) { tr.Edit(0, 5, nil, 0) },
+		b: func(tr *json.Tree) {
+			tr.Edit(8, 8, &json.TreeNode{Type: "p", Children: []json.TreeNode{}}, 0)
+			tr.Style(6, 7, bold)
+		},
+		want:      `<r><p></p>cd</r>`,
+		wantAttrs: []string{},
 	}}
 
 	for _, tc := range cases {
@@ -530,20 +688,40 @@ func TestStyleReachedSetMatchesComplexSuite(t *testing.T) {
 				root.SetNewTree("t", tc.base)
 				return nil
 			}))
+			if tc.pre != nil {
+				require.NoError(t, seed.Update(func(root *json.Object, p *presence.Presence) error {
+					tc.pre(root.GetTree("t"))
+					return nil
+				}))
+			}
 			base := grab(t, seed)
 
 			pA, pB := concurrentTreeChanges(t, base, tc.a, tc.b)
-			ab := replayStyleOrder(t, base, pA, pB)
-			ba := replayStyleOrder(t, base, pB, pA)
-			require.Empty(t, ab.err)
-			require.Empty(t, ba.err)
-			require.Equal(t, tc.want, ba.xml)
-			// The rendered document only, which is what the complex suite
-			// asserts. Five of these six still book a different number of
-			// attributes onto tombstones depending on the order — the
-			// tombstone-only half of the merge family's known limitation,
-			// counted by TestStyleAcrossEveryMerge, not introduced here.
-			require.Equal(t, ba.xml, ab.xml, "the two delivery orders render differently")
+			abDoc, err := replayStyleInto(t, base, pA, pB)
+			require.NoError(t, err)
+			baDoc, err := replayStyleInto(t, base, pB, pA)
+			require.NoError(t, err)
+			abXML := abDoc.Root().GetTree("t").ToXML()
+			baXML := baDoc.Root().GetTree("t").ToXML()
+			require.Equal(t, tc.want, baXML)
+			if tc.wantAttrs != nil {
+				// Marshal shows neither an empty attribute container nor a
+				// removal tombstone, so the complex suite reads these off the
+				// CRDT directly; so does this. The two orders are compared
+				// with the entry tickets included, which is where two
+				// replicas holding "one removed bold entry" each can still
+				// disagree.
+				require.Equal(t, tc.wantAttrs, liveAttrDescs(t, baDoc, false))
+				require.Equal(t, liveAttrDescs(t, baDoc, true), liveAttrDescs(t, abDoc, true),
+					"the two delivery orders hold different attribute entries on live nodes")
+			}
+			// The rendered document, which is what the complex suite asserts,
+			// plus the live-node attribute entries where wantAttrs is set.
+			// Several of these still book a different number of attributes
+			// onto TOMBSTONES depending on the order — the tombstone-only
+			// half of the merge family's known limitation, counted by
+			// TestStyleAcrossEveryMerge, not introduced here.
+			require.Equal(t, baXML, abXML, "the two delivery orders render differently")
 		})
 	}
 }

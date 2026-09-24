@@ -841,6 +841,50 @@ rendered divergences → 0, merge × style 297 → 0. Porting is the
 follow-up tracked on the task; the Go-side fix is not held for it
 because leaving it out keeps Go replicas diverging from each other.
 
+**Port specification.** The JS SDK is a separate repository
+(`yorkie-team/yorkie-js-sdk`), so the port cannot land in the same
+commit; it can land against a fixed spec. The four rules are stated
+here without reference to Go identifiers, each with the invariant that
+makes it decidable on any replica, so a port is a transcription rather
+than a re-derivation:
+
+1. **§9.1 End-token guard.** An element reached through its End token
+   is skipped when the element has a split sibling the change could not
+   have known (its creation ticket is not covered by the change's
+   version vector) *and* the change's range-end position named that
+   element — or a node in its split lineage — as its parent. When the
+   range ran past the element's end, the End token was in the range
+   before any split existed and the element is kept.
+2. **§9.2 Split-lineage closure.** A node the change reached stands for
+   every product of splitting it, forwards and backwards along the
+   split lineage, token type not consulted.
+3. **§9.5 Boundary elements.** Independently of the traversal, the
+   reached set includes the ancestors of the change's own range-start
+   position (carried as End tokens) and of its range-end position
+   (carried as Start tokens), each chain stopping below the two
+   positions' common ancestor. These are computed from the positions
+   the change carries, never from the resolved index range, and are put
+   through the change-level skips (1, 2, §9.4's interloper filter) only
+   — not through the traversal-local from-side recovery restriction.
+   Skipped entirely when the two positions are equal, or when the range
+   resolves backwards with both declared ancestries live (a caller's
+   backwards range, not a merge-collapsed one).
+4. **§9.6 Range-start guard.** An element reached through its End token
+   alone — i.e. the resolved from-parent or one of its ancestors — is
+   skipped unless the change's range-start position named that element
+   as its parent. Matching runs in *both* directions along the split
+   lineage here, unlike §9.1: both halves of a split element are the
+   element the change began inside.
+
+Acceptance vectors, all replayable without a server:
+`TestStyleReachedSetMatchesComplexSuite` in
+`pkg/document/tree_style_reached_set_test.go` is thirteen two-change
+cases with rendered goldens and, where Marshal hides the answer, the
+attribute entries each live node must end up holding; the exhaustive
+scans in the same file fix the counts in the table above. A port that
+reproduces those numbers over the same base tree has the same reached
+set. Until it does, the divergence is the one described above.
+
 **Known limitations** (tracked as follow-ups):
 
 - The JS SDK has not yet been ported (see **Cross-implementation**

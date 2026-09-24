@@ -95,10 +95,17 @@ identities, and they answer exactly the questions the index space cannot.
 - [x] Confirm no pair that converged before diverges after
 - [x] Regression tests in `pkg/document/tree_style_reached_set_test.go`,
       covering `RemoveStyle` as well as `Style`
-- [x] Design doc: §9.1, §9.2, new §9.5, known limitations, Fix 25
-- [ ] Port to the JS SDK so snapshots and clients agree — **blast radius
-      of landing Go-only is recorded under "Known limitation" below and in
-      `docs/design/concurrent-merge-split.md` (Cross-implementation)**
+- [x] Design doc: §9.1, §9.2, new §9.5, §9.6, known limitations, Fix 25
+- [x] Mirror every merge × style complex case in the unit lane
+      (`TestStyleReachedSetMatchesComplexSuite`), so a reached-set change
+      cannot move a `test/complex` golden unnoticed behind its path filter
+- [ ] Port to the JS SDK so snapshots and clients agree — the SDK is a
+      separate repository (`yorkie-team/yorkie-js-sdk`), so it cannot land
+      in this PR. The four rules are written up implementation-neutrally,
+      with acceptance vectors, under **Port specification** in
+      `docs/design/concurrent-merge-split.md`; the blast radius of landing
+      Go-only is recorded under "Known limitation" below and under
+      **Cross-implementation** in the same doc
 
 ## Result
 
@@ -124,7 +131,7 @@ No pair or seed that converged before diverges after.
 
 ## Known limitation
 
-**The JS SDK is not ported.** §9.1, §9.2 and §9.5 move which nodes a
+**The JS SDK is not ported.** §9.1, §9.2, §9.5 and §9.6 move which nodes a
 `Tree.Style`/`Tree.RemoveStyle` reaches, in the Go CRDT only.
 `server/packs/snapshot.go` rebuilds snapshots through this code, so until the
 port lands a JS client and the server resolve different reached sets for the
