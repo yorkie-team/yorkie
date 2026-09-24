@@ -160,3 +160,54 @@ the reason a blanket gate cannot just be added:
 
 The rule this leaves: a standstill is only honestly recorded once it is recorded
 somewhere a person who is not reading this PR would find it.
+
+## Panel round 4: the size measurement moved off the hot path
+
+Two findings came back. One was actionable and is fixed; the other is the same
+standstill for the fourth time.
+
+The actionable one: `logicalValue` ran `json.Unmarshal` on a client-supplied
+attribute value *inside* `RHTNode.DataSize()`. That method is called per split,
+style, register and collect, and over every node of a document on a rebuild, so
+an O(1) size read had become an O(value) decode-and-allocate that a client
+chooses the cost of. The leading-quote short-circuit did not help a value that
+simply starts with a quote and never closes: it still paid a full scan and a
+failed parse, every call.
+
+The fix has three parts, and only the first is the one that matters:
+
+- Measure once, at `newRHTNode`, and carry the result on the node (`valLen`).
+  Nodes are immutable, so the measurement cannot go stale. `DataSize()` and
+  `Remove`'s `ValueDropped` read the field.
+- `RHT.DeepCopy` now copies nodes rather than replaying them through
+  `SetInternal`, so a clone carries the measurement across instead of
+  re-measuring every attribute. A clone is taken on every local update, so
+  rebuilding there would have reintroduced the same cost one level up.
+- `logicalSize` decodes only when it must: an unquoted value costs two byte
+  compares, and a quoted body with no escape, bare quote or control character
+  decodes to itself and is measured by subtraction.
+
+The rule: a `DataSize()` that is cheap to call is part of its contract, not an
+implementation detail. Anything derived from untrusted bytes belongs at the
+construction boundary, where it is paid for once against a string the parser
+already allocated.
+
+The equivalence is pinned by `rht_logical_size_test.go`, which asserts
+`logicalSize` against a spelled-out decode-always reference over the hostile
+inputs as well as the ordinary ones — including the trailing-whitespace case,
+where JSON permits what the fast path must not silently charge differently.
+
+### The size-limit gap, round 4
+
+Still `--skipped`, still recorded as a standstill and not a disagreement: the
+refusal semantics of a server-side gate is a wire-protocol decision about what
+a client does with a push the server refuses after the client already applied
+it, and that is not a reviewer's call to make inside a fix pass.
+
+What this round added to `docs/design/document-size-limit.md` is one fact that
+makes option 2 cheaper than rounds 2 and 3 assumed: the deadlock those rounds
+treated as disqualifying already exists client-side. `Document.Update` compares
+the post-update `Total()` (`pkg/document/document.go:257-258`), so a stock SDK
+already refuses a *deletion* on an over-quota document. A blanket server
+refusal would not be inventing a new failure mode, only requiring a way to
+express the existing one over the wire.

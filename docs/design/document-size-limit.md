@@ -97,6 +97,15 @@ every peer's version vector has moved past the tombstone. So a client cannot
 edit its way back under an all-changes-refused gate: the push that would delete
 content is refused for the same reason the push that added it was.
 
+The deadlock is not, however, a semantic the server would be inventing. The
+client's own gate compares the post-update `Total()`
+(`pkg/document/document.go:257-258`), so a stock SDK *already* refuses a
+deletion on an over-quota document with `ErrDocumentSizeExceedsLimit`. An
+honest client is therefore already stuck in exactly the way a blanket
+server-side refusal would get a dishonest one stuck. What the server gate adds
+is not a new failure mode but the need to reach that failure mode over the
+wire, where no rejection message exists.
+
 Any acceptable design therefore has to answer this, e.g.:
 
 1. **Refuse growth only.** Admit pushes whose changes cannot increase `Live`.
