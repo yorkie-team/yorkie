@@ -37,7 +37,7 @@
 // Gating them would mean editing history to keep a checker quiet. The archive
 // INDEX is still walked, so the rows pointing at those records stay honest.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -225,9 +225,20 @@ export function collectFindings(repoRoot) {
   return findings;
 }
 
-const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+// REALPATH BOTH SIDES. `import.meta.url` is resolved through symlinks by the
+// loader; `process.argv[1]` is whatever the caller typed. Compared as plain
+// strings, invoking this through a symlinked path — `/tmp/...` on macOS, a
+// link to `/private/tmp` — makes the two differ, so the block below never runs
+// and the process exits 0 having checked nothing. Caught while giving
+// verify-license.mjs the same entry point; the two share this construct.
+const isDirectRun = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
 
 if (isDirectRun) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

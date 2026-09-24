@@ -35,7 +35,7 @@
 // planted directory, and so a file that is about to be committed is checked
 // before it is staged rather than after.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -102,10 +102,21 @@ export function hasLicenseHeader(content) {
 /**
  * One finding per Go file missing the header. Pure over a directory, so the
  * suite can plant a tree and never touch this repository.
+ *
+ * SCANNING NOTHING IS A FINDING, not a pass. A wrong root — this file moved
+ * into `scripts/ci/`, say, so `..` lands on `scripts/` — walks a tree with no
+ * Go in it, reports zero missing headers and exits 0. That is a green check
+ * with no coverage, which is the failure this repository's own rule names: a
+ * check that reports nothing is indistinguishable from a check that found
+ * nothing. `verify-doc-links.mjs` guards the same way when its queue is empty.
  */
 export function collectFindings(repoRoot) {
+  const files = goFiles(repoRoot);
+  if (files.length === 0) {
+    return [`no .go files found under ${repoRoot} — this check scanned nothing`];
+  }
   const findings = [];
-  for (const rel of goFiles(repoRoot)) {
+  for (const rel of files) {
     let content;
     try {
       content = readFileSync(path.join(repoRoot, rel), 'utf8');
@@ -117,15 +128,31 @@ export function collectFindings(repoRoot) {
   return findings;
 }
 
-const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+// REALPATH BOTH SIDES. `import.meta.url` is already resolved through symlinks
+// by the loader; `process.argv[1]` is whatever the caller typed. Invoke this
+// through a symlinked path — `/tmp/...` on macOS, which is a link to
+// `/private/tmp` — and the two strings differ, the block below never runs, and
+// the process exits 0 having checked nothing. That is the same silent pass
+// `collectFindings` was just taught to refuse, arriving by a different door.
+const isDirectRun = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
 
 if (isDirectRun) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const findings = collectFindings(repoRoot);
   if (findings.length === 0) {
-    console.log(`${PREFIX} Every Go file carries the Apache 2.0 header.`);
+    // The count is in the success line on purpose: "every Go file" is true of
+    // a tree with none, and the number is what makes a collapsed scan visible
+    // in a log nobody reads closely.
+    console.log(
+      `${PREFIX} Every Go file (${goFiles(repoRoot).length}) carries the Apache 2.0 header.`,
+    );
   } else {
     for (const finding of findings) console.log(`${PREFIX}   ${finding}`);
     console.log(`${PREFIX} ${findings.length} file(s) missing the header.`);

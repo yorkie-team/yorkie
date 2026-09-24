@@ -4,11 +4,13 @@
 // the OS temp directory, created per test and removed after. Nothing touches
 // the repository and nothing shells out to git.
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   collectFindings,
@@ -17,6 +19,8 @@ import {
   HEADER_SCAN_LINES,
   LICENSE_CLAUSE,
 } from '../verify-license.mjs';
+
+const SCRIPT = fileURLToPath(new URL('../verify-license.mjs', import.meta.url));
 
 /** The header as hand-written files in this repository carry it. */
 const BLOCK_HEADER = `/*
@@ -125,9 +129,62 @@ test('vendored and generated-output directories are not walked', () => {
   );
 });
 
-test('a missing root yields no findings rather than throwing', () => {
+test('a missing root is a finding, not a silent pass', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'verify-license-'));
   rmSync(root, { recursive: true, force: true });
   assert.deepEqual(goFiles(root), []);
-  assert.deepEqual(collectFindings(root), []);
+  assert.match(collectFindings(root)[0], /scanned nothing/);
+});
+
+test('a tree with no Go files is a finding, not a silent pass', () => {
+  // The regression this guards: point the script at the wrong root — move it
+  // into scripts/ci/ and `..` lands on scripts/ — and it walks a tree with no
+  // Go in it, finds nothing missing, and exits 0. A green check with no
+  // coverage reads exactly like a green check with full coverage.
+  withTree({ 'docs/notes.md': 'no Go here', 'pkg/thing.ts': 'export {};' }, (root) =>
+    assert.match(collectFindings(root)[0], /scanned nothing/),
+  );
+});
+
+/**
+ * Run the CLI against a planted tree.
+ *
+ * The script resolves its root from its OWN location (`../`), not from cwd, so
+ * a copy is planted at `<tree>/scripts/verify-license.mjs` and `..` lands on
+ * the tree. That is also the property the wrong-root guard above protects, so
+ * exercising it here keeps the two honest about each other.
+ */
+function runCliIn(root) {
+  mkdirSync(path.join(root, 'scripts'), { recursive: true });
+  const planted = path.join(root, 'scripts', 'verify-license.mjs');
+  copyFileSync(SCRIPT, planted);
+  return spawnSync(process.execPath, [planted], { encoding: 'utf8' });
+}
+
+test('the CLI exits 1 and names each file when a header is missing', () => {
+  withTree({ 'pkg/a.go': 'package a\n', 'pkg/ok.go': LINE_HEADER }, (root) => {
+    const r = runCliIn(root);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /pkg\/a\.go has no Apache 2\.0 header/);
+    assert.match(r.stdout, /1 file\(s\) missing the header/);
+    assert.doesNotMatch(r.stdout, /pkg\/ok\.go/);
+  });
+});
+
+test('the CLI exits 1 when it scanned nothing', () => {
+  withTree({ 'docs/notes.md': 'no Go here' }, (root) => {
+    const r = runCliIn(root);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /scanned nothing/);
+  });
+});
+
+test('the CLI reports the count it actually checked', () => {
+  // Against this repository, not a planted tree: the success line is the only
+  // place the scan size is visible, and "every Go file" is true of zero.
+  const r = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const m = r.stdout.match(/Every Go file \((\d+)\) carries/);
+  assert.ok(m, `no count in the success line: ${r.stdout}`);
+  assert.ok(Number(m[1]) > 100, `implausibly few files scanned: ${m[1]}`);
 });
