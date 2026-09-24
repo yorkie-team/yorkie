@@ -3287,6 +3287,13 @@ func (t *Tree) StyleByIndex(
 // visited twice, on its Start token and on its End token. The second write
 // was already a no-op: RHT.Set and RHT.Remove both reject a ticket that is
 // not After the one they hold, which is the same ticket on the second visit.
+//
+// NOTE(cross-implementation): the set this returns is a replicated contract,
+// not a local detail — every SDK has to reach the same nodes for the same
+// change. The rules are stated without reference to Go identifiers, with
+// replayable acceptance vectors, under "Port specification" in
+// docs/design/concurrent-merge-split.md; change them here and that section
+// and the yorkie-js-sdk port have to move with them.
 func (t *Tree) styleTargets(
 	from, to *TreePos,
 	editedAt *time.Ticket,

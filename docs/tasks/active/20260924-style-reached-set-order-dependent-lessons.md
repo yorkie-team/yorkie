@@ -116,3 +116,39 @@
   that makes it decidable on any replica, plus the acceptance vectors a port
   has to reproduce (the 13 mirror cases and the scan counts). "Tracked as a
   follow-up" is a note; a rule statement plus a test vector is a task.
+
+## Review panel round 4
+
+- **A cross-repository requirement is a standstill, not a work item.** The
+  panel re-raised "must land on the server and the JS SDK together" as
+  blocking, on both lenses. Nothing in this repository can satisfy it:
+  `yorkie-js-sdk` is a separate repository, and any Go-side change to the
+  reached set — including the empty one of not landing — either diverges from
+  unported JS clients or keeps two Go replicas diverging from each other by
+  delivery order, which is the worse of the two. The round produced a
+  structured rebuttal rather than a code change, so the standstill is on the
+  record and reaches a human instead of being re-litigated each round.
+
+- **Read what the quoted sentence is attached to.** The issue's "has to land
+  on the server and the JS SDK together" qualifies *the durable shape* it
+  proposes — the range resolved in a version-vector-filtered index space,
+  which "touches the traversal contract shared by `Style`, `RemoveStyle` and
+  tree position resolution". This PR deliberately does not take that approach
+  and records it as the open limitation in §9.5. The same sentence, lifted
+  off its antecedent, then reads as a gate on the approach that *was* taken.
+  Quoting an issue is not the same as scoping the quote.
+
+- **The repository's own ledger is the precedent.** Fix 11 (§9.1), Fix 12
+  (§9.2), Fix 21 (§9.3), Fix 22 and Fix 23 (§9.4) each changed which nodes a
+  `Tree.Style` writes to and each landed Go-only, through this same design
+  doc, in #1909, #1928 and #1954. Fix 10 is recorded in the same table as
+  "JS-only". The ledger already models the two implementations landing
+  separately; a rule that forbids it would have blocked five of the twenty-four
+  fixes above it.
+
+- **Put the contract where the code is, not only where the doc is.** The
+  port spec was discoverable only to someone already reading
+  `docs/design/concurrent-merge-split.md`. `styleTargets` now carries a
+  `NOTE(cross-implementation)` saying its return value is a replicated
+  contract and pointing at that section, so the next editor of the reached set
+  learns it from the function they are editing.

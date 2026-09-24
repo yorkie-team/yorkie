@@ -841,6 +841,21 @@ rendered divergences → 0, merge × style 297 → 0. Porting is the
 follow-up tracked on the task; the Go-side fix is not held for it
 because leaving it out keeps Go replicas diverging from each other.
 
+Landing a reached-set rule Go-first is how this series has always
+worked, not a new exception. Fix 11 (§9.1), Fix 12 (§9.2), Fix 21
+(§9.3), Fix 22 and Fix 23 (§9.4) each changed which nodes a
+`Tree.Style` writes to, and each landed in this repository alone
+(#1909, #1928, #1954). Fix 10 in the same table is recorded as
+"JS-only". The cross-reference ledger tracks the two implementations
+converging fix by fix rather than commit by commit, because they sit in
+different repositories and one of them cannot be held while the other
+keeps replicas of a single implementation diverging from each other.
+What the issue says "has to land on the server and the JS SDK
+together" is the *durable shape* it proposes — the range resolved in a
+version-vector-filtered index space, which touches position resolution
+for `Edit` as well. That approach is not taken here; it is the open
+item at the end of §9.5, and it is the one that has to land as a pair.
+
 **Port specification.** The JS SDK is a separate repository
 (`yorkie-team/yorkie-js-sdk`), so the port cannot land in the same
 commit; it can land against a fixed spec. The four rules are stated
