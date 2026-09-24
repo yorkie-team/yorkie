@@ -147,27 +147,11 @@ func NewRoot(root *Object) *Root {
 	}
 
 	r.object = root
-	r.RegisterElement(root, nil)
 
 	// NOTE(hackerwins): tombstoned elements are not re-registered here:
-	// RegisterElement above already booked every one of them into GC.
-	root.Descendants(func(elem Element, parent Container) bool {
-		switch e := elem.(type) {
-		case *Array:
-			for _, pair := range e.GCPairs() {
-				r.RegisterGCPair(pair)
-			}
-		case *Text:
-			for _, pair := range e.GCPairs() {
-				r.RegisterGCPair(pair)
-			}
-		case *Tree:
-			for _, pair := range e.GCPairs() {
-				r.RegisterGCPair(pair)
-			}
-		}
-		return false
-	})
+	// RegisterElement books every one of them into GC, along with the
+	// tombstones its elements carry inside themselves.
+	r.RegisterElement(root, nil)
 
 	return r
 }
@@ -201,6 +185,54 @@ func (r *Root) RegisterElement(element Element, parent Container) {
 	// subtree, so doing it while the first pass is still walking would move
 	// descendants Live has not been charged for yet, and drive Live negative.
 	r.adoptTombstones(element, parent)
+
+	// The two passes above see elements only. A Text/Tree/Array also holds
+	// tombstones *inside* itself -- removed tree nodes, removed text pieces,
+	// removed RHT attributes -- and those are collected through gcNodePairMap,
+	// which only a GC pair reaches.
+	//
+	// Every route that brings such an element in has to book them, not just
+	// snapshot load: a Set/Add/ArraySet payload is decoded by the same
+	// BytesTo* readers a snapshot is, and an undo re-sets a DeepCopy of a
+	// removed container whose tree may still hold nodes that were tombstoned
+	// before it. Left unbooked they are the worst of both states -- invisible
+	// to every later edit, yet charged to nothing and collectable by nothing,
+	// so the bytes stay in the document forever. A crafted payload whose tree
+	// nodes all arrive with removedAt reaches exactly that state on purpose.
+	r.registerInternalGCPairs(element)
+}
+
+// registerInternalGCPairs books the tombstones the given element and its
+// descendant elements carry inside themselves into GC.
+//
+// Freshly created content has none, so this costs one walk of the registered
+// subtree and no registration in the common case.
+func (r *Root) registerInternalGCPairs(element Element) {
+	register := func(elem Element) {
+		switch e := elem.(type) {
+		case *Array:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
+		case *Text:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
+		case *Tree:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
+		}
+	}
+
+	register(element)
+
+	if container, ok := element.(Container); ok {
+		container.Descendants(func(elem Element, _ Container) bool {
+			register(elem)
+			return false
+		})
+	}
 }
 
 // registerLive registers the given element and its descendants to the element

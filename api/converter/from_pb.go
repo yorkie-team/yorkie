@@ -979,10 +979,24 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	var treeNodes []*crdt.TreeNode
 
 	for _, pbNode := range pbNodes {
+		if pbNode == nil {
+			return nil, goerrors.New("tree edit content missing")
+		}
+
 		treeNode, err := FromTreeNodes(pbNode.Content)
 
 		if err != nil {
 			return nil, err
+		}
+
+		// FromTreeNodes reports an empty content list as a nil root, and every
+		// group ToTreeNodesWhenEdit writes holds at least the root of one
+		// content node. Reject the empty group rather than carry the nil into
+		// the operation: TreeEdit.Execute dereferences each content to deep-
+		// copy it, so a nil in the slice is a panic on apply -- in the server
+		// handling the change, and on every replica it is forwarded to.
+		if treeNode == nil {
+			return nil, goerrors.New("tree edit content missing")
 		}
 
 		// Operation content is fully client-controlled and is always freshly
@@ -995,10 +1009,8 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 		// structural pointers once Tree.Edit registers these nodes in
 		// NodeMapByID, and a node born tombstoned under a live parent is
 		// counted as live content that no GC pair will ever collect.
-		if treeNode != nil {
-			treeNode.DropEngineOnlyLinks()
-			treeNode.ClearTombstones()
-		}
+		treeNode.DropEngineOnlyLinks()
+		treeNode.ClearTombstones()
 
 		treeNodes = append(treeNodes, treeNode)
 	}

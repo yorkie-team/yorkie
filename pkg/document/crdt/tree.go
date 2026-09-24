@@ -1045,6 +1045,18 @@ func (t *Tree) rebuildMergeState() {
 			return
 		}
 
+		// A merge moves children under an element parent, so a child sitting
+		// under a text node cannot be one a merge moved. Only a snapshot is
+		// guaranteed well-formed here: an element payload (Set/Add/ArraySet)
+		// passes through this same reader and keeps its MergedFrom, because
+		// the reverse of a Remove legitimately carries the merges the tree
+		// really underwent. Deriving a forwarding pointer at a text node from
+		// a crafted one is what would hand a later insert a parent that can
+		// hold no children.
+		if node.Parent.Value.IsText() {
+			return
+		}
+
 		// Backwards compatibility: older snapshots have MergedFrom
 		// without MergedAt. Fall back to src.removedAt — imperfect
 		// when a later tombstone overwrote it, but this is the best
@@ -3457,7 +3469,16 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 			return realParentNode.Index.Parent.Value, realParentNode, diff, nil
 		}
 		mergeTarget := t.findFloorNode(realParentNode.mergedInto)
-		if mergeTarget != nil && !mergeTarget.IsRemoved() {
+		// A text node is never a merge destination: mergeNodes moves children
+		// into an element parent, and a text node cannot hold children at all.
+		// The check is on the resolved node rather than on the pointer because
+		// the pointer can come from a client: an element payload keeps the
+		// MergedFrom that rebuildMergeState derives mergedInto from, so a
+		// crafted one can name a text node here. Returned as the insertion
+		// parent it would fail every later edit that resolves through this
+		// tombstone, permanently and on every replica. Falling through to the
+		// normal path treats the crafted lineage as the absent one it is.
+		if mergeTarget != nil && !mergeTarget.IsRemoved() && !mergeTarget.IsText() {
 			targetChildren := mergeTarget.Index.Children(true)
 			for i, targetChild := range targetChildren {
 				if targetChild.Value.MergedFrom == nil ||
