@@ -120,3 +120,73 @@ The `commit-msg` hook rejected two subject lines over 70 characters during
 this task, and the new `pre-commit` hook refused the deliberate `lll`
 violation used to prove it works. Both gates were exercised by the commits
 that introduced them.
+
+## Review rounds
+
+### Round 1 — weighted to correctness and test adequacy
+
+One Critical, seven Important, ten Minor. All eight blocking findings
+fixed; the rejections and deferrals are recorded below.
+
+The Critical one is the lesson. Adding the licence lane was half the
+change: **four places in the tree still asserted the gap was open**, and
+the worst of them is `MECHANICAL_COVERAGE_NOTE` in `review-panel.mjs`,
+which is appended last to every lens prompt. Every lens on every panel
+run was being told that a finding about a missing licence header is
+"worth MORE than one the lanes above would have caught" — directed to
+spend turns on a class `docs.yml` now reds in seconds. And
+`review-panel.test.mjs` *asserted* the stale sentence, so the guard
+written to keep the note honest would have failed on the correction.
+
+**Rule: closing a gap means finding everything that describes it.** A
+grep for the gap's own words is the cheapest possible step and it was
+not taken. The note's header states the failure mode in both directions
+— "tell a lens something is covered when it is not and that whole
+finding class stops being reported" — and the inverse costs the same.
+
+### The lesson I wrote and then broke in the same branch
+
+This file already argued that ported prose is a defect class. The commit
+that fixed one instance (`docs.yml`'s reference to a TypeScript monorepo)
+replaced it with a **fresh claim I had not checked**: that `docs/design/`
+cites Go files, so deleting a cited `.go` breaks a link. Walked with the
+checker's own `linkTargets`, the graph has zero relative `.go` targets —
+every Go citation is an absolute GitHub URL, which the checker skips.
+
+The true evidence was one command away: 35 images under
+`docs/design/media/`, three script directories, and the workflow file
+itself. Writing a justification is not the same act as checking one, and
+knowing the failure class does not protect you from it — the second
+version was written with the lesson already on disk. Measurements now go
+in the comment as numbers, which is harder to fake than an adjective.
+
+### The silent pass that arrived by a second door
+
+The new checker returned `[]` for an empty tree and printed "Every Go
+file carries the Apache 2.0 header", which is true of zero files. The
+same Makefile comment three commits earlier had argued that a check
+reporting nothing is indistinguishable from a check finding nothing.
+
+Chasing it found the same failure by another route, in both verify
+scripts: `isDirectRun` compared `process.argv[1]` to `import.meta.url`
+as strings, and the loader resolves one through symlinks while the
+caller's spelling is not resolved at all. Invoked as `/tmp/...` on macOS
+— a link to `/private/tmp` — the CLI block never ran and the process
+exited 0 in silence. **A principle stated in a comment is not a
+property of the code.** Both now realpath both sides, and the success
+line carries the file count so a collapsed scan is visible.
+
+### Guards are not optional for the gate you are adding
+
+Round 1's sharpest procedural finding: the inline-help fix shipped with
+two guards, and Gate 1 — the actual subject of the task — shipped with
+none. The nine payloads proving the hook works were run by hand and
+thrown away, so the reviewer had to re-derive them.
+
+`scripts/test/harness-hooks.test.mjs` now pins the three that fail
+silently: the guard hook fails OPEN, so a `case` pattern that stops
+matching stops guarding without erroring; a renamed hook makes its
+settings.json entry a no-op; and deleting the `docs.yml` step leaves
+`make verify` printing SKIPPED where Node is absent. The generated set
+is derived from the tree rather than listed, so `api/yorkie/v2/` is
+covered the day it appears. Seven mutations, seven failures.
