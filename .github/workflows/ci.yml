@@ -143,11 +143,15 @@ jobs:
         run: go test -tags integration -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -v ./...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        # v3 runs on a Node version current runners no longer provide, which
+        # actionlint reports as "too old to run on GitHub Actions". The input
+        # was renamed on the way: `file` became `files` in v4, and v3's name
+        # is accepted-and-ignored rather than rejected, so carrying it over
+        # would upload nothing and still go green.
+        uses: codecov/codecov-action@v5
         with:
-          file: ./coverage.txt
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.txt
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   bench:
     name: bench

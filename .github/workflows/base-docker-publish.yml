@@ -3,9 +3,13 @@ on:
   workflow_call:
     inputs:
       command:
-        description: make command to run
+        # No default: the input is required, so a default can never be used,
+        # and actionlint reports the pair. Required is the half to keep —
+        # both callers pass it explicitly, and a default that silently
+        # published the `docker` tag for a caller that meant `docker-latest`
+        # is the wrong direction to fail in.
+        description: make command to run — `docker` or `docker-latest`
         required: true
-        default: docker # or docker-latest
         type: string
 jobs:
   build:
