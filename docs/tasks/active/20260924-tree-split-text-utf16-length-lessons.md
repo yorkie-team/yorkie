@@ -52,3 +52,32 @@ Two blocking findings, both accepted and fixed:
 The second fix surfaced that a locally built reverse operation has no
 `executedAt` until `Document.applyUndo` stamps one, so two round-trip tests were
 encoding a wire form no real client sends; they now stamp the ticket first.
+
+## Review panel round 3
+
+Same shape as round 2's second finding, one level down. Hardening had been
+applied to the *operation's* tickets but not to the *element* those operations
+carry, so a Set/Add/ArraySet payload with no `created_at` still reached
+`ElementRHT`/`RGATreeList`, which key on `v.CreatedAt().Key()`. Three lenses
+independently found it, plus the `TreeEdit.split_tickets` entries, still decoded
+through the permissive `fromTimeTicket`. The lesson repeats: when the defect is
+"a permissive decoder is trusted at a dereference site", the fix has to sweep
+every site that decoder feeds, not the family you happened to be looking at.
+
+The other finding was the counterpart the repo already documents: every
+rejection added to `FromOperations` also lands on `ChangeInfo.ToChange`, which
+reads changes written under the older rules, and there a rejection makes the
+document permanently unloadable. Two of the new rejections have no repair — you
+cannot invent a ticket, and substituting one only moves the failure from decode
+to execute — so the stored path now *drops* those operations
+(`FromStoredOperations`). That is defensible precisely because such an operation
+could never have applied anywhere: the nil ticket faulted inside `Execute`, so
+no document ever held its effect. The split-ticket list is repairable and is
+truncated at the first absent entry instead, since `TreeEdit.Execute` already
+falls back to reconstructing the tickets it runs out of.
+
+Worth recording: `withoutUndatedOperations` asks `fromOperation` rather than
+re-listing the required fields. A hand-written mirror of "what is required"
+drifts from the wire boundary on the next round; asking the decoder cannot.
+And it runs only after the ordinary decode has reported `ErrMissingTicket`, so
+the stored path pays nothing in the normal case.

@@ -326,36 +326,7 @@ func FromDocSize(pbDocSize *api.DocSize) resource.DocSize {
 func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	var ops []operations.Operation
 	for _, pbOp := range pbOps {
-		if pbOp == nil {
-			return nil, goerrors.New("operation missing")
-		}
-
-		var op operations.Operation
-		var err error
-		switch decoded := pbOp.Body.(type) {
-		case *api.Operation_Set_:
-			op, err = fromSet(decoded.Set)
-		case *api.Operation_Add_:
-			op, err = fromAdd(decoded.Add)
-		case *api.Operation_Move_:
-			op, err = fromMove(decoded.Move)
-		case *api.Operation_Remove_:
-			op, err = fromRemove(decoded.Remove)
-		case *api.Operation_Edit_:
-			op, err = fromEdit(decoded.Edit)
-		case *api.Operation_Style_:
-			op, err = fromStyle(decoded.Style)
-		case *api.Operation_Increase_:
-			op, err = fromIncrease(decoded.Increase)
-		case *api.Operation_TreeEdit_:
-			op, err = fromTreeEdit(decoded.TreeEdit)
-		case *api.Operation_TreeStyle_:
-			op, err = fromTreeStyle(decoded.TreeStyle)
-		case *api.Operation_ArraySet_:
-			op, err = fromArraySet(decoded.ArraySet)
-		default:
-			return nil, ErrUnsupportedOperation
-		}
+		op, err := fromOperation(pbOp)
 		if err != nil {
 			return nil, err
 		}
@@ -363,6 +334,40 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	}
 
 	return ops, nil
+}
+
+// fromOperation converts a single operation. It is split out of FromOperations
+// so the stored-decode path can ask about one operation at a time; see
+// withoutUndatedOperations.
+func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
+	if pbOp == nil {
+		return nil, goerrors.New("operation missing")
+	}
+
+	switch decoded := pbOp.Body.(type) {
+	case *api.Operation_Set_:
+		return fromSet(decoded.Set)
+	case *api.Operation_Add_:
+		return fromAdd(decoded.Add)
+	case *api.Operation_Move_:
+		return fromMove(decoded.Move)
+	case *api.Operation_Remove_:
+		return fromRemove(decoded.Remove)
+	case *api.Operation_Edit_:
+		return fromEdit(decoded.Edit)
+	case *api.Operation_Style_:
+		return fromStyle(decoded.Style)
+	case *api.Operation_Increase_:
+		return fromIncrease(decoded.Increase)
+	case *api.Operation_TreeEdit_:
+		return fromTreeEdit(decoded.TreeEdit)
+	case *api.Operation_TreeStyle_:
+		return fromTreeStyle(decoded.TreeStyle)
+	case *api.Operation_ArraySet_:
+		return fromArraySet(decoded.ArraySet)
+	default:
+		return nil, ErrUnsupportedOperation
+	}
 }
 
 func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
@@ -806,9 +811,12 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		executedAt,
 	)
 
+	// Each entry becomes a split node's CreatedAt, which crdt.Tree keys
+	// NodeMapByID on and compares -- so an absent one is not a tolerable gap in
+	// the list but a nil TreeNodeID.CreatedAt that faults during the split.
 	var splitTickets []*time.Ticket
 	for _, pbTicket := range pbTreeEdit.SplitTickets {
-		ticket, err := fromTimeTicket(pbTicket)
+		ticket, err := fromRequiredTimeTicket(pbTicket, "tree_edit.split_tickets")
 		if err != nil {
 			return nil, err
 		}
@@ -922,7 +930,7 @@ func fromTextNodePos(
 		return nil, err
 	}
 	if createdAt == nil {
-		return nil, goerrors.New("text node pos has nil createdAt")
+		return nil, fmt.Errorf("text_node_pos.created_at: %w", ErrMissingTicket)
 	}
 
 	return crdt.NewRGATreeSplitNodePos(
@@ -1258,7 +1266,7 @@ func fromRequiredTimeTicket(pbTicket *api.TimeTicket, field string) (*time.Ticke
 		return nil, err
 	}
 	if ticket == nil {
-		return nil, fmt.Errorf("%s is missing", field)
+		return nil, fmt.Errorf("%s: %w", field, ErrMissingTicket)
 	}
 	return ticket, nil
 }
@@ -1303,6 +1311,13 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	return elem, nil
 }
 
+// fromElement decodes the element an operation carries as its payload.
+//
+// The element's own createdAt is as load-bearing as the operation's tickets:
+// ElementRHT and RGATreeList key on it (v.CreatedAt().Key()), so an absent one
+// is a nil dereference the moment the operation is applied -- server-side, in
+// the background snapshot goroutine, on every later replay of the change. It is
+// required here for the same reason fromRequiredTimeTicket exists.
 func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	if pbElement == nil {
 		return nil, ErrUnsupportedElement
@@ -1311,7 +1326,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		if pbElement.Value == nil {
-			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 			if err != nil {
 				return nil, err
 			}
@@ -1323,7 +1338,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		return sanitizeElement(BytesToObject(pbElement.Value))
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
 		if pbElement.Value == nil {
-			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 			if err != nil {
 				return nil, err
 			}
@@ -1350,7 +1365,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
@@ -1364,7 +1379,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		}
 		return primitive, nil
 	case api.ValueType_VALUE_TYPE_TEXT:
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
@@ -1379,7 +1394,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
