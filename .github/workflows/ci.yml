@@ -179,10 +179,15 @@ jobs:
         # PINNED, because of what this job holds. `bench` runs with
         # `contents: write`, `pull-requests: write`, GITHUB_TOKEN and
         # CLAUDE_CODE_OAUTH_TOKEN, and an unpinned global install resolves
-        # whatever was published minutes ago — the one step in this
-        # repository that let an outside release choose what runs next to
-        # those credentials. Everything else here is pinned: actions by SHA,
-        # golangci-lint by version, the Agent SDK by lockfile.
+        # whatever was published minutes ago.
+        #
+        # Not the same risk as the `@v4` action tags around it, which is why
+        # this one is worth a version and they are left alone: a tag is a ref
+        # its publisher moves deliberately, while `npm install -g` with no
+        # version re-resolves on every run. (Of the actions in this
+        # repository only two are SHA-pinned — the two that mint credentials.
+        # Whether that line should be "anything touching a secret" is a
+        # separate question from this one.)
         #
         # Tracks the `stable` dist-tag, not `latest`, which is ahead of it.
         # Dependabot cannot see this — its npm ecosystem reads manifests, and

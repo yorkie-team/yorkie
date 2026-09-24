@@ -17,7 +17,17 @@
 // stays read-only: it runs the hook with a payload on stdin and reads files.
 
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  accessSync,
+  constants,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
@@ -153,4 +163,83 @@ test('make verify reaches the licence gate', () => {
   assert.ok(target, 'the Makefile has no verify target');
   assert.match(target, /\bverify-license\b/);
   assert.match(mk, /^verify-license:/m, 'verify names a target that does not exist');
+});
+
+/**
+ * Run `pre-commit` against a throwaway repository.
+ *
+ * GIT IS ALWAYS ADDRESSED WITH `-C dir`, never through the working directory.
+ * The sibling suite's header records why: a suite elsewhere in this
+ * organization ran `git init`/`commit`/`checkout` against the CWD, and under a
+ * `git worktree` it rewrote that checkout's HEAD and moved two branch refs.
+ * Nothing below can see this repository.
+ */
+function inScratchRepo(body) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pre-commit-'));
+  const git = (...args) =>
+    spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+  try {
+    git('init', '-q', '.');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'test');
+    return body({ dir, git });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** The hook's decision alone: 0 = "nothing to lint", 1 = "there is Go here". */
+function wouldLint({ dir }) {
+  // The hook `exec`s `make lint` when it decides to run, which a scratch repo
+  // has no Makefile for. Replacing the tail with a marker isolates the
+  // decision, which is the part with the history of being wrong.
+  const src = readFileSync(path.join(REPO, '.githooks', 'pre-commit'), 'utf8')
+    .replace(/^exec make lint$/m, 'echo WOULD_LINT');
+  const probe = path.join(dir, '.probe-pre-commit');
+  writeFileSync(probe, src);
+  const r = spawnSync('bash', [probe], { cwd: dir, encoding: 'utf8' });
+  return r.stdout.includes('WOULD_LINT');
+}
+
+test('pre-commit lints whenever a commit stages Go, however it stages it', () => {
+  // THE REGRESSION: `--diff-filter=ACM` dropped `R`, and git reports a
+  // rename-with-edit as a single `R` entry above ~50% similarity. Such a
+  // commit stages Go and the hook skipped the lint entirely — the same silent
+  // pass this branch exists to close, inside the gate that closes it.
+  inScratchRepo(({ dir, git }) => {
+    writeFileSync(path.join(dir, 'a.go'), 'package a\nfunc A() {}\n');
+    git('add', 'a.go');
+    git('commit', '-qm', 'init', '--no-verify');
+
+    // Rename with an edit: reported as R, not as A+D.
+    git('mv', 'a.go', 'b.go');
+    writeFileSync(path.join(dir, 'b.go'), 'package a\nfunc A() {}\nfunc B() {}\n');
+    git('add', 'b.go');
+    assert.match(git('diff', '--cached', '--name-status').stdout, /^R/);
+    assert.equal(wouldLint({ dir }), true, 'a rename-with-edit must still lint');
+  });
+});
+
+test('pre-commit lints a staged Go deletion', () => {
+  // A deletion cannot introduce a lint violation in its own text, but it
+  // breaks compilation for every file that referenced it — which golangci-lint
+  // reports. `--diff-filter=ACMR` would have skipped this one.
+  inScratchRepo(({ dir, git }) => {
+    writeFileSync(path.join(dir, 'a.go'), 'package a\nfunc A() {}\n');
+    git('add', 'a.go');
+    git('commit', '-qm', 'init', '--no-verify');
+
+    git('rm', '-q', 'a.go');
+    assert.equal(wouldLint({ dir }), true, 'a staged deletion must still lint');
+  });
+});
+
+test('pre-commit skips a commit that stages no Go at all', () => {
+  // The other half: an outside contributor fixing a typo must not need the Go
+  // toolchain to commit.
+  inScratchRepo(({ dir, git }) => {
+    writeFileSync(path.join(dir, 'README.md'), '# docs\n');
+    git('add', 'README.md');
+    assert.equal(wouldLint({ dir }), false, 'a docs-only commit must not lint');
+  });
 });

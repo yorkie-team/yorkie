@@ -26,11 +26,19 @@ set -euo pipefail
 # contributor fixing a typo in a README, who followed CONTRIBUTING.md and ran
 # `scripts/setup.sh`, cannot commit without installing the Go toolchain.
 #
+# NO --diff-filter. It is tempting to narrow this to added-or-modified, and
+# both plausible narrowings are wrong. `ACM` drops `R`, so a rename-with-edit
+# — which git reports as a single `R` entry above ~50% similarity — stages Go
+# and skips the lint entirely. Adding `R` still drops `D`, and a deletion
+# breaks compilation for every file that referenced the deleted one, which is
+# a failure golangci-lint reports. Any staged change to a `.go` file is a
+# reason to run.
+#
 # git's own pathspec does the filtering. A `| grep -q '\.go$'` would be the
 # obvious spelling and is a trap here: `grep -q` exits at the first match,
 # `git` takes SIGPIPE, and `set -o pipefail` then reports the pipeline as
 # FAILED — inverting the test precisely when Go files are staged.
-if [ -z "$(git diff --cached --name-only --diff-filter=ACM -- '*.go')" ]; then
+if [ -z "$(git diff --cached --name-only -- '*.go')" ]; then
   exit 0
 fi
 
