@@ -262,12 +262,12 @@ An exact element match treats the absent product as the absent lineage it is,
 the same guard §6.3 applies to `mergedInto`.
 
 What the propagation tombstones never enters Phase 5's `toBeRemoveds`, so it
-is reported separately on `TreeEditReverseInfo.Removed`/`PreTombstoned`: it
-is content the edit destroyed, and merge propagation always clears
-`SpansComplete`, so the copy-reinsert reverse built from those fields is the
-only thing that can restore it. `RemovedSize` deliberately excludes it — that
-field describes one contiguous pre-edit index range, and these nodes sit
-outside the resolved range by construction.
+reaches the operations layer as GC pairs only — not through
+`TreeEditReverseInfo` — and an undo of the edit does not restore it. That is
+JS's behavior too (its merge propagation likewise never appends to
+`nodesToBeRemoved`), and `undo-redo-go-port.md` keeps the two ports identical
+including JS's known defects, so this is a shared defect to fix in both ports
+at once rather than in Go alone.
 
 A source the range only spans is a plain delete of everything that was
 inside it. Its children are tombstoned wherever the concurrent merge left

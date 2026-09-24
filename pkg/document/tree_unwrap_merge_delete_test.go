@@ -132,16 +132,24 @@ func TestTreeUnwrapAndMergeDelete(t *testing.T) {
 		// orders them by arrival -- d1 ends with [ab(x), cd] under the root
 		// and d2 with [cd, ab(x)].
 		//
-		// Pinned rather than left unasserted. Fixing it means placing merged
-		// children at the merge source's position instead of appending, which
-		// changes the outcome of every unwrap and would have to land in the JS
-		// SDK at the same moment or the two ports would stop converging with
-		// each other outright. Out of scope here; see the task's known
-		// limitations. If this NotEqual ever fails, the limitation is gone.
+		// That is a real ID-level divergence, not a cosmetic one: an insert a
+		// third replica anchors to ab lands before cd on d1 and after it on
+		// d2, and the server snapshots whichever order reached it first. It is
+		// NOT introduced here -- mergeNodes is untouched by this fix, the JS
+		// SDK appends identically, and before this fix ab was live and the two
+		// replicas disagreed on XML as well. Closing it means changing where
+		// mergeNodes places moved children, which is wire-visible for every
+		// unwrap and has to land in the JS SDK at the same moment; tracked in
+		// docs/tasks/active/20260924-merge-moved-child-order-todo.md, the same
+		// class as 20260923-same-boundary-split-order.
+		//
+		// Pinned rather than left unasserted, so the day that fix lands this
+		// test says so instead of silently agreeing.
 		assert.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[1]))
 		assert.NotEqual(t, treeShape(t, docs[0]), treeShape(t, docs[1]),
-			"tombstone ordering now converges: replace this with the "+
-				"treeShape equality the other subtests assert")
+			"merge-moved child ordering now converges: close "+
+				"20260924-merge-moved-child-order and replace this with "+
+				"the treeShape equality the other subtests assert")
 	})
 
 	t.Run("same unwrap on both replicas keeps the hoisted children", func(t *testing.T) {

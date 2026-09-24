@@ -73,3 +73,31 @@
   byte what the pre-round branch produced, and still better than `main` (242
   and 1328 on the first two). So the generalizations cost nothing measurable
   on these shapes; they close reasoning gaps the fixtures do not reach.
+
+## Panel round (2026-09-24, after "Key the merge-delete skip…")
+
+- **A one-sided defect fix is a divergence, even when nothing on the wire
+  changes.** Feeding §6.2's propagated tombstones into
+  `TreeEditReverseInfo.Removed`/`PreTombstoned` made Go's undo restore content
+  JS's undo drops. `undo-redo-go-port.md` (Goals; Key Decision "Port JS's known
+  defects as-is") rules that out: parity is the point, and a Go-only fix widens
+  the gap the port exists to close. The plumbing was reverted; the gap is
+  recorded as a known limitation to fix in both ports at once. The previous
+  entry in this file argued for the opposite and was wrong.
+
+- **Widening a field's population breaks consumers written for the narrow
+  one.** `Removed` was one contiguous pre-edit range, and the operations layer
+  reads it that way -- `toReverseOperation` anchors at `Removed[0]`,
+  `topLevelRemoved` filters by parent membership in the same set. Appending
+  out-of-range propagated nodes kept the type and the name while changing the
+  contract, so nothing failed to compile and nothing failed at review-time
+  reading either. If a field's doc comment has to describe two populations,
+  that is the signal to add a field, not to append.
+
+- **Pinning a divergence is not the same as owning it.** The reported case's
+  `assert.NotEqual` said the limitation exists; it did not say who fixes it or
+  when. It now points at `20260924-merge-moved-child-order-todo.md`, a task in
+  the same class as `20260923-same-boundary-split-order` (arrival-ordered
+  placement, Go fix gated on a JS mirror), with the consequence spelled out --
+  a third replica's insert anchored to the hoisted child, and snapshots taking
+  whichever arrival order reached the server.

@@ -1770,21 +1770,13 @@ type TreeEditReverseInfo struct {
 	InsertedContentSize int
 
 	// Removed holds each node of Phase 5's toBeRemoveds that THIS edit
-	// transitioned visible -> tombstoned, in the order that phase walked them,
-	// followed by the children §6.2's merge propagation tombstoned on top of
-	// them. PreTombstoned names — by IDString, mirroring the JS port's
-	// ID-string Set — every one of those same collected nodes that was already
-	// tombstoned before this edit ran, plus the already-dead descendants the
-	// propagation walked past.
-	//
-	// The propagated nodes are appended here because they are content this
-	// edit destroyed: they never enter toBeRemoveds (merge propagation
-	// recomputes them from the merge target's children), and a copy-reinsert
-	// reverse built from Removed alone would leave them unrestorable. This is
-	// where Go deliberately parts from JS, whose merge propagation never
-	// appends to nodesToBeRemoved and whose undo therefore drops them. Only
-	// the reverse's contents change; nothing a replica exchanges does, so the
-	// two ports still converge.
+	// transitioned visible -> tombstoned, in the order that phase walked them.
+	// PreTombstoned names — by IDString, mirroring the JS port's ID-string Set
+	// — every one of those same collected nodes that was already tombstoned
+	// before this edit ran. The two partition toBeRemoveds; they say nothing
+	// about nodes propagateMergeDeletes additionally tombstones, since those
+	// never enter toBeRemoveds either (matching JS, whose merge propagation
+	// likewise never appends to nodesToBeRemoved).
 	//
 	// A node in PreTombstoned represents a deletion the user already made
 	// independently of this edit and must not be resurrected by a reverse
@@ -1839,13 +1831,6 @@ type TreeEditReverseInfo struct {
 	// fully returned, over the same set: JS's nodesToBeRemoved includes
 	// pre-tombstoned nodes the way this field does, unlike Removed above --
 	// see Removed's own doc comment.
-	//
-	// Strictly Phase 5's set, so the nodes §6.2's merge propagation tombstones
-	// are excluded even though Removed lists them: this describes ONE
-	// contiguous pre-edit index range starting at PreEditFromIdx, and the
-	// propagated nodes sit outside the resolved range -- that is why the
-	// propagation has to reach them at all -- so counting them would stretch
-	// the reconciliation range over nodes the edit never touched.
 	RemovedSize int
 
 	// SplitSize is the visible-index size Phase 7's split added: one close
@@ -1859,22 +1844,6 @@ type TreeEditReverseInfo struct {
 	// reported a split as a zero-width, zero-growth edit and undo/redo
 	// reconciliation left every stacked entry to the right of it unshifted.
 	SplitSize int
-}
-
-// addPropagated folds what §6.2's merge propagation tombstoned into the sets a
-// copy-reinsert reverse is built from. Phase 5's toBeRemoveds never holds those
-// nodes, so this is the only path by which they reach a caller.
-func (i *TreeEditReverseInfo) addPropagated(
-	removed []*TreeNode,
-	preTombstoned map[string]struct{},
-) {
-	i.Removed = append(i.Removed, removed...)
-	for id := range preTombstoned {
-		if i.PreTombstoned == nil {
-			i.PreTombstoned = make(map[string]struct{})
-		}
-		i.PreTombstoned[id] = struct{}{}
-	}
 }
 
 // Edit edits the tree with the given range and content. If the content is
@@ -2017,21 +1986,13 @@ func (t *Tree) Edit(
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
-	// §6.2: Propagate deletes to children moved by prior merges.
-	//
-	// What it tombstones is content this edit destroyed just as surely as
-	// Phase 5's own range did, so it joins Removed/PreTombstoned: those nodes
-	// never enter toBeRemoveds, and a copy-reinsert reverse built from Removed
-	// alone would silently fail to restore them. They stay out of RemovedSize,
-	// which describes one contiguous pre-edit index range starting at
-	// PreEditFromIdx -- these sit outside it, wherever the concurrent merge
-	// left them, so adding their size would stretch that range over untouched
-	// nodes.
-	mergePairs, mergeRemoved, mergePreTombstoned := t.propagateMergeDeletes(
+	// §6.2: Propagate deletes to children moved by prior merges. The declared
+	// positions are passed through because the skip is keyed on them; what the
+	// propagation tombstones stays out of the reverse info, as it does in JS.
+	mergePairs := t.propagateMergeDeletes(
 		fromParent, from, to, toBeRemoveds, toBeMergedNodes, editedAt,
 	)
 	pairs = append(pairs, mergePairs...)
-	info.addPropagated(mergeRemoved, mergePreTombstoned)
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
 	//
@@ -2771,18 +2732,19 @@ func (t *Tree) declaredBoundaries(positions ...*TreePos) map[*TreeNode]struct{} 
 // moved children is recomputed on the fly from the merge target's children
 // filtered by MergedFrom.
 //
-// Alongside the GC pairs it reports the nodes it newly tombstoned and -- by
-// IDString -- the already-dead ones it walked past, so the copy-reinsert
-// reverse a caller has to build here (merge propagation always clears
-// SpansComplete) can restore the first set without resurrecting the second.
-// Phase 5 never collects either, so this is the only place they are reported.
+// What it tombstones is reported as GC pairs only, never through
+// TreeEditReverseInfo: Phase 5's toBeRemoveds does not hold these nodes, and
+// JS's merge propagation likewise never appends to nodesToBeRemoved, so undo
+// drops them on both ports. Reporting them here would be a Go-only behavior
+// change to undo, which undo-redo-go-port.md rules out: a defect is ported as
+// is and fixed in both ports at once.
 func (t *Tree) propagateMergeDeletes(
 	fromParent *TreeNode,
 	from, to *TreePos,
 	toBeRemoveds []*TreeNode,
 	toBeMergedNodes []*TreeNode,
 	editedAt *time.Ticket,
-) ([]GCPair, []*TreeNode, map[string]struct{}) {
+) []GCPair {
 	// Compare against the resolved destination, not fromParent: mergeNodes
 	// points every source's mergedInto at the flattened target (§6.3), so a
 	// chained merge (dest != fromParent) must recognize a concurrent-merge
@@ -2794,14 +2756,6 @@ func (t *Tree) propagateMergeDeletes(
 	// same-destination branch below needs them.
 	var declared map[*TreeNode]struct{}
 	var pairs []GCPair
-	var removed []*TreeNode
-	var preTombstoned map[string]struct{}
-	markPreTombstoned := func(node *TreeNode) {
-		if preTombstoned == nil {
-			preTombstoned = make(map[string]struct{})
-		}
-		preTombstoned[node.IDString()] = struct{}{}
-	}
 	for _, node := range toBeRemoveds {
 		if node.mergedInto == nil ||
 			slices.Contains(toBeMergedNodes, node) {
@@ -2844,31 +2798,21 @@ func (t *Tree) propagateMergeDeletes(
 					Parent: t,
 					Child:  child,
 				})
-				removed = append(removed, child)
 			}
-			// Also tombstone descendants of the moved child. One that was
-			// already dead is recorded instead: it stands for a deletion made
-			// before this edit, which a reverse built from removed must not
-			// resurrect.
+			// Also tombstone descendants of the moved child.
 			index.TraverseNode(child.Index, func(n *index.Node[*TreeNode], _ int) {
-				if n.Value == child {
-					return
-				}
-				if n.Value.removedAt != nil {
-					markPreTombstoned(n.Value)
-					return
-				}
-				if n.Value.remove(editedAt) {
-					pairs = append(pairs, GCPair{
-						Parent: t,
-						Child:  n.Value,
-					})
-					removed = append(removed, n.Value)
+				if n.Value != child && n.Value.removedAt == nil {
+					if n.Value.remove(editedAt) {
+						pairs = append(pairs, GCPair{
+							Parent: t,
+							Child:  n.Value,
+						})
+					}
 				}
 			})
 		}
 	}
-	return pairs, removed, preTombstoned
+	return pairs
 }
 
 // collectBetween collects nodes that are marked as removed or moved.
