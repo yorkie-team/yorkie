@@ -23,7 +23,7 @@ Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
 | Script | Invoked as | Role |
 |---|---|---|
-| `setup.sh` | `bash scripts/setup.sh` | Points `core.hooksPath` at `.githooks/`. Run once per clone. |
+| `setup.sh` | `bash scripts/setup.sh` | Points `core.hooksPath` at `.githooks/`. Run once per clone. Installs all three hooks: `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`). |
 
 ## Directories
 

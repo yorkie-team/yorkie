@@ -109,11 +109,17 @@ detached.
 
 The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various git tools.
 
-To enable automatic commit message validation, run:
+To enable the local hooks, run:
 
 ```sh
 bash scripts/setup.sh
 ```
+
+This points `core.hooksPath` at `.githooks/`, which then validates every
+commit message against the format above, runs `make lint` on commit, and
+runs `make verify` (lint plus the unit tests) on push. The integration
+lane is not in them — it needs MongoDB, so CI runs it. Any of the three
+can be bypassed with `--no-verify` when you mean to.
 
 ### Testing
 

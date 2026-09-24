@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The cheap half of `make verify`, run on every commit.
+#
+# CLAUDE.md step 2 requires each commit to be lint-green. Until this hook
+# existed that was a convention with nothing behind it, and the first thing
+# CI reported was a lint failure on a commit that had already been pushed.
+#
+# Lint only. `go test ./...` is ~35s against golangci-lint's ~6s, which is
+# the difference between a gate people keep and one they disable — the tests
+# run in pre-push, one layer out, where the cost is paid once per push
+# instead of once per commit.
+#
+# SCOPE: this lints the working tree, not the staged content. A commit made
+# with `git add -p` can therefore pass on code that is not being committed,
+# or fail on code that is not either. Linting an index-only checkout would
+# cost a temporary worktree per commit; pre-push and CI both see the real
+# thing, so the cheap approximation is the right trade here.
+#
+# Bypass with `git commit --no-verify` when you mean to.
+
+if ! command -v golangci-lint >/dev/null 2>&1; then
+  echo "pre-commit: golangci-lint not found; run 'make tools'." >&2
+  exit 1
+fi
+
+exec make lint
