@@ -383,6 +383,10 @@ test("gate 1b covers the WHOLE CI-defining surface, not just .github/**", () => 
     "build/docker/docker-compose.yml",
     "scripts/ci/parse-bench.js",
     "scripts/verify-doc-links.mjs",
+    // And the module both verify scripts import their entry-point predicate
+    // from: editing it alone makes docs.yml's two gates exit 0 having checked
+    // nothing, so gate 1b has to refuse it too.
+    "scripts/direct-run.mjs",
     ".github/CODEOWNERS",
   ]) {
     const { code, stdout, stderr, calls } = run(["7", "--promote"], okConfig({ files: [{ filename }] }));

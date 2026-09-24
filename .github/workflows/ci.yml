@@ -148,7 +148,19 @@ jobs:
         # was renamed on the way: `file` became `files` in v4, and v3's name
         # is accepted-and-ignored rather than rejected, so carrying it over
         # would upload nothing and still go green.
-        uses: codecov/codecov-action@v5
+        #
+        # SHA-PINNED, unlike the `@v4`-style tags elsewhere in this file, and
+        # the rule it follows is "anything handed a secret". This step receives
+        # `secrets.CODECOV_TOKEN` in a job that also holds the full workspace
+        # and GITHUB_TOKEN; the repository's only other SHA pins are the two
+        # actions that mint credentials. A mutable tag there is a different
+        # bet from a mutable tag on `actions/checkout`.
+        #
+        # v5 rather than the current v7: this pin is the version whose upload
+        # step is observed green on this pull request's `build` run. Dependabot
+        # watches the github-actions ecosystem and rewrites SHA pins with their
+        # version comment, so the bump arrives through review rather than here.
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
           files: ./coverage.txt
           token: ${{ secrets.CODECOV_TOKEN }}

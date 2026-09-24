@@ -382,3 +382,39 @@ carries no `workflows` permission, so the push was rejected outright —
 'workflows' permission`. A maintainer has to make both edits. Recorded here
 rather than quietly dropped: a change a bot cannot push is invisible in the
 diff and looks exactly like a change nobody thought was needed.
+
+### Round 4, continued — the two the fixer could not close
+
+The autonomous fixer's own lessons entry above is accurate and its repair is
+better than the one this session had planned (CODEOWNERS on `.claude/`, which
+would have made the hook body a reviewed file without making it an unreachable
+one). Verified rather than accepted: after `scripts/setup.sh`, rewriting
+`scripts/hooks/guard-generated-files.sh` in the worktree to `echo PWNED` leaves
+the installed snapshot under `$GIT_DIR/agent-hooks/` still refusing an edit to
+a `.pb.go`. The mechanism also resolves `$GIT_DIR` correctly for a submodule
+checkout, where it is not a `.git` directory in the worktree.
+
+**The disputed finding.** Blast-radius raised `chart-release.yml`'s
+`azure/setup-helm@v3` as "if actionlint's popular-actions data covers
+azure/setup-helm, the lane reds on every PR", and said outright it could not
+run actionlint to check. Run: `rhysd/actionlint:1.7.12` with the lane's own
+flags reports nothing across all workflows, and a planted file containing both
+`azure/setup-helm@v3` and `codecov/codecov-action@v3` reports only the second.
+The stated consequence is false.
+
+The observation underneath it is not, and the fixer had already reframed it
+correctly: actionlint reads inputs and expressions, never an action's runtime,
+so a `node16` action is newly in scope and permanently invisible to the lane
+grading it. Bumped to v4 here — inputs compatible, `token` dropped because v4
+defaults it and marks it deprecated.
+
+**Rule: separate a finding's claim from its consequence before disputing it.**
+The consequence was checkable in one command and wrong; the claim was right and
+would have been thrown out with it. A rebuttal that answers only the loudest
+sentence loses the finding.
+
+**What a bot cannot push is not the same as what nobody needs.** Both edits
+live in `.github/workflows/`, which the agent App has no permission to write,
+so the fixer's diff shows nothing and reads as a judgement that nothing was
+needed. It said so explicitly instead. That is the honest shape for a refusal
+the tooling imposed rather than the reviewer.

@@ -100,6 +100,14 @@ jobs:
   # That symmetry is the point going forward: the startup-failure class this
   # lane exists for is not specific to `agent-*.yml`, and a `ci.yml` GitHub
   # refuses to load takes the Go lane down the same way it took the panel down.
+  #
+  # WIDENING MEANS OWNING WHAT IS NEWLY GRADED, including what actionlint does
+  # NOT report. It reads an action's inputs and expressions, never its runtime,
+  # so `chart-release.yml`'s `azure/setup-helm@v3` — `using: node16`, a runtime
+  # GitHub is removing — was silently in scope and clean. Bumped to v4 in the
+  # same change rather than left for whoever next trips over it; the review
+  # panel found it, and an autonomous fixer could not push it because the App
+  # token carries no `workflows` permission.
   lint-workflows:
     runs-on: ubuntu-latest
     steps:
