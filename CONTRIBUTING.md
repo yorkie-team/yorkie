@@ -120,9 +120,16 @@ To enable the local hooks, run:
 bash scripts/setup.sh
 ```
 
-This points `core.hooksPath` at `.githooks/`, which then validates every
-commit message against the format above, runs `make lint` on commit, and
-runs `make verify` (lint, licence headers and the unit tests) on push.
+This copies `.githooks/` into your clone's `$GIT_DIR` and points
+`core.hooksPath` there, then does the same for the Claude Code hooks. The
+installed hooks validate every commit message against the format above,
+run `make lint` on commit, and run `make verify` (lint, licence headers
+and the unit tests) on push.
+
+They are snapshots on purpose: a hook run out of the working tree is
+code the branch you have checked out supplies, so reviewing a patch
+would mean running it. The cost is that an improved hook reaches your
+clone when you next run this script.
 The integration lane is not in them — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.
 

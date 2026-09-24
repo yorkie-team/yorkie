@@ -406,3 +406,30 @@ test('a clone path with shell metacharacters cannot inject', () => {
   assert.match(out.stdout, /\$\(touch/, 'the metacharacters must survive as literal text');
   assert.equal(existsSync('/tmp/pwned-by-hook-wiring'), false);
 });
+
+test('setup.sh installs git hooks from a snapshot, not from the worktree', () => {
+  // THE PROPERTY, and it is the same one install.mjs exists for. Pointing
+  // `core.hooksPath` at the tracked `.githooks/` makes every hook
+  // branch-controlled: a pull request rewrites `pre-commit`, a reviewer checks
+  // the branch out and commits, and it runs — reaching the branch's Makefile
+  // and Go test code through `make lint` / `make verify`. Closing that for the
+  // Claude hooks and leaving it open for the git hooks would be two threat
+  // models in one change.
+  const setup = readFileSync(path.join(REPO, 'scripts', 'setup.sh'), 'utf8');
+
+  assert.match(setup, /rev-parse --absolute-git-dir/, 'setup.sh must resolve $GIT_DIR');
+  // THE COMMAND, not the comment. The paragraph above it explains the change
+  // by quoting the old `core.hooksPath ... .githooks` form, so a naive `find`
+  // on the setting name reads the argument for the fix as the fix.
+  const hooksPath = setup
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.startsWith('git config core.hooksPath'));
+  assert.ok(hooksPath, 'setup.sh no longer configures core.hooksPath');
+  assert.doesNotMatch(
+    hooksPath,
+    /REPO_ROOT|\.githooks"?$/,
+    `core.hooksPath must name the $GIT_DIR snapshot, not the worktree: ${hooksPath}`,
+  );
+  assert.match(hooksPath, /HOOKS_SNAPSHOT/);
+});

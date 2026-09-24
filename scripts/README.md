@@ -25,7 +25,7 @@ Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
 | Script | Invoked as | Role |
 |---|---|---|
-| `setup.sh` | `bash scripts/setup.sh` | Points `core.hooksPath` at `.githooks/`. Run once per clone. Installs all three hooks: `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`). |
+| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Copies `.githooks/` into `$GIT_DIR/githooks` and points `core.hooksPath` there — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — then runs `hooks/install.mjs` for the Claude Code hooks. Both are snapshots rather than the worktree, so a branch cannot supply code that runs on a reviewer's machine; re-run it to pick up hook changes. |
 
 ## Directories
 

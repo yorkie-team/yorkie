@@ -55,23 +55,35 @@ export const LICENSE_CLAUSE = 'Licensed under the Apache License, Version 2.0';
 export const HEADER_SCAN_LINES = 40;
 
 /**
- * Directories never descended into. Neither holds first-party source: `vendor`
- * and `node_modules` are other people's code under their own licences, and the
- * rest are build output.
+ * Directories never descended into, at ANY depth. Neither holds first-party
+ * source: `vendor` and `node_modules` are other people's code under their own
+ * licences, and `.git` is not source at all. A nested one is as certain as a
+ * root one, so depth does not matter.
  */
-const SKIP_DIRS = new Set([
-  '.git',
-  'node_modules',
-  'vendor',
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'vendor']);
+
+/**
+ * Directories skipped ONLY at the tree root: build output, and the sibling
+ * checkouts this repository's own workflows stage beside the tree —
+ * `agent-review-panel.yml` unpacks `.trusted*`, `ci.yml`'s bench job checks
+ * out `repo`, `benchmark-repo` and `load-repo`, and `.worktrees` is
+ * gitignored for git-worktree isolation.
+ *
+ * ROOT-ONLY IS THE POINT. These are ordinary words. Skipping `repo` at any
+ * depth would mean a future `pkg/repo/` silently leaving the licence gate —
+ * a hole of exactly the kind this file exists to refuse, bought for nothing,
+ * since every one of them is staged at the root or not at all.
+ */
+const SKIP_ROOT_DIRS = new Set([
   'bin',
   'binaries',
-  // SIBLING CHECKOUTS OF THIS SAME REPOSITORY, which are full of .go files
-  // that are not part of the tree being committed. `.worktrees` is gitignored
-  // here and `.trusted` is what agent-review-panel.yml stages `ref: main`
-  // into; walking either makes `make verify` — and therefore `pre-push` —
-  // refuse a push over files outside the branch.
   '.worktrees',
   '.trusted',
+  '.trusted-agent',
+  '.trusted-cred',
+  'repo',
+  'benchmark-repo',
+  'load-repo',
 ]);
 
 /**
@@ -100,6 +112,7 @@ export function goFiles(root) {
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (SKIP_DIRS.has(entry.name)) continue;
+        if (dir === root && SKIP_ROOT_DIRS.has(entry.name)) continue;
         walk(abs);
       } else if (entry.isFile() && entry.name.endsWith('.go')) {
         files.push(path.relative(root, abs));

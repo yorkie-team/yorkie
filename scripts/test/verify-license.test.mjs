@@ -129,12 +129,46 @@ test('vendored and generated-output directories are not walked', () => {
       'node_modules/y/y.go': 'package y\n',
       'bin/z.go': 'package z\n',
       'binaries/w.go': 'package w\n',
+      'repo/staged.go': 'package staged\n',
+      'benchmark-repo/b.go': 'package b\n',
+      '.trusted-agent/t.go': 'package t\n',
       'pkg/real.go': LINE_HEADER,
     },
     (root) => {
       assert.deepEqual(goFiles(root).files, ['pkg/real.go']);
       assert.deepEqual(collectFindings(root), []);
     },
+  );
+});
+
+test('the sibling-checkout skips apply at the root ONLY', () => {
+  // `repo`, `bin` and friends are ordinary words. Skipping them at any depth
+  // would quietly drop a future `pkg/repo/` out of the licence gate — a hole
+  // of exactly the kind this file refuses, bought for nothing, since every one
+  // of them is staged at the root or not at all.
+  withTree(
+    {
+      'repo/staged.go': 'package staged\n',
+      'pkg/repo/real.go': 'package repo\n',
+      'server/bin/tool.go': 'package tool\n',
+    },
+    (root) =>
+      assert.deepEqual(collectFindings(root), [
+        'pkg/repo/real.go has no Apache 2.0 header',
+        'server/bin/tool.go has no Apache 2.0 header',
+      ]),
+  );
+});
+
+test('vendor and node_modules are skipped at any depth', () => {
+  // The other half of the same decision: these are certain wherever they sit.
+  withTree(
+    {
+      'pkg/vendor/x.go': 'package x\n',
+      'pkg/node_modules/y.go': 'package y\n',
+      'pkg/real.go': LINE_HEADER,
+    },
+    (root) => assert.deepEqual(goFiles(root).files, ['pkg/real.go']),
   );
 });
 

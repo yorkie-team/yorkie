@@ -418,3 +418,56 @@ live in `.github/workflows/`, which the agent App has no permission to write,
 so the fixer's diff shows nothing and reads as a judgement that nothing was
 needed. It said so explicitly instead. That is the honest shape for a refusal
 the tooling imposed rather than the reviewer.
+
+### Round 5 — closing the seam between two threat models
+
+The panel blocked on the seam, and it was right: `install.mjs` inverted its
+whole design so a branch could not supply code that runs on a reviewer's
+machine, while `setup.sh` two files away pointed `core.hooksPath` straight at
+the tracked `.githooks/`. A pull request rewrites `pre-commit`, a reviewer
+checks the branch out and commits anything, and it runs — reaching the
+branch's Makefile and Go test code through `make lint` and `make verify`.
+
+The exposure predates this change (`commit-msg` was already tracked and
+already executed), but this change is what made it inconsistent: one hook
+system hardened, its twin left open, in the same commit range.
+
+Now symmetric. `setup.sh` copies `.githooks/` into `$GIT_DIR/githooks` and
+points `core.hooksPath` there. Verified the same way: rewriting
+`.githooks/pre-commit` in the worktree to `exit 1` does not block a commit,
+because the snapshot is what runs.
+
+**Rule: when you harden one instance of a pattern, enumerate the others in the
+same change.** The argument that justified the installer applied word for word
+to the git hooks, and nobody noticed for two rounds because the two live in
+different files and are installed by different code.
+
+### Two findings refuted the same way, twice
+
+Round 4 blocked on `bufbuild/buf-lint-action@v1` possibly tripping actionlint's
+"too old" rule — "verifier: confirmed, low confidence", and the finding said it
+could not run actionlint. Planted a probe carrying both it and
+`codecov/codecov-action@v3`: only the second is reported. Round 3 had produced
+the identical shape for `azure/setup-helm@v3`.
+
+Security likewise flagged the codecov SHA pin as "asserted, not verified — a
+SHA from a fork resolves identically". Checkable: `0fb7174895…` is a commit in
+`codecov/codecov-action` itself, message `chore(release): 5.5.5`, and it is
+exactly what the `v5` tag dereferences to.
+
+**Rule: a finding that says it could not check something is a task, not a
+verdict.** Both were one command away. The panel is right to raise what it
+cannot confirm — the error is leaving it unconfirmed on the other side too.
+
+### A skip list is an allowlist for the thing it skips
+
+Widening `SKIP_DIRS` to cover the sibling checkouts CI stages (`repo`,
+`benchmark-repo`, `load-repo`, `.trusted*`) was correct and nearly introduced a
+hole: those are ordinary words, and the walk matched at any depth. A future
+`pkg/repo/` would have left the licence gate silently — the exact failure the
+file exists to refuse, bought for nothing, since every one of them is staged at
+the root or not at all.
+
+Split in two: `.git`/`node_modules`/`vendor` at any depth, because they are
+certain wherever they sit; everything else at the root only. Both halves are
+tested, and making the root-only set match at any depth fails the suite.
