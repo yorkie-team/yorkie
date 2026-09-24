@@ -367,11 +367,11 @@ each one by a mechanism rather than a promise:
 
 ##### Acceptance criteria for the implementation
 
-Each of these is a defect the reviewed draft actually had. A maintainer landing
-this workflow should treat the list as the review checklist, and should expect
-the three `agent-implement.yml` guards in `scripts/agent/checks.test.mjs` — which
-skip today via `workflow-presence.mjs` and re-arm the moment the file exists — to
-run and to have to pass.
+Each of these is a defect the reviewed draft actually had, and each is held by
+the installed workflow. Treat the list as the review checklist for any change to
+it: the three `agent-implement.yml` guards in `scripts/agent/checks.test.mjs` run
+today (they skip through `workflow-presence.mjs` only if the file is ever
+withdrawn again) and have to pass.
 
 1. **The gate must not be satisfiable by the party it gates.** One App token
    carrying `pull-requests: write` (which opening a PR needs) beside

@@ -20,9 +20,13 @@ none.
 a **draft** PR back to `main`. Any `@claude` on an issue that is not `fix` — a bare
 mention and a PR-only verb alike — gets a `help` reply instead of silence.
 
-## Outcome: the workflow is NOT landed, the design is
+## Outcome: the workflow is landed (#2026, 2026-09-24)
 
-The workflow was written, reviewed, and **withdrawn**. Five review lenses
+It was restored and merged with the acceptance criteria met, and the
+post-agent job split followed (#2034). The history below is kept because the
+reasons still hold.
+
+The workflow was first written, reviewed, and **withdrawn**. Five review lenses
 returned blocking findings against it and none of them could be fixed: no
 credential in this pipeline can write `.github/workflows/**`, which was measured
 this round, not assumed —
@@ -45,9 +49,10 @@ workflow-specific guards in `checks.test.mjs` are kept and skip through
 
 ## Scope
 
-- [ ] `.github/workflows/agent-implement.yml`, ported from wafflebase and
-      adapted to the Go layout — **WITHDRAWN**, see above; a maintainer lands it
-      against the design doc's acceptance criteria
+- [x] `.github/workflows/agent-implement.yml`, ported from wafflebase and
+      adapted to the Go layout — withdrawn once, then landed in #2026 against
+      the design doc's acceptance criteria; post-agent steps moved to the
+      `finish` job in #2034
 - [x] The `agent:*` labels created deliberately rather than auto-created —
       eight, matching `set-state.mjs`'s six states plus `agent:managed` and
       `agent:candidate`. Two upstream names (`agent:iterating`,
