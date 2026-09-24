@@ -298,3 +298,33 @@ than at a clean round. Per `.claude/commands/self-review.md` that means stop,
 open the PR, and get a human — not run a fourth round. Recorded here rather
 than silently continuing, because "three rounds, still finding things" is
 information a reviewer should have.
+
+### The guard that only worked on my machine
+
+CI was red on the first push, and the failure was in the two guards added to
+close round 3's gate hole — not in the hook. They passed locally and failed on
+the runner.
+
+`wouldLint()` drove the real `pre-commit` script with `exec make lint` replaced
+by a marker, then asked whether the marker was printed. But the hook refuses
+*before* that line when `golangci-lint` is missing, and the `Docs` workflow
+that runs this suite is a Node-only job with no Go toolchain. So the probe was
+measuring **"could lint"** where it claimed to measure **"decided to lint"**,
+and the two happen to agree on a developer machine and disagree on the runner.
+
+The fix puts a stub `golangci-lint` on `PATH` rather than deleting the check,
+so the hook runs exactly as written, and adds the case the stub makes possible:
+Go staged with no linter must still refuse. "Nothing to lint" and "no linter"
+must keep producing different answers, which is the distinction round 2
+installed and this test was quietly erasing.
+
+**Rule: a test of environment-dependent behaviour has to be run in the
+environment.** `env -i PATH=<node>:/usr/bin:/bin` reproduces the runner in a
+second and would have caught this before the push. It is now how these guards
+are checked: 48/48 under that PATH, and both narrowings of the filter still
+fail under it.
+
+The irony is on the nose — the branch exists because a gate that quietly does
+nothing is indistinguishable from a gate that found nothing, and its own new
+guard did exactly that, in the direction that reports failure rather than
+success only because the runner lacks a binary.

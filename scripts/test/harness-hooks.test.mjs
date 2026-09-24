@@ -19,7 +19,9 @@
 import { spawnSync } from 'node:child_process';
 import {
   accessSync,
+  chmodSync,
   constants,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -188,18 +190,58 @@ function inScratchRepo(body) {
   }
 }
 
-/** The hook's decision alone: 0 = "nothing to lint", 1 = "there is Go here". */
+/** The hook's decision alone: false = "nothing to lint", true = "there is Go". */
 function wouldLint({ dir }) {
-  // The hook `exec`s `make lint` when it decides to run, which a scratch repo
-  // has no Makefile for. Replacing the tail with a marker isolates the
-  // decision, which is the part with the history of being wrong.
+  // TWO SUBSTITUTIONS, AND THE SECOND IS THE ONE THIS TEST LEARNED THE HARD
+  // WAY. Replacing `exec make lint` with a marker is obvious — a scratch repo
+  // has no Makefile. But the hook ALSO refuses when golangci-lint is missing,
+  // and the `Docs` workflow that runs this suite is a Node-only job with no Go
+  // toolchain. Probing only the tail therefore measured "could lint" rather
+  // than "decided to lint": the first version passed on a developer machine
+  // and failed on the runner, for a reason that had nothing to do with the
+  // decision under test.
+  //
+  // A stub on PATH rather than deleting the check, so the hook runs exactly as
+  // written and the guard still covers the refusal path's placement.
+  const bin = path.join(dir, '.probe-bin');
+  mkdirSync(bin, { recursive: true });
+  const stub = path.join(bin, 'golangci-lint');
+  writeFileSync(stub, '#!/usr/bin/env bash\nexit 0\n');
+  chmodSync(stub, 0o755);
+
   const src = readFileSync(path.join(REPO, '.githooks', 'pre-commit'), 'utf8')
     .replace(/^exec make lint$/m, 'echo WOULD_LINT');
   const probe = path.join(dir, '.probe-pre-commit');
   writeFileSync(probe, src);
-  const r = spawnSync('bash', [probe], { cwd: dir, encoding: 'utf8' });
+
+  const r = spawnSync('bash', [probe], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+  });
   return r.stdout.includes('WOULD_LINT');
 }
+
+test('pre-commit refuses when Go is staged and the linter is missing', () => {
+  // The other half of the same decision, and the reason the stub above is a
+  // stub rather than a deletion: "nothing to lint" and "no linter" must keep
+  // producing different answers.
+  inScratchRepo(({ dir, git }) => {
+    writeFileSync(path.join(dir, 'a.go'), 'package a\n');
+    git('add', 'a.go');
+    const src = readFileSync(path.join(REPO, '.githooks', 'pre-commit'), 'utf8')
+      .replace(/^exec make lint$/m, 'echo WOULD_LINT');
+    const probe = path.join(dir, '.probe-pre-commit');
+    writeFileSync(probe, src);
+    const r = spawnSync('bash', [probe], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    assert.equal(r.status, 1, 'a missing linter with Go staged must refuse');
+    assert.match(r.stderr, /golangci-lint not found/);
+  });
+});
 
 test('pre-commit lints whenever a commit stages Go, however it stages it', () => {
   // THE REGRESSION: `--diff-filter=ACM` dropped `R`, and git reports a
