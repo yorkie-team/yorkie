@@ -306,36 +306,43 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
   assert.match(block("Address panel findings"), /^\s*id: fixer$/m,
     "the fixer step must carry `id: fixer` for its outcome to be readable");
 
-  const cond = (block("Page if the fix produced no commit").match(/^\s*if: >-\n((?: {9,}.*\n)+)/m) || [])[1];
-  assert.ok(cond, "could not extract the no-commit page's if: expression");
+  // THE PAGE LIVES IN `fix-report`, a separate job on a fresh runner (the agent's
+  // own job cannot be trusted with anything after the agent). So "does it page"
+  // is the job's condition AND the step's, evaluated together.
+  const jobIf = (yml.match(/^ {2}fix-report:\n(?:.*\n)*? {4}if: >-\n((?: {6}.*\n)+)/m) || [])[1];
+  assert.ok(jobIf, "could not extract the fix-report job's if: expression");
+  const stepIf = (block("Page if the fix produced no commit").match(/^\s*if: >-\n((?: {9,}.*\n)+)/m) || [])[1];
+  assert.ok(stepIf, "could not extract the no-commit page's if: expression");
 
-  // `always()` and not `!failure()`: the runner is only documented to keep
-  // running a step through a cancellation when the condition is always-true, and
-  // this step has to run precisely when the job is being cancelled.
-  assert.match(cond, /always\(\)/, "the step must survive the job's own cancellation");
+  // `always()` and not `!cancelled()`: the job has to start precisely when the
+  // run is being cancelled — by the fix job's own wall, or by the fixer's push
+  // superseding it.
+  assert.match(jobIf, /always\(\)/, "the report job must survive the fix job's cancellation");
 
-  const pages = new Function("PROCEED", "FIXER", "CRED", `return Boolean(${cond
+  const pages = new Function("PROCEED", "FIXER", "CRED", "ADVANCED", `return Boolean((${jobIf}) && (${stepIf}));`
     .replace(/always\(\)/g, "true")
-    .replace(/steps\.guard\.outputs\.proceed/g, "PROCEED")
-    .replace(/steps\.fixer\.outcome/g, "FIXER")
-    .replace(/steps\.cred\.outputs\.available/g, "CRED")});`);
+    .replace(/needs\.fix\.outputs\.proceed/g, "PROCEED")
+    .replace(/needs\.fix\.outputs\.fixer/g, "FIXER")
+    .replace(/needs\.fix\.outputs\.available/g, "CRED")
+    .replace(/steps\.after\.outputs\.advanced/g, "ADVANCED"));
 
   for (const [why, args, expected] of [
-    ["the fixer finished — the head check decides", ["true", "success", "true"], true],
+    ["the fixer finished and pushed nothing", ["true", "success", "true", "false"], true],
+    ["the fixer finished and pushed", ["true", "success", "true", "true"], false],
     // THE REGRESSION this step's condition was rewritten for.
-    ["the job's own wall killed the fixer", ["true", "cancelled", "true"], true],
-    ["the wall hit and the credential picker was absent", ["true", "cancelled", ""], true],
+    ["the job's own wall killed the fixer", ["true", "cancelled", "true", "false"], true],
+    ["the wall hit and the credential picker was absent", ["true", "cancelled", "", "false"], true],
     // Every row below reports `outcome: skipped` or `failure`, and each already has
     // a pager that says something TRUER than this step could. Paging here as well
     // would comment twice and latch `agent:blocked` from two places.
-    ["the fixer hard-errored — `stalled` pages", ["true", "failure", "true"], false],
-    ["a setup step failed, so the fixer was skipped — `stalled` pages", ["true", "skipped", ""], false],
+    ["the fixer hard-errored — `stalled` pages", ["true", "failure", "true", "false"], false],
+    ["a setup step failed, so the fixer was skipped — `stalled` pages", ["true", "skipped", "", "false"], false],
     // The dedicated no-credential page owns this one: it knows no round was spent
     // and that a usage window commonly reopens on its own, so this step's "did not
     // converge within its turn budget / re-run with @claude fix" would contradict
     // it in both cause and remedy.
-    ["no live credential — its own page owns it", ["true", "skipped", "false"], false],
-    ["the round guard held or paged, so no round was spent", ["false", "skipped", ""], false],
+    ["no live credential — its own page owns it", ["true", "skipped", "false", "false"], false],
+    ["the round guard held or paged, so no round was spent", ["false", "skipped", "", "false"], false],
   ]) {
     assert.equal(pages(...args), expected,
       `${why}: expected the no-commit page to ${expected ? "run" : "be skipped"}`);
@@ -364,10 +371,10 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
   assert.match(page, /"\$NOW_ATTEMPT" != "\$CI_ATTEMPT"[\s\S]*?exit 0/,
     "a re-run must suppress the page, not just be logged");
   // Reading it needs a scope the App token used for the comment does not carry.
-  const fixPerms = (yml.match(/^ {2}fix:\n(?:.*\n)*? {4}permissions:\n((?: {6}.*\n)+)/m) || [])[1];
-  assert.ok(fixPerms, "could not extract the fix job's permissions");
+  const fixPerms = (yml.match(/^ {2}fix-report:\n(?:.*\n)*? {4}permissions:\n((?: {6}.*\n)+)/m) || [])[1];
+  assert.ok(fixPerms, "could not extract the fix-report job's permissions");
   assert.match(fixPerms, /^ {6}actions: read/m,
-    "the fix job needs `actions: read` for the re-run check");
+    "the fix-report job needs `actions: read` for the re-run check");
 
   // THE WALL'S LENGTH IS WRITTEN IN THREE PLACES and cannot be read from any
   // expression context, so a step cannot ask its own job how long it had. The page
@@ -401,6 +408,12 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
     "stalled must keep `!cancelled()` — a superseded panel must not page");
   assert.ok(!/needs\.fix\.result == 'cancelled'/.test(stalledIf),
     "a cancelled fix job is the no-commit page's case; claiming it here double-pages");
+  // The no-commit page lives in `fix-report`, so the net must watch that job
+  // too — or a failed mint or comment there strands the PR with no page at all.
+  assert.match(yml, /^ {2}stalled:\n {4}needs: \[[^\]]*\bfix-report\b[^\]]*\]$/m,
+    "stalled must depend on fix-report to see it fail");
+  assert.match(stalledIf, /needs\.fix-report\.result == 'failure'/,
+    "a failed fix-report is a page that may never have been posted");
 
   // ...but every OTHER job's `cancelled` must be listed, and this is the pair of
   // facts that makes it safe: GitHub reports a job killed by its own
@@ -533,7 +546,7 @@ test("each verb that needs the App answers the commenter when it is missing", ()
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
   // `agent-implement.yml` is in the list CONDITIONALLY rather than dropped from
   // it: the rule applies to that verb too, and hard-coding it would fail the
-  // whole file while the verb is deferred (docs/design/agent-command-verbs.md
+  // whole file whenever the verb is absent (docs/design/agent-command-verbs.md
   // Phase I), whereas dropping it would silently stop asking the day it lands.
   const files = ["agent-loop.yml", "agent-rerun.yml", "agent-fix.yml"];
   if (hasWorkflow("agent-implement.yml")) files.push("agent-implement.yml");
@@ -1550,15 +1563,12 @@ test("a job that comments on a PR holds pull-requests:write, not just issues:wri
   );
 });
 
-// The three guards below read `agent-implement.yml`, which this repository does
-// not install: the verb is designed in docs/design/agent-command-verbs.md Phase
-// I and deliberately not landed, because no credential in this pipeline can push
-// `.github/workflows/**` and the reviewed draft could therefore not be corrected
-// in place. They are kept rather than deleted for the reason
-// `workflow-presence.mjs` exists — each one re-arms by itself the day a
-// maintainer lands the workflow, and each encodes a defect that was found the
-// hard way. Anyone landing that workflow should expect these to run, and to have
-// to satisfy them.
+// The three guards below read `agent-implement.yml` (docs/design/
+// agent-command-verbs.md, Phase I). They are written through `skipWithout`
+// because the workflow was withdrawn once, when no credential in this pipeline
+// could push `.github/workflows/**` to correct it — and a guard that would fail
+// the whole file while a verb is absent is one somebody deletes. Each encodes a
+// defect that was found the hard way.
 test("agent-implement's reporter keeps its approved condition, ids and shape", skipWithout("agent-implement.yml"), () => {
   // THIS DEFECT SURVIVED FIVE ROUNDS BY MOVING, and two attempts to pin it
   // survived because they were written as DENY-LISTS. The job acknowledges an
@@ -1584,8 +1594,13 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   // token mint stops it too, which is why the reporter no longer borrows that
   // token. It is the earliest gate whose failure the reporter can still survive,
   // which is the property that matters.
-  const APPROVED =
-    "        if: always() && steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'";
+  //
+  // TWO LINES NOW, because the reporter moved to the `finish` job: every step
+  // after the agent in the agent's own job runs in an environment the agent can
+  // rewrite, and a reporter is no exception. The App check keys the JOB, and the
+  // step keeps `always()` so it survives every failure before it in that job.
+  const APPROVED = "        if: always() && github.event_name == 'issue_comment'";
+  const APPROVED_JOB = "always() && needs.implement.outputs.configured == 'true'";
   const wf = WF("agent-implement.yml");
   const at = wf.indexOf("- name: Report a run that ended without a PR");
   assert.ok(at > 0, "agent-implement.yml has no reporter step");
@@ -1607,10 +1622,22 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
       "if this needs to change, change APPROVED here in the same commit and say why",
   );
 
+  const finishIf = (wf.match(/^ {2}finish:\n(?:.*\n)*? {4}if: (.*)$/m) || [])[1];
+  assert.equal(finishIf, APPROVED_JOB, "the finish job must be keyed on the App check and nothing downstream");
+
   // And it must still be able to NAME the cause, or it reports the wrong one —
   // which it has also done, telling an `npm ci` failure that main was unprotected.
-  assert.match(step, /steps\.protection\.outcome/, "the protection refusal must be named, not guessed at");
-  assert.match(step, /steps\.stage\.outcome/, "a setup failure must be distinguishable from a refusal");
+  assert.match(step, /needs\.implement\.outputs\.protection/, "the protection refusal must be named, not guessed at");
+  assert.match(step, /needs\.implement\.outputs\.staged/, "a setup failure must be distinguishable from a refusal");
+  // ...through job outputs that carry the step outcomes across, unrenamed.
+  for (const [out, expr] of [
+    ["configured", "steps.app.outputs.configured"],
+    ["protection", "steps.protection.outcome"],
+    ["staged", "steps.stage.outcome"],
+    ["agent", "steps.agent.outcome"],
+  ]) {
+    assert.ok(wf.includes(`      ${out}: \${{ ${expr} }}`), `the implement job must export ${out} from ${expr}`);
+  }
 
   // THE IDS MUST EXIST. A mutation run reached this step's behaviour AROUND the
   // pinned line rather than through it: renaming `id: protection` to `protect`
@@ -1625,27 +1652,11 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
     );
   }
 
-  // The reporter must sit in the job whose steps it reads, AFTER the agent —
-  // moving it to another job, or above the gates, leaves the text identical and
-  // the outcomes empty.
-  const agentAt = wf.indexOf("        id: agent");
-  assert.ok(agentAt > 0 && agentAt < at, "the reporter must come after the agent step it reports on");
-  const jobAt = wf.lastIndexOf("\n  implement:", at);
-  assert.ok(jobAt > 0, "the reporter must live in the implement job");
-  // VACUOUS UNTIL NOW, and the vacuity was arithmetic rather than a wrong
-  // pattern: the old form searched from `at` — the reporter itself — and then
-  // asserted `nextJobAt + at > at`, which holds for every non-negative match
-  // index and could not fail for any relocation. The question is whether the job
-  // header that FOLLOWS `implement:` comes after the reporter; searching from
-  // `jobAt` is what asks it. `help` sits below `implement`, so this is a real
-  // bound: move the reporter under `help` and it fails.
-  const rel = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(jobAt + 1));
-  const nextJobAt = rel ? jobAt + 1 + rel.index : wf.length;
-  assert.ok(
-    nextJobAt > at,
-    "the reporter must live in the implement job, not a later one — every steps.*.outcome it reads " +
-      "is the empty string from anywhere else",
-  );
+  // The reporter must sit in the `finish` job — the nearest job header above it —
+  // and that job must wait for the implement job whose outcomes it reads.
+  const headers = [...wf.matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)].filter((m) => m.index < at);
+  assert.equal(headers.at(-1)?.[1], "finish", "the reporter must live in the finish job");
+  assert.match(wf, /^ {2}finish:\n {4}needs: \[implement\]$/m, "the finish job must run after implement");
 
   // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
@@ -1985,28 +1996,43 @@ test("a release the agent App created publishes nothing", () => {
       `${file} runs on a published release and would run for one the agent App created`,
     );
   }
+  // THE SAME CREDENTIALS, REACHED THROUGH A MERGE. `contents: write` also merges
+  // a PR a human already approved, which is a push to `main` authored by the
+  // App — and a push-triggered workflow that inherits secrets answers it the
+  // same way. Every such workflow must refuse the App as the actor.
+  const onPushInherit = readdirSync(dir)
+    .filter((f) => f.endsWith(".yml"))
+    .filter((f) => {
+      const code = readFileSync(path.join(dir, f), "utf8").split("\n").filter((l) => !/^\s*#/.test(l));
+      const on = code.slice(0, code.findIndex((l) => /^jobs:/.test(l)));
+      return on.some((l) => /^\s+push:\s*$/.test(l)) && code.some((l) => /^\s+secrets: inherit\s*$/.test(l));
+    });
+  assert.ok(onPushInherit.includes("docker-publish-latest.yml"), "the push-triggered publisher must be found");
+  for (const file of onPushInherit) {
+    assert.match(
+      readFileSync(path.join(dir, file), "utf8"),
+      /github\.actor != 'yorkie-team-agent\[bot\]'/,
+      `${file} inherits secrets on a push and would run for one the agent App made by merging`,
+    );
+  }
 });
 
-test("both fixer prompts order disputes before the report", () => {
-  // `fix-report.mjs` counts the disputes THIS round emitted by reading the
-  // files, so a prompt that says report-then-dispute produces a report claiming
-  // nothing was disputed — on exactly the round where something was. The
-  // instruction went into one prompt and not the other, and the script that made
-  // the edit printed "skip (no anchor)" for the second and was not chased.
+test("the trusted job posts disputes before the report it counts them in", () => {
+  // The report's "Disputed (n)" is counted when the TRUSTED job republishes it,
+  // from the dispute comments already on the PR — so the disputes have to be
+  // posted first, or the report says nothing was disputed on exactly the round
+  // where something was. Pinned in both jobs that post a fixer's output.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
   for (const file of ["agent-fix.yml", "agent-review-panel.yml"]) {
     const wf = readFileSync(path.join(dir, file), "utf8");
-    if (!/rebuttal\.mjs post/.test(wf)) continue;
-    const dispute = wf.indexOf("DISPUTE FIRST, THEN REPORT");
-    assert.ok(dispute > 0, `${file}: the fixer prompt does not order disputes before the report`);
-    const report = wf.search(/REPORT WHAT YOU DID/);
-    assert.ok(
-      report > dispute,
-      `${file}: the ordering instruction must come before the reporting instruction`,
-    );
+    const disputes = wf.indexOf("run: node scripts/agent/rebuttal.mjs republish");
+    const report = wf.indexOf("run: node scripts/agent/fix-report.mjs republish");
+    assert.ok(disputes > 0 && report > 0, `${file}: both must be republished by the trusted job`);
+    assert.ok(disputes < report, `${file}: the disputes must be posted before the report that counts them`);
   }
 });
+
 
 test("no `gh` invocation runs on node's default 1 MiB buffer", () => {
   // IT GETS MORE LIKELY THE LONGER A PR IS REVIEWED, which is exactly backwards.
@@ -2043,55 +2069,165 @@ test("no `gh` invocation runs on node's default 1 MiB buffer", () => {
   );
 });
 
-test("nothing an agent wrote is posted verbatim under the App identity", () => {
-  // THE CHANNEL THE NARROW TOKEN WAS MINTED TO CLOSE. The agent emits its report
-  // and disputes to files and a trusted step posts them — under the App, whose
-  // comments this pipeline trusts BY AUTHOR for latches, ledgers and dedupe
-  // markers. Posting the file verbatim hands an agent that reads untrusted input
-  // an arbitrary App-authored comment, which is the capability the whole token
-  // split exists to withhold. The agent holds a `Write` tool, so "it used the
-  // CLI, and the CLI neutralises its arguments" is not a property anything
-  // enforces.
+test("in a job that runs a pushing agent, nothing after the agent but the handoff", () => {
+  // THE AGENT OWNS THE REST OF ITS JOB. Its unrestricted `Bash` inherits
+  // `$GITHUB_ENV` and `$GITHUB_PATH`, which the runner applies to every LATER
+  // step of the same job, and it can rewrite `~/.gitconfig`, `~/.npmrc` and the
+  // workspace's `.git/config` (`remote.origin.url = ext::sh -c …` is command
+  // execution for the next `git` that reads it). Re-staging scripts from a fresh
+  // checkout protected the files and not the process that ran them, so every
+  // "trusted" post-agent step holding the wide token ran on the agent's terms.
   //
-  // `post-emitted.mjs` parses the hidden record in trusted, post-agent code and
-  // posts its own render of it — or refuses. A `--body-file` pointing at an
-  // agent-written path is the defect this catches.
+  // So the rule is structural: after the agent step, a pushing job may only hand
+  // its output across as an artifact. Anything that posts, discloses, pages or
+  // records runs in a separate job on a fresh runner.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
-  const AGENT_WRITTEN = /\$(?:RUNNER_TEMP|\{\{ runner\.temp \}\})\/(?:fix-report|rebuttal|reply|pr)/;
-  const offenders = [];
+  let checked = 0;
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    const jobsAt = lines.findIndex((l) => /^jobs:\s*$/.test(l));
+    const starts = [];
+    for (let i = jobsAt + 1; i < lines.length; i++) if (/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[i])) starts.push(i);
+    for (let j = 0; j < starts.length; j++) {
+      const job = lines.slice(starts[j], starts[j + 1] ?? lines.length);
+      const code = job.filter((l) => !/^\s*#/.test(l));
+      if (!code.some((l) => l.includes("anthropics/claude-code-action@"))) continue;
+      if (!code.some((l) => /^\s+permission-contents: write/.test(l))) continue;
+      checked++;
+      const id = job[0].trim();
+      const stepAt = [];
+      for (let i = 0; i < job.length; i++) if (/^ {6}- /.test(job[i])) stepAt.push(i);
+      const steps = stepAt.map((s, k) => job.slice(s, stepAt[k + 1] ?? job.length).filter((l) => !/^\s*#/.test(l)));
+      const agentIdx = steps.findIndex((st) => st.some((l) => l.includes("anthropics/claude-code-action@")));
+      const after = steps.slice(agentIdx + 1);
+      assert.ok(after.length >= 1, `${file} ${id}: the agent's output must be handed to a trusted job`);
+      for (const st of after) {
+        assert.ok(
+          st.some((l) => /uses: actions\/upload-artifact@/.test(l)),
+          `${file} ${id}: "${st[0].trim()}" runs after the agent in the agent's own job`,
+        );
+        assert.ok(!st.some((l) => /^\s+run:/.test(l)), `${file} ${id}: a post-agent step must not run a command`);
+      }
+      // And nothing in the job mints or uses the wide App token after that point
+      // — the only App token minted in a pushing agent job is the narrow one.
+      assert.ok(
+        !code.some((l) => l.includes("steps.app-token.outputs.token")) ||
+          steps.slice(agentIdx).every((st) => !st.some((l) => l.includes("steps.app-token.outputs.token"))),
+        `${file} ${id}: the wide App token is used after the agent`,
+      );
+    }
+  }
+  assert.ok(checked >= 5, `expected every pushing agent job to be checked, got ${checked}`);
+});
 
+test("every step of a trusted post-agent job survives a cancelled run", () => {
+  // These jobs are `always()` so they start even when the run was cancelled —
+  // the fixer's own push supersedes the panel run, and a fix job's wall
+  // reports `cancelled`. But inside such a job a step on the default
+  // `success()` is SKIPPED in a cancelled run (see close-stuck-checks), so a
+  // setup step without `always()` silently turned the whole report into a
+  // no-op on exactly the runs it exists for.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const JOBS = {
+    "agent-fix.yml": "report",
+    "agent-iterate-ci.yml": "report",
+    "agent-review-reply.yml": "report",
+    "agent-review-panel.yml": "fix-report",
+    "agent-implement.yml": "finish",
+  };
+  for (const [file, job] of Object.entries(JOBS)) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    const at = wf.indexOf(`\n  ${job}:\n`);
+    assert.ok(at > 0, `${file}: no ${job} job`);
+    const next = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at + 1));
+    const lines = wf.slice(at, next ? at + 1 + next.index : wf.length).split("\n");
+    assert.match(lines.slice(0, 8).join("\n"), /if: (>-\n\s+)?always\(\)/, `${file} ${job}: the job itself must be always()`);
+    const stepAt = lines.map((l, i) => (/^ {6}- /.test(l) ? i : -1)).filter((i) => i >= 0);
+    assert.ok(stepAt.length > 3, `${file} ${job}: expected steps`);
+    stepAt.forEach((s, k) => {
+      const step = lines.slice(s, stepAt[k + 1] ?? lines.length).filter((l) => !/^\s*#/.test(l)).join("\n");
+      assert.match(step, /^ {8}if: (>-\n {10})?always\(\)/m, `${file} ${job}: "${lines[s].trim()}" is skipped in a cancelled run`);
+    });
+  }
+});
+
+test("nothing an agent wrote is posted verbatim under the App identity", () => {
+  // THE CHANNEL THE NARROW TOKEN WAS MINTED TO CLOSE. The agent emits its
+  // report, disputes, reply and PR description to files, and a trusted job posts
+  // them — under the App, whose comments this pipeline trusts BY AUTHOR for
+  // latches, ledgers and dedupe markers. The agent holds `Bash` and `Write`, so
+  // "it used the CLI" is not a property of the file.
+  //
+  // TWO WAYS TO BE SAFE, and which applies depends on the content. A report or
+  // a dispute carries a hidden record the next round parses, so it goes through
+  // `republish`, which renders afresh from that record. A reply is free prose
+  // with no record, so neutralising every marker wholesale is the only option.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const AGENT_WRITTEN =
+    /\$(?:RUNNER_TEMP|\{\{ runner\.temp \}\})\/(?:agent-output\/)?(?:fix-report|rebuttal|reply|pr)/;
+  const offenders = [];
+  let seen = 0;
   for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
     const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
     for (let i = 0; i < lines.length; i++) {
       if (/^\s*#/.test(lines[i])) continue;
       if (!/gh pr comment .*--body-file/.test(lines[i])) continue;
-      // Resolve the variable it posts, looking back a few lines for its binding.
-      // COMMENTS STRIPPED. The step that does this correctly explains itself in
-      // a comment naming `post-emitted.mjs`, so a lookback including prose finds
-      // the safe spelling in the text above a defect and clears it — the fourth
-      // guard in this file to read its own explanation as code.
-      const near = lines
-        .slice(Math.max(0, i - 8), i + 1)
-        .filter((l) => !/^\s*#/.test(l))
-        .join("\n");
+      // Comments stripped: a correct step explains itself in prose, and a
+      // lookback that read the prose would clear a defect beneath it.
+      const near = lines.slice(Math.max(0, i - 8), i + 1).filter((l) => !/^\s*#/.test(l)).join("\n");
       if (!AGENT_WRITTEN.test(near)) continue;
-      // TWO WAYS TO BE SAFE, and which one applies depends on the content.
-      // A report or a dispute carries a hidden record the next round parses, so
-      // it is re-rendered from that record and a blanket substitution would
-      // destroy it. A reply is free prose with no record, so neutralising every
-      // marker wholesale is both sufficient and the only option.
-      const rerendered = /post-emitted\.mjs/.test(near);
+      seen++;
       const neutralised = /sed 's\/<!--/.test(near) && /-safe\./.test(lines[i]);
-      if (!rerendered && !neutralised) {
-        offenders.push(`${file}:${i + 1} ${lines[i].trim()}`);
-      }
+      if (!neutralised) offenders.push(`${file}:${i + 1} ${lines[i].trim()}`);
+    }
+    // Reports and disputes: never through `gh pr comment` at all, only republish.
+    const code = lines.filter((l) => !/^\s*#/.test(l)).join("\n");
+    if (/fix-report\.md|rebuttals/.test(code) && /agent-output/.test(code)) {
+      assert.match(code, /fix-report\.mjs republish/, `${file}: the emitted report must be republished`);
+      assert.match(code, /rebuttal\.mjs republish/, `${file}: the emitted disputes must be republished`);
     }
   }
-
+  assert.ok(seen > 0, "no step posts an agent-written reply — this guard would be vacuous");
   assert.deepEqual(
     offenders,
     [],
     "these steps post an agent-written file verbatim under the App identity:\n  " + offenders.join("\n  "),
   );
+});
+
+test("each trusted job downloads exactly the artifact its agent job uploaded", () => {
+  // The download is `continue-on-error` — an agent that died before writing
+  // anything must not red the report — so a renamed artifact on either side
+  // would not fail anything. It would post no report, no disputes and no cost,
+  // silently, on every run. Pin the names to each other.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const JOBS = {
+    "agent-fix.yml": ["fix", "report"],
+    "agent-iterate-ci.yml": ["iterate", "report"],
+    "agent-review-reply.yml": ["reply", "report"],
+    "agent-review-panel.yml": ["fix", "fix-report"],
+    "agent-implement.yml": ["implement", "finish"],
+  };
+  const jobText = (wf, id) => {
+    const at = wf.indexOf(`\n  ${id}:\n`);
+    assert.ok(at >= 0, `no ${id} job`);
+    const next = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at + 1));
+    return wf.slice(at, next ? at + 1 + next.index : wf.length);
+  };
+  const names = (text, action) => [...text.matchAll(
+    new RegExp(`uses: actions/${action}@v\\d+\\n(?: {8}.*\\n)*? {10}name: (\\S+)`, "g"),
+  )].map((m) => m[1]);
+  for (const [file, [agentJob, trustedJob]] of Object.entries(JOBS)) {
+    const wf = readFileSync(path.join(dir, file), "utf8");
+    const up = names(jobText(wf, agentJob), "upload-artifact");
+    const down = names(jobText(wf, trustedJob), "download-artifact");
+    assert.equal(up.length, 1, `${file} ${agentJob}: expected one handoff upload, got ${up.join(", ")}`);
+    assert.deepEqual(down, up, `${file}: ${trustedJob} must download what ${agentJob} uploaded`);
+    assert.match(jobText(wf, trustedJob), new RegExp(`needs: \\[[^\\]]*\\b${agentJob}\\b`),
+      `${file}: ${trustedJob} must wait for ${agentJob}`);
+  }
 });

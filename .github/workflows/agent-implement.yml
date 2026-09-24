@@ -105,6 +105,14 @@ jobs:
       # grant is a second way for an agent to reach approve-and-merge.
       issues: write # comment on the issue
       pull-requests: read # pulls.list, to find the PR this run opened
+    # For the `finish` job, from steps that ran BEFORE the agent — see
+    # agent-fix.yml's handoff step for why nothing later in this job counts.
+    # `agent` is the runner's own outcome for that step.
+    outputs:
+      configured: ${{ steps.app.outputs.configured }}
+      protection: ${{ steps.protection.outcome }}
+      staged: ${{ steps.stage.outcome }}
+      agent: ${{ steps.agent.outcome }}
     steps:
       # The association check above is a pre-filter on a field the payload
       # carries; this asks the API. Both, because `author_association` is
@@ -178,9 +186,15 @@ jobs:
           # Least privilege, and `administration: read` is the one this verb adds
           # over every other: the gate below reads branch protection. Notably
           # absent, here as everywhere: `workflows`.
+          # Revoked by our own step before the agent — see "Revoke the pre-agent
+          # token" — not by this action's post step at job end.
+          skip-token-revoke: true
+          # And NOT `contents: write` or `pull-requests: write`: this token lives
+          # in the job the agent runs in, the push uses the narrow token below, and
+          # the PR is opened by the `finish` job with a token minted there.
           permission-administration: read # read branch protection, never write it
-          permission-contents: write # push the branch
-          permission-pull-requests: write # open the draft PR
+          permission-contents: read # read rulesets and branches
+          permission-pull-requests: read # the pre-flight lists open PRs
           permission-issues: write # answer on the issue
 
       # THE TOKEN THE AGENT GETS, AND IT IS NOT THE ONE ABOVE. `contents: write`
@@ -191,8 +205,9 @@ jobs:
       # wrote, and `actions/checkout` persists whatever token it is given into
       # `.git/config`, one `git config --get` from being read back.
       #
-      # So the agent commits and pushes, and cannot open, approve or merge
-      # anything. The PR is opened by a step in this file after it stops.
+      # So the agent commits and pushes, and cannot open or approve anything. (It
+      # can still merge a PR a human already approved — `contents: write` reaches
+      # the merge endpoint; see the design doc's residuals.) The PR is opened by the `finish` job after it stops.
       - name: Generate the agent's narrow token
         if: steps.app.outputs.configured == 'true'
         id: agent-token
@@ -209,8 +224,8 @@ jobs:
         with:
           node-version: 22.x
 
-      # STAGE MAIN'S COPY WHILE THE TREE IS STILL MAIN, so the steps after the
-      # agent run code the agent did not write into the workspace.
+      # STAGE MAIN'S COPY WHILE THE TREE IS STILL MAIN, for the credential
+      # picker and the CLIs the agent is told to run.
       #
       # IT IS NOT A TRUST BOUNDARY, and earlier revisions of this comment called
       # it one. `$RUNNER_TEMP` is writable by the agent: it runs an unrestricted
@@ -222,9 +237,10 @@ jobs:
       # that sets out to defeat it.
       #
       # The real containment is elsewhere and was added later: the agent holds a
-      # token that cannot approve, merge or comment on a pull request. That is a
-      # property of the credential rather than of a directory, which is why it
-      # holds.
+      # token that cannot approve or comment on a pull request, and every
+      # step that needs more runs in the `finish` job, on a runner the agent
+      # never had a shell on. Those are properties of a credential and of a
+      # machine rather than of a directory, which is why they hold.
       #
       # `npm ci` runs against the staged copy so those steps take their
       # dependencies from main's lockfile.
@@ -368,8 +384,8 @@ jobs:
 
       # `main`, because the issue has no branch yet — so unlike the fix jobs,
       # this workspace starts TRUSTED. It does not stay that way: the agent
-      # below writes to it, including to `scripts/agent/**` if it wants to, and
-      # every step after it still holds the App token.
+      # below writes to it, including to `scripts/agent/**` if it wants to —
+      # which is why nothing after the agent in this job holds a wide token.
       - uses: actions/checkout@v4
         if: steps.app.outputs.configured == 'true'
         with:
@@ -388,6 +404,11 @@ jobs:
         if: steps.app.outputs.configured == 'true'
         with:
           go-version: "1.25"
+          # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
+          # build cache after the agent ran, with whatever the agent left there,
+          # under a key the agent controls through `go.sum` — and `ci.yml` and the
+          # Docker publish restore by the same key on `main`.
+          cache: false
 
       # Same untrusted-setup rule as every other token-bearing job here: the
       # linter version is pinned in this file rather than read from `make tools`,
@@ -600,6 +621,18 @@ jobs:
           }
           node "$RUNNER_TEMP/agent-tools/pick-credential.mjs"
 
+      # REVOKED BEFORE THE AGENT STARTS. The wide token above was minted for the
+      # pre-agent comments only, and it would otherwise live for an hour in the
+      # job the agent is about to run in — its post step revokes it only at job
+      # end, and the agent can reach that step's environment. Revoking it here
+      # makes it worthless by the time anything untrusted runs.
+      - name: Revoke the pre-agent token
+        if: always() && steps.app-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api -X DELETE installation/token
+
       - name: Run Claude Code
         if: steps.app.outputs.configured == 'true'
         id: agent
@@ -618,10 +651,74 @@ jobs:
             --model claude-opus-5
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
 
-      # The full transcript — every turn, tool call and permission denial — so a
-      # run that ends without a PR is diagnosable. always(): upload even when the
-      # agent step failed, which is exactly when it is wanted.
-      # THE PR IS OPENED HERE, AFTER THE AGENT HAS STOPPED.
+      # EVERYTHING AFTER THE AGENT RUNS IN THE `finish` JOB BELOW, on a fresh
+      # runner — agent-fix.yml's handoff step documents why: the agent can
+      # rewrite `$GITHUB_ENV` / `$GITHUB_PATH`, `~/.gitconfig` and this
+      # workspace's `.git/config` (a `remote.origin.url` of `ext::sh -c …` is
+      # command execution for the next `git` that reads it), and all of it
+      # applies to every later step of this job. Re-staging the scripts from a
+      # fresh checkout protected the files and not the process that ran them.
+      # Only DATA crosses: the transcript and the PR description.
+      - name: Hand the agent's output to the finish job
+        if: always() && steps.stage.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-execution-output
+          path: |
+            ${{ runner.temp }}/claude-execution-output.json
+            ${{ runner.temp }}/pr.md
+          if-no-files-found: warn
+
+  # THE TRUSTED HALF: open the PR, disclose, record the cost, and say so when no
+  # PR came of the run. A fresh runner, main's scripts, and the wide App token
+  # minted here — the agent job never mints it after the agent starts.
+  #
+  # `always()`, keyed on the App check: the no-PR reporter must survive every
+  # failure it reports, including the protection gate refusing and the job
+  # being cancelled. Everything that opens or edits a PR is further gated on
+  # staging having succeeded, which is what "the agent may have run" means.
+  finish:
+    needs: [implement]
+    if: always() && needs.implement.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write # the no-PR report (GITHUB_TOKEN)
+      pull-requests: read # pulls.list, to find the PR this run opened
+    steps:
+      - uses: actions/checkout@v4
+        if: always() && needs.implement.outputs.staged == 'success'
+        with:
+          ref: main
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: always() && needs.implement.outputs.staged == 'success'
+        with:
+          node-version: 22.x
+
+      - name: Collect the agent's output (untrusted data)
+        if: always() && needs.implement.outputs.staged == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: claude-execution-output
+          path: ${{ runner.temp }}/agent-output
+
+      - name: Generate GitHub App token
+        id: app-token
+        if: always() && needs.implement.outputs.staged == 'success'
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          permission-contents: read # find the branch the agent pushed
+          permission-pull-requests: write # open the draft PR; the disclosure edits its body
+          permission-issues: write # link comment, `agent:candidate`, effort record
+
+      # THE PR IS OPENED HERE, AFTER THE AGENT HAS STOPPED, IN A JOB IT NEVER RAN IN.
       #
       # Three reasons, and none of them is tidiness. `--draft` is an argument in
       # this file rather than a line in a prompt, so it is a fact rather than a
@@ -632,78 +729,68 @@ jobs:
       # CI-fix arm both claim any `agent/` branch that HAS a PR and dispatch
       # fixers that push to it, so opening one mid-run would give the branch three
       # writers while the implement agent is still committing.
-      # RE-STAGED AFTER THE AGENT, and this is the step that makes "trusted" true.
-      #
-      # The copy taken before the agent ran was staged into `$RUNNER_TEMP`, which
-      # the agent writes: it holds an unrestricted `Bash` in this same job. Every
-      # step below then executed a `.mjs` file out of that directory WITH THE
-      # WIDE TOKEN in `GH_TOKEN` — so an agent that edited one of those files got
-      # the very `pull-requests: write` the narrow mint exists to withhold. The
-      # separation was defeated by the thing meant to support it.
-      #
-      # A fresh checkout after the agent has stopped cannot be tampered with:
-      # there is no longer anything running that could write to it.
-      - name: Re-stage the trusted agent scripts (post-agent)
-        if: always() && steps.stage.outcome == 'success'
-        run: |
-          set -euo pipefail
-          rm -rf "$RUNNER_TEMP/agent-tools"
-      - name: Check out the default branch again (post-agent)
-        if: always() && steps.stage.outcome == 'success'
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          path: .trusted-post
-          sparse-checkout: scripts/agent
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - name: Move the post-agent copy clear of the workspace
-        if: always() && steps.stage.outcome == 'success'
-        run: |
-          set -euo pipefail
-          mv .trusted-post/scripts/agent "$RUNNER_TEMP/agent-tools"
-          rm -rf .trusted-post
-          npm ci --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
-
       - name: Open the draft PR
         id: open-pr
-        if: always() && steps.stage.outcome == 'success'
+        if: always() && steps.app-token.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
         run: |
           set -euo pipefail
-          # THE BRANCH NAME COMES FROM THE API, NOT FROM THE WORKSPACE. Both
-          # `git rev-parse` and `git ls-remote origin` read `.git/config`, which
-          # the agent owns — and a rewritten `remote.origin.url` is command
-          # execution (`ext::sh -c …`), here in a step holding the WIDE token.
-          # The remote is the only thing that matters anyway: a branch the agent
-          # pushed exists on the server.
-          BRANCH="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/agent/$ISSUE-" \
-            --jq '.[0].ref // empty' | sed 's|^refs/heads/||')"
-          [ -n "$BRANCH" ] || { echo "nothing was pushed to agent/$ISSUE-*; there is no work to open a PR for"; exit 0; }
-          EXISTING="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          # THE BRANCH NAME COMES FROM THE API — this job has no checkout of the
+          # agent's work, and the server is the only thing that matters anyway: a
+          # branch the agent pushed exists there.
+          #
+          # EXACTLY ONE, OR NONE. The pre-flight gate refused to start while any
+          # `agent/$ISSUE-*` branch existed, and the job's concurrency group
+          # admits one `implement` run per issue — and this job runs only after
+          # that one — so every match here was pushed by THIS run.
+          # More than one means the agent pushed several and there is no honest
+          # way to pick; say so rather than open a PR from the wrong one.
+          REFS="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/heads/agent/$ISSUE-" --jq '.[].ref')"
+          COUNT="$(printf '%s' "$REFS" | grep -c . || true)"
+          [ "$COUNT" -gt 0 ] || { echo "nothing was pushed to agent/$ISSUE-*; there is no work to open a PR for"; exit 0; }
+          if [ "$COUNT" -gt 1 ]; then
+            echo "::warning::this run pushed $COUNT agent/$ISSUE-* branches; not guessing which one to open a PR from"
+            printf '%s\n' "$REFS"
+            exit 0
+          fi
+          BRANCH="${REFS#refs/heads/}"
+          # The suffix is the agent's to choose, and a ref name may contain a
+          # `"` — which the jq filter below would read as code. Plain names only.
+          [[ "$BRANCH" =~ ^agent/[0-9]+-[A-Za-z0-9._/-]+$ ]] || { echo "::warning::refusing an unexpected branch name: $BRANCH"; exit 0; }
+          # SAME-REPO, like every other agent-branch lookup here: a fork PR
+          # from a branch of the same name is not this run's work.
+          EXISTING="$(gh pr list --state open --json number,headRefName,isCrossRepository \
+            --jq "map(select(.isCrossRepository == false and .headRefName == \"$BRANCH\")) | .[0].number // empty")"
           [ -z "$EXISTING" ] || { echo "#$EXISTING is already open for $BRANCH"; exit 0; }
-          PR_FILE="$RUNNER_TEMP/pr.md"
-          [ -s "$PR_FILE" ] || { echo "the agent wrote no PR description; not opening a PR"; exit 0; }
-          TITLE="$(head -n 1 "$PR_FILE")"
+          PR_FILE="$RUNNER_TEMP/agent-output/pr.md"
+          [ -f "$PR_FILE" ] && [ -s "$PR_FILE" ] || { echo "the agent wrote no PR description; not opening a PR"; exit 0; }
+          # NEUTRALISE HTML COMMENTS in the title and the body alike. Both are
+          # written by the agent and posted under the App identity, and the
+          # pipeline's latches and dedupe markers are trusted BY AUTHOR — so
+          # agent-authored text carried into an App-authored body is exactly how
+          # a forged `<!-- agent-review-paged -->` gets believed. The same
+          # substitution `fix-report.mjs` makes, for the same reason. Capped, so
+          # an oversized file is cut rather than rejected by the API.
+          # Cut by CHARACTER, not byte: `cut -c` counts bytes, and half a
+          # multibyte character makes `gh pr create` fail after the push landed.
+          TITLE="$(head -n 1 "$PR_FILE" | sed 's/<!--/<!\xe2\x80\x8c--/g')"
+          TITLE="$(LC_ALL=C.UTF-8 bash -c 'printf "%s" "${1:0:200}"' _ "$TITLE")"
           [ -n "$TITLE" ] || { echo "the PR description has no title on its first line"; exit 0; }
-          # NEUTRALISE HTML COMMENTS. This file is written by the agent and posted
-          # under the App identity, and the pipeline's latches and dedupe markers
-          # are trusted BY AUTHOR — so agent-authored text carried into an
-          # App-authored body is exactly how a forged `<!-- agent-review-paged -->`
-          # gets believed. The same substitution `fix-report.mjs` makes, for the
-          # same reason.
           {
-            tail -n +2 "$PR_FILE" | sed 's/<!--/<!\xe2\x80\x8c--/g'
+            tail -n +2 "$PR_FILE" | head -c 60000 | sed 's/<!--/<!\xe2\x80\x8c--/g'
             printf '\n\nFixes #%s\n' "$ISSUE"
           } > "$RUNNER_TEMP/pr-body.md"
-          gh pr create --draft --base main --head "$BRANCH" \
-            --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md"
-          NUM="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          # The number from `gh pr create`'s own output — the URL it prints —
+          # not a second query that could race or come back empty.
+          URL="$(gh pr create --draft --base main --head "$BRANCH" \
+            --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md")"
+          NUM="${URL##*/}"
+          case "$NUM" in ''|*[!0-9]*) echo "::error::gh pr create printed no PR URL: $URL"; exit 1 ;; esac
           echo "number=$NUM" >> "$GITHUB_OUTPUT"
-          node "$RUNNER_TEMP/agent-tools/set-state.mjs" "$NUM" implementing || true
+          node scripts/agent/set-state.mjs "$NUM" implementing || true
           gh issue comment "$ISSUE" --body "🤖 Opened #$NUM (draft) from this issue."
 
       # `agent:candidate` ON THE ISSUE, not the PR. The panel's design-fit lens
@@ -718,56 +805,42 @@ jobs:
           ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
         run: gh issue edit "$ISSUE" --add-label agent:candidate
 
-      - name: Upload agent execution log
-        if: always() && steps.app.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-execution-output
-          path: ${{ runner.temp }}/claude-execution-output.json
-          if-no-files-found: warn
-
       # BELT AND BRACES. The prompt asks the agent to disclose in the PR body it
       # writes, and a prompt is a request, not a mechanism — the same prompt an
       # injected issue gets to talk to. This makes the rule uniform: every job
       # that can push to a branch discloses, mechanically. Idempotent, so it says
-      # nothing when the agent already did.
+      # nothing when the agent already did. Only on the PR this job opened.
       - name: Disclose agent authorship in the PR body
-        if: always() && steps.stage.outcome == 'success'
+        if: always() && steps.open-pr.outputs.number != ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
-        run: |
-          # SAME-REPO, like every other agent-branch lookup in this file. A fork
-          # PR from a branch named `agent/<issue>-x` is not this run's work, and
-          # disclosing agent authorship on an outside contributor's PR would be
-          # a false statement about their change.
-          PR="$(gh pr list --state open --json number,headRefName,isCrossRepository \
-            --jq "map(select(.isCrossRepository == false and (.headRefName | startswith(\"agent/$ISSUE-\")))) | .[0].number // empty")"
-          [ -n "$PR" ] || { echo "no same-repo agent/$ISSUE-* PR yet; nothing to disclose on"; exit 0; }
-          node "$RUNNER_TEMP/agent-tools/disclose-pr.mjs" "$PR"
+          PR: ${{ steps.open-pr.outputs.number }}
+        run: node scripts/agent/disclose-pr.mjs "$PR"
 
       - name: Write implement session job summary
-        if: always() && steps.stage.outcome == 'success'
+        if: always() && needs.implement.outputs.staged == 'success'
         continue-on-error: true
         run: |
-          node "$RUNNER_TEMP/agent-tools/session-job-summary.mjs" \
-            --execution "$RUNNER_TEMP/claude-execution-output.json" \
+          node scripts/agent/session-job-summary.mjs \
+            --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" \
             --kind implement \
             --title "Implement agent session"
 
-      # The kickoff created the PR mid-run, so resolve it by the `agent/<issue>-…`
-      # branch rather than by a number this job never saw.
+      # Onto the PR this job opened when it opened one; otherwise resolved from
+      # an open `agent/<issue>-…` PR. A run that opened no PR has no ledger to
+      # record into, and the script says so and exits 0.
       - name: Record agent effort metrics
-        if: always() && steps.stage.outcome == 'success'
+        if: always() && steps.app-token.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
-        run: >-
-          node "$RUNNER_TEMP/agent-tools/metrics.mjs" record
-          --execution "$RUNNER_TEMP/claude-execution-output.json"
-          --kind implement --issue "$ISSUE"
+          PR: ${{ steps.open-pr.outputs.number }}
+        run: |
+          node scripts/agent/metrics.mjs record \
+            --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" \
+            --kind implement ${PR:+--pr "$PR"} --issue "$ISSUE"
 
       # THE ONE SILENT TERMINATION LEFT. The run dies, or exhausts its turns,
       # before opening a PR — and the issue keeps the "On it" acknowledgement
@@ -794,7 +867,7 @@ jobs:
       # its own defect — the previous revision told a `npm ci` failure that
       # `main` was unprotected.
       - name: Report a run that ended without a PR
-        if: always() && steps.app.outputs.configured == 'true' && github.event_name == 'issue_comment'
+        if: always() && github.event_name == 'issue_comment'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -807,23 +880,26 @@ jobs:
           # nothing on the issue. A reporter must not depend on the thing whose
           # failure it reports. The job already holds `issues: write`, and the
           # target is an issue, so nothing here needs the App.
+          #
+          # And in THIS job, not the agent's: every step after the agent in that
+          # job runs in an environment the agent could rewrite.
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issue = context.payload.issue.number;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const agentOutcome = '${{ steps.agent.outcome }}';
-            const staged = '${{ steps.stage.outcome }}' === 'success';
+            const agentOutcome = '${{ needs.implement.outputs.agent }}';
+            const staged = '${{ needs.implement.outputs.staged }}' === 'success';
             // `failure` and `skipped` are different answers. The gate REFUSING
             // is `failure`; `skipped` means it never ran, and the only thing
             // between the App check and it is the token mint — so `skipped` is a
             // dead credential, not an unprotected branch. Collapsing both into
             // `!== 'success'` told a rotated private key that `main` needed
             // branch protection it already had.
-            const protection = '${{ steps.protection.outcome }}';
+            const protection = '${{ needs.implement.outputs.protection }}';
             const cause = protection === 'failure' ? 'protection'
               : protection === 'cancelled' ? 'cancelled'
               : protection !== 'success' ? 'credential'
-              : '${{ steps.stage.outcome }}' !== 'success' ? 'setup' : 'no-pr';
+              : !staged ? 'setup' : 'no-pr';
             // KEYED BY CAUSE, not by run. A bare marker meant one no-PR report
             // per issue EVER: a protection refusal claimed it, the maintainer
             // fixed protection and retried exactly as that comment told them to,

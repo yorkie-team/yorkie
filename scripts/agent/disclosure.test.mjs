@@ -176,6 +176,6 @@ test("every job that pushes a fix also discloses", () => {
       /- name: Disclose agent authorship in the PR body/,
       `${file} can push commits to a PR but never discloses, so that PR can never be promoted`,
     );
-    assert.match(wf, /disclose-pr\.mjs" "\$(?:PR|\{PR\})"/, `${file}: the disclosure step must run the CLI`);
+    assert.match(wf, /disclose-pr\.mjs"? "\$(?:PR|\{PR\})"/, `${file}: the disclosure step must run the CLI`);
   }
 });

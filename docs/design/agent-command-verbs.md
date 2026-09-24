@@ -45,60 +45,77 @@ work here is porting plus the three repo-specific pieces named in §4.
   do: a token holding `contents: write` and `pull-requests: write` together can
   approve and merge whether or not any workflow asks it to.
 
-  **Four workflows that ship today hand an agent exactly that pair**, and saying
-  otherwise would document an invariant this repository does not hold. Each mints
-  one installation token with `contents: write` + `pull-requests: write` +
-  `issues: write` and passes it to `claude-code-action` as `github_token`, with
-  `Bash` in `--allowedTools`, in a job whose workspace is checked out from the
-  untrusted PR branch:
+  **No agent is handed that pair, and no step the workflow runs after the agent
+  holds it.** That is a claim about the workflow's steps; what the agent can
+  reach by other means is listed under the residuals below. Until 2026-09-24 four workflows (`agent-fix.yml`, `agent-iterate-ci.yml`,
+  the panel's `fix` job and `agent-review-reply.yml`) passed `claude-code-action`
+  one token carrying `contents` + `pull-requests` + `issues`. Now every job that
+  runs a pushing agent is built the same way, and `agent-implement.yml` too:
 
-  | Workflow | Token mint | Handed to the agent |
+  | Where | Holds | Runs |
   | --- | --- | --- |
-  | `agent-fix.yml` | lines 201-203 | line 536 |
-  | `agent-iterate-ci.yml` | lines 156-158 | line 456 |
-  | `agent-review-panel.yml` (fix job) | lines 1880-1882 | line 2075 |
-  | `agent-review-reply.yml` | lines 158-160 | line 268 |
+  | The agent job, before the agent | a pre-agent App token where a pre-agent step needs one (never `contents: write`), revoked by a step just before the agent; a GITHUB_TOKEN without `contents: write` | gates, the brief, the placeholder — all from `main` |
+  | The agent step | a **narrow** App token, `contents: write` only, persisted into `.git/config` | the agent, with `Bash` |
+  | The agent job, after the agent | no workflow step but the artifact upload — though the runner still runs the earlier actions' **post steps** here (see residuals) | the handoff of the agent's files, as data |
+  | A separate job (`report`, `fix-report`, `finish`) on a fresh runner | a wide App token minted there | posting, disclosure, paging, metrics — `main`'s scripts |
 
-  So the human-approval invariant rests on **branch protection on `main`** and on
-  the fact that nothing in these workflows asks the token to approve or merge — it
-  does **not** rest on the credentials being unable to. A successful prompt
-  injection in any of the four reaches a token that can submit an approving review
-  on a PR the App did not author and then merge it. That gap is open and it is not
-  closed by anything on this branch.
+  **Why a separate job and not a re-staged copy.** The previous correction
+  re-checked-out `scripts/agent` after the agent stopped, and called the steps
+  that ran it trusted. It protected the files and not the process: the agent's
+  shell inherits `$GITHUB_ENV` and `$GITHUB_PATH`, which the runner applies to
+  every later step of the same job, and it can rewrite `~/.gitconfig`,
+  `~/.npmrc` and the workspace's `.git/config`, where a `remote.origin.url` of
+  `ext::sh -c …` is command execution for the next `git ls-remote origin`. A
+  step later in that job ran on the agent's terms whatever file it executed.
+  `checks.test.mjs` ("nothing after the agent but the handoff") now fails any
+  pushing agent job with another step after the agent.
 
-  Two things about that sentence are weaker than they read, and both are recorded
-  here rather than left for the next reader to discover.
+  **What crosses is data, and it is read as data.** The agent writes its fix
+  report, disputes, reply, PR description and execution log; the trusted job
+  never posts any of them as written. `fix-report.mjs republish` and
+  `rebuttal.mjs republish` parse the structured record and render every comment
+  afresh — so a file reading `<!-- agent-review-paged -->` posts nothing — and
+  `metrics.mjs` coerces the log's counts and identifiers before any of it reaches
+  a comment. Free prose (the reply, the PR description) has every `<!--`
+  neutralised. Heads are read from the API, never from a checkout.
 
-  **The compensating control is unverified in this repository.** Branch protection
-  on `main` is a repository *setting*. It appears nowhere in the tree — no
-  ruleset fixture, no `CODEOWNERS`, and no test in `scripts/agent/checks.test.mjs`
-  asserts it. Nothing here would notice if it were relaxed tomorrow. Phase I's gate
-  (below) is the only place in this design that reads the setting at run time, and
-  Phase I is not landed. So the invariant currently rests on an assumption, checked
-  by nobody.
+  **What this does not close, stated so it is not mistaken for closed.**
 
-  **Splitting the mint is necessary and not sufficient, as these four jobs are
-  built.** The correction is Phase I's acceptance criterion 1 — the agent gets
-  `contents` + `issues` and no `pull-requests`, and every step needing
-  `pull-requests` becomes a trusted step in the workflow file. But "trusted step"
-  is a claim about the *code the step runs*, not about where the step sits in the
-  file, and in these jobs it does not hold yet: each copies `scripts/agent` to
-  `$RUNNER_TEMP/agent-tools` **before** the agent runs (`agent-fix.yml:408`), then
-  runs the agent with `Bash` and no filesystem confinement
-  (`agent-fix.yml:524-634`), then executes those same staged files afterwards
-  (`agent-fix.yml:657`, `:672`, `:770`). An agent that rewrites
-  `$RUNNER_TEMP/agent-tools/metrics.mjs` mid-run is executed by a later step — so
-  handing that step the `pull-requests` token would hand it to the branch. This is
-  criterion 12 ("staged scripts in `$RUNNER_TEMP` are not a trust boundary")
-  arriving in the four workflows that already shipped, and **both corrections have
-  to land together**: the split alone relocates the capability without removing it.
-
-  Neither can be landed from here. No credential in this pipeline may write
-  `.github/workflows/**` (see Phase I below) — re-measured against this exact file
-  on 2026-09-23, where a push carrying a one-byte change to `agent-fix.yml` came
-  back `refusing to allow a GitHub App to create or update workflow
-  .github/workflows/agent-fix.yml without 'workflows' permission`. A maintainer
-  must land both, and until then this is the repository's largest known open gap.
+  - **`contents: write` alone reaches the merge endpoint.** The narrow token
+    cannot approve or comment, but it can merge a PR that already satisfies
+    `main`'s protection — a human-approved PR can be merged early by an injected
+    agent. `require_last_push_approval` (Phase I criterion 2) limits which
+    approvals count; it does not stop the merge of one that does. The agent needs
+    `contents: write` to push its own commits, so closing this means the agent
+    stops pushing: it commits, hands a bundle across, and the trusted job pushes.
+    That is the next change here. The two workflows that turn a push or release
+    by the App into Docker Hub credentials refuse the App as the actor.
+  - **The agent job still holds the App's private key, and still runs code
+    after the agent.** The key is there to mint the narrow token, and the runner
+    runs every earlier action's **post step** after the agent, in the same job:
+    `create-github-app-token`'s (whose environment carries the private key as
+    an input and each minted token as state) and `actions/checkout`'s (carrying
+    the job's `GITHUB_TOKEN`). The agent can reach those without `sudo` — the
+    actions' code under `_actions/` is owned by the runner user and can be
+    rewritten, a process left running outlives the agent step and can read the
+    post step's `/proc/<pid>/environ` as the same user, and `$GITHUB_ENV` can
+    set `LD_PRELOAD` — and with the passwordless `sudo` a GitHub-hosted runner
+    grants, it can read the runner's memory directly. With the key it can mint
+    any token the installation allows, the approve+merge pair included; with
+    the `GITHUB_TOKEN` it can post as `github-actions[bot]`, an author several
+    markers are trusted by. What IS done: no agent job's `GITHUB_TOKEN` carries
+    `contents: write`; the pre-agent App tokens carry no `contents: write` and
+    are revoked by a step before the agent starts; `setup-go` runs without its
+    cache, whose post step would otherwise save the agent's module and build
+    caches under a key `main` restores. Closing the rest needs the narrow token
+    minted by a plain `run:` step (no post step, the key only in that step's
+    environment), the job's `GITHUB_TOKEN` read-only, and `sudo` dropped before
+    the agent — all three; dropping `sudo` alone closes none of the channels
+    above.
+  - **Branch protection on `main` is a setting, not a checked property.** It
+    appears nowhere in the tree — no ruleset fixture, no `CODEOWNERS`, no test.
+    Phase I's gate is the only thing that reads it at run time, and only for that
+    verb.
 
 ## Design
 
@@ -272,7 +289,7 @@ finding is wrong.
   also fires on `pull_request_review_comment`, and it triggers on a mention
   with no verb at all, so its misfire surface is the widest of the set.
 
-#### Phase I — `@claude fix` on an issue (issue → PR) — DESIGNED, NOT LANDED
+#### Phase I — `@claude fix` on an issue (issue → PR)
 
 > **This phase is installed.** `.github/workflows/agent-implement.yml` exists and
 > is live behind `AGENT_PIPELINE_ENABLED`, with one operational prerequisite that
@@ -350,21 +367,23 @@ each one by a mechanism rather than a promise:
 
 ##### Acceptance criteria for the implementation
 
-Each of these is a defect the reviewed draft actually had. A maintainer landing
-this workflow should treat the list as the review checklist, and should expect
-the three `agent-implement.yml` guards in `scripts/agent/checks.test.mjs` — which
-skip today via `workflow-presence.mjs` and re-arm the moment the file exists — to
-run and to have to pass.
+Each of these is a defect the reviewed draft actually had, and each is held by
+the installed workflow. Treat the list as the review checklist for any change to
+it: the three `agent-implement.yml` guards in `scripts/agent/checks.test.mjs` run
+today (they skip through `workflow-presence.mjs` only if the file is ever
+withdrawn again) and have to pass.
 
 1. **The gate must not be satisfiable by the party it gates.** One App token
    carrying `pull-requests: write` (which opening a PR needs) beside
    `contents: write` is exactly the pair that submits an **approving review** and
    then **merges**; GitHub only blocks approving a PR the same identity authored,
    so an injected run could approve and merge somebody else's. Mint **two**
-   tokens: the agent gets `contents` + `issues` and no `pull-requests`, the
-   workspace checkout persists *that* narrower one (`persist-credentials` writes
-   it into `.git/config`, which the agent reads with one `Bash` call), and every
-   step needing `pull-requests` is a trusted step in the workflow file.
+   tokens: the agent gets `contents` alone, the workspace checkout persists
+   *that* narrower one (`persist-credentials` writes it into `.git/config`,
+   which the agent reads with one `Bash` call), and every step needing more runs
+   in a separate job the agent never ran in (see Non-Goals). `contents: write`
+   on its own still reaches the merge endpoint for a PR that is already
+   approved — an accepted, written residual until the agent stops pushing.
 2. **The protection check must require `require_last_push_approval`** on both the
    classic-protection and the ruleset path. Without it an approval given on an
    agent PR stays valid across every later commit the bot pushes to the same
@@ -410,11 +429,13 @@ run and to have to pass.
 11. **The ambient `GITHUB_TOKEN` gets `issues: write` and `pull-requests: read`,**
     which is what its only consumer needs — not the `contents`/`pull-requests`
     write the draft granted it.
-12. **Staged scripts in `$RUNNER_TEMP` are not a trust boundary.** The draft
-    copied `scripts/agent` there and called it the trusted copy, then ran the
-    agent with unrestricted `Bash` in the same job and executed those files
-    afterwards with the App token. Either run trusted tooling from a path the
-    agent cannot write, or stop describing it as trusted.
+12. **Nothing after the agent in its own job is a trust boundary.** The draft
+    copied `scripts/agent` to `$RUNNER_TEMP` and called it the trusted copy,
+    then ran the agent with unrestricted `Bash` in the same job and executed
+    those files afterwards with the App token. Re-checking them out after the
+    agent did not help either: the agent owns the job's environment
+    (`$GITHUB_ENV`, `$GITHUB_PATH`, `~/.gitconfig`, `.git/config`), not just its
+    files. Every post-agent step runs in the `finish` job instead.
 13. **The per-cause dedupe on the no-PR reporter must be acknowledgement-aware.**
     Suppressing on the mere presence of a prior report of the same kind
     re-creates the silence it exists to close: the "On it" acknowledgement is
@@ -512,8 +533,8 @@ Four guards in the ported suites assert that a module and a workflow carry the
 same literal. They skip when their workflow is absent, through one helper
 (`workflow-presence.mjs`) that says why — and with every phase installed, none
 of them skips today. The helper stays because `agent-implement.yml` (issue → PR)
-is still deferred, and because the arrangement is what makes adding a phase
-safe: a guard re-arms by itself when its workflow lands, whereas deleting it
+was withdrawn once and may be again, and because the arrangement is what makes
+adding a phase safe: a guard re-arms by itself when its workflow lands, whereas deleting it
 would make that day a silent regression of a check written precisely because its
 failure mode is invisible.
 
@@ -546,7 +567,7 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | `reply` last | It is the only verb with no verb: any bare `@claude` mention on an agent PR triggers it, and it also fires on inline review comments. Widest misfire surface in the set |
 | Advisory before gating | Check runs interact with branch protection and with the merge queue. Landing the reviewer first separates "is it any good?" from "does it block merges?" |
 | Keep the upstream kill-switch variable | Lets a workflow be merged inert, so review of the workflow and the decision to enable it are separate events |
-| Defer issue → PR (Phase I), after reversing that deferral once | It originates work, where every phase here reviews work a human already decided to do — and when it was tried anyway, the corrections review demanded could not be pushed, because no agent credential may write `.github/workflows/**`. The design is specified; the implementation is a human's |
+| Land issue → PR (Phase I) after deferring it, withdrawing it once, and restoring it | It originates work, where every phase here reviews work a human already decided to do — and when it was first tried, the corrections review demanded could not be pushed, because no agent credential may write `.github/workflows/**`. It is installed behind a gate a repository setting must satisfy (`require_last_push_approval` on `main`), and its workflow changes are a human's to push |
 
 ## Alternatives Considered
 

@@ -278,3 +278,106 @@ When a design doc concedes an open gap, the remediation it prescribes is part
 of the claim and gets checked as hard as the gap. "Here is how to fix it" that
 does not survive the jobs as built is worse than "we do not know how to fix
 it yet" — it reads as a plan and retires the question.
+
+## Round 6 panel findings — landed by a maintainer session (2026-09-24)
+
+The pipeline had paged a human: its last fix round never started (the
+review-round guard died on ENOBUFS, fixed in `2149e6a`), and three lenses held
+eight blocking findings, three of them critical security. They were fixed from
+an interactive session holding a credential that can write
+`.github/workflows/**`, which is what the standstill needed.
+
+- **"Re-stage after the agent" protected the files, not the process.** The
+  previous round checked `scripts/agent` out again once the agent stopped and
+  called the later steps trusted. The agent's shell inherits `$GITHUB_ENV` and
+  `$GITHUB_PATH`, which apply to every later step of the same job, and owns
+  `~/.gitconfig` and the workspace `.git/config` (`ext::sh` remote URLs are
+  command execution). Nothing later in the agent's own job can be trusted with
+  a wide token, whatever file it runs. The fix is structural — a separate job
+  on a fresh runner — and a guard now fails any pushing agent job with a step
+  after the agent other than the artifact handoff.
+- **"The CLI rendered it" is not a property of a file.** `--emit` moved posting
+  out of the agent, and then the trusted step posted the agent's file verbatim,
+  on the assumption the CLI had written it. An agent with `Bash` writes whatever
+  it likes to that path. `republish` parses the record and renders afresh, so
+  the only thing that survives is what the CLI could have said. The same held
+  for the execution log feeding `metrics.mjs`: a string where a count belongs
+  concatenated through `+` straight into an App-authored comment.
+- **A job split moves every implicit dependency on the old job.** Each moved
+  step had leaned on something in its old job: the staged scripts, the
+  checkout's `.git/config` for `ls-remote`, the job's GITHUB_TOKEN grants, step
+  outcomes read as `steps.*`. Each had to be carried across explicitly — as a
+  job output from a PRE-agent step, an API read, or a new grant — and the
+  pre-existing tests caught five of them.
+- **Correctness critical refuted, with the source.** "claude-code-action needs
+  PR/issue scopes" does not hold at the pinned commit: in prompt (agent) mode
+  it calls `users.getByUsername` and the collaborator-permission endpoint
+  (metadata, which every installation token carries), and loads no GitHub MCP
+  server unless `--allowedTools` names one.
+- **Not closed, and written down as such:** `contents: write` alone reaches the
+  merge endpoint for an already-approved PR; the agent job still holds the App
+  private key on a runner with passwordless `sudo`. Both are in the design doc.
+
+### Self-review of that change (round 1 of 3: correctness + security)
+
+Two blocking, both fixed:
+
+- `rebuttal.mjs` neutralised every author field but `lens`, and the visible
+  line prints `lens` — so `republish` still posted a live latch from a crafted
+  record. Every field is neutralised now, and a test puts the latch in each
+  field in turn. The earlier test only put it in prose OUTSIDE the record,
+  which `republish` discards anyway — a test of the easy half.
+- `agent-fix.yml`'s agent job still granted its GITHUB_TOKEN `contents: write`;
+  the other four had been narrowed. Dropped.
+
+Non-blocking, fixed: in a cancelled run a default-`success()` step is skipped
+even inside an `always()` job, so the trusted jobs' checkout/`npm ci`/mint
+would have skipped on exactly the superseded runs they exist for — every step
+now carries `always()`, pinned by a test. A cancelled fixer is reported as
+cancelled, not as "found nothing". `republish` takes the head from the trusted
+job. The PR title is cut by character. And the "several disputes in one file"
+test was vacuous — its rebuttals never tied, so it passed with the fix
+removed; it now builds a real tie and was mutation-checked.
+
+Stated, not fixed: the sudo/runner-memory path to the App key and to the wide
+token minted before the agent. In the design doc and the PR body.
+
+### Self-review round 2 (design fit), after porting onto the merged `main`
+
+#2026 merged mid-session with its own verbatim-post fix (`post-emitted.mjs`);
+this work was ported onto it as one commit and `republish` replaced that
+script. Round 2 found two blocking:
+
+- The pre-agent wide tokens in `agent-fix` and `agent-implement` still carried
+  `contents: write` for a push that the narrow token now makes. Both mints
+  are cut to what their pre-agent steps use, so no token in an agent's job
+  holds the approve+merge pair.
+- The panel's `stalled` net watched `fix`, but the no-commit page had moved to
+  `fix-report` — a failed mint or comment there paged nobody. `stalled` now
+  needs `fix-report` and pages on its failure.
+
+Non-blocking, fixed: `npm ci` dropped from the trusted jobs (none of their
+scripts has a third-party import, and in `finish` it sat on the path to
+opening the PR); a dropped or over-cap dispute now warns; a guard pins each
+handoff artifact's name to its download; stale single-job comments and two
+design-doc rows. Left as drift, deliberately: the five trusted jobs read the
+head three slightly different ways, and two keep artifacts for 7 days.
+
+### Self-review round 3 (security + docs) — the last round
+
+One blocking, on the docs: they said nothing runs after the agent in its own
+job, and the runner runs every earlier action's POST step there —
+`create-github-app-token`'s with the private key among its inputs, and
+`checkout`'s with the job's `GITHUB_TOKEN`. The agent reaches those without
+`sudo` (rewrite the action under `_actions/`, or leave a process that reads
+the post step's environment), so "or drop `sudo`" was not a remedy. The design
+doc now says so and names the three changes that would close it. Cheap
+mitigations landed: `setup-go` without cache (its post step would save the
+agent's module cache under a key `main` restores), the pre-agent App tokens
+revoked by a step before the agent, a numeric-only `status` in the effort
+comment, and the no-commit pages falling back to GITHUB_TOKEN when the mint
+fails.
+
+Standing rule: a guard over `steps:` sees only the steps a workflow declares.
+Before claiming what runs in a job, count the post steps of every action the
+job uses.
