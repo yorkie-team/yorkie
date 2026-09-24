@@ -384,15 +384,6 @@ type Database interface {
 		doc *document.InternalDocument,
 	) error
 
-	// UpdateDocInfoSize records the document's measured size in bytes so the
-	// push path can enforce the project's size quota without building the
-	// document. See docs/design/document-size-limit.md.
-	UpdateDocInfoSize(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-		docSize int64,
-	) error
-
 	// FindSnapshotInfo return the snapshot by the given DocRefKey and serverSeq.
 	FindSnapshotInfo(
 		ctx context.Context,

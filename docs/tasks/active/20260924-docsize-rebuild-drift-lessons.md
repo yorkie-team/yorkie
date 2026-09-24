@@ -256,3 +256,44 @@ The rule this leaves: a standstill recorded four times is a decision not being
 made, not a decision being deferred. When the design doc a previous round wrote
 already contains a viable option, the next round's job is to build it, not to
 re-describe why building it is hard.
+
+## Panel round 6: the gate was reverted; it was not race-free
+
+CI turned red on the round-5 gate. Four failures, one commit, two distinct
+mechanisms — both in the plumbing that fed the gate its number, neither in the
+gate's own logic:
+
+- **A data race on the cached `DocInfo`.** `storeSnapshot` ended with
+  `docInfo.DocSize = int64(size.Total())`. That `docInfo` is not private to the
+  snapshot goroutine: `CreateChangeInfos` finishes with
+  `c.docCache.Add(refKey, docInfo)` (`mongo/client.go`), so the object handed
+  to `PushPull`'s background goroutine *is* the cache entry. Every concurrent
+  `FindDocInfoByRefKey` cache hit deep-copies it. `-race` caught the write
+  against that read in three integration tests
+  (`TestDisableGCOnAttach`, `TestHistoryTreeMultiClientStyleUndoConvergence`,
+  `TestObjectPropertyConvergence`).
+- **`ErrConflictOnUpdate` in the bench lane.** Round 5 recorded, as a lesson,
+  that `UpdateDocInfoSize` *removes* the `docCache` entry rather than re-adding
+  one read outside `DocPushKey`. Removing is not the safe half of that choice;
+  it is the other end of the same hazard. `PushPullChanges` calls
+  `documents.FindDocInfoByRefKey` at step 03 holding only `DocPullKey` (per
+  actor) and an `RLock` on `DocKey` — no `DocPushKey`. While the entry stays
+  warm that call is a harmless cache hit. Dropping the entry turns it into an
+  unlocked Mongo read that re-populates the cache, which is exactly the stale
+  overwrite the NOTE atop `pushPack`'s locked block warns about:
+  `BenchmarkRPC/client_to_client_via_server` failed with
+  `create changes of Document (...): conflict on update`.
+
+Reverted `25453f54` whole. The gate is also outside this task's stated scope —
+the todo is the three accumulator-vs-rebuild drifts in `pkg/`, and the server
+enforcement arrived as a panel addition on top.
+
+The rule: a number that is cheap to read because it rides an existing cache
+inherits that cache's concurrency contract. The round-5 design picked
+`DocInfo.DocSize` precisely to avoid paying for a fresh read on the push path,
+and every problem it hit came from that: writing the field mutates a shared
+cache entry, and invalidating the field invalidates the whole `DocInfo` for
+readers that hold none of the locks the `DocInfo` CAS depends on. A server-side
+gate wants a size source that is *not* the `docCache` — a separate keyed entry,
+or an accepted extra read — and that is a design choice to make before writing
+the gate, not after.

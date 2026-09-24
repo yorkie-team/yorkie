@@ -68,14 +68,6 @@ type DocInfo struct {
 	// thereafter; the empty (false) value matches documents created before
 	// this option existed.
 	DisablePresence bool `bson:"disable_presence,omitempty"`
-
-	// DocSize is the document's size in bytes as of the last snapshot
-	// (`resource.DocSize.Total()`), written by the snapshot path so the push
-	// path can gate on it without building the document. Zero means "not
-	// measured yet" — documents written before this field existed, and
-	// documents that have never crossed a snapshot interval — and the gate
-	// admits those. See docs/design/document-size-limit.md.
-	DocSize int64 `bson:"doc_size,omitempty"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.
@@ -109,7 +101,6 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		CompactedAt:     info.CompactedAt,
 		Epoch:           info.Epoch,
 		DisablePresence: info.DisablePresence,
-		DocSize:         info.DocSize,
 	}
 }
 

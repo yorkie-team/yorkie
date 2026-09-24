@@ -50,7 +50,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
-- [Document Size Limit](document-size-limit.md): The lagging, growth-only server-side backstop that makes `MaxSizePerDocument` hold against a client that skips its own check
+- [Document Size Limit](document-size-limit.md): Proposal for a server-side backstop on `MaxSizePerDocument`, which is enforced only on the client today
 - [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 - [Project Stats Cache](project-stats-cache.md): Asynchronously refreshed cache for `ClientsCount` and `DocumentsCount` to keep `GetProjectStats` fast at large scale
 - [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md): Daily HLL rollups that make the warehouse-backed `GetProjectStats` metrics independent of event volume

@@ -70,10 +70,6 @@ func TestClient(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("RunUpdateDocInfoSize test", func(t *testing.T) {
-		testcases.RunUpdateDocInfoSizeTest(t, cli, dummyProjectID)
-	})
-
 	t.Run("RunFindDocInfosByKeysAndIDs test", func(t *testing.T) {
 		testcases.RunFindDocInfosByKeysAndIDsTest(t, cli, dummyProjectID)
 	})

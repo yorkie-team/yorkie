@@ -120,7 +120,7 @@ func PushPull(
 	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, project, clientInfo, docKey, reqPack)
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
@@ -248,18 +248,14 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 func pushPack(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
 ) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
-	// 01. Filter out changes that are already pushed. The decoded changes are
-	// kept alongside their ChangeInfos so the size gate below can classify
-	// them by operation kind; a ChangeInfo carries its operations encoded.
+	// 01. Filter out changes that are already pushed.
 	var pushables []*database.ChangeInfo
-	var pushableChanges []*change.Change
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
 			logging.From(ctx).Warnf(
@@ -275,7 +271,6 @@ func pushPack(
 		}
 
 		pushables = append(pushables, info)
-		pushableChanges = append(pushableChanges, cn)
 	}
 
 	// 02. Push the changes to the database.
@@ -310,25 +305,12 @@ func pushPack(
 					currentDocInfo.Epoch,
 				)
 				pushables = nil
-				pushableChanges = nil
 			}
 		} else if reqPack.Checkpoint.ServerSeq > currentDocInfo.ServerSeq {
 			return nil, nil, time.InitialLamport, change.InitialCheckpoint, connect.NewError(
 				connect.CodeInvalidArgument,
 				errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
 			)
-		}
-
-		// 04. Enforce the project's size quota on the server. The client
-		// checks it too, exactly, in Document.Update; this gate is what makes
-		// the quota hold against a client that does not. It reads the size the
-		// snapshot path last measured onto DocInfo, so it costs nothing beyond
-		// the FindDocInfoByRefKey already done above. A removal-only push is
-		// still admitted — see checkDocSize.
-		if len(pushableChanges) > 0 {
-			if err := checkDocSize(project, currentDocInfo, pushableChanges); err != nil {
-				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-			}
 		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(

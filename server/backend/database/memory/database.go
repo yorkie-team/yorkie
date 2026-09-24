@@ -2138,38 +2138,6 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// UpdateDocInfoSize records the document's measured size in bytes.
-func (d *DB) UpdateDocInfoSize(
-	_ context.Context,
-	docRefKey types.DocRefKey,
-	docSize int64,
-) error {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	raw, err := txn.First(
-		tblDocuments,
-		"project_id_id",
-		docRefKey.ProjectID.String(),
-		docRefKey.DocID.String(),
-	)
-	if err != nil {
-		return fmt.Errorf("update size of %s: %w", docRefKey, err)
-	}
-	if raw == nil {
-		return fmt.Errorf("update size of %s: %w", docRefKey, database.ErrDocumentNotFound)
-	}
-
-	info := raw.(*database.DocInfo).DeepCopy()
-	info.DocSize = docSize
-	if err := txn.Insert(tblDocuments, info); err != nil {
-		return fmt.Errorf("update size of %s: %w", docRefKey, err)
-	}
-	txn.Commit()
-
-	return nil
-}
-
 // hasVersionVectorRow reports whether any client has stored a version
 // vector row for the given document within the open transaction.
 func (d *DB) hasVersionVectorRow(txn *memdb.Txn, docRefKey types.DocRefKey) (bool, error) {
