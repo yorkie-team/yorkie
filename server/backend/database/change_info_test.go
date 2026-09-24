@@ -137,4 +137,30 @@ func TestChangeInfoDecodesOperationsRejectedOnTheWire(t *testing.T) {
 		assert.Equal(t, "kept", spans[0].Attributes.Get("dated"))
 		assert.False(t, spans[0].Attributes.Has("undated"))
 	})
+
+	t.Run("stored empty tree edit content group is dropped test", func(t *testing.T) {
+		content := crdt.NewTreeNode(crdt.NewTreeNodeID(executedAt, 0), "text", nil, "a")
+		op := operations.NewTreeEdit(seed, pos, pos, []*crdt.TreeNode{content}, 0, executedAt)
+		pbOps, err := converter.ToOperations([]operations.Operation{op})
+		require.NoError(t, err)
+
+		treeEdit := pbOps[0].GetTreeEdit()
+		require.Len(t, treeEdit.Contents, 1)
+		// The shapes a change written before the check could carry: a group
+		// holding no tree node, and an absent one.
+		treeEdit.Contents = append([]*api.TreeNodes{{}, nil}, treeEdit.Contents...)
+
+		_, err = converter.FromOperations(pbOps)
+		assert.Error(t, err)
+
+		// Dropping the empty groups keeps the document readable; carrying one
+		// into the operation leaves a nil content that TreeEdit.Execute
+		// dereferences to deep-copy. The well-formed sibling must survive.
+		c, err := storedChange(t, pbOps).ToChange()
+		require.NoError(t, err)
+
+		contents := c.Operations()[0].(*operations.TreeEdit).Contents()
+		require.Len(t, contents, 1)
+		assert.Equal(t, "a", contents[0].Value)
+	})
 }

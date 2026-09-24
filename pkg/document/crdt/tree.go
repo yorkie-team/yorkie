@@ -1040,23 +1040,11 @@ func (t *Tree) rebuildMergeState() {
 			return
 		}
 
-		src := t.findFloorNode(child.MergedFrom)
+		// findMergeNode, not findFloorNode: MergedFrom is client-supplied on an
+		// element payload (Set/Add/ArraySet), so the source it names has to be
+		// the node it names exactly, and an element. See findMergeNode.
+		src := t.findMergeNode(child.MergedFrom)
 		if src == nil {
-			return
-		}
-
-		// findFloorNode is a floor lookup: it answers with the node that
-		// *contains* the offset, which is what a position inside a split node
-		// needs, but a merge source is recorded by mergeNodes as the parent's
-		// exact ID. Requiring the exact ID back matters because MergedFrom is
-		// client-supplied on an element payload (Set/Add/ArraySet), where the
-		// floor is the only thing standing between a made-up offset and a
-		// forwarding pointer planted on an unrelated live node -- one that a
-		// later, innocent delete would follow in propagateMergeDeletes to
-		// cascade-tombstone that node's namesakes. A source that is a text
-		// node is rejected for the same reason the destination is below: a
-		// merge only ever moves children out of an element parent.
-		if !src.id.Equal(child.MergedFrom) || src.IsText() {
 			return
 		}
 
@@ -2427,19 +2415,17 @@ func (t *Tree) styleSkipPredicate(
 // merge chain stays flat (P->R, not P->Q) and both replicas converge. The
 // seen set guards against cycles from a concurrent mutual merge.
 //
-// A text node is never a merge destination: mergeNodes moves children into an
-// element parent, and a text node cannot hold children at all. The chain is
-// therefore cut at one, for the same reason FindTreeNodesWithSplitText checks
-// its own resolution -- mergedInto is derived from the MergedFrom an element
-// payload keeps, so a crafted one can name a text node here, and mergeNodes
-// hands what this returns straight to MoveChild. Stopping at the last
-// well-formed link treats the crafted tail as the absent lineage it is.
+// Each link is resolved through findMergeNode, so a text node or a floor-only
+// match cuts the chain: mergedInto is derived from the MergedFrom an element
+// payload keeps, so a crafted one can name either here, and mergeNodes hands
+// what this returns straight to MoveChild. Stopping at the last well-formed
+// link treats the crafted tail as the absent lineage it is.
 func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
 	target := node
 	seen := map[*TreeNode]bool{target: true}
 	for target.IsRemoved() && target.mergedInto != nil {
-		next := t.findFloorNode(target.mergedInto)
-		if next == nil || seen[next] || next.IsText() {
+		next := t.findMergeNode(target.mergedInto)
+		if next == nil || seen[next] {
 			break
 		}
 		seen[next] = true
@@ -2526,7 +2512,15 @@ func (t *Tree) mergeNodes(
 		// parentless children, so runtime and snapshot agree. (A parentless
 		// child, detached by a concurrent split cascade, is continue'd above
 		// and must not repoint its source here.)
-		if src := t.findFloorNode(node.MergedFrom); src != nil {
+		//
+		// Resolved through findMergeNode for the same reason rebuildMergeState
+		// resolves it there: MergedFrom is stamped here only when the node
+		// carries none, so a node that arrived on an element payload with one
+		// already set keeps the client's value, and this is where that value is
+		// read again long after the decode that first saw it. Left to a plain
+		// floor lookup, a made-up offset would plant the forwarding pointer on
+		// whatever node happens to sit below it.
+		if src := t.findMergeNode(node.MergedFrom); src != nil {
 			src.mergedInto = dest.id
 		}
 	}
@@ -2557,7 +2551,12 @@ func (t *Tree) propagateMergeDeletes(
 			node.mergedInto.Equal(dest.id) {
 			continue
 		}
-		mergeTarget := t.findFloorNode(node.mergedInto)
+		// The destination has to be the node mergedInto names exactly, and an
+		// element: this loop tombstones that node's children, so a floor
+		// lookup landing on a neighbour is the cascade reaching live nodes no
+		// merge ever moved. mergedInto is derived from the MergedFrom an
+		// element payload keeps, so the pointer can be a client's.
+		mergeTarget := t.findMergeNode(node.mergedInto)
 		if mergeTarget == nil {
 			continue
 		}
@@ -3508,17 +3507,19 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		if mode == BoundaryRange && realParentNode.Index.Parent != nil {
 			return realParentNode.Index.Parent.Value, realParentNode, diff, nil
 		}
-		mergeTarget := t.findFloorNode(realParentNode.mergedInto)
-		// A text node is never a merge destination: mergeNodes moves children
-		// into an element parent, and a text node cannot hold children at all.
-		// The check is on the resolved node rather than on the pointer because
-		// the pointer can come from a client: an element payload keeps the
-		// MergedFrom that rebuildMergeState derives mergedInto from, so a
-		// crafted one can name a text node here. Returned as the insertion
-		// parent it would fail every later edit that resolves through this
-		// tombstone, permanently and on every replica. Falling through to the
-		// normal path treats the crafted lineage as the absent one it is.
-		if mergeTarget != nil && !mergeTarget.IsRemoved() && !mergeTarget.IsText() {
+		// findMergeNode, not findFloorNode: a text node is never a merge
+		// destination (mergeNodes moves children into an element parent, and a
+		// text node cannot hold children at all), and neither is a node the
+		// pointer merely floors onto. The check is on the resolved node rather
+		// than on the pointer because the pointer can come from a client: an
+		// element payload keeps the MergedFrom that rebuildMergeState derives
+		// mergedInto from, so a crafted one can name either here. Returned as
+		// the insertion parent it would fail every later edit that resolves
+		// through this tombstone, permanently and on every replica. Falling
+		// through to the normal path treats the crafted lineage as the absent
+		// one it is.
+		mergeTarget := t.findMergeNode(realParentNode.mergedInto)
+		if mergeTarget != nil && !mergeTarget.IsRemoved() {
 			targetChildren := mergeTarget.Index.Children(true)
 			for i, targetChild := range targetChildren {
 				if targetChild.Value.MergedFrom == nil ||
@@ -3741,6 +3742,41 @@ func (t *Tree) putNode(node *TreeNode) {
 	}
 
 	t.NodeMapByID.Put(node.id, node)
+}
+
+// findMergeNode resolves one end of a merge relation -- the source a
+// MergedFrom names, or the destination a mergedInto names -- and returns nil
+// unless the id names such a node exactly.
+//
+// Two requirements, neither of which findFloorNode makes. First the exact ID:
+// the floor lookup answers with the node that *contains* the offset, which is
+// what a position interior to a split node needs, but both ends of a merge are
+// recorded by mergeNodes as a node's own ID, so a floor that lands on a
+// neighbour is a pointer to a node the merge never touched. Second the element
+// type: a merge moves children out of one element parent into another, and a
+// text node can hold no children at all.
+//
+// Both matter because these pointers are not all server-derived. MergedFrom is
+// retained on an element payload (Set/Add/ArraySet) -- DropSplitLinksInElement
+// deliberately keeps the lineage a reverse-of-Remove legitimately carries --
+// so on that path the field is client-supplied, persists on the node inside
+// the live document, and mergedInto is derived from it. Every reader goes
+// through here rather than through findFloorNode so the check holds for the
+// whole lifetime of the value and not only at the decode that first saw it:
+// otherwise a made-up offset becomes a forwarding pointer planted on an
+// unrelated node, which a later, innocent delete follows in
+// propagateMergeDeletes to cascade-tombstone that node's live children.
+func (t *Tree) findMergeNode(id *TreeNodeID) *TreeNode {
+	if id == nil {
+		return nil
+	}
+
+	node := t.findFloorNode(id)
+	if node == nil || !node.id.Equal(id) || node.IsText() {
+		return nil
+	}
+
+	return node
 }
 
 // findFloorNode returns node from given id.

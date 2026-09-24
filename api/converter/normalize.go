@@ -20,7 +20,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 )
 
-// NormalizeStoredOperations repairs, in place, the two shapes FromOperations
+// NormalizeStoredOperations repairs, in place, the shapes FromOperations
 // rejects that a change persisted before those checks existed could still
 // carry. It exists because FromOperations sits on two paths with opposite
 // requirements: it decodes operations arriving from a client, where rejecting
@@ -54,9 +54,41 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 			pbTreeEdit.SplitLevel = 0
 		}
 
+		pbTreeEdit.Contents = withoutEmptyContents(pbTreeEdit.Contents)
+
 		dropUndatedAttrs(pbTreeEdit.RestoreSpans)
 		dropUndatedAttrs(pbTreeEdit.RetombstoneSpans)
 	}
+}
+
+// withoutEmptyContents removes the content groups holding no tree node.
+//
+// Like dropUndatedAttrs, this does not reproduce the prior behavior, because
+// that behavior was itself a crash: FromTreeNodes reports an absent or empty
+// group as a nil root, the nil used to be carried into the operation's content
+// slice, and TreeEdit.Execute dereferences each content to deep-copy it — a
+// nil-pointer panic on apply, both in the server replaying the change and on
+// every replica it is forwarded to. Dropping the group loses nothing a
+// well-formed change carried (every group ToTreeNodesWhenEdit writes holds at
+// least the root of one content node), and leaves an edit that inserts the
+// groups that are intact. All-empty collapses to no content at all, which is
+// an ordinary deletion — the same edit the operation already described, since
+// the empty group named nothing to insert.
+func withoutEmptyContents(pbGroups []*api.TreeNodes) []*api.TreeNodes {
+	kept := make([]*api.TreeNodes, 0, len(pbGroups))
+	for _, pbGroup := range pbGroups {
+		if pbGroup == nil || len(pbGroup.Content) == 0 {
+			continue
+		}
+
+		kept = append(kept, pbGroup)
+	}
+
+	if len(kept) == 0 {
+		return nil
+	}
+
+	return kept
 }
 
 // dropUndatedAttrs removes restore-span attributes carrying no updatedAt.

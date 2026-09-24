@@ -466,6 +466,22 @@ converter's `fromElement`, and `executeUndoRedo` for the copy a reverse
 operation captured locally, which never passes the converter on the
 replica that runs the undo.
 
+Keeping the lineage makes both ends of a merge relation partly
+client-supplied, so every reader of one resolves it through
+`Tree.findMergeNode` rather than through `findFloorNode`: the node has to
+be the one the ID names *exactly* (both ends are recorded by `mergeNodes`
+as a node's own ID; a floor match is a position interior to a split node,
+which no merge records) and has to be an element (a merge moves children
+out of one element parent into another, and a text node holds none).
+That covers `rebuildMergeState` on the way in, `mergeNodes` re-deriving
+`mergedInto` when a later merge moves the node again, and the three
+`mergedInto` readers — `resolveMergeTarget`,
+`FindTreeNodesWithSplitText`'s §1.1 redirect, and `propagateMergeDeletes`
+§6.2. The last is why the check cannot live at the decode alone: the
+field stays on the node inside the live document, and a made-up offset
+that resolved by floor would plant a forwarding pointer on an unrelated
+live node for a later, innocent delete to cascade-tombstone through.
+
 The split loop ascends from `parent`, not from the retargeted node. A
 retarget reorders the product *within* one level; the node the
 operation split is still `parent`, and the next level's boundary is
