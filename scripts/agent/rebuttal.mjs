@@ -51,6 +51,15 @@ import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { CITATION } from "./citation.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 
+// `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
+// blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
+// error, not an empty result, a CRASH — and the caller reports it as whatever
+// its own failure means. On #2026 that was the review-round guard dying and the
+// pipeline announcing "the fixer agent failed", which it had not: it never ran.
+// A PR accumulates comments as it is reviewed, so this gets MORE likely the
+// longer a PR is worked on, which is exactly backwards.
+const GH_MAX_BUFFER = 64 * 1024 * 1024;
+
 /** Hidden-comment marker, mirroring metrics.mjs's `METRIC_PREFIX`. */
 export const REBUTTAL_MARKER = "<!-- agent-rebuttal ";
 
@@ -605,7 +614,7 @@ function cmdPost(pr, args) {
     return;
   }
   try {
-    execFileSync("gh", ["pr", "comment", String(pr), "--body", body], { encoding: "utf8" });
+    execFileSync("gh", ["pr", "comment", String(pr), "--body", body], { encoding: "utf8", maxBuffer: GH_MAX_BUFFER });
   } catch (err) {
     // Author-side and best-effort: a rebuttal that cannot be posted leaves the
     // finding standing, which is the same outcome as not writing one.

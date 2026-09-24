@@ -2007,3 +2007,38 @@ test("both fixer prompts order disputes before the report", () => {
     );
   }
 });
+
+test("no `gh` invocation runs on node's default 1 MiB buffer", () => {
+  // IT GETS MORE LIKELY THE LONGER A PR IS REVIEWED, which is exactly backwards.
+  // `gh api --paginate` over a PR's comments grows with the thread, and node's
+  // default `maxBuffer` is 1 MiB. Past it `execFileSync` throws ENOBUFS — not an
+  // API error, not an empty result, a crash — and the caller reports it as
+  // whatever its own failure means.
+  //
+  // On #2026 that was `review-round-guard.mjs` dying and the pipeline announcing
+  // "the fixer agent failed, and the branch head is unchanged", then writing the
+  // terminal paged latch. The fixer had not failed; it never ran. Nine call
+  // sites across seven modules shared the defect.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE);
+  const offenders = [];
+
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"))) {
+    const src = readFileSync(path.join(dir, file), "utf8");
+    for (const m of src.matchAll(/execFileSync\(\s*"gh"\s*,/g)) {
+      // Read to the end of this call's argument list.
+      const seg = src.slice(m.index, m.index + 400);
+      const end = seg.indexOf(");");
+      const call = end > 0 ? seg.slice(0, end) : seg;
+      if (!/maxBuffer/.test(call)) {
+        offenders.push(`${file}:${src.slice(0, m.index).split("\n").length}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these \`gh\` calls run on the default 1 MiB buffer and will ENOBUFS on a busy PR:\n  ${offenders.join("\n  ")}`,
+  );
+});

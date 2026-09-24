@@ -40,6 +40,15 @@ import { classifyResult } from "./ask.mjs";
 import { redactSecrets } from "./redact.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 
+// `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
+// blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
+// error, not an empty result, a CRASH — and the caller reports it as whatever
+// its own failure means. On #2026 that was the review-round guard dying and the
+// pipeline announcing "the fixer agent failed", which it had not: it never ran.
+// A PR accumulates comments as it is reviewed, so this gets MORE likely the
+// longer a PR is worked on, which is exactly backwards.
+const GH_MAX_BUFFER = 64 * 1024 * 1024;
+
 // Each session posts its OWN hidden metric comment (append-only) — no shared
 // ledger to read-modify-write, so concurrent sessions can't overwrite each
 // other's records. `summarize` aggregates them into one human-readable SUMMARY,
@@ -957,7 +966,7 @@ export function dedupRecords(records) {
 // --- gh-backed CLI ---------------------------------------------------------
 
 export function gh(args) {
-  return execFileSync("gh", args, { encoding: "utf8" });
+  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: GH_MAX_BUFFER });
 }
 export function ghJson(args) {
   return JSON.parse(gh(args));
