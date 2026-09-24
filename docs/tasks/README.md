@@ -21,6 +21,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Task | Todo | Lessons |
 |---|---|---|
 | Local harness enforcement (2026-09-24) | [20260924-local-harness-enforcement-todo.md](./active/20260924-local-harness-enforcement-todo.md) | [20260924-local-harness-enforcement-lessons.md](./active/20260924-local-harness-enforcement-lessons.md) |
+| Expose cache hit/miss as Prometheus metrics (2026-09-24) | [20260924-cache-hit-miss-metrics-todo.md](./active/20260924-cache-hit-miss-metrics-todo.md) | [20260924-cache-hit-miss-metrics-lessons.md](./active/20260924-cache-hit-miss-metrics-lessons.md) |
 | Concurrent splits of one boundary sit in arrival order (2026-09-23) | [20260923-same-boundary-split-order-todo.md](./active/20260923-same-boundary-split-order-todo.md) | [20260923-same-boundary-split-order-lessons.md](./active/20260923-same-boundary-split-order-lessons.md) |
 | Maintainer Merge skill (2026-09-23) | [20260923-maintainer-merge-skill-todo.md](./active/20260923-maintainer-merge-skill-todo.md) | [20260923-maintainer-merge-skill-lessons.md](./active/20260923-maintainer-merge-skill-lessons.md) |
 | End the Watch stream when its subscriptions close (2026-09-22) | [20260922-watch-stream-zombie-todo.md](./active/20260922-watch-stream-zombie-todo.md) | [20260922-watch-stream-zombie-lessons.md](./active/20260922-watch-stream-zombie-lessons.md) |
