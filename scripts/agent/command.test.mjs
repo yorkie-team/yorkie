@@ -114,13 +114,15 @@ test("the inline help arm answers every canonical verb", skipWithout("agent-revi
   assert.ok(m, "agent-review-reply.yml has no inline-help verb list to check");
 
   const answered = JSON.parse(m[1]);
-  // `reply` is the inline surface's one working verb — it has its own job —
-  // so it is the one command that must NOT be in the help list.
-  const shouldAnswer = COMMANDS.filter((c) => c !== "reply");
+  // `reply` is a FALLBACK in parseCommand, not an entry in VERB_TO_COMMAND, so
+  // it never appears in COMMANDS and needs no filtering out. Asserted rather
+  // than assumed: if it ever became a real verb, the help list would have to
+  // exclude it — it has its own job — and this is where that would surface.
+  assert.ok(!COMMANDS.includes("reply"), "`reply` is a fallback, not a verb");
 
   assert.deepEqual(
     [...answered].sort(),
-    [...shouldAnswer].sort(),
+    [...COMMANDS].sort(),
     "the inline help verb list has drifted from command.mjs's VERB_TO_COMMAND",
   );
 });

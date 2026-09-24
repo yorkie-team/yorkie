@@ -473,6 +473,13 @@ jobs:
     # One reply in flight per PR. Twenty inline mentions are otherwise twenty
     # runs racing the marker check below, which would each read an empty list
     # and each post.
+    #
+    # THE COST, since it is not free: GitHub holds one pending run per group
+    # and cancels the previously pending one, so three different verbs typed in
+    # quick succession can lose the middle one's help. Serialising is still the
+    # better side to err on — the alternative is several identical replies on a
+    # thread a human is reading, and the marker is per verb per thread, so a
+    # dropped run is recoverable by typing the verb again.
     concurrency:
       group: agent-inline-help-${{ github.event.pull_request.number }}
       cancel-in-progress: false
@@ -509,13 +516,26 @@ jobs:
           retries: 3
           script: |
             const typed = process.env.COMMAND;
-            // PER VERB, AND AUTHOR-CHECKED, for the reasons the issue-surface
-            // help records: one reply per PR ever means a maintainer who typed
-            // `@claude review` and later `@claude summarize` gets the silence
-            // this job exists to end, on the second mistake; and a marker test
-            // that trusts the TEXT lets any user pre-post it to suppress help
-            // permanently. The trust in a marker is its author.
-            const MARKER = `<!-- agent-inline-help:${typed} -->`;
+            // PER VERB, PER THREAD, AND AUTHOR-CHECKED.
+            //
+            // Per verb, for the reason the issue-surface help records: one
+            // reply per PR ever means a maintainer who typed `@claude review`
+            // and later `@claude summarize` gets the silence this job exists
+            // to end, on the second mistake.
+            //
+            // Per thread, because that argument does not stop at the verb. A
+            // PR carries many inline threads and they are read separately; the
+            // same mistake in a different thread three weeks later is the same
+            // person getting the same silence. The issue surface has no
+            // equivalent axis — an issue is one conversation — which is why
+            // this half is not inherited.
+            //
+            // Author-checked, because a marker test that trusts the TEXT lets
+            // any user pre-post it and suppress help permanently. The trust in
+            // a marker is its author, never its text.
+            const thread = context.payload.comment.in_reply_to_id
+              ?? context.payload.comment.id;
+            const MARKER = `<!-- agent-inline-help:${typed}:${thread} -->`;
             const pull_number = context.payload.pull_request.number;
             const { owner, repo } = context.repo;
             const existing = await github.paginate(github.rest.pulls.listReviewComments, {
