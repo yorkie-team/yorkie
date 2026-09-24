@@ -119,6 +119,18 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+
+	// The caches already count their own hits and misses, so the collector
+	// reads them on scrape rather than touching the lookup path.
+	if err := metrics.RegisterCaches(
+		conf.Hostname,
+		cacheManager.Snapshot,
+		cacheManager.AuthWebhook,
+		cacheManager.SessionCount,
+	); err != nil {
+		return nil, err
+	}
+
 	lockers := sync.New()
 	pubsub := pubsub.New()
 	bg := background.New(metrics)
