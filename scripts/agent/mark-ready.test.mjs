@@ -102,6 +102,11 @@ if (argv[0] === "pr" && argv[1] === "view") {
   process.stdout.write(JSON.stringify(body === "junk" ? { message: "not an array" } : body));
 } else if (argv[0] === "api" && joined.includes("check-runs")) {
   process.stdout.write(JSON.stringify({ check_runs: cfg.checkRuns || [] }));
+} else if (argv[0] === "api" && /issues\\/\\d+\\/comments/.test(joined)) {
+  // \`--paginate --slurp\` wraps the pages in an array, so the shape is
+  // [[...page1], [...page2]] and the caller flattens it. \`comments\` is the
+  // single-page shorthand a test uses to say "the hand-off is already there".
+  process.stdout.write(JSON.stringify([cfg.comments || []]));
 } else {
   process.stdout.write("{}");
 }
@@ -587,14 +592,50 @@ test("exit 0: --promote flips the PR, sets one lifecycle label, posts the hand-o
   assert.ok(comment?.includes(HANDOFF_MARKER), "harvest.mjs finds the hand-off by this marker");
 });
 
-test("exit 0: an already-ready PR is a no-op, not a re-promotion", () => {
+test("exit 0: a NON-DRAFT PR still gets the label and the hand-off (#2033)", () => {
+  // THE BUG THIS PINS. `agent:ready` and the hand-off comment used to sit BELOW
+  // an `if (!pr.isDraft) process.exit(0)` early return, so a PR opened
+  // non-draft — every `@claude loop` opt-in, and every human PR carrying
+  // `agent:managed` — cleared all four gates and was then left on
+  // `agent:reviewing` forever with no hand-off posted. The promote job exited 0
+  // and reported `promoted`, so nothing anywhere said the hand-off had not
+  // happened. Being out of draft is the state ONE of the three promotion steps
+  // targets; it is not evidence the other two ran.
   const { code, stdout, calls } = run(
     ["7", "--promote"],
     okConfig({ pr: { ...okConfig().pr, isDraft: false } }),
   );
   assert.equal(code, 0);
-  assert.match(stdout, /already marked ready/);
-  assert.ok(!promoted(calls));
+  assert.ok(!promoted(calls), "there is no draft to flip, so `gh pr ready` must not be called");
+  assert.match(stdout, /not a draft/);
+
+  const put = calls.find((c) => c.startsWith("api -X PUT"));
+  assert.ok(put, "the lifecycle label must still be set");
+  assert.match(put, /labels\[\]=agent:ready/);
+  assert.doesNotMatch(put, /labels\[\]=agent:reviewing/, "the PR must not stay on agent:reviewing");
+
+  const comment = calls.find((c) => c.startsWith("pr comment"));
+  assert.ok(comment?.includes(HANDOFF_MARKER), "the hand-off must still be posted");
+});
+
+test("exit 0: the hand-off is posted ONCE, however many green rounds run", () => {
+  // The flip to ready used to be the de-facto idempotence guard: a PR could only
+  // be promoted out of draft once. Promoting a non-draft PR removes that guard,
+  // so the marker has to carry it — otherwise every later green panel round
+  // re-posts the same hand-off.
+  const { code, calls } = run(
+    ["7", "--promote"],
+    okConfig({
+      pr: { ...okConfig().pr, isDraft: false },
+      comments: [{ id: 1, body: `${HANDOFF_MARKER}\n## 🤝 Ready for human review` }],
+    }),
+  );
+  assert.equal(code, 0);
+  assert.ok(!calls.some((c) => c.startsWith("pr comment")), "no duplicate hand-off");
+
+  // The label is still reasserted: it is a REPLACE and therefore idempotent, and
+  // it is the one step that repairs a lifecycle label a later round moved away.
+  assert.ok(calls.some((c) => c.startsWith("api -X PUT") && c.includes("labels[]=agent:ready")));
 });
 
 test("exit 0: the best-effort label and comment steps cannot change the code", () => {
