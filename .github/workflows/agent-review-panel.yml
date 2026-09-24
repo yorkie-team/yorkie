@@ -2455,7 +2455,7 @@ jobs:
         run: |
           F="$RUNNER_TEMP/fix-report.md"
           [ -s "$F" ] || { echo "no fix-agent report was written; nothing to post"; exit 0; }
-          gh pr comment "$PR" --body-file "$F"
+          node "$RUNNER_TEMP/agent-tools/post-emitted.mjs" report "$PR" --file "$F"
 
       # POSTED HERE, NOT BY THE AGENT — its token carries no `pull-requests`
       # permission, and a token that can comment can also approve.
@@ -2484,7 +2484,7 @@ jobs:
           n=0
           for F in "$D"/*.md; do
             [ -s "$F" ] || continue
-            gh pr comment "$PR" --body-file "$F" && n=$((n+1))
+            node "$RUNNER_TEMP/agent-tools/post-emitted.mjs" dispute "$PR" --file "$F" && n=$((n+1))
           done
           echo "posted $n dispute(s)"
 

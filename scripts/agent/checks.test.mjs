@@ -2042,3 +2042,56 @@ test("no `gh` invocation runs on node's default 1 MiB buffer", () => {
     `these \`gh\` calls run on the default 1 MiB buffer and will ENOBUFS on a busy PR:\n  ${offenders.join("\n  ")}`,
   );
 });
+
+test("nothing an agent wrote is posted verbatim under the App identity", () => {
+  // THE CHANNEL THE NARROW TOKEN WAS MINTED TO CLOSE. The agent emits its report
+  // and disputes to files and a trusted step posts them — under the App, whose
+  // comments this pipeline trusts BY AUTHOR for latches, ledgers and dedupe
+  // markers. Posting the file verbatim hands an agent that reads untrusted input
+  // an arbitrary App-authored comment, which is the capability the whole token
+  // split exists to withhold. The agent holds a `Write` tool, so "it used the
+  // CLI, and the CLI neutralises its arguments" is not a property anything
+  // enforces.
+  //
+  // `post-emitted.mjs` parses the hidden record in trusted, post-agent code and
+  // posts its own render of it — or refuses. A `--body-file` pointing at an
+  // agent-written path is the defect this catches.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(HERE, "..", "..", ".github", "workflows");
+  const AGENT_WRITTEN = /\$(?:RUNNER_TEMP|\{\{ runner\.temp \}\})\/(?:fix-report|rebuttal|reply|pr)/;
+  const offenders = [];
+
+  for (const file of readdirSync(dir).filter((f) => f.startsWith("agent-") && f.endsWith(".yml"))) {
+    const lines = readFileSync(path.join(dir, file), "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*#/.test(lines[i])) continue;
+      if (!/gh pr comment .*--body-file/.test(lines[i])) continue;
+      // Resolve the variable it posts, looking back a few lines for its binding.
+      // COMMENTS STRIPPED. The step that does this correctly explains itself in
+      // a comment naming `post-emitted.mjs`, so a lookback including prose finds
+      // the safe spelling in the text above a defect and clears it — the fourth
+      // guard in this file to read its own explanation as code.
+      const near = lines
+        .slice(Math.max(0, i - 8), i + 1)
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (!AGENT_WRITTEN.test(near)) continue;
+      // TWO WAYS TO BE SAFE, and which one applies depends on the content.
+      // A report or a dispute carries a hidden record the next round parses, so
+      // it is re-rendered from that record and a blanket substitution would
+      // destroy it. A reply is free prose with no record, so neutralising every
+      // marker wholesale is both sufficient and the only option.
+      const rerendered = /post-emitted\.mjs/.test(near);
+      const neutralised = /sed 's\/<!--/.test(near) && /-safe\./.test(lines[i]);
+      if (!rerendered && !neutralised) {
+        offenders.push(`${file}:${i + 1} ${lines[i].trim()}`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "these steps post an agent-written file verbatim under the App identity:\n  " + offenders.join("\n  "),
+  );
+});

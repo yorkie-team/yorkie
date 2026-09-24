@@ -736,7 +736,7 @@ jobs:
           n=0
           for F in "$D"/*.md; do
             [ -s "$F" ] || continue
-            gh pr comment "$PR" --body-file "$F" && n=$((n+1))
+            node "$RUNNER_TEMP/agent-tools/post-emitted.mjs" dispute "$PR" --file "$F" && n=$((n+1))
           done
           echo "posted $n dispute(s)"
 
@@ -749,10 +749,12 @@ jobs:
         run: |
           REPORT="$RUNNER_TEMP/fix-report.md"
           [ -s "$REPORT" ] || { echo "no fix report was written; nothing to post"; exit 0; }
-          # Posted verbatim: `fix-report.mjs` neutralises the visible prose and
-          # keeps the hidden record the next round parses. A blanket sed here
-          # destroyed that record.
-          gh pr comment "$PR" --body-file "$REPORT"
+          # RE-RENDERED HERE, not posted verbatim. The agent writes this file and
+          # holds a `Write` tool, so it need not have used the CLI at all — and
+          # this step posts under the App identity, whose comments the pipeline
+          # trusts by author. `post-emitted.mjs` parses the hidden record and
+          # posts its own render of it, or refuses.
+          node "$RUNNER_TEMP/agent-tools/post-emitted.mjs" report "$PR" --file "$REPORT"
 
       - name: Upload fix execution log
         if: always() && steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
