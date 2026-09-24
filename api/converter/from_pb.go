@@ -1037,6 +1037,10 @@ func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {
 		if updatedAt == nil {
 			return nil, goerrors.New("tree node attribute missing updatedAt")
 		}
+		// SetInternal drops the value of a removed attribute: a payload written
+		// before Remove stopped copying it still carries one, and restoring it
+		// would size the tombstone differently from a replica that performed
+		// the removal under the current code. See RHT.SetInternal.
 		rht.SetInternal(k, pbAttr.Value, updatedAt, pbAttr.IsRemoved)
 	}
 	return rht, nil

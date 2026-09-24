@@ -205,7 +205,22 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) RHTWrite {
 }
 
 // SetInternal sets the value of the given key internally.
+//
+// A tombstone is installed with no value, whatever value was handed in. This is
+// the decode boundary: snapshots written before Remove stopped copying the
+// value -- and payloads from any peer that still does -- carry one on a removed
+// attribute, and restoring it would make the node's DataSize a function of what
+// happened to be at that key when the removal arrived. A replica that performed
+// the removal itself charges the key alone, so the two would disagree on
+// docSize.GC, and therefore on Total() and the size limit it gates, for the same
+// document. The value is unreachable either way: Get, Has, Elements and Marshal
+// all filter on isRemoved, and a Set that revives the tombstone replaces the
+// value wholesale. See Remove.
 func (rht *RHT) SetInternal(k string, v string, updatedAt *time.Ticket, removed bool) {
+	if removed {
+		v = ""
+	}
+
 	newNode := newRHTNode(k, v, updatedAt, removed)
 	rht.nodeMapByKey[k] = newNode
 

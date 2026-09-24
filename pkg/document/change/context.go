@@ -154,6 +154,12 @@ func (c *Context) Acc(diff resource.DataSize) {
 	c.root.Acc(diff)
 }
 
+// AccMovedElement accumulates the diff a move stamped on the given element to
+// the ledger holding that element. See Root.AccMovedElement.
+func (c *Context) AccMovedElement(elem crdt.Element, diff resource.DataSize) {
+	c.root.AccMovedElement(elem, diff)
+}
+
 // AccGC accumulates the given DataSize to GC. See Root.AccGC.
 func (c *Context) AccGC(diff resource.DataSize) {
 	c.root.AccGC(diff)

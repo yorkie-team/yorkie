@@ -123,6 +123,56 @@ func TestArrayMoveChargesTheMovedAtTicket(t *testing.T) {
 	})
 }
 
+// TestArrayMoveOnATombstonedElement pins WHICH ledger the movedAt ticket lands
+// in. MoveAfter stamps the ticket whether or not the element is already a
+// tombstone -- a remove and a move issued concurrently is the ordinary way to
+// reach that -- and a rebuild charges a tombstone's whole DataSize, movedAt
+// included, to GC. Booking the ticket to Live there left 24 bytes in Live that
+// no rebuild agrees with and that collection never takes back out.
+func TestArrayMoveOnATombstonedElement(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewArray("a").AddString("e0").AddString("e1").AddString("e2")
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	// Concurrent: d1 deletes "e2", d2 moves it to the front. d1 therefore
+	// applies the move to an element it has already tombstoned, and d2
+	// tombstones an element it has already moved.
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetArray("a").Delete(2)
+		return nil
+	}))
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		arr := root.GetArray("a")
+		arr.MoveFront(arr.Get(2).CreatedAt())
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	require.Equal(t, d1.Marshal(), d2.Marshal(), "sanity: the replicas converged")
+	assertRebuildsSame(t, d1, "move applied to a tombstone")
+	assertRebuildsSame(t, d2, "tombstone set on a moved element")
+	assert.Equal(t, d1.DocSize(), d2.DocSize(),
+		"identical documents must report identical sizes whatever order they arrived in")
+
+	// And the ticket must leave the ledger with the element it was stamped on.
+	vv := d1.VersionVector().DeepCopy()
+	for _, actor := range []time.ActorID{a1, a2} {
+		if v := d2.VersionVector().VersionOf(actor); v > vv.VersionOf(actor) {
+			vv.Set(actor, v)
+		}
+	}
+	d1.GarbageCollect(vv)
+	d2.GarbageCollect(vv)
+	assert.Equal(t, d1.DocSize(), d2.DocSize(), "collection must leave both replicas equal")
+	gc := d1.DocSize().GC
+	assert.Zero(t, (&gc).Total(), "nothing left charged to GC")
+	assertRebuildsSame(t, d1, "after collection")
+}
+
 // TestAttributeTombstoneDoesNotDependOnDeliveryOrder is the document-level half
 // of the RHT.Remove fix. A tombstone that copied the value it replaced made its
 // stored bytes a function of what had landed at that key when the removal

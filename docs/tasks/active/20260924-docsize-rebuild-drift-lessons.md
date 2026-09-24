@@ -70,3 +70,39 @@ on which half landed — noted in the PR rather than left to be discovered.
 
 Self-review was not run: this was a one-shot autonomous run with no reviewer
 subagent available. Verification is CI, `@claude review`, and a human.
+
+## Panel round 1: the ledger a diff lands in is a second decision
+
+Two of the three blocking findings were the same mistake in different places:
+the change computed *how much* a write costs and then assumed *where* it goes.
+
+`Move.Execute` charged the movedAt ticket to Live unconditionally, but a move
+applied to an element another replica has already deleted is ordinary — RGA
+stamps movedAt either way — and a rebuild charges a tombstone's whole DataSize
+to GC. Routing it needs more than picking `AccGC`: `deregisterElement`
+subtracts what `sizeInGC` recorded for that element, so a GC top-up that leaves
+the record alone only moves the stray bytes from Live to GC. `Root.AccMovedElement`
+raises the record with the charge; without it the test still failed, one ledger
+over.
+
+The decode boundary was the same shape read backwards. `Remove` minting a
+valueless tombstone makes a tombstone's size a function of its key, but only
+for tombstones this code minted; `SetInternal` restored whatever the wire
+carried, so a pre-upgrade snapshot rebuilt a heavier tombstone than the replica
+that performed the removal. Enforcing it in `SetInternal` covers both decoders
+and `DeepCopy` at one choke point, which is the only place all three meet.
+
+The reproduction rule from the round before held again: both new tests were run
+against the code with the fix removed, and both failed with exactly the drift
+the finding described (24 bytes stranded in Live after collection; a heavier GC
+charge on the legacy payload).
+
+## Reported, not fixed: the size limit has no server-side gate
+
+The security lens is right that `MaxSizePerDocument` is enforced only in
+`Document.Update` on the client, and that the server's push path never
+re-checks it. It is also not something this change introduced or could close
+here: `pushPack` stores changes without materializing a root, so a real gate
+means building the document on the push path and deciding what a rejected push
+does to a client that already applied it locally — a design question, not an
+accounting one. Rebutted on scope with the note that the finding itself stands.
