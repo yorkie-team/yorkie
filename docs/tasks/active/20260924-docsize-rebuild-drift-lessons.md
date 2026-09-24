@@ -40,6 +40,25 @@ coincidence. A golden-number test that happens to encode a missing term reads as
 a regression when the term is added; stating the invariant instead would have
 made the fix land without touching them.
 
+## A document-level test that looked like it covered the GC branch did not
+
+The first attempt to cover "the attribute was stripped from a node that is
+already a tombstone" built the obvious shape: two replicas, one deletes the
+styled paragraph, the other strips the attribute, exchange. It passed — and it
+still passed with the GC compensation deleted, which is how the gap showed.
+Instrumenting the branch showed why: a `Tree`'s `traverseInPosRange` never
+reaches a node the replica has already tombstoned, so only the replica that had
+*not* deleted it ran the removal, and there the node was live.
+
+`Text` is different — `findBetween` walks tombstones, and the comment on
+`Text.RemoveStyle` says so. The branch is pinned there instead, at the CRDT
+layer, with a range resolved before the delete so it still addresses the node
+after it.
+
+The lesson is procedural: a new test that passes is not evidence until it has
+been run against the code without the fix. Both tests here were, and one of
+them had to be rewritten as a result.
+
 ## Only half of item 2 is reachable from this repository
 
 The issue offers two fixes for the server/SDK size disagreement and prefers the
