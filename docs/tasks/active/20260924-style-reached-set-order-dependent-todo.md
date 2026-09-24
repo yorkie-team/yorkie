@@ -73,6 +73,12 @@ identities, and they answer exactly the questions the index space cannot.
 - **Boundary elements (§9.5)** — `boundaryElements(from, to)` derives, from
   the two declared positions alone, the elements the change reached through a
   single token. Identical on every replica whatever a merge did to indices.
+- **Range-start guard (§9.6)** — the mirror of §9.1. An element is reached
+  through its End token alone exactly when this replica's range begins inside
+  it; the change reached it that way only if the change's own range-start
+  position was declared inside it (`beginsInside`). A merge that moves
+  children into the element before them otherwise puts the style on that
+  element — a live node the other order never touches.
 - **Shared resolution** — `styleTargets` now does the whole resolution once
   and hands `Style` and `RemoveStyle` one ordered, duplicate-free node list.
 
@@ -83,6 +89,7 @@ identities, and they answer exactly the questions the index space cannot.
 - [x] §9.1: `endsInside` gate on the End-token guard
 - [x] §9.2: token-agnostic forward closure + backward `splitFamilyOf`
 - [x] §9.5: `boundaryElements` from the change's declared positions
+- [x] §9.6: `beginsInside` guard for a range start a merge moved
 - [x] Treat an empty resolved range as collapsed in `reversedFromAnchorRecovery`
 - [x] Fold `Style`/`RemoveStyle` onto one `styleTargets` resolution
 - [x] Confirm no pair that converged before diverges after
@@ -98,12 +105,20 @@ identities, and they answer exactly the questions the index space cannot.
 | scan | pairs | rendered | tombstone-only |
 |---|---|---|---|
 | split × style | 1001 | 135 → 0 | 0 → 0 |
-| merge × style | 7098 | 297 → 126 | 2879 → 1292 |
+| merge × style | 7098 | 297 → 0 | 2879 → 1292 |
 | randomised sweep | 300 seeds | 11 → 9 | 47 → 30 diverging seeds |
 
 Scanned again with `RemoveStyle` in place of `Style` over a pre-bolded base:
-the same profile, 3311 → 1418 diverging pairs, split family closed. That is
-the point of the shared `styleTargets` — the two operations cannot drift.
+identical on every count, split and merge families closed in the rendered
+document. That is the point of the shared `styleTargets` — the two operations
+cannot drift.
+
+**Every rendered divergence the issue reported is closed.** What remains is
+1292 pairs whose two orders render the same document but book attributes onto
+a different set of tombstones. §9.6 closed the last 126 rendered ones, which
+were the only family still writing to a LIVE node, and with them the §9.4
+known limitation recorded as the `RemoveStyle(6,8)` / `Edit(1,5)` PBT
+counterexample.
 
 No pair or seed that converged before diverges after.
 
@@ -125,12 +140,13 @@ implementations were never in agreement to preserve: both were
 order-dependent, so "agreement" meant agreeing only when the orders happened
 to match.
 
-Elements a style covered *strictly between* its two anchors are still resolved
-in the current index space. A merge can move them out of reach — deleting a
-paragraph's opening tag moves its children into the grandparent and can push
-the resolved range start past every element the style covered. Closing that
-needs the range resolved in an index space filtered by the change's version
-vector, which has to land on the server and the JS SDK together.
+Attributes on tombstones. A *removed* element a style covered strictly
+between its two anchors is still resolved in the current index space, and a
+merge can move it out of reach, so the two orders leave a different amount of
+attribute metadata on removed nodes — 1292 of the merge scan's 7098 pairs,
+none of them rendering differently. Closing that needs the range resolved in
+an index space filtered by the change's version vector, which has to land on
+the server and the JS SDK together.
 
 The issue also reports two randomised seeds where one interleaving fails to
 apply (`node not found`) while another succeeds. Not reproduced here and not

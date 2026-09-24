@@ -151,6 +151,43 @@ func TestStyleAcrossConcurrentMerge(t *testing.T) {
 	require.Equal(t, ba, ab, "merge-then-style diverges from style-then-merge")
 }
 
+// The mirror of TestStyleAcrossConcurrentMerge: the merge removes the opening
+// tag of the paragraph the style range STARTS inside, so that paragraph's
+// children move into the one before it. The style covered the paragraph it
+// named and nothing else, so after the merge it lands on a tombstone and
+// nothing renders — the paragraph that absorbed the children is an element
+// the styling replica never entered, and styling it would put an attribute on
+// a live node the other order leaves alone.
+func TestStyleAfterMergedRangeStart(t *testing.T) {
+	base := styleScanBase(t)
+	pA, pB := concurrentTreeChanges(t, base,
+		func(tree *json.Tree) { tree.Edit(1, 5, nil, 0) },
+		func(tree *json.Tree) { tree.Style(6, 8, map[string]string{"b": "x"}) },
+	)
+
+	ab := replayStyleOrder(t, base, pA, pB)
+	ba := replayStyleOrder(t, base, pB, pA)
+	require.Equal(t, `<r><p>cd</p><p>ef</p></r>`, ba.xml)
+	require.Equal(t, ba, ab, "merge-then-style styles the merge target the other order does not")
+}
+
+// The same pair as a RemoveStyle, which is the counterexample the property
+// suite reported and docs/design/concurrent-merge-split.md carried as a §9.4
+// known limitation: the merge target kept its attribute in one order and lost
+// it in the other, because the range start moved into it.
+func TestRemoveStyleAfterMergedRangeStart(t *testing.T) {
+	base := styleScanBoldBase(t)
+	pA, pB := concurrentTreeChanges(t, base,
+		func(tree *json.Tree) { tree.Edit(1, 5, nil, 0) },
+		func(tree *json.Tree) { tree.RemoveStyle(6, 8, []string{"b"}) },
+	)
+
+	ab := replayStyleOrder(t, base, pA, pB)
+	ba := replayStyleOrder(t, base, pB, pA)
+	require.Equal(t, `<r><p b="x">cd</p><p b="x">ef</p></r>`, ba.xml)
+	require.Equal(t, ba, ab, "merge-then-remove-style clears the merge target the other order keeps")
+}
+
 // styleScanBoldBase is styleScanBase with every paragraph already bold, so a
 // RemoveStyle has something to take off.
 func styleScanBoldBase(t *testing.T) []*change.Change {
@@ -298,18 +335,9 @@ func TestStyleAcrossEverySplit(t *testing.T) {
 	require.Equal(t, 1862, scan.styledNodes, "split x style reached a different set of nodes")
 }
 
-// Every deletion range against every style range: 78 x 91 pairs. This family
-// is NOT closed: a merge moves children out of a parent, and the nodes a
-// style covered strictly between its two anchors are then unreachable from
-// the resolved range. Recovering those needs the range resolved in an index
-// space filtered by the change's version vector, which has to land on the
-// server and the JS SDK together — see docs/design/concurrent-merge-split.md.
-//
-// The budgets below are a ratchet, not a target. They were 297 and 2879
-// before the change's own positions decided the reached set.
-func TestStyleAcrossEveryMerge(t *testing.T) {
-	base := styleScanBase(t)
-
+// mergeRanges is every deletion range over the scan base: 78 of them, each
+// paired with every one of the 91 style ranges.
+func mergeRanges() []func(tree *json.Tree) {
 	var merges []func(tree *json.Tree)
 	for from := 0; from <= 12; from++ {
 		for to := from + 1; to <= 12; to++ {
@@ -317,21 +345,66 @@ func TestStyleAcrossEveryMerge(t *testing.T) {
 		}
 	}
 
-	scan := styleScanDivergences(t, base, merges, styleRange, countBold)
+	return merges
+}
+
+// Every deletion range against every style range: 78 x 91 pairs. No pair
+// renders differently in the two delivery orders any more — the rendered
+// family is closed for merges as it is for splits. It was the last one open
+// that put attributes on LIVE nodes, which is the failure neither replica can
+// retract: a merge moves the range-start anchor into the element that
+// absorbed the children, and styling that element writes where the replica
+// that styled first wrote nothing.
+//
+// What remains is attributes on TOMBSTONES, counted below and bounded as a
+// ratchet: the two orders render the same document but book a different
+// amount of attribute metadata onto removed nodes. Closing that needs the
+// range resolved in an index space filtered by the change's version vector,
+// which has to land on the server and the JS SDK together — see
+// docs/design/concurrent-merge-split.md §9.5.
+func TestStyleAcrossEveryMerge(t *testing.T) {
+	base := styleScanBase(t)
+
+	scan := styleScanDivergences(t, base, mergeRanges(), styleRange, countBold)
 	t.Logf("merge x style: %+v", scan)
 	require.Equal(t, 7098, scan.pairs)
-	require.LessOrEqual(t, scan.rendered, 126, "merge x style regressed in the rendered document")
+	require.Zero(t, scan.rendered, "merge x style diverges in the rendered document")
+	// The tombstone half is a ratchet, not a target: 2879 before the change's
+	// own positions decided the reached set.
 	require.LessOrEqual(t, scan.tombstoneOnly, 1292, "merge x style regressed on tombstoned attributes")
 	// A pair neither order can apply is not a converged pair. Bounding them
-	// keeps the ratchets above from being satisfied by a scan that mostly
+	// keeps the ratchet above from being satisfied by a scan that mostly
 	// failed to run.
 	require.Zero(t, scan.errored, "merge x style could not be replayed")
-	// The absolute half, for the same reason as the split scan: the ratchets
-	// above are blind to a reached set that is uniformly too small. These
-	// move whenever the known limitation below narrows, so a change that
-	// improves the merge family updates them upward, with the reason.
-	require.Equal(t, 4308, scan.styledPairs, "merge x style reached a different set of ranges")
-	require.Equal(t, 6428, scan.styledNodes, "merge x style reached a different set of nodes")
+	// The absolute half, for the same reason as the split scan: convergence
+	// alone is blind to a reached set that is uniformly too small. These are
+	// 54 pairs and 126 nodes below what they were while the rendered family
+	// was open, which is exactly the over-reach that family consisted of —
+	// the merge target the styling replica never touched.
+	require.Equal(t, 4254, scan.styledPairs, "merge x style reached a different set of ranges")
+	require.Equal(t, 6302, scan.styledNodes, "merge x style reached a different set of nodes")
+}
+
+// The merge scan with RemoveStyle in place of Style, over a pre-bolded base.
+// Both operations share one range resolution, and the numbers are identical
+// to TestStyleAcrossEveryMerge's on every count — which is what "shared"
+// has to mean for a reached set.
+func TestRemoveStyleAcrossEveryMerge(t *testing.T) {
+	base := styleScanBoldBase(t)
+
+	// A paragraph RemoveStyle reached renders as `<p>`; one it did not still
+	// carries the attribute from the base.
+	cleared := func(xml string) int { return strings.Count(xml, "<p>") }
+	scan := styleScanDivergences(t, base, mergeRanges(),
+		func(tree *json.Tree, from, to int) { tree.RemoveStyle(from, to, []string{"b"}) },
+		cleared)
+	t.Logf("merge x remove-style: %+v", scan)
+	require.Equal(t, 7098, scan.pairs)
+	require.Zero(t, scan.rendered, "merge x remove-style diverges in the rendered document")
+	require.LessOrEqual(t, scan.tombstoneOnly, 1292, "merge x remove-style regressed on tombstoned attributes")
+	require.Zero(t, scan.errored, "merge x remove-style could not be replayed")
+	require.Equal(t, 4254, scan.styledPairs, "merge x remove-style reached a different set of ranges")
+	require.Equal(t, 6302, scan.styledNodes, "merge x remove-style reached a different set of nodes")
 }
 
 // The same scan with RemoveStyle in place of Style, over a pre-bolded base.

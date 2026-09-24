@@ -2408,23 +2408,13 @@ func (t *Tree) isSplitProductOf(node, origin *TreeNode) bool {
 	return false
 }
 
-// endsInside reports whether the change's range ended inside node, i.e.
-// whether node is the element the range-end position named as its parent, or
-// an ancestor of it. That is the one question the index space cannot answer
-// after a concurrent split: node's End token is in the resolved range either
-// because the range genuinely ran past node's end, or because the split
-// pushed the end anchor into a sibling. The range-end position is carried by
-// the change and never moves, so it separates the two.
-//
-// The ancestry walked here is the CURRENT one, and a concurrent split moves
-// the children after the split point into the new right half — so the
-// declared parent can now sit under a piece of node instead of under node.
-// Each ancestor is therefore matched through its split lineage rather than by
-// identity: every product of splitting node stands for node, which is what
-// the ancestry looked like when the change declared the position.
-func (t *Tree) endsInside(node, declaredToParent *TreeNode) bool {
-	for current := declaredToParent; current != nil; {
-		if t.isSplitProductOf(current, node) {
+// declaredAncestryHas walks the CURRENT ancestry of the element a position
+// named as its parent, from that element up to the root, and reports whether
+// any of them matches. Both callers below ask "was this position declared
+// inside node", differing only in how an ancestor is matched to node.
+func (t *Tree) declaredAncestryHas(declaredParent *TreeNode, match func(*TreeNode) bool) bool {
+	for current := declaredParent; current != nil; {
+		if match(current) {
 			return true
 		}
 		if current.Index.Parent == nil {
@@ -2436,13 +2426,52 @@ func (t *Tree) endsInside(node, declaredToParent *TreeNode) bool {
 	return false
 }
 
+// endsInside reports whether the change's range ended inside node, i.e.
+// whether node is the element the range-end position named as its parent, or
+// an ancestor of it. That is the one question the index space cannot answer
+// after a concurrent split: node's End token is in the resolved range either
+// because the range genuinely ran past node's end, or because the split
+// pushed the end anchor into a sibling. The range-end position is carried by
+// the change and never moves, so it separates the two.
+//
+// The ancestry walked is the CURRENT one, and a concurrent split moves the
+// children after the split point into the new right half — so the declared
+// parent can now sit under a piece of node instead of under node. Each
+// ancestor is therefore matched through its split lineage rather than by
+// identity: every product of splitting node stands for node, which is what
+// the ancestry looked like when the change declared the position.
+func (t *Tree) endsInside(node, declaredToParent *TreeNode) bool {
+	return t.declaredAncestryHas(declaredToParent, func(ancestor *TreeNode) bool {
+		return t.isSplitProductOf(ancestor, node)
+	})
+}
+
+// beginsInside is the same question for the range-START position (§9.6): was
+// the change's range start declared inside node, so that node's End token was
+// in the range on the replica that issued the change.
+//
+// It matches a declared ancestor to node in BOTH directions along the split
+// lineage, which endsInside deliberately does not. A split of the element the
+// range began inside leaves the start anchor in whichever half now holds it,
+// so the resolved from-parent can be a product of the declared one — the
+// direction endsInside does not accept, because there the extra matches would
+// make a guard that must not fail open do exactly that. Here the two halves
+// are one element as far as the change is concerned: it declared a position
+// inside the element that was split, and both halves are that element.
+func (t *Tree) beginsInside(node, declaredFromParent *TreeNode) bool {
+	return t.declaredAncestryHas(declaredFromParent, func(ancestor *TreeNode) bool {
+		return t.isSplitProductOf(ancestor, node) || t.isSplitProductOf(node, ancestor)
+	})
+}
+
 // styleSkipPredicate builds the per-token skip checks shared by Style and
 // RemoveStyle, as two predicates over the same state.
 //
 // skipReached answers "did the change reach this node at all": the End-token
-// unknown-split-sibling exclusion and the §9.4 merged-anchor interloper
-// filter for the range-end position. It is about the change, so it holds for
-// every node a style writes to, however that node was found.
+// unknown-split-sibling exclusion (§9.1), the §9.6 range-start guard and the
+// §9.4 merged-anchor interloper filter for the range-end position. It is
+// about the change, so it holds for every node a style writes to, however
+// that node was found.
 //
 // skipToken adds the one restriction that belongs to the index traversal
 // alone — the §9.4 from-side recovery re-anchors the traversal start over
@@ -2450,14 +2479,30 @@ func (t *Tree) endsInside(node, declaredToParent *TreeNode) bool {
 // interlopers the recovery positively identified. Nodes derived from the
 // change's own positions are not in that widened span and answer to
 // skipReached only.
+//
+// beganInside is the set of elements THIS replica's resolved range begins
+// inside — the resolved from-parent and its ancestors, the only elements a
+// token traversal reaches through their End token alone. Every other element
+// the traversal reaches on an End token was reached on its Start token first.
 func (t *Tree) styleSkipPredicate(
-	to *TreePos,
+	from, to *TreePos,
+	fromParent *TreeNode,
 	versionVector time.VersionVector,
 	recoveredInterloper func(*TreeNode) bool,
 ) (skipToken, skipReached func(index.TreeToken[*TreeNode]) bool) {
 	isVersionVectorEmpty := len(versionVector) == 0
 	isAnchorInterloper, _, _ := t.mergedAnchorInterloperGuard(to, versionVector)
 	declaredToParent, _ := t.ToTreeNodes(to)
+	declaredFromParent, _ := t.ToTreeNodes(from)
+
+	beganInside := map[*TreeNode]bool{}
+	for current := fromParent; current != nil; {
+		beganInside[current] = true
+		if current.Index.Parent == nil {
+			break
+		}
+		current = current.Index.Parent.Value
+	}
 
 	skipReached = func(token index.TreeToken[*TreeNode]) bool {
 		// Skip styling via End token when the node has an unknown split
@@ -2470,6 +2515,20 @@ func (t *Tree) styleSkipPredicate(
 		if token.TokenType == index.End && !isVersionVectorEmpty &&
 			(declaredToParent == nil || t.endsInside(token.Node, declaredToParent)) &&
 			t.hasUnknownSplitSibling(token.Node, versionVector) {
+			return true
+		}
+		// §9.6, the mirror of §9.1 on the range-start side. This replica's
+		// range begins inside the node, so only its End token is in the
+		// range; the change reached it that way only if the change's own
+		// range-start position was declared inside it. When a merge removes
+		// a paragraph's opening tag its children move into the merge target,
+		// and the start anchor resolves inside that target — an element the
+		// change never entered, whose End token is in the range solely
+		// because of the merge. Styling it puts the attribute on a LIVE node
+		// the replica that styled first left alone.
+		if token.TokenType == index.End && !isVersionVectorEmpty &&
+			beganInside[token.Node] && declaredFromParent != nil &&
+			!t.beginsInside(token.Node, declaredFromParent) {
 			return true
 		}
 		// §9.4: the node is in the range only because an unknown merge
@@ -3270,7 +3329,8 @@ func (t *Tree) styleTargets(
 	if recoveredParent != nil {
 		fromParent, fromLeft = recoveredParent, recoveredLeft
 	}
-	shouldSkipToken, shouldSkipReached := t.styleSkipPredicate(to, versionVector, isRecoveredInterloper)
+	shouldSkipToken, shouldSkipReached := t.styleSkipPredicate(
+		from, to, fromParent, versionVector, isRecoveredInterloper)
 	declaredToParent, _ := t.ToTreeNodes(to)
 
 	var targets []*TreeNode

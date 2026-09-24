@@ -752,16 +752,63 @@ loses the client's range as completely as covering it backwards. A
 change whose own range was empty is excluded, so an empty style stays
 empty.
 
-**What this does not close.** Elements the change covered *strictly
-between* its two anchors are still resolved in the current index space,
-and a merge can move them out of reach: deleting a paragraph's opening
-tag moves its children into the grandparent, which can push the
-resolved range start past every element the style covered. Recovering
-those needs the range resolved in an index space filtered by the
-change's version vector — nodes the change could not have known
-contributing zero width, nodes it knew contributing their width
-regardless of later structural edits — which has to land on the server
-and the JS SDK together.
+**What this does not close.** Attributes on *tombstones*. Elements the
+change covered strictly between its two anchors are still resolved in
+the current index space, and a merge can move a removed one out of
+reach, so the two orders book a different amount of attribute metadata
+onto removed nodes while rendering the same document. Recovering those
+needs the range resolved in an index space filtered by the change's
+version vector — nodes the change could not have known contributing
+zero width, nodes it knew contributing their width regardless of later
+structural edits — which has to land on the server and the JS SDK
+together.
+
+### §9.6 Range-Start Guard at Merged Anchors
+
+§9.1 asks of an End token in the range "was the range-end position
+declared inside this element, or did a concurrent split push the anchor
+here". §9.6 is the same question on the other side, and it is what
+closed the merge family.
+
+A token traversal reaches an element through its End token *alone*
+exactly when the range begins inside it: the resolved from-parent and
+its ancestors, and nothing else — every other element reached on an End
+token was reached on its Start token first. So the applying replica's
+answer to "which elements does my range begin inside" is that chain,
+and the change's own answer is the ancestry of the element its
+range-start position named as its parent. `beginsInside` compares them.
+
+When a merge removes a paragraph's opening tag, its children move into
+the element before it, and a range-start anchored among those children
+resolves inside that element — whose End token is then in the range
+purely because of the merge. Styling it writes an attribute on a **live**
+node that the replica applying the style first never touched, which is
+the failure with no way back. `Style(6, 8)` over
+`<r><p>ab</p><p>cd</p><p>ef</p></r>` against a concurrent
+`Edit(1, 5)` is the minimal case: the style covered only the second
+paragraph, which the merge turns into a tombstone, so nothing should
+render as styled — and before this guard the merge-first order rendered
+`<p b="x">cd</p>`. This shape is 126 of the 297 rendered divergences the
+merge scan started from, and all 126 of what was left after §9.1–§9.5.
+
+`beginsInside` matches a declared ancestor to the node in **both**
+directions along the split lineage, which `endsInside` deliberately does
+not: a split of the element the range began inside leaves the start
+anchor in whichever half now holds it, so the resolved from-parent may
+be a *product* of the declared one. Accepting only `endsInside`'s
+direction costs 45 rendered divergences on the split scan — the guard
+then fires on the very element the change named. Accepting the extra
+direction in `endsInside` is not symmetric-and-therefore-fine: that
+guard excludes nodes, so extra matches make it fail open, which §9.1
+records as the direction a guard must not fail in.
+
+This also closes the §9.4 limitation recorded as "a range end whose
+left sibling is the merge-source tombstone under a surviving parent
+styles the merge target one-sidedly" (PBT counterexample
+`RemoveStyle(6, 8)` against `Edit(1, 5)`): the target is styled there
+because the range START moved into it, which is the question this guard
+asks. `pkg/document/tree_style_reached_set_test.go` pins both that pair
+and the `Style` mirror of it.
 
 Measured over the exhaustive scans in
 `pkg/document/tree_style_reached_set_test.go`
@@ -771,14 +818,16 @@ style, both delivery orders):
 | scan | pairs | rendered divergences | tombstone-only |
 |---|---|---|---|
 | split × style | 1001 | 135 → **0** | 0 → **0** |
-| merge × style | 7098 | 297 → **126** | 2879 → **1292** |
+| merge × style | 7098 | 297 → **0** | 2879 → **1292** |
 
+The same numbers hold for `RemoveStyle` over a pre-bolded base, on
+every count, which is what sharing one range resolution has to mean.
 No pair that converged before diverges after, in either scan or in a
-300-seed randomised sweep (47 → 30 diverging seeds).
+300-seed randomised sweep.
 
-**Cross-implementation.** §9.1, §9.2 and §9.5 change *which nodes* a
-`Tree.Style`/`Tree.RemoveStyle` writes to, and only the Go
-implementation has them. Until the JS SDK carries the same three rules,
+**Cross-implementation.** §9.1, §9.2, §9.5 and §9.6 change *which
+nodes* a `Tree.Style`/`Tree.RemoveStyle` writes to, and only the Go
+implementation has them. Until the JS SDK carries the same four rules,
 a JS client and the server disagree on the reached set for exactly the
 concurrent split/merge shapes above: the server's snapshot
 (`server/packs/snapshot.go` rebuilds through this code) then holds
@@ -788,7 +837,7 @@ This is a narrowing, not a widening — every shape listed here already
 diverged *between two Go replicas* by delivery order, which is strictly
 worse, and the two implementations agreed only in the sense that both
 were order-dependent. The scans quantify what moved: split × style 135
-rendered divergences → 0, merge × style 297 → 126. Porting is the
+rendered divergences → 0, merge × style 297 → 0. Porting is the
 follow-up tracked on the task; the Go-side fix is not held for it
 because leaving it out keeps Go replicas diverging from each other.
 
@@ -799,8 +848,11 @@ because leaving it out keeps Go replicas diverging from each other.
   concurrent split/merge shapes.
 - An edit-only divergence independent of styling (concurrent unwrap
   versus merge-delete of the same paragraph) remains open.
-- Elements a style covered strictly between its two anchors are lost
-  when a merge moves them out of the resolved range; see §9.5.
+- Attributes still land on a different set of TOMBSTONES in the two
+  delivery orders (1292 of the merge scan's 7098 pairs): a removed
+  element the style covered strictly between its two anchors is still
+  resolved in the current index space, and a merge can move it out of
+  the resolved range. Nothing renders differently; see §9.5.
 - Within a collapsed from-side range, any *stamped* node fails open in
   the other direction: a merge-moved element child at or after the
   original from anchor (probe shape `<p>c<b/></p>`), an insert declared
@@ -816,10 +868,6 @@ because leaving it out keeps Go replicas diverging from each other.
   and is styled on the merged replica only; the guard's direct-child
   shape restriction deliberately excludes this shape (reproduces at
   base, before Fix 23).
-- A range *end* whose left sibling is the merge-source tombstone under
-  a surviving parent resolves past the merge target's End token on the
-  applying replica and styles the target itself one-sidedly
-  (PBT counterexample: `RemoveStyle(6,8)` against `Edit(1,5)`).
 - The recovery inherits the guard's direct-child shape restriction, so
   a from-anchor collapsed by a *chained* merge (declared parent's
   tombstone left under an intermediate source) gets no recovery and
@@ -925,4 +973,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 22 | §9.4 | Intended-parent stamp + interloper filter at moved anchors |
 | Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
-| Fix 25 | §9.1 + §9.2 + §9.5 | Style reached set decided by the change's own positions |
+| Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
