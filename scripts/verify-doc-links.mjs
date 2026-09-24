@@ -227,7 +227,6 @@ export function collectFindings(repoRoot) {
   return findings;
 }
 
-
 if (isDirectRun(import.meta.url)) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const findings = collectFindings(repoRoot);

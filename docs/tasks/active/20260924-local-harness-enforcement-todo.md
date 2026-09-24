@@ -141,7 +141,9 @@ ever becomes a burden for contributors, `addlicense` is the swap to make.
 
 ## Review
 
-Eleven commits, +1086/−36 across 38 files. Three groups:
+Three groups of work, plus the fixes from three review rounds. Commit counts
+are deliberately not recorded here: the first version of this section carried
+them and they were stale two rounds later, which round 3 caught.
 
 **The local layer (Gate 1).** `make verify`, `pre-commit`, `pre-push`, and two
 Claude Code hooks. The split between the two git hooks was chosen from
@@ -168,6 +170,16 @@ have left the class open.
 Two survey items were rejected on reading, above. Both would have passed any
 test written for them, which is the argument for reading the target before
 trusting a finding about it.
+
+**Three review rounds**, logged in the lessons file: correctness and test
+adequacy (1 Critical, 7 Important), design fit and blast radius (3 Important),
+security and documentation consistency (2 Important, no Critical). All fixed.
+The recurring finding across all three was a claim written but not checked —
+four places still denying the licence lane, a replacement justification with no
+relative `.go` targets behind it, an assumption about `claude-code-action`
+contradicted by this repository's own workflow, and a security note asserting
+every action here is SHA-pinned when two of seventeen are. Each is now either
+measured or deleted.
 
 Known limitations, deliberate:
 

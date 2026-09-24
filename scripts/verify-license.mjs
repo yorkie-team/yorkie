@@ -15,7 +15,7 @@
 // Assert every Go file carries the Apache 2.0 header.
 //
 // CLAUDE.md requires it and CONTRIBUTING.md shows it, and until this existed
-// nothing checked it: `docs/design/agent-command-verbs.md` §4b lists the
+// nothing checked it: `docs/design/agent-command-verbs.md` §4b listed the
 // licence header under "enforced by nothing". It had drifted — 17 of 486
 // tracked .go files carried no header when this was written, across five
 // years, which is what a convention with no lane behind it looks like.
@@ -129,7 +129,6 @@ export function collectFindings(repoRoot) {
   }
   return findings;
 }
-
 
 if (isDirectRun(import.meta.url)) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

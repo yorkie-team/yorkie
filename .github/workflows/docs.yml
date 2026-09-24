@@ -13,9 +13,11 @@
 #
 # A link breaks when its TARGET moves, and targets are not only markdown.
 # Walked with the checker's own `linkTargets` from its three roots, the graph
-# reaches 155 markdown files and 39 non-markdown ones: 35 images under
-# `docs/design/media/`, three script directories reached through their
-# READMEs, and this workflow file. Renaming or deleting any of those breaks a
+# reaches 39 non-markdown targets: 35 images under `docs/design/media/`, three
+# script directories reached through their READMEs, and this workflow file.
+# (The breakdown is the durable part — a count of the markdown files it walks
+# would change on every PR that adds a doc, and nothing checks it.) Renaming
+# or deleting any of those breaks a
 # link without touching a single `.md`. There are no relative `.go` targets:
 # every Go citation in `docs/design/` is an absolute GitHub URL, which the
 # checker skips as a scheme.
@@ -65,5 +67,5 @@ jobs:
 
       # The glob, not the directory: `node --test scripts/test/` tries to load
       # the directory as a module and dies with MODULE_NOT_FOUND.
-      - name: Test the link checker
+      - name: Test the repository checks
         run: node --test 'scripts/test/**/*.test.mjs'

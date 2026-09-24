@@ -69,6 +69,11 @@ make lint
 > [!NOTE]  
 > If you have an old version of `golangci-lint` installed locally, running `make lint` may fail—especially if the linter doesn't support the newer version of Go. It's recommended to run `make tools` periodically to keep your tools up to date.
 
+`make verify` is the gate a commit has to pass: `make lint`, the licence
+headers, and the unit tests. It leaves out the integration lane, which needs
+MongoDB and runs in CI. The hooks installed by `scripts/setup.sh` run it for
+you — see Commit Message Format below.
+
 ### Setting for VSCode
 If you are using VSCode, add the following in your `.vscode/settings.json` so that proper language features work correctly in test files
 with build tag `integration`, `bench`, or `complex`.
