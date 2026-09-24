@@ -328,3 +328,57 @@ The irony is on the nose — the branch exists because a gate that quietly does
 nothing is indistinguishable from a gate that found nothing, and its own new
 guard did exactly that, in the direction that reports failure rather than
 success only because the runner lacks a binary.
+
+### Round 4 — the review panel, and a round-3 conclusion reversed
+
+Three blocking findings, all fixed; no rebuttals.
+
+**The security answer from round 3 was right about the threat it examined and
+wrong about the one it did not.** Round 3 asked whether tracking
+`.claude/settings.json` grants a *PR branch* new capability *in CI*, and
+answered no: the workflows that check out an untrusted branch without
+stripping `.claude/` already hand the agent an unrestricted `Bash` tool. That
+still holds. The panel asked about the other consumer — a **person** who checks
+out a contributor's branch to review it. There, tracked wiring plus tracked
+`scripts/hooks/*.sh` means opening a session in that checkout runs the
+branch's code at SessionStart and before every Edit, with no confirmation and
+no CI sandbox around it. Reviewing a patch became running it.
+
+The repair inverts both halves: the wiring moves to the gitignored
+`.claude/settings.local.json`, and `install.mjs` snapshots the hook scripts
+into `$GIT_DIR/agent-hooks/` — a directory `git checkout` never writes — so a
+branch supplies neither the wiring nor the code. The cost is staleness: an
+improved guard reaches a clone only when someone re-runs `scripts/setup.sh`.
+That is the right direction to fail, and CI's codegen-freshness check remains
+the backstop the guard was only ever an accelerator for.
+
+**Rule: "does this grant the attacker a new capability?" has to name the
+victim.** Round 3's analysis was sound for the CI agent and never asked about
+the laptop. A capability question with an unstated subject answers itself with
+whichever subject is most convenient.
+
+**A refusal surface has to cover what its members import.** Gate 1b listed
+`scripts/verify-*.mjs` because a workflow invokes those directly — but both of
+them now import `direct-run.mjs` for the predicate deciding whether their CLI
+body runs at all, so editing that one unlisted file makes both of `docs.yml`'s
+gates exit 0 having checked nothing. The pattern is now `scripts/*.mjs`.
+Extracting a shared helper moved the CI definition out from under the glob
+that named it, in the same change that made the extraction worth doing.
+
+**Widening a linter's scope means owning everything newly in it.** Pointing
+actionlint at the whole workflow directory was justified in a comment that
+accounted for only the two files that had *reported*. The rest were newly
+graded too, silently: actionlint is clean on all of them (verified by running
+the lane's exact image, `rhysd/actionlint:1.7.12`, over the full directory),
+but it has no view of an action's runtime, so `chart-release.yml`'s node16
+`azure/setup-helm@v3` is newly in scope and still unchecked.
+
+**LEFT UNDONE, AND NOT BECAUSE IT WAS JUDGED WRONG.** The fix is a one-line
+bump of `.github/workflows/chart-release.yml:26` to `azure/setup-helm@v4`
+(same `token` input, node20 runtime) plus the scope comment in
+`.github/workflows/agent-scripts.yml`. The autonomous fixer's GitHub App token
+carries no `workflows` permission, so the push was rejected outright —
+`refusing to allow a GitHub App to create or update workflow ... without
+'workflows' permission`. A maintainer has to make both edits. Recorded here
+rather than quietly dropped: a change a bot cannot push is invisible in the
+diff and looks exactly like a change nobody thought was needed.

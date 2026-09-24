@@ -8,7 +8,7 @@
 // NO HOOK MIRRORS THIS HERE, AND PORTING ONE WOULD BE A NO-OP. Upstream pairs
 // the trailer with a `require-ai-disclosure.sh` harness hook that enforces it at
 // commit time. This repository now has a harness-hook subsystem of its own
-// (`scripts/hooks/`, wired in `.claude/settings.json`) and three git hooks, so
+// (`scripts/hooks/`, wired per clone by its `install.mjs`) and three git hooks, so
 // the reason is no longer "there is nowhere to put it" — it is that the hook
 // would never fire. Upstream it is inert unless an environment variable is set,
 // and the LOCAL autonomous arm (`spec-to-pr`) is what sets it. There is no local

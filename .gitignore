@@ -90,7 +90,9 @@ node_modules/
 # `git add -A` commits as a gitlink.
 .harness-reports/
 
-# Claude Code's per-user settings, which sit beside the tracked
-# .claude/settings.json. It holds `permissions.allow` grants; committing one by
-# accident widens the permission set for every contributor, silently.
+# Claude Code's per-user settings. It holds `permissions.allow` grants and the
+# hook wiring `scripts/hooks/install.mjs` writes; committing one by accident
+# both widens the permission set for every contributor and makes a branch able
+# to run code on anyone who checks it out. There is deliberately no tracked
+# .claude/settings.json to sit beside — see that installer's header.
 .claude/settings.local.json

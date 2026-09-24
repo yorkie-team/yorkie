@@ -1,11 +1,13 @@
-// Guards for the local enforcement layer: the Claude Code hooks, their wiring
-// in .claude/settings.json, and the workflow step that runs the licence gate.
+// Guards for the local enforcement layer: the Claude Code hooks, the installer
+// that wires them per clone, and the workflow step that runs the licence gate.
 //
 // EVERY FAILURE THIS FILE CATCHES IS SILENT — none of them shows up as a red
 // lane, which is the whole reason they are pinned here.
 // `guard-generated-files.sh` fails OPEN by design, so a `case` pattern that
 // stops matching does not error, it stops guarding. A renamed hook script
-// makes its settings.json entry a no-op Claude Code does not announce.
+// makes its wiring entry a no-op Claude Code does not announce. Re-tracking
+// the wiring in the working tree hands a pull-request branch arbitrary local
+// execution and breaks nothing visible.
 // Dropping session-prime's CI exit changes only what a CI agent is told.
 // Deleting the licence step from docs.yml, or filtering that workflow by
 // path, leaves the gate resting on a local `make verify` the contributor may
@@ -21,6 +23,7 @@ import {
   accessSync,
   chmodSync,
   constants,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -42,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 // inherited GIT_INDEX_FILE once did here: a public PR whose diff appeared to
 // delete every file in the repository.
 import { fixtureGitEnv } from '../agent/git-env.mjs';
+import { HOOK_WIRING, wireHooks } from '../hooks/install.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GUARD = path.join(REPO, 'scripts', 'hooks', 'guard-generated-files.sh');
@@ -109,23 +113,62 @@ test('the guard fails open on an unusable payload', () => {
   }
 });
 
-test('every hook .claude/settings.json names exists and is executable', () => {
+test('every hook the installer wires exists and is executable', () => {
   // A rename makes the entry a no-op, and Claude Code does not announce it.
-  const settings = JSON.parse(
-    readFileSync(path.join(REPO, '.claude', 'settings.json'), 'utf8'),
-  );
-  const commands = Object.values(settings.hooks ?? {})
-    .flat()
-    .flatMap((m) => m.hooks ?? [])
-    .map((h) => h.command);
-
-  assert.ok(commands.length >= 2, `expected the hooks to be wired, found ${commands.length}`);
-  for (const command of commands) {
-    const script = command.replace(/^bash\s+/, '').trim();
-    const abs = path.join(REPO, script);
+  assert.ok(HOOK_WIRING.length >= 2, `expected the hooks to be wired, found ${HOOK_WIRING.length}`);
+  for (const { script } of HOOK_WIRING) {
+    const abs = path.join(REPO, 'scripts', 'hooks', script);
     statSync(abs); // throws with the path if it moved
     accessSync(abs, constants.X_OK);
   }
+});
+
+test('the hook wiring is never tracked in the working tree', () => {
+  // THE SECURITY PROPERTY, pinned because nothing else fails when it goes.
+  // Claude Code runs the commands a project settings file names, with no
+  // confirmation, at SessionStart and before every Edit/Write. A tracked
+  // `.claude/settings.json` therefore means checking out a pull-request branch
+  // executes that branch's `scripts/hooks/*.sh` — and both halves are ordinary
+  // tracked files any contributor can rewrite. The wiring lives in the
+  // gitignored `settings.local.json` instead, written by `install.mjs`.
+  assert.equal(
+    existsSync(path.join(REPO, '.claude', 'settings.json')),
+    false,
+    '.claude/settings.json must stay untracked — see scripts/hooks/install.mjs',
+  );
+  const ignore = readFileSync(path.join(REPO, '.gitignore'), 'utf8');
+  assert.match(ignore, /^\.claude\/settings\.local\.json$/m);
+});
+
+test('the installer wires the snapshot and keeps everything else', () => {
+  // Two failures this catches, both silent. Re-running setup must REPLACE the
+  // previous wiring rather than stack a second copy of every hook; and the
+  // file it merges into is where a contributor's `permissions.allow` grants
+  // live, so anything the installer does not own has to survive untouched.
+  const snapshot = '/tmp/clone/.git/agent-hooks';
+  const existing = {
+    permissions: { allow: ['Bash(make lint)'] },
+    hooks: {
+      SessionStart: [{ matcher: '', hooks: [{ type: 'command', command: 'bash scripts/hooks/session-prime.sh' }] }],
+      PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo mine' }] }],
+    },
+  };
+
+  const once = wireHooks(existing, snapshot);
+  assert.deepEqual(once.permissions, existing.permissions, 'unrelated settings must survive');
+
+  const commands = Object.values(once.hooks)
+    .flat()
+    .flatMap((g) => g.hooks)
+    .map((h) => h.command);
+  // The stale in-tree wiring is migrated, the unrelated Bash hook is kept.
+  assert.ok(commands.includes('echo mine'), "another tool's hook must survive");
+  assert.equal(commands.filter((c) => c.includes('scripts/hooks/')).length, 0, 'in-tree wiring must be replaced');
+  for (const { script } of HOOK_WIRING) {
+    assert.ok(commands.includes(`bash ${snapshot}/${script}`), `${script} must be wired to the snapshot`);
+  }
+
+  assert.deepEqual(wireHooks(once, snapshot), once, 'a second install must be a no-op');
 });
 
 test('session-prime says nothing in CI and speaks locally', () => {

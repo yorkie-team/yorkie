@@ -141,7 +141,15 @@ export const CI_DEFINING_PATHS = [
   "build/docker/**",
   // Scripts a workflow invokes directly.
   "scripts/ci/**",
-  "scripts/verify-*.mjs",
+  // …and the modules those scripts import. `scripts/*.mjs` rather than
+  // `scripts/verify-*.mjs`: `verify-doc-links.mjs` and `verify-license.mjs`
+  // both import `direct-run.mjs` for the predicate that decides whether their
+  // CLI body runs at all, so a branch editing that one file makes both of
+  // docs.yml's gates exit 0 having checked nothing — the same fail-open as
+  // editing the verify scripts themselves, one import away from the pattern
+  // that only named them. The directory holds nothing but those scripts and
+  // their shared helpers, so the wider glob costs no false refusals.
+  "scripts/*.mjs",
 ];
 
 // `**` spans separators, `*` does not, everything else is literal. Deliberately

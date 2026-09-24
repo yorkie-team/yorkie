@@ -73,7 +73,13 @@ Deliberately out of scope:
       reach.
 - [x] `scripts/hooks/guard-generated-files.sh` — PreToolUse(Edit|Write), exit 2
       on `api/yorkie/v1/**/*.pb.go` and `*.connect.go`, printing `make proto`.
-- [x] `.claude/settings.json` wiring both hooks.
+- [x] `scripts/hooks/install.mjs` wiring both hooks per clone, from
+      `scripts/setup.sh`. NOT a tracked `.claude/settings.json`: Claude Code
+      runs what a project settings file names without confirming, so tracked
+      wiring executes a PR branch's hooks on any checkout of it. The
+      installer snapshots the scripts into `$GIT_DIR/agent-hooks/` and writes
+      the gitignored `settings.local.json`, so neither half comes from the
+      branch.
 
 ### Gate 2 — the license header, which §4b says nothing enforces
 
