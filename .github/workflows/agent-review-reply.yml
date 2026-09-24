@@ -549,9 +549,15 @@ jobs:
             const mine = (c) => String(c.body ?? '').includes(MARKER)
               && AUTHORS.includes((c.user || {}).login);
             if (existing.some(mine)) return;
+            // THE ROOT, NOT THE TRIGGER. `/pulls/{n}/comments/{id}/replies`
+            // wants a top-level review comment; a mistyped verb is most often
+            // typed as a reply INSIDE an existing thread, and passing that
+            // reply's id risks the call failing — leaving exactly the silence
+            // this job exists to end. When the trigger IS the root the two are
+            // the same value, so this is strictly safer.
             await github.rest.pulls.createReplyForReviewComment({
               owner, repo, pull_number,
-              comment_id: context.payload.comment.id,
+              comment_id: thread,
               body: [
                 MARKER,
                 `👋 \`@claude ${typed}\` does not run from an inline review thread.`,

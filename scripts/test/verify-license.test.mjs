@@ -5,9 +5,11 @@
 // the repository and nothing shells out to git.
 
 import {
+  chmodSync,
   copyFileSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -130,7 +132,7 @@ test('vendored and generated-output directories are not walked', () => {
       'pkg/real.go': LINE_HEADER,
     },
     (root) => {
-      assert.deepEqual(goFiles(root), ['pkg/real.go']);
+      assert.deepEqual(goFiles(root).files, ['pkg/real.go']);
       assert.deepEqual(collectFindings(root), []);
     },
   );
@@ -139,7 +141,7 @@ test('vendored and generated-output directories are not walked', () => {
 test('a missing root is a finding, not a silent pass', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'verify-license-'));
   rmSync(root, { recursive: true, force: true });
-  assert.deepEqual(goFiles(root), []);
+  assert.deepEqual(goFiles(root).files, []);
   assert.match(collectFindings(root)[0], /scanned nothing/);
 });
 
@@ -221,4 +223,46 @@ test('the CLI reports the count it actually checked', () => {
   const m = r.stdout.match(/Every Go file \((\d+)\) carries/);
   assert.ok(m, `no count in the success line: ${r.stdout}`);
   assert.ok(Number(m[1]) > 100, `implausibly few files scanned: ${m[1]}`);
+});
+
+test('an unlistable directory is a finding, not a gap in a green run', () => {
+  // The narrower the gap the more convincing the green: one unreadable
+  // directory used to mean its Go files were never examined while every other
+  // file passed and the run reported success.
+  withTree({ 'pkg/ok.go': LINE_HEADER, 'locked/hidden.go': 'package x\n' }, (root) => {
+    const locked = path.join(root, 'locked');
+    chmodSync(locked, 0o000);
+    try {
+      if (goFiles(root).files.includes('locked/hidden.go')) return; // running as root
+      const findings = collectFindings(root);
+      assert.equal(findings.length, 1, `expected one finding, got ${findings}`);
+      assert.match(findings[0], /^locked could not be listed \(/);
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+  });
+});
+
+test('an unreadable Go file is named as unreadable, not as unheadered', () => {
+  // The two are different facts and the fix for each is different. Reporting
+  // an I/O error as "has no Apache 2.0 header" sends someone to edit a file
+  // they cannot open.
+  withTree({ 'pkg/ok.go': LINE_HEADER, 'pkg/locked.go': LINE_HEADER }, (root) => {
+    const locked = path.join(root, 'pkg', 'locked.go');
+    chmodSync(locked, 0o000);
+    try {
+      let findings;
+      try {
+        readFileSync(locked, 'utf8');
+        return; // readable anyway (running as root)
+      } catch {
+        findings = collectFindings(root);
+      }
+      assert.equal(findings.length, 1, `expected one finding, got ${findings}`);
+      assert.match(findings[0], /^pkg\/locked\.go could not be read \(/);
+      assert.doesNotMatch(findings[0], /no Apache 2\.0 header/);
+    } finally {
+      chmodSync(locked, 0o644);
+    }
+  });
 });

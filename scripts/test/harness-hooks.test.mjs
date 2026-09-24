@@ -35,6 +35,14 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+// The repository's own guard, not a hand-copied list of variable names —
+// copying it is the drift this branch keeps finding. `fixtureGitEnv` strips
+// every GIT_* that redirects a command AND pins GIT_DIR/GIT_WORK_TREE at the
+// fixture, so no discovery happens at all. Its header records what an
+// inherited GIT_INDEX_FILE once did here: a public PR whose diff appeared to
+// delete every file in the repository.
+import { fixtureGitEnv } from '../agent/git-env.mjs';
+
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GUARD = path.join(REPO, 'scripts', 'hooks', 'guard-generated-files.sh');
 
@@ -179,7 +187,10 @@ test('make verify reaches the licence gate', () => {
 function inScratchRepo(body) {
   const dir = mkdtempSync(path.join(tmpdir(), 'pre-commit-'));
   const git = (...args) =>
-    spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+    spawnSync('git', ['-C', dir, ...args], {
+      encoding: 'utf8',
+      env: fixtureGitEnv(dir),
+    });
   try {
     git('init', '-q', '.');
     git('config', 'user.email', 'test@example.com');
@@ -217,7 +228,12 @@ function wouldLint({ dir }) {
   const r = spawnSync('bash', [probe], {
     cwd: dir,
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    // The hook itself runs `git diff --cached`; `git -C` above protects the
+    // helper, but nothing protected the hook until this.
+    env: fixtureGitEnv(dir, {
+      ...process.env,
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+    }),
   });
   return r.stdout.includes('WOULD_LINT');
 }
@@ -236,7 +252,7 @@ test('pre-commit refuses when Go is staged and the linter is missing', () => {
     const r = spawnSync('bash', [probe], {
       cwd: dir,
       encoding: 'utf8',
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
+      env: fixtureGitEnv(dir, { ...process.env, PATH: '/usr/bin:/bin' }),
     });
     assert.equal(r.status, 1, 'a missing linter with Go staged must refuse');
     assert.match(r.stderr, /golangci-lint not found/);

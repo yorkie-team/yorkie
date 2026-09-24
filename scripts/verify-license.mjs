@@ -61,14 +61,26 @@ export const HEADER_SCAN_LINES = 40;
  */
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'vendor', 'bin', 'binaries']);
 
-/** Every `.go` file under `root`, as paths relative to it, sorted. */
+/**
+ * Every `.go` file under `root` as paths relative to it, sorted, plus the
+ * directories that could not be listed.
+ *
+ * THE ERRORS ARE RETURNED, NOT SWALLOWED. An unreadable directory used to be
+ * a bare `return`: its Go files were never examined, the remaining ones
+ * passed, and the run reported success. That is the same silent pass this
+ * file refuses at the top level, one directory down — and the narrower it is,
+ * the more convincing the green.
+ */
 export function goFiles(root) {
-  const found = [];
+  const files = [];
+  const errors = [];
   const walk = (dir) => {
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      const rel = path.relative(root, dir) || '.';
+      errors.push(`${rel} could not be listed (${err.code ?? err.message})`);
       return;
     }
     for (const entry of entries) {
@@ -77,13 +89,14 @@ export function goFiles(root) {
         if (SKIP_DIRS.has(entry.name)) continue;
         walk(abs);
       } else if (entry.isFile() && entry.name.endsWith('.go')) {
-        found.push(path.relative(root, abs));
+        files.push(path.relative(root, abs));
       }
     }
   };
-  if (!safeIsDirectory(root)) return found;
+  if (!safeIsDirectory(root)) return { files, errors };
   walk(root);
-  return found.sort();
+  files.sort();
+  return { files, errors };
 }
 
 function safeIsDirectory(target) {
@@ -113,16 +126,21 @@ export function hasLicenseHeader(content) {
  * nothing. `verify-doc-links.mjs` guards the same way when its queue is empty.
  */
 export function collectFindings(repoRoot) {
-  const files = goFiles(repoRoot);
-  if (files.length === 0) {
+  const { files, errors } = goFiles(repoRoot);
+  // An unreadable tree is reported as what it is. Falling through to "scanned
+  // nothing" would be true but would name the wrong cause.
+  if (files.length === 0 && errors.length === 0) {
     return [`no .go files found under ${repoRoot} — this check scanned nothing`];
   }
-  const findings = [];
+  const findings = [...errors];
   for (const rel of files) {
     let content;
     try {
       content = readFileSync(path.join(repoRoot, rel), 'utf8');
-    } catch {
+    } catch (err) {
+      // A file the walk found and the read could not open is a gap in the
+      // scan, not a file without a header. Say which.
+      findings.push(`${rel} could not be read (${err.code ?? err.message})`);
       continue;
     }
     if (!hasLicenseHeader(content)) findings.push(`${rel} has no Apache 2.0 header`);
@@ -138,7 +156,7 @@ if (isDirectRun(import.meta.url)) {
     // The count is in the success line on purpose: "every Go file" is true of
     // a tree with none, and the number is what makes a collapsed scan visible
     // in a log nobody reads closely.
-    console.log(`${PREFIX} Every Go file (${checked.length}) carries the Apache 2.0 header.`);
+    console.log(`${PREFIX} Every Go file (${checked.files.length}) carries the Apache 2.0 header.`);
   } else {
     for (const finding of findings) console.log(`${PREFIX}   ${finding}`);
     console.log(`${PREFIX} ${findings.length} file(s) missing the header.`);
