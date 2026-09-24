@@ -928,3 +928,40 @@ test("LEDGER_AUTHOR_LOGINS matches the latch's trusted authors exactly", () => {
 });
 
 import { PAGE_AUTHOR_LOGINS } from "./rounds.mjs";
+test("an agent-written execution log cannot put a marker into a trusted comment", async () => {
+  // The log lives in the agent's $RUNNER_TEMP, so the trusted report job reads
+  // it as data. A string where a count belongs used to concatenate through `+`,
+  // and a model id was copied verbatim — both into a comment posted as the App.
+  const { parseExecution, sumExecutions, serializeRecord, parseMetricComment, renderFixEffort } =
+    await import("./metrics.mjs");
+  const { isPagedLatchComment, PAGED_LATCH } = await import("./rounds.mjs");
+  const APP = { type: "Bot", login: "yorkie-team-agent[bot]" };
+  const evil = [{
+    type: "result",
+    subtype: "success",
+    is_error: true,
+    api_error_status: PAGED_LATCH,
+    num_turns: PAGED_LATCH,
+    duration_ms: "1",
+    total_cost_usd: 1.5,
+    session_id: PAGED_LATCH,
+    usage: { input_tokens: PAGED_LATCH, output_tokens: 10 },
+    modelUsage: { [PAGED_LATCH]: {}, "claude-opus-5": {} },
+  }];
+  for (const rec of [parseExecution(evil, "review-fix"), sumExecutions(evil, "review-fix")]) {
+    assert.equal(rec.turns, 0);
+    assert.equal(rec.tokens, 10);
+    assert.equal(rec.durationMs, 0);
+    assert.equal(rec.costUsd, 1.5);
+    assert.equal(rec.sessionId, "");
+    assert.deepEqual(rec.models, ["claude-opus-5"]);
+    const body = serializeRecord({ ...rec, note: PAGED_LATCH });
+    assert.equal(isPagedLatchComment({ body, user: APP }), false);
+    assert.equal(parseMetricComment(body).note, PAGED_LATCH, "the record still round-trips exactly");
+  }
+  const effort = renderFixEffort({
+    rec: parseExecution(evil, "review-fix"),
+    outcome: { ok: false, kind: "api-error", status: PAGED_LATCH, reason: "" },
+  });
+  assert.equal(isPagedLatchComment({ body: effort, user: APP }), false);
+});

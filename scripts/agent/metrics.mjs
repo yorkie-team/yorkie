@@ -128,14 +128,26 @@ export function isOwnComment(comment, marker) {
  */
 export const TOKEN_WEIGHTS = { input: 1, output: 1, cacheCreation: 1.25, cacheRead: 0.1 };
 
+// THE EXECUTION LOG IS AGENT-WRITABLE. `claude-execution-output.json` sits in
+// `$RUNNER_TEMP` of the job the agent ran in, with an unrestricted `Bash`, and the
+// trusted report job reads it and posts what it derives under the App identity.
+// So every field is coerced at the boundary: a count that is not a finite number
+// is 0 (a string would otherwise CONCATENATE through `+` and reach the comment
+// verbatim), and an identifier outside a plain charset is dropped. Honest logs
+// carry numbers and model ids like `claude-opus-5`, and pass through unchanged.
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+const SAFE_ID = /^[A-Za-z0-9._:@/[\]-]{1,120}$/;
+const safeIds = (o) => Object.keys(o && typeof o === "object" ? o : {}).filter((k) => SAFE_ID.test(k));
+const safeId = (s) => (typeof s === "string" && SAFE_ID.test(s) ? s : "");
+
 /** Weighted (spend-representative) token count from a usage object. */
 export function weightedTokensFor(usage) {
   const u = usage || {};
   return Math.round(
-    (u.input_tokens || 0) * TOKEN_WEIGHTS.input +
-      (u.output_tokens || 0) * TOKEN_WEIGHTS.output +
-      (u.cache_creation_input_tokens || 0) * TOKEN_WEIGHTS.cacheCreation +
-      (u.cache_read_input_tokens || 0) * TOKEN_WEIGHTS.cacheRead,
+    num(u.input_tokens) * TOKEN_WEIGHTS.input +
+      num(u.output_tokens) * TOKEN_WEIGHTS.output +
+      num(u.cache_creation_input_tokens) * TOKEN_WEIGHTS.cacheCreation +
+      num(u.cache_read_input_tokens) * TOKEN_WEIGHTS.cacheRead,
   );
 }
 
@@ -146,19 +158,19 @@ export function parseExecution(messages, kind = "implement") {
   if (!result) return null;
   const u = result.usage || {};
   const tokens =
-    (u.input_tokens || 0) +
-    (u.output_tokens || 0) +
-    (u.cache_creation_input_tokens || 0) +
-    (u.cache_read_input_tokens || 0);
+    num(u.input_tokens) +
+    num(u.output_tokens) +
+    num(u.cache_creation_input_tokens) +
+    num(u.cache_read_input_tokens);
   return {
     kind,
-    models: Object.keys(result.modelUsage || {}),
-    turns: result.num_turns || 0,
+    models: safeIds(result.modelUsage),
+    turns: num(result.num_turns),
     tokens,
     weightedTokens: weightedTokensFor(u),
-    durationMs: result.duration_ms || 0,
-    costUsd: result.total_cost_usd || 0,
-    sessionId: result.session_id || "",
+    durationMs: num(result.duration_ms),
+    costUsd: num(result.total_cost_usd),
+    sessionId: safeId(result.session_id),
   };
 }
 
@@ -176,15 +188,15 @@ export function sumExecutions(messages, kind = "review") {
   for (const r of results) {
     const u = r.usage || {};
     tokens +=
-      (u.input_tokens || 0) +
-      (u.output_tokens || 0) +
-      (u.cache_creation_input_tokens || 0) +
-      (u.cache_read_input_tokens || 0);
+      num(u.input_tokens) +
+      num(u.output_tokens) +
+      num(u.cache_creation_input_tokens) +
+      num(u.cache_read_input_tokens);
     weightedTokens += weightedTokensFor(u);
-    turns += r.num_turns || 0;
-    durationMs += r.duration_ms || 0;
-    costUsd += r.total_cost_usd || 0;
-    for (const m of Object.keys(r.modelUsage || {})) models.add(m);
+    turns += num(r.num_turns);
+    durationMs += num(r.duration_ms);
+    costUsd += num(r.total_cost_usd);
+    for (const m of safeIds(r.modelUsage)) models.add(m);
   }
   return {
     kind,
@@ -194,7 +206,7 @@ export function sumExecutions(messages, kind = "review") {
     weightedTokens,
     durationMs,
     costUsd,
-    sessionId: results.length ? results[results.length - 1].session_id || "" : "",
+    sessionId: results.length ? safeId(results[results.length - 1].session_id) : "",
     calls: results.length,
   };
 }
@@ -908,11 +920,19 @@ export function renderFixEffort({ rec, outcome, head, runUrl }) {
   // FIX_EFFORT_MARKER. Stated in the comment so the two are not read as
   // duplicates of each other.
   lines.push("_This covers the on-demand fix agent only. The review panel's own effort is reported separately._");
-  return `${lines.join("\n")}\n${FIX_EFFORT_MARKER}`;
+  // Every `<!--` in the visible part broken (ZWNJ, the fix-report.mjs rule): the
+  // outcome line quotes fields of an agent-writable log, and this comment is
+  // posted under an identity the pipeline trusts markers from.
+  return `${lines.join("\n").replace(/<!--/g, "<!-\u200c-")}\n${FIX_EFFORT_MARKER}`;
 }
 
+// `<` and `-->` escaped inside the JSON, so no field can close this comment or
+// open another marker. JSON-safe: both occur only inside strings, where the
+// `\u003c` / `\u002d` escapes parse back to the same characters.
+const hiddenJson = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/-->/g, "-\\u002d>");
+
 export function serializeRecord(rec) {
-  return `${METRIC_PREFIX}${JSON.stringify(rec)} -->`;
+  return `${METRIC_PREFIX}${hiddenJson(rec)} -->`;
 }
 
 /** Recover the record from a single metric comment body; null if not one. */
@@ -928,7 +948,7 @@ export function parseMetricComment(body) {
 
 /** Serialize the cumulative ledger into the summary's hidden data block. */
 export function serializeSummaryData(records) {
-  return `${SUMMARY_DATA_MARKER}${JSON.stringify(records ?? [])} -->`;
+  return `${SUMMARY_DATA_MARKER}${hiddenJson(records ?? [])} -->`;
 }
 
 /** Records embedded in a summary body; [] if none / unparseable. */

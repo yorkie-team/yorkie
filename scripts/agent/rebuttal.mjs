@@ -44,7 +44,7 @@
 // again, and pages at two. That is the right destination for it.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
@@ -105,8 +105,11 @@ export function serializeRebuttal(rec) {
   const r = rec && typeof rec === "object" ? rec : {};
   const payload = {
     v: REBUTTAL_VERSION,
-    findingKey: trim(r.findingKey, 300),
-    lens: trim(r.lens, 60),
+    // EVERY author field, `lens` and the key included: `renderRebuttalComment`
+    // prints `lens` in the visible line, and a lens reading
+    // `<!-- agent-review-paged -->` was a live latch under the App identity.
+    findingKey: neutral(trim(r.findingKey, 300)),
+    lens: neutral(trim(r.lens, 60)),
     // `neutral` on every author-written field — see its docblock; a real path,
     // summary or citation never contains `<!--`, so honest rebuttals are
     // byte-unchanged.
@@ -322,6 +325,23 @@ export function findingKeyOf(finding) {
  * tie rule has never governed and this change does not alter.
  */
 export function matchRebuttal(finding, rebuttals, { threshold = DEFAULT_SIMILARITY } = {}) {
+  // A VERBATIM TARGET IS NOT AMBIGUOUS. The fixer is told to copy each finding's
+  // wording into `--summary`, and one fix round now files every dispute it has
+  // at once — so several rebuttals against findings in the same file are the
+  // ordinary case, not an attack. Scored by similarity alone, two of them could
+  // tie against a finding neither quotes exactly, and the refusal below then
+  // discarded BOTH, silently: the finding went through unadjudicated, looking
+  // exactly like a fixer that never disputed it.
+  //
+  // A rebuttal whose lens, file AND whole summary equal the finding's names that
+  // finding and no other, so it is taken outright (the latest one, as below).
+  // Only when none does is similarity consulted — with its tie refusal intact,
+  // because that is where two records genuinely could be about either target.
+  const exact = (Array.isArray(rebuttals) ? rebuttals : []).filter((r) =>
+    str(r?.lens).trim() === str(finding?.lens).trim()
+    && str(r?.file).trim() === str(finding?.file).trim()
+    && sameWording(r?.summary, finding?.summary));
+  if (exact.length > 0) return exact[exact.length - 1];
   let best = null;
   let bestScore = 0;
   let tied = false;
@@ -348,6 +368,12 @@ export function matchRebuttal(finding, rebuttals, { threshold = DEFAULT_SIMILARI
     }
   }
   return tied ? null : best;
+}
+
+/** Equal summaries, ignoring case, spacing and the ZWNJ `neutral` inserts. */
+function sameWording(a, b) {
+  const norm = (s) => str(s).replace(/\u200c/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return norm(a) !== "" && norm(a) === norm(b);
 }
 
 // --- adjudication ------------------------------------------------------------
@@ -552,7 +578,9 @@ function parseArgs(argv) {
 const USAGE =
   "Usage:\n" +
   "  node rebuttal.mjs read <pr> [--out <file>]\n" +
-  "  node rebuttal.mjs post <pr> --lens <id> --file <path> --summary <text> --claim <text> [--evidence <file:line> ...]";
+  "  node rebuttal.mjs post <pr> --lens <id> --file <path> --summary <text> --claim <text> [--evidence <file:line> ...]\n" +
+  "      [--emit <dir>]\n" +
+  "  node rebuttal.mjs republish <pr> --from <dir> [--out <dir>]";
 
 /**
  * Post one rebuttal, so the fixer never hand-writes the record.
@@ -636,15 +664,113 @@ function cmdPost(pr, args) {
   console.error(`rebuttal: posted a dispute of ${rec.findingKey} on #${pr}`);
 }
 
+/**
+ * At most this many disputes are republished from one fix round. The work list
+ * `fix-brief.mjs` hands the fixer is capped at 40 items, and a dispute answers
+ * one item, so a directory holding more is not a list of disputes.
+ */
+export const MAX_REPUBLISHED_REBUTTALS = 40;
+
+/** The largest single emitted dispute `republish` will read. */
+const MAX_EMITTED_BYTES = 64 * 1024;
+
+/**
+ * The bodies the trusted step posts for an emitted dispute directory.
+ *
+ * Takes the directory's CONTENTS (name → text), so the rule is testable without
+ * a filesystem. Each file is parsed as data and rendered again by
+ * `renderRebuttalComment` — the same renderer `cmdPost` uses — so no byte the
+ * agent wrote is posted as written. The finding key is RECOMPUTED from
+ * lens/file/summary rather than taken from the file, so it always names the
+ * finding the dispute actually describes; duplicates collapse on it. Files that
+ * do not parse are dropped, and the count is capped.
+ *
+ * `fix-report.mjs::republishFixReport` documents why: an agent with an
+ * unrestricted `Bash` can write anything to these paths, and a verbatim post
+ * under the App identity lets it forge every marker the pipeline trusts by
+ * author.
+ */
+export function republishRebuttals(files, { max = MAX_REPUBLISHED_REBUTTALS } = {}) {
+  const out = [];
+  const seen = new Set();
+  const names = Object.keys(files && typeof files === "object" ? files : {}).sort();
+  for (const name of names) {
+    if (out.length >= max) break;
+    const r = parseRebuttalComment(files[name]);
+    if (!r) continue;
+    const findingKey = findingKeyOf({ lens: r.lens, file: r.file, summary: r.summary });
+    if (seen.has(findingKey)) continue;
+    const body = renderRebuttalComment({ ...r, findingKey });
+    if (!body) continue;
+    seen.add(findingKey);
+    out.push({ findingKey, body });
+  }
+  return out;
+}
+
+/** Every regular `*.md` file directly in `dir`, size-capped; `{}` when there is none. */
+function readEmittedDir(dir) {
+  const files = {};
+  let names;
+  try {
+    if (!statSync(dir).isDirectory()) return files;
+    names = readdirSync(dir);
+  } catch {
+    return files;
+  }
+  for (const name of names) {
+    if (!name.endsWith(".md")) continue;
+    const file = path.join(dir, name);
+    try {
+      const st = statSync(file);
+      if (!st.isFile() || st.size === 0 || st.size > MAX_EMITTED_BYTES) continue;
+      files[name] = readFileSync(file, "utf8");
+    } catch {
+      // unreadable entry: skipped, like one that does not parse
+    }
+  }
+  return files;
+}
+
+/**
+ * `republish <pr> --from <dir>`: the TRUSTED half of `--emit`, run in a job the
+ * agent never ran in. Exits 0 on every outcome — a dispute that is not posted
+ * leaves its finding standing, which is the safe direction — but says so.
+ */
+function cmdRepublish(pr, args) {
+  const bodies = republishRebuttals(args.from ? readEmittedDir(String(args.from)) : {});
+  if (args.out) {
+    mkdirSync(String(args.out), { recursive: true });
+    bodies.forEach(({ body }, i) => writeFileSync(path.join(String(args.out), `${i}.md`), body));
+    return;
+  }
+  let posted = 0;
+  for (const { findingKey, body } of bodies) {
+    try {
+      execFileSync("gh", ["pr", "comment", String(pr), "--body-file", "-"], {
+        input: body, encoding: "utf8", maxBuffer: GH_MAX_BUFFER,
+      });
+      posted++;
+    } catch (err) {
+      emitBestEffortWarning(
+        `rebuttal republish failed for ${findingKey} on #${pr} (${err.message}) — the dispute was NOT filed ` +
+          "and the finding stands unchallenged",
+      );
+    }
+  }
+  console.error(`rebuttal: republished ${posted} of ${bodies.length} dispute(s) on #${pr}`);
+}
+
 function main() {
   const cmd = process.argv[2];
   const args = parseArgs(process.argv);
   const pr = args.pr ?? process.argv[3];
-  if (!pr || !/^\d+$/.test(String(pr)) || (cmd !== "read" && cmd !== "post")) {
+  if (!pr || !/^\d+$/.test(String(pr)) || !["read", "post", "republish"].includes(cmd)) {
     console.error(USAGE);
     process.exit(2); // usage error is a tooling error, not a review outcome
   }
   if (cmd === "post") return cmdPost(pr, args);
+  if (cmd === "republish") return cmdRepublish(pr, args);
   const rebuttals = readRebuttals(pr);
   const json = JSON.stringify(rebuttals);
   if (args.out) writeFileSync(args.out, json);

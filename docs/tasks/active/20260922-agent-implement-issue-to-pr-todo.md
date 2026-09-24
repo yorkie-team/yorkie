@@ -88,3 +88,10 @@ installation (2026-09-22). `Workflows` stays at no access.
 - The review panel has still never completed a real review, so a PR this verb
   opens is reviewed by `@claude review` (advisory) and a human, not the panel.
 - Fork issues are not a case: the verb pushes a branch into this repository.
+- The agent still pushes with `contents: write`, which also reaches the merge
+  endpoint for an already-approved PR. Next: the agent commits, hands a git
+  bundle across, and the trusted job pushes — then the agent job needs no
+  write credential at all.
+- The agent job still holds the App private key (to mint the narrow token) on a
+  runner with passwordless `sudo`. Mint outside the agent job, or drop `sudo`
+  before the agent starts.

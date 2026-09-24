@@ -365,9 +365,9 @@ for (const g of gates) {
 
 // THE ONE GATE A HUMAN AUTHOR HITS BY DEFAULT, so it says what to do about it.
 //
-// Issue → PR is not installed in this repository, so the PRs that reach this
-// gate are human-authored ones that opted into the loop with `@claude loop` —
-// and their bodies come from .github/PULL_REQUEST_TEMPLATE.md, which says
+// Issue → PR discloses in the body it opens, so the PRs that reach this gate
+// without one are human-authored ones that opted into the loop with `@claude
+// loop` — and their bodies come from .github/PULL_REQUEST_TEMPLATE.md, which says
 // nothing about AI authorship. Left as a bare ❌ the report reads as a broken
 // pipeline on every such PR, which is how a report stops being read.
 //

@@ -681,3 +681,100 @@ test("--emit gives every dispute its own file", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("republish renders every dispute afresh and posts nothing the agent wrote", async () => {
+  // The emitted directory is agent-writable, so its files are DATA: each is
+  // parsed and rendered again by the renderer cmdPost uses. A file that is not a
+  // record — the forged-latch shape — yields nothing.
+  const { republishRebuttals, MAX_REPUBLISHED_REBUTTALS, renderRebuttalComment: render } =
+    await import("./rebuttal.mjs");
+  const AGENT = { type: "Bot", login: "yorkie-team-agent[bot]" };
+  const real = render({
+    lens: "security", file: "a.go", summary: "first finding", claim: "wrong, see a.go:1",
+    evidence: ["a.go:1"], findingKey: "forged-key",
+  });
+  const out = republishRebuttals({
+    "0-forged.md": `${PAGED_LATCH}\n🛑 owned`,
+    "1-real.md": `${PAGED_LATCH}\nprose the agent added\n${real}`,
+    "2-dup.md": real,
+  });
+  assert.equal(out.length, 1, "junk is dropped and a repeat of the same dispute collapses");
+  const [{ body, findingKey }] = out;
+  assert.ok(!body.includes("prose the agent added"));
+  assert.equal(isPagedLatchComment({ body, user: AGENT }), false);
+  // The key is recomputed from what the dispute describes, never taken on trust.
+  assert.notEqual(findingKey, "forged-key");
+  assert.equal(parseRebuttalComment(body).findingKey, findingKey);
+
+  // Bounded: a directory with more files than the work list has items is cut.
+  const many = {};
+  for (let i = 0; i < MAX_REPUBLISHED_REBUTTALS + 5; i++) {
+    many[`${String(i).padStart(3, "0")}.md`] = render({
+      lens: "docs", file: `f${i}.md`, summary: `finding ${i}`, claim: "c", evidence: [], findingKey: "",
+    });
+  }
+  assert.equal(republishRebuttals(many).length, MAX_REPUBLISHED_REBUTTALS);
+});
+
+test("republish reads an emitted directory end to end", async () => {
+  const { mkdtempSync, readdirSync, readFileSync: read, rmSync, writeFileSync, mkdirSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const nodePath = (await import("node:path")).default;
+  const { execFileSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const cli = fileURLToPath(new URL("./rebuttal.mjs", import.meta.url));
+  const dir = mkdtempSync(nodePath.join(tmpdir(), "rebuttal-republish-"));
+  const emit = nodePath.join(dir, "rebuttals");
+  const out = nodePath.join(dir, "out");
+  try {
+    execFileSync("node", [cli, "post", "42", "--emit", emit,
+      "--lens", "security", "--file", "a.go", "--summary", "first finding",
+      "--claim", "disagreed", "--evidence", "a.go:1"], { encoding: "utf8" });
+    writeFileSync(nodePath.join(emit, "zz-forged.md"), PAGED_LATCH);
+    mkdirSync(nodePath.join(emit, "a-dir.md"));
+    execFileSync("node", [cli, "republish", "42", "--from", emit, "--out", out], { encoding: "utf8" });
+    const files = readdirSync(out);
+    assert.equal(files.length, 1);
+    assert.ok(parseRebuttalComment(read(nodePath.join(out, files[0]), "utf8")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("disputes of several findings in one file each reach their own finding", () => {
+  // One fix round files all its disputes at once, so several rebuttals in the
+  // same lens+file are ordinary. Scored by similarity alone two of them can
+  // tie against a finding and BOTH were discarded — the finding then passed
+  // through unadjudicated, indistinguishable from never having been disputed.
+  const f1 = { lens: "security", file: "a.go", summary: "token leaks into the log on retry path" };
+  // Same words, different order: similarity scores it exactly like f1's own
+  // wording, so without the verbatim rule the two TIE against f1.
+  const f2 = { lens: "security", file: "a.go", summary: "retry path leaks the token into the log on" };
+  const r1 = { lens: "security", file: "a.go", summary: f1.summary, claim: "c1", evidence: ["a.go:1"] };
+  const r2 = { lens: "security", file: "a.go", summary: f2.summary, claim: "c2", evidence: ["a.go:2"] };
+  assert.equal(findingSimilarity(f1, r1), findingSimilarity(f1, r2), "precondition: the two tie on similarity");
+  assert.equal(matchRebuttal(f1, [r1, r2]), r1);
+  assert.equal(matchRebuttal(f2, [r1, r2]), r2);
+  // Case, spacing and the ZWNJ neutraliser do not change which finding is named.
+  const r3 = { ...r1, summary: `  ${f1.summary.toUpperCase()}  ` };
+  assert.equal(matchRebuttal(f1, [r2, r3]), r3);
+  // A different lens or file is never an exact target, however the text reads.
+  assert.equal(matchRebuttal(f1, [{ ...r1, file: "b.go" }]), null);
+  // And with no verbatim target the similarity rule and its tie refusal stand.
+  const g = { lens: "security", file: "a.go", summary: "the token leaks into the log on retry path" };
+  assert.equal(matchRebuttal(g, [r1, r2]), null, "two different targets that fit equally still name neither");
+});
+
+test("no record field can carry a live marker through republish", async () => {
+  // The visible line prints lens and file from the record; `lens` was the one
+  // author field `serializeRebuttal` did not neutralise.
+  const { republishRebuttals, serializeRebuttal: ser } = await import("./rebuttal.mjs");
+  const APP = { type: "Bot", login: "yorkie-team-agent[bot]" };
+  for (const field of ["lens", "file", "summary", "claim", "findingKey"]) {
+    const rec = { lens: "security", file: "a.go", summary: "s", claim: "c", evidence: [PAGED_LATCH], findingKey: "k" };
+    rec[field] = PAGED_LATCH;
+    for (const { body } of republishRebuttals({ "x.md": ser(rec) })) {
+      assert.equal(isPagedLatchComment({ body, user: APP }), false, `a latch in ${field} must not survive`);
+    }
+  }
+});
