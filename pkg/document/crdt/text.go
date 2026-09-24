@@ -671,7 +671,19 @@ func (t *Text) RemoveStyle(
 			// the third case attrGCPair asks about.
 			attrWasLive := val.attrs.Has(attr)
 			nodeIsLive := node.RemovedAt() == nil
-			for _, rhtNode := range val.attrs.Remove(attr, executedAt) {
+			removal := val.attrs.Remove(attr, executedAt)
+
+			// The tombstone carries no value, so the bytes the replaced value
+			// was charging leave the ledger that was holding them: Live while
+			// this node is live, GC once the node is a tombstone whose own
+			// charge already covered its live attributes.
+			if nodeIsLive {
+				size.Live.Sub(removal.ValueDropped)
+			} else {
+				size.GC.Sub(removal.ValueDropped)
+			}
+
+			for _, rhtNode := range removal.GCNodes {
 				pairs = append(pairs, attrGCPair(node.Value(), rhtNode, attrWasLive, nodeIsLive))
 				// Only the node that replaces the live value settles the live
 				// value's bytes; a second one in the same call is the

@@ -888,8 +888,9 @@ func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) RHTWrite {
 	return n.Attrs.Set(k, v, ticket)
 }
 
-// RemoveAttr removes the given attribute of the element.
-func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) []*RHTNode {
+// RemoveAttr removes the given attribute of the element and reports what the
+// removal dropped. See RHTRemoval.
+func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) RHTRemoval {
 	if n.Attrs == nil {
 		n.Attrs = NewRHT()
 	}
@@ -3311,7 +3312,18 @@ func (t *Tree) RemoveStyle(
 				// change, so nodeIsLive is the third question attrGCPair asks.
 				wasLive := node.Attrs != nil && node.Attrs.Has(attr)
 				nodeIsLive := !node.IsRemoved()
-				for _, rhtNode := range node.RemoveAttr(attr, editedAt) {
+				removal := node.RemoveAttr(attr, editedAt)
+
+				// The tombstone carries no value, so the bytes the replaced
+				// value was charging leave the ledger that was holding them.
+				// See Text.RemoveStyle for the same two cases.
+				if nodeIsLive {
+					size.Live.Sub(removal.ValueDropped)
+				} else {
+					size.GC.Sub(removal.ValueDropped)
+				}
+
+				for _, rhtNode := range removal.GCNodes {
 					pairs = append(pairs, attrGCPair(node, rhtNode, wasLive, nodeIsLive))
 					// Only the node that replaces the live value takes a size
 					// out of Live; a second one in the same call is the
@@ -3340,7 +3352,14 @@ func (t *Tree) RemoveStyle(
 					for _, attr := range attrs {
 						wasLive := next.Attrs != nil && next.Attrs.Has(attr)
 						nodeIsLive := !next.IsRemoved()
-						for _, rhtNode := range next.RemoveAttr(attr, editedAt) {
+						removal := next.RemoveAttr(attr, editedAt)
+						if nodeIsLive {
+							size.Live.Sub(removal.ValueDropped)
+						} else {
+							size.GC.Sub(removal.ValueDropped)
+						}
+
+						for _, rhtNode := range removal.GCNodes {
 							pairs = append(pairs, attrGCPair(next, rhtNode, wasLive, nodeIsLive))
 							wasLive = false
 						}

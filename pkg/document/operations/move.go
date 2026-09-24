@@ -78,10 +78,15 @@ func (o *Move) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (
 		reverseOp = NewMove(o.parentCreatedAt, prevCreatedAt, o.createdAt, o.executedAt)
 	}
 
-	deadNode, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
+	deadNode, diff, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 	if err != nil {
 		return ExecutionResult{}, err
 	}
+
+	// The movedAt ticket MoveAfter stamps on the element, which the element's
+	// MetaSize counts and a rebuild therefore charges. Only the first move of
+	// an element reports anything here.
+	root.Acc(diff)
 
 	if deadNode != nil {
 		// A dead position node holds no element, so Array.DataSize never
