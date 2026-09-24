@@ -92,6 +92,9 @@ installation (2026-09-22). `Workflows` stays at no access.
   endpoint for an already-approved PR. Next: the agent commits, hands a git
   bundle across, and the trusted job pushes — then the agent job needs no
   write credential at all.
-- The agent job still holds the App private key (to mint the narrow token) on a
-  runner with passwordless `sudo`. Mint outside the agent job, or drop `sudo`
-  before the agent starts.
+- The agent job still holds the App private key and runs earlier actions' post
+  steps after the agent (`create-github-app-token`'s carries the key,
+  `checkout`'s the job's GITHUB_TOKEN). All three are needed to close it: mint
+  the narrow token in a plain `run:` step, make the agent job's GITHUB_TOKEN
+  read-only (move the pre-agent comments to a pre-agent job), and drop `sudo`
+  before the agent. Dropping `sudo` alone closes none of it.

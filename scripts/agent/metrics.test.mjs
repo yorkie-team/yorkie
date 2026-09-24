@@ -964,4 +964,8 @@ test("an agent-written execution log cannot put a marker into a trusted comment"
     outcome: { ok: false, kind: "api-error", status: PAGED_LATCH, reason: "" },
   });
   assert.equal(isPagedLatchComment({ body: effort, user: APP }), false);
+  // `status` is an HTTP status or nothing — never text from the log.
+  assert.ok(!effort.includes("agent-review-paged"), "a non-numeric status is dropped, not neutralised");
+  const withStatus = renderFixEffort({ rec: null, outcome: { ok: false, kind: "api-error", status: 529, reason: "r" } });
+  assert.match(withStatus, /api-error 529/);
 });

@@ -362,3 +362,22 @@ opening the PR); a dropped or over-cap dispute now warns; a guard pins each
 handoff artifact's name to its download; stale single-job comments and two
 design-doc rows. Left as drift, deliberately: the five trusted jobs read the
 head three slightly different ways, and two keep artifacts for 7 days.
+
+### Self-review round 3 (security + docs) — the last round
+
+One blocking, on the docs: they said nothing runs after the agent in its own
+job, and the runner runs every earlier action's POST step there —
+`create-github-app-token`'s with the private key among its inputs, and
+`checkout`'s with the job's `GITHUB_TOKEN`. The agent reaches those without
+`sudo` (rewrite the action under `_actions/`, or leave a process that reads
+the post step's environment), so "or drop `sudo`" was not a remedy. The design
+doc now says so and names the three changes that would close it. Cheap
+mitigations landed: `setup-go` without cache (its post step would save the
+agent's module cache under a key `main` restores), the pre-agent App tokens
+revoked by a step before the agent, a numeric-only `status` in the effort
+comment, and the no-commit pages falling back to GITHUB_TOKEN when the mint
+fails.
+
+Standing rule: a guard over `steps:` sees only the steps a workflow declares.
+Before claiming what runs in a job, count the post steps of every action the
+job uses.

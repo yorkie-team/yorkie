@@ -45,17 +45,18 @@ work here is porting plus the three repo-specific pieces named in §4.
   do: a token holding `contents: write` and `pull-requests: write` together can
   approve and merge whether or not any workflow asks it to.
 
-  **No agent is handed that pair, and no step the agent could influence holds
-  it.** Until 2026-09-24 four workflows (`agent-fix.yml`, `agent-iterate-ci.yml`,
+  **No agent is handed that pair, and no step the workflow runs after the agent
+  holds it.** That is a claim about the workflow's steps; what the agent can
+  reach by other means is listed under the residuals below. Until 2026-09-24 four workflows (`agent-fix.yml`, `agent-iterate-ci.yml`,
   the panel's `fix` job and `agent-review-reply.yml`) passed `claude-code-action`
   one token carrying `contents` + `pull-requests` + `issues`. Now every job that
   runs a pushing agent is built the same way, and `agent-implement.yml` too:
 
   | Where | Holds | Runs |
   | --- | --- | --- |
-  | The agent job, before the agent | the wide App token where a pre-agent step needs it; a GITHUB_TOKEN without `contents: write` | gates, the brief, the placeholder — all from `main` |
+  | The agent job, before the agent | a pre-agent App token where a pre-agent step needs one (never `contents: write`), revoked by a step just before the agent; a GITHUB_TOKEN without `contents: write` | gates, the brief, the placeholder — all from `main` |
   | The agent step | a **narrow** App token, `contents: write` only, persisted into `.git/config` | the agent, with `Bash` |
-  | The agent job, after the agent | nothing but the artifact upload | the handoff of the agent's files, as data |
+  | The agent job, after the agent | no workflow step but the artifact upload — though the runner still runs the earlier actions' **post steps** here (see residuals) | the handoff of the agent's files, as data |
   | A separate job (`report`, `fix-report`, `finish`) on a fresh runner | a wide App token minted there | posting, disclosure, paging, metrics — `main`'s scripts |
 
   **Why a separate job and not a re-staged copy.** The previous correction
@@ -89,15 +90,28 @@ work here is porting plus the three repo-specific pieces named in §4.
     stops pushing: it commits, hands a bundle across, and the trusted job pushes.
     That is the next change here. The two workflows that turn a push or release
     by the App into Docker Hub credentials refuse the App as the actor.
-  - **The agent job still holds the App's private key**, to mint the narrow
-    token, and a GitHub-hosted runner gives its user passwordless `sudo`. An
-    injection that goes looking can read the runner's memory and mint any token
-    the installation allows. The same read reaches everything else the job
-    holds: the wide token `agent-fix.yml` and `agent-implement.yml` mint BEFORE
-    the agent for their pre-agent comments (valid for an hour), and the job's
-    `GITHUB_TOKEN` — which is why no agent job's `GITHUB_TOKEN` carries
-    `contents: write`. Closing it needs the narrow token minted outside the
-    agent's job, or `sudo` dropped before the agent starts; neither is done.
+  - **The agent job still holds the App's private key, and still runs code
+    after the agent.** The key is there to mint the narrow token, and the runner
+    runs every earlier action's **post step** after the agent, in the same job:
+    `create-github-app-token`'s (whose environment carries the private key as
+    an input and each minted token as state) and `actions/checkout`'s (carrying
+    the job's `GITHUB_TOKEN`). The agent can reach those without `sudo` — the
+    actions' code under `_actions/` is owned by the runner user and can be
+    rewritten, a process left running outlives the agent step and can read the
+    post step's `/proc/<pid>/environ` as the same user, and `$GITHUB_ENV` can
+    set `LD_PRELOAD` — and with the passwordless `sudo` a GitHub-hosted runner
+    grants, it can read the runner's memory directly. With the key it can mint
+    any token the installation allows, the approve+merge pair included; with
+    the `GITHUB_TOKEN` it can post as `github-actions[bot]`, an author several
+    markers are trusted by. What IS done: no agent job's `GITHUB_TOKEN` carries
+    `contents: write`; the pre-agent App tokens carry no `contents: write` and
+    are revoked by a step before the agent starts; `setup-go` runs without its
+    cache, whose post step would otherwise save the agent's module and build
+    caches under a key `main` restores. Closing the rest needs the narrow token
+    minted by a plain `run:` step (no post step, the key only in that step's
+    environment), the job's `GITHUB_TOKEN` read-only, and `sudo` dropped before
+    the agent — all three; dropping `sudo` alone closes none of the channels
+    above.
   - **Branch protection on `main` is a setting, not a checked property.** It
     appears nowhere in the tree — no ruleset fixture, no `CODEOWNERS`, no test.
     Phase I's gate is the only thing that reads it at run time, and only for that

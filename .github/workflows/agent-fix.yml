@@ -215,6 +215,9 @@ jobs:
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
           private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          # Revoked by our own step before the agent, not by this action's post
+          # step at job end — see "Revoke the pre-agent token".
+          skip-token-revoke: true
           # ONLY what the two pre-agent comments need — the placeholder and the
           # refusal — and NOT `contents: write`. This token lives in the job the
           # agent runs in, for an hour: the push uses the narrow token below, and
@@ -237,7 +240,9 @@ jobs:
       # than a bot that can push to main; it is the same problem.
       #
       # So the agent gets `contents` alone — enough to commit and push, and
-      # nothing that can review, merge, or comment on a pull request. Every step
+      # nothing that can review or comment on a pull request. (It CAN still merge
+      # a PR a human already approved: `contents: write` reaches the merge
+      # endpoint. See the design doc's residuals.) Every step
       # that needs more after the agent runs in the `report` job, on a runner the
       # agent never had a shell on.
       - name: Generate the agent's narrow token
@@ -495,6 +500,11 @@ jobs:
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         with:
           go-version: "1.25"
+          # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
+          # build cache after the agent ran, with whatever the agent left there,
+          # under a key the agent controls through `go.sum` — and `ci.yml` and the
+          # Docker publish restore by the same key on `main`.
+          cache: false
       - name: Install the linter (pinned here, not read from the branch)
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
@@ -568,6 +578,18 @@ jobs:
             exit 0
           }
           node "$RUNNER_TEMP/agent-tools/pick-credential.mjs"
+
+      # REVOKED BEFORE THE AGENT STARTS. The wide token above was minted for the
+      # pre-agent comments only, and it would otherwise live for an hour in the
+      # job the agent is about to run in — its post step revokes it only at job
+      # end, and the agent can reach that step's environment. Revoking it here
+      # makes it worthless by the time anything untrusted runs.
+      - name: Revoke the pre-agent token
+        if: always() && steps.app-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api -X DELETE installation/token
 
       - name: Address panel findings
         id: agent
@@ -704,7 +726,9 @@ jobs:
       #
       # So the wide token is never minted here after the agent, and the report,
       # the disputes and the execution log leave this job as an artifact the
-      # `report` job reads with main's code and does not execute. The artifact
+      # `report` job reads with main's code and does not execute. (The runner
+      # still runs the earlier actions' post steps after this one; what those
+      # expose is a residual the design doc names, not something this closes.) The artifact
       # is agent-controlled — `fix-report.mjs republish` and `rebuttal.mjs
       # republish` parse it and render every comment afresh, and `metrics.mjs`
       # coerces the log's fields — so what it can carry is a claim, never a

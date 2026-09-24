@@ -186,6 +186,9 @@ jobs:
           # Least privilege, and `administration: read` is the one this verb adds
           # over every other: the gate below reads branch protection. Notably
           # absent, here as everywhere: `workflows`.
+          # Revoked by our own step before the agent — see "Revoke the pre-agent
+          # token" — not by this action's post step at job end.
+          skip-token-revoke: true
           # And NOT `contents: write` or `pull-requests: write`: this token lives
           # in the job the agent runs in, the push uses the narrow token below, and
           # the PR is opened by the `finish` job with a token minted there.
@@ -202,8 +205,9 @@ jobs:
       # wrote, and `actions/checkout` persists whatever token it is given into
       # `.git/config`, one `git config --get` from being read back.
       #
-      # So the agent commits and pushes, and cannot open, approve or merge
-      # anything. The PR is opened by the `finish` job after it stops.
+      # So the agent commits and pushes, and cannot open or approve anything. (It
+      # can still merge a PR a human already approved — `contents: write` reaches
+      # the merge endpoint; see the design doc's residuals.) The PR is opened by the `finish` job after it stops.
       - name: Generate the agent's narrow token
         if: steps.app.outputs.configured == 'true'
         id: agent-token
@@ -233,7 +237,7 @@ jobs:
       # that sets out to defeat it.
       #
       # The real containment is elsewhere and was added later: the agent holds a
-      # token that cannot approve, merge or comment on a pull request, and every
+      # token that cannot approve or comment on a pull request, and every
       # step that needs more runs in the `finish` job, on a runner the agent
       # never had a shell on. Those are properties of a credential and of a
       # machine rather than of a directory, which is why they hold.
@@ -400,6 +404,11 @@ jobs:
         if: steps.app.outputs.configured == 'true'
         with:
           go-version: "1.25"
+          # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
+          # build cache after the agent ran, with whatever the agent left there,
+          # under a key the agent controls through `go.sum` — and `ci.yml` and the
+          # Docker publish restore by the same key on `main`.
+          cache: false
 
       # Same untrusted-setup rule as every other token-bearing job here: the
       # linter version is pinned in this file rather than read from `make tools`,
@@ -611,6 +620,18 @@ jobs:
             exit 0
           }
           node "$RUNNER_TEMP/agent-tools/pick-credential.mjs"
+
+      # REVOKED BEFORE THE AGENT STARTS. The wide token above was minted for the
+      # pre-agent comments only, and it would otherwise live for an hour in the
+      # job the agent is about to run in — its post step revokes it only at job
+      # end, and the agent can reach that step's environment. Revoking it here
+      # makes it worthless by the time anything untrusted runs.
+      - name: Revoke the pre-agent token
+        if: always() && steps.app-token.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api -X DELETE installation/token
 
       - name: Run Claude Code
         if: steps.app.outputs.configured == 'true'

@@ -360,6 +360,11 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         with:
           go-version: "1.25"
+          # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
+          # build cache after the agent ran, with whatever the agent left there,
+          # under a key the agent controls through `go.sum` — and `ci.yml` and the
+          # Docker publish restore by the same key on `main`.
+          cache: false
       - name: Install the linter (pinned here, not read from the branch)
         if: steps.guard.outputs.proceed == 'true'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
@@ -627,7 +632,10 @@ jobs:
       - name: Page if the fix produced no commit
         if: always() && steps.after.outputs.advanced != 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # GITHUB_TOKEN when the mint failed: this job has no stalled net, so
+          # the page must not depend on the one credential that just broke.
+          # `github-actions[bot]` is an author the latch readers trust.
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR: ${{ needs.iterate.outputs.pr }}
           BEFORE: ${{ needs.iterate.outputs.before }}
           AFTER: ${{ steps.after.outputs.sha }}

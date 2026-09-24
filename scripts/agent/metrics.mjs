@@ -905,8 +905,11 @@ export function renderFixEffort({ rec, outcome, head, runUrl }) {
         : outcome.retryable
           ? "This looks transient. Comment `@claude fix` again to retry."
           : "Not retryable as-is; a human should take a look.";
+    // An HTTP status, or nothing: `status` is copied from the agent-writable
+    // execution log, and anything else there is text under the App's name.
+    const status = /^\d{3}$/.test(String(outcome.status ?? "")) ? String(outcome.status) : "";
     lines.push(
-      `**Outcome: failed (${outcome.kind}${outcome.status ? ` ${outcome.status}` : ""})** — ${detail || "no detail reported"}`,
+      `**Outcome: failed (${outcome.kind}${status ? ` ${status}` : ""})** — ${detail || "no detail reported"}`,
       "",
       advice,
       "",
