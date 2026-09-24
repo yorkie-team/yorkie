@@ -17,7 +17,7 @@ note), so a browser client resolved the same key differently per page load.
 ## What was measured
 
 A wafflebase slides document (`slides-deb5465a…`), read with
-`@yorkie-js/sdk@0.7.21` against the internal service, attached 12 times.
+`@yorkie-js/sdk@0.7.21` against a deployed server, attached 12 times.
 Same document, no writes between attaches, `doc.toJSON()` each time:
 
 | attach | `50f8cc21.frame` | `e4f7414b.frame` | bytes |
