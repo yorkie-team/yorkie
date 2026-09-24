@@ -42,6 +42,14 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/mcp"
 )
 
+// maxRequestBytes bounds a single decoded request message. Without it,
+// connect-go reads a request body of any length, so one push can carry an
+// arbitrary number of changes and nothing but MongoDB's 16 MB BSON limit on
+// the snapshot stands in its way. The value sits above both the default
+// MaxSizePerDocument (10 MiB) and SnapshotBodyThreshold (12 MiB), so no pack
+// that could be stored durably is refused here.
+const maxRequestBytes = 16 * 1024 * 1024
+
 // Server is a normal server that processes the logic requested by the client.
 type Server struct {
 	conf                *Config
@@ -68,6 +76,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 			clusterInterceptor,
 			defaultInterceptor,
 		),
+		connect.WithReadMaxBytes(maxRequestBytes),
 	}
 
 	healthChecker := grpchealth.NewStaticChecker(

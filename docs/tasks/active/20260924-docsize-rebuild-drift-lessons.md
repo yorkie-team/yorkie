@@ -297,3 +297,34 @@ readers that hold none of the locks the `DocInfo` CAS depends on. A server-side
 gate wants a size source that is *not* the `docCache` — a separate keyed entry,
 or an accepted extra read — and that is a design choice to make before writing
 the gate, not after.
+
+## Round 6 — panel: request byte cap, and two findings aimed at reverted code
+
+Three blocking findings arrived. Only one described code that exists.
+
+- **No request byte limit behind the design doc's claim.** Real, and fixed.
+  `docs/design/document-size-limit.md` justified the lagging gate's overshoot
+  bound with "each push itself capped by the request byte limit", and there was
+  no such cap: `server/rpc/server.go` built its `[]connect.HandlerOption` out of
+  interceptors alone, so connect-go read a request message of any length. Added
+  `connect.WithReadMaxBytes(maxRequestBytes)` (16 MiB — above both the default
+  `MaxSizePerDocument` of 10 MiB and `SnapshotBodyThreshold` of 12 MiB, so no
+  pack that could be stored durably is refused by it). The doc now names the
+  constant instead of asserting a limit that was not there.
+
+  Worth stating plainly: a doc that cites a mechanism is a claim about the
+  code, and this one had gone unchecked. The gate's overshoot argument was
+  resting on it.
+
+- **Two findings against `25453f54`, which `47b68b0c` reverted.** One says
+  compaction never resets `doc_size` and so the push gate keeps refusing growth
+  on a just-shrunk document; the other says the push path never re-checks size.
+  Both are about the same commit from opposite directions, and at HEAD there is
+  no `doc_size` field, no `server/packs/docsize.go` and no `mayGrowDocument`.
+  Rebutted rather than patched.
+
+  The compaction point is nonetheless correct *about the design*, and it would
+  have been a live bug had the gate stayed: `CompactChangeInfos` rewrites only
+  `server_seq`, `compacted_at` and `epoch`. It is now a risk row in the design
+  doc, next to the `docCache` contract round 5 learned the expensive way — so
+  the next attempt at the gate starts from both.

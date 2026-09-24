@@ -29,9 +29,10 @@ document at all.
 
 So the quota is advisory. A client that does not run the check — a modified SDK,
 or a direct Connect call — can grow a document without bound, and the only
-things standing in the way are the per-request byte cap and MongoDB's 16 MB BSON
-limit on the snapshot (see [snapshot-overflow.md](snapshot-overflow.md)), which
-bites long after the quota was meant to.
+things standing in the way are `maxRequestBytes` (`server/rpc/server.go:45`),
+which bounds one push and not the total, and MongoDB's 16 MB BSON limit on the
+snapshot (see [snapshot-overflow.md](snapshot-overflow.md)), which bites long
+after the quota was meant to.
 
 ### Goals
 
@@ -76,10 +77,19 @@ This requires a new `DocInfo` field carried through both backends (`mongo` and
 
 **What it bounds.** The size the gate sees is at most `SnapshotInterval` changes
 stale, so a document can overshoot the quota by whatever one snapshot interval's
-worth of pushes adds, each push itself capped by the request byte limit. That is
-a bound; the status quo has none. The overshoot is the price of not rebuilding
-on every push, and it should be stated in the quota's documentation rather than
-hidden.
+worth of pushes adds, each push itself capped by `maxRequestBytes`
+(`server/rpc/server.go:45`, 16 MiB) — the `connect.WithReadMaxBytes` cap on
+every handler. That is a bound; the status quo has none. The overshoot is the
+price of not rebuilding on every push, and it should be stated in the quota's
+documentation rather than hidden.
+
+**What it does not bound.** Compaction rebuilds a document from scratch and
+rewrites only `server_seq`, `compacted_at` and `epoch`
+(`server/backend/database/mongo/client.go:2004-2017`, and the memory driver's
+`CompactChangeInfos`). A gate that reads a persisted size must therefore reset
+that field on the compaction path too, or it goes on refusing growth on a
+document compaction just shrank. The same holds for any other path that purges
+document internals.
 
 ### What refusing does to the client
 
@@ -127,6 +137,8 @@ Any acceptable design therefore has to answer this, e.g.:
 | Lagging size lets a document exceed the quota by one snapshot interval | Document the overshoot as part of the quota's contract; tighten `SnapshotInterval` for projects that care |
 | A `DocInfo` schema addition has to be safe on documents written before it existed | Zero value means "unknown", which the gate treats as "admit"; the first `storeSnapshot` after upgrade populates it |
 | Server and client disagree on the number, so an honest client is refused | Only refuse strictly above the limit, and keep the client check as the primary gate; the [rebuild-drift work](../tasks/) that makes the accumulator agree with a rebuild is a prerequisite for the two to be comparable at all |
+| Compaction shrinks a document without touching the persisted size, so the gate goes on refusing growth on a document that is now small | Reset the field on every path that rebuilds or purges document internals — `CompactChangeInfos` in both drivers — as part of landing the gate, not after |
+| A size source that rides the `docCache` inherits that cache's concurrency contract | `CreateChangeInfos` caches the caller's `DocInfo` by reference (`server/backend/database/mongo/client.go:1957`), so writing the field races every `FindDocInfoByRefKey` deep-copy, and invalidating the entry turns a later cache hit into an unlocked Mongo read that overwrites fresher state; pick a size source that is not the `docCache` |
 
 ### Design Decisions
 
@@ -139,7 +151,7 @@ Any acceptable design therefore has to answer this, e.g.:
 
 | Alternative | Why not |
 |-------------|---------|
-| Cap the bytes of a single change pack | Already effectively covered by the request size limit, and it bounds one push, not a quota reached over many |
+| Cap the bytes of a single change pack | Covered by `maxRequestBytes` (`server/rpc/server.go:45`), and it bounds one push, not a quota reached over many |
 | Read the size off `be.Cache.Snapshot` in `pushPack` | Free, but never warm for a client that only pushes — `storeSnapshot` builds its own document and does not populate that cache |
 | Rebuild the document in `pushPack` | Correct and exact, but adds a snapshot load, a range query, a GC pass and two `DeepCopy` calls to every push |
 | Leave enforcement client-side | What exists today; the quota is then advisory against anything but a stock SDK |
