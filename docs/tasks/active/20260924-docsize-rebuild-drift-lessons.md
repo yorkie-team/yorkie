@@ -136,3 +136,27 @@ design decision rather than a patch:
 
 Recorded as a standstill rather than a silent skip: the finding is upheld, the
 work is real, and it belongs to a human and a `docs/design/` entry.
+
+## Panel round 3: the design entry the standstill was owed
+
+Third pass, same finding, still correct, still not a patch. What was missing
+from rounds 1 and 2 is that both parked the work in a task-lessons file, which
+is where a decision goes to be forgotten. Round 3 wrote it down where the repo
+keeps decisions instead: `docs/design/document-size-limit.md`, indexed from
+`docs/design/README.md`, marked **proposal** so no reader mistakes it for
+shipped behavior.
+
+Writing it out surfaced one thing neither earlier round had stated, and it is
+the reason a blanket gate cannot just be added:
+
+- `DocSize.Total()` is `Live + GC` (`pkg/document/resource/resource.go:26`), and
+  a deletion does not shrink `Total` — it moves bytes into `GC`, where they stay
+  until every peer's version vector passes the tombstone. So a gate that refuses
+  every push on an over-quota document deadlocks it: the push that would delete
+  content is refused for the same reason as the push that added it. The gate has
+  to refuse *growth*, define a recovery, or move the enforcement out of the push
+  path entirely. That is three options with different SDK consequences, which is
+  exactly what a design doc is for.
+
+The rule this leaves: a standstill is only honestly recorded once it is recorded
+somewhere a person who is not reading this PR would find it.
