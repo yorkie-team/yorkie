@@ -198,7 +198,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		if pbNode.Element == nil {
 			// Dead position node (abandoned by a move).
 			if pbNode.PositionCreatedAt == nil || pbNode.PositionRemovedAt == nil {
-				return nil, fmt.Errorf("dead RGA position node missing position timestamps")
+				return nil, fmt.Errorf("json_array.node.position_created_at/position_removed_at: %w", ErrMissingTicket)
 			}
 			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
 			if err != nil {
@@ -227,7 +227,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 
 		if posMovedAt != nil {
 			if pbNode.PositionCreatedAt == nil {
-				return nil, fmt.Errorf("moved RGA node missing position_created_at")
+				return nil, fmt.Errorf("json_array.node.position_created_at: %w", ErrMissingTicket)
 			}
 			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
 			if err != nil {
@@ -451,7 +451,7 @@ func fromTextNodeID(
 		return nil, err
 	}
 	if createdAt == nil {
-		return nil, fmt.Errorf("text node id has nil createdAt")
+		return nil, fmt.Errorf("text_node_id.created_at: %w", ErrMissingTicket)
 	}
 
 	return crdt.NewRGATreeSplitNodeID(

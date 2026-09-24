@@ -34,8 +34,9 @@ import (
 // the nodes an element split creates. Each entry becomes a split node's
 // CreatedAt, which crdt.Tree keys NodeMapByID on, so an absent one is a nil
 // TreeNodeID.CreatedAt rather than a tolerable gap. The stored counterpart
-// truncates instead of rejecting: TreeEdit.Execute already falls back to
-// reconstructing the tickets it runs out of.
+// discards the whole list instead of rejecting: TreeEdit.Execute falls back to
+// reconstructing every ticket, and only the whole-list fallback is free of the
+// delimiter collision a carried prefix plus the fallback would produce.
 func TestTreeEditRejectsAbsentSplitTicket(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000000")
 	require.NoError(t, err)
@@ -54,7 +55,7 @@ func TestTreeEditRejectsAbsentSplitTicket(t *testing.T) {
 	converter.NormalizeStoredOperations(pbOps)
 	ops, err := converter.FromOperations(pbOps)
 	require.NoError(t, err)
-	assert.Equal(t, []*time.Ticket{executedAt}, ops[0].(*operations.TreeEdit).SplitTickets())
+	assert.Empty(t, ops[0].(*operations.TreeEdit).SplitTickets())
 }
 
 // TestElementRejectsAbsentCreatedAt covers the payload the operation carries

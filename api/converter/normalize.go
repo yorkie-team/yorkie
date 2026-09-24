@@ -54,6 +54,31 @@ func FromStoredOperations(pbOps []*api.Operation) ([]operations.Operation, error
 	return FromOperations(withoutUndatedOperations(pbOps))
 }
 
+// SanitizeStoredOperations applies the same repair-and-drop pass as
+// FromStoredOperations, but yields the protobuf operations rather than the
+// decoded models.
+//
+// It exists for the pull path, which forwards stored operations to clients
+// without ever decoding them into models (ServerPack.ToPBChangePack). Without
+// it the server would tolerate on its own read path exactly the shapes it then
+// hands to every pulling client to reject: the client decodes what it receives
+// through the strict wire path (FromChangePack -> FromOperations), so a stored
+// operation missing a required ticket would fail the pull for the very
+// documents FromStoredOperations exists to keep loadable. Sanitizing here keeps
+// the two views of a change in agreement.
+func SanitizeStoredOperations(pbOps []*api.Operation) []*api.Operation {
+	NormalizeStoredOperations(pbOps)
+
+	// Same shape as FromStoredOperations: the drop pass runs only once the
+	// ordinary decode has reported ErrMissingTicket, so intact changes -- every
+	// change, unless legacy data says otherwise -- pay one decode and no more.
+	if _, err := FromOperations(pbOps); err != nil && goerrors.Is(err, ErrMissingTicket) {
+		return withoutUndatedOperations(pbOps)
+	}
+
+	return pbOps
+}
+
 // withoutUndatedOperations drops the operations FromOperations rejects for an
 // absent required time ticket, leaving every other rejection to surface.
 //
@@ -110,30 +135,30 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 		}
 
 		pbTreeEdit.Contents = withoutEmptyContents(pbTreeEdit.Contents)
-		pbTreeEdit.SplitTickets = truncatedAtUndatedTicket(pbTreeEdit.SplitTickets)
+		pbTreeEdit.SplitTickets = splitTicketsUnlessUndated(pbTreeEdit.SplitTickets)
 
 		dropUndatedAttrs(pbTreeEdit.RestoreSpans)
 		dropUndatedAttrs(pbTreeEdit.RetombstoneSpans)
 	}
 }
 
-// truncatedAtUndatedTicket cuts the carried split tickets at the first absent
-// one.
+// splitTicketsUnlessUndated returns the carried split tickets, or none at all
+// if any one of them is absent.
 //
-// The list is consumed in order by TreeEdit.Execute's issueTimeTicket, which
-// already falls back to reconstructing a ticket from executedAt once the list
-// runs out -- so truncating hands the well-formed prefix through and leaves the
-// rest to the fallback a change written before the field existed relied on
-// entirely. Dropping only the absent entries instead would shift every later
-// ticket onto the wrong split node, which is worse than the fallback.
-func truncatedAtUndatedTicket(pbTickets []*api.TimeTicket) []*api.TimeTicket {
-	for i, pbTicket := range pbTickets {
+// Truncating at the first absent entry instead reads as the safer repair and is
+// not. The list is consumed in order by TreeEdit.Execute's issueTimeTicket,
+// whose fallback -- reconstructing a ticket from executedAt's delimiter plus
+// the number of top-level contents, incremented per call -- runs a counter that
+// the carried entries never advance. A carried prefix followed by that fallback
+// therefore hands out delimiters the prefix already used, and two split nodes
+// land under one TreeNodeID: silent structural corruption, worse than the
+// rejection it was meant to avoid. The fallback on its own is self-consistent
+// and is exactly what a change written before the field existed relied on, so
+// discard the whole list.
+func splitTicketsUnlessUndated(pbTickets []*api.TimeTicket) []*api.TimeTicket {
+	for _, pbTicket := range pbTickets {
 		if pbTicket == nil {
-			if i == 0 {
-				return nil
-			}
-
-			return pbTickets[:i]
+			return nil
 		}
 	}
 

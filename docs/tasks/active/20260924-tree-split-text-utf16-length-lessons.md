@@ -81,3 +81,32 @@ re-listing the required fields. A hand-written mirror of "what is required"
 drifts from the wire boundary on the next round; asking the decoder cannot.
 And it runs only after the ordinary decode has reported `ErrMissingTicket`, so
 the stored path pays nothing in the normal case.
+
+## Review panel round 4
+
+Round 3's stored-decode escape hatch was right in principle and applied to one
+of the two places stored operations are read. `ChangeInfo.ToChange` repairs and
+drops; `ServerPack.ToPBChangePack` unmarshals the same bytes and forwards them
+to pulling clients, which decode through the strict wire path. The server
+therefore tolerated on its own read path exactly what it asked every client to
+reject, so the legacy change `FromStoredOperations` exists to rescue still broke
+the pull. `SanitizeStoredOperations` now runs the same pass on the pb side and
+the pull path calls it. The lesson: when validation gets an escape hatch, the
+hatch belongs on every path the data leaves storage by, not only the one that
+happened to decode it into models.
+
+Truncating the split-ticket list at the first absent entry was wrong, and wrong
+in the worst way — silently. `TreeEdit.Execute`'s fallback reconstructs tickets
+from `executedAt.Delimiter() + len(contents)`, a counter the carried entries
+never advance, so a carried prefix followed by the fallback re-issues delimiters
+the prefix already used and two split nodes land under one `TreeNodeID`. Only
+the whole-list fallback is self-consistent. A repair that produces a
+plausible-looking but internally inconsistent structure is worse than the
+rejection it replaces.
+
+Last: a sentinel error is only as good as its coverage. Four rejections with
+identical semantics (`tree_node_id.created_at`, `text_node_id.created_at`, and
+the two RGA position-node cases in `from_bytes.go`) were left as plain errors,
+so the drop path silently did not cover them and those documents stayed
+unloadable. Wrapping is not decoration here; it is the classification the
+recovery path keys on.
