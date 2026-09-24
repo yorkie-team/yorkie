@@ -933,16 +933,38 @@ func fromTextNodePos(
 	// offset counts UTF-16 code units inside that insertion and
 	// relativeOffset counts further into the node the id floor-resolves to;
 	// getAbsoluteID adds the two. Neither is negative on any producing path,
-	// and a negative one addresses content no replica can locate, so reject it
-	// at the wire for the same reason fromTreeNodeID does.
-	if pbPos.Offset < 0 || pbPos.RelativeOffset < 0 {
-		return nil, goerrors.New("text node pos has negative offset")
+	// so clamp rather than reject, for the same reason fromTreeNodeID does.
+	return crdt.NewRGATreeSplitNodePos(
+		crdt.NewRGATreeSplitNodeID(createdAt, clampWireOffset(pbPos.Offset)),
+		clampWireOffset(pbPos.RelativeOffset),
+	), nil
+}
+
+// clampWireOffset pulls a negative offset arriving on the wire back to zero.
+//
+// Repair rather than rejection, because the two are not symmetric here. An
+// offset counts UTF-16 code units inside the insertion its createdAt names, so
+// a negative one never resolved to anything: the floor lookup walks to the
+// first id at or below it and lands on the insertion's head, which is offset
+// zero. Clamping states that outcome; it is also the only repair the field's
+// own contents allow, since the offset carries no record of what it was meant
+// to be.
+//
+// Rejecting instead would be an availability bug across SDKs. The only known
+// producer of a negative offset is the left-sibling anchor a restore span
+// builds beside an empty text node, and the fix for it (crdt.leftAnchorID) is
+// this implementation's alone -- a peer SDK still running the old arithmetic
+// would have every retry of that change refused, with no way to revise it,
+// wedging the pushing client forever. The invariant the rejection was there to
+// protect is kept either way: nothing downstream sees a negative offset.
+// NormalizeStoredOperations applies the same clamp to a change already in
+// storage, so the two paths agree on what such an id means.
+func clampWireOffset(offset int32) int {
+	if offset < 0 {
+		return 0
 	}
 
-	return crdt.NewRGATreeSplitNodePos(
-		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
-		int(pbPos.RelativeOffset),
-	), nil
+	return int(offset)
 }
 
 // FromTreeNodes converts protobuf tree nodes to crdt.TreeNode. The last node
@@ -1134,18 +1156,12 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 
 	// The offset locates content inside the insertion createdAt names, so it is
 	// a count of UTF-16 code units and is never negative on any producing path.
-	// A negative one from crafted input resolves to no node at all, and every
-	// consumer of an id -- a TreePos on each TreeEdit/TreeStyle as much as a
-	// restore span -- would then carry a position no replica can execute. The
-	// change is persisted before it is ever executed, so a rejection has to
-	// happen here, at the wire, rather than at the first failing replay.
-	if pbPos.Offset < 0 {
-		return nil, goerrors.New("tree node id has negative offset")
-	}
-
+	// The change is persisted before it is ever executed, so the repair has to
+	// happen here, at the wire, rather than at the first failing replay; see
+	// clampWireOffset for why it is a repair and not a rejection.
 	return crdt.NewTreeNodeID(
 		createdAt,
-		int(pbPos.Offset),
+		clampWireOffset(pbPos.Offset),
 	), nil
 }
 

@@ -560,8 +560,12 @@ func (s *RGATreeSplit[V]) splitNode(
 ) (*RGATreeSplitNode[V], resource.DataSize, error) {
 	var diff resource.DataSize
 
-	if offset > node.contentLen() {
-		return nil, diff, fmt.Errorf("offset should be less than or equal to length: %s", s.ToTestString())
+	// Both bounds, not just the upper one: a negative offset names no cut in
+	// the value either, and the slices TextValue.Split would take for it are
+	// out of range in the same way. TreeNode.SplitText refuses one on the tree
+	// side (ErrSplitOutOfRange); this is that refusal here.
+	if offset < 0 || offset > node.contentLen() {
+		return nil, diff, fmt.Errorf("offset should be within [0, length]: %s", s.ToTestString())
 	}
 
 	// An offset between the two code units of a surrogate pair names no
@@ -852,12 +856,20 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 // subValue returns a deep copy of full restricted to [from, to). full is
 // left unmodified.
 //
-// The bounds come from piece boundaries, and piece boundaries are where
-// splitNode cut, so on a Go replica they never fall inside a surrogate pair. A
-// bound recorded by a replica whose strings hold lone surrogates can, and Split
-// then moves it to the end of the pair rather than decoding a lone surrogate as
-// U+FFFD (see TextValue.Split): the fragment keeps whole characters, at the
-// cost of a bound one code unit off the one the span named.
+// The window is exact, in UTF-16 code units, for every bound -- including one
+// that falls between the two code units of a surrogate pair. It has to be: the
+// caller registers the fragment under the ID range [from, to) of its insertion,
+// and a fragment whose length disagrees with its ID range shifts every piece
+// offset after it. Split therefore cuts where it is told and does not move a
+// mid-pair bound (unlike splitNode, which moves the ID with the cut); the price
+// is that a bound a replica with lone-surrogate strings recorded mid-pair
+// decodes as U+FFFD. The tree's sliceSpanValue makes the same trade.
+//
+// Out-of-range bounds cannot panic here: Split clamps (see clampSplitOffset),
+// so a `to` past the value's end yields a short fragment and `to <= from`
+// yields an empty one. On the wire path neither happens -- fromRestoreSpans
+// checks the span's Content length against its own range -- but a span replayed
+// from storage never passed through that check.
 func subValue[V RGATreeSplitValue](full V, from, to int) V {
 	cp := full.DeepCopy()
 	tail := cp.Split(from) // cp=[0,from), tail=[from,len)
@@ -909,11 +921,15 @@ func (s *RGATreeSplit[V]) restore(
 			if piece != nil && pieceStart <= cursor {
 				overlapEnd := min(pieceEnd, span.end)
 				if piece.removedAt != nil {
-					target, _ := s.isolateRange(piece, cursor, overlapEnd)
-					target.SetRemovedAt(nil)
-					s.treeByIndex.Splay(target.indexNode)
-					untombstoned = append(untombstoned, target)
-					chainAnchor = target
+					// A nil target is a range that names no character boundary
+					// in the piece (isolateRange); leave it tombstoned. The
+					// cursor still advances below, so the run cannot stall.
+					if target, _ := s.isolateRange(piece, cursor, overlapEnd); target != nil {
+						target.SetRemovedAt(nil)
+						s.treeByIndex.Splay(target.indexNode)
+						untombstoned = append(untombstoned, target)
+						chainAnchor = target
+					}
 				} else {
 					chainAnchor = piece
 				}
@@ -985,6 +1001,11 @@ func (s *RGATreeSplit[V]) retombstone(
 			target, splitDiff := s.isolateRange(
 				piece, max(pieceStart, span.start), min(pieceEnd, span.end))
 			diff.Add(splitDiff)
+			// A nil target is a range that names no character boundary in the
+			// piece (isolateRange); leave it live.
+			if target == nil {
+				continue
+			}
 			target.SetRemovedAt(executedAt)
 			s.treeByIndex.Splay(target.indexNode)
 			pairs = append(pairs, GCPair{Parent: s, Child: target})
@@ -1045,20 +1066,61 @@ func (s *RGATreeSplit[V]) findPieceCovering(
 // isolateRange splits piece so a node exactly covering [from, to) exists,
 // and returns it plus the net docSize diff produced by the splits.
 // Requires pieceStart <= from < to <= pieceEnd.
+//
+// Returns a nil node when no such node can exist: the bound names no character
+// boundary inside piece. splitNode moves a cut that falls between the two code
+// units of a surrogate pair to the end of the pair (TextValue.SplitOffset), so
+// a bound recorded by a replica whose strings hold lone surrogates can ask for
+// a cut this value cannot make. Handing back the piece anyway would give the
+// callers -- restore and retombstone -- a node covering text the span never
+// addressed, and taking splitNode's `offset == contentLen` return would hand
+// them node.next: nil at the end of the chain, or a node of an entirely
+// different insertion. They skip a nil instead. This mirrors the (nil, nil) of
+// the tree twin, Tree.isolateTextRange, whose doc records the divergence from
+// JS that both share.
 func (s *RGATreeSplit[V]) isolateRange(
 	piece *RGATreeSplitNode[V], from, to int,
 ) (*RGATreeSplitNode[V], resource.DataSize) {
 	var diff resource.DataSize
 	node := piece
 	if from > node.ID().Offset() {
-		right, d, _ := s.splitNode(node, from-node.ID().Offset())
+		// Ask for the cut before making it: splitNode returns node.next once
+		// the alignment pushes the cut onto the piece's own end, and that node
+		// belongs to another insertion (or does not exist).
+		rel := from - node.ID().Offset()
+		if node.value.SplitOffset(rel) >= node.contentLen() {
+			return nil, diff
+		}
+
+		right, d, err := s.splitNode(node, rel)
+		if err != nil || right == nil {
+			return nil, diff
+		}
 		diff.Add(d)
 		node = right
+
+		// The cut landed on the right piece's start, which is where the
+		// alignment moved `from` to. If that already reached `to`, both bounds
+		// sat inside one surrogate pair and the range is empty here.
+		if to <= node.ID().Offset() {
+			return nil, diff
+		}
 	}
 	newStart := node.ID().Offset()
 	if to < newStart+node.contentLen() {
-		_, d, _ := s.splitNode(node, to-newStart)
-		diff.Add(d)
+		// Same question for the closing bound: a cut the alignment moves ends
+		// the node past `to`, so it would cover a character the range does not
+		// address. Leave the piece unsplit and skip the range.
+		rel := to - newStart
+		if node.value.SplitOffset(rel) != rel {
+			return nil, diff
+		}
+
+		if _, d, err := s.splitNode(node, rel); err == nil {
+			diff.Add(d)
+		} else {
+			return nil, diff
+		}
 	}
 	return node, diff
 }

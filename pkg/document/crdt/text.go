@@ -142,22 +142,57 @@ func alignSplitOffset(encoded []uint16, offset int) int {
 	return offset
 }
 
-// SplitOffset returns the offset Split actually cuts at when asked to cut at
-// the given one. It differs only for an offset inside a surrogate pair, which
-// alignSplitOffset moves to the end of the pair. Callers that derive node IDs
-// or lengths from the cut must ask first, so the ID space and the value agree.
-func (t *TextValue) SplitOffset(offset int) int {
-	return alignSplitOffset(utf16.Encode([]rune(t.value)), offset)
+// clampSplitOffset pulls an offset that names no cut in encoded onto the
+// nearest end of it.
+//
+// Split cannot report an error -- RGATreeSplitValue.Split returns a value --
+// and both of its slices would be out of range for such an offset, so the
+// nearest end is the only answer that is not a panic. Every in-process caller
+// is already bounded (RGATreeSplit.splitNode rejects an out-of-range offset
+// before it gets here), but subValue's bounds come from a restore span whose
+// piece windows the wire cannot check, so this is the last thing between
+// crafted bounds and a slice out of range.
+func clampSplitOffset(encoded []uint16, offset int) int {
+	if offset < 0 {
+		return 0
+	}
+	if offset > len(encoded) {
+		return len(encoded)
+	}
+
+	return offset
 }
 
-// Split splits this value by the given offset. An offset inside a surrogate
-// pair is moved to the end of the pair (see alignSplitOffset), so the cut can
-// land one code unit after the requested one; RGATreeSplit.splitNode asks
-// SplitOffset for the same boundary before deriving the new node's ID.
+// SplitOffset returns the offset a split of this value has to land on when
+// asked to cut at the given one: the requested offset bounded by the value and
+// then, if it falls inside a surrogate pair, moved to the end of that pair.
+//
+// Split itself does NOT apply this -- it cuts exactly where it is told -- because
+// only a caller that derives the new node's ID from the cut can move the two
+// together. RGATreeSplit.splitNode is that caller: it asks here first and cuts
+// at the answer, so the ID space and the value stay in agreement.
+func (t *TextValue) SplitOffset(offset int) int {
+	encoded := utf16.Encode([]rune(t.value))
+	return alignSplitOffset(encoded, clampSplitOffset(encoded, offset))
+}
+
+// Split splits this value at exactly the given offset (bounded by the value;
+// see clampSplitOffset), leaving the left piece in place and returning the
+// right one.
+//
+// Exactly, including inside a surrogate pair, where each half then keeps a lone
+// surrogate that a Go string cannot hold and decoding rewrites as U+FFFD. The
+// alignment that avoids that lives in SplitOffset, which splitNode applies
+// before calling here, because moving the cut also moves the ID the caller
+// derives from it. The one caller that cannot accept a moved cut -- subValue,
+// which rebuilds a purged fragment under an ID range it does not choose -- gets
+// the exact window and the U+FFFD with it: the fragment has to cover exactly
+// the UTF-16 range it is registered under, or every piece offset in that
+// insertion shifts. The tree's sliceSpanValue answers the same question the
+// same way, for the same reason.
 func (t *TextValue) Split(offset int) RGATreeSplitValue {
-	value := t.value
-	encoded := utf16.Encode([]rune(value))
-	offset = alignSplitOffset(encoded, offset)
+	encoded := utf16.Encode([]rune(t.value))
+	offset = clampSplitOffset(encoded, offset)
 	t.value = string(utf16.Decode(encoded[0:offset]))
 
 	return NewTextValue(

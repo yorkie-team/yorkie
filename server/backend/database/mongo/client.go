@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -58,6 +59,14 @@ type Client struct {
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+
+	// vectorCacheMu serializes publishing a freshly loaded version-vector map
+	// into vectorCache. The map is mutated in place afterwards
+	// (UpdateMinVersionVector), so two loaders that each Add their own copy
+	// would leave one of them holding a map nothing reads -- and the mutations
+	// aimed at it, such as a detached client's Delete, lost with it. It does
+	// not cover the Mongo read, which stays outside the lock.
+	vectorCacheMu sync.Mutex
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -2374,13 +2383,30 @@ func (c *Client) UpdateMinVersionVector(
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return nil, err
+	}
+
 	// 01. Update synced version vector of the given client and document.
 	// NOTE(hackerwins): Considering removing the detached client's lamport
 	// from the other clients' version vectors. For now, we just ignore it.
+	//
+	// The skip is only sound while the client is still attached, where the
+	// write updateVersionVector would make is an upsert of the vector already
+	// stored -- a true no-op. For a detached client that write is a DELETE, and
+	// a detaching client pushes the same vector it last pushed, so keying the
+	// skip on equality alone would let the row survive the detach. It would
+	// then sit in Mongo unreferenced until the LRU entry is evicted and
+	// GetMinVersionVector reloads from the collection, resurrecting the
+	// departed client's vector and pinning the document's min version vector
+	// (and with it its GC) to a lamport nobody advances again.
 	needsUpdate := true
-	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
-		if existing, ok := vvMap.Get(clientInfo.ID); ok && vector.Equal(existing) {
-			needsUpdate = false
+	if attached {
+		if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
+			if existing, ok := vvMap.Get(clientInfo.ID); ok && vector.Equal(existing) {
+				needsUpdate = false
+			}
 		}
 	}
 	if needsUpdate {
@@ -2392,11 +2418,6 @@ func (c *Client) UpdateMinVersionVector(
 	// 02. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
 	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
-		attached, err := clientInfo.IsAttached(docRefKey.DocID)
-		if err != nil {
-			return nil, err
-		}
-
 		if attached {
 			vvMap.Upsert(clientInfo.ID, func(value time.VersionVector, exists bool) time.VersionVector {
 				return vector
@@ -2438,8 +2459,20 @@ func (c *Client) GetMinVersionVector(
 			infoMap.Set(infos[i].ClientID, infos[i].VersionVector)
 		}
 
-		c.vectorCache.Add(docRefKey, infoMap)
-		vvMap = infoMap
+		// Publish at most one map per key: another loader may have published
+		// one while this one was reading from Mongo, and UpdateMinVersionVector
+		// mutates whichever map the cache holds. Overwriting would orphan those
+		// mutations -- most visibly a detached client's Delete -- and leave the
+		// surviving map claiming a client that is gone. Prefer the published
+		// map; this one is then just a discarded read.
+		c.vectorCacheMu.Lock()
+		if cached, ok := c.vectorCache.Get(docRefKey); ok {
+			vvMap = cached
+		} else {
+			c.vectorCache.Add(docRefKey, infoMap)
+			vvMap = infoMap
+		}
+		c.vectorCacheMu.Unlock()
 	}
 
 	vals := vvMap.Values()

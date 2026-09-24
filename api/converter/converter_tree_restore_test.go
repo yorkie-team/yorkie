@@ -359,15 +359,20 @@ func TestTreeRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
 	assert.Len(t, ops, 1)
 }
 
-// TestTreeNodeIDRejectsNegativeOffset guards every offset that arrives on the
+// TestTreeNodeIDClampsNegativeOffset guards every offset that arrives on the
 // wire, not just a restore span's own. An offset counts UTF-16 code units
 // inside the insertion its created_at names, so a negative one addresses no
-// node on any replica: the change is stored before it is ever executed, so
-// letting one in would make the document unreplayable from then on, for
-// everyone. The check therefore lives in the shared fromTreeNodeID, which the
-// span ids, their parent/sibling anchors and the from/to TreePos of every
-// TreeEdit and TreeStyle all decode through.
-func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
+// node on any replica; it floor-resolves to the insertion's head, which is
+// offset zero, and that is what the decoder writes down.
+//
+// Clamped rather than rejected: the change is stored before it is ever
+// executed, so the repair has to happen at decode, and refusing instead would
+// wedge any peer SDK still emitting the pre-fix left-anchor offset -- every
+// retry of the same change refused, with nothing the client can revise. The
+// repair lives in the shared fromTreeNodeID, which the span ids, their
+// parent/sibling anchors and the from/to TreePos of every TreeEdit and
+// TreeStyle all decode through.
+func TestTreeNodeIDClampsNegativeOffset(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000000")
 	assert.NoError(t, err)
 	seed := time.NewTicket(1, 0, actor)
@@ -380,8 +385,9 @@ func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		pbOps[0].GetTreeEdit().From.ParentId.Offset = -1
-		_, err = converter.FromOperations(pbOps)
-		assert.Error(t, err)
+		ops, err := converter.FromOperations(pbOps)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, ops[0].(*operations.TreeEdit).FromPos().ParentID.Offset)
 	})
 
 	t.Run("tree edit to position", func(t *testing.T) {
@@ -390,8 +396,9 @@ func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		pbOps[0].GetTreeEdit().To.LeftSiblingId.Offset = -1
-		_, err = converter.FromOperations(pbOps)
-		assert.Error(t, err)
+		ops, err := converter.FromOperations(pbOps)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, ops[0].(*operations.TreeEdit).ToPos().LeftSiblingID.Offset)
 	})
 
 	t.Run("tree style position", func(t *testing.T) {
@@ -400,20 +407,30 @@ func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		pbOps[0].GetTreeStyle().From.ParentId.Offset = -1
-		_, err = converter.FromOperations(pbOps)
-		assert.Error(t, err)
+		ops, err := converter.FromOperations(pbOps)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, ops[0].(*operations.TreeStyle).FromPos().ParentID.Offset)
 	})
 
 	// The span's own id and every anchor it carries decode through the same
-	// helper, so all four are rejected.
+	// helper, so all four are repaired.
 	spanFields := []struct {
 		name string
 		set  func(span *api.TreeRestoreSpan)
+		get  func(span *crdt.TreeRestoreSpan) int
 	}{
-		{"span id", func(s *api.TreeRestoreSpan) { s.Id.Offset = -1 }},
-		{"parent id", func(s *api.TreeRestoreSpan) { s.ParentId.Offset = -1 }},
-		{"left sibling id", func(s *api.TreeRestoreSpan) { s.LeftSiblingId.Offset = -1 }},
-		{"right sibling id", func(s *api.TreeRestoreSpan) { s.RightSiblingId.Offset = -1 }},
+		{"span id",
+			func(s *api.TreeRestoreSpan) { s.Id.Offset = -1 },
+			func(s *crdt.TreeRestoreSpan) int { return s.ID.Offset }},
+		{"parent id",
+			func(s *api.TreeRestoreSpan) { s.ParentId.Offset = -1 },
+			func(s *crdt.TreeRestoreSpan) int { return s.ParentID.Offset }},
+		{"left sibling id",
+			func(s *api.TreeRestoreSpan) { s.LeftSiblingId.Offset = -1 },
+			func(s *crdt.TreeRestoreSpan) int { return s.LeftSiblingID.Offset }},
+		{"right sibling id",
+			func(s *api.TreeRestoreSpan) { s.RightSiblingId.Offset = -1 },
+			func(s *crdt.TreeRestoreSpan) int { return s.RightSiblingID.Offset }},
 	}
 	for _, field := range spanFields {
 		t.Run(field.name, func(t *testing.T) {
@@ -431,8 +448,10 @@ func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
 			pbOps, err := converter.ToOperations([]operations.Operation{op})
 			assert.NoError(t, err)
 			field.set(pbOps[0].GetTreeEdit().RestoreSpans[0])
-			_, err = converter.FromOperations(pbOps)
-			assert.Error(t, err)
+			ops, err := converter.FromOperations(pbOps)
+			assert.NoError(t, err)
+			spans := ops[0].(*operations.TreeEdit).RestoreSpans()
+			assert.Equal(t, 0, field.get(spans[0]))
 		})
 	}
 }

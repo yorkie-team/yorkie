@@ -26,10 +26,10 @@ import (
 
 // TestLeftAnchorID pins the offset a restore span stores as its left-sibling
 // anchor. The last-char arithmetic underflows for a text node with no
-// characters, and the wire decoder rejects a negative offset -- so a span
-// built beside one would be refused by the server on every retry, wedging the
-// pushing client. Local edits cannot create an empty text node, but a remote
-// peer's decoded contents can.
+// characters, and the wire decoder clamps a negative offset to zero -- so a
+// span built beside one would anchor on the insertion's head instead of on the
+// sibling, silently moving the restored run. Local edits cannot create an
+// empty text node, but a remote peer's decoded contents can.
 func TestLeftAnchorID(t *testing.T) {
 	createdAt := time.NewTicket(1, 0, time.InitialActorID)
 

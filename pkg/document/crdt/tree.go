@@ -455,9 +455,9 @@ func (n *TreeNode) SplitText(
 	// identical segmentation. Landing on the node's end is the existing
 	// "nothing to split off" no-op below.
 	//
-	// alignSplitOffset is the same rule TextValue.Split applies to the Text
-	// CRDT: the two halves of the document model have to answer a mid-pair
-	// offset the same way.
+	// alignSplitOffset is the same rule TextValue.SplitOffset reports and
+	// RGATreeSplit.splitNode applies to the Text CRDT: the two halves of the
+	// document model have to answer a mid-pair offset the same way.
 	offset = alignSplitOffset(encoded, offset)
 
 	leftRune := utf16.Decode(encoded[0:offset])

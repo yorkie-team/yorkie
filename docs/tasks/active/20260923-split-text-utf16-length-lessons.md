@@ -136,3 +136,40 @@
   written to, never read back for the value we already hold. Every other cache
   in `mongo/client.go` already followed that shape; this was the one that
   didn't.
+
+## Review panel round: text half of a tree-half fix
+
+- **A contract change has two implementations, not one.** Moving a mid-pair
+  cut forward was applied to `TreeNode.SplitText` *and* `TextValue.Split`, but
+  only the tree's consumers were taught the new contract. `splitNode`'s
+  callers still assumed the cut lands exactly where asked, so
+  `RGATreeSplit.isolateRange` could take the `offset == contentLen` branch and
+  hand `restore`/`retombstone` a `node.next` that is nil or belongs to another
+  insertion. `isolateRange` now mirrors `Tree.isolateTextRange`: it asks
+  `SplitOffset` where the cut would land, returns a nil target when that is
+  not the bound the span named, and both callers skip a nil.
+- **Alignment belongs to the caller that owns the ID, not to the primitive.**
+  Aligning inside `TextValue.Split` broke `subValue`, whose fragment is
+  registered under an ID range it does not choose: a moved cut shifted the
+  window by a code unit and could ask the shortened tail for an offset past
+  its end. `Split` now cuts exactly where told (clamped, so it cannot slice
+  out of range) and `SplitOffset` is the alignment oracle that `splitNode`
+  — the one caller that also derives an ID from the cut — applies. The two
+  callers that cannot accept a moved cut get the exact window, U+FFFD and
+  all, which is the trade `sliceSpanValue` already makes on the tree side.
+- **Reject at the wire only what no peer can emit.** The negative-offset
+  rejections added last round had no repair on the inbound path, and the only
+  known producer's fix (`leftAnchorID`) is this implementation's alone — a
+  peer SDK still running the old arithmetic would have every retry refused
+  with nothing to revise. The wire now clamps (`clampWireOffset`), the same
+  repair `NormalizeStoredOperations` makes to a change already in storage, so
+  the invariant survives without the liveness cost. `from_bytes.go`'s
+  `fromTextNodeID` — reachable from client-supplied Set/Add element bytes —
+  was the hole this closed on the text side.
+- **A skip keyed on equality has to be keyed on the write, too.**
+  `UpdateMinVersionVector` skipped `updateVersionVector` whenever the pushed
+  vector equalled the cached one. For an attached client that write is an
+  idempotent upsert; for a detaching one it is a DELETE, and a detaching
+  client pushes the vector it last pushed, so the row survived the detach and
+  resurrected on the next cache miss. The skip is now conditioned on the
+  client still being attached.

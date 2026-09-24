@@ -254,14 +254,39 @@ func TestTextSplitInsideSurrogatePair(t *testing.T) {
 		value := crdt.NewTextValue("a"+clef+"b", crdt.NewRHT())
 		require.Equal(t, 4, value.Len())
 
-		// Offset 2 sits between the clef's two code units.
-		right := value.Split(2)
+		// Offset 2 sits between the clef's two code units, so the boundary a
+		// split has to land on is the end of the pair. splitNode asks
+		// SplitOffset for it and cuts there, moving the new node's ID with it.
 		assert.Equal(t, 3, value.SplitOffset(2), "the cut moves to the end of the pair")
+
+		right := value.Split(value.SplitOffset(2))
 		assert.Equal(t, "a"+clef, value.Value())
 		assert.Equal(t, "b", right.String())
 		assert.NotContains(t, value.Value()+right.String(), "�")
 		// The pieces still partition the original, in UTF-16 code units.
 		assert.Equal(t, 4, value.Len()+right.Len())
+	})
+
+	t.Run("value split cuts exactly where asked test", func(t *testing.T) {
+		// Split itself does not move the cut: subValue rebuilds a purged
+		// fragment under an ID range it does not choose, so a moved cut would
+		// leave the fragment's length disagreeing with that range and shift
+		// every piece offset after it. The price is the two U+FFFD a lone
+		// surrogate decodes to, which is what the tree's sliceSpanValue pays too.
+		value := crdt.NewTextValue("a"+clef+"b", crdt.NewRHT())
+		right := value.Split(2)
+		assert.Equal(t, 2, value.Len())
+		assert.Equal(t, 2, right.Len())
+
+		// An offset naming no cut at all clamps to the nearest end rather than
+		// slicing out of range; Split has no way to report an error.
+		beyond := crdt.NewTextValue("ab", crdt.NewRHT())
+		assert.Equal(t, "", beyond.Split(9).String())
+		assert.Equal(t, "ab", beyond.Value())
+
+		below := crdt.NewTextValue("ab", crdt.NewRHT())
+		assert.Equal(t, "ab", below.Split(-3).String())
+		assert.Equal(t, "", below.Value())
 	})
 
 	t.Run("edit at a mid-pair index test", func(t *testing.T) {

@@ -444,9 +444,13 @@ func fromTextNodeID(
 		return nil, fmt.Errorf("text node id has nil createdAt")
 	}
 
+	// This decoder is not snapshot-only: element bytes on a Set/Add operation
+	// reach it straight from a client, so the offset here is as untrusted as
+	// the one on fromTextNodePos and gets the same repair. Unclamped, it would
+	// reach RGATreeSplit.splitNode as a negative split offset.
 	return crdt.NewRGATreeSplitNodeID(
 		createdAt,
-		int(pbTextNodeID.Offset),
+		clampWireOffset(pbTextNodeID.Offset),
 	), nil
 }
 

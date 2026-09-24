@@ -143,11 +143,10 @@ func TestChangeInfoDecodesOperationsRejectedOnTheWire(t *testing.T) {
 		treeEdit.From.ParentId.Offset = -1
 		treeEdit.To.LeftSiblingId.Offset = -2
 
-		_, err := converter.FromOperations(pbOps)
-		assert.Error(t, err)
-
 		// A negative offset floor-resolved to the insertion's head anyway, and
 		// zero is that head -- the only repair the field's own contents allow.
+		// The wire decoder makes the same repair (converter.clampWireOffset),
+		// so the stored path and the live one agree on what such an id means.
 		c, err := storedChange(t, pbOps).ToChange()
 		require.NoError(t, err)
 
@@ -165,9 +164,6 @@ func TestChangeInfoDecodesOperationsRejectedOnTheWire(t *testing.T) {
 		pbEdit := pbOps[0].GetEdit()
 		pbEdit.From.Offset = -1
 		pbEdit.To.RelativeOffset = -1
-
-		_, err = converter.FromOperations(pbOps)
-		assert.Error(t, err)
 
 		c, err := storedChange(t, pbOps).ToChange()
 		require.NoError(t, err)
