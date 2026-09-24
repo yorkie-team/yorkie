@@ -2416,7 +2416,11 @@ func (c *Client) GetMinVersionVector(
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
-	if !c.vectorCache.Contains(docRefKey) {
+	// NOTE(hackerwins): The cache is a bounded LRU, so an entry can be evicted
+	// by a concurrent Add between storing and reading it back. Keep the loaded
+	// map on the stack and use it directly instead of re-reading the cache.
+	vvMap, ok := c.vectorCache.Get(docRefKey)
+	if !ok {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -2435,11 +2439,7 @@ func (c *Client) GetMinVersionVector(
 		}
 
 		c.vectorCache.Add(docRefKey, infoMap)
-	}
-
-	vvMap, ok := c.vectorCache.Get(docRefKey)
-	if !ok {
-		return nil, fmt.Errorf("find min version vector: %w", database.ErrVersionVectorNotFound)
+		vvMap = infoMap
 	}
 
 	vals := vvMap.Values()

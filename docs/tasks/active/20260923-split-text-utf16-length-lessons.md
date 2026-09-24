@@ -122,3 +122,17 @@
   empty text node, but a remote peer's decoded contents can, so the producer
   has to survive one. Any new wire check needs the same sweep: what does this
   reject that our own clients can emit?
+
+## CI round: `BenchmarkGetDocuments/with_root_presence_1000`
+
+- **A bounded cache is not a handoff channel.** `GetMinVersionVector` loaded
+  the version vectors, `Add`ed them to `vectorCache`, then read the same key
+  back out and returned `ErrVersionVectorNotFound` when the read missed. The
+  cache is a 16-shard LRU, so `VectorCacheSize: 1000` is ~62 slots per shard;
+  the 1000-doc benchmark fans out over exactly that boundary and a concurrent
+  `Add` to the same shard can evict the entry between the write and the read.
+  The 10- and 100-doc cases stayed green because they never filled a shard.
+  The loaded map is now kept on the stack and used directly — the cache is
+  written to, never read back for the value we already hold. Every other cache
+  in `mongo/client.go` already followed that shape; this was the one that
+  didn't.
