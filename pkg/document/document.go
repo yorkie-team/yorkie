@@ -273,6 +273,26 @@ func (d *Document) Update(
 			// diverged from the document for the rest of the session.
 			d.cloneRoot = nil
 			d.clonePresences = nil
+
+			// Execute applies operations one at a time and does not roll back,
+			// so the document keeps every operation that ran before the failing
+			// one. Record exactly that prefix and advance changeID even though
+			// the update failed. Returning without doing either would leave
+			// three separate inconsistencies: peers would never see mutations
+			// this document already took, the next update would reissue the
+			// tickets this context handed out (the same lamport and delimiter,
+			// now colliding with elements the prefix already registered), and
+			// the clientSeq this change consumed would be a hole the server
+			// rejects the next push over (validateClientSeqContinuity).
+			//
+			// The presence change is dropped rather than recorded: Execute
+			// applies it only after the last operation, so it never reached
+			// the document.
+			d.doc.localChanges = append(
+				d.doc.localChanges,
+				change.New(c.ID(), c.Message(), result.Executed, nil),
+			)
+			d.doc.changeID = ctx.NextID()
 			return err
 		}
 

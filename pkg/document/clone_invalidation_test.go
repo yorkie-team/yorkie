@@ -76,6 +76,18 @@ func TestUpdateDropsCloneWhenDocumentExecuteFails(t *testing.T) {
 	assertCloneMatchesDocument(t, d)
 	assert.NotContains(t, d.Root().Marshal(), "ghost")
 
+	// The first operation applied to the document and Execute does not roll
+	// back, so the failed update still owes a change: the prefix that ran, on
+	// the clientSeq it consumed. Dropping it would hide "live" from every peer
+	// and leave a hole the server refuses the next push over, and leaving
+	// changeID where it was would reissue the tickets this update spent.
+	assert.Contains(t, d.RootObject().Marshal(), "live")
+	pack := d.CreateChangePack()
+	require.Len(t, pack.Changes, 2)
+	failed := pack.Changes[1]
+	assert.Equal(t, pack.Changes[0].ClientSeq()+1, failed.ClientSeq())
+	assert.Len(t, failed.Operations(), 1)
+
 	// The next update has to see the document, not the abandoned clone.
 	require.NoError(t, d.Update(func(r *json.Object, _ *presence.Presence) error {
 		assert.NotContains(t, r.Marshal(), "ghost")

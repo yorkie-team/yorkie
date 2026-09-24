@@ -40,19 +40,27 @@ import (
 // with no repair here is only correct when the accepted shape used to fault
 // on read anyway, since there is no earlier behavior left to reproduce.
 //
-// Every ticket rejection is of that kind, which is why none of them has a
-// counterpart below. fromRequiredTimeTicket refuses an omitted ticket on an
-// operation, fromElement refuses one on the element a Set/Add/ArraySet
-// carries, and fromTextNodePos/fromTreeNodeID refuse a nil createdAt on a node
-// id. Accepting any of them used to hand a nil *time.Ticket to Ticket.Key() or
-// Ticket.Compare(), both of which read off the pointer -- so a stored change
-// shaped that way already panicked the process on the load that decoded it,
-// not merely on the wire. Refusing it downgrades that crash to a load error on
-// one document. Nor is a repair available: a ticket is (lamport, delimiter,
-// actor) and the message carries no record of what the missing one was, so any
-// value invented here would be a different operation on every replica that
-// invented it. Only clamps, which have exactly one defensible value, appear
-// below.
+// Almost every ticket rejection is of that kind, which is why almost none of
+// them has a counterpart below. fromRequiredTimeTicket refuses an omitted
+// ticket on an operation, fromElement refuses one on the element a
+// Set/Add/ArraySet carries, and fromTextNodePos/fromTreeNodeID refuse a nil
+// createdAt on a node id. Accepting any of them used to hand a nil
+// *time.Ticket to Ticket.Key() or Ticket.Compare(), both of which read off the
+// pointer -- so a stored change shaped that way already panicked the process
+// on the load that decoded it, not merely on the wire. Refusing it downgrades
+// that crash to a load error on one document. Nor is a repair available: a
+// ticket is (lamport, delimiter, actor) and the message carries no record of
+// what the missing one was, so any value invented here would be a different
+// operation on every replica that invented it.
+//
+// Increase is the one exception, and fillIncreaseValueCreatedAt below is its
+// repair: its value is decoded by the same fromElement but is never keyed by
+// its createdAt, so a stored Increase with no created_at used to load and
+// execute fine. That one does have a repair, and it has to, or the new
+// rejection would strand a change that was previously harmless.
+//
+// Apart from it, only clamps -- which have exactly one defensible value --
+// appear below.
 func NormalizeStoredOperations(pbOps []*api.Operation) {
 	for _, pbOp := range pbOps {
 		if pbEdit := pbOp.GetEdit(); pbEdit != nil {
@@ -63,6 +71,10 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 		if pbStyle := pbOp.GetStyle(); pbStyle != nil {
 			clampTextNodePos(pbStyle.From)
 			clampTextNodePos(pbStyle.To)
+		}
+
+		if pbInc := pbOp.GetIncrease(); pbInc != nil {
+			fillIncreaseValueCreatedAt(pbInc)
 		}
 
 		if pbTreeStyle := pbOp.GetTreeStyle(); pbTreeStyle != nil {
@@ -100,6 +112,30 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 		dropUndatedAttrs(pbTreeEdit.RestoreSpans)
 		dropUndatedAttrs(pbTreeEdit.RetombstoneSpans)
 	}
+}
+
+// fillIncreaseValueCreatedAt gives an Increase's delta the created_at
+// fromElement now requires, copying the operation's own executed_at.
+//
+// Unlike a Set, an Add or an ArraySet, an Increase never registers its value
+// anywhere: Increase.Execute reads value.Value() and hands the ticket to
+// crdt.NewPrimitive, which stores the pointer without dereferencing it, and
+// Counter.Increase/IncreaseDedup only look at the number. Nothing calls
+// Key() or Compare() on it, so a stored Increase with no created_at loaded
+// and executed correctly before fromElement started requiring one -- which
+// makes it the single ticket rejection with prior behavior left to reproduce,
+// and the single one that would otherwise strand a document.
+//
+// executed_at is the defensible fill precisely because the ticket is inert:
+// it is read from the same message, so every replica normalizing this change
+// derives the same value rather than inventing one, and the value it derives
+// is the ticket the issuing client drew from the very same change.
+func fillIncreaseValueCreatedAt(pbInc *api.Operation_Increase) {
+	if pbInc.Value == nil || pbInc.Value.CreatedAt != nil || pbInc.ExecutedAt == nil {
+		return
+	}
+
+	pbInc.Value.CreatedAt = pbInc.ExecutedAt
 }
 
 // clampTreeNodeID pulls a negative tree node id offset back to zero.

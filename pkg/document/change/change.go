@@ -91,7 +91,15 @@ func (c *Change) Execute(
 			if errors.Is(err, operations.ErrOperationSkipped) {
 				continue
 			}
-			return ExecutionResult{}, err
+
+			// The operations before this one are already applied to the root
+			// and there is no rollback, so the caller is handed the prefix
+			// that ran alongside the error. A caller that only checks err may
+			// ignore it; one that owns the root has to record what it took.
+			// ReverseOps is left in execution order here -- it is only
+			// reversed once the whole change succeeds -- so it is not usable
+			// on this path.
+			return result, err
 		}
 		result.Executed = append(result.Executed, op)
 		result.Observable = result.Observable || opResult.Observable

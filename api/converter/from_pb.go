@@ -1372,6 +1372,13 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 // a stored change and fault inside Execute -- on the server, in a goroutine
 // nothing recovers, and again on every later replay of that change. See
 // fromRequiredTimeTicket.
+//
+// fromIncrease decodes its delta here too, and that one is different: an
+// Increase never keys its value by createdAt, so the ticket is inert and a
+// stored Increase omitting it used to execute fine. Requiring it on the wire
+// is still right -- the wire has a live client to reject -- but the stored
+// side needs the shape back, which is what NormalizeStoredOperations'
+// fillIncreaseValueCreatedAt supplies before this runs.
 func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	if pbElement == nil {
 		return nil, ErrUnsupportedElement

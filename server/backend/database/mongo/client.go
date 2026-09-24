@@ -2595,6 +2595,28 @@ func (c *Client) applyToVectorCache(
 	}
 }
 
+// dropVectorCache forgets a document's cached version vectors and tells any
+// load in flight for it that what it read is already gone.
+//
+// It is the delete-side counterpart of applyToVectorCache, and it needs the
+// same pairing for the same reason. Removing the cache entry alone leaves a
+// loader that started before the delete holding rows the delete removed:
+// endVectorLoad would find no cached map and no stale mark, and publish that
+// map as current -- resurrecting the purged vectors and pinning the
+// document's min version vector, and with it its GC, to a lamport nobody
+// advances again. Marking the load stale makes the loader use its map once
+// and discard it, so the next call reloads from the emptied collection.
+func (c *Client) dropVectorCache(docRefKey types.DocRefKey) {
+	c.vectorCacheMu.Lock()
+	defer c.vectorCacheMu.Unlock()
+
+	c.vectorCache.Remove(docRefKey)
+
+	if load, ok := c.vectorCacheLoads[docRefKey]; ok {
+		load.stale = true
+	}
+}
+
 // updateVersionVector updates the given version vector of the given client
 func (c *Client) updateVersionVector(
 	ctx context.Context,
@@ -2915,7 +2937,6 @@ func (c *Client) purgeDocumentInternals(
 
 	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 	c.presenceCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
-	c.vectorCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
@@ -2952,6 +2973,12 @@ func (c *Client) purgeDocumentInternals(
 		return nil, fmt.Errorf("purge version vectors of %s: %w", docID, err)
 	}
 	counts[ColVersionVectors] = res.DeletedCount
+
+	// After the delete, not before, and for the same reason
+	// UpdateMinVersionVector applies to the cache only once its own write has
+	// landed: a load starting in the gap would otherwise read rows that are
+	// still there and publish them as current. See dropVectorCache.
+	c.dropVectorCache(types.DocRefKey{ProjectID: projectID, DocID: docID})
 
 	return counts, nil
 }

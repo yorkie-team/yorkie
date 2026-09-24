@@ -66,7 +66,15 @@ func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (E
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
-	value := o.value.(*crdt.Primitive)
+	// The value is client-supplied: fromIncrease decodes it with the same
+	// fromElement that a Set or an Add uses, which accepts any element type,
+	// so an Increase naming a JSON_OBJECT reaches here. An unchecked assertion
+	// would panic inside Execute -- on the server, in a goroutine nothing
+	// recovers, and again on every later replay of the stored change.
+	value, ok := o.value.(*crdt.Primitive)
+	if !ok {
+		return ExecutionResult{}, ErrNotApplicableDataType
+	}
 
 	// Compute the reverse before mutating the counter, mirroring the JS SDK
 	// (increase_operation.ts:95-130). A dedup counter (o.actor != "")

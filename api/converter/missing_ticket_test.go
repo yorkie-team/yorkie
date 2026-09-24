@@ -167,3 +167,42 @@ func TestFromOperationsRejectsMissingTicket(t *testing.T) {
 		})
 	}
 }
+
+// TestNormalizeRepairsIncreaseValueCreatedAt pins the one ticket rejection
+// that needed a stored-side repair.
+//
+// fromElement now requires created_at on every element, and fromIncrease
+// decodes its delta through it. Unlike a Set or an Add, an Increase never keys
+// its value by that ticket -- Execute reads the number and hands the pointer
+// to crdt.NewPrimitive without dereferencing it -- so a change stored before
+// the guard existed executed fine and must keep loading. The wire still
+// refuses it; NormalizeStoredOperations fills it from the operation's own
+// executed_at, which every replica derives identically from the same message.
+func TestNormalizeRepairsIncreaseValueCreatedAt(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(2, 0, actor)
+
+	prim, err := crdt.NewPrimitive(1, seed)
+	assert.NoError(t, err)
+
+	pbOps, err := converter.ToOperations([]operations.Operation{
+		operations.NewIncrease(seed, prim, executedAt),
+	})
+	assert.NoError(t, err)
+	pbOps[0].GetIncrease().Value.CreatedAt = nil
+
+	// The wire refuses it, where there is still a client to reject.
+	_, err = converter.FromOperations(pbOps)
+	assert.ErrorIs(t, err, converter.ErrMissingTimeTicket)
+
+	// The stored side repairs it instead, so the document stays loadable.
+	converter.NormalizeStoredOperations(pbOps)
+	assert.True(t, proto.Equal(pbOps[0].GetIncrease().ExecutedAt, pbOps[0].GetIncrease().Value.CreatedAt))
+
+	ops, err := converter.FromOperations(pbOps)
+	assert.NoError(t, err)
+	assert.Len(t, ops, 1)
+	assert.Equal(t, executedAt, ops[0].(*operations.Increase).Value().CreatedAt())
+}
