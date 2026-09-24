@@ -528,3 +528,85 @@ and `buf generate` steps beside it already resolve.
 **Rule: check what the token can push before choosing where to fix.** The fix
 that is right in the abstract and the fix that can land are not always the same
 file, and a round spent authoring an unpushable diff buys only the record of it.
+
+## Review round 6 — the same two unpushable findings, now authored
+
+The panel re-raised all three of round 5's blockers. One was mine to fix and
+shipped; the other two are the workflow edits round 5 had already written out
+above, and the rejection is verbatim the one recorded there:
+
+```
+! [remote rejected] harness-local-enforcement (refusing to allow a GitHub App
+  to create or update workflow `.github/workflows/agent-iterate-ci.yml`
+  without `workflows` permission)
+```
+
+The rejection is for the whole ref, not the file — so the hook-guard fix in the
+same push would have been lost with it. Authored the workflow change as its own
+commit, attempted the push, reset it off the branch on the rejection and pushed
+the rest. That sequencing is the only reason both halves did not go down
+together, and it is worth repeating: **when part of a change needs a permission
+the token lacks, put that part in its own commit before you find out.**
+
+### The guard compared the files it was named after, not the ones it runs
+
+`setup.sh`'s new re-run guard diffed `.githooks`, `scripts/hooks` and
+`scripts/setup.sh` — and then executed `scripts/hooks/install.mjs`, which
+imports `../direct-run.mjs`. A branch changing only that one file passed the
+guard and got its code run on the machine of a reviewer following CONTRIBUTING's
+"re-run `setup.sh`" instruction.
+
+`scripts/agent/checks.mjs` had written that lesson down already, one screen
+away, for the CI lane: its `CI_DEFINING_PATHS` says `scripts/*.mjs` rather than
+`scripts/verify-*.mjs` *because* both verify scripts import `direct-run.mjs`.
+The same sentence applies word for word to the hook install, and I wrote the
+narrow list anyway.
+
+**Rule: an execution surface is the transitive closure of the imports, not the
+list of entry points.** The glob needs `:(glob)` magic — git's default pathspec
+`*` spans `/`, so a bare `scripts/*.mjs` would have quietly pulled all of
+`scripts/agent/**` into the comparison and refused on most topic branches.
+
+### The workflow patch, ready to apply
+
+Both hunks below are exactly what round 5 prescribed, plus the test that pins
+the ci.yml copy and a trigger comment saying why widening the arm's
+`workflows:` list is not the alternative (CI's conclusion is the mutex between
+that arm and the panel's fixer, and the attempts bound counts failed runs of
+`workflow_id: 'ci.yml'`, which another workflow's failure never advances).
+Apply with `git apply` from the repository root:
+
+```diff
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -85,8 +85,10 @@ jobs:
+       - name: Lint
+         run: make lint
+ 
++      - name: Verify licence headers
++        run: node scripts/verify-license.mjs
++
+       - name: Lint proto files
+-        uses: bufbuild/buf-lint-action@v1
++        run: buf lint
+```
+
+```diff
+--- a/scripts/test/harness-hooks.test.mjs
++++ b/scripts/test/harness-hooks.test.mjs
+@@ -231,6 +231,11 @@ test('docs.yml still runs both checks, on every pull request', () => {
+ });
+ 
++test('ci.yml runs the licence gate too, where the harness can see it', () => {
++  const wf = readFileSync(path.join(REPO, '.github', 'workflows', 'ci.yml'), 'utf8');
++  assert.match(wf, /node scripts\/verify-license\.mjs/);
++});
++
+ test('make verify reaches the licence gate', () => {
+```
+
+The full version, with the comments that carry the reasoning, is the
+`agent-review-fix` round-6 job's local commit; it is reproduced in the fix
+report posted to the pull request. Landing the ci.yml hunk WITHOUT the test
+hunk is fine; landing the test hunk without the ci.yml hunk fails the suite,
+which is the direction that pair should fail in.
