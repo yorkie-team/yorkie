@@ -983,20 +983,38 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	var treeNodes []*crdt.TreeNode
 
 	for _, pbNode := range pbNodes {
+		if pbNode == nil {
+			return nil, goerrors.New("tree edit content missing")
+		}
+
 		treeNode, err := FromTreeNodes(pbNode.Content)
 
 		if err != nil {
 			return nil, err
 		}
 
-		// Operation content is fully client-controlled and is always freshly
-		// created by the editing client, so it can never be a split product.
-		// Drop the split-sibling links the wire format carries anyway: the
-		// tree follows them as trusted structural pointers once Tree.Edit
-		// registers these nodes in NodeMapByID.
-		if treeNode != nil {
-			treeNode.DropSplitLinks()
+		// FromTreeNodes reports an empty content list as a nil root, and every
+		// group ToTreeNodesWhenEdit writes holds at least the root of one
+		// content node. Reject the empty group rather than carry the nil into
+		// the operation: TreeEdit.Execute dereferences each content to deep-
+		// copy it, so a nil in the slice is a panic on apply -- in the server
+		// handling the change, and on every replica it is forwarded to.
+		if treeNode == nil {
+			return nil, goerrors.New("tree edit content missing")
 		}
+
+		// Operation content is fully client-controlled and is always freshly
+		// created by the editing client, so it can never be a split product,
+		// carry a merge lineage, or arrive already tombstoned -- Tree.Edit
+		// stamps MergedFrom/MergedAt on the content it inserts from the merge
+		// parent it resolves locally, and tombstones it itself when the parent
+		// it lands in is removed. Drop the engine-only links and the tombstone
+		// the wire format carries anyway: the tree follows the links as trusted
+		// structural pointers once Tree.Edit registers these nodes in
+		// NodeMapByID, and a node born tombstoned under a live parent is
+		// counted as live content that no GC pair will ever collect.
+		treeNode.DropEngineOnlyLinks()
+		treeNode.ClearTombstones()
 
 		treeNodes = append(treeNodes, treeNode)
 	}
@@ -1280,7 +1298,7 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 		return nil, err
 	}
 
-	dropSplitLinksInElement(elem)
+	crdt.DropSplitLinksInElement(elem)
 
 	return elem, nil
 }

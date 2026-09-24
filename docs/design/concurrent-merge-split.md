@@ -444,6 +444,44 @@ which otherwise reaches the tree through the same
 `BytesToObject`/`BytesToTree` a snapshot uses. A snapshot is server-built
 and keeps its links.
 
+`MergedFrom`/`MergedAt` ride the same wire but are dropped on **one** of
+those two paths only, by `DropEngineOnlyLinks`. On `TreeEdit` operation
+content they are engine-only in the same sense: `Tree.Edit` stamps them
+on the content it inserts, from the merge parent it resolves locally on
+every replica, so a value a client sends can only disagree with what the
+applying replica computes — and would steer the §1.1 redirect and §6.2
+propagation at a parent of the client's choosing. The derived
+`mergedInto` goes with them there, since `NewTree` rebuilds it from
+`MergedFrom` while decoding.
+
+An element payload is different, and keeps its merge lineage. It is not
+always freshly created content: the reverse of a `Remove` carries a
+`DeepCopy` of the element as it stood, merges and all, so its
+`MergedFrom`/`MergedAt` are the genuine record of merges that happened
+before the removal. Dropping them would switch off the §1.1 redirect and
+the §6.2 propagation skip for a tree restored by an undo — a silent loss
+of merge state, not a hardening. `DropSplitLinksInElement` therefore
+clears `InsPrevID`/`InsNextID` and nothing else, on both ways in: the
+converter's `fromElement`, and `executeUndoRedo` for the copy a reverse
+operation captured locally, which never passes the converter on the
+replica that runs the undo.
+
+Keeping the lineage makes both ends of a merge relation partly
+client-supplied, so every reader of one resolves it through
+`Tree.findMergeNode` rather than through `findFloorNode`: the node has to
+be the one the ID names *exactly* (both ends are recorded by `mergeNodes`
+as a node's own ID; a floor match is a position interior to a split node,
+which no merge records) and has to be an element (a merge moves children
+out of one element parent into another, and a text node holds none).
+That covers `rebuildMergeState` on the way in, `mergeNodes` re-deriving
+`mergedInto` when a later merge moves the node again, and the three
+`mergedInto` readers — `resolveMergeTarget`,
+`FindTreeNodesWithSplitText`'s §1.1 redirect, and `propagateMergeDeletes`
+§6.2. The last is why the check cannot live at the decode alone: the
+field stays on the node inside the live document, and a made-up offset
+that resolved by floor would plant a forwarding pointer on an unrelated
+live node for a later, innocent delete to cascade-tombstone through.
+
 The split loop ascends from `parent`, not from the retargeted node. A
 retarget reorders the product *within* one level; the node the
 operation split is still `parent`, and the next level's boundary is
