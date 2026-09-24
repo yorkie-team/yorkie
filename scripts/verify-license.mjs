@@ -59,7 +59,20 @@ export const HEADER_SCAN_LINES = 40;
  * and `node_modules` are other people's code under their own licences, and the
  * rest are build output.
  */
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'vendor', 'bin', 'binaries']);
+const SKIP_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'vendor',
+  'bin',
+  'binaries',
+  // SIBLING CHECKOUTS OF THIS SAME REPOSITORY, which are full of .go files
+  // that are not part of the tree being committed. `.worktrees` is gitignored
+  // here and `.trusted` is what agent-review-panel.yml stages `ref: main`
+  // into; walking either makes `make verify` — and therefore `pre-push` —
+  // refuse a push over files outside the branch.
+  '.worktrees',
+  '.trusted',
+]);
 
 /**
  * Every `.go` file under `root` as paths relative to it, sorted, plus the

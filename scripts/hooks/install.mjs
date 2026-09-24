@@ -87,7 +87,10 @@ function isOurs(command) {
     // The boundary has to admit a leading `bash ` as well as a path prefix,
     // which is why it is `[\s/]` and not `/` — the in-tree wiring this
     // migrates from is written `bash scripts/hooks/<name>.sh`.
-    new RegExp(`(^|[\\s/])(${SNAPSHOT_DIRNAME}|scripts/hooks)/[\\w.-]+\\.sh(\\s|$)`).test(command)
+    // The trailing class admits the closing quote `shellQuote` adds as well
+    // as whitespace: without it, re-running setup stops recognising its own
+    // previous wiring and stacks a second copy of every hook.
+    new RegExp(`(^|[\\s/'"])(${SNAPSHOT_DIRNAME}|scripts/hooks)/[\\w.-]+\\.sh(['"\\s]|$)`).test(command)
   );
 }
 
@@ -99,6 +102,19 @@ function isOurs(command) {
  * live, and an installer that dropped them would be a worse nuisance than no
  * installer.
  */
+/**
+ * Single-quote a path for the shell Claude Code runs hook commands through.
+ *
+ * Unquoted, a clone under `~/My Projects/` produces `bash /Users/x/My
+ * Projects/.../session-prime.sh`, which the shell splits into two words: the
+ * hook fails to start and the guard is silently gone — the failure this whole
+ * change exists to refuse. A path containing shell metacharacters is worse
+ * than silent.
+ */
+export function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
 export function wireHooks(settings, snapshotDir) {
   const next = { ...(settings ?? {}) };
   const hooks = { ...(next.hooks ?? {}) };
@@ -117,7 +133,9 @@ export function wireHooks(settings, snapshotDir) {
       ...kept,
       {
         matcher,
-        hooks: [{ type: 'command', command: `bash ${path.join(snapshotDir, script)}` }],
+        hooks: [
+          { type: 'command', command: `bash ${shellQuote(path.join(snapshotDir, script))}` },
+        ],
       },
     ];
   }

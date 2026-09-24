@@ -78,9 +78,10 @@ changes go to `docs/design/<topic>.md`.
 2. **Branch + commit** — topic branch from `main`; each commit
    `make verify` green, plus `make test` when MongoDB is up and the
    change reaches the integration lane; follow the commit-message
-   convention above. `bash scripts/setup.sh` installs hooks that run
-   `make lint` on commit and `make verify` on push, so this is checked
-   rather than remembered.
+   convention above. `bash scripts/setup.sh` installs hooks that check
+   part of this for you — `make lint` on commit, the full `make verify`
+   on push — so the per-commit half is lint only and the tests are
+   caught one layer out, not per commit.
 3. **Self review** — `/self-review`: a bounded loop of review → fix →
    re-verify over the full branch diff, **max 3 rounds, stopping at the
    first round with no blocking findings**. Rotate what you weight per

@@ -44,8 +44,8 @@ import { fileURLToPath } from 'node:url';
 // fixture, so no discovery happens at all. Its header records what an
 // inherited GIT_INDEX_FILE once did here: a public PR whose diff appeared to
 // delete every file in the repository.
-import { fixtureGitEnv } from '../agent/git-env.mjs';
-import { HOOK_WIRING, wireHooks } from '../hooks/install.mjs';
+import { fixtureGitEnv, repoScopedEnv } from '../agent/git-env.mjs';
+import { HOOK_WIRING, shellQuote, wireHooks } from '../hooks/install.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GUARD = path.join(REPO, 'scripts', 'hooks', 'guard-generated-files.sh');
@@ -131,11 +131,31 @@ test('the hook wiring is never tracked in the working tree', () => {
   // executes that branch's `scripts/hooks/*.sh` — and both halves are ordinary
   // tracked files any contributor can rewrite. The wiring lives in the
   // gitignored `settings.local.json` instead, written by `install.mjs`.
-  assert.equal(
-    existsSync(path.join(REPO, '.claude', 'settings.json')),
-    false,
-    '.claude/settings.json must stay untracked — see scripts/hooks/install.mjs',
+  // ASKS GIT WHAT IS TRACKED, because `.gitignore` is not a security control:
+  // `git add -f .claude/settings.local.json` commits it regardless, and a
+  // branch that does so ships hook wiring that runs the moment a reviewer
+  // checks it out — the exact attack install.mjs closed, one filename over.
+  // Checking `existsSync` cannot tell the two apart either, since that file
+  // legitimately exists on any clone where setup.sh has been run.
+  const tracked = spawnSync('git', ['-C', REPO, 'ls-files', '--', '.claude/'], {
+    encoding: 'utf8',
+    env: repoScopedEnv(REPO),
+  });
+  assert.equal(tracked.status, 0, `git ls-files failed: ${tracked.stderr}`);
+  const settingsFiles = tracked.stdout
+    .split('\n')
+    .filter(Boolean)
+    .filter((f) => /^\.claude\/settings(\.[\w-]+)?\.json$/.test(f));
+  assert.deepEqual(
+    settingsFiles,
+    [],
+    'no .claude/settings*.json may be tracked — Claude Code executes what it names, ' +
+      'straight out of a branch checkout. See scripts/hooks/install.mjs.',
   );
+
+  // The ignore entry is still worth pinning: it is what stops the file being
+  // committed by accident, which is the common case. It is not what stops it
+  // being committed on purpose — the assertion above is.
   const ignore = readFileSync(path.join(REPO, '.gitignore'), 'utf8');
   assert.match(ignore, /^\.claude\/settings\.local\.json$/m);
 });
@@ -165,7 +185,10 @@ test('the installer wires the snapshot and keeps everything else', () => {
   assert.ok(commands.includes('echo mine'), "another tool's hook must survive");
   assert.equal(commands.filter((c) => c.includes('scripts/hooks/')).length, 0, 'in-tree wiring must be replaced');
   for (const { script } of HOOK_WIRING) {
-    assert.ok(commands.includes(`bash ${snapshot}/${script}`), `${script} must be wired to the snapshot`);
+    assert.ok(
+      commands.includes(`bash ${shellQuote(`${snapshot}/${script}`)}`),
+      `${script} must be wired to the snapshot`,
+    );
   }
 
   assert.deepEqual(wireHooks(once, snapshot), once, 'a second install must be a no-op');
@@ -343,4 +366,43 @@ test('pre-commit skips a commit that stages no Go at all', () => {
     git('add', 'README.md');
     assert.equal(wouldLint({ dir }), false, 'a docs-only commit must not lint');
   });
+});
+
+test('a clone path with a space stays one argument, and stays idempotent', () => {
+  // THE BUG THIS PINS. The command is handed to a shell. Unquoted, a clone
+  // under `~/My Projects/` becomes two words, the hook never starts, and the
+  // guard is silently gone — the failure this whole change exists to refuse.
+  //
+  // Idempotency is half the test: `isOurs` recognises previous wiring by
+  // matching the path, and quoting changes the character that follows `.sh`.
+  // Miss that and every re-run of setup.sh stacks another copy of every hook.
+  const snapshot = '/Users/someone/My Projects/repo/.git/agent-hooks';
+  const once = wireHooks({}, snapshot);
+  const commands = Object.values(once.hooks)
+    .flat()
+    .flatMap((g) => g.hooks)
+    .map((h) => h.command);
+
+  for (const c of commands) {
+    assert.match(c, /^bash '\/Users\/someone\/My Projects\/.*\.sh'$/, `unquoted: ${c}`);
+    // Parsed by a real shell, the path must arrive as ONE argument.
+    const script = c.slice('bash '.length);
+    const argc = spawnSync('bash', ['-c', `set -- ${script}; echo $#`], { encoding: 'utf8' });
+    assert.equal(argc.stdout.trim(), '1', `the shell split the path: ${c}`);
+  }
+
+  assert.deepEqual(wireHooks(once, snapshot), once, 'a second install must be a no-op');
+});
+
+test('a clone path with shell metacharacters cannot inject', () => {
+  const snapshot = "/tmp/repo$(touch /tmp/pwned-by-hook-wiring)/.git/agent-hooks";
+  const once = wireHooks({}, snapshot);
+  const command = Object.values(once.hooks).flat().flatMap((g) => g.hooks)[0].command;
+  const script = command.slice('bash '.length);
+  // Single quotes make the substitution inert; echo it rather than run it.
+  const out = spawnSync('bash', ['-c', `set -- ${script}; printf '%s' "$1"`], {
+    encoding: 'utf8',
+  });
+  assert.match(out.stdout, /\$\(touch/, 'the metacharacters must survive as literal text');
+  assert.equal(existsSync('/tmp/pwned-by-hook-wiring'), false);
 });

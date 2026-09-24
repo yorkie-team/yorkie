@@ -131,8 +131,11 @@ test("pull_request_review_comment still has exactly one subscriber", () => {
   // The help arm assumes it is the only responder on that surface; a second
   // subscriber would make a mistyped verb draw two replies. If a workflow is
   // added here deliberately, update the help arm's dedup rather than this.
+  // BOTH SPELLINGS. GitHub accepts `.yaml`, and filtering to `.yml` is the
+  // same blind spot this branch removed from the actionlint lane — a guard
+  // with the defect it was written to catch.
   const subscribers = readdirSync(WORKFLOW_DIR)
-    .filter((f) => f.endsWith(".yml"))
+    .filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"))
     .filter((f) => /^\s*pull_request_review_comment:/m.test(readWorkflow(f)));
   assert.deepEqual(subscribers, ["agent-review-reply.yml"]);
 });

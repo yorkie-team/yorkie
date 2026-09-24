@@ -500,11 +500,21 @@ jobs:
           retries: 3
           script: |
             const actor = context.payload.comment.user.login;
-            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
-              owner: context.repo.owner, repo: context.repo.repo, username: actor,
-            });
-            const ok = ['admin', 'maintain', 'write'].includes(data.permission);
-            if (!ok) core.info(`@${actor} lacks write access (${data.permission}); staying quiet.`);
+            // STAYING QUIET COVERS THE ERROR PATH TOO. Without the catch, a
+            // 403 or an API blip turns a mistyped verb into a red check on
+            // someone else's pull request — a worse outcome than the silence
+            // this job exists to end, and one they cannot act on. The step
+            // already retries; past that, refuse to speak rather than fail.
+            let ok = false;
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner, repo: context.repo.repo, username: actor,
+              });
+              ok = ['admin', 'maintain', 'write'].includes(data.permission);
+              if (!ok) core.info(`@${actor} lacks write access (${data.permission}); staying quiet.`);
+            } catch (err) {
+              core.info(`could not resolve @${actor}'s permission (${err.status ?? err.message}); staying quiet.`);
+            }
             core.setOutput('ok', ok ? 'true' : 'false');
 
       - name: Reply in the thread

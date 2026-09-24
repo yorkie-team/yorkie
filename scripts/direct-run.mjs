@@ -25,6 +25,7 @@
 // scripts exist to prevent, so it is worth one function that cannot drift.
 
 import { realpathSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -38,9 +39,16 @@ import { fileURLToPath } from 'node:url';
  */
 export function isDirectRun(moduleUrl) {
   if (!process.argv[1]) return false;
+  const entry = fileURLToPath(moduleUrl);
   try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(moduleUrl));
+    return realpathSync(process.argv[1]) === realpathSync(entry);
   } catch {
-    return false;
+    // FALL BACK, DO NOT GIVE UP. Returning false here means a CLI invocation
+    // whose path merely could not be resolved — a deleted symlink target, a
+    // permissions oddity — exits 0 having verified nothing, which is the
+    // silent pass these scripts exist to refuse. `path.resolve` is the weaker
+    // comparison this function replaced, and weaker is the right direction:
+    // it still answers correctly whenever the caller typed a real path.
+    return path.resolve(process.argv[1]) === path.resolve(entry);
   }
 }

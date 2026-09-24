@@ -525,8 +525,11 @@ announces a skip rather than passing quietly where Node is absent. The
 integration lane needs the docker-compose stack and is left to CI rather than
 run inside the fix job. The fixer prompts in `agent-fix.yml`,
 `agent-iterate-ci.yml` and `agent-review-panel.yml` still spell the pair out
-rather than calling the target; that is a rename, not a behaviour change, and is
-deliberately not bundled with the commit that introduced the target.
+rather than calling the target. Switching them is NOT a pure rename: `make
+verify` also runs the licence check, so today the autonomous arm verifies
+without that gate and CI's `docs.yml` is what catches it. Deliberately not
+bundled with the commit that introduced the target — changing what a fixer runs
+is a behaviour change to the pipeline and belongs in its own.
 
 #### 2.1 What the port actually carried
 
