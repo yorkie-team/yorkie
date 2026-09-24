@@ -114,7 +114,7 @@ func withSplitTree(t *testing.T) *document.Document {
 // A Set/Add/ArraySet reverse captures its value with DeepCopy, and that copy
 // keeps the split-sibling links of the tree it was taken from. Undo executes
 // it directly, while every other replica -- and the server -- decodes the same
-// operation through crdt.DropEngineOnlyLinksInElement. Unless the copy is
+// operation through crdt.DropSplitLinksInElement. Unless the copy is
 // stripped too, the replica that ran the undo is the only one left holding the
 // links.
 func TestTreeSplitLinksInReverseOperationPayload(t *testing.T) {

@@ -444,14 +444,27 @@ which otherwise reaches the tree through the same
 `BytesToObject`/`BytesToTree` a snapshot uses. A snapshot is server-built
 and keeps its links.
 
-`MergedFrom`/`MergedAt` ride the same wire and are dropped on the same
-two paths, by the same `DropEngineOnlyLinks`. They are engine-only too:
-`Tree.Edit` stamps them on the content it inserts, from the merge parent
-it resolves locally on every replica, so a value a client sends can only
-disagree with what the applying replica computes — and would steer the
-§1.1 redirect and §6.2 propagation at a parent of the client's choosing.
-The derived `mergedInto` goes with them, since `NewTree` rebuilds it from
+`MergedFrom`/`MergedAt` ride the same wire but are dropped on **one** of
+those two paths only, by `DropEngineOnlyLinks`. On `TreeEdit` operation
+content they are engine-only in the same sense: `Tree.Edit` stamps them
+on the content it inserts, from the merge parent it resolves locally on
+every replica, so a value a client sends can only disagree with what the
+applying replica computes — and would steer the §1.1 redirect and §6.2
+propagation at a parent of the client's choosing. The derived
+`mergedInto` goes with them there, since `NewTree` rebuilds it from
 `MergedFrom` while decoding.
+
+An element payload is different, and keeps its merge lineage. It is not
+always freshly created content: the reverse of a `Remove` carries a
+`DeepCopy` of the element as it stood, merges and all, so its
+`MergedFrom`/`MergedAt` are the genuine record of merges that happened
+before the removal. Dropping them would switch off the §1.1 redirect and
+the §6.2 propagation skip for a tree restored by an undo — a silent loss
+of merge state, not a hardening. `DropSplitLinksInElement` therefore
+clears `InsPrevID`/`InsNextID` and nothing else, on both ways in: the
+converter's `fromElement`, and `executeUndoRedo` for the copy a reverse
+operation captured locally, which never passes the converter on the
+replica that runs the undo.
 
 The split loop ascends from `parent`, not from the retargeted node. A
 retarget reorders the product *within* one level; the node the

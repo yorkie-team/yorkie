@@ -709,22 +709,43 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
+// DropSplitLinks clears the split-sibling links on this node and every one of
+// its descendants.
+//
+// InsPrevID/InsNextID name positions in a split chain and only SplitElement
+// may create them. A node arriving as operation content is freshly created by
+// the editing client, so it can never legitimately be a split product — but
+// the wire format carries the fields regardless, and the chain walks that
+// read them (advancePastUnknownSplitSiblings, orderSameBoundarySplit) treat
+// them as trusted structural pointers. Drop them on the way in rather than
+// let a client hand the tree a chain of its choosing.
+//
+// The merge lineage is deliberately left alone here: unlike operation content,
+// an element payload can be a DeepCopy of real document state (the reverse of
+// a Remove restores the tree as it stood, merges and all), and erasing
+// MergedFrom/MergedAt would switch off the §1.1 insert redirect and the §6.2
+// propagation skip for a tree that legitimately earned them. Only
+// DropEngineOnlyLinks, which runs on content no merge can have touched,
+// clears those.
+func (n *TreeNode) DropSplitLinks() {
+	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
+		node.Value.InsPrevID = nil
+		node.Value.InsNextID = nil
+	})
+}
+
 // DropEngineOnlyLinks clears the engine-only links on this node and every one
 // of its descendants: the split-sibling chain and the merge lineage.
 //
-// InsPrevID/InsNextID name positions in a split chain and only SplitElement
-// may create them; MergedFrom/MergedAt name the parent a node was moved out of
-// and only a merge may stamp them (Edit restamps them on the content it
-// inserts, from the merge parent it resolves locally). A node arriving as
-// operation content or inside an element payload is freshly created by the
-// editing client, so it can never legitimately be either — but the wire format
-// carries all four regardless, and the walks that read them
-// (advancePastUnknownSplitSiblings, orderSameBoundarySplit, the §1.1 redirect
-// and §6.2 propagation) treat them as trusted structural pointers. Drop them
-// on the way in rather than let a client hand the tree a lineage of its
-// choosing. mergedInto goes with them: NewTree derives it from MergedFrom
-// while decoding, so leaving it would keep a source parent pointing at a
-// destination no field records any more.
+// It is the operation-content counterpart of DropSplitLinks. MergedFrom/
+// MergedAt name the parent a node was moved out of and only a merge may stamp
+// them (Edit restamps them on the content it inserts, from the merge parent it
+// resolves locally), so content arriving on a TreeEdit — always freshly
+// created by the editing client, never a copy of live state — can never
+// legitimately carry them, while the §1.1 redirect and §6.2 propagation read
+// them as trusted structural pointers. mergedInto goes with them: NewTree
+// derives it from MergedFrom while decoding, so leaving it would keep a source
+// parent pointing at a destination no field records any more.
 func (n *TreeNode) DropEngineOnlyLinks() {
 	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.InsPrevID = nil
@@ -2615,8 +2636,8 @@ type advanceOpts struct {
 // insNextWalker bounds a walk of an InsNextID chain. InsNextID is a
 // structural pointer that only SplitElement is supposed to set, but it also
 // arrives verbatim from client-supplied bytes (api/converter/from_bytes.go,
-// and — until DropEngineOnlyLinks strips it — operation contents), so a chain
-// that loops back on itself would spin the applying goroutine forever while it
+// and — until DropSplitLinks strips it — operation contents), so a chain that
+// loops back on itself would spin the applying goroutine forever while it
 // holds the document lock. Every chain walk runs through one of these.
 type insNextWalker struct {
 	seen map[*TreeNode]struct{}

@@ -1225,15 +1225,14 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
-// sanitizeElement adapts a BytesTo* result: it drops the engine-only links
-// (the split chain and the merge lineage) from every tree the decoded element
-// carries, or passes the error through.
+// sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
+// from every tree the decoded element carries, or passes the error through.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	if err != nil {
 		return nil, err
 	}
 
-	crdt.DropEngineOnlyLinksInElement(elem)
+	crdt.DropSplitLinksInElement(elem)
 
 	return elem, nil
 }
