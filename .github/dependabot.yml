@@ -14,3 +14,15 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+  # scripts/agent is the only Node package here and it sits outside any
+  # workspace, so nothing else reaches it. It pins the Agent SDK exactly and
+  # carries hand-written `overrides` for two transitive packages that were
+  # added as security pins — the kind of entry that is only correct for as
+  # long as someone is watching it. Nothing was.
+  - package-ecosystem: "npm"
+    directory: "/scripts/agent"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"

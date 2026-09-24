@@ -176,8 +176,19 @@ jobs:
           node-version: '20'
 
       - name: Install Claude Code CLI
+        # PINNED, because of what this job holds. `bench` runs with
+        # `contents: write`, `pull-requests: write`, GITHUB_TOKEN and
+        # CLAUDE_CODE_OAUTH_TOKEN, and an unpinned global install resolves
+        # whatever was published minutes ago — the one step in this
+        # repository that let an outside release choose what runs next to
+        # those credentials. Everything else here is pinned: actions by SHA,
+        # golangci-lint by version, the Agent SDK by lockfile.
+        #
+        # Tracks the `stable` dist-tag, not `latest`, which is ahead of it.
+        # Dependabot cannot see this — its npm ecosystem reads manifests, and
+        # this is an argument in a run step — so bumping it is manual.
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.273
 
       - name: Checkout current repository
         uses: actions/checkout@v4
