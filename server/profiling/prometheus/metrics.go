@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/internal/version"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
 const (
@@ -40,6 +41,7 @@ const (
 	taskTypeLabel     = "task_type"
 	docEventTypeLabel = "doc_event_type"
 	channelKeyLabel   = "channel_key"
+	cacheLabel        = "cache"
 )
 
 var (
@@ -508,6 +510,33 @@ func (m *Metrics) SetChannelSessionsTopN(
 // ResetChannelSessionsTopN resets the top N channels by session count.
 func (m *Metrics) ResetChannelSessionsTopN() {
 	m.channelSessionsTopN.Reset()
+}
+
+// RegisterCaches registers the given caches so that their hit/miss statistics
+// are reported on scrape.
+//
+// Every cache goes in one call: a second call builds a collector describing the
+// same metrics and is rejected, so a caller that registers caches built later
+// in startup must gather them into the same call rather than adding a second.
+//
+// It also returns an error if two caches share a name. The name is the metric's
+// only distinguishing label, so a collision would make every scrape of /metrics
+// fail, not just the cache metrics.
+func (m *Metrics) RegisterCaches(hostname string, caches ...cache.StatsProvider) error {
+	names := make(map[string]struct{}, len(caches))
+	for _, c := range caches {
+		name := c.Name()
+		if _, ok := names[name]; ok {
+			return fmt.Errorf("register cache collector: duplicate cache name %q", name)
+		}
+		names[name] = struct{}{}
+	}
+
+	if err := m.registry.Register(newCacheCollector(hostname, caches)); err != nil {
+		return fmt.Errorf("register cache collector: %w", err)
+	}
+
+	return nil
 }
 
 // Registry returns the registry of this metrics.

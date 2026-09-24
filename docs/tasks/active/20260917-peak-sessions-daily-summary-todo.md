@@ -113,7 +113,7 @@ dashboard goes blank — not just the peak chart. So the order is fixed:
       `sum_session_peak_daily` vs a `MAX` over channels computed from
       `sum_session_hll_daily_ch` for the same days.
 
-### devops (internal repo, ships first)
+### devops (ships first)
 
 - [x] `k8s/cluster/analytics-summary.yaml`: add the table to `create.sql`, the
       derived insert to `backfill.sql` and `refresh.sql` (after the session

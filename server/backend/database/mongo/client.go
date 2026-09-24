@@ -2416,7 +2416,12 @@ func (c *Client) GetMinVersionVector(
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
-	if !c.vectorCache.Contains(docRefKey) {
+	// NOTE(hackerwins): Keep the loaded map instead of reading it back from the
+	// cache. vectorCache is a sharded LRU, so a concurrent Add on the same shard
+	// can evict this key between the Add and the read-back, and the read-back
+	// then reports a missing version vector for a document that has one.
+	vvMap, ok := c.vectorCache.Get(docRefKey)
+	if !ok {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -2435,11 +2440,7 @@ func (c *Client) GetMinVersionVector(
 		}
 
 		c.vectorCache.Add(docRefKey, infoMap)
-	}
-
-	vvMap, ok := c.vectorCache.Get(docRefKey)
-	if !ok {
-		return nil, fmt.Errorf("find min version vector: %w", database.ErrVersionVectorNotFound)
+		vvMap = infoMap
 	}
 
 	vals := vvMap.Values()

@@ -163,4 +163,44 @@ func TestChangeInfoDecodesOperationsRejectedOnTheWire(t *testing.T) {
 		require.Len(t, contents, 1)
 		assert.Equal(t, "a", contents[0].Value)
 	})
+
+	t.Run("stored operation without executedAt is dropped test", func(t *testing.T) {
+		kept := operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt)
+		undated := operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt)
+		pbOps, err := converter.ToOperations([]operations.Operation{undated, kept})
+		require.NoError(t, err)
+		pbOps[0].GetTreeEdit().ExecutedAt = nil
+
+		_, err = converter.FromOperations(pbOps)
+		assert.ErrorIs(t, err, converter.ErrMissingTicket)
+
+		// No repair exists for an absent ticket, and the operation could never
+		// have applied anywhere -- a nil executedAt faults inside Execute. The
+		// well-formed sibling must survive.
+		c, err := storedChange(t, pbOps).ToChange()
+		require.NoError(t, err)
+		require.Len(t, c.Operations(), 1)
+		assert.Equal(t, executedAt, c.Operations()[0].ExecutedAt())
+	})
+
+	t.Run("stored element without createdAt is dropped test", func(t *testing.T) {
+		primitive, err := crdt.NewPrimitive("a", executedAt)
+		require.NoError(t, err)
+		set := operations.NewSet(seed, "k", primitive, executedAt)
+		treeEdit := operations.NewTreeEdit(seed, pos, pos, nil, 0, executedAt)
+		pbOps, err := converter.ToOperations([]operations.Operation{set, treeEdit})
+		require.NoError(t, err)
+		pbOps[0].GetSet().Value.CreatedAt = nil
+
+		_, err = converter.FromOperations(pbOps)
+		assert.ErrorIs(t, err, converter.ErrMissingTicket)
+
+		// The element's createdAt is what ElementRHT keys on, so this Set was
+		// a nil dereference on apply rather than something the document ever
+		// held. The well-formed sibling must survive.
+		c, err := storedChange(t, pbOps).ToChange()
+		require.NoError(t, err)
+		require.Len(t, c.Operations(), 1)
+		assert.IsType(t, &operations.TreeEdit{}, c.Operations()[0])
+	})
 }

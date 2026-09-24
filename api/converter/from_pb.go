@@ -326,36 +326,7 @@ func FromDocSize(pbDocSize *api.DocSize) resource.DocSize {
 func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	var ops []operations.Operation
 	for _, pbOp := range pbOps {
-		if pbOp == nil {
-			return nil, goerrors.New("operation missing")
-		}
-
-		var op operations.Operation
-		var err error
-		switch decoded := pbOp.Body.(type) {
-		case *api.Operation_Set_:
-			op, err = fromSet(decoded.Set)
-		case *api.Operation_Add_:
-			op, err = fromAdd(decoded.Add)
-		case *api.Operation_Move_:
-			op, err = fromMove(decoded.Move)
-		case *api.Operation_Remove_:
-			op, err = fromRemove(decoded.Remove)
-		case *api.Operation_Edit_:
-			op, err = fromEdit(decoded.Edit)
-		case *api.Operation_Style_:
-			op, err = fromStyle(decoded.Style)
-		case *api.Operation_Increase_:
-			op, err = fromIncrease(decoded.Increase)
-		case *api.Operation_TreeEdit_:
-			op, err = fromTreeEdit(decoded.TreeEdit)
-		case *api.Operation_TreeStyle_:
-			op, err = fromTreeStyle(decoded.TreeStyle)
-		case *api.Operation_ArraySet_:
-			op, err = fromArraySet(decoded.ArraySet)
-		default:
-			return nil, ErrUnsupportedOperation
-		}
+		op, err := fromOperation(pbOp)
 		if err != nil {
 			return nil, err
 		}
@@ -363,6 +334,40 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	}
 
 	return ops, nil
+}
+
+// fromOperation converts a single operation. It is split out of FromOperations
+// so the stored-decode path can ask about one operation at a time; see
+// withoutUndatedOperations.
+func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
+	if pbOp == nil {
+		return nil, goerrors.New("operation missing")
+	}
+
+	switch decoded := pbOp.Body.(type) {
+	case *api.Operation_Set_:
+		return fromSet(decoded.Set)
+	case *api.Operation_Add_:
+		return fromAdd(decoded.Add)
+	case *api.Operation_Move_:
+		return fromMove(decoded.Move)
+	case *api.Operation_Remove_:
+		return fromRemove(decoded.Remove)
+	case *api.Operation_Edit_:
+		return fromEdit(decoded.Edit)
+	case *api.Operation_Style_:
+		return fromStyle(decoded.Style)
+	case *api.Operation_Increase_:
+		return fromIncrease(decoded.Increase)
+	case *api.Operation_TreeEdit_:
+		return fromTreeEdit(decoded.TreeEdit)
+	case *api.Operation_TreeStyle_:
+		return fromTreeStyle(decoded.TreeStyle)
+	case *api.Operation_ArraySet_:
+		return fromArraySet(decoded.ArraySet)
+	default:
+		return nil, ErrUnsupportedOperation
+	}
 }
 
 func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
@@ -418,11 +423,11 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 		return nil, goerrors.New("operation set missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbSet.ParentCreatedAt, "set.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbSet.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbSet.ExecutedAt, "set.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -444,11 +449,11 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 		return nil, goerrors.New("operation add missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbAdd.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbAdd.ParentCreatedAt, "add.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
-	prevCreatedAt, err := fromTimeTicket(pbAdd.PrevCreatedAt)
+	prevCreatedAt, err := fromRequiredTimeTicket(pbAdd.PrevCreatedAt, "add.prev_created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +461,7 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbAdd.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbAdd.ExecutedAt, "add.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -473,19 +478,19 @@ func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 		return nil, goerrors.New("operation move missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbMove.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbMove.ParentCreatedAt, "move.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
-	prevCreatedAt, err := fromTimeTicket(pbMove.PrevCreatedAt)
+	prevCreatedAt, err := fromRequiredTimeTicket(pbMove.PrevCreatedAt, "move.prev_created_at")
 	if err != nil {
 		return nil, err
 	}
-	createdAt, err := fromTimeTicket(pbMove.CreatedAt)
+	createdAt, err := fromRequiredTimeTicket(pbMove.CreatedAt, "move.created_at")
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbMove.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbMove.ExecutedAt, "move.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -502,15 +507,15 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 		return nil, goerrors.New("operation remove missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbRemove.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbRemove.ParentCreatedAt, "remove.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
-	createdAt, err := fromTimeTicket(pbRemove.CreatedAt)
+	createdAt, err := fromRequiredTimeTicket(pbRemove.CreatedAt, "remove.created_at")
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbRemove.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbRemove.ExecutedAt, "remove.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +531,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		return nil, goerrors.New("operation edit missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbEdit.ParentCreatedAt, "edit.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +543,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbEdit.ExecutedAt, "edit.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -640,7 +645,7 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 		return nil, goerrors.New("operation style missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbStyle.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbStyle.ParentCreatedAt, "style.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +657,7 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbStyle.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbStyle.ExecutedAt, "style.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +703,7 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 		return nil, goerrors.New("operation increase missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbInc.ParentCreatedAt, "increase.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +711,7 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbInc.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbInc.ExecutedAt, "increase.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -730,12 +735,12 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		return nil, goerrors.New("operation tree_edit missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbTreeEdit.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbTreeEdit.ParentCreatedAt, "tree_edit.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
 
-	executedAt, err := fromTimeTicket(pbTreeEdit.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbTreeEdit.ExecutedAt, "tree_edit.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -806,9 +811,12 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		executedAt,
 	)
 
+	// Each entry becomes a split node's CreatedAt, which crdt.Tree keys
+	// NodeMapByID on and compares -- so an absent one is not a tolerable gap in
+	// the list but a nil TreeNodeID.CreatedAt that faults during the split.
 	var splitTickets []*time.Ticket
 	for _, pbTicket := range pbTreeEdit.SplitTickets {
-		ticket, err := fromTimeTicket(pbTicket)
+		ticket, err := fromRequiredTimeTicket(pbTicket, "tree_edit.split_tickets")
 		if err != nil {
 			return nil, err
 		}
@@ -824,12 +832,12 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		return nil, goerrors.New("operation tree_style missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbTreeStyle.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbTreeStyle.ParentCreatedAt, "tree_style.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
 
-	executedAt, err := fromTimeTicket(pbTreeStyle.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbTreeStyle.ExecutedAt, "tree_style.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -886,11 +894,11 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 		return nil, goerrors.New("operation array_set missing")
 	}
 
-	parentCreatedAt, err := fromTimeTicket(pbSetByIndex.ParentCreatedAt)
+	parentCreatedAt, err := fromRequiredTimeTicket(pbSetByIndex.ParentCreatedAt, "array_set.parent_created_at")
 	if err != nil {
 		return nil, err
 	}
-	createdAt, err := fromTimeTicket(pbSetByIndex.CreatedAt)
+	createdAt, err := fromRequiredTimeTicket(pbSetByIndex.CreatedAt, "array_set.created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -898,7 +906,7 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbSetByIndex.ExecutedAt)
+	executedAt, err := fromRequiredTimeTicket(pbSetByIndex.ExecutedAt, "array_set.executed_at")
 	if err != nil {
 		return nil, err
 	}
@@ -921,6 +929,10 @@ func fromTextNodePos(
 	if err != nil {
 		return nil, err
 	}
+	if createdAt == nil {
+		return nil, fmt.Errorf("text_node_pos.created_at: %w", ErrMissingTicket)
+	}
+
 	return crdt.NewRGATreeSplitNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
@@ -1133,7 +1145,7 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 		return nil, err
 	}
 	if createdAt == nil {
-		return nil, goerrors.New("tree node id has nil createdAt")
+		return nil, fmt.Errorf("tree_node_id.created_at: %w", ErrMissingTicket)
 	}
 
 	return crdt.NewTreeNodeID(
@@ -1245,6 +1257,52 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
+// fromRequiredTimeTicket decodes a ticket that a well-formed operation always
+// carries. fromTimeTicket maps an absent ticket to (nil, nil), and the
+// execution paths dereference these without checking -- Root.FindByCreatedAt
+// and Ticket.After both do -- so a nil one decoded from client-supplied input
+// panics server-side. Worse, a pushed change is persisted before anything
+// executes it and is replayed later by the background snapshot goroutine, so
+// the panic repeats. Reject the nil at the converter boundary instead.
+func fromRequiredTimeTicket(pbTicket *api.TimeTicket, field string) (*time.Ticket, error) {
+	ticket, err := fromTimeTicket(pbTicket)
+	if err != nil {
+		return nil, err
+	}
+	if ticket == nil {
+		return nil, fmt.Errorf("%s: %w", field, ErrMissingTicket)
+	}
+	return ticket, nil
+}
+
+// dropSplitLinksInElement strips the split-sibling links from every tree
+// reachable from elem.
+//
+// A Set/Add/SetByIndex payload arrives as element bytes and is decoded by the
+// same BytesToObject/BytesToArray/BytesToTree that reads a server-built
+// snapshot, but unlike a snapshot it is entirely client-supplied and always
+// freshly created by the editing client: none of its nodes can be a split
+// product. The wire format carries InsPrevID/InsNextID regardless and the tree
+// follows them as trusted structural pointers, so drop them here for the same
+// reason FromTreeNodesWhenEdit drops them from operation content. Removed
+// members are walked too — they are still registered in NodeMapByID.
+func dropSplitLinksInElement(elem crdt.Element) {
+	switch e := elem.(type) {
+	case *crdt.Tree:
+		if root := e.Root(); root != nil {
+			root.DropSplitLinks()
+		}
+	case *crdt.Object:
+		for _, node := range e.RHTNodes() {
+			dropSplitLinksInElement(node.Element())
+		}
+	case *crdt.Array:
+		for _, node := range e.AllRGANodes() {
+			dropSplitLinksInElement(node.Element())
+		}
+	}
+}
+
 // sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
 // from every tree the decoded element carries, or passes the error through.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
@@ -1257,6 +1315,13 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	return elem, nil
 }
 
+// fromElement decodes the element an operation carries as its payload.
+//
+// The element's own createdAt is as load-bearing as the operation's tickets:
+// ElementRHT and RGATreeList key on it (v.CreatedAt().Key()), so an absent one
+// is a nil dereference the moment the operation is applied -- server-side, in
+// the background snapshot goroutine, on every later replay of the change. It is
+// required here for the same reason fromRequiredTimeTicket exists.
 func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	if pbElement == nil {
 		return nil, ErrUnsupportedElement
@@ -1265,7 +1330,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		if pbElement.Value == nil {
-			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 			if err != nil {
 				return nil, err
 			}
@@ -1277,7 +1342,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		return sanitizeElement(BytesToObject(pbElement.Value))
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
 		if pbElement.Value == nil {
-			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 			if err != nil {
 				return nil, err
 			}
@@ -1304,7 +1369,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
@@ -1318,7 +1383,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		}
 		return primitive, nil
 	case api.ValueType_VALUE_TYPE_TEXT:
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
@@ -1333,7 +1398,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
