@@ -979,20 +979,38 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	var treeNodes []*crdt.TreeNode
 
 	for _, pbNode := range pbNodes {
+		if pbNode == nil {
+			return nil, goerrors.New("tree edit content missing")
+		}
+
 		treeNode, err := FromTreeNodes(pbNode.Content)
 
 		if err != nil {
 			return nil, err
 		}
 
-		// Operation content is fully client-controlled and is always freshly
-		// created by the editing client, so it can never be a split product.
-		// Drop the split-sibling links the wire format carries anyway: the
-		// tree follows them as trusted structural pointers once Tree.Edit
-		// registers these nodes in NodeMapByID.
-		if treeNode != nil {
-			treeNode.DropSplitLinks()
+		// FromTreeNodes reports an empty content list as a nil root, and every
+		// group ToTreeNodesWhenEdit writes holds at least the root of one
+		// content node. Reject the empty group rather than carry the nil into
+		// the operation: TreeEdit.Execute dereferences each content to deep-
+		// copy it, so a nil in the slice is a panic on apply -- in the server
+		// handling the change, and on every replica it is forwarded to.
+		if treeNode == nil {
+			return nil, goerrors.New("tree edit content missing")
 		}
+
+		// Operation content is fully client-controlled and is always freshly
+		// created by the editing client, so it can never be a split product,
+		// carry a merge lineage, or arrive already tombstoned -- Tree.Edit
+		// stamps MergedFrom/MergedAt on the content it inserts from the merge
+		// parent it resolves locally, and tombstones it itself when the parent
+		// it lands in is removed. Drop the engine-only links and the tombstone
+		// the wire format carries anyway: the tree follows the links as trusted
+		// structural pointers once Tree.Edit registers these nodes in
+		// NodeMapByID, and a node born tombstoned under a live parent is
+		// counted as live content that no GC pair will ever collect.
+		treeNode.DropEngineOnlyLinks()
+		treeNode.ClearTombstones()
 
 		treeNodes = append(treeNodes, treeNode)
 	}
@@ -1223,34 +1241,6 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
-// dropSplitLinksInElement strips the split-sibling links from every tree
-// reachable from elem.
-//
-// A Set/Add/SetByIndex payload arrives as element bytes and is decoded by the
-// same BytesToObject/BytesToArray/BytesToTree that reads a server-built
-// snapshot, but unlike a snapshot it is entirely client-supplied and always
-// freshly created by the editing client: none of its nodes can be a split
-// product. The wire format carries InsPrevID/InsNextID regardless and the tree
-// follows them as trusted structural pointers, so drop them here for the same
-// reason FromTreeNodesWhenEdit drops them from operation content. Removed
-// members are walked too — they are still registered in NodeMapByID.
-func dropSplitLinksInElement(elem crdt.Element) {
-	switch e := elem.(type) {
-	case *crdt.Tree:
-		if root := e.Root(); root != nil {
-			root.DropSplitLinks()
-		}
-	case *crdt.Object:
-		for _, node := range e.RHTNodes() {
-			dropSplitLinksInElement(node.Element())
-		}
-	case *crdt.Array:
-		for _, node := range e.AllRGANodes() {
-			dropSplitLinksInElement(node.Element())
-		}
-	}
-}
-
 // sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
 // from every tree the decoded element carries, or passes the error through.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
@@ -1258,7 +1248,7 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 		return nil, err
 	}
 
-	dropSplitLinksInElement(elem)
+	crdt.DropSplitLinksInElement(elem)
 
 	return elem, nil
 }
