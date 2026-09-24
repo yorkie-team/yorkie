@@ -106,3 +106,33 @@ here: `pushPack` stores changes without materializing a root, so a real gate
 means building the document on the push path and deciding what a rejected push
 does to a client that already applied it locally — a design question, not an
 accounting one. Rebutted on scope with the note that the finding itself stands.
+
+## Panel round 2: the same gap, re-raised — standstill, not a skip
+
+Round 2 returned the identical finding. Nothing about it has changed and it is
+still correct, so this round did not write code against it either. What the
+second pass added was the cost of the only honest fix, which is what makes it a
+design decision rather than a patch:
+
+- The push path is deliberately document-free. `preparePack` returns before any
+  document exists for push-only mode (`server/packs/pushpull.go:446`), and
+  `pushPack` hands `pushables` straight to `CreateChangeInfos`
+  (`server/packs/pushpull.go:316`) without a root.
+- The only server-side way to obtain a root is `BuildInternalDocForServerSeq`
+  (`server/packs/snapshot.go:67`): a snapshot load, a `FindChangesBetweenServerSeqs`
+  range query, an `ApplyChangePack`, a `GarbageCollect`, and two whole-document
+  `DeepCopy` calls. Today that runs only when a pull crosses the snapshot
+  threshold. A gate in `pushPack` would run it on *every* push.
+- Cheaper half-gates were considered and rejected as worse than nothing. Reading
+  `DocSize()` off `be.Cache.Snapshot` is free but is never armed in the case that
+  matters — `storeSnapshot` builds its own document and does not populate that
+  cache, so a client that only pushes never warms it. Capping the bytes of a
+  single pack bounds one push, not a quota reached over many.
+- A lagging gate — have `storeSnapshot`, which already builds the document,
+  persist the size on `DocInfo` so `pushPack` can reject cheaply — is the shape
+  that would actually work. It needs a `DocInfo` field across both the Mongo and
+  memory backends and an answer for the client that has already applied locally
+  what the server now refuses. That is a design doc, not a review fix.
+
+Recorded as a standstill rather than a silent skip: the finding is upheld, the
+work is real, and it belongs to a human and a `docs/design/` entry.
