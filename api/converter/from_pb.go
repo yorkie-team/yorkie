@@ -1337,11 +1337,24 @@ func dropSplitLinksInElement(elem crdt.Element) {
 	}
 }
 
-// sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
-// from every tree the decoded element carries, or passes the error through.
+// sanitizeElement adapts a BytesTo* result: it refuses an element that names
+// no creation ticket, drops the split-sibling links from every tree the
+// decoded element carries, or passes the error through.
+//
+// The bytes branches of fromElement reach the same decoders a snapshot does,
+// but with client-supplied bytes. Those decoders nil-check the createdAt of
+// every nested member (from_bytes.go's fromObject/fromArray) and of every text
+// node id, yet build the outermost element with whatever fromTimeTicket
+// returns -- nil for an absent ticket. That element is then registered under
+// its own createdAt by ElementRHT/RGATreeList, which read Ticket.Key() off the
+// pointer, so the refusal has to happen before it is handed to Execute. Only
+// the operation path goes through here; the snapshot path is untouched.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	if err != nil {
 		return nil, err
+	}
+	if elem.CreatedAt() == nil {
+		return nil, fmt.Errorf("element.created_at: %w", ErrMissingTimeTicket)
 	}
 
 	dropSplitLinksInElement(elem)
@@ -1349,6 +1362,16 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	return elem, nil
 }
 
+// fromElement decodes the element value a Set/Add/ArraySet carries.
+//
+// Every branch requires created_at. It is the element's identity, not an
+// annotation: ElementRHT.SetWithExecutedAt and RGATreeList key the element by
+// Ticket.Key() and resolve conflicts with Ticket.Compare, both of which read
+// straight off the pointer. fromTimeTicket answers (nil, nil) for an omitted
+// ticket, so accepting one here would carry a nil through FromOperations into
+// a stored change and fault inside Execute -- on the server, in a goroutine
+// nothing recovers, and again on every later replay of that change. See
+// fromRequiredTimeTicket.
 func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	if pbElement == nil {
 		return nil, ErrUnsupportedElement
@@ -1357,7 +1380,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		if pbElement.Value == nil {
-			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 			if err != nil {
 				return nil, err
 			}
@@ -1369,7 +1392,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		return sanitizeElement(BytesToObject(pbElement.Value))
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
 		if pbElement.Value == nil {
-			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 			if err != nil {
 				return nil, err
 			}
@@ -1396,7 +1419,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
@@ -1410,7 +1433,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		}
 		return primitive, nil
 	case api.ValueType_VALUE_TYPE_TEXT:
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}
@@ -1425,7 +1448,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
 		if err != nil {
 			return nil, err
 		}

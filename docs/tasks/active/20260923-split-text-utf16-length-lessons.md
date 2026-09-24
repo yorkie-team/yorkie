@@ -196,3 +196,31 @@
   (document.go:454) and JS's `toOperation` throws on an unstamped one, so that
   wire form has no producer; the tests now stamp it, which is what the path
   they claim to model actually does.
+
+## Review panel round: the element is a ticket too
+
+- **"Every ticket on the operation" stopped one level short of the value.**
+  `fromRequiredTimeTicket` covered the operation's own tickets, but the
+  element a `Set`/`Add`/`ArraySet` carries decoded its `created_at` with the
+  nil-tolerant `fromTimeTicket` on all five inline branches, and the bytes
+  branches only nil-checked *nested* members — never the outermost element.
+  That createdAt is the element's identity: `ElementRHT` keys by
+  `Ticket.Key()` and resolves by `Ticket.Compare`, both reading off the
+  pointer. The previous round's test docstring already claimed this case; it
+  now has the four cases (three inline, one through `BytesToObject`) that
+  make the claim true.
+- **A rejection needs a reason it has no `NormalizeStoredOperations`
+  counterpart, written down.** Every clamp in `normalize.go` carries its
+  argument for existing; the ticket rejections carried no argument for *not*
+  existing, which reads the same as an oversight. They are sound because the
+  accepted shape already panicked the load that decoded it and because a
+  ticket cannot be repaired — invent one and every replica invents a
+  different operation. The file now says so.
+- **Serializing the publish does not serialize the read it publishes.** The
+  version-vector loader took `vectorCacheMu` only around `vectorCache.Add`,
+  so a detach landing during the Mongo `Find` found no cache entry to
+  `Delete` from and the loader then published a map still naming the departed
+  client — the exact pinning the detach was meant to end. `vectorCacheLoads`
+  registers the load *before* the read, so the write marks it stale and the
+  loader discards what it read. One uncached, conservatively low min beats a
+  cached wrong one.

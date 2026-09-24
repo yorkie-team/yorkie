@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -47,8 +48,21 @@ func TestFromOperationsRejectsMissingTicket(t *testing.T) {
 
 	prim, err := crdt.NewPrimitive(1, seed)
 	assert.NoError(t, err)
+	obj := crdt.NewObject(crdt.NewElementRHT(), seed)
 	textPos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(seed, 0), 0)
 	treePos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	// nullObjectBytesCreatedAt nulls the createdAt inside an element carried as
+	// serialized bytes, which is the branch of fromElement that BytesToObject
+	// decodes rather than the inline one.
+	nullObjectBytesCreatedAt := func(pbElem *api.JSONElementSimple) {
+		var pbJSON api.JSONElement
+		assert.NoError(t, proto.Unmarshal(pbElem.Value, &pbJSON))
+		pbJSON.GetJsonObject().CreatedAt = nil
+		bytes, err := proto.Marshal(&pbJSON)
+		assert.NoError(t, err)
+		pbElem.Value = bytes
+	}
 
 	// Each case names the field to null on the encoded operation; nulling is
 	// done on the protobuf so the operation itself stays well-formed.
@@ -116,6 +130,25 @@ func TestFromOperationsRejectsMissingTicket(t *testing.T) {
 		"array_set.executed_at",
 		operations.NewArraySet(seed, seed, prim, executedAt),
 		func(op *api.Operation) { op.GetArraySet().ExecutedAt = nil },
+	}, {
+		// The element a Set/Add/ArraySet carries is keyed by its own createdAt
+		// once it reaches ElementRHT/RGATreeList, so it is as required as the
+		// operation's own tickets -- inline, and inside the serialized bytes.
+		"set.value.created_at",
+		operations.NewSet(seed, "k", prim, executedAt),
+		func(op *api.Operation) { op.GetSet().Value.CreatedAt = nil },
+	}, {
+		"add.value.created_at",
+		operations.NewAdd(seed, seed, prim, executedAt),
+		func(op *api.Operation) { op.GetAdd().Value.CreatedAt = nil },
+	}, {
+		"array_set.value.created_at",
+		operations.NewArraySet(seed, seed, prim, executedAt),
+		func(op *api.Operation) { op.GetArraySet().Value.CreatedAt = nil },
+	}, {
+		"set.value.object_bytes.created_at",
+		operations.NewSet(seed, "k", obj, executedAt),
+		func(op *api.Operation) { nullObjectBytesCreatedAt(op.GetSet().Value) },
 	}}
 
 	for _, tc := range tests {

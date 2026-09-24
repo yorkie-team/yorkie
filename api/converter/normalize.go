@@ -38,8 +38,21 @@ import (
 // Each repair restores what the field meant before the check, except where
 // that meaning was itself a crash; see the individual comments. A rejection
 // with no repair here is only correct when the accepted shape used to fault
-// on read anyway -- a nil createdAt on a tree node id or a text node pos --
-// since there is no earlier behavior left to reproduce.
+// on read anyway, since there is no earlier behavior left to reproduce.
+//
+// Every ticket rejection is of that kind, which is why none of them has a
+// counterpart below. fromRequiredTimeTicket refuses an omitted ticket on an
+// operation, fromElement refuses one on the element a Set/Add/ArraySet
+// carries, and fromTextNodePos/fromTreeNodeID refuse a nil createdAt on a node
+// id. Accepting any of them used to hand a nil *time.Ticket to Ticket.Key() or
+// Ticket.Compare(), both of which read off the pointer -- so a stored change
+// shaped that way already panicked the process on the load that decoded it,
+// not merely on the wire. Refusing it downgrades that crash to a load error on
+// one document. Nor is a repair available: a ticket is (lamport, delimiter,
+// actor) and the message carries no record of what the missing one was, so any
+// value invented here would be a different operation on every replica that
+// invented it. Only clamps, which have exactly one defensible value, appear
+// below.
 func NormalizeStoredOperations(pbOps []*api.Operation) {
 	for _, pbOp := range pbOps {
 		if pbEdit := pbOp.GetEdit(); pbEdit != nil {

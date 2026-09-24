@@ -60,13 +60,30 @@ type Client struct {
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 
-	// vectorCacheMu serializes publishing a freshly loaded version-vector map
-	// into vectorCache. The map is mutated in place afterwards
-	// (UpdateMinVersionVector), so two loaders that each Add their own copy
-	// would leave one of them holding a map nothing reads -- and the mutations
-	// aimed at it, such as a detached client's Delete, lost with it. It does
-	// not cover the Mongo read, which stays outside the lock.
+	// vectorCacheMu guards vectorCacheLoads and serializes the two operations
+	// that contend over a document's version-vector map: publishing a freshly
+	// loaded one into vectorCache, and UpdateMinVersionVector's in-place
+	// mutation of whichever map the cache already holds. Running them under one
+	// lock means either the mutation finds the published map and applies to it,
+	// or it marks the load stale and the load discards what it read.
 	vectorCacheMu sync.Mutex
+
+	// vectorCacheLoads holds one entry per document with a load in flight, and
+	// only for as long as one is: the Mongo read stays outside vectorCacheMu,
+	// so the entry is what lets a write landing during that read tell the
+	// loader its result is already out of date.
+	vectorCacheLoads map[types.DocRefKey]*vectorLoad
+}
+
+// vectorLoad tracks the reads of one document's version vectors that are in
+// flight. refs counts them so the entry lives exactly as long as they do;
+// stale records that the collection changed since they started, which makes
+// every one of them unpublishable -- a map read before the write cannot
+// reflect it, and the write's own cache mutation found no entry to apply
+// itself to.
+type vectorLoad struct {
+	refs  int
+	stale bool
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -164,6 +181,8 @@ func Dial(conf *Config) (*Client, error) {
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
 		vectorCache:   vectorCache,
+
+		vectorCacheLoads: make(map[types.DocRefKey]*vectorLoad),
 	}
 
 	if conf.CacheStatsEnabled {
@@ -2417,15 +2436,7 @@ func (c *Client) UpdateMinVersionVector(
 
 	// 02. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
-		if attached {
-			vvMap.Upsert(clientInfo.ID, func(value time.VersionVector, exists bool) time.VersionVector {
-				return vector
-			})
-		} else {
-			vvMap.Delete(clientInfo.ID)
-		}
-	}
+	c.applyToVectorCache(docRefKey, clientInfo.ID, vector, attached)
 
 	// 03. Calculate the minimum version vector of the given document.
 	return c.GetMinVersionVector(ctx, docRefKey, vector)
@@ -2442,37 +2453,11 @@ func (c *Client) GetMinVersionVector(
 	// map on the stack and use it directly instead of re-reading the cache.
 	vvMap, ok := c.vectorCache.Get(docRefKey)
 	if !ok {
-		var infos []database.VersionVectorInfo
-		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-		})
+		loaded, err := c.loadVersionVectors(ctx, docRefKey)
 		if err != nil {
-			return nil, fmt.Errorf("find min version vector: %w", err)
+			return nil, err
 		}
-		if err := cursor.All(ctx, &infos); err != nil {
-			return nil, fmt.Errorf("find min version vector: %w", err)
-		}
-
-		infoMap := cmap.New[types.ID, time.VersionVector]()
-		for i := range infos {
-			infoMap.Set(infos[i].ClientID, infos[i].VersionVector)
-		}
-
-		// Publish at most one map per key: another loader may have published
-		// one while this one was reading from Mongo, and UpdateMinVersionVector
-		// mutates whichever map the cache holds. Overwriting would orphan those
-		// mutations -- most visibly a detached client's Delete -- and leave the
-		// surviving map claiming a client that is gone. Prefer the published
-		// map; this one is then just a discarded read.
-		c.vectorCacheMu.Lock()
-		if cached, ok := c.vectorCache.Get(docRefKey); ok {
-			vvMap = cached
-		} else {
-			c.vectorCache.Add(docRefKey, infoMap)
-			vvMap = infoMap
-		}
-		c.vectorCacheMu.Unlock()
+		vvMap = loaded
 	}
 
 	vals := vvMap.Values()
@@ -2480,6 +2465,134 @@ func (c *Client) GetMinVersionVector(
 	copy(vectors, vals)
 	vectors[len(vals)] = vector
 	return time.MinVersionVector(vectors...), nil
+}
+
+// loadVersionVectors reads the document's version vectors from the collection
+// and returns the map to read them from, publishing it into vectorCache when
+// it is still the freshest thing anyone has.
+func (c *Client) loadVersionVectors(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) (*cmap.Map[types.ID, time.VersionVector], error) {
+	// Register before the read, not after: the read below is the window this
+	// entry exists to cover.
+	load := c.beginVectorLoad(docRefKey)
+
+	var infos []database.VersionVectorInfo
+	cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	})
+	if err != nil {
+		c.endVectorLoad(docRefKey, load, nil)
+		return nil, fmt.Errorf("find min version vector: %w", err)
+	}
+	if err := cursor.All(ctx, &infos); err != nil {
+		c.endVectorLoad(docRefKey, load, nil)
+		return nil, fmt.Errorf("find min version vector: %w", err)
+	}
+
+	infoMap := cmap.New[types.ID, time.VersionVector]()
+	for i := range infos {
+		infoMap.Set(infos[i].ClientID, infos[i].VersionVector)
+	}
+
+	return c.endVectorLoad(docRefKey, load, infoMap), nil
+}
+
+// beginVectorLoad registers a load of the given document's version vectors as
+// in flight and returns its entry, which the caller hands back to
+// endVectorLoad.
+func (c *Client) beginVectorLoad(docRefKey types.DocRefKey) *vectorLoad {
+	c.vectorCacheMu.Lock()
+	defer c.vectorCacheMu.Unlock()
+
+	load, ok := c.vectorCacheLoads[docRefKey]
+	if !ok {
+		load = &vectorLoad{}
+		c.vectorCacheLoads[docRefKey] = load
+	}
+	load.refs++
+
+	return load
+}
+
+// endVectorLoad retires an in-flight load and answers the map its caller
+// should read, publishing infoMap only when nothing has overtaken it. Pass a
+// nil infoMap to retire a load that failed.
+//
+// Two things can overtake it. Another loader may have published first, in
+// which case that map is the one UpdateMinVersionVector mutates and this read
+// is merely discarded. Or a version-vector write may have landed mid-read and
+// marked the load stale: infoMap then predates the write -- it can still carry
+// a row the write deleted -- and the write could not apply itself to a cache
+// entry that did not yet exist. Publishing it would resurrect a detached
+// client's vector and pin the document's min version vector, and with it its
+// GC, to a lamport nobody advances again. Returning it uncached is safe: it is
+// used once to compute a min that is at worst conservatively low, and the next
+// call reloads from the collection.
+//
+// Retiring and publishing happen in one critical section on purpose. Splitting
+// them would let the entry drop to zero refs and be deleted first, so a write
+// arriving in between would find nothing to mark and nothing to mutate, and
+// this map would be published as if it were current.
+func (c *Client) endVectorLoad(
+	docRefKey types.DocRefKey,
+	load *vectorLoad,
+	infoMap *cmap.Map[types.ID, time.VersionVector],
+) *cmap.Map[types.ID, time.VersionVector] {
+	c.vectorCacheMu.Lock()
+	defer c.vectorCacheMu.Unlock()
+
+	load.refs--
+	if load.refs <= 0 && c.vectorCacheLoads[docRefKey] == load {
+		delete(c.vectorCacheLoads, docRefKey)
+	}
+
+	if infoMap == nil {
+		return nil
+	}
+	if cached, ok := c.vectorCache.Get(docRefKey); ok {
+		return cached
+	}
+	if load.stale {
+		return infoMap
+	}
+
+	c.vectorCache.Add(docRefKey, infoMap)
+
+	return infoMap
+}
+
+// applyToVectorCache records a client's just-written version vector on the
+// cached map for the document, removing the client instead when it is no
+// longer attached, and marks any load in flight for that document stale.
+//
+// The two halves belong together: exactly one of them takes effect for a given
+// load. Either the map is already published and gets the mutation, or it is
+// still being read and the loader is told to discard it.
+func (c *Client) applyToVectorCache(
+	docRefKey types.DocRefKey,
+	clientID types.ID,
+	vector time.VersionVector,
+	attached bool,
+) {
+	c.vectorCacheMu.Lock()
+	defer c.vectorCacheMu.Unlock()
+
+	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
+		if attached {
+			vvMap.Upsert(clientID, func(value time.VersionVector, exists bool) time.VersionVector {
+				return vector
+			})
+		} else {
+			vvMap.Delete(clientID)
+		}
+	}
+
+	if load, ok := c.vectorCacheLoads[docRefKey]; ok {
+		load.stale = true
+	}
 }
 
 // updateVersionVector updates the given version vector of the given client
