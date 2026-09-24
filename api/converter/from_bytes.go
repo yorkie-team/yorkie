@@ -145,7 +145,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 			return nil, err
 		}
 		if elem.CreatedAt() == nil {
-			return nil, fmt.Errorf("json object member has nil createdAt")
+			return nil, fmt.Errorf("json_object.node.created_at: %w", ErrMissingTicket)
 		}
 		// NOTE: elem already carries its own decoded movedAt/removedAt, so
 		// the LWW tie-break for re-inserting it into the RHT must use its
@@ -158,7 +158,13 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 		members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem))
 	}
 
-	createdAt, err := fromTimeTicket(pbObj.CreatedAt)
+	// These bytes are not always a server-built snapshot: the same decoder reads
+	// the element payload of a client-pushed Set/Add/ArraySet (fromElement ->
+	// sanitizeElement -> BytesToObject). The element's createdAt is what
+	// ElementRHT and RGATreeList key on, so an absent one is a nil dereference
+	// when the operation is applied -- required here for the same reason
+	// fromRequiredTimeTicket requires the operation's own tickets.
+	createdAt, err := fromRequiredTimeTicket(pbObj.CreatedAt, "json_object.created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +198,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		if pbNode.Element == nil {
 			// Dead position node (abandoned by a move).
 			if pbNode.PositionCreatedAt == nil || pbNode.PositionRemovedAt == nil {
-				return nil, fmt.Errorf("dead RGA position node missing position timestamps")
+				return nil, fmt.Errorf("json_array.node.position_created_at/position_removed_at: %w", ErrMissingTicket)
 			}
 			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
 			if err != nil {
@@ -211,7 +217,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 			return nil, err
 		}
 		if elem.CreatedAt() == nil {
-			return nil, fmt.Errorf("json array element has nil createdAt")
+			return nil, fmt.Errorf("json_array.node.created_at: %w", ErrMissingTicket)
 		}
 
 		posMovedAt, err := fromTimeTicket(pbNode.PositionMovedAt)
@@ -221,7 +227,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 
 		if posMovedAt != nil {
 			if pbNode.PositionCreatedAt == nil {
-				return nil, fmt.Errorf("moved RGA node missing position_created_at")
+				return nil, fmt.Errorf("json_array.node.position_created_at: %w", ErrMissingTicket)
 			}
 			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
 			if err != nil {
@@ -237,7 +243,8 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		}
 	}
 
-	createdAt, err := fromTimeTicket(pbArr.CreatedAt)
+	// See fromJSONObject: client-supplied element bytes reach here too.
+	createdAt, err := fromRequiredTimeTicket(pbArr.CreatedAt, "json_array.created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +269,8 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 func fromJSONPrimitive(
 	pbPrim *api.JSONElement_Primitive,
 ) (*crdt.Primitive, error) {
-	createdAt, err := fromTimeTicket(pbPrim.CreatedAt)
+	// See fromJSONObject: client-supplied element bytes reach here too.
+	createdAt, err := fromRequiredTimeTicket(pbPrim.CreatedAt, "json_primitive.created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +302,8 @@ func fromJSONPrimitive(
 func fromJSONText(
 	pbText *api.JSONElement_Text,
 ) (*crdt.Text, error) {
-	createdAt, err := fromTimeTicket(pbText.CreatedAt)
+	// See fromJSONObject: client-supplied element bytes reach here too.
+	createdAt, err := fromRequiredTimeTicket(pbText.CreatedAt, "json_text.created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +348,8 @@ func fromJSONText(
 }
 
 func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
-	createdAt, err := fromTimeTicket(pbCnt.CreatedAt)
+	// See fromJSONObject: client-supplied element bytes reach here too.
+	createdAt, err := fromRequiredTimeTicket(pbCnt.CreatedAt, "json_counter.created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +451,7 @@ func fromTextNodeID(
 		return nil, err
 	}
 	if createdAt == nil {
-		return nil, fmt.Errorf("text node id has nil createdAt")
+		return nil, fmt.Errorf("text_node_id.created_at: %w", ErrMissingTicket)
 	}
 
 	return crdt.NewRGATreeSplitNodeID(
@@ -456,7 +466,8 @@ func fromJSONTree(
 	if pbTree == nil {
 		return nil, fmt.Errorf("json tree is nil")
 	}
-	createdAt, err := fromTimeTicket(pbTree.CreatedAt)
+	// See fromJSONObject: client-supplied element bytes reach here too.
+	createdAt, err := fromRequiredTimeTicket(pbTree.CreatedAt, "json_tree.created_at")
 	if err != nil {
 		return nil, err
 	}

@@ -436,8 +436,12 @@ func (n *TreeNode) SplitText(
 	prevSize := n.DataSize()
 
 	n.Value = string(leftRune)
-	n.Index.VisibleLength = len(leftRune)
-	n.Index.TotalLength = len(leftRune)
+	// The left piece spans UTF-16 offsets [0,offset), so offset is its length.
+	// len(leftRune) is a rune count — utf16.Decode hands back runes — and it
+	// undercounts by one per surrogate pair, while every offset measured
+	// against this node counts UTF-16 code units.
+	n.Index.VisibleLength = offset
+	n.Index.TotalLength = offset
 
 	rightNode := NewTreeNode(&TreeNodeID{
 		CreatedAt: n.id.CreatedAt,

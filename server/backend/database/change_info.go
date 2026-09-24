@@ -118,12 +118,11 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 
 	// These operations were written under whatever rules held when they were
 	// stored, so validation added to FromOperations since then would reject
-	// them here and leave this document permanently unloadable. Repair the
-	// shapes that applies to before decoding; the client-facing decode path
-	// keeps rejecting them.
-	converter.NormalizeStoredOperations(pbOps)
-
-	ops, err := converter.FromOperations(pbOps)
+	// them here and leave this document permanently unloadable. Decoding
+	// through FromStoredOperations repairs the shapes that applies to, and
+	// drops the operations no repair exists for; the client-facing decode path
+	// keeps rejecting all of them.
+	ops, err := converter.FromStoredOperations(pbOps)
 	if err != nil {
 		return nil, err
 	}
