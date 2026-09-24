@@ -173,3 +173,26 @@
   client pushes the vector it last pushed, so the row survived the detach and
   resurrected on the next cache miss. The skip is now conditioned on the
   client still being attached.
+
+## Review panel round: nil tickets and the text half's missing test
+
+- **A guard added on one side of a mirrored pair needs the mirrored test.**
+  The nil-target skip in `RGATreeSplit.restore`/`retombstone` was the text
+  twin of `Tree.isolateTextRange`'s, but only the tree side got tests, so the
+  text side's only evidence it worked was that nothing crashed.
+  `TestTextRestoreSpanBoundInsideSurrogatePair` drives a `[2, 3)` span across
+  the clef's two code units through both entry points; with either guard
+  reverted it panics in `SetRemovedAt`, which is the whole point.
+- **Hardening one field of an untrusted message is not hardening the
+  message.** `fromTextNodePos` refused a nil `createdAt` because
+  `Ticket.Compare` reads `other.lamport` straight off the pointer, but every
+  other ticket on the same client-supplied operation still decoded to nil via
+  `fromTimeTicket`'s `(nil, nil)` — `executed_at` above all, which every
+  `Execute` walks into an `After`/`ActorID` call. `fromRequiredTimeTicket`
+  now refuses each ticket an operation cannot be interpreted without.
+- **"The test constructs it" is not "a peer can send it."** Requiring
+  `executed_at` broke two operation tests that encoded a reverse straight out
+  of `Execute`. `Document.Undo` stamps the reverse before it joins a change
+  (document.go:454) and JS's `toOperation` throws on an unstamped one, so that
+  wire form has no producer; the tests now stamp it, which is what the path
+  they claim to model actually does.

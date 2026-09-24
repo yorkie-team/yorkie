@@ -162,6 +162,12 @@ func TestStyle(t *testing.T) {
 		reverse := reverseRes.Reverse
 		assert.NoError(t, err)
 
+		// Execute leaves the reverse unstamped; Document.Undo issues its
+		// ticket before the reverse joins a change, so the wire form always
+		// carries one -- and the decoder now refuses one that does not (see
+		// converter.fromRequiredTimeTicket).
+		reverse.SetExecutedAt(time.NewTicket(3, 0, actor))
+
 		pbOps, err := converter.ToOperations([]operations.Operation{reverse})
 		assert.NoError(t, err)
 		decodedOps, err := converter.FromOperations(pbOps)

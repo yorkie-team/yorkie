@@ -311,6 +311,83 @@ func TestTextSplitInsideSurrogatePair(t *testing.T) {
 	})
 }
 
+func TestTextRestoreSpanBoundInsideSurrogatePair(t *testing.T) {
+	// The Text twin of the tree's TestTreeRestoreSpanBoundInsideSurrogatePair.
+	//
+	// A span bound between the two code units of a surrogate pair names no
+	// character boundary, so RGATreeSplit.isolateRange refuses to cut there
+	// and answers a nil target. restore and retombstone must SKIP such a
+	// range: the next thing either one does with the target is
+	// target.SetRemovedAt, which on a nil target panics the server replaying
+	// the change. A span like this is not hypothetical -- a replica whose
+	// strings can hold lone surrogates (JS) records it, and it then lives in
+	// the document's history forever.
+	const clef = "\U0001D11E" // one surrogate pair: two UTF-16 code units
+
+	// newText returns a Text holding "a<clef>b" (4 UTF-16 code units in one
+	// insertion) along with the ticket that insertion is identified by.
+	newText := func(t *testing.T) (*crdt.Text, *time.Ticket, func() *time.Ticket) {
+		t.Helper()
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos, err := text.CreateRange(0, 0)
+		require.NoError(t, err)
+		insertedAt := ctx.IssueTimeTicket()
+		_, _, _, _, _, err = text.Edit(fromPos, toPos, "a"+clef+"b", nil, insertedAt, nil)
+		require.NoError(t, err)
+
+		return text, insertedAt, ctx.IssueTimeTicket
+	}
+
+	t.Run("restore skips a mid-pair bound test", func(t *testing.T) {
+		text, insertedAt, nextTicket := newText(t)
+
+		delFrom, delTo, err := text.CreateRange(0, 4)
+		require.NoError(t, err)
+		_, _, _, _, _, err = text.Edit(delFrom, delTo, "", nil, nextTicket(), nil)
+		require.NoError(t, err)
+		require.Equal(t, "", text.String())
+
+		anchor, _, err := text.CreateRange(0, 0)
+		require.NoError(t, err)
+
+		// [2, 3) opens inside the clef, so no piece boundary answers it.
+		untombstoned, recreated, _ := text.Restore([]*crdt.RestoreSpan{{
+			CreatedAt: insertedAt, Start: 2, End: 3, Content: "x",
+		}}, nextTicket(), anchor)
+		assert.Empty(t, untombstoned, "a range naming no boundary revives nothing")
+		assert.Empty(t, recreated, "the piece still exists, so nothing is recreated")
+		assert.Equal(t, "", text.String())
+
+		// Skipping it leaves the insertion restorable as a whole, intact.
+		untombstoned, recreated, _ = text.Restore([]*crdt.RestoreSpan{{
+			CreatedAt: insertedAt, Start: 0, End: 4, Content: "a" + clef + "b",
+		}}, nextTicket(), anchor)
+		assert.NotEmpty(t, untombstoned)
+		assert.Empty(t, recreated)
+		assert.Equal(t, "a"+clef+"b", text.String())
+		assert.NotContains(t, text.String(), "�")
+	})
+
+	t.Run("retombstone skips a mid-pair bound test", func(t *testing.T) {
+		text, insertedAt, nextTicket := newText(t)
+
+		pairs, _ := text.Retombstone([]*crdt.RestoreSpan{{
+			CreatedAt: insertedAt, Start: 2, End: 3, Content: "x",
+		}}, nextTicket())
+		assert.Empty(t, pairs, "a range naming no boundary removes nothing")
+		assert.Equal(t, "a"+clef+"b", text.String())
+
+		// And the insertion is still removable as a whole.
+		pairs, _ = text.Retombstone([]*crdt.RestoreSpan{{
+			CreatedAt: insertedAt, Start: 0, End: 4, Content: "a" + clef + "b",
+		}}, nextTicket())
+		assert.NotEmpty(t, pairs)
+		assert.Equal(t, "", text.String())
+	})
+}
+
 func TestTextNormalizeAndRefinePos(t *testing.T) {
 	// A reverse operation anchors on a normalized position -- an absolute
 	// offset from the head -- and the anchor is remapped onto whatever the
