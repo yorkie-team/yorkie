@@ -17,6 +17,7 @@
 package trie
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 )
@@ -94,11 +95,9 @@ func (t *PathTrie[T]) insertNode(
 
 	segment := keyPath[depth]
 
-	// Copy children map
+	// Copy children map, sized for the one entry about to be inserted
 	newChildren := make(map[string]*trieNode[T], len(node.children)+1)
-	for k, v := range node.children {
-		newChildren[k] = v
-	}
+	maps.Copy(newChildren, node.children)
 
 	// Recursively insert into child
 	child := node.children[segment]

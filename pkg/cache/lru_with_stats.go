@@ -38,10 +38,7 @@ type LRU[K comparable, V any] struct {
 
 // NewLRU creates a new sharded LRU cache with statistics tracking.
 func NewLRU[K comparable, V any](size int, name string) (*LRU[K, V], error) {
-	perShard := size / numShards
-	if perShard < 1 {
-		perShard = 1
-	}
+	perShard := max(size/numShards, 1)
 
 	c := &LRU[K, V]{
 		stats: &Stats{},

@@ -605,9 +605,7 @@ func (m *Manager) List(
 	if limit <= 0 {
 		limit = MinChannelLimit
 	}
-	if limit > MaxChannelLimit {
-		limit = MaxChannelLimit
-	}
+	limit = min(limit, MaxChannelLimit)
 
 	results := make([]ChannelSessionCountInfo, 0)
 	if query != "" {

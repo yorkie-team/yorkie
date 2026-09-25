@@ -28,10 +28,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-var tID = reflect.TypeOf(types.ID(""))
-var tActorID = reflect.TypeOf(time.ActorID{})
-var tVersionVector = reflect.TypeOf(time.VersionVector{})
-var tPresenceChange = reflect.TypeOf(&presence.Change{})
+var tID = reflect.TypeFor[types.ID]()
+var tActorID = reflect.TypeFor[time.ActorID]()
+var tVersionVector = reflect.TypeFor[time.VersionVector]()
+var tPresenceChange = reflect.TypeFor[*presence.Change]()
 
 // NewRegistryBuilder returns a new registry with the default encoder and decoder.
 func NewRegistryBuilder() *bson.Registry {
