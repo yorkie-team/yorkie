@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-23
+updated: 2026-09-24
 ---
 
 # Tasks Index
@@ -20,7 +20,13 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Tree unwrap vs. merge-delete divergence (#1956) (2026-09-24) | [20260924-tree-unwrap-merge-delete-todo.md](./active/20260924-tree-unwrap-merge-delete-todo.md) | [20260924-tree-unwrap-merge-delete-lessons.md](./active/20260924-tree-unwrap-merge-delete-lessons.md) |
+| SplitText records the left piece's length in runes (2026-09-24) | [20260924-tree-split-text-utf16-length-todo.md](./active/20260924-tree-split-text-utf16-length-todo.md) | [20260924-tree-split-text-utf16-length-lessons.md](./active/20260924-tree-split-text-utf16-length-lessons.md) |
+| Expose cache hit/miss as Prometheus metrics (2026-09-24) | [20260924-cache-hit-miss-metrics-todo.md](./active/20260924-cache-hit-miss-metrics-todo.md) | [20260924-cache-hit-miss-metrics-lessons.md](./active/20260924-cache-hit-miss-metrics-lessons.md) |
 | Concurrent splits of one boundary sit in arrival order (2026-09-23) | [20260923-same-boundary-split-order-todo.md](./active/20260923-same-boundary-split-order-todo.md) | [20260923-same-boundary-split-order-lessons.md](./active/20260923-same-boundary-split-order-lessons.md) |
+| Maintainer Merge skill (2026-09-23) | [20260923-maintainer-merge-skill-todo.md](./active/20260923-maintainer-merge-skill-todo.md) | [20260923-maintainer-merge-skill-lessons.md](./active/20260923-maintainer-merge-skill-lessons.md) |
+| End the Watch stream when its subscriptions close (2026-09-22) | [20260922-watch-stream-zombie-todo.md](./active/20260922-watch-stream-zombie-todo.md) | [20260922-watch-stream-zombie-lessons.md](./active/20260922-watch-stream-zombie-lessons.md) |
+| Port `@claude fix` on an issue (issue → PR) (2026-09-22) | [20260922-agent-implement-issue-to-pr-todo.md](./active/20260922-agent-implement-issue-to-pr-todo.md) | [20260922-agent-implement-issue-to-pr-lessons.md](./active/20260922-agent-implement-issue-to-pr-lessons.md) |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
 | Precompute the daily peak sessions per channel (2026-09-17) | [20260917-peak-sessions-daily-summary-todo.md](./active/20260917-peak-sessions-daily-summary-todo.md) | [20260917-peak-sessions-daily-summary-lessons.md](./active/20260917-peak-sessions-daily-summary-lessons.md) |
 | Undoing a container removal discards a peer's concurrent edit inside it (2026-09-12) | [20260912-undo-discards-concurrent-peer-edit-todo.md](./active/20260912-undo-discards-concurrent-peer-edit-todo.md) | - |

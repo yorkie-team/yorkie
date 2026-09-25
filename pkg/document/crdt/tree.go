@@ -1986,9 +1986,11 @@ func (t *Tree) Edit(
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
-	// §6.2: Propagate deletes to children moved by prior merges.
+	// §6.2: Propagate deletes to children moved by prior merges. The declared
+	// positions are passed through because the skip is keyed on them; what the
+	// propagation tombstones stays out of the reverse info, as it does in JS.
 	mergePairs := t.propagateMergeDeletes(
-		fromParent, toBeRemoveds, toBeMergedNodes, editedAt,
+		fromParent, from, to, toBeRemoveds, toBeMergedNodes, editedAt,
 	)
 	pairs = append(pairs, mergePairs...)
 
@@ -2672,14 +2674,73 @@ func (t *Tree) mergeNodes(
 	return nil
 }
 
+// declaredBoundaries returns the elements the edit's own positions named as
+// boundaries: the element each position declared as its parent, and every
+// ancestor of that element. A range stops at those rather than covering them --
+// the edit asks to merge their remaining content away, not to delete it -- so a
+// concurrent merge that already moved their children where this edit would have
+// put them did this edit's work rather than something it now has to undo.
+//
+// The declared parent is resolved with findMergeNode, not ToTreeNodes: a floor
+// lookup matches on CreatedAt alone, so a ParentID naming an element-split
+// product this replica does not hold (a concurrent split not yet applied, or a
+// client-supplied offset) would land on the offset-0 element and hand the skip
+// to a node the position never named. An exact element match treats the absent
+// product as the absent lineage it is.
+//
+// The walk upward prefers MergedFrom over the physical parent: a prior merge
+// moves a node under the merge target, so Index.Parent no longer names the
+// element that enclosed it when the position was declared. Without that, an
+// edit merging at more than one level keeps only its innermost boundary --
+// the enclosing element the range also stops at is just as intentional, and
+// tombstoning its merge-moved children is the over-deletion this skip exists
+// to prevent. The boundaries map doubles as the seen set, guarding against a
+// cycle in a client-supplied MergedFrom chain the way resolveMergeTarget does.
+func (t *Tree) declaredBoundaries(positions ...*TreePos) map[*TreeNode]struct{} {
+	boundaries := map[*TreeNode]struct{}{}
+	for _, pos := range positions {
+		if pos == nil {
+			continue
+		}
+		for current := t.findMergeNode(pos.ParentID); current != nil; {
+			if _, ok := boundaries[current]; ok {
+				break
+			}
+			boundaries[current] = struct{}{}
+
+			if src := t.findMergeNode(current.MergedFrom); src != nil {
+				current = src
+				continue
+			}
+			if current.Index.Parent == nil {
+				break
+			}
+			current = current.Index.Parent.Value
+		}
+	}
+
+	return boundaries
+}
+
 // propagateMergeDeletes tombstones children that were moved by prior
 // merges when the merge-source node is fully deleted (not a merge
-// boundary). It skips when mergedInto points to the merge destination,
-// which indicates a concurrent merge rather than a delete. The list of
-// moved children is recomputed on the fly from the merge target's
-// children filtered by MergedFrom.
+// boundary). It skips a source whose children a concurrent merge already
+// moved into this edit's own destination AND that one of this edit's own
+// positions named -- directly, or as an ancestor of the one it named; see
+// declaredBoundaries: there the concurrent merge moved them where this edit
+// would have, so they are not part of what this edit deletes. The list of
+// moved children is recomputed on the fly from the merge target's children
+// filtered by MergedFrom.
+//
+// What it tombstones is reported as GC pairs only, never through
+// TreeEditReverseInfo: Phase 5's toBeRemoveds does not hold these nodes, and
+// JS's merge propagation likewise never appends to nodesToBeRemoved, so undo
+// drops them on both ports. Reporting them here would be a Go-only behavior
+// change to undo, which undo-redo-go-port.md rules out: a defect is ported as
+// is and fixed in both ports at once.
 func (t *Tree) propagateMergeDeletes(
 	fromParent *TreeNode,
+	from, to *TreePos,
 	toBeRemoveds []*TreeNode,
 	toBeMergedNodes []*TreeNode,
 	editedAt *time.Ticket,
@@ -2689,12 +2750,31 @@ func (t *Tree) propagateMergeDeletes(
 	// chained merge (dest != fromParent) must recognize a concurrent-merge
 	// boundary by dest to skip it here.
 	dest := t.resolveMergeTarget(fromParent)
+	// The boundaries the edit's own positions name, resolved lazily: §1.1
+	// redirects a position away from a merged-away parent, so fromParent and
+	// toParent no longer say which boundaries the edit asked for. Only the
+	// same-destination branch below needs them.
+	var declared map[*TreeNode]struct{}
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
 		if node.mergedInto == nil ||
-			slices.Contains(toBeMergedNodes, node) ||
-			node.mergedInto.Equal(dest.id) {
+			slices.Contains(toBeMergedNodes, node) {
 			continue
+		}
+		// A source whose children already sit in this edit's own destination
+		// stands for a merge the edit itself asks for only when one of the
+		// edit's positions named that source: the edit's range then stops at
+		// the source instead of covering it, and keeping the children is what
+		// makes the two replicas agree (§6.2). A source the range merely spans
+		// is a plain delete of everything that was inside it, so its children
+		// are tombstoned wherever the concurrent merge left them.
+		if node.mergedInto.Equal(dest.id) {
+			if declared == nil {
+				declared = t.declaredBoundaries(from, to)
+			}
+			if _, ok := declared[node]; ok {
+				continue
+			}
 		}
 		// The destination has to be the node mergedInto names exactly, and an
 		// element: this loop tombstones that node's children, so a floor

@@ -229,8 +229,51 @@ When a merge-source is deleted (not merged), its former children —
 now in the merge target — must also be tombstoned. Children are
 identified via `child.MergedFrom == source.id`.
 
-Skip propagation when `mergedInto == fromParent`: this indicates a
-concurrent merge (both sides merged into each other), not a delete.
+Skip propagation when `mergedInto` is this edit's own merge destination
+**and** one of the edit's own positions named that source: the concurrent
+merge then moved the children exactly where this edit would have, and
+tombstoning them would undo a merge the edit itself asks for. Two replicas
+running the same unwrap are the symmetric case (the source is the declared
+to-parent); an edit whose range starts inside the merged-away source is the
+other (the source is the declared from-parent).
+
+"Named" means the whole declared ancestry, not just the declared parent
+(`Tree.declaredBoundaries`). An edit that merges at more than one level runs
+past the Start or End token of every element between its position and the
+common ancestor, and stops at each of them rather than covering it; keying
+the skip on the innermost one alone would tombstone the merge-moved children
+of every enclosing boundary. The walk upward prefers a node's `MergedFrom`
+over its physical parent, because a prior merge has already moved the node
+out from under the element the position was declared inside.
+
+The positions have to be read as *declared*, not through the resolved
+`fromParent`/`toParent`: §1.1 redirects a position away from a merged-away
+parent, and that redirect is what widens the resolved range over the source
+in the first place. Nothing in the resolved range separates the two cases —
+a source the range merely spans is fully contained exactly as a redirected
+boundary is.
+
+Each declared `ParentID` is resolved through `findMergeNode`, not the floor
+lookup `Tree.ToTreeNodes` uses. A floor lookup matches on `CreatedAt` alone,
+so a `ParentID` naming an element-split product this replica does not hold —
+a concurrent split not yet applied, or a client-supplied offset — resolves to
+the offset-0 element and hands the skip to a node the position never named.
+An exact element match treats the absent product as the absent lineage it is,
+the same guard §6.3 applies to `mergedInto`.
+
+What the propagation tombstones never enters Phase 5's `toBeRemoveds`, so it
+reaches the operations layer as GC pairs only — not through
+`TreeEditReverseInfo` — and an undo of the edit does not restore it. That is
+JS's behavior too (its merge propagation likewise never appends to
+`nodesToBeRemoved`), and `undo-redo-go-port.md` keeps the two ports identical
+including JS's known defects, so this is a shared defect to fix in both ports
+at once rather than in Go alone.
+
+A source the range only spans is a plain delete of everything that was
+inside it. Its children are tombstoned wherever the concurrent merge left
+them; otherwise the replica that merged first keeps them alive while the
+replica that deleted first does not (#1956: an `Edit(0, 1)` unwrap of `p1`
+against a concurrent `Edit(0, 5)` that deletes `p1` whole).
 
 ### §6.3 Chained-Merge Flattening
 
@@ -1033,3 +1076,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 23 | §9.4 | From-side recovery for style ranges collapsed by a merge |
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
 | Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
+| Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
