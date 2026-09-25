@@ -30,12 +30,12 @@
 # checked.
 #
 # AND "CAME FROM" IS NOT THE AUTHOR LINE. An earlier revision of this file
-# compared `%aE` against the local `user.email`, which is not an authentication
-# decision at all: the author address is a field the branch's own author writes,
-# so `git config user.email maintainer@example.com` before committing walked
-# straight through the gate, and `.mailmap` — also branch-supplied, also
-# consulted by `%aE` — could rewrite it after the fact. The address is a label,
-# not a credential.
+# compared the author address against the local `user.email`, which is not an
+# authentication decision at all: the address is a field the branch's own
+# author writes, so `git config user.email maintainer@example.com` before
+# committing walked straight through the gate. The address is a label, not a
+# credential. (It is also read raw, `%ae`: the mailmapped `%aE` let the
+# branch's own `.mailmap` rewrite it after the fact.)
 #
 # The credential is the reflog — HEAD's and the current branch's. It lives in
 # `$GIT_DIR`, it is written by the local git as it moves HEAD and the branch,
@@ -166,7 +166,7 @@ yorkie_require_own_work() {
   # resolve produced no output, no output read as "no foreign commits", and the
   # gate passed on the error path.
   # shellcheck disable=SC2086
-  if ! commits=$(git log --format='%H %aE' HEAD --not $upstreams 2>/dev/null); then
+  if ! commits=$(git log --format='%H %ae' HEAD --not $upstreams 2>/dev/null); then
     echo "$hook: could not list this branch's commits against" >&2
     echo "        ${upstream#refs/remotes/}, so there is no way to tell whose code" >&2
     echo "        $runs would run. See the bypass below." >&2
@@ -178,8 +178,11 @@ yorkie_require_own_work() {
     return 0
   fi
 
-  # `%aE` is the mailmap-resolved author address, compared case-insensitively
-  # because git preserves the case a commit was made with and addresses are not
+  # `%ae` is the RAW author address. `%aE` would apply `.mailmap`, a tracked
+  # file the branch supplies, letting it map its author onto yours — which
+  # matters once you have rewritten the branch yourself (rebase, amend) and the
+  # reflog calls its commits created here. Compared case-insensitively, because
+  # git preserves the case a commit was made with and addresses are not
   # case-sensitive in practice. A commit with no author address at all
   # (`--author='A U Thor <>'`, which git accepts) yields an empty field: it is
   # reported as untrusted rather than silently compared equal to nothing, which

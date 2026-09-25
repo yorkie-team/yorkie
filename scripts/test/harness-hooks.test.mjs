@@ -976,3 +976,24 @@ test('setup.sh compares against upstream/main in a fork', () => {
     assert.equal(r.status, 0, r.stderr);
   });
 });
+
+test("the author check ignores the branch's own .mailmap", () => {
+  // `%aE` applies `.mailmap`, a tracked file the branch supplies, so a branch
+  // could map its author onto yours. Once you rewrite it locally (rebase,
+  // amend) the commits count as created and only the author check is left.
+  inScratchClone(({ upstream, clone, at, env }) => {
+    at(upstream)('checkout', '-qb', 'pr');
+    writeFileSync(path.join(upstream, '.mailmap'), 'test <test@example.com> <someone@else.example>\n');
+    at(upstream)('add', '.mailmap');
+    at(upstream)('-c', 'user.email=someone@else.example', 'commit', '-qm', 'theirs', '--no-verify');
+    at(clone)('fetch', '-q', 'origin');
+    at(clone)('checkout', '-qb', 'review', 'origin/pr');
+    // A local rewrite that keeps the author: now "created here".
+    const rebased = at(clone)('rebase', '-q', '-f', 'origin/main');
+    assert.equal(rebased.status, 0, rebased.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 1, `a mailmapped author must refuse: ${r.stdout}`);
+    assert.doesNotMatch(r.stdout, /RAN make/);
+    assert.match(r.stderr, /someone@else\.example/);
+  });
+});
