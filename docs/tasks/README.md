@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Agent pipeline: the entry paths a human PR uses (2026-09-25) | [20260925-agent-pipeline-entry-paths-todo.md](./active/20260925-agent-pipeline-entry-paths-todo.md) | [20260925-agent-pipeline-entry-paths-lessons.md](./active/20260925-agent-pipeline-entry-paths-lessons.md) |
 | A style's reached node set depends on delivery order (2026-09-24) | [20260924-style-reached-set-order-dependent-todo.md](./active/20260924-style-reached-set-order-dependent-todo.md) | [20260924-style-reached-set-order-dependent-lessons.md](./active/20260924-style-reached-set-order-dependent-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Expose cache hit/miss as Prometheus metrics (2026-09-24) | [20260924-cache-hit-miss-metrics-todo.md](./active/20260924-cache-hit-miss-metrics-todo.md) | [20260924-cache-hit-miss-metrics-lessons.md](./active/20260924-cache-hit-miss-metrics-lessons.md) |
