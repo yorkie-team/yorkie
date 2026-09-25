@@ -217,16 +217,36 @@ function failingPackage(lines) {
 /**
  * The most specific failing test.
  *
- * `go test -v` prints the deepest subtest FIRST and its parents after it, so
- * the first `--- FAIL:` in stream order is the most specific one — which is
- * also the one whose name can be handed straight to `go test -run`.
+ * THE ORDER IS NOT WHAT IT LOOKS LIKE. `go test -v` prints the PARENT's
+ * `--- FAIL:` first and indents its failing subtests underneath:
+ *
+ *     --- FAIL: TestTreeEdit (0.02s)
+ *         --- FAIL: TestTreeEdit/split_at_a_boundary (0.01s)
+ *
+ * so taking the first line in stream order names `TestTreeEdit` — true, but
+ * one level too coarse to hand to `go test -run`. Taking the last is wrong
+ * too: a run with several failing tests ends on whichever failed last.
+ *
+ * The rule that holds either way is DESCENDANT OF THE FIRST: the first
+ * `--- FAIL:` establishes the root, and the deepest later name below it is
+ * the specific one. A second unrelated failing test is not a descendant and
+ * cannot displace it.
  */
 function failingTest(lines) {
+  let root = null;
+  let best = null;
   for (const line of lines) {
     const m = /^\s*--- FAIL:\s+(\S+)/.exec(line);
-    if (m) return m[1];
+    if (!m) continue;
+    const name = m[1];
+    if (root === null) {
+      root = name;
+      best = name;
+      continue;
+    }
+    if (name.startsWith(`${root}/`) && name.length > best.length) best = name;
   }
-  return null;
+  return best;
 }
 
 /** `# pkg` followed by `file.go:1:2: message` — the shape of a compile error. */

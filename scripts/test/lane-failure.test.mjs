@@ -24,6 +24,10 @@ import {
  * independently would agree with whatever the implementation did and assert
  * nothing — and it is how the duplicate-counting bug ("2 issues" rendered as
  * "+3 more") stayed invisible until a test counted.
+ *
+ * The context lookbehind is the runner's, not re-derived here: that logic is
+ * `createCapture`'s and is tested there. Anything it would have kept is in
+ * `tail` for these fixtures anyway.
  */
 function evidence(kind, output) {
   const lines = output.split('\n');
@@ -35,12 +39,17 @@ function evidence(kind, output) {
   };
 }
 
+// Copied from a real `go test -tags integration -race -v ./...` run in this
+// repository, ORDER INCLUDED. The order is the part that matters and the part
+// that was got wrong: go prints the PARENT's `--- FAIL:` first and indents the
+// failing subtests underneath it.
 const GO_TEST_FAIL = `=== RUN   TestTreeEdit
 === RUN   TestTreeEdit/split_at_a_boundary
     tree_test.go:214: expected <p>ab</p>, got <p>a</p><p>b</p>
-    --- FAIL: TestTreeEdit/split_at_a_boundary (0.01s)
 --- FAIL: TestTreeEdit (0.02s)
+    --- FAIL: TestTreeEdit/split_at_a_boundary (0.01s)
 FAIL
+coverage: 14.7% of statements in ./...
 FAIL	github.com/yorkie-team/yorkie/pkg/document/crdt	0.312s
 ok  	github.com/yorkie-team/yorkie/pkg/units	0.004s
 FAIL`;
@@ -49,9 +58,30 @@ test('a failing Go test is named, not the first line with the word error', () =>
   const summary = summarizeFailure(evidence('go-test', GO_TEST_FAIL));
   assert.match(summary, /TestTreeEdit\/split_at_a_boundary failed/);
   assert.match(summary, /github\.com\/yorkie-team\/yorkie\/pkg\/document\/crdt/);
-  // The subtest, not its parent: `go test -v` prints the deepest one first,
-  // and it is the name that can be handed to `go test -run`.
+  // The subtest, not its parent, even though the parent is printed first. The
+  // subtest name is the one that can be handed to `go test -run`.
   assert.doesNotMatch(summary, /^TestTreeEdit failed/);
+});
+
+test('the specific name wins whichever order the two arrive in', () => {
+  // Parallel subtests interleave, so the indented line can precede its parent.
+  // The rule is "deepest descendant of the first `--- FAIL:`", which holds for
+  // both orders — unlike "first" or "last", each of which is right once.
+  const reversed = `    --- FAIL: TestTreeEdit/split_at_a_boundary (0.01s)
+--- FAIL: TestTreeEdit (0.02s)
+FAIL	github.com/yorkie-team/yorkie/pkg/document/crdt	0.312s`;
+  assert.match(
+    summarizeFailure(evidence('go-test', reversed)),
+    /TestTreeEdit\/split_at_a_boundary failed/,
+  );
+});
+
+test('a second, unrelated failing test cannot displace the first', () => {
+  const two = `--- FAIL: TestAlpha (0.01s)
+    --- FAIL: TestAlpha/one (0.01s)
+--- FAIL: TestBetaWithAMuchLongerName (0.01s)
+FAIL	github.com/yorkie-team/yorkie/pkg/document/crdt	0.312s`;
+  assert.match(summarizeFailure(evidence('go-test', two)), /^TestAlpha\/one failed/);
 });
 
 test('the assertion line rides along when there is one', () => {
