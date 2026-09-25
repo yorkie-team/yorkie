@@ -61,6 +61,8 @@ not contain the failure at all.
 - [x] End-to-end locally: break a Go test, run the runner, show that the
       summariser names the failing test and that `summarize-ci.mjs` renders
       the block a fixing agent would receive. Recorded in the lessons file.
+      It found two defects the whole green suite had missed — see the
+      lessons — so the last two commits are the fixes and their tests.
 
 ## Review
 

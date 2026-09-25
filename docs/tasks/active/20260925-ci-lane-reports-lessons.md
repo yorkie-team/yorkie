@@ -63,6 +63,53 @@ That is also what forced `lane-failure.mjs` to own the patterns rather than
 the runner: the runner has to apply them while streaming, and the suite has to
 test them without a Go toolchain anywhere near it.
 
+## Running it for real found two bugs no unit test would have
+
+The whole suite was green, on fixtures written from memory of what `go test`
+prints. Then the `test` lane ran for real against this repository with a
+planted failing test — 666 KB of output — and returned:
+
+```
+"summary": "FAIL",
+"notableDropped": 104
+```
+
+Both defects were in the half that only a real stream exercises.
+
+**The patterns matched what a PASSING run prints.** `ok  <pkg>` and every
+`<file>_test.go:NN:` line were on the notable list. In verbose output those
+are most of the stream, so the 60-line budget filled with a hundred passing
+packages long before the run reached the failing one, and the `--- FAIL:`
+never got in. The rule that came out of it: *a pattern that matches a green
+run's output does not select evidence, it evicts it.* The fixtures could not
+have caught this — every one of them was a failure, so the budget was never
+under pressure.
+
+Tightening the patterns then lost the one line worth having, the assertion
+output, because it is byte-identical whether its test passed or failed. That
+one is kept by **lookbehind** instead: hold the last eight context-shaped
+lines and flush them only when a failure-shaped line arrives, which is exactly
+where `go test` prints them.
+
+**`go test` prints the parent's `--- FAIL:` first.** The comment in the code
+confidently said the opposite, and the fixture had been written to agree with
+the comment:
+
+```
+--- FAIL: TestLaneDemoTreeSplit (0.00s)
+    --- FAIL: TestLaneDemoTreeSplit/split_at_a_boundary (0.00s)
+```
+
+so "take the first" named one level too coarse for `go test -run`. "Take the
+last" is wrong the other way — a run with several failing tests ends on
+whichever failed last. The rule that holds for both orders is *deepest
+descendant of the first*. The fixture is now a verbatim copy of the real run.
+
+The lesson is narrower than "write integration tests": **a fixture written
+from memory tests the memory.** Both fixtures had been derived from what the
+implementation expected, so they agreed with it. The 25 minutes the real lane
+took is what the design doc's claims are now worth.
+
 ## The dedup bug the fixtures found
 
 `summarizeFailure` takes the notable lines *and* the tail. On any lane whose
