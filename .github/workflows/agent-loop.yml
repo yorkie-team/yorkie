@@ -255,7 +255,12 @@ jobs:
             // Re-run the latest CI run for the head SHA so the loop engages now
             // (a green run → review panel; a red run → CI-fix arm). Best-effort:
             // if there's nothing to re-run, the label still engages the next CI run.
-            let ciNote = "\n\nIt will engage on the next CI run — if there is one. `ci.yml` ignores changes confined to markdown, `api/docs/**`, `build/charts/**`, `design/**` and `*.txt`, and the panel triggers only on a CI run, so a PR touching only those never starts a round. Use `@claude review` for those.";
+            // No longer carries the docs-only caveat it used to. `ci.yml` filters
+            // documentation on its `build` JOB rather than on the workflow
+            // trigger, so every pull request produces a CI run and every pull
+            // request therefore reaches the panel — a documentation PR just runs
+            // no Go lane inside it.
+            let ciNote = "\n\nIt will engage on the next CI run.";
             try {
               // Mirrors `ciRunToRerun` / `ciRunToAwait` in scripts/agent/checks.mjs,
               // where the rules are unit-tested — this step runs before any

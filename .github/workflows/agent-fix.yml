@@ -301,20 +301,36 @@ jobs:
       # agent-iterate-ci fires on `workflow_run` of CI with `conclusion ==
       # 'failure'`, and that is the whole of what makes each answer below right:
       #
-      #   no CI run at all   → CLEAR. No workflow_run event ever fires, so the
-      #                        arm cannot have started. This is the ordinary
-      #                        state of a docs-only PR: ci.yml carries
-      #                        `paths-ignore: "**/*.md"`, so such a PR produces
-      #                        no run ever — and the `docs` lens is blocking, so
-      #                        refusing here would make `@claude fix` permanently
-      #                        unusable on exactly the PRs only it can unblock.
+      #   no CI run at all   → NOT clear. See below; this branch used to answer
+      #                        CLEAR and the reason it gave was false.
       #   queued/in progress → NOT clear. The arm fires the moment it concludes
       #                        failure, which is seconds away.
       #   completed success  → CLEAR. The arm never fired.
       #   completed failure  → NOT clear. The arm owns this branch.
       #
-      # Fails toward NOT clear on anything unreadable: an API error refuses
-      # rather than races, like every other branch of this gate.
+      # THE FIRST ROW USED TO SAY CLEAR, AND IT WAS DEAD CODE THAT ALSO GAVE THE
+      # WRONG ANSWER. Its justification was that a docs-only PR produces no CI
+      # run (`ci.yml` then carried `paths-ignore: "**/*.md"`), so refusing here
+      # would make `@claude fix` permanently unusable on the PRs the blocking
+      # `docs` lens is the only thing gating. Follow the two conditions and it
+      # never ran: this step is `if: steps.eligible.outputs.eligible == 'true'`,
+      # and `fix-eligible.mjs` returns ineligible whenever the head carries no
+      # `agent-review-<lens>` check runs. Only the panel writes those
+      # (`agent-review-on-demand.yml` holds `checks: read`, never write), and the
+      # panel runs only from a CI `workflow_run`. No CI run therefore implied no
+      # verdict, which was refused one gate earlier — every time, for the whole
+      # life of the carve-out.
+      #
+      # `ci.yml` no longer filters `pull_request` at the workflow level, so a
+      # docs-only PR now produces a run (its `build` job skips instead), and the
+      # case the carve-out was written for does not exist. What is left in the
+      # no-run state is "this sha's CI run is not visible" — deleted by hand, or
+      # aged past retention while its check runs survive — i.e. the conclusion
+      # that gates the two pushing arms cannot be read at all.
+      #
+      # So it joins every other unknown here. Fails toward NOT clear on anything
+      # unreadable: an API error refuses rather than races, and so does an absent
+      # run.
       - name: Refuse while the CI-fix arm may own this branch
         if: steps.eligible.outputs.eligible == 'true'
         id: ci-clear
@@ -332,14 +348,15 @@ jobs:
                 workflow_id: 'ci.yml', head_sha: sha, per_page: 100,
               });
               const runs = data.workflow_runs || [];
-              // No run at all → the CI arm cannot have fired. See the four
-              // states above; this is a docs-only PR's normal condition, not a
-              // gap. A reviewer has already read this branch as "proceeding
-              // before CI is known green" — it is, deliberately, because the
-              // question is ownership, not greenness.
+              // No run at all → REFUSE. It is true that the CI arm cannot have
+              // fired without one, but that is not the only thing this gate
+              // hands over: a `@claude fix` push wants a CI state somebody has
+              // read, and an invisible run is one nobody can. Kept as an
+              // explicit branch rather than left to the `reduce` below throwing
+              // into the catch, so the log says which unknown this was.
               if (!runs.length) {
-                core.info(`No CI run exists for ${sha}; the CI-fix arm cannot have started.`);
-                return core.setOutput('clear', 'true');
+                core.info(`No CI run is visible for ${sha}, so its conclusion cannot be read; refusing rather than racing.`);
+                return core.setOutput('clear', 'false');
               }
               const newest = runs.reduce((a, b) => ((b.id ?? 0) > (a.id ?? 0) ? b : a));
               // AN UNFINISHED RUN IS NOT A CLEAR ONE. Asking whether CI is RED
@@ -414,7 +431,8 @@ jobs:
             // out. REASON is empty only when the gate step itself failed rather
             // than returning a decision; say that, rather than posting a blank.
             const why = process.env.CI_CLEAR === 'false'
-              ? 'CI is not green on this commit — it is still running, or it failed and the CI-fix arm owns that state. '
+              ? 'CI is not known green on this commit — it is still running, it failed and the CI-fix arm owns that state, '
+                + 'or no CI run for this commit is visible any more (deleted, or aged past retention). '
                 + 'Running a second fixer on the same branch would lose one of the two pushes. '
                 + 'Wait for CI, then comment `@claude fix` again — or `@claude rerun` if the PR was handed to a human.'
               : (process.env.REASON

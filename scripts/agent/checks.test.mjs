@@ -931,19 +931,80 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
     !/conclusion === 'failure'/.test(gate),
     "asking whether CI is RED lets a still-running run pass as clear",
   );
-  // THE ABSENT-RUN BRANCH IS DELIBERATE, and pinned because it has already been
-  // read as a bug once. The gate asks whether agent-iterate-ci.yml's fixer could
-  // own this branch, not whether the code is good — and that arm fires only on a
-  // `workflow_run` of CI, so no run means it cannot have started. Refusing here
-  // would make `@claude fix` permanently unusable on a docs-only PR, which
-  // produces no CI run ever (`ci.yml` ignores `**/*.md`) and which the blocking
-  // `docs` lens is the only thing gating.
+  // THE ABSENT-RUN BRANCH REFUSES, and it is pinned because it used to answer
+  // the opposite for a reason that was never true.
+  //
+  // The carve-out said: the gate asks whether agent-iterate-ci.yml's fixer could
+  // own this branch, that arm fires only on a `workflow_run` of CI, so no run
+  // means it cannot have started — and refusing would make `@claude fix`
+  // unusable on a docs-only PR, which produced no CI run at all. Follow the two
+  // conditions instead of the prose and the branch never executed: the step is
+  // `if: steps.eligible.outputs.eligible == 'true'`, and `decideEligibility`
+  // returns `eligible: false` on `total === 0` — no lens check runs on the head.
+  // Only the panel writes those, and only a CI run starts the panel. No CI run
+  // therefore meant no verdict, refused one gate earlier, every time.
+  //
+  // `ci.yml` now filters documentation on its `build` JOB rather than on the
+  // `pull_request` trigger (see the guard below), so a docs-only PR produces a
+  // run and the case is gone. What is left in this branch is an invisible run —
+  // deleted, or past retention — which is the CI conclusion being unreadable,
+  // and this gate refuses every unknown.
   assert.match(gate, /if \(!runs\.length\)/, "the no-run case must be handled explicitly");
   const noRun = gate.slice(gate.indexOf("if (!runs.length)"), gate.indexOf("const newest"));
-  assert.match(noRun, /setOutput\('clear', 'true'\)/,
-    "an absent CI run must read as CLEAR — the CI-fix arm cannot have fired without one");
+  assert.match(noRun, /setOutput\('clear', 'false'\)/,
+    "an absent CI run means its conclusion cannot be read — refuse, like every other unknown here");
   assert.match(refusal.slice(0, 2600), /eligibility check could not complete/, "an empty reason must still say something");
   assert.match(refusal.slice(0, 2600), /the CI-fix arm owns that state/, "...and the CI-red refusal must say which arm has the branch");
+  assert.match(refusal.slice(0, 2600), /no CI run for this commit is visible/,
+    "...and the refusal must name the third cause, or an absent run reads as a stuck CI");
+});
+
+test("ci.yml files a run for every PR, so a docs-only PR reaches the pipeline", () => {
+  // THE PROPERTY THE WHOLE AUTONOMOUS ARM RESTS ON, and it is about the run
+  // EXISTING, not about what runs inside it.
+  //
+  // `agent-review-panel.yml` and `agent-iterate-ci.yml` both trigger on
+  // `workflow_run` of `ci.yml`. A workflow skipped by a trigger-level
+  // `paths-ignore` files NO RUN, so there is no event, so neither fires — and a
+  // PR confined to markdown sat outside the loop entirely: `@claude loop`
+  // labelled it and nothing happened, `mark-ready.mjs`'s gate could never go
+  // green, and `@claude fix`'s docs-only carve-out above was written for a state
+  // `fix-eligible.mjs` had already refused. Moving the filter onto the `build`
+  // JOB keeps the cost saving (no Go lane, no MongoDB, no `-race` suite) and
+  // gives the pipeline its event back.
+  //
+  // Asserted here rather than left to review because it is a ONE-LINE
+  // regression: re-adding `paths-ignore:` under `pull_request` restores every
+  // symptom above and changes nothing a reviewer of that diff would see run.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const yml = readFileSync(path.join(HERE, "..", "..", CI_WORKFLOW_PATH), "utf8");
+
+  const on = yml.slice(yml.indexOf("\non:"), yml.indexOf("\nenv:"));
+  const pr = on.slice(on.indexOf("  pull_request:"));
+  assert.ok(pr.startsWith("  pull_request:"), "ci.yml must still trigger on pull_request");
+  assert.ok(
+    !/^ {4}paths(-ignore)?:/m.test(pr.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n")),
+    "ci.yml must not filter `pull_request` at the workflow level — a filtered-out PR files no run, "
+    + "and the review panel and the CI-fix arm both trigger on one",
+  );
+
+  // ...and the filter that replaced it must keep failing toward RUNNING. The
+  // only positive pattern is `**`, so a path nothing mentions still builds; the
+  // rest are negations. A positive list here would silently skip CI on any new
+  // directory, which is the failure this shape exists to make impossible.
+  const step = yml.slice(yml.indexOf("id: code-changed"));
+  const filters = step.slice(step.indexOf("build:"), step.indexOf("\n\n"));
+  const patterns = [...filters.matchAll(/^ {14}- '(.+)'$/gm)].map((m) => m[1]);
+  assert.ok(patterns.length >= 2, "could not read the build filter's patterns from ci.yml");
+  assert.equal(patterns[0], "**", "the build filter's only positive pattern must be `**`");
+  for (const p of patterns.slice(1)) {
+    assert.ok(p.startsWith("!"), `the build filter must be \`**\` plus negations only; found '${p}'`);
+  }
+  // Without `every`, dorny/paths-filter ORs the patterns per file: a lone
+  // `README.md` matches `**` and the filter is true, so the negations do
+  // nothing and the step is a no-op that looks like a filter.
+  assert.match(step.slice(0, 400), /predicate-quantifier: every/,
+    "the build filter needs `predicate-quantifier: every`, or its negations are inert");
 });
 
 test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
@@ -969,9 +1030,10 @@ test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
   // rather than an omission. Upstream asserts this list is a superset of its
   // `harness.config.json` `ciConfig`, which exists because a changed path there
   // can SHRINK a CI run — so a PR editing it could grade its own homework. This
-  // repository's `ci.yml` filter declares `build: '**'`, so the lint/build/test
-  // job is unconditional and no path can shrink it; the tag-gated jobs it can
-  // narrow (bench, complex-test, load-test) are not what a gate reads. The
+  // repository's `build` filter is `'**'` plus negations naming documentation
+  // paths, and `definesCi` refuses a PR that edits `ci.yml` at all, so a branch
+  // cannot widen those negations to exempt its own code; the tag-gated jobs it
+  // can narrow (bench, complex-test, load-test) are not what a gate reads. The
   // property the upstream mirror protects is structurally absent, so what is
   // left to assert is that the matcher classifies the real surface.
   for (const p of [

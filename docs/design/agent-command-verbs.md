@@ -278,11 +278,34 @@ that latch — deliberately, because pushing a commit does not.
   switch: turn `AGENT_PIPELINE_ENABLED` on and Phase 1 works, while `loop`,
   `rerun` and `fix` refuse legibly until the App exists.
 
-- **Requires:** a docs-only PR cannot use it. `ci.yml` carries `paths-ignore`
-  for markdown, `api/docs`, `build/charts`, `design/` and `*.txt`, and the panel
-  triggers only on a CI run, so a PR confined to those paths never starts a
-  round — `@claude loop` labels it and nothing happens. `@claude review` is the
-  path for those, and the loop's confirmation comment says so.
+- **Required, until 2026-09-25: a docs-only PR could not use it.** `ci.yml`
+  carried `paths-ignore` for markdown, `api/docs`, `build/charts`, `design/`
+  and `*.txt`; the panel triggers only on a CI run, so a PR confined to those
+  paths never started a round — `@claude loop` labelled it and nothing
+  happened, and the loop's confirmation comment had to say so.
+
+  That filter now sits on `ci.yml`'s **`build` job** instead of on its
+  `pull_request` trigger. The distinction is the whole fix: a trigger-level
+  filter files **no run**, and three things here read the run's existence
+  rather than its result — this workflow's `workflow_run`,
+  `agent-iterate-ci.yml`'s, and `mark-ready.mjs`'s promotion gate, which
+  refused an empty run list and told the operator to promote by hand. A
+  job-level filter files the run and skips the Go lane inside it, so the cost
+  is unchanged (one `ci-target-check` job, ~20s) and every PR reaches the
+  pipeline.
+
+  It also settles a question this document left open above: GitHub leaves a
+  required check **Pending forever** when its workflow is skipped by path
+  filtering, and reports **Success** when a job is skipped by a conditional. So
+  making a lane required would have deadlocked every docs PR under the old
+  arrangement and does not under this one.
+
+  The filter fails toward RUNNING. Its only positive pattern is `**` and the
+  rest are negations, so an unmatched path — a new directory, an unfamiliar
+  extension — builds; `checks.test.mjs` pins that shape, and pins that
+  `pull_request` carries no workflow-level filter. `dorny/paths-filter` needs
+  `predicate-quantifier: every` for it, because under the default a lone
+  `README.md` matches `**` and the negations do nothing.
 - **Requires:** a decision about the six new check runs that appear on a
   labelled PR. Whether any of them is *required* to merge is a repository
   setting, and should start as "no".
@@ -307,6 +330,17 @@ The first phase in which a bot pushes commits to a contributor's branch.
 check runs — a commit landing after the panel moves the head, so that one
 question answers both "did the panel run?" and "has anything landed since?".
 It fails toward ineligible on every unknown.
+
+A second gate sits behind that one and asks a different question: *could
+`agent-iterate-ci.yml`'s fixer be pushing to this branch right now?* It answers
+from CI's state on the head, and it carried a carve-out — *no CI run at all →
+proceed* — justified as keeping the verb usable on a docs-only PR. That
+justification was never reachable: the step runs only when `fix-eligible.mjs`
+said yes, and `fix-eligible` refuses a head with no lens check runs, which only
+a panel writes, which only a CI run starts. No CI run therefore meant no
+verdict, refused one gate earlier. With Phase 2's filter change a docs-only PR
+has a CI run anyway, so the branch now refuses: an invisible run is a CI
+conclusion nobody can read, and this gate refuses every unknown.
 
 `reply` is the bare-mention fallback: a comment mentioning `@claude` with no
 verb on an agent-authored PR is treated as review feedback to evaluate, act on
@@ -553,9 +587,12 @@ fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
 
 *Enforced by nothing* — `staticcheck` and `unused` are explicitly disabled in
 `.golangci.yml`. `complex-test`, `bench` and `load-test` are path-gated and do
-not run on most PRs. And `ci.yml` carries `paths-ignore: "**/*.md"`, so a
-documentation-only PR runs none of the above — only the separate `docs.yml`,
-which checks documentation links and reads no Go behaviour.
+not run on most PRs. And `ci.yml`'s `build` job is filtered on `**/*.md` (plus
+`api/docs`, `build/charts`, `design/` and `*.txt`), so a documentation-only PR
+runs none of the above — only the separate `docs.yml`, which checks
+documentation links and reads no Go behaviour. *Which lanes execute* is
+unchanged by that filter's move off the trigger; *whether a run exists* is
+not, and Phase 2 above says why that mattered.
 
 The Apache license header was on this list, as a convention with no lane behind
 it, and 17 of 486 `.go` files had drifted by the time anyone counted. It now has
@@ -563,7 +600,8 @@ one: `scripts/verify-license.mjs`, run by `ci.yml`'s `build` job and by `make
 verify` locally. It sits in `ci.yml` rather than the unfiltered `docs.yml`
 because `agent-iterate-ci.yml` subscribes to CI alone — a gate that reds in
 another workflow stops an agent-managed PR with nothing watching it — and
-`paths-ignore` costs it nothing, since no ignored path holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
+the `build` job's documentation filter costs it nothing, since no filtered path
+holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
 `MECHANICAL_COVERAGE_NOTE` was derived from, so the two move together — a stale
 entry here becomes a lens instructed to hunt a class CI already reds.
 
