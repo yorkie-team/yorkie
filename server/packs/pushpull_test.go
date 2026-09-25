@@ -300,6 +300,145 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, uint32(2), clientInfo.Checkpoint(docID).ClientSeq)
 	})
 
+	t.Run("keeps the new changes of a partially duplicated pack", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		triggerErrUpdateClientInfo(false)
+
+		actorID, docInfo, clientInfo := attachForDuplication(t, ctx, project)
+		docID := docInfo.ID
+		docRefKey := docInfo.RefKey()
+
+		// 1. Store the change with clientSeq 2 through a PushPull that fails
+		// before the checkpoint moves.
+		stored := newChangeWithOperation(t, actorID, 2, 2)
+		triggerErrUpdateClientInfo(true)
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docRefKey, change.NewPack(
+			helper.TestKey(t),
+			change.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+			[]*change.Change{stored},
+			nil,
+			nil,
+		), packs.PushPullOptions{Mode: types.SyncModePushPull, Status: document.StatusAttached})
+		assert.ErrorIs(t, err, ErrUpdateClientInfoFailed)
+		triggerErrUpdateClientInfo(false)
+
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), docInfo.ServerSeq)
+
+		// 2. Re-send that change together with a genuinely new one. The client
+		// is still at the stale checkpoint, so it presents both.
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, uint32(1), clientInfo.Checkpoint(docID).ClientSeq)
+
+		fresh := newChangeWithOperation(t, actorID, 3, 3)
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docRefKey, change.NewPack(
+			helper.TestKey(t),
+			change.Checkpoint{ServerSeq: 0, ClientSeq: 3},
+			[]*change.Change{stored, fresh},
+			nil,
+			nil,
+		), packs.PushPullOptions{Mode: types.SyncModePushPull, Status: document.StatusAttached})
+		assert.NoError(t, err)
+
+		// 3. Only the duplicate is dropped: the new change is stored at the
+		// next server seq and nothing lands beyond it.
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), docInfo.ServerSeq)
+
+		changes, err := packs.FindChanges(ctx, testBackend, docInfo, 3, 3)
+		assert.NoError(t, err)
+		assert.Len(t, changes, 1)
+		assert.Equal(t, uint32(3), changes[0].ID().ClientSeq())
+
+		changes, err = packs.FindChanges(ctx, testBackend, docInfo, 4, 4)
+		assert.NoError(t, err)
+		assert.Len(t, changes, 0)
+
+		// 4. The checkpoint acknowledges both the dropped and the stored change.
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), clientInfo.Checkpoint(docID).ServerSeq)
+		assert.Equal(t, uint32(3), clientInfo.Checkpoint(docID).ClientSeq)
+	})
+
+	t.Run("resumed attach is not exempt from the stored-change filter", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		triggerErrUpdateClientInfo(false)
+
+		// The attach above seeded a non-zero checkpoint, which is what a
+		// resumed (Case-B) attach presents: its clientSeq does not restart, so
+		// IsAttach must not disable the duplicate filter for it. Only a fresh
+		// attach, whose seeded checkpoint is still 0/0, is exempt.
+		actorID, docInfo, clientInfo := attachForDuplication(t, ctx, project)
+		docID := docInfo.ID
+		docRefKey := docInfo.RefKey()
+		assert.NotEqual(t, uint32(0), clientInfo.Checkpoint(docID).ClientSeq)
+
+		pack := func() *change.Pack {
+			return change.NewPack(
+				helper.TestKey(t),
+				change.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+				[]*change.Change{newChangeWithOperation(t, actorID, 2, 2)},
+				nil,
+				nil,
+			)
+		}
+
+		triggerErrUpdateClientInfo(true)
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docRefKey, pack(),
+			packs.PushPullOptions{Mode: types.SyncModePushPull, Status: document.StatusAttached})
+		assert.ErrorIs(t, err, ErrUpdateClientInfoFailed)
+		triggerErrUpdateClientInfo(false)
+
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docRefKey, pack(),
+			packs.PushPullOptions{
+				Mode:     types.SyncModePushPull,
+				Status:   document.StatusAttached,
+				IsAttach: true,
+			})
+		assert.NoError(t, err)
+
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), docInfo.ServerSeq)
+
+		changes, err := packs.FindChanges(ctx, testBackend, docInfo, 3, 3)
+		assert.NoError(t, err)
+		assert.Len(t, changes, 0)
+
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, uint32(2), clientInfo.Checkpoint(docID).ClientSeq)
+	})
+
 	t.Run("non-sequential client seq is rejected", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -1279,6 +1418,69 @@ func TestPacks(t *testing.T) {
 
 // assertRejectedPushPullUnchanged reloads DocInfo/ClientInfo after a rejected
 // PushPull and asserts neither document nor client checkpoints advanced.
+// attachForDuplication activates a client and attaches it to a fresh document
+// with a single change, leaving the document at server seq 1 and the client at
+// checkpoint 1/1 — the starting point for the duplicate-push scenarios.
+func attachForDuplication(
+	t *testing.T,
+	ctx context.Context,
+	project *types.Project,
+) (time.ActorID, *database.DocInfo, *database.ClientInfo) {
+	activateResp, err := testClient.ActivateClient(ctx, connect.NewRequest(&api.ActivateClientRequest{
+		ClientKey: helper.TestKey(t).String(),
+	}))
+	assert.NoError(t, err)
+
+	clientID, err := hex.DecodeString(activateResp.Msg.ClientId)
+	assert.NoError(t, err)
+	resPack, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+		ClientId: activateResp.Msg.ClientId,
+		ChangePack: &api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+			Changes:     []*api.Change{{Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID}}},
+		},
+	}))
+	assert.NoError(t, err)
+
+	actorID, err := time.ActorIDFromBytes(clientID)
+	assert.NoError(t, err)
+
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, types.DocRefKey{
+		ProjectID: project.ID,
+		DocID:     types.ID(resPack.Msg.DocumentId),
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), docInfo.ServerSeq)
+
+	clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	assert.NoError(t, err)
+
+	return actorID, docInfo, clientInfo
+}
+
+// newChangeWithOperation builds a change carrying a real operation. Only such a
+// change leaves a durable row in the changes collection on the Mongo backend,
+// and the duplicate filter reads that collection to recognize a re-send.
+func newChangeWithOperation(
+	t *testing.T,
+	actorID time.ActorID,
+	clientSeq uint32,
+	lamport int64,
+) *change.Change {
+	changeID := change.NewID(clientSeq, 0, lamport, actorID, time.NewVersionVector())
+	executedAt := changeID.NewTimeTicket(1)
+	value, err := crdt.NewPrimitive("v", executedAt)
+	assert.NoError(t, err)
+
+	return change.New(changeID, "", []operations.Operation{
+		operations.NewSet(time.InitialTicket, "k", value, executedAt),
+	}, nil)
+}
+
 func assertRejectedPushPullUnchanged(
 	t *testing.T,
 	ctx context.Context,

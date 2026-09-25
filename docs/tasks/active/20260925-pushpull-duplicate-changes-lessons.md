@@ -55,3 +55,43 @@ written has never had its fixtures checked against the storage it runs on;
 re-reading the payload against `CreateChangeInfos` before trusting the
 assertions is the step that was missing. The change now carries a `Set`
 operation, which is what makes it durable.
+
+## A metadata dedup key must be scoped to what the caller can prove
+
+The first version of `filterStoredChanges` compared `ActorID`, `ClientSeq` and
+`Lamport` — all three of which arrive verbatim from the wire. Nothing on the
+push path proves a change belongs to the actor it names, so the filter could
+be aimed at another client: forge rows under a victim's actor, raise the
+stored `(ClientSeq, Lamport)` watermark, and the victim's genuine changes are
+dropped *and* acknowledged. Gating on `ClientInfo.IsOwnActor` is what makes
+the comparison a statement the server can stand behind, and it also caps the
+work under the exclusive `DocPushKey` lock at one lookup per pack instead of
+one per distinct actor in it.
+
+## "A stored change always has lamport >= 1" is a Mongo-only fact
+
+Using `latest.Lamport > 0` as the not-found signal read as harmless — Mongo
+returns a zero-valued `ChangeInfo` when nothing matches. But the memory
+backend inserts presence-only changes into `tblChanges`, and those carry
+`Lamport` 0 (`ID.Next(true)`), so "found" and "not found" became
+indistinguishable there. The signal has to be a field that is only ever set on
+a real row: `latest.ActorID != ""`. The same lamport-0 shape on the *pushed*
+side is worse — `info.Lamport <= latest.Lamport` holds for free — so
+operation-less changes are excluded from the filter outright.
+
+## Dropping a change from the write is only half of dropping it
+
+`pushPack` filtered `pushables` but left the duplicate in `reqPack.Changes`,
+and `pullSnapshot` replays that slice on top of a document already built
+through `initialSeq`. Above the snapshot threshold the very operations the
+filter exists to stop were applied twice into the response snapshot. A filter
+that removes work from one consumer has to be checked against every other
+consumer of the same input.
+
+## A dropped duplicate may be the only chance to announce a stored change
+
+The attempt that stored the change returned early, before the publish block,
+so no `DocChanged` event, webhook or snapshot trigger ever fired for it. With
+the retry dropping it, `len(pushedChanges) > 0` was false and the edit stayed
+durable but unannounced forever. `pushPack` now returns the dropped changes
+separately so `PushPull` can publish for them.

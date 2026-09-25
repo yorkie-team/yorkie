@@ -1979,11 +1979,22 @@ func (d *DB) FindLatestChangeInfoByActor(
 		return nil, fmt.Errorf("find the last change of %s: %w", actorID, err)
 	}
 
+	// The index is (doc_id, actor_id, server_seq), so descending iteration from
+	// the requested bound leaves the requested (doc, actor) prefix as soon as
+	// either component stops matching — everything past that point belongs to a
+	// lower actor or to another document entirely. Stop there instead of
+	// scanning on: continuing would let the caller compare a change against one
+	// from a different document or project.
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.ChangeInfo)
-		if info != nil && info.ActorID == actorID {
-			return info, nil
+		if info == nil || info.DocID != docRefKey.DocID || info.ActorID != actorID {
+			break
 		}
+		if info.ProjectID != "" && info.ProjectID != docRefKey.ProjectID {
+			break
+		}
+
+		return info, nil
 	}
 
 	return nil, database.ErrChangeNotFound
