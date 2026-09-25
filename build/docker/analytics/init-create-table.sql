@@ -10,9 +10,11 @@ CREATE TABLE IF NOT EXISTS user_events (
     user_agent VARCHAR(32)
 ) ENGINE = OLAP
 DUPLICATE KEY(project_id, user_id, timestamp)
-DISTRIBUTED BY RANDOM BUCKETS 16
+PARTITION BY date_trunc('day', timestamp)
+DISTRIBUTED BY RANDOM
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "1",
+    "partition_ttl" = "90 DAY"
 );
 
 CREATE TABLE IF NOT EXISTS document_events (
@@ -23,9 +25,11 @@ CREATE TABLE IF NOT EXISTS document_events (
     event_type VARCHAR(32)
 ) ENGINE = OLAP  
 DUPLICATE KEY(project_id, document_key, actor_id, timestamp)  
-DISTRIBUTED BY RANDOM BUCKETS 16
+PARTITION BY date_trunc('day', timestamp)
+DISTRIBUTED BY RANDOM
 PROPERTIES (  
-    "replication_num" = "1"  
+    "replication_num" = "1",
+    "partition_ttl" = "90 DAY"
 );  
 
 CREATE TABLE IF NOT EXISTS channel_events (
@@ -35,9 +39,11 @@ CREATE TABLE IF NOT EXISTS channel_events (
     event_type VARCHAR(32)
 ) ENGINE = OLAP
 DUPLICATE KEY(project_id, channel_key, timestamp)
-DISTRIBUTED BY RANDOM BUCKETS 16
+PARTITION BY date_trunc('day', timestamp)
+DISTRIBUTED BY RANDOM
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "1",
+    "partition_ttl" = "90 DAY"
 );
 
 CREATE TABLE IF NOT EXISTS session_events (
@@ -49,9 +55,11 @@ CREATE TABLE IF NOT EXISTS session_events (
     event_type VARCHAR(32)
 ) ENGINE = OLAP
 DUPLICATE KEY(project_id, session_id, timestamp)
-DISTRIBUTED BY RANDOM BUCKETS 16
+PARTITION BY date_trunc('day', timestamp)
+DISTRIBUTED BY RANDOM
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "1",
+    "partition_ttl" = "90 DAY"
 );
 
 CREATE TABLE IF NOT EXISTS client_events (
@@ -61,7 +69,9 @@ CREATE TABLE IF NOT EXISTS client_events (
     event_type VARCHAR(32)
 ) ENGINE = OLAP
 DUPLICATE KEY(project_id, client_id, timestamp)
-DISTRIBUTED BY RANDOM BUCKETS 16
+PARTITION BY date_trunc('day', timestamp)
+DISTRIBUTED BY RANDOM
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "1",
+    "partition_ttl" = "90 DAY"
 );
