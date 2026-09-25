@@ -415,7 +415,7 @@ jobs:
       - uses: actions/setup-go@v6
         if: steps.app.outputs.configured == 'true'
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
           # build cache after the agent ran, with whatever the agent left there,
           # under a key the agent controls through `go.sum` — and `ci.yml` and the
