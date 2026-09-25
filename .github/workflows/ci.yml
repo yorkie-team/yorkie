@@ -85,12 +85,28 @@ jobs:
           filters: |
             build:
               - '**'
-              - '!api/docs/**'
-              - '!build/charts/**'
-              - '!design/**'
+              # BY FILE, NOT BY DIRECTORY. `!api/docs/**` excluded every path
+              # under it, so `api/docs/handler.go` was classified documentation
+              # and `build` skipped the Go build, the tests and the licence
+              # gate. Before the filter moved here that produced NO CI RUN and
+              # `mark-ready.mjs` refused an empty list; now it produces a GREEN
+              # one, so the promotion gate would read a success that proves
+              # nothing about the Go file. Turning "no evidence" into "false
+              # evidence" is strictly worse than the problem being fixed.
+              #
+              # Scoped to the extensions those directories actually hold
+              # (`api/docs` is YAML; `build/charts` is YAML, Chart.lock,
+              # .helmignore, and markdown/text already covered below), so
+              # anything else added there — a `.go` above all — counts and
+              # `build` runs. `design/` is dropped: it does not exist, and
+              # `**/*.md` already covers a future one.
               - '!**/*.md'
               - '!**/*.txt'
               - '!**/.gitignore'
+              - '!api/docs/**/*.yaml'
+              - '!build/charts/**/*.yaml'
+              - '!build/charts/**/*.lock'
+              - '!build/charts/**/.helmignore'
 
       - name: CI target check by path
         uses: dorny/paths-filter@v3
@@ -264,7 +280,7 @@ jobs:
       pull-requests: write
 
     needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.bench == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.bench == 'true') }}
 
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
@@ -490,7 +506,7 @@ jobs:
     runs-on: ubuntu-latest
 
     needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.complex-test == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.complex-test == 'true') }}
 
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
@@ -533,7 +549,7 @@ jobs:
       pull-requests: write
 
     needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.load-test == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.load-test == 'true') }}
 
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}

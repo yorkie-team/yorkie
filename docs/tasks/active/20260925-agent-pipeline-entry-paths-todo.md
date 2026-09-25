@@ -29,8 +29,16 @@ criteria — reviewing with `/tmp/issue.txt` empty.
       criteria, non-goals, plus context and pointers.
 - [x] **Do NOT auto-apply `agent:candidate` from the form.** Reasoning in the
       form's own comment and below.
-- [x] Make the label reach human PRs: `agent-loop.yml` labels the issue named
-      by the PR body's `Fixes #N` when a maintainer opts the PR in.
+- [x] ~~Make the label reach human PRs: `agent-loop.yml` labels the issue named
+      by the PR body's `Fixes #N` when a maintainer opts the PR in.~~ Written,
+      then removed on review. A label is applied at one instant and the panel
+      reads the issue's current body at another, so labelling on a maintainer's
+      behalf lets them vouch for text that is replaced before it is graded.
+      That weakness exists today on the one path that does label, reaching only
+      issues the pipeline has acted on; wiring the human path would extend it
+      to every human PR. The binding it needs — a digest recorded at label time
+      and checked at read time, across four sites and two bot identities — is
+      its own change. Recorded in `docs/design/agent-command-verbs.md` §1.1.
 
 ### Why the form must not auto-label
 

@@ -187,70 +187,28 @@ jobs:
             }
             await github.rest.issues.addLabels({ owner, repo, issue_number: pr_number, labels: ['agent:managed'] });
 
-            // VOUCH FOR THE SPEC, because nothing else will on a human PR.
+            // WHAT THIS DELIBERATELY DOES NOT DO: apply `agent:candidate`
+            // to the issue `Fixes #N` names.
             //
-            // The panel's design-fit lens is BLOCKING, and it resolves its spec
-            // from this PR body's `Fixes #N` — then trusts that issue only if it
-            // carries `agent:candidate` and was not filed by a Bot
-            // (agent-review-panel.yml, "Fetch originating issue spec"). Until now
-            // the only writer of that label was agent-implement.yml, AFTER it
-            // opens its own PR. So every human-opened PR was graded by a blocking
-            // lens with `/tmp/issue.txt` empty — the lens logs a core.warning and
-            // reviews anyway, which is the shape of failure nobody notices.
+            // It is tempting, and it repairs a real gap — the panel's
+            // design-fit lens is BLOCKING and resolves its spec from that
+            // issue, trusting it only when it carries `agent:candidate` and
+            // was not filed by a Bot, so every human-opened PR is graded by a
+            // blocking lens against an empty spec.
             //
-            // THIS IS THE RIGHT PLACE AND THE ISSUE FORM IS NOT. The label is a
-            // provenance claim, not a category, and `.github/ISSUE_TEMPLATE/
-            // agent-task.yml` says at length why a form must not apply it: form
-            // labels land on whatever any account submits, and this repository is
-            // public. Here the actor has already passed
-            // `getCollaboratorPermissionLevel`, and opting a PR into the gating
-            // panel is exactly the moment a maintainer is deciding what it should
-            // be graded against.
+            // The label cannot carry that meaning on its own. It is applied at
+            // one instant; the panel reads the issue's CURRENT body at
+            // another, and the issue's author can edit it in between. Labelling
+            // here would let a maintainer vouch for text that is replaced
+            // before it is graded, and would widen that to every human PR —
+            // today it only reaches issues agent-implement has acted on.
             //
-            // What the maintainer is vouching for is stated in the outcome note
-            // below, because the ISSUE NUMBER COMES FROM THE PR BODY, which the
-            // PR author writes. Pointing `Fixes #N` at an unrelated issue makes
-            // design-fit grade against the wrong spec; the label is visible on
-            // that issue and removable, and the alternative (no spec at all) is
-            // what this repairs.
-            //
-            // Best-effort throughout: the loop is enabled either way, and a
-            // failure here must not cost the verb.
-            let specNote = '';
-            try {
-              // The SAME pattern agent-review-panel.yml and
-              // agent-review-on-demand.yml match with, so this labels exactly the
-              // issue they will later look for.
-              const m = (pr.body || '').match(/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i);
-              if (!m) {
-                specNote = '\n\nNo `Fixes #N` in the PR body, so the blocking `design-fit` lens will review this PR with no spec. Add one and re-comment `@claude loop` if you want it graded against an issue.';
-              } else {
-                const issue_number = Number(m[1]);
-                const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number });
-                if (issue.pull_request) {
-                  specNote = `\n\n\`Fixes #${issue_number}\` names a pull request, not an issue, so \`design-fit\` will review with no spec.`;
-                } else if (issue.user && issue.user.type === 'Bot') {
-                  // The panel refuses a Bot-authored issue as a spec whatever it
-                  // is labelled, so applying the label would promise a spec that
-                  // is then ignored. Say so instead.
-                  specNote = `\n\n#${issue_number} was filed by a bot, and the panel only trusts a human-filed issue as a spec — \`design-fit\` will review with no spec.`;
-                } else {
-                  try {
-                    await github.rest.issues.getLabel({ owner, repo, name: 'agent:candidate' });
-                  } catch (e) {
-                    if (e.status === 404) {
-                      await github.rest.issues.createLabel({ owner, repo, name: 'agent:candidate',
-                        color: '0e8a16', description: 'Issue vouched for as the spec the review panel grades a PR against' });
-                    }
-                  }
-                  await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ['agent:candidate'] });
-                  specNote = `\n\n#${issue_number} is now labelled \`agent:candidate\`, so the blocking \`design-fit\` lens grades this PR against its outcome and acceptance criteria. Remove the label if that is the wrong spec.`;
-                }
-              }
-            } catch (e) {
-              core.warning(`Could not label the originating issue (${e.message}); design-fit will review without a spec.`);
-              specNote = '\n\n⚠️ Could not label the originating issue, so `design-fit` will review this PR with no spec — add `agent:candidate` to it by hand.';
-            }
+            // Binding a vouch to the content it vouched for needs a digest
+            // recorded at label time and checked at read time, in four places
+            // (both writers, both readers), across two bot identities with a
+            // decision about which may vouch. That is its own change. See
+            // docs/design/agent-command-verbs.md §1.1.
+            const specNote = '\n\nThe blocking `design-fit` lens reviews with **no spec** unless the issue this PR fixes carries `agent:candidate`. Apply it by hand if you have read that issue and want the PR graded against it.';
 
             // Re-run the latest CI run for the head SHA so the loop engages now
             // (a green run → review panel; a red run → CI-fix arm). Best-effort:

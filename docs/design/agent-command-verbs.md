@@ -168,25 +168,44 @@ own PR. So a PR the pipeline opened was graded against a spec and a PR a human
 opened was graded against nothing — the same blocking lens, silently doing
 less work on half its input.
 
-Two things close it, and the split between them is the whole design:
+**`.github/ISSUE_TEMPLATE/agent-task.yml`** collects the fields the lens reads
+(outcome, acceptance criteria, non-goals) and **applies no labels.** A form's
+`labels:` are applied to whatever any account submits and this repository is
+public; auto-labelling would let an arbitrary user author the text a blocking
+lens grades somebody else's PR against, reachable by filing one issue and
+writing `Fixes #N`. The label currently costs an attacker triage permission,
+and it has to keep costing that.
 
-- **`.github/ISSUE_TEMPLATE/agent-task.yml`** collects the fields the lens
-  reads (outcome, acceptance criteria, non-goals) and **applies no labels.** A
-  form's `labels:` are applied to whatever any account submits and this
-  repository is public; auto-labelling would let an arbitrary user author the
-  text a blocking lens grades somebody else's PR against, reachable by filing
-  one issue and writing `Fixes #N`. The label currently costs an attacker
-  triage permission, and it has to keep costing that.
-- **`agent-loop.yml` applies it**, to the issue the PR body names, when a
-  maintainer opts the PR into the gating panel. That actor has already passed
-  `repos.getCollaboratorPermissionLevel`, and choosing what a PR is graded
-  against is the same decision as choosing to grade it.
+**Nothing applies the label automatically, and that is not finished work.**
+The obvious second half — `agent-loop.yml` labelling the issue when a
+maintainer opts a PR into the gating panel — was written and then removed,
+because a label cannot carry the claim on its own:
 
-What this does not make safe: the issue NUMBER still comes from the PR body,
-so a maintainer running `@claude loop` on a PR whose `Fixes #N` points
-somewhere unhelpful vouches for that issue. The verb's reply names the issue it
-labelled for exactly that reason, and the label is visible and removable. The
-alternative it replaces is no spec at all.
+> A label is applied at one instant. The panel reads the issue's CURRENT body
+> at another, and the issue's author can edit it in between. Labelling on the
+> maintainer's behalf lets them vouch for text that is replaced before it is
+> graded.
+
+That weakness exists today on the one path that does label
+(`agent-implement.yml`), where it reaches only issues the pipeline has already
+acted on. Wiring the human path would have extended it to every human PR, so
+the widening waits for the binding.
+
+**What the binding needs**, as the prerequisite for wiring the human path: a
+digest of the issue's title and body recorded when the label is applied, and
+checked against the live issue when the spec is read — refusing to the
+existing no-spec behaviour on mismatch. It touches four places, both writers
+(`agent-loop`, `agent-implement`) and both readers (`agent-review-panel`,
+`agent-review-on-demand`), and it has to decide which bot identity may vouch:
+GITHUB_TOKEN posts as `github-actions[bot]`, the App as
+`yorkie-team-agent[bot]`, and the second is an identity an injected agent with
+`issues: write` can also post under.
+
+Until then `agent-loop.yml` says so in its reply: the lens reviews with no
+spec unless a maintainer labels the issue by hand, having read it.
+
+What none of this makes safe: the issue NUMBER comes from the PR body, so
+whoever applies the label is vouching for an issue the PR author chose.
 
 `@claude review` deliberately does **not** label: it is invocable by the PR
 author, which is the trust level the label exists to be above. An advisory

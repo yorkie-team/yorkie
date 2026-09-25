@@ -75,7 +75,12 @@ body:
       description: >-
         A checklist a reviewer can walk. Each line should be decidable from the
         diff, a test, or a command's output — not from intent.
-      value: |
+      # `placeholder`, NOT `value`. GitHub submits `value` as the textarea's
+      # contents, so three empty checkboxes would satisfy `required: true` and
+      # the field would collect nothing while looking like it collected
+      # something — which is worse than no field, because the lens then grades
+      # against an empty list it believes is a spec.
+      placeholder: |
         - [ ]
         - [ ]
         - [ ]
