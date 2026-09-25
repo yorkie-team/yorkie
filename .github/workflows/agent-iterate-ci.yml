@@ -392,7 +392,8 @@ jobs:
           DIAG="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -c 40000)"
           if [ -z "$DIAG" ]; then
             DIAG="No failed-step log could be read for run $RUN_ID. Re-run the failing
-          lane locally: \`make lint\`, \`make build\`, then \`go test ./...\`."
+          lane locally: \`make verify\` (lint, licence headers, unit tests), then
+          \`make build\`."
           fi
           # A RANDOM DELIMITER, because $DIAG is a build log and a test that
           # prints the delimiter would close the block early: the runner then
@@ -498,10 +499,12 @@ jobs:
               single pass.
             - Stay in scope: modify only the files the failure implicates unless a
               fix genuinely requires touching others; do not refactor unrelated code.
-            - Run `make lint` and `go test ./...` ONCE at the end to confirm green
-              before pushing — not after every edit. Do NOT run `make test`: it
-              needs a MongoDB this job does not stand up, and the push re-runs the
-              full integration lane anyway.
+            - Run `make verify` ONCE at the end to confirm green before pushing —
+              not after every edit. It is `make lint`, the Apache licence-header
+              check and `go test ./...`, which is the whole of what this job can
+              verify. Do NOT run `make test`: it needs a MongoDB this job does
+              not stand up, and the push re-runs the full integration lane
+              anyway.
 
             Append a follow-up commit (do NOT force-push over history); the commit
             message must end with the trailer "Assisted-by: Claude Code

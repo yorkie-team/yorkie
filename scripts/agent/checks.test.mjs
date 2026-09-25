@@ -868,6 +868,36 @@ test("no token-bearing job sets itself up by running the branch's build files", 
   }
 });
 
+test("every fixer prompt runs the same verification target", () => {
+  // THE LANE THE AUTONOMOUS ARM VERIFIES WITH, named once.
+  //
+  // All three prompts used to spell out `make lint` and `go test ./...`, which
+  // is `make verify` MINUS the licence check — so a fixer could push a `.go`
+  // file with no Apache header, red `ci.yml`'s `build` job, and buy the PR a
+  // whole extra round plus a CI-fix round for a line it could have added before
+  // pushing. Naming the target instead means a lane added to the Makefile
+  // reaches all three at once, which is the only reason to name one.
+  //
+  // `make verify-license` announces SKIPPED where Node is absent, which would
+  // have made this a cosmetic rename — the guard below is what rules that out
+  // for these jobs specifically. ("every job that runs a pipeline script pins
+  // its Node" covers the same steps from the other direction, for a different
+  // reason; both must hold, and only this one is about the licence gate.)
+  for (const name of ["agent-fix.yml", "agent-iterate-ci.yml", "agent-review-panel.yml"]) {
+    const wf = WF(name);
+    assert.match(wf, /Run `make verify` ONCE at the end/,
+      `${name}: the fixer prompt must call \`make verify\`, not a hand-written subset of it`);
+    assert.ok(
+      !/- Run `make lint` and `go test \.\/\.\.\.` ONCE/.test(wf),
+      `${name}: the prompt still spells out the pair, so the licence check is not in the fixer's lane`,
+    );
+    // The licence half of `make verify` only runs where node does, and the
+    // prompt promises it unconditionally.
+    assert.match(wf, /uses: actions\/setup-node@v4/,
+      `${name}: without a Node setup, \`make verify\` skips the licence check and the prompt lies`);
+  }
+});
+
 test("agent-fix is maintainers-only and refuses bot-authored comments", () => {
   const wf = WF("agent-fix.yml");
   // Structural, not a marker string: `user.type` is set by GitHub and cannot be

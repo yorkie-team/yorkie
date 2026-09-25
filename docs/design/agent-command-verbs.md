@@ -614,16 +614,29 @@ holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
 entry here becomes a lens instructed to hunt a class CI already reds.
 
 **c. The verification command the fixer runs.** `pnpm verify:fast` becomes
-`make verify` — `make lint` plus `go test ./...`, plus the licence check, which
-announces a skip rather than passing quietly where Node is absent. The
+`make verify` — `make lint` plus the licence check plus `go test ./...`. The
 integration lane needs the docker-compose stack and is left to CI rather than
-run inside the fix job. The fixer prompts in `agent-fix.yml`,
-`agent-iterate-ci.yml` and `agent-review-panel.yml` still spell the pair out
-rather than calling the target. Switching them is NOT a pure rename: `make
-verify` also runs the licence check, so today the autonomous arm verifies
-without that gate and CI's `build` job is what catches it. Deliberately not
-bundled with the commit that introduced the target — changing what a fixer runs
-is a behaviour change to the pipeline and belongs in its own.
+run inside the fix job.
+
+The three fixer prompts (`agent-fix.yml`, `agent-iterate-ci.yml`,
+`agent-review-panel.yml`) spelled out `make lint` and `go test ./...` rather
+than calling the target, and switching them was **not** a pure rename: `make
+verify` also runs the licence check, so until 2026-09-25 the autonomous arm
+verified without that gate and CI's `build` job was the only thing catching a
+missing Apache header — a full round, plus a red CI, plus a CI-fix round, for a
+line the fixer could have added before pushing.
+
+The one thing that could have made the switch cosmetic is ruled out by reading
+the jobs rather than the target: `make verify-license` announces `SKIPPED`
+where Node is absent, and Node is **not** absent — all three jobs run
+`actions/setup-node@v4` with `node-version: 22.x` as an ungated first step,
+because their pre-agent gate scripts are Node and must not run on whatever the
+runner image ships. So the gate really executes in the fixers. (`ci.yml` still
+invokes `node scripts/verify-license.mjs` directly rather than through the
+target, and its comment says why: a CI gate must not be able to fail open.)
+
+Naming a target rather than a list is also what makes the next lane free: one
+line in the Makefile reaches all three prompts at once.
 
 #### 2.1 What the port actually carried
 

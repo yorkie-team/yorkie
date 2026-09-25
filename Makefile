@@ -48,9 +48,9 @@ lint: ## runs the golang-ci lint, checks for lint violations
 # up. Keep it in step with the "verification command" named in
 # docs/design/agent-command-verbs.md §4c.
 #
-# The CI fixer prompts still spell out `make lint` and `go test ./...` rather
-# than calling this. That is a rename worth doing separately from introducing
-# the target, and §4c records it.
+# The three autonomous fixer prompts (`agent-fix.yml`, `agent-iterate-ci.yml`,
+# `agent-review-panel.yml`) call this target, so a lane added here is one they
+# all gain — which is the point of them naming a target rather than a list.
 verify: lint verify-license ## runs the checks a commit must pass: lint, licence headers, unit tests
 	go test ./...
 
