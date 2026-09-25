@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-24
+updated: 2026-09-25
 ---
 
 # Tasks Archive
@@ -8,12 +8,16 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 37
+Total archived tasks: 41
 
-## 2026/09 (7 tasks)
+## 2026/09 (11 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Tree unwrap vs. merge-delete divergence (#1956) (2026-09-24) | [20260924-tree-unwrap-merge-delete-todo.md](./2026/09/20260924-tree-unwrap-merge-delete-todo.md) | [20260924-tree-unwrap-merge-delete-lessons.md](./2026/09/20260924-tree-unwrap-merge-delete-lessons.md) |
+| SplitText records the left piece's length in runes (2026-09-24) | [20260924-tree-split-text-utf16-length-todo.md](./2026/09/20260924-tree-split-text-utf16-length-todo.md) | [20260924-tree-split-text-utf16-length-lessons.md](./2026/09/20260924-tree-split-text-utf16-length-lessons.md) |
+| Local harness enforcement (2026-09-24) | [20260924-local-harness-enforcement-todo.md](./2026/09/20260924-local-harness-enforcement-todo.md) | [20260924-local-harness-enforcement-lessons.md](./2026/09/20260924-local-harness-enforcement-lessons.md) |
+| docSize drifts from a rebuild in three places (2026-09-24) | [20260924-docsize-rebuild-drift-todo.md](./2026/09/20260924-docsize-rebuild-drift-todo.md) | [20260924-docsize-rebuild-drift-lessons.md](./2026/09/20260924-docsize-rebuild-drift-lessons.md) |
 | A style lands on a deleted text node in Go and not in JS (2026-09-21) | [20260921-style-on-a-tombstoned-node-todo.md](./2026/09/20260921-style-on-a-tombstoned-node-todo.md) | [20260921-style-on-a-tombstoned-node-lessons.md](./2026/09/20260921-style-on-a-tombstoned-node-lessons.md) |
 | The attribute ledger, and which SDK's representation is canonical (2026-09-21) | [20260921-attribute-ledger-and-representation-todo.md](./2026/09/20260921-attribute-ledger-and-representation-todo.md) | [20260921-attribute-ledger-and-representation-lessons.md](./2026/09/20260921-attribute-ledger-and-representation-lessons.md) |
 | Post-GC style panic and the snapshot's lost text attribute tombstone (2026-09-20) | [20260920-post-gc-panic-and-snapshot-tombstone-todo.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-todo.md) | [20260920-post-gc-panic-and-snapshot-tombstone-lessons.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-lessons.md) |
