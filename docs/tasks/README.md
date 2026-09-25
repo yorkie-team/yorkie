@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-24
+updated: 2026-09-25
 ---
 
 # Tasks Index
@@ -20,9 +20,8 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
-| Local harness enforcement (2026-09-24) | [20260924-local-harness-enforcement-todo.md](./active/20260924-local-harness-enforcement-todo.md) | [20260924-local-harness-enforcement-lessons.md](./active/20260924-local-harness-enforcement-lessons.md) |
-| Tree unwrap vs. merge-delete divergence (#1956) (2026-09-24) | [20260924-tree-unwrap-merge-delete-todo.md](./active/20260924-tree-unwrap-merge-delete-todo.md) | [20260924-tree-unwrap-merge-delete-lessons.md](./active/20260924-tree-unwrap-merge-delete-lessons.md) |
-| SplitText records the left piece's length in runes (2026-09-24) | [20260924-tree-split-text-utf16-length-todo.md](./active/20260924-tree-split-text-utf16-length-todo.md) | [20260924-tree-split-text-utf16-length-lessons.md](./active/20260924-tree-split-text-utf16-length-lessons.md) |
+| A style's reached node set depends on delivery order (2026-09-24) | [20260924-style-reached-set-order-dependent-todo.md](./active/20260924-style-reached-set-order-dependent-todo.md) | [20260924-style-reached-set-order-dependent-lessons.md](./active/20260924-style-reached-set-order-dependent-lessons.md) |
+| Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Expose cache hit/miss as Prometheus metrics (2026-09-24) | [20260924-cache-hit-miss-metrics-todo.md](./active/20260924-cache-hit-miss-metrics-todo.md) | [20260924-cache-hit-miss-metrics-lessons.md](./active/20260924-cache-hit-miss-metrics-lessons.md) |
 | Concurrent splits of one boundary sit in arrival order (2026-09-23) | [20260923-same-boundary-split-order-todo.md](./active/20260923-same-boundary-split-order-todo.md) | [20260923-same-boundary-split-order-lessons.md](./active/20260923-same-boundary-split-order-lessons.md) |
 | Maintainer Merge skill (2026-09-23) | [20260923-maintainer-merge-skill-todo.md](./active/20260923-maintainer-merge-skill-todo.md) | [20260923-maintainer-merge-skill-lessons.md](./active/20260923-maintainer-merge-skill-lessons.md) |
@@ -41,5 +40,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 37
+- Archived task count: 41
 - Archive index: [archive/README.md](./archive/README.md)
