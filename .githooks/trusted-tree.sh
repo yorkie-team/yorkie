@@ -39,11 +39,12 @@
 #
 # The credential is HEAD's reflog. It lives in `$GIT_DIR`, it is written by the
 # local git as it moves HEAD, and no content a fetched branch carries can add an
-# entry to it. A commit this clone CREATED has a reflog entry whose action is a
-# commit-creating one (`commit`, `commit (amend)`, `rebase (pick)`, `merge`,
+# entry to it. A commit this clone CREATED has a reflog entry recording git
+# WRITING it (`commit`, `commit (amend)`, a rebase `(pick)`, a merge git made,
 # `cherry-pick`, `revert`, `am`); a commit this clone merely RECEIVED is known
-# only through `clone:`, `fetch`, `checkout:`, `reset:` or a `Fast-forward`,
-# which is exactly the `gh pr checkout` case being refused. The author check is
+# only through `clone:`, `fetch`, `checkout:`, `reset:`, a fast-forward or a
+# rebase's `(finish)`, which is exactly the `gh pr checkout` case being
+# refused. The author check is
 # kept underneath it, because a mismatched address is still worth naming in the
 # refusal — but it is the second condition, never the only one.
 #
@@ -70,17 +71,30 @@ yorkie_upstream_ref() {
 
 # Echo the OIDs this clone CREATED, one per line.
 #
-# `%gs` is the reflog subject, whose first word is the action. Only the
-# commit-creating actions count: `checkout:`, `reset:`, `clone:`,
-# `rebase (start):`, and any entry ending in `Fast-forward` all move HEAD onto a
-# commit that arrived from somewhere else, so an OID known only through those is
-# precisely what this refuses. An unrecognised action is not creating, so a
-# future git spelling fails closed rather than open.
+# `%gs` is the reflog subject. Only entries that record git WRITING a commit
+# count, matched on the whole subject rather than its first word:
+#
+#   - `commit`, `commit (amend)`, `commit (merge)`, `cherry-pick`, `revert`,
+#     `am`, `applypatch`;
+#   - a rebase step that writes one — `(pick)`, `(reword)`, `(edit)`,
+#     `(squash)`, `(fixup)`, `(continue)` — whether git spells the action
+#     `rebase` or `pull --rebase ...`, which is what `git pull --rebase` logs;
+#   - a merge commit git made, `merge ...: Merge made by` or
+#     `pull ...: Merge made by`.
+#
+# Everything else moves HEAD onto a commit that arrived from somewhere else:
+# `checkout:`, `reset:`, `clone:`, anything ending in `fast-forward` (any
+# case — `cherry-pick --ff` logs it lowercase, against the foreign OID), and
+# `(start)` / `(finish)` of a rebase. `(finish)` in particular names the
+# commit HEAD lands on, which after a rebase that only fast-forwarded onto a
+# fetched branch is somebody else's. An unrecognised subject is not creating,
+# so a future git spelling fails closed rather than open.
 yorkie_locally_created() {
   git reflog show HEAD --format='%H %gs' 2>/dev/null | awk '
-    /Fast-forward$/ { next }
-    $2 == "rebase" && $3 == "(start):" { next }
-    $2 ~ /^(commit|rebase|merge|cherry-pick|revert|am|applypatch)/ { print $1 }
+    tolower($0) ~ / fast-forward$/ { next }
+    /^[0-9a-f]+ (commit|cherry-pick|revert|am|applypatch)( \([a-z]+\))?:/ { print $1; next }
+    /^[0-9a-f]+ (rebase|pull)[^:]*\((pick|reword|edit|squash|fixup|continue)\):/ { print $1; next }
+    /^[0-9a-f]+ (merge|pull)[^:]*: Merge made by/ { print $1; next }
   '
 }
 

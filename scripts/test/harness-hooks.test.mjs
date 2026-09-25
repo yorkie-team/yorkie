@@ -780,3 +780,138 @@ test('setup.sh in a worktree installs into the shared git dir', () => {
     statSync(path.join(hooksPath, 'pre-push')); // still there
   });
 });
+
+test('pre-push runs on your own branch, and reaches make verify', () => {
+  // The baseline every trust-guard case below is measured against: a clone,
+  // one commit of your own, the real hook, and `make` reached.
+  inScratchClone(({ clone, at, env }) => {
+    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /RAN make verify/);
+  });
+});
+
+test('pre-commit runs on your own branch, and reaches make lint', () => {
+  inScratchClone(({ clone, at, env }) => {
+    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
+    writeFileSync(path.join(clone, 'a.go'), 'package a\n');
+    at(clone)('add', 'a.go');
+    const r = runHookIn('pre-commit', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /RAN make lint/);
+  });
+});
+
+/** Your own commit on top of origin/main, with upstream moved on since. */
+function withDivergedUpstream({ upstream, clone, at }) {
+  at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
+  at(upstream)('commit', '-qm', 'upstream moved', '--allow-empty', '--no-verify');
+}
+
+test('the trust guard accepts your own commits after git pull --rebase', () => {
+  // `git pull --rebase` logs its picks as `pull --rebase ... (pick): ...`, so
+  // an action list that knows only `rebase` refused the everyday way of
+  // staying current — and a guard that refuses the everyday case gets
+  // bypassed by reflex.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    withDivergedUpstream(ctx);
+    const pulled = at(clone)('pull', '-q', '--rebase', 'origin', 'main');
+    assert.equal(pulled.status, 0, pulled.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
+test('the trust guard accepts your own merge made by git pull', () => {
+  // A pull merge logs `pull ...: Merge made by ...`, which the first-word
+  // match did not know.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    withDivergedUpstream(ctx);
+    const pulled = at(clone)('pull', '-q', '--no-rebase', '--no-edit', 'origin', 'main');
+    assert.equal(pulled.status, 0, pulled.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
+test('the trust guard accepts your own amended commit', () => {
+  // Every reflog form the header claims to accept needs its own case. awk
+  // splits `commit (amend):` into `commit` and `(amend):`, and a form of
+  // yorkie-js-sdk's copy of this guard refused your own amend for exactly that
+  // reason while its plain-`commit` tests stayed green.
+  inScratchClone(({ clone, at, env }) => {
+    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
+    const amended = at(clone)('commit', '-q', '--amend', '-m', 'mine, amended', '--allow-empty', '--no-verify');
+    assert.equal(amended.status, 0, amended.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
+test('the trust guard accepts a merge you concluded with git commit', () => {
+  // `merge --no-commit` (or a conflicted merge) concluded by `git commit`
+  // logs `commit (merge): ...`.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    withDivergedUpstream(ctx);
+    at(clone)('fetch', '-q', 'origin');
+    const merged = at(clone)('merge', '-q', '--no-commit', '--no-ff', 'origin/main');
+    assert.equal(merged.status, 0, merged.stderr);
+    const done = at(clone)('commit', '-q', '--no-edit', '--no-verify');
+    assert.equal(done.status, 0, done.stderr);
+    assert.match(at(clone)('reflog', '-1', '--format=%gs').stdout, /^commit \(merge\):/);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
+/**
+ * An upstream `pr` branch with one commit somebody else wrote, fetched.
+ *
+ * AUTHORED AS THE LOCAL IDENTITY, which is the spoof the reflog exists to
+ * survive: a stranger sets `user.email` to yours before committing. With a
+ * different address the author check refuses anyway and a reflog that wrongly
+ * calls the commit "created" goes unnoticed; with yours, the reflog is the
+ * only thing standing between the branch and `make`.
+ */
+function withForeignPr({ upstream, clone, at }) {
+  at(upstream)('checkout', '-qb', 'pr');
+  at(upstream)('commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
+  at(upstream)('checkout', '-q', 'main');
+  at(clone)('fetch', '-q', 'origin');
+}
+
+test('the trust guard refuses a rebase that only fast-forwards onto a PR', () => {
+  // `rebase (finish)` names the commit HEAD lands on, which after a rebase
+  // with nothing to replay is somebody else's. Only the steps that write a
+  // commit (pick, reword, ...) are evidence that this clone wrote it.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    withForeignPr(ctx);
+    const rebased = at(clone)('rebase', '-q', 'origin/pr');
+    assert.equal(rebased.status, 0, rebased.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 1, `a fast-forward onto a PR must refuse: ${r.stdout}`);
+    assert.doesNotMatch(r.stdout, /RAN make/);
+    assert.match(r.stderr, /not created by this clone/);
+  });
+});
+
+test('the trust guard refuses commits reached by cherry-pick --ff', () => {
+  // `cherry-pick --ff` logs `cherry-pick: fast-forward` against the foreign
+  // OID, unchanged — lowercase, so a case-sensitive `Fast-forward` skip missed
+  // it and the `cherry-pick` action counted it as written here.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    withForeignPr(ctx);
+    const picked = at(clone)('cherry-pick', '--ff', 'origin/pr');
+    assert.equal(picked.status, 0, picked.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 1, `a fast-forwarded pick must refuse: ${r.stdout}`);
+    assert.doesNotMatch(r.stdout, /RAN make/);
+    assert.match(r.stderr, /not created by this clone/);
+  });
+});
