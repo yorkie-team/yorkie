@@ -1693,25 +1693,41 @@ jobs:
       needs.ci.outputs.conclusion == 'success' &&
       needs.review-panel.outputs.blocked == 'true' && needs.review-panel.outputs.pr != ''
     runs-on: ubuntu-latest
-    # 90, raised from 45. A round that hits the wall loses ALL of its work — the
-    # fixer pushes at the end — so the wall was cutting off rounds that were still
-    # converging, and on #1047/#1052/#1053 it did so silently. `--max-turns 200`
-    # below is the real backstop against a runaway; this is the cost ceiling, and
-    # MAX_REVIEW_ROUNDS still bounds how many of them a PR may spend.
-    # ⚠️ 90 MINUTES, AGAINST A 60-MINUTE CREDENTIAL. A GitHub App installation
-    # token's lifetime is fixed at one hour and `create-github-app-token` cannot
-    # extend it, so a round that runs past the hour loses the credential sitting
-    # in `.git/config` and in `github_token`: the push 401s. The reporting
-    # survives it — it runs in a separate job that mints its own token — so the
-    # round is reported as one that pushed nothing, rather than left saying
-    # "Working on…" for good.
+    # 55, AND IT IS THE CREDENTIAL'S LIMIT RATHER THAN A BUDGET.
     #
-    # The wall is NOT shortened to 55, because that would refuse exactly the
-    # rounds the reasoning below says to allow. Closing it properly means
-    # re-minting before the push and rewriting the git credential, which is a
-    # change worth making with the App actually configured and a real round to
-    # test against — see docs/tasks/active/20260922-agent-command-verbs-todo.md.
-    timeout-minutes: 90
+    # A GitHub App installation token lives exactly one hour;
+    # `create-github-app-token` cannot extend it and mints it at or after this
+    # job starts. So the token in `.git/config` and in `github_token` is dead by
+    # minute 60 of the job at the latest, and a fixer that reaches its push after
+    # that gets a 401. 55 leaves five minutes for the push itself, its `git
+    # ls-remote` confirmation and clock skew between the minting API and the
+    # runner, and needs no assumption about how long the setup steps above took.
+    #
+    # It was 90, raised from 45 because a round that hits the wall loses ALL of
+    # its work — the fixer pushes at the end — and on #1047/#1052/#1053 the
+    # 45-minute wall cut off rounds that were still converging, silently. That
+    # reasoning is still right and it does not reach past 60. The comment this
+    # replaces said the wall was "NOT shortened to 55, because that would refuse
+    # exactly the rounds the reasoning above says to allow" — but the rounds
+    # between minute 60 and minute 90 are holding a credential that has already
+    # expired. They cannot push, whatever they produce. They spent model budget
+    # and one of MAX_REVIEW_ROUNDS to arrive at "no commit", which is the exact
+    # outcome the raise from 45 was made to prevent. There was never anything
+    # there to refuse.
+    #
+    # WHY NOT REFRESH INSTEAD. Minting a second token needs a step, and
+    # checks.test.mjs enforces that nothing runs after the agent in its own job —
+    # the agent owns `$GITHUB_ENV`, `$GITHUB_PATH`, `~/.gitconfig` and
+    # `.git/config` from that point, so a later step runs on its terms. That rule
+    # is load-bearing for the whole trust model and is not worth trading for
+    # thirty minutes that cannot push. The change that would actually buy them is
+    # the agent committing and handing a bundle to a trusted job that pushes;
+    # docs/design/agent-command-verbs.md names it as the next change here.
+    #
+    # `--max-turns 200` below is the backstop against a runaway, MAX_REVIEW_ROUNDS
+    # bounds how many rounds a PR may spend, and the prompt tells the fixer its
+    # budget — which is a convention, not a control.
+    timeout-minutes: 55
     environment: agent
     # GITHUB_TOKEN for the steps BEFORE the agent: the guard, the metrics and
     # state writers, the brief, the dispatch record. They comment on the PR, and
@@ -2130,10 +2146,20 @@ jobs:
             - Fix ALL blocking findings in a single pass.
             - Stay in scope: modify only the flagged files unless a fix genuinely
               requires touching others; do not refactor unrelated code.
-            - Run `make lint` and `go test ./...` ONCE at the end to confirm
-              green — not after every edit. Do NOT run `make test`: it needs a
-              MongoDB this job does not stand up, and the push below re-runs the
-              full integration lane anyway.
+            - Run `make verify` ONCE at the end to confirm green — not after
+              every edit. It is `make lint`, the Apache licence-header check and
+              `go test ./...`, which is the whole of what this job can verify.
+              Do NOT run `make test`: it needs a MongoDB this job does not stand
+              up, and the push below re-runs the full integration lane anyway.
+
+            YOUR WALL IS ABOUT FIFTY MINUTES, and it is the credential's rather
+            than a budget: the job is killed at 55 and the token you push with
+            dies at 60 whatever the job does, so a round still working past the
+            hour cannot push at all and loses everything it did. If you are
+            running long, narrow the pass — commit the findings you have fixed,
+            write the report, push — instead of aiming for a clean sweep you will
+            not reach. Nothing measures this for you; the wall is the only
+            control, and it takes the work with it.
 
             REPORT WHAT YOU DID — AFTER COMMITTING, BEFORE PUSHING. Required, and
             not paperwork: the next round reads this report and hands each claim to
@@ -2456,7 +2482,7 @@ jobs:
             # from any expression context. checks.test.mjs asserts all three agree,
             # so raising a wall without correcting the sentence fails the build
             # rather than telling a human the wrong number.
-            CAUSE='It was **cancelled after 90 minutes** — the `fix` job'"'"'s `timeout-minutes` wall — with nothing pushed, so the whole round'"'"'s work was lost. Re-run it with `@claude fix` and, in the same comment, tell it to commit and push partial progress well before the wall (the same 90-minute limit applies to `agent-fix.yml`).'
+            CAUSE='It was **cancelled after 55 minutes** — the `fix` job'"'"'s `timeout-minutes` wall, set just under the one-hour life of the App token it pushes with — with nothing pushed, so the whole round'"'"'s work was lost. Re-run it with `@claude fix` and, in the same comment, tell it to commit and push partial progress well before the wall (the same 55-minute limit applies to `agent-fix.yml`).'
           else
             CAUSE='Likely causes: it produced no new commit, did not converge within its turn budget, hit tool-permission denials, could not push, or the branch head could not be determined — see the `claude-fix-execution-output` artifact and the run log.'
           fi

@@ -205,23 +205,24 @@ function ciPassed(sha) {
     process.exit(2);
   }
   const runs = data.workflow_runs || [];
-  // NO RUN AT ALL is reported separately, because in THIS repository it is a
-  // routine outcome rather than a broken one: `ci.yml` carries `paths-ignore`
-  // for markdown, `api/docs`, `build/charts`, `design/` and `*.txt`, so a PR
-  // touching only those produces no CI run for its head SHA and this gate can
-  // never go green.
+  // NO RUN AT ALL is reported separately, because the two unknowns need
+  // different words. It USED to be a routine outcome here: `ci.yml` carried
+  // `paths-ignore` for markdown, `api/docs`, `build/charts`, `design/` and
+  // `*.txt`, so a documentation-only PR produced no CI run for its head SHA and
+  // this gate could never go green — the operator was told to promote it by
+  // hand. That filter now lives on ci.yml's `build` JOB instead, precisely so
+  // that every PR produces a run; a documentation PR reaches this gate with a
+  // green run whose Go lane was skipped, and promotes like any other.
   //
-  // It still refuses — "no evidence CI passed" is not "CI passed", and the
-  // whole point of gate 1 is that promotion rests on evidence. What changes is
-  // that the operator is told WHICH of the two it is. A permanently red gate
-  // whose message says "CI is not green" about a run that was never required
-  // reads as a broken pipeline, and the next person debugs CI instead of
-  // reading this line.
+  // So an empty list is no longer routine. It means this sha's run is not
+  // visible — deleted, or aged past retention — and the gate still refuses,
+  // because "no evidence CI passed" is not "CI passed" and the whole point of
+  // gate 1 is that promotion rests on evidence.
   if (runs.length === 0) {
     console.error(
-      `No run of ${CI_WORKFLOW_FILE} exists for ${sha}. If this PR changes only paths\n` +
-        "ci.yml ignores (markdown, api/docs, build/charts, design/, *.txt), CI was never\n" +
-        "required and this gate cannot be satisfied — promote it by hand.",
+      `No run of ${CI_WORKFLOW_FILE} is visible for ${sha}. Every pull request produces\n` +
+        "one, so this is a run that was deleted or has aged out rather than one that was\n" +
+        "never required — there is no evidence CI passed, and the gate refuses.",
     );
     return false;
   }

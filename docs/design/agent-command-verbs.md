@@ -152,6 +152,66 @@ organization membership is not repository permission. For a repository whose
 contributions arrive mostly from forks, that is the whole difference between a
 surface contributors can use and one only maintainers can.
 
+### 1.1 Who vouches for the spec
+
+`design-fit` is a **blocking** lens and it grades a diff against the
+originating issue's *outcome* and *acceptance criteria*. Both the autonomous
+panel and the on-demand `@claude review` resolve that issue from the PR body's
+`Fixes #N` — text the PR **author** writes — so neither can treat it as a spec
+on the author's word alone. The rule both apply is *the issue carries
+`agent:candidate` and was not filed by a Bot*; otherwise the lens reviews with
+no spec and logs a warning.
+
+That made the label the pipeline's provenance claim, and for the whole of
+Phase I it had exactly one writer: `agent-implement.yml`, after it opened its
+own PR. So a PR the pipeline opened was graded against a spec and a PR a human
+opened was graded against nothing — the same blocking lens, silently doing
+less work on half its input.
+
+**`.github/ISSUE_TEMPLATE/agent-task.yml`** collects the fields the lens reads
+(outcome, acceptance criteria, non-goals) and **applies no labels.** A form's
+`labels:` are applied to whatever any account submits and this repository is
+public; auto-labelling would let an arbitrary user author the text a blocking
+lens grades somebody else's PR against, reachable by filing one issue and
+writing `Fixes #N`. The label currently costs an attacker triage permission,
+and it has to keep costing that.
+
+**Nothing applies the label automatically, and that is not finished work.**
+The obvious second half — `agent-loop.yml` labelling the issue when a
+maintainer opts a PR into the gating panel — was written and then removed,
+because a label cannot carry the claim on its own:
+
+> A label is applied at one instant. The panel reads the issue's CURRENT body
+> at another, and the issue's author can edit it in between. Labelling on the
+> maintainer's behalf lets them vouch for text that is replaced before it is
+> graded.
+
+That weakness exists today on the one path that does label
+(`agent-implement.yml`), where it reaches only issues the pipeline has already
+acted on. Wiring the human path would have extended it to every human PR, so
+the widening waits for the binding.
+
+**What the binding needs**, as the prerequisite for wiring the human path: a
+digest of the issue's title and body recorded when the label is applied, and
+checked against the live issue when the spec is read — refusing to the
+existing no-spec behaviour on mismatch. It touches four places, both writers
+(`agent-loop`, `agent-implement`) and both readers (`agent-review-panel`,
+`agent-review-on-demand`), and it has to decide which bot identity may vouch:
+GITHUB_TOKEN posts as `github-actions[bot]`, the App as
+`yorkie-team-agent[bot]`, and the second is an identity an injected agent with
+`issues: write` can also post under.
+
+Until then `agent-loop.yml` says so in its reply: the lens reviews with no
+spec unless a maintainer labels the issue by hand, having read it.
+
+What none of this makes safe: the issue NUMBER comes from the PR body, so
+whoever applies the label is vouching for an issue the PR author chose.
+
+`@claude review` deliberately does **not** label: it is invocable by the PR
+author, which is the trust level the label exists to be above. An advisory
+review of an unlabelled human PR reviews without a spec, and that is the
+correct answer for it.
+
 ### 2. The phases
 
 Each phase lands on its own, is useful on its own, and is reverted by removing
@@ -237,11 +297,34 @@ that latch — deliberately, because pushing a commit does not.
   switch: turn `AGENT_PIPELINE_ENABLED` on and Phase 1 works, while `loop`,
   `rerun` and `fix` refuse legibly until the App exists.
 
-- **Requires:** a docs-only PR cannot use it. `ci.yml` carries `paths-ignore`
-  for markdown, `api/docs`, `build/charts`, `design/` and `*.txt`, and the panel
-  triggers only on a CI run, so a PR confined to those paths never starts a
-  round — `@claude loop` labels it and nothing happens. `@claude review` is the
-  path for those, and the loop's confirmation comment says so.
+- **Required, until 2026-09-25: a docs-only PR could not use it.** `ci.yml`
+  carried `paths-ignore` for markdown, `api/docs`, `build/charts`, `design/`
+  and `*.txt`; the panel triggers only on a CI run, so a PR confined to those
+  paths never started a round — `@claude loop` labelled it and nothing
+  happened, and the loop's confirmation comment had to say so.
+
+  That filter now sits on `ci.yml`'s **`build` job** instead of on its
+  `pull_request` trigger. The distinction is the whole fix: a trigger-level
+  filter files **no run**, and three things here read the run's existence
+  rather than its result — this workflow's `workflow_run`,
+  `agent-iterate-ci.yml`'s, and `mark-ready.mjs`'s promotion gate, which
+  refused an empty run list and told the operator to promote by hand. A
+  job-level filter files the run and skips the Go lane inside it, so the cost
+  is unchanged (one `ci-target-check` job, ~20s) and every PR reaches the
+  pipeline.
+
+  It also settles a question this document left open above: GitHub leaves a
+  required check **Pending forever** when its workflow is skipped by path
+  filtering, and reports **Success** when a job is skipped by a conditional. So
+  making a lane required would have deadlocked every docs PR under the old
+  arrangement and does not under this one.
+
+  The filter fails toward RUNNING. Its only positive pattern is `**` and the
+  rest are negations, so an unmatched path — a new directory, an unfamiliar
+  extension — builds; `checks.test.mjs` pins that shape, and pins that
+  `pull_request` carries no workflow-level filter. `dorny/paths-filter` needs
+  `predicate-quantifier: every` for it, because under the default a lone
+  `README.md` matches `**` and the negations do nothing.
 - **Requires:** a decision about the six new check runs that appear on a
   labelled PR. Whether any of them is *required* to merge is a repository
   setting, and should start as "no".
@@ -266,6 +349,17 @@ The first phase in which a bot pushes commits to a contributor's branch.
 check runs — a commit landing after the panel moves the head, so that one
 question answers both "did the panel run?" and "has anything landed since?".
 It fails toward ineligible on every unknown.
+
+A second gate sits behind that one and asks a different question: *could
+`agent-iterate-ci.yml`'s fixer be pushing to this branch right now?* It answers
+from CI's state on the head, and it carried a carve-out — *no CI run at all →
+proceed* — justified as keeping the verb usable on a docs-only PR. That
+justification was never reachable: the step runs only when `fix-eligible.mjs`
+said yes, and `fix-eligible` refuses a head with no lens check runs, which only
+a panel writes, which only a CI run starts. No CI run therefore meant no
+verdict, refused one gate earlier. With Phase 2's filter change a docs-only PR
+has a CI run anyway, so the branch now refuses: an invisible run is a CI
+conclusion nobody can read, and this gate refuses every unknown.
 
 `reply` is the bare-mention fallback: a comment mentioning `@claude` with no
 verb on an agent-authored PR is treated as review feedback to evaluate, act on
@@ -344,15 +438,23 @@ each one by a mechanism rather than a promise:
   the prompt — a convention the agent could get wrong, verified by nothing.
   Criterion 9 below is what turns it into an argument the workflow passes.
 
-- **Two things are known-unverified, and both are recorded rather than guessed.**
-  The job's ceiling is 90 minutes and an installation token lives 60, so a run
-  that passes the hour loses the ability to push — the failure is a 401 at the
-  end of the expensive part. And `current_user_can_bypass` is documented as the
-  bypass type of *the user making the request*; under an installation token there
-  is no user, and what it returns is untested here because this repository has no
-  rulesets. If it is anything but `never`, every ruleset-protected repository is
-  refused. Both fail safe. Both should be settled by observation on the first
-  runs rather than by argument.
+- **One thing is known-unverified, and it is recorded rather than guessed.**
+  `current_user_can_bypass` is documented as the bypass type of *the user making
+  the request*; under an installation token there is no user, and what it returns
+  is untested here because this repository has no rulesets. If it is anything but
+  `never`, every ruleset-protected repository is refused. It fails safe, and it
+  should be settled by observation on the first runs rather than by argument.
+
+  The other entry that stood here — the job's 90-minute ceiling against a
+  60-minute installation token, so a run past the hour loses the ability to push
+  and 401s at the end of the expensive part — was not unverified at all, only
+  unfixed, and `agent-fix.yml` and the panel's `fix` job carried the same
+  ceiling. All three are now 55. The minutes between 60 and 90 held a credential
+  that had already expired: they could spend model budget and a round from
+  `MAX_REVIEW_ROUNDS` and could not push, which is the outcome raising the fixer
+  wall from 45 to 90 was meant to prevent. Refreshing mid-round would need a step
+  after the agent, which the trust model forbids; `checks.test.mjs` now fails any
+  of the three whose wall reaches the token's hour.
 - **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
   write-access check on top. An issue body is data, never instructions.
 - **Not ported:** upstream's issue classifier. It labels issues into a category
@@ -425,7 +527,11 @@ withdrawn again) and have to pass.
 10. **Label the originating issue `agent:candidate`.** The panel's design-fit
     lens resolves a PR's spec from `Fixes #N` and only trusts an issue carrying
     that label, so without it every PR this verb opens is reviewed with no
-    knowledge of what it was asked to build.
+    knowledge of what it was asked to build. Two workflows read the label —
+    the panel and `agent-review-on-demand.yml`, with the same
+    `labelled && human` rule — and until 2026-09-25 this job was its only
+    writer, so the property held for agent-opened PRs and for nothing else.
+    See §1.1.
 11. **The ambient `GITHUB_TOKEN` gets `issues: write` and `pull-requests: read`,**
     which is what its only consumer needs — not the `contents`/`pull-requests`
     write the draft granted it.
@@ -508,9 +614,12 @@ fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
 
 *Enforced by nothing* — `staticcheck` and `unused` are explicitly disabled in
 `.golangci.yml`. `complex-test`, `bench` and `load-test` are path-gated and do
-not run on most PRs. And `ci.yml` carries `paths-ignore: "**/*.md"`, so a
-documentation-only PR runs none of the above — only the separate `docs.yml`,
-which checks documentation links and reads no Go behaviour.
+not run on most PRs. And `ci.yml`'s `build` job is filtered on `**/*.md` (plus
+`api/docs`, `build/charts`, `design/` and `*.txt`), so a documentation-only PR
+runs none of the above — only the separate `docs.yml`, which checks
+documentation links and reads no Go behaviour. *Which lanes execute* is
+unchanged by that filter's move off the trigger; *whether a run exists* is
+not, and Phase 2 above says why that mattered.
 
 The Apache license header was on this list, as a convention with no lane behind
 it, and 17 of 486 `.go` files had drifted by the time anyone counted. It now has
@@ -518,21 +627,35 @@ one: `scripts/verify-license.mjs`, run by `ci.yml`'s `build` job and by `make
 verify` locally. It sits in `ci.yml` rather than the unfiltered `docs.yml`
 because `agent-iterate-ci.yml` subscribes to CI alone — a gate that reds in
 another workflow stops an agent-managed PR with nothing watching it — and
-`paths-ignore` costs it nothing, since no ignored path holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
+the `build` job's documentation filter costs it nothing, since no filtered path
+holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
 `MECHANICAL_COVERAGE_NOTE` was derived from, so the two move together — a stale
 entry here becomes a lens instructed to hunt a class CI already reds.
 
 **c. The verification command the fixer runs.** `pnpm verify:fast` becomes
-`make verify` — `make lint` plus `go test ./...`, plus the licence check, which
-announces a skip rather than passing quietly where Node is absent. The
+`make verify` — `make lint` plus the licence check plus `go test ./...`. The
 integration lane needs the docker-compose stack and is left to CI rather than
-run inside the fix job. The fixer prompts in `agent-fix.yml`,
-`agent-iterate-ci.yml` and `agent-review-panel.yml` still spell the pair out
-rather than calling the target. Switching them is NOT a pure rename: `make
-verify` also runs the licence check, so today the autonomous arm verifies
-without that gate and CI's `build` job is what catches it. Deliberately not
-bundled with the commit that introduced the target — changing what a fixer runs
-is a behaviour change to the pipeline and belongs in its own.
+run inside the fix job.
+
+The three fixer prompts (`agent-fix.yml`, `agent-iterate-ci.yml`,
+`agent-review-panel.yml`) spelled out `make lint` and `go test ./...` rather
+than calling the target, and switching them was **not** a pure rename: `make
+verify` also runs the licence check, so until 2026-09-25 the autonomous arm
+verified without that gate and CI's `build` job was the only thing catching a
+missing Apache header — a full round, plus a red CI, plus a CI-fix round, for a
+line the fixer could have added before pushing.
+
+The one thing that could have made the switch cosmetic is ruled out by reading
+the jobs rather than the target: `make verify-license` announces `SKIPPED`
+where Node is absent, and Node is **not** absent — all three jobs run
+`actions/setup-node@v4` with `node-version: 22.x` as an ungated first step,
+because their pre-agent gate scripts are Node and must not run on whatever the
+runner image ships. So the gate really executes in the fixers. (`ci.yml` still
+invokes `node scripts/verify-license.mjs` directly rather than through the
+target, and its comment says why: a CI gate must not be able to fail open.)
+
+Naming a target rather than a list is also what makes the next lane free: one
+line in the Makefile reaches all three prompts at once.
 
 #### 2.1 What the port actually carried
 

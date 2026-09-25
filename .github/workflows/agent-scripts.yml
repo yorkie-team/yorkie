@@ -1,10 +1,11 @@
 # The test lane for `scripts/agent` — the Node package behind the `@claude`
 # command surface (docs/design/agent-command-verbs.md).
 #
-# A workflow of its own, because `ci.yml` is the Go lane: it carries
-# `paths-ignore` for markdown and gates its jobs on Go paths, so nothing there
-# would run on a change to these scripts, and adding a Node job to it would put
-# an unrelated toolchain on the critical path of every Go pull request.
+# A workflow of its own, because `ci.yml` is the Go lane: its `build` job
+# filters documentation out and its other jobs gate on Go paths, so nothing
+# there would run on a change to these scripts, and adding a Node job to it
+# would put an unrelated toolchain on the critical path of every Go pull
+# request.
 #
 # TRIGGERED BY WORKFLOW CHANGES TOO, and that is not over-collection: several of
 # these tests assert that a module and a workflow agree — the paged-latch

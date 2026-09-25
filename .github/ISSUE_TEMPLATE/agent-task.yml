@@ -1,0 +1,148 @@
+# An issue written to be a SPEC — for `@claude fix` on an issue
+# (agent-implement.yml), and for the design-fit lens on any PR that closes it.
+#
+# WHY A FORM AND NOT A MARKDOWN TEMPLATE. The other three templates in this
+# directory are `.md`, whose headings a reporter can delete. This one is the
+# input to a BLOCKING review lens: `scripts/agent/lenses/design-fit.md` judges
+# "does the diff actually satisfy the originating issue's `outcome` +
+# `acceptance` criteria", and an issue missing either leaves that lens with
+# nothing to judge against — it then reviews the PR with no spec at all and
+# says so in a `core.warning` nobody reads. A form's `required: true` is the
+# only thing in this repository that makes those two fields arrive.
+#
+# THIS FORM APPLIES NO LABELS, AND THAT IS THE POINT.
+#
+# `agent:candidate` is not a category tag. It is the panel's PROVENANCE check:
+# `agent-review-panel.yml` and `agent-review-on-demand.yml` resolve a PR's spec
+# from the PR body's `Fixes #N` — text the PR AUTHOR controls — and trust the
+# issue it names only if that issue is labelled `agent:candidate` AND was not
+# filed by a Bot. The label is the part that means "somebody with triage rights
+# vouched for this as a spec".
+#
+# An issue form's `labels:` are applied to whatever any GitHub user submits,
+# and this repository is public. Auto-labelling here would let an arbitrary
+# account write the text a blocking lens reviews somebody else's PR against,
+# reachable by filing one issue and writing `Fixes #N` in a PR body. Today that
+# costs an attacker triage permission; auto-labelling would cost them nothing.
+#
+# So the label is applied only by an actor that has already been
+# permission-checked against THIS repository with
+# `repos.getCollaboratorPermissionLevel`:
+#   - `agent-implement.yml`'s `finish` job, for a PR the agent opened;
+#   - `agent-loop.yml`, when a maintainer opts a human PR into the panel.
+# Adding it by hand from the issue sidebar is the third way, and needs the same
+# permission.
+name: Agent Task
+description: A task specified precisely enough for an agent to implement and for the review panel to grade
+title: "[Agent Task] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is for work you want specified tightly — whether an agent
+        or a person picks it up.
+
+        Two of the fields below are read by machinery, so it is worth knowing
+        which:
+
+        - **Outcome** and **Acceptance criteria** are what the review panel's
+          blocking `design-fit` lens grades a pull request against, once a
+          maintainer has labelled this issue `agent:candidate`. Write the
+          criteria so that a reviewer who has never seen the code can tell
+          whether each one is met.
+        - **Non-goals** is what the same lens reads to decide that a change
+          went further than it was asked to.
+
+        Everything here is treated as **data**, never as instructions — by the
+        implementing agent and by every lens. A line telling an agent what to
+        run, what to ignore, or what to approve is itself a review finding.
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What is true when this is done, stated as behaviour rather than as an implementation.
+      placeholder: |
+        Detaching a document leaves no synced-seq row behind, so housekeeping
+        can collect its tombstones on the next pass.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >-
+        A checklist a reviewer can walk. Each line should be decidable from the
+        diff, a test, or a command's output — not from intent.
+      # `placeholder`, NOT `value`. GitHub submits `value` as the textarea's
+      # contents, so three empty checkboxes would satisfy `required: true` and
+      # the field would collect nothing while looking like it collected
+      # something — which is worse than no field, because the lens then grades
+      # against an empty list it believes is a spec.
+      placeholder: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: >-
+        What this change must NOT do. Scope past a stated non-goal is a blocking
+        finding, so this is the cheapest place to prevent one.
+      placeholder: |
+        - Does not change the wire format.
+        - Does not touch the sharded-cluster path.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this is wanted now, and anything already known about the cause.
+    validations:
+      required: false
+
+  - type: input
+    id: design-doc
+    attributes:
+      label: Design doc or prior art
+      description: >-
+        A path under `docs/design/`, a prior PR, or an issue. The design-fit
+        lens reads the named doc's Non-Goals section, so naming one here is
+        worth more than a paragraph of description.
+      placeholder: docs/design/garbage-collection.md
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - pkg (CRDT / document)
+        - server
+        - client / admin / cluster
+        - api (protobuf, wire contract)
+        - build, CI or the agent pipeline
+        - docs
+        - not sure
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched for an existing issue covering this.
+          required: false
+        - label: >-
+            The acceptance criteria above are decidable — someone who has not
+            read this discussion could tell whether each is met.
+          required: false

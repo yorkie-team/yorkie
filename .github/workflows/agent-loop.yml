@@ -187,10 +187,38 @@ jobs:
             }
             await github.rest.issues.addLabels({ owner, repo, issue_number: pr_number, labels: ['agent:managed'] });
 
+            // WHAT THIS DELIBERATELY DOES NOT DO: apply `agent:candidate`
+            // to the issue `Fixes #N` names.
+            //
+            // It is tempting, and it repairs a real gap — the panel's
+            // design-fit lens is BLOCKING and resolves its spec from that
+            // issue, trusting it only when it carries `agent:candidate` and
+            // was not filed by a Bot, so every human-opened PR is graded by a
+            // blocking lens against an empty spec.
+            //
+            // The label cannot carry that meaning on its own. It is applied at
+            // one instant; the panel reads the issue's CURRENT body at
+            // another, and the issue's author can edit it in between. Labelling
+            // here would let a maintainer vouch for text that is replaced
+            // before it is graded, and would widen that to every human PR —
+            // today it only reaches issues agent-implement has acted on.
+            //
+            // Binding a vouch to the content it vouched for needs a digest
+            // recorded at label time and checked at read time, in four places
+            // (both writers, both readers), across two bot identities with a
+            // decision about which may vouch. That is its own change. See
+            // docs/design/agent-command-verbs.md §1.1.
+            const specNote = '\n\nThe blocking `design-fit` lens reviews with **no spec** unless the issue this PR fixes carries `agent:candidate`. Apply it by hand if you have read that issue and want the PR graded against it.';
+
             // Re-run the latest CI run for the head SHA so the loop engages now
             // (a green run → review panel; a red run → CI-fix arm). Best-effort:
             // if there's nothing to re-run, the label still engages the next CI run.
-            let ciNote = "\n\nIt will engage on the next CI run — if there is one. `ci.yml` ignores changes confined to markdown, `api/docs/**`, `build/charts/**`, `design/**` and `*.txt`, and the panel triggers only on a CI run, so a PR touching only those never starts a round. Use `@claude review` for those.";
+            // No longer carries the docs-only caveat it used to. `ci.yml` filters
+            // documentation on its `build` JOB rather than on the workflow
+            // trigger, so every pull request produces a CI run and every pull
+            // request therefore reaches the panel — a documentation PR just runs
+            // no Go lane inside it.
+            let ciNote = "\n\nIt will engage on the next CI run.";
             try {
               // Mirrors `ciRunToRerun` / `ciRunToAwait` in scripts/agent/checks.mjs,
               // where the rules are unit-tested — this step runs before any
@@ -300,7 +328,7 @@ jobs:
             core.setOutput('outcome',
               "🔁 Loop enabled — this PR is now `agent:managed`. On green CI the review panel runs and can promote it; " +
               "on red CI the fixer pushes a follow-up commit. Bounded by the pipeline's round/attempt caps; a human approval is still required to merge." +
-              ciNote);
+              ciNote + specNote);
 
       # Edit the placeholder into the final result. always() so a failure in the
       # enable step still replaces the "working on it" note instead of stranding it.

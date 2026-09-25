@@ -3,15 +3,34 @@ name: CI
 on:
   push:
     branches: [main]
+  # NO `paths-ignore` HERE, DELIBERATELY, AND IT IS NOT ONLY ABOUT COST.
+  #
+  # The documentation filter this used to carry lives on the `build` job below
+  # instead. The two look equivalent and are not: a workflow filtered at this
+  # level produces NO RUN AT ALL, and three other things in this repository read
+  # the run's existence rather than its result.
+  #
+  #   - `agent-review-panel.yml` and `agent-iterate-ci.yml` trigger on
+  #     `workflow_run` of this file. No run means no event, so a PR confined to
+  #     documentation never reached the autonomous loop: `@claude loop` labelled
+  #     it `agent:managed` and nothing happened, and the verb's own confirmation
+  #     comment had to say so.
+  #   - `mark-ready.mjs`'s promotion gate reads this workflow's runs for the head
+  #     sha and refuses on an empty list — correctly, "no evidence CI passed" is
+  #     not "CI passed" — so a documentation PR could only ever be promoted by
+  #     hand.
+  #   - Required status checks. GitHub leaves a check Pending forever when its
+  #     workflow is skipped by PATH FILTERING, and reports Success when a JOB is
+  #     skipped by a conditional. Making `build` required would have deadlocked
+  #     every documentation PR; with the filter on the job it does not.
+  #
+  # What it costs: `ci-target-check` below — one checkout and two path
+  # evaluations, on the order of twenty seconds — now runs on every pull
+  # request. `build` still does not, so no Go lane, no MongoDB and no `-race`
+  # suite is spent on a documentation change. See
+  # docs/design/agent-command-verbs.md §2.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "api/docs/**"
-      - "build/charts/**"
-      - "design/**"
-      - "**/*.md"
-      - "**/*.txt"
-      - "**/.gitignore"
 
 env:
   GO_VERSION: "1.25"
@@ -21,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      build: ${{ steps.ci-target-check.outputs.build }}
+      build: ${{ steps.code-changed.outputs.build }}
       bench: ${{ steps.ci-target-check.outputs.bench }}
       complex-test: ${{ steps.ci-target-check.outputs.complex-test }}
       load-test: ${{ steps.ci-target-check.outputs.load-test }}
@@ -30,12 +49,70 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # THE DOCUMENTATION FILTER, moved off the workflow trigger (see the `on:`
+      # block for why) and into its own step.
+      #
+      # ITS OWN STEP because `predicate-quantifier` is a STEP input and applies
+      # to every filter in the block it is given. The filters below are lists of
+      # ALTERNATIVES — a change under `test/bench/**` OR `pkg/**` runs the bench
+      # lane — and `every` would require one file to match all of them at once,
+      # which is essentially never true. Putting the two in one step disables the
+      # three tag-gated lanes silently.
+      #
+      # WHAT `every` MEANS HERE, because the default gets this exactly backwards.
+      # `dorny/paths-filter` evaluates a filter as: some changed FILE satisfies
+      # the PATTERNS, where `every` ANDs the patterns per file and the default
+      # `some` ORs them. So under the default, `['**', '!**/*.md']` is TRUE for a
+      # lone `README.md` — it matches `**` — and the filter would never turn
+      # anything off. Under `every`, a file counts when it matches `**` and none
+      # of the negations, and the filter is true when at least one changed file
+      # counts. That is precisely what `paths-ignore` meant.
+      #
+      # THE FAIL DIRECTION IS "RUN". The only positive pattern is `**`, so a path
+      # nothing here mentions — a new directory, an unfamiliar extension —
+      # counts, and `build` runs. Losing CI on code would take a negation that
+      # matches a code path, and every negation below is a documentation
+      # extension or a documentation directory. `checks.test.mjs` pins that
+      # shape: `**` plus negations, nothing else.
+      #
+      # `**` covers `.gitignore` because the action matches with picomatch's
+      # `{ dot: true }`; without that the last negation would be unreachable.
+      - name: Does this pull request touch anything but documentation?
+        uses: dorny/paths-filter@v3
+        id: code-changed
+        with:
+          predicate-quantifier: every
+          filters: |
+            build:
+              - '**'
+              # BY FILE, NOT BY DIRECTORY. `!api/docs/**` excluded every path
+              # under it, so `api/docs/handler.go` was classified documentation
+              # and `build` skipped the Go build, the tests and the licence
+              # gate. Before the filter moved here that produced NO CI RUN and
+              # `mark-ready.mjs` refused an empty list; now it produces a GREEN
+              # one, so the promotion gate would read a success that proves
+              # nothing about the Go file. Turning "no evidence" into "false
+              # evidence" is strictly worse than the problem being fixed.
+              #
+              # Scoped to the extensions those directories actually hold
+              # (`api/docs` is YAML; `build/charts` is YAML, Chart.lock,
+              # .helmignore, and markdown/text already covered below), so
+              # anything else added there — a `.go` above all — counts and
+              # `build` runs. `design/` is dropped: it does not exist, and
+              # `**/*.md` already covers a future one.
+              - '!**/*.md'
+              - '!**/*.txt'
+              - '!**/.gitignore'
+              - '!api/docs/**/*.yaml'
+              - '!build/charts/**/*.yaml'
+              - '!build/charts/**/*.lock'
+              - '!build/charts/**/.helmignore'
+
       - name: CI target check by path
         uses: dorny/paths-filter@v3
         id: ci-target-check
         with:
           filters: |
-            build: '**'
             bench:
               - 'test/bench/**'
               - 'pkg/**'
@@ -106,8 +183,8 @@ jobs:
         # `agent-iterate-ci.yml` subscribes to CI alone and the review panel
         # reads CI's conclusion alone: a gate that reds only in another
         # workflow stops an agent-managed PR with nothing watching it.
-        # `paths-ignore` above costs nothing here — the check reads `.go`
-        # files, and none of the ignored paths can hold one.
+        # This job's documentation filter costs the check nothing — it reads
+        # `.go` files, and none of the filtered paths can hold one.
         #
         # `node …`, not `make verify-license`: that target announces SKIPPED
         # when Node is absent, and a CI gate must not fail open.
@@ -203,7 +280,7 @@ jobs:
       pull-requests: write
 
     needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.bench == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.bench == 'true') }}
 
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
@@ -429,7 +506,7 @@ jobs:
     runs-on: ubuntu-latest
 
     needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.complex-test == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.complex-test == 'true') }}
 
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
@@ -472,7 +549,7 @@ jobs:
       pull-requests: write
 
     needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.load-test == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.load-test == 'true') }}
 
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}

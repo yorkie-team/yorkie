@@ -397,6 +397,40 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
   assert.equal(onDemandWall, fixWall,
     "agent-fix.yml's fix wall must match the autonomous one the page points away from");
 
+  // AND THE WALL MUST FIT INSIDE THE CREDENTIAL. A GitHub App installation
+  // token's life is fixed at one hour, `create-github-app-token` cannot extend
+  // it, and every one of these jobs pushes with the copy `actions/checkout`
+  // persisted into `.git/config`. A wall past 60 therefore buys minutes in which
+  // the fixer can work and cannot land anything: the push 401s and the round
+  // reports as "no commit", which is precisely what raising the wall from 45 was
+  // meant to stop happening.
+  //
+  // It was 90 in all three for exactly that reason, with a comment that said so
+  // and deferred the fix. Refreshing mid-round is not available — it needs a step
+  // after the agent, which "nothing after the agent but the handoff" above
+  // forbids — so the wall IS the mechanism, and it is asserted rather than left
+  // to a comment because the number reads as a cost ceiling and raising it looks
+  // harmless.
+  //
+  // `agent-implement.yml` is in the list conditionally, like every other guard
+  // here that names it: the same token, the same push, and the phase can be
+  // withdrawn again.
+  const APP_TOKEN_MINUTES = 60;
+  const walls = [["agent-review-panel.yml", "fix", fixWall], ["agent-fix.yml", "fix", onDemandWall]];
+  if (hasWorkflow("agent-implement.yml")) {
+    const impl = readFileSync(path.join(HERE, "..", "..", ".github", "workflows", "agent-implement.yml"), "utf8");
+    const implWall = (impl.match(/^ {2}implement:\n(?:.*\n)*? {4}timeout-minutes: (\d+)$/m) || [])[1];
+    assert.ok(implWall, "could not read the implement job's timeout-minutes");
+    walls.push(["agent-implement.yml", "implement", implWall]);
+  }
+  for (const [file, job, wall] of walls) {
+    assert.ok(
+      Number(wall) < APP_TOKEN_MINUTES,
+      `${file}'s \`${job}\` job has timeout-minutes: ${wall}, at or past the ${APP_TOKEN_MINUTES}-minute life of the `
+      + "App token it pushes with — the minutes past the hour can spend model budget and a round, and cannot push",
+    );
+  }
+
   // And `stalled` keeps its `!cancelled()`. It is not the bug — it is what stops
   // a run cancelled by the concurrency guard from paging over a FRESHER round,
   // and it is deliberately left alone because the step above now owns the
@@ -834,6 +868,36 @@ test("no token-bearing job sets itself up by running the branch's build files", 
   }
 });
 
+test("every fixer prompt runs the same verification target", () => {
+  // THE LANE THE AUTONOMOUS ARM VERIFIES WITH, named once.
+  //
+  // All three prompts used to spell out `make lint` and `go test ./...`, which
+  // is `make verify` MINUS the licence check — so a fixer could push a `.go`
+  // file with no Apache header, red `ci.yml`'s `build` job, and buy the PR a
+  // whole extra round plus a CI-fix round for a line it could have added before
+  // pushing. Naming the target instead means a lane added to the Makefile
+  // reaches all three at once, which is the only reason to name one.
+  //
+  // `make verify-license` announces SKIPPED where Node is absent, which would
+  // have made this a cosmetic rename — the guard below is what rules that out
+  // for these jobs specifically. ("every job that runs a pipeline script pins
+  // its Node" covers the same steps from the other direction, for a different
+  // reason; both must hold, and only this one is about the licence gate.)
+  for (const name of ["agent-fix.yml", "agent-iterate-ci.yml", "agent-review-panel.yml"]) {
+    const wf = WF(name);
+    assert.match(wf, /Run `make verify` ONCE at the end/,
+      `${name}: the fixer prompt must call \`make verify\`, not a hand-written subset of it`);
+    assert.ok(
+      !/- Run `make lint` and `go test \.\/\.\.\.` ONCE/.test(wf),
+      `${name}: the prompt still spells out the pair, so the licence check is not in the fixer's lane`,
+    );
+    // The licence half of `make verify` only runs where node does, and the
+    // prompt promises it unconditionally.
+    assert.match(wf, /uses: actions\/setup-node@v4/,
+      `${name}: without a Node setup, \`make verify\` skips the licence check and the prompt lies`);
+  }
+});
+
 test("agent-fix is maintainers-only and refuses bot-authored comments", () => {
   const wf = WF("agent-fix.yml");
   // Structural, not a marker string: `user.type` is set by GitHub and cannot be
@@ -931,19 +995,80 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
     !/conclusion === 'failure'/.test(gate),
     "asking whether CI is RED lets a still-running run pass as clear",
   );
-  // THE ABSENT-RUN BRANCH IS DELIBERATE, and pinned because it has already been
-  // read as a bug once. The gate asks whether agent-iterate-ci.yml's fixer could
-  // own this branch, not whether the code is good — and that arm fires only on a
-  // `workflow_run` of CI, so no run means it cannot have started. Refusing here
-  // would make `@claude fix` permanently unusable on a docs-only PR, which
-  // produces no CI run ever (`ci.yml` ignores `**/*.md`) and which the blocking
-  // `docs` lens is the only thing gating.
+  // THE ABSENT-RUN BRANCH REFUSES, and it is pinned because it used to answer
+  // the opposite for a reason that was never true.
+  //
+  // The carve-out said: the gate asks whether agent-iterate-ci.yml's fixer could
+  // own this branch, that arm fires only on a `workflow_run` of CI, so no run
+  // means it cannot have started — and refusing would make `@claude fix`
+  // unusable on a docs-only PR, which produced no CI run at all. Follow the two
+  // conditions instead of the prose and the branch never executed: the step is
+  // `if: steps.eligible.outputs.eligible == 'true'`, and `decideEligibility`
+  // returns `eligible: false` on `total === 0` — no lens check runs on the head.
+  // Only the panel writes those, and only a CI run starts the panel. No CI run
+  // therefore meant no verdict, refused one gate earlier, every time.
+  //
+  // `ci.yml` now filters documentation on its `build` JOB rather than on the
+  // `pull_request` trigger (see the guard below), so a docs-only PR produces a
+  // run and the case is gone. What is left in this branch is an invisible run —
+  // deleted, or past retention — which is the CI conclusion being unreadable,
+  // and this gate refuses every unknown.
   assert.match(gate, /if \(!runs\.length\)/, "the no-run case must be handled explicitly");
   const noRun = gate.slice(gate.indexOf("if (!runs.length)"), gate.indexOf("const newest"));
-  assert.match(noRun, /setOutput\('clear', 'true'\)/,
-    "an absent CI run must read as CLEAR — the CI-fix arm cannot have fired without one");
+  assert.match(noRun, /setOutput\('clear', 'false'\)/,
+    "an absent CI run means its conclusion cannot be read — refuse, like every other unknown here");
   assert.match(refusal.slice(0, 2600), /eligibility check could not complete/, "an empty reason must still say something");
   assert.match(refusal.slice(0, 2600), /the CI-fix arm owns that state/, "...and the CI-red refusal must say which arm has the branch");
+  assert.match(refusal.slice(0, 2600), /no CI run for this commit is visible/,
+    "...and the refusal must name the third cause, or an absent run reads as a stuck CI");
+});
+
+test("ci.yml files a run for every PR, so a docs-only PR reaches the pipeline", () => {
+  // THE PROPERTY THE WHOLE AUTONOMOUS ARM RESTS ON, and it is about the run
+  // EXISTING, not about what runs inside it.
+  //
+  // `agent-review-panel.yml` and `agent-iterate-ci.yml` both trigger on
+  // `workflow_run` of `ci.yml`. A workflow skipped by a trigger-level
+  // `paths-ignore` files NO RUN, so there is no event, so neither fires — and a
+  // PR confined to markdown sat outside the loop entirely: `@claude loop`
+  // labelled it and nothing happened, `mark-ready.mjs`'s gate could never go
+  // green, and `@claude fix`'s docs-only carve-out above was written for a state
+  // `fix-eligible.mjs` had already refused. Moving the filter onto the `build`
+  // JOB keeps the cost saving (no Go lane, no MongoDB, no `-race` suite) and
+  // gives the pipeline its event back.
+  //
+  // Asserted here rather than left to review because it is a ONE-LINE
+  // regression: re-adding `paths-ignore:` under `pull_request` restores every
+  // symptom above and changes nothing a reviewer of that diff would see run.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const yml = readFileSync(path.join(HERE, "..", "..", CI_WORKFLOW_PATH), "utf8");
+
+  const on = yml.slice(yml.indexOf("\non:"), yml.indexOf("\nenv:"));
+  const pr = on.slice(on.indexOf("  pull_request:"));
+  assert.ok(pr.startsWith("  pull_request:"), "ci.yml must still trigger on pull_request");
+  assert.ok(
+    !/^ {4}paths(-ignore)?:/m.test(pr.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n")),
+    "ci.yml must not filter `pull_request` at the workflow level — a filtered-out PR files no run, "
+    + "and the review panel and the CI-fix arm both trigger on one",
+  );
+
+  // ...and the filter that replaced it must keep failing toward RUNNING. The
+  // only positive pattern is `**`, so a path nothing mentions still builds; the
+  // rest are negations. A positive list here would silently skip CI on any new
+  // directory, which is the failure this shape exists to make impossible.
+  const step = yml.slice(yml.indexOf("id: code-changed"));
+  const filters = step.slice(step.indexOf("build:"), step.indexOf("\n\n"));
+  const patterns = [...filters.matchAll(/^ {14}- '(.+)'$/gm)].map((m) => m[1]);
+  assert.ok(patterns.length >= 2, "could not read the build filter's patterns from ci.yml");
+  assert.equal(patterns[0], "**", "the build filter's only positive pattern must be `**`");
+  for (const p of patterns.slice(1)) {
+    assert.ok(p.startsWith("!"), `the build filter must be \`**\` plus negations only; found '${p}'`);
+  }
+  // Without `every`, dorny/paths-filter ORs the patterns per file: a lone
+  // `README.md` matches `**` and the filter is true, so the negations do
+  // nothing and the step is a no-op that looks like a filter.
+  assert.match(step.slice(0, 400), /predicate-quantifier: every/,
+    "the build filter needs `predicate-quantifier: every`, or its negations are inert");
 });
 
 test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
@@ -969,9 +1094,10 @@ test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
   // rather than an omission. Upstream asserts this list is a superset of its
   // `harness.config.json` `ciConfig`, which exists because a changed path there
   // can SHRINK a CI run — so a PR editing it could grade its own homework. This
-  // repository's `ci.yml` filter declares `build: '**'`, so the lint/build/test
-  // job is unconditional and no path can shrink it; the tag-gated jobs it can
-  // narrow (bench, complex-test, load-test) are not what a gate reads. The
+  // repository's `build` filter is `'**'` plus negations naming documentation
+  // paths, and `definesCi` refuses a PR that edits `ci.yml` at all, so a branch
+  // cannot widen those negations to exempt its own code; the tag-gated jobs it
+  // can narrow (bench, complex-test, load-test) are not what a gate reads. The
   // property the upstream mirror protects is structurally absent, so what is
   // left to assert is that the matcher classifies the real surface.
   for (const p of [

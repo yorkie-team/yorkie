@@ -1451,13 +1451,17 @@ const CONFIDENCE_LEVELS = new Set(FINDING.properties.confidence.enum);
  *     half until the lane landed. Moving it is the same discipline as the
  *     formatting bullet above, in the other direction: a lens told to hunt a
  *     class CI reds in seconds spends turns for nothing.
- *   - `ci.yml` carries a markdown `paths-ignore`, so on a documentation-only PR
- *     none of the lanes below run at all — only `docs.yml`'s link check. The
- *     licence check loses nothing by that: it reads `.go` files, and no
- *     ignored path can hold one.
+ *   - `ci.yml`'s `build` job is filtered on documentation paths, so on a
+ *     documentation-only PR none of the lanes below run at all — only
+ *     `docs.yml`'s link check. (The filter used to sit on ci.yml's trigger,
+ *     which skipped the whole run; it moved onto the job so the run still
+ *     exists for the pipeline to trigger on. Nothing changed about which lanes
+ *     execute.) The licence check loses nothing by it: it reads `.go` files,
+ *     and no filtered path can hold one.
  *   - `complex-test`, `bench` and `load-test` are path-gated by the
- *     `ci-target-check` job, so most pull requests run none of them. Only the
- *     `build` job is unconditional.
+ *     `ci-target-check` job, so most pull requests run none of them. `build` is
+ *     gated only on the documentation filter above, so it runs on every pull
+ *     request that touches anything else.
  *   - `go vet -tags rgafuzz ./...` COMPILES the tag-gated reproductions and
  *     deliberately never runs them; they are expected to fail when run.
  *
@@ -1508,9 +1512,9 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "  whole staticcheck class and unreferenced code reach main unremarked.",
   "- `go test -tags complex` (the sharded-cluster suite), `-tags bench`, and the",
   "  k6 load test. All three are path-gated, so most pull requests run none.",
-  "- Everything above, on a documentation-only PR. `ci.yml` carries",
-  "  `paths-ignore: \"**/*.md\"` (plus api/docs, build/charts, design/ and *.txt),",
-  "  so such a PR runs no lint, no build and no tests — only `docs.yml`'s link",
+  "- Everything above, on a documentation-only PR. `ci.yml`'s `build` job is",
+  "  filtered on `**/*.md` (plus api/docs, build/charts, design/ and *.txt), so",
+  "  such a PR runs no lint, no build and no tests — only `docs.yml`'s link",
   "  check, which reads no Go behaviour.",
   "- A data race on a path no test exercises. `-race` observes executions, not",
   "  code, so it proves nothing about what the suite never reached.",
