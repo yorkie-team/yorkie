@@ -1994,6 +1994,17 @@ func (d *DB) FindLatestChangeInfoByActor(
 			break
 		}
 
+		// Skip the rows Mongo would not have. Mongo keeps presence-only
+		// changes in its presence cache and stores nothing at all for a change
+		// with neither operations nor presence, while this backend inserts
+		// every change into tblChanges. Such a row carries lamport 0 and an
+		// empty version vector (change.ID.Next(true)), so returning it would
+		// hand the caller a clock that is behind the actor's real one and make
+		// the two backends disagree about the actor's latest change.
+		if !info.HasOperations() {
+			continue
+		}
+
 		return info, nil
 	}
 

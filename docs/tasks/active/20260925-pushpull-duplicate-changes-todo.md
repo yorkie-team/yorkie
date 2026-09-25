@@ -59,11 +59,27 @@ where a restarted `ClientSeq` is legitimate:
 
 - Skip when `DocInfo.ServerSeq == cpBeforePush.ServerSeq`: nothing has been
   stored since this client was last acknowledged, so no duplicate can exist.
-- Skip on the `AttachDocument` path (`PushPullOptions.IsAttach`). A fresh
-  attach seeds the checkpoint at 0/0 and legitimately pushes pre-attach local
-  edits at `ClientSeq` 1 / `Lamport` 1, which an earlier attachment's stored
-  changes would shadow. A retried attach cannot reach `PushPull` anyway — it
-  is rejected with `ErrDocumentAlreadyAttached`.
+- Skip on the `AttachDocument` path (`PushPullOptions.IsAttach`) when, and only
+  when, the seeded checkpoint is still 0/0. A fresh attach legitimately pushes
+  pre-attach local edits at `ClientSeq` 1 / `Lamport` 1, which an earlier
+  attachment's stored changes would shadow. A resumed (Case-B) attach seeds the
+  presented checkpoint verbatim, so it is not skipped.
+
+  **Known open risk, not closed by this change**: a fresh attach that fails
+  after `CreateChangeInfos` and is retried is exempt too, so its pre-attach
+  changes can be stored twice. `ClientInfo.AttachDocument` only rejects with
+  `ErrDocumentAlreadyAttached` once the status is persisted as
+  `DocumentAttached`, while the interrupted attempt leaves it at `Attaching`
+  (`clients.TryAttaching`), so the retry does reach `PushPull`. The pre-attach
+  edits and the re-send are identical in `ClientSeq`/`Lamport`, so no
+  discriminator exists in the metadata; atomicity is the real fix. Recorded in
+  the Risks table of `docs/design/pushpull-idempotency.md`.
+
+A drop additionally requires an **anchor**: the pack must contain the actor's
+latest stored change verbatim (same `ClientSeq`, same `Lamport`). A genuine
+re-send always carries it. Without the anchor, any pack sitting below the
+actor's watermark would be discarded — reachable when two sessions share one
+`StableActorID`, or when that watermark was raised by someone else.
 
 ## Tasks
 
@@ -73,6 +89,15 @@ where a restarted `ClientSeq` is legitimate:
 - [x] `PushPullOptions.IsAttach`, set at the `AttachDocument` call site.
 - [x] Un-skip the reproduction subtest in `server/packs/pushpull_test.go`.
 - [x] `docs/design/pushpull-idempotency.md` + `docs/design/README.md` entry.
+- [x] Require the anchor before dropping, so a watermark this pack did not set
+      cannot silence it.
+- [x] Drop already-acknowledged changes from `reqPack.Changes` too: `pullSnapshot`
+      replays that slice over a document already built through `initialSeq`.
+- [x] Make the memory backend's `FindLatestChangeInfoByActor` skip the
+      presence-only rows Mongo never writes to the changes collection, so the
+      filter is not silently disabled there, and teach the other caller
+      (`clusterServer.DetachDocument`) that `ErrChangeNotFound` means "no stored
+      change", not failure.
 
 ## Out of scope
 

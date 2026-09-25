@@ -439,6 +439,75 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, uint32(2), clientInfo.Checkpoint(docID).ClientSeq)
 	})
 
+	t.Run("fresh attach keeps pre-attach edits shadowed by an earlier attachment", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		triggerErrUpdateClientInfo(false)
+
+		actorID, docInfo, clientInfo := attachForDuplication(t, ctx, project)
+		docID := docInfo.ID
+		docRefKey := docInfo.RefKey()
+
+		// 1. An earlier attachment of this stable actor stores an
+		// operation-carrying change at clientSeq 1 / lamport 1 — the shape a
+		// pre-attach edit has, since a fresh attach restarts both counters.
+		seedFreshAttachCheckpoint(t, clientInfo, docID)
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docRefKey, change.NewPack(
+			helper.TestKey(t),
+			change.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+			[]*change.Change{newChangeWithOperation(t, actorID, 1, 1)},
+			nil,
+			nil,
+		), packs.PushPullOptions{
+			Mode:     types.SyncModePushPull,
+			Status:   document.StatusAttached,
+			IsAttach: true,
+		})
+		assert.NoError(t, err)
+
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), docInfo.ServerSeq)
+
+		// 2. The same stable actor attaches again. The seeded checkpoint is
+		// back at 0/0 and the local edit it carries is indistinguishable from
+		// the stored one by metadata alone — clientSeq 1, lamport 1 — so the
+		// fresh-attach exemption is the only thing keeping it.
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		seedFreshAttachCheckpoint(t, clientInfo, docID)
+
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docRefKey, change.NewPack(
+			helper.TestKey(t),
+			change.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+			[]*change.Change{newChangeWithOperation(t, actorID, 1, 1)},
+			nil,
+			nil,
+		), packs.PushPullOptions{
+			Mode:     types.SyncModePushPull,
+			Status:   document.StatusAttached,
+			IsAttach: true,
+		})
+		assert.NoError(t, err)
+
+		// 3. The pre-attach edit is stored, not silently discarded.
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), docInfo.ServerSeq)
+
+		changes, err := packs.FindChanges(ctx, testBackend, docInfo, 3, 3)
+		assert.NoError(t, err)
+		assert.Len(t, changes, 1)
+		assert.Equal(t, uint32(1), changes[0].ID().ClientSeq())
+	})
+
 	t.Run("non-sequential client seq is rejected", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -1460,6 +1529,18 @@ func attachForDuplication(
 	assert.NoError(t, err)
 
 	return actorID, docInfo, clientInfo
+}
+
+// seedFreshAttachCheckpoint rewinds the client's checkpoint for the document to
+// 0/0, which is what ClientInfo.AttachDocument seeds for a FRESH attach. The
+// document's epoch and the attachment status are left alone.
+func seedFreshAttachCheckpoint(t *testing.T, clientInfo *database.ClientInfo, docID types.ID) {
+	t.Helper()
+
+	clientDocInfo, ok := clientInfo.Documents[docID]
+	assert.True(t, ok)
+	clientDocInfo.ServerSeq = 0
+	clientDocInfo.ClientSeq = 0
 }
 
 // newChangeWithOperation builds a change carrying a real operation. Only such a

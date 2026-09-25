@@ -137,6 +137,11 @@ func PushPull(
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
+	// Snapshot what arrived on the wire: pushPack prunes reqPack.Changes of
+	// the changes the database already holds, and the received metrics report
+	// what the client sent, not what survived the filters.
+	receivedChanges, receivedOperations := reqPack.ChangesLen(), reqPack.OperationsLen()
+
 	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
@@ -172,8 +177,8 @@ func PushPull(
 		)
 	}
 
-	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
-	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
+	be.Metrics.AddPushPullReceivedChanges(hostname, project, receivedChanges)
+	be.Metrics.AddPushPullReceivedOperations(hostname, project, receivedOperations)
 	be.Metrics.AddPushPullSentChanges(hostname, project, resPack.ChangesLen())
 	be.Metrics.AddPushPullSentOperations(hostname, project, resPack.OperationsLen())
 	be.Metrics.AddPushPullSnapshotBytes(hostname, project, resPack.SnapshotLen())
@@ -290,7 +295,16 @@ func pushPack(
 	var storedDuplicates []*database.ChangeInfo
 
 	// 01. Filter out changes that are already pushed.
+	//
+	// A change the checkpoint already acknowledges is durable, and the pull
+	// path replays reqPack.Changes on top of a document built through
+	// initialSeq (pullSnapshot), which holds that stored copy. Drop it from the
+	// request pack as well as from the write, or the snapshot branch applies it
+	// a second time — the same double-application the already-stored filter
+	// below avoids for its own drops.
 	var pushables []*database.ChangeInfo
+	var unacked []*change.Change
+	received := len(reqPack.Changes)
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
 			logging.From(ctx).Warnf(
@@ -305,8 +319,10 @@ func pushPack(
 			return nil, nil, nil, time.InitialLamport, change.InitialCheckpoint, err
 		}
 
+		unacked = append(unacked, cn)
 		pushables = append(pushables, info)
 	}
+	reqPack.Changes = unacked
 
 	// 02. Push the changes to the database.
 	// NOTE(hackerwins): The lock must be acquired before the epoch check
@@ -393,13 +409,13 @@ func pushPack(
 	}
 
 	initialSeq := docInfo.ServerSeq - int64(len(pushables))
-	if len(reqPack.Changes) > 0 {
+	if received > 0 {
 		logging.From(ctx).Debugf(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
 			clientInfo.Key,
 			len(pushables),
 			docInfo.Key,
-			len(reqPack.Changes)-len(pushables),
+			received-len(pushables),
 			initialSeq,
 			docInfo.ServerSeq,
 			cpAfterPush,
@@ -462,11 +478,24 @@ func dropStoredChanges(changes []*change.Change, dropped []*database.ChangeInfo)
 // authoritative record of what was stored, so ask it directly.
 //
 // A change counts as already stored when the actor's latest stored change is
-// at or beyond it in BOTH clientSeq and lamport. Neither field is a dedup key
-// alone: clientSeq restarts at 1 for a client that re-attaches under the same
-// stable actor, and that client's post-attach lamports sit above everything
-// the document holds because attach syncs its clock first. Only an actual
-// re-send is behind on both.
+// at or beyond it in BOTH clientSeq and lamport, AND the pack itself contains
+// that latest stored change verbatim — same clientSeq, same lamport. Neither
+// field is a dedup key alone: clientSeq restarts at 1 for a client that
+// re-attaches under the same stable actor, and that client's post-attach
+// lamports sit above everything the document holds because attach syncs its
+// clock first. Only an actual re-send is behind on both.
+//
+// The anchor — the pack holding the actor's own latest stored change — is what
+// makes the comparison a statement about THIS pack rather than about a
+// watermark someone else set. A re-send always carries it: the attempt that
+// stored the batch left its last change as the actor's latest, and the client
+// re-sends from its stale checkpoint, so that change is still in the pack.
+// Without the anchor, any pack whose metadata merely sits below the watermark
+// would be discarded — which is reachable when two sessions share one
+// StableActorID (same project, same client key), since the watermark is then
+// raised by the other session and the loser's genuinely new changes would be
+// dropped and acknowledged. With it, that requires the two sessions to collide
+// on an exact (clientSeq, lamport) pair.
 //
 // Two classes of change are never eligible, because for them the comparison is
 // not a statement about a re-send:
@@ -494,6 +523,7 @@ func filterStoredChanges(
 	pushables []*database.ChangeInfo,
 ) ([]*database.ChangeInfo, []*database.ChangeInfo, uint32, error) {
 	latestByActor := make(map[types.ID]*database.ChangeInfo)
+	anchoredByActor := make(map[types.ID]bool)
 	var remaining, dropped []*database.ChangeInfo
 	var maxStoredClientSeq uint32
 
@@ -515,11 +545,27 @@ func filterStoredChanges(
 
 		// An actor with no stored change is reported as ErrChangeNotFound by
 		// one database implementation and as a zero-valued ChangeInfo by the
-		// other; a stored row always names its actor. Lamport is not a
-		// not-found signal: the memory backend stores presence-only rows,
-		// whose lamport is 0. Such a row simply matches nothing here, so the
-		// change is re-stored rather than silently dropped.
+		// other; a stored row always names its actor. Both implementations
+		// report the latest change that CARRIES OPERATIONS: Mongo never writes
+		// presence-only changes to the changes collection, and the memory
+		// backend skips those rows in FindLatestChangeInfoByActor so the two
+		// agree. Without that a presence-only latest row — lamport 0 — would
+		// silently disable this filter on the memory backend.
 		if latest == nil || latest.ActorID == "" {
+			remaining = append(remaining, info)
+			continue
+		}
+
+		// The pack must contain the actor's latest stored change itself,
+		// otherwise it is not the batch that was stored and the comparison
+		// below is about someone else's watermark. Computed once per actor:
+		// the answer depends only on the pack and that actor's latest row.
+		anchored, ok := anchoredByActor[info.ActorID]
+		if !ok {
+			anchored = isAnchoredBy(pushables, latest)
+			anchoredByActor[info.ActorID] = anchored
+		}
+		if !anchored {
 			remaining = append(remaining, info)
 			continue
 		}
@@ -540,6 +586,21 @@ func filterStoredChanges(
 	}
 
 	return remaining, dropped, maxStoredClientSeq, nil
+}
+
+// isAnchoredBy reports whether the pack re-sends the given stored change: one
+// of its pushables names the same actor and carries the same clientSeq and
+// lamport. See filterStoredChanges for why a drop requires it.
+func isAnchoredBy(pushables []*database.ChangeInfo, latest *database.ChangeInfo) bool {
+	for _, info := range pushables {
+		if info.ActorID == latest.ActorID &&
+			info.ClientSeq == latest.ClientSeq &&
+			info.Lamport == latest.Lamport {
+			return true
+		}
+	}
+
+	return false
 }
 
 func pullPack(

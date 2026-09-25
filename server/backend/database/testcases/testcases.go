@@ -1010,7 +1010,51 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, maxLamport, latestChangeInfo.Lamport)
+
+		// 05. Another document must not surface this actor's changes. The
+		// lookup walks a (doc_id, actor_id, server_seq) index backwards, so an
+		// iteration that ran past the requested prefix would answer with the
+		// change stored above, which belongs to another document.
+		otherDocInfo, err := db.FindOrCreateDocInfo(
+			ctx,
+			clientInfo.RefKey(),
+			key.Key(fmt.Sprintf("tests$%s-other", t.Name())),
+			false,
+		)
+		assert.NoError(t, err)
+		assertNoLatestChangeInfo(t, db, otherDocInfo.RefKey(), types.ID(actorID.String()))
+
+		// 06. Nor must another actor in the same document.
+		otherClientInfo, err := db.ActivateClient(
+			ctx,
+			projectID,
+			fmt.Sprintf("%s-other", t.Name()),
+			map[string]string{"userID": t.Name()},
+		)
+		assert.NoError(t, err)
+		assertNoLatestChangeInfo(t, db, refKey, otherClientInfo.ID)
 	})
+}
+
+// assertNoLatestChangeInfo asserts that the given actor has no stored change in
+// the given document. The two implementations report that differently: the
+// memory backend returns ErrChangeNotFound, Mongo an empty ChangeInfo.
+func assertNoLatestChangeInfo(
+	t *testing.T,
+	db database.Database,
+	refKey types.DocRefKey,
+	actorID types.ID,
+) {
+	t.Helper()
+
+	info, err := db.FindLatestChangeInfoByActor(context.Background(), refKey, actorID, 10)
+	if err != nil {
+		assert.ErrorIs(t, err, database.ErrChangeNotFound)
+		return
+	}
+
+	assert.Empty(t, string(info.ActorID))
+	assert.Equal(t, int64(0), info.Lamport)
 }
 
 // RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.

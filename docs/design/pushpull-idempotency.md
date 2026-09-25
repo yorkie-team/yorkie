@@ -40,7 +40,12 @@ not idempotent (`increase`, text edits) double-count. Reported as
 - A dropped duplicate must not be re-applied anywhere else in the request: it
   is removed from `reqPack.Changes` as well as from the write, because
   `pullSnapshot` replays that slice on top of a document already built through
-  `initialSeq`, which holds the stored copy.
+  `initialSeq`, which holds the stored copy. The same removal applies to the
+  changes the pre-existing checkpoint filter drops
+  (`clientSeq <= cpBeforePush.ClientSeq`): those are stored too, and leaving
+  them in the pack double-applied them in the snapshot branch. The received
+  metrics are snapshotted before the pack is pruned, so they still report what
+  arrived on the wire.
 - A change that is durable but was never announced — stored by the attempt that
   then failed — is announced by the retry that drops it, so the `DocChanged`
   event, the `DocRootChanged` webhook and the snapshot trigger are not lost.
@@ -63,10 +68,30 @@ the existing `Database.FindLatestChangeInfoByActor` and drops any pushable
 that is at or behind it in **both** `ClientSeq` and `Lamport`:
 
 ```go
-if info.ClientSeq <= latest.ClientSeq && info.Lamport <= latest.Lamport {
+if isAnchoredBy(pushables, latest) &&
+    info.ClientSeq <= latest.ClientSeq && info.Lamport <= latest.Lamport {
     // already stored — drop
 }
 ```
+
+### The anchor
+
+A drop also requires the pack to contain the actor's latest stored change
+*verbatim* — same `ClientSeq`, same `Lamport`. A genuine re-send always carries
+it: the attempt that stored the batch left its last change as the actor's
+latest, and the retry re-sends from the stale checkpoint that still precedes it.
+
+Without the anchor, the predicate is a statement about a watermark rather than
+about this pack, and anything sitting below that watermark is discarded — which
+is reachable whenever the watermark was raised by someone other than this
+session: two sessions sharing a `StableActorID` (same project, same client key),
+or a peer that activated under another client's key and pushed a row under the
+shared actor. With the anchor, silencing a victim requires colliding on an exact
+`(ClientSeq, Lamport)` pair the victim has not yet sent.
+
+Both fields still arrive verbatim from the wire, so this narrows the blast
+radius of a forged pack rather than removing it; the ownership of a client key
+is an authentication question, outside this design.
 
 Dropped changes are acknowledged by advancing the checkpoint that is handed to
 `CreateChangeInfos`:
@@ -112,8 +137,9 @@ re-send.
 | Extra database round trip on the push hot path | One indexed `FindOne` per distinct actor in the pack (in practice one), gated on the document having moved since the client's last acknowledgement. The lookup uses the existing `project_id/doc_id/actor_id/server_seq` index. |
 | A legitimate change is mistaken for a duplicate and silently dropped | Requires being behind on both `ClientSeq` and `Lamport`, which a client cannot produce after syncing, *and* being stamped with the pushing client's own actor. The one case that can — pre-attach local edits — is excluded via the fresh-attach skip. Every drop is logged at warn level with actor, clientSeq and lamport. |
 | A fresh attach that fails after `CreateChangeInfos` and is retried stores its pre-attach changes twice | Not closed. `ClientInfo.AttachDocument` only rejects with `ErrDocumentAlreadyAttached` once the status is persisted as `DocumentAttached`, while the interrupted attempt leaves it at `Attaching` (`clients.TryAttaching`), so the retry reaches `PushPull` and is skipped by the fresh-attach rule above. Closing it needs a discriminator the metadata does not carry (the pre-attach edits and the re-send are identical in `ClientSeq`/`Lamport`); atomicity — the recorded non-goal — is the real fix. |
-| The two backends disagree about what the `changes` collection holds | Mongo routes presence-only changes to `presenceCache` and stores nothing for a change with neither operations nor presence; the memory backend inserts every change into `tblChanges`, including presence-only rows whose `Lamport` is 0. The filter therefore treats "found" as *the row names an actor*, never as `Lamport > 0`, and a presence-only latest row simply matches nothing — the change is re-stored rather than silently dropped. Dedup coverage of operation-carrying changes is identical on both. |
-| Two concurrent sessions under one client key share a `StableActorID`, so one session's changes can sit behind the other's in both fields | Out of scope here, and already broken without this filter: a shared actor also breaks self-echo dedup, version-vector liveness and lamport ordering. One logical client at a time is the assumption `StableActorID` is built on (see [Offline-Resumable Attach](offline-resumable-attach.md)). |
+| The two backends disagree about what the `changes` collection holds | Mongo routes presence-only changes to `presenceCache` and stores nothing for a change with neither operations nor presence; the memory backend inserts every change into `tblChanges`, including presence-only rows whose `Lamport` is 0. Returning such a row would silently disable the filter there — every operation-carrying re-send fails `info.Lamport <= 0` — so the memory backend's `FindLatestChangeInfoByActor` skips the rows Mongo would not have written and reports the actor's latest *operation-carrying* change, as Mongo does. Dedup coverage is then identical on both. |
+| Two consumers, two "not found" conventions | `FindLatestChangeInfoByActor` reports an actor with no stored change as `ErrChangeNotFound` (memory) or as a zero-valued `ChangeInfo` (Mongo). Both callers accept either: the filter treats a row that names no actor as no row, and `clusterServer.DetachDocument` falls back to the initial clock for its presence-clear change instead of failing the detach. |
+| Two concurrent sessions under one client key share a `StableActorID`, so one session's changes can sit behind the other's in both fields | Narrowed by the anchor above: the loser's pack is only eligible if it contains the exact `(ClientSeq, Lamport)` of the other session's latest stored change. Beyond that, out of scope here, and already broken without this filter: a shared actor also breaks self-echo dedup, version-vector liveness and lamport ordering. One logical client at a time is the assumption `StableActorID` is built on (see [Offline-Resumable Attach](offline-resumable-attach.md)). |
 | Compaction removes the stored changes a duplicate would be matched against | Compaction bumps `DocInfo.Epoch`, and the epoch check in `pushPack` discards stale-epoch changes before this filter is reached. |
 | A re-sent change that carries no operations is not recognised | `FindLatestChangeInfoByActor` reads the `changes` collection, and the Mongo backend writes only changes that carry operations: `CreateChangeInfos` routes presence-only changes to `presenceCache` and stores nothing at all for a change with neither, keeping only the `server_seq` it consumed. Re-storing either duplicates no operation — presence is last-write-wins and an empty change carries nothing — so the only cost is a burnt `server_seq`. The double-counting this design exists to stop (`increase`, text edits) is confined to operation-carrying changes, which are exactly the ones the filter sees. |
 

@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -84,8 +85,16 @@ func (s *clusterServer) DetachDocument(
 		types.ID(req.Msg.ClientId),
 		cp.ServerSeq,
 	)
-	if err != nil {
+	if err != nil && !errors.Is(err, database.ErrChangeNotFound) {
 		return nil, err
+	}
+	// The two backends report "this actor stored nothing in this document"
+	// differently: Mongo returns a zero-valued ChangeInfo with no error, the
+	// memory backend returns ErrChangeNotFound. Either way the presence clear
+	// starts from the initial clock, which is what a client with no stored
+	// change has.
+	if latestChangeInfo == nil {
+		latestChangeInfo = &database.ChangeInfo{}
 	}
 	changeCtx := change.NewContext(
 		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector),
