@@ -38,7 +38,9 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -220,15 +222,26 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, int64(1), clientInfo.Checkpoint(docID).ServerSeq)
 		assert.Equal(t, uint32(1), clientInfo.Checkpoint(docID).ClientSeq)
 
-		// 1. Create a ChangePack with a single Change
-		pack, err := converter.FromChangePack(&api.ChangePack{
-			DocumentKey: helper.TestKey(t).String(),
-			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
-			Changes: []*api.Change{
-				{Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: clientID}},
-			},
-		})
+		// 1. Create a ChangePack with a single Change carrying an operation.
+		// The change has to leave a durable row in the changes collection for
+		// this test to mean anything: the Mongo backend only writes changes
+		// that carry operations (presence-only ones live in the presence
+		// cache, and a change with neither is nothing but a server_seq bump),
+		// and the duplicate filter reads that collection to recognize a
+		// re-send.
+		changeID := change.NewID(2, 0, 2, actorID, time.NewVersionVector())
+		executedAt := changeID.NewTimeTicket(1)
+		value, err := crdt.NewPrimitive("v", executedAt)
 		assert.NoError(t, err)
+		pack := change.NewPack(
+			helper.TestKey(t),
+			change.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+			[]*change.Change{change.New(changeID, "", []operations.Operation{
+				operations.NewSet(time.InitialTicket, "k", value, executedAt),
+			}, nil)},
+			nil,
+			nil,
+		)
 
 		// 2-1. An arbitrary failure occurs while updating clientInfo
 		triggerErrUpdateClientInfo(true)

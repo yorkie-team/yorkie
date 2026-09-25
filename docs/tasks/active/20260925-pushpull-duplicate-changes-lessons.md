@@ -41,3 +41,17 @@ Any duplicate must have been stored after the client was last acknowledged, so
 `DocInfo.ServerSeq == cpBeforePush.ServerSeq` rules one out without a query.
 In the single-writer steady state that is every push, so the lookup costs
 nothing there; it is paid only when the document actually moved.
+
+## The skipped test's payload never matched its own assertions
+
+Un-skipping the reproduction was not enough: it pushed a change with no
+operations and no presence, and asserted that change was "stored in the
+database". The Mongo backend writes only changes that carry operations —
+`CreateChangeInfos` routes presence-only changes to `presenceCache` and drops
+an empty change entirely, keeping just the `server_seq` it consumed. So the
+row the filter queries never existed, `FindChanges` returned nothing, and the
+retry could not be recognised. A test that was skipped from the day it was
+written has never had its fixtures checked against the storage it runs on;
+re-reading the payload against `CreateChangeInfos` before trusting the
+assertions is the step that was missing. The change now carries a `Set`
+operation, which is what makes it durable.
