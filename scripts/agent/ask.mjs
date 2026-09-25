@@ -94,6 +94,24 @@ export const PERMITTED_TOOLS = Object.freeze(["Read", "Grep", "Glob"]);
  */
 export const PERMITTED_MCP_TOOLS = Object.freeze([]);
 
+/**
+ * Paths no session may read, as permission rules (`//` = absolute).
+ *
+ * A session's environment necessarily holds the Claude credential it runs on,
+ * and a bare `Read` rule reaches any path — verified with the CLI:
+ * `--allowedTools Read` read /etc/hosts from an unrelated cwd, and
+ * `--disallowedTools "Read(//etc/**)"` refused it while ./ stayed readable. So
+ * a prompt injection in the diff under review could ask for
+ * /proc/self/environ, and the verdict is published. `redactSecrets` masks the
+ * value verbatim, not an encoding of it. Denied for every read-capable tool.
+ */
+export const DENIED_READ_PATHS = Object.freeze(["//proc/**", "//sys/**"]);
+
+/** `disallowedTools` rules denying `DENIED_READ_PATHS` to each built-in tool. */
+export function deniedReadRules(tools) {
+  return tools.flatMap((tool) => DENIED_READ_PATHS.map((p) => `${tool}(${p})`));
+}
+
 const PERMITTED_SET = new Set(PERMITTED_TOOLS);
 
 /**
@@ -509,6 +527,9 @@ export function buildSessionOptions({ systemPrompt, model, repo, schema, maxTurn
     // here to be callable, but must NOT appear in `tools`, which is built-ins
     // only. Anything absent from both stays denied by `dontAsk`.
     allowedTools: sessionTools,
+    // Deny rules win over the allow list: no read-capable tool may open
+    // /proc or /sys, where the credential this session runs on is readable.
+    disallowedTools: deniedReadRules(builtinTools),
     // Only attach the server(s) when one was actually wired — `askStructured`
     // keys its MCP timeout backstop off the presence of this field.
     ...(hasServers ? { mcpServers } : {}),

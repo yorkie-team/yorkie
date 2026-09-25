@@ -798,3 +798,20 @@ test("poolExhaustedError: carries the same publishable vocabulary as every other
   // The operator-facing message is unchanged.
   assert.match(err.message, /^review: every credential in the pool \(3\) was retired/);
 });
+
+test("no session can read /proc or /sys, where its credential lives", async () => {
+  const { buildSessionOptions, DENIED_READ_PATHS } = await import("./ask.mjs");
+  const opts = buildSessionOptions({
+    systemPrompt: "s",
+    model: "m",
+    repo: "/tmp",
+    schema: { type: "object" },
+    allowedTools: ["Read", "Grep", "Glob"],
+  });
+  for (const tool of ["Read", "Grep", "Glob"]) {
+    for (const p of DENIED_READ_PATHS) {
+      assert.ok(opts.disallowedTools.includes(`${tool}(${p})`), `${tool}(${p}) must be denied`);
+    }
+  }
+  assert.ok(DENIED_READ_PATHS.includes("//proc/**"));
+});
