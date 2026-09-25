@@ -39,17 +39,17 @@ against accident only; scratch repos in the tests need
 
 ## Plan
 
-- [ ] Pin `commit.gpgsign=false` in the test scratch repos
-- [ ] Snapshot into the common git dir (setup.sh, install.mjs) — worktree test
-- [ ] Reflog parser: accept `pull --rebase` picks, pull merges, amend/merge
+- [x] Pin `commit.gpgsign=false` in the test scratch repos
+- [x] Snapshot into the common git dir (setup.sh, install.mjs) — worktree test
+- [x] Reflog parser: accept `pull --rebase` picks, pull merges, amend/merge
       commits
-- [ ] Reflog parser: refuse `rebase (finish)` and lowercase `fast-forward`
-- [ ] Read the current branch's reflog too — cross-worktree test
-- [ ] Trust `upstream/main` in the guard and prefer it in setup.sh — fork test
-- [ ] Raw `%ae` for the author check — `.mailmap` test
-- [ ] setup.sh: count untracked hook sources; say the refusal is accident-only
-- [ ] Update `docs/design/local-enforcement-layer.md` and CONTRIBUTING.md
-- [ ] `node --test scripts/test/*.test.mjs` green; Red shown for each new test
+- [x] Reflog parser: refuse `rebase (finish)` and lowercase `fast-forward`
+- [x] Read the current branch's reflog too — cross-worktree test
+- [x] Trust `upstream/main` in the guard and prefer it in setup.sh — fork test
+- [x] Raw `%ae` for the author check — `.mailmap` test
+- [x] setup.sh: count untracked hook sources; say the refusal is accident-only
+- [x] Update `docs/design/local-enforcement-layer.md` and CONTRIBUTING.md
+- [x] `node --test scripts/test/*.test.mjs` green; Red shown for each new test
 
 ## Not ported
 
@@ -59,3 +59,33 @@ against accident only; scratch repos in the tests need
 - pnpm, lint-staged, the `examples/` filter, `verify-license` `.ts` changes.
 
 ## Review
+
+Every fix landed with a scratch-clone test that runs the real hook (with
+`make` and `golangci-lint` stubbed on `PATH`) or the real `setup.sh`. Red
+before each fix:
+
+| Fix | Test | Red |
+|-----|------|-----|
+| Common git dir | setup.sh in a worktree installs into the shared git dir | hooksPath was `.git/worktrees/wt/githooks`; with setup.sh fixed, install.mjs's settings still named `worktrees` |
+| `pull --rebase` picks | the trust guard accepts your own commits after git pull --rebase | refused, "not created by this clone" |
+| pull merge | the trust guard accepts your own merge made by git pull | refused, "not created by this clone" |
+| `rebase (finish)` | the trust guard refuses a rebase that only fast-forwards onto a PR | `RAN make verify` |
+| `cherry-pick --ff` | the trust guard refuses commits reached by cherry-pick --ff | `RAN make verify` |
+| Branch reflog | the trust guard accepts a branch committed in another worktree | refused, "not created by this clone" |
+| `upstream/main` | the trust guard accepts a fork branch rebased onto upstream/main; setup.sh compares against upstream/main in a fork | refused; setup "differ from origin/main" |
+| Raw `%ae` | the author check ignores the branch's own .mailmap | `RAN make verify` |
+| Untracked sources | setup.sh refuses an untracked hook it would install | installed |
+| gpgsign | (existing suite under a HOME with `commit.gpgsign=true`) | 6 tests failed |
+
+`commit (amend)` and `commit (merge)` were already accepted here: yorkie's
+first-word match tested `$2 ~ /^(commit|…)/`, which the qualifier in `$3`
+does not disturb; the defect was in an intermediate js-sdk form. The two
+tests pin them against the whole-subject rewrite, and were green before
+and after.
+
+The `(finish)` and `cherry-pick --ff` fixtures author the PR commit as the
+local identity. With a different address the author check refuses anyway
+and the misclassification is invisible; with yours, `make verify` ran.
+
+Verification: `node --test scripts/test/*.test.mjs` 167/167; `make verify`
+green; `scripts/agent` untouched. shellcheck not installed, not run.
