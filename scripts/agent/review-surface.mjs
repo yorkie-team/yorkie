@@ -47,6 +47,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { repoScopedEnv } from "./git-env.mjs";
 import { gh } from "./gh-checks.mjs";
 import { findingLocation } from "./novelty.mjs";
@@ -330,7 +332,12 @@ async function dryRun(argv) {
   console.log(`demotes: ${DEMOTING_SCOPES.has(r.scope)}`);
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// The package's own entry-point guard — `scripts/agent/` is staged detached
+// from its parent, so `isDirectRun` from `scripts/direct-run.mjs` is out of
+// reach. The `file://` template this replaces compared a percent-encoded URL
+// against a raw path, so any clone path needing encoding silently skipped the
+// CLI.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   if (argv[0] === "resolve") {
     cmdResolve(argv.slice(1));
