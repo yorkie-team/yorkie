@@ -71,9 +71,25 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Setup buf action
-        uses: bufbuild/buf-setup-action@v1
+      - name: Set up buf
+        # `bufbuild/buf-setup-action` and `bufbuild/buf-lint-action` are both
+        # archived; `buf-action` is their successor. They came into scope when
+        # `agent-scripts.yml` widened actionlint to the whole directory, and
+        # actionlint reads an action's inputs, never its runtime — so an
+        # archived action aging out would surface only as a startup failure
+        # on whichever PR next ran this job. `setup_only` because the steps
+        # below already run the CLI directly.
+        #
+        # `version` is the default `buf-setup-action@v1` installed, stated
+        # because `buf-action` has none of its own: swapping the action must
+        # not also swap the CLI that lint, breaking and generate run with.
+        #
+        # SHA-PINNED, following the rule `codecov-action` below states:
+        # anything handed a secret.
+        uses: bufbuild/buf-action@85aebf73123b5c15fd5528aaecbf9129cddf7fa7 # v1.6.0
         with:
+          setup_only: true
+          version: 1.50.0
           github_token: ${{ github.token }}
 
       - name: Check out code
@@ -98,7 +114,9 @@ jobs:
         run: node scripts/verify-license.mjs
 
       - name: Lint proto files
-        uses: bufbuild/buf-lint-action@v1
+        # `buf.work.yaml` points the workspace at `api/`, which is how the
+        # `buf breaking` and `buf generate` steps below resolve too.
+        run: buf lint
 
       - name: Check proto for breaking changes
         # api/buf.yaml has configured `breaking: use: FILE` since before this
