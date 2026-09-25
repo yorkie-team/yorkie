@@ -129,8 +129,8 @@ fallbacks for a bare `@claude` mention:
 |------|---------|-------------|-------------------|
 | `fix` | issue | branch + draft PR | `write` or above |
 | `fix` | PR | commit pushed to the branch | `write` or above |
-| `summarize` (alias `summarise`) | PR | no | **PR author**, or `write` and above |
-| `review` | PR | no | **PR author**, or `write` and above |
+| `summarize` (alias `summarise`) | PR | no | `write` or above |
+| `review` | PR | no | `write` or above |
 | `loop` | PR | label only | `write` or above |
 | `rerun` | PR | no | `write` or above |
 | *(bare mention)* → `reply` | PR | commit pushed to the branch | `write` or above |
@@ -145,12 +145,15 @@ against the review panel's standing verdict*. The workflows gate on
 calls this the most confusable fact in the loop, and this document keeps the
 two apart by deferring the issue arm entirely.
 
-**`review` and `summarize` are the only verbs a PR author can invoke.** Every
-other verb requires `admin`, `maintain` or `write` on this repository, checked
+**Every verb requires write access, including `review` and `summarize`.**
+Trigger authority is `admin`, `maintain` or `write` on this repository, checked
 with `repos.getCollaboratorPermissionLevel` rather than `author_association` —
-organization membership is not repository permission. For a repository whose
-contributions arrive mostly from forks, that is the whole difference between a
-surface contributors can use and one only maintainers can.
+organization membership is not repository permission. Upstream also let the PR
+author invoke the two advisory verbs, and this document first adopted that. It
+was withdrawn: on a public repository the PR author is any GitHub account, so a
+fork PR plus one comment started an unattended model run over attacker-chosen
+text, in a process whose environment holds the Claude credential. A maintainer
+can still run either verb on a fork PR, having chosen to.
 
 ### 1.1 Who vouches for the spec
 
@@ -259,9 +262,14 @@ pushing a commit is what re-arms them.
   when no placeholder id reaches it: a refusal costs the "running…" note, not
   the review. If the findings comment itself 403s on a fork, the job goes red
   rather than silent, and the remedy is to bring the App forward from Phase 3.
-- **Fork behavior:** works. Neither verb checks out or executes branch code;
-  the diff and metadata are read through the API and handed to the model as
-  data.
+- **Fork behavior:** works when a maintainer triggers it. Neither verb checks
+  out or executes branch code; the diff and metadata are read through the API
+  and handed to the model as data. `summarize` checks out only the default
+  branch, shallow and without credentials, because `claude-code-action` needs
+  a git repository for its own setup. Its model job holds a read-only
+  `GITHUB_TOKEN`; a separate `publish` job, which runs no model, posts the
+  comment. Every model session is denied reads under `/proc` and `/sys`, where
+  its credential is readable.
 - **Exit criteria:** on twenty PRs, the panel's findings are compared against
   CodeRabbit's on the same diff. Phase 2 is justified only if the panel raises
   blocking-severity findings CodeRabbit did not.
@@ -703,7 +711,7 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | Decision | Reason |
 |----------|--------|
 | Phase by verb, not by component | The components are one graph; the verbs are what a person types. A phase boundary users can see is one they can be told about |
-| `summarize` in Phase 1 with `review` | Same trust level, same throttle, zero write authority, and both are invocable by the PR author — together they are the only combination that is useful to a fork contributor |
+| `summarize` in Phase 1 with `review` | Same trust level, same throttle, zero write authority. Both were first invocable by the PR author, for fork contributors; that was withdrawn (see §1), and both now require write access |
 | `reply` last | It is the only verb with no verb: any bare `@claude` mention on an agent PR triggers it, and it also fires on inline review comments. Widest misfire surface in the set |
 | Advisory before gating | Check runs interact with branch protection and with the merge queue. Landing the reviewer first separates "is it any good?" from "does it block merges?" |
 | Keep the upstream kill-switch variable | Lets a workflow be merged inert, so review of the workflow and the decision to enable it are separate events |
