@@ -641,7 +641,7 @@ jobs:
         # when bumping. github_token is the App token so the push re-triggers CI —
         # a GITHUB_TOKEN-authored push does not, which would leave the PR with no
         # CI at all.
-        uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
+        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.agent-token.outputs.token }}
