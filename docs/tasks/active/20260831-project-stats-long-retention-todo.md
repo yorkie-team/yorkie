@@ -444,8 +444,10 @@ old table after the swap.
       summary row, so the TTL drops nothing the read path still needs.
 - [ ] Per table: create `<t>_p` (`PARTITION BY date_trunc('day', timestamp)`,
       `partition_ttl = "90 DAY"`) and its sync MV as `<mv>_p` → `PAUSE ROUTINE
-      LOAD` → `INSERT INTO <t>_p SELECT` → `SWAP` → `STOP` + `CREATE ROUTINE
-      LOAD` at `Progress + 1` → keep the old table as `<t>_old`. Auto-resume
+      LOAD` → copy the last 90 days into `<t>_p` → `SWAP` → `STOP` + `CREATE
+      ROUTINE LOAD` with `kafka_default_offsets = Progress + 1` (no partition
+      list), then switch it to `OFFSET_BEGINNING` → keep the old table as
+      `<t>_old`. Auto-resume
       of paused jobs held off for the duration; largest tables in a
       low-ingest window, watching `ADMIN SHOW REPLICA STATUS`.
 - [ ] `EXPLAIN` a fresh-day total: confirm it reads `mv_*_hll_daily`. The

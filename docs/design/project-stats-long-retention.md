@@ -526,11 +526,19 @@ the job is recreated against the new table at the offset where it stopped:
    table, so it takes a temporary name (`<mv>_p`) until the old table is gone.
 2. `PAUSE ROUTINE LOAD FOR <t>`; record `Progress` — the last *consumed*
    offset per Kafka partition.
-3. `INSERT INTO <t>_p (<cols>) SELECT <cols> FROM <t>`; compare counts.
+3. Copy only what the TTL keeps: `INSERT INTO <t>_p (<cols>) SELECT <cols>
+   FROM <t> WHERE timestamp >= <today - 90 days>`. Compare counts one day
+   inside that bound, on both tables with the same predicate. `<t>_p` carries
+   the TTL from creation, so a scheduler tick can land between the copy and the
+   check and drop the boundary day. Older rows need no copy: the TTL would drop
+   them, the summaries already hold those days, and `<t>_old` keeps them.
 4. `ALTER TABLE <t> SWAP WITH <t>_p`.
 5. `STOP ROUTINE LOAD FOR <t>`, then `CREATE ROUTINE LOAD` under the same name
-   `ON <t>` with the original properties plus `kafka_partitions` and
-   `kafka_offsets` set to `Progress + 1`.
+   `ON <t>` with the original properties (`property.group.id` included — `SHOW
+   CREATE ROUTINE LOAD` omits it) and `"property.kafka_default_offsets" =
+   "<Progress + 1>"`, naming no partitions. Once it is consuming, `PAUSE`,
+   `ALTER ROUTINE LOAD ... FROM KAFKA ("property.kafka_default_offsets" =
+   "OFFSET_BEGINNING")`, `RESUME` (see below).
 6. Once the long windows are verified, drop the old table and `ALTER TABLE <t>
    RENAME ROLLUP <mv>_p <mv>`. Renaming first would leave two MVs of the same
    name, since `RENAME ROLLUP` skips the uniqueness check `CREATE` enforces.
@@ -540,6 +548,20 @@ landed once, none twice. Anything that resumes paused jobs automatically has
 to be held off for the duration, or it resumes the old job into the old table.
 On large tables this runs in a low-ingest window with replica status watched —
 `replication_num = 1` has a tablet-quorum-stall history.
+
+**Why the offset goes through `kafka_default_offsets`.** The original jobs name
+no partitions, so they pick up partitions added to the topic later. The
+per-partition `kafka_offsets` requires an explicit `kafka_partitions`, and on
+3.3 an explicit list pins the job to it (`property.kafka_partition_discovery`
+is not in 3.3). The event topics have one partition each, so a numeric default
+offset resumes exactly where the old job stopped and keeps discovery. It would
+also apply to a partition added later, though — rehearsed on 3.3.22, the new
+empty partition was read from that offset, failed with "Offset out of range",
+and paused the whole job. Switching the default to `OFFSET_BEGINNING` once the
+job is past it keeps the consumed progress (nothing is re-read) and reads a
+later partition from its start: rehearsed with a partition added after the
+switch, every message on both partitions landed once. A topic with more than
+one partition cannot take this path; it needs the explicit list and is pinned.
 
 **Partition pruning under `DATE()`.** The MV design warned that wrapping
 `timestamp` in `DATE()` can lose partition pruning once the base is partitioned,
