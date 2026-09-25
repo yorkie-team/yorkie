@@ -90,6 +90,21 @@ node_modules/
 # `git add -A` commits as a gitlink.
 .harness-reports/
 
+# The per-lane CI reports `scripts/ci/run-lanes.mjs` writes and `ci.yml`
+# uploads for the CI-fix loop to read (docs/design/ci-lane-reports.md).
+#
+# A SECOND DIRECTORY, deliberately, and the one above is why. The name
+# `.harness-reports/` is the one the upstream pipeline uses for exactly this
+# artifact, and it was already taken here by something with incompatible
+# contents: novelty.test.mjs plants whole git repositories under it. Sharing
+# it would put a nested `.git` inside the upload's search root — @actions/glob
+# walks it, and the artifact would carry throwaway repositories a local `node
+# --test` run happened to leave behind, on a runner where the two would race
+# for the same path. Renaming the scratch directory instead would have edited
+# a test's isolation guarantee to make room for a reports sink, which is the
+# wrong file to touch.
+.ci-reports/
+
 # Claude Code's per-user settings. It holds `permissions.allow` grants and the
 # hook wiring `scripts/hooks/install.mjs` writes; committing one by accident
 # both widens the permission set for every contributor and makes a branch able
