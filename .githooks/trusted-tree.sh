@@ -52,6 +52,11 @@
 # construction: they are on the default branch. So a branch rebased onto — or
 # merged with — a fetched `main` does not trip this.
 #
+# WHAT IT DOES NOT CATCH: a branch authored under YOUR address that you then
+# rewrite yourself — rebase, amend, `am`, a `pull --rebase`. The rewrite writes
+# the commits here and the author matches. Read the diff before rewriting
+# someone else's branch.
+#
 # THE COST, stated because it is real: a commit you wrote on another machine and
 # fetched into this clone was not created here, so this refuses it. That is the
 # same evidence a stranger's commit presents, and the bypass below is the answer

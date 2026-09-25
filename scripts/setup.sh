@@ -105,9 +105,9 @@ fi
 # and the commit that hands a branch's Makefile to `make` happens later, in a
 # checkout of a branch that need not exist yet. So the second half is checked
 # where it has to be, inside the hooks: `.githooks/trusted-tree.sh` refuses
-# when the checkout carries commits on top of `origin/main` that this clone
-# did not create — read out of HEAD's reflog, not out of the author line the
-# branch's own author writes — which is what checking out somebody's pull
+# when the checkout carries commits on top of `origin/main` or `upstream/main`
+# that this clone did not create — read out of the reflog, not out of the
+# author line the branch's own author writes — which is what checking out somebody's pull
 # request produces and what writing your own does not. Bypass with
 # `--no-verify` or
 # `YORKIE_ALLOW_FOREIGN_TREE=1`. CONTRIBUTING.md says the same thing where
