@@ -48,6 +48,11 @@ import (
 //
 // They are written as invariants rather than as golden numbers because the
 // point is the shape of the cost, not one measurement of it.
+//
+// A drained document does NOT cost what it cost before the moves: a moved
+// element carries a movedAt ticket it did not carry before, and a rebuild
+// charges it. That is content, not retention, which is why these tests bound
+// the residue by one ticket per moved element and check it against a rebuild.
 
 // dragToFront moves the element at idx to the front of the array.
 func dragToFront(t *testing.T, d *document.Document, idx int) {
@@ -115,8 +120,14 @@ func TestBarrierRetentionIsBoundedByLagNotByArraySize(t *testing.T) {
 			assert.Equal(t, 0, doc.GarbageLen(), "retention must drain")
 			assert.Zero(t, drained.GC.Data, "no data charged to GC after draining")
 			assert.Zero(t, drained.GC.Meta, "no metadata charged to GC after draining")
-			assert.Equal(t, baselineTotal, (&drained).Total(),
-				"a fully synced document must cost exactly what it cost before the moves")
+
+			// Every drag moves a distinct element -- at step i the first i
+			// slots hold the elements already dragged, so index i is still
+			// the one that has never moved -- and each pays exactly the one
+			// movedAt ticket it now carries. Nothing else survives.
+			assert.Equal(t, baselineTotal+(n-1)*time.TicketSize, (&drained).Total(),
+				"a fully synced document must cost its content: one movedAt ticket per moved element")
+			assertRebuildsSame(t, doc, "after dragging every element and collecting")
 		})
 	}
 }
@@ -126,7 +137,10 @@ func TestBarrierRetentionIsBoundedByLagNotByArraySize(t *testing.T) {
 // 8th of 19 drags under a 1000-byte limit.
 func TestBarrierKeepsAnArrayUnderItsSizeLimitMovable(t *testing.T) {
 	doc := document.New("barrier-cost-limit")
-	doc.MaxSizeLimit = 1000
+	// 1000 bytes, plus room for the one movedAt ticket each of the 19 drags
+	// legitimately adds to the document's content. Without that room the test
+	// would be measuring the tickets rather than the retention it is here for.
+	doc.MaxSizeLimit = 1000 + 19*time.TicketSize
 	newStringArray(t, doc, 20)
 	doc.GarbageCollect(doc.VersionVector())
 
@@ -198,6 +212,15 @@ func TestBarrierCostsNothingOnConcurrentMoves(t *testing.T) {
 	assert.Equal(t, 0, d2.GarbageLen())
 
 	drained := d1.DocSize()
-	assert.Equal(t, syncedTotal, (&drained).Total(),
-		"moving elements around and syncing must not change what the document costs")
+	d2Size := d2.DocSize()
+	assert.Equal(t, drained, d2Size, "replicas must agree on size")
+
+	// Each round drags one element per replica, so at most 2*rounds elements
+	// ever gain a movedAt ticket. Anything above that bound is retention that
+	// failed to drain, which is what this test is here to catch.
+	assert.GreaterOrEqual(t, (&drained).Total(), syncedTotal)
+	assert.LessOrEqual(t, (&drained).Total(), syncedTotal+2*rounds*time.TicketSize,
+		"a move costs at most the one ticket it stamps; nothing else may survive collection")
+	assertRebuildsSame(t, d1, "after concurrent moves and full collection")
+	assertRebuildsSame(t, d2, "after concurrent moves and full collection")
 }

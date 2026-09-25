@@ -421,6 +421,11 @@ func fromTextNode(
 		// `isRemoved` flag as-is. Unlike Set, it never loses to an existing
 		// occupant and keeps the removed element count in sync. This is safe
 		// here because the RHT is freshly built and the keys are unique.
+		//
+		// A removed attribute's value is dropped by SetInternal: a snapshot
+		// written before Remove stopped copying the value still carries one,
+		// and restoring it would size the tombstone differently from a replica
+		// that performed the removal under the current code.
 		attrs.SetInternal(key, pbAttr.Value, updatedAt, pbAttr.IsRemoved)
 	}
 

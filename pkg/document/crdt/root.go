@@ -743,6 +743,36 @@ func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
 }
 
+// AccMovedElement books the diff a move stamped on the given element into the
+// ledger that is actually holding that element's bytes.
+//
+// A live element is charged to Live like any other write. An element that is
+// already a tombstone -- the ordinary outcome of a concurrent remove and move --
+// is not: a rebuild charges a tombstone's whole DataSize, movedAt included, to
+// GC, so Live would keep the ticket forever while a rebuild put it in GC.
+//
+// The recorded charge has to rise with it. deregisterElement subtracts exactly
+// what sizeInGC recorded when the tombstone is collected, so a GC top-up that
+// left the record alone would only move the stray bytes from Live to GC. An
+// element with no record is one Live is still holding (deregisterElement makes
+// the same split), so it is charged to Live.
+func (r *Root) AccMovedElement(elem Element, diff resource.DataSize) {
+	if elem == nil || elem.RemovedAt() == nil {
+		r.docSize.Live.Add(diff)
+		return
+	}
+
+	charged, ok := r.sizeInGC[elem]
+	if !ok {
+		r.docSize.Live.Add(diff)
+		return
+	}
+
+	r.docSize.GC.Add(diff)
+	charged.Add(diff)
+	r.sizeInGC[elem] = charged
+}
+
 // AccGC accumulates the given DataSize to GC.
 //
 // docSize.GC has to stay equal to the sum of the CURRENT DataSize of every
