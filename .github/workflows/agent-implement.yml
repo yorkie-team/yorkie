@@ -79,7 +79,19 @@ jobs:
        (needs.route.outputs.command == 'fix' &&
         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
     runs-on: ubuntu-latest
-    timeout-minutes: 90 # hard cost/time ceiling; implementation is turn-heavy
+    # 55, NOT A COST CEILING — the credential's. This job pushes a branch and
+    # opens a PR with a GitHub App installation token, whose life is fixed at one
+    # hour and which `create-github-app-token` cannot extend; a run that passes
+    # the hour 401s at the `git push`, which is the end of the expensive part.
+    # The design doc filed that as known-unverified under Phase I ("the job's
+    # ceiling is 90 minutes and an installation token lives 60") and it is the
+    # same defect the two fixer jobs carried. Five minutes of margin for the
+    # push, the PR creation and clock skew.
+    #
+    # Implementation is turn-heavy, so this bites sooner here than in the fixers
+    # — but a run still working at minute 61 could not have landed anything
+    # anyway, and `--max-turns 150` is the backstop against a runaway.
+    timeout-minutes: 55
     concurrency:
       group: agent-implement-${{ github.event.issue.number || github.event.inputs.issue_number }}
       # FALSE, matching every other comment-triggered verb here and unlike
@@ -553,6 +565,14 @@ jobs:
              this run is granted no tool that can do that. Its own rules forbid
              substituting your own read of your own diff, and there is nobody here
              to ask. The PR's reviewers are CI, `@claude review`, and a human.
+
+          YOUR WALL IS ABOUT FIFTY MINUTES. The job is killed at 55, and the
+          token you push with dies at 60 whatever the job does — so a run still
+          working past the hour cannot land anything, and the commit-and-push in
+          step 4 is what has to happen inside the budget. If you are running
+          long, narrow the change to the acceptance criteria you can actually
+          deliver, push that, and say in __PR_FILE__ what you left. A pushed
+          partial change is reviewable; an unpushed complete one is lost.
 
           Execution rules: run EVERY command in the FOREGROUND and wait for it
           synchronously. This is a one-shot headless run with NO resume — do NOT run

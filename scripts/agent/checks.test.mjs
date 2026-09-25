@@ -397,6 +397,40 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
   assert.equal(onDemandWall, fixWall,
     "agent-fix.yml's fix wall must match the autonomous one the page points away from");
 
+  // AND THE WALL MUST FIT INSIDE THE CREDENTIAL. A GitHub App installation
+  // token's life is fixed at one hour, `create-github-app-token` cannot extend
+  // it, and every one of these jobs pushes with the copy `actions/checkout`
+  // persisted into `.git/config`. A wall past 60 therefore buys minutes in which
+  // the fixer can work and cannot land anything: the push 401s and the round
+  // reports as "no commit", which is precisely what raising the wall from 45 was
+  // meant to stop happening.
+  //
+  // It was 90 in all three for exactly that reason, with a comment that said so
+  // and deferred the fix. Refreshing mid-round is not available — it needs a step
+  // after the agent, which "nothing after the agent but the handoff" above
+  // forbids — so the wall IS the mechanism, and it is asserted rather than left
+  // to a comment because the number reads as a cost ceiling and raising it looks
+  // harmless.
+  //
+  // `agent-implement.yml` is in the list conditionally, like every other guard
+  // here that names it: the same token, the same push, and the phase can be
+  // withdrawn again.
+  const APP_TOKEN_MINUTES = 60;
+  const walls = [["agent-review-panel.yml", "fix", fixWall], ["agent-fix.yml", "fix", onDemandWall]];
+  if (hasWorkflow("agent-implement.yml")) {
+    const impl = readFileSync(path.join(HERE, "..", "..", ".github", "workflows", "agent-implement.yml"), "utf8");
+    const implWall = (impl.match(/^ {2}implement:\n(?:.*\n)*? {4}timeout-minutes: (\d+)$/m) || [])[1];
+    assert.ok(implWall, "could not read the implement job's timeout-minutes");
+    walls.push(["agent-implement.yml", "implement", implWall]);
+  }
+  for (const [file, job, wall] of walls) {
+    assert.ok(
+      Number(wall) < APP_TOKEN_MINUTES,
+      `${file}'s \`${job}\` job has timeout-minutes: ${wall}, at or past the ${APP_TOKEN_MINUTES}-minute life of the `
+      + "App token it pushes with — the minutes past the hour can spend model budget and a round, and cannot push",
+    );
+  }
+
   // And `stalled` keeps its `!cancelled()`. It is not the bug — it is what stops
   // a run cancelled by the concurrency guard from paging over a FRESHER round,
   // and it is deliberately left alone because the step above now owns the

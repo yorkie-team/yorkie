@@ -419,15 +419,23 @@ each one by a mechanism rather than a promise:
   the prompt — a convention the agent could get wrong, verified by nothing.
   Criterion 9 below is what turns it into an argument the workflow passes.
 
-- **Two things are known-unverified, and both are recorded rather than guessed.**
-  The job's ceiling is 90 minutes and an installation token lives 60, so a run
-  that passes the hour loses the ability to push — the failure is a 401 at the
-  end of the expensive part. And `current_user_can_bypass` is documented as the
-  bypass type of *the user making the request*; under an installation token there
-  is no user, and what it returns is untested here because this repository has no
-  rulesets. If it is anything but `never`, every ruleset-protected repository is
-  refused. Both fail safe. Both should be settled by observation on the first
-  runs rather than by argument.
+- **One thing is known-unverified, and it is recorded rather than guessed.**
+  `current_user_can_bypass` is documented as the bypass type of *the user making
+  the request*; under an installation token there is no user, and what it returns
+  is untested here because this repository has no rulesets. If it is anything but
+  `never`, every ruleset-protected repository is refused. It fails safe, and it
+  should be settled by observation on the first runs rather than by argument.
+
+  The other entry that stood here — the job's 90-minute ceiling against a
+  60-minute installation token, so a run past the hour loses the ability to push
+  and 401s at the end of the expensive part — was not unverified at all, only
+  unfixed, and `agent-fix.yml` and the panel's `fix` job carried the same
+  ceiling. All three are now 55. The minutes between 60 and 90 held a credential
+  that had already expired: they could spend model budget and a round from
+  `MAX_REVIEW_ROUNDS` and could not push, which is the outcome raising the fixer
+  wall from 45 to 90 was meant to prevent. Refreshing mid-round would need a step
+  after the agent, which the trust model forbids; `checks.test.mjs` now fails any
+  of the three whose wall reaches the token's hour.
 - **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
   write-access check on top. An issue body is data, never instructions.
 - **Not ported:** upstream's issue classifier. It labels issues into a category

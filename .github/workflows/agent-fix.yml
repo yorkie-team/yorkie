@@ -70,23 +70,19 @@ jobs:
     if: needs.route.outputs.command == 'fix'
     runs-on: ubuntu-latest
     # Matched to the autonomous fixer's wall in agent-review-panel.yml, which
-    # documents why it is 90. This is the path a human is told to retry on when
-    # that one dies, so a tighter wall here would refuse exactly the rounds the
-    # loop could not finish either.
-    # ⚠️ 90 MINUTES, AGAINST A 60-MINUTE CREDENTIAL. A GitHub App installation
-    # token's lifetime is fixed at one hour and `create-github-app-token` cannot
-    # extend it, so a round that runs past the hour loses the credential sitting
-    # in `.git/config` and in `github_token`: the push 401s. The reporting
-    # survives it — it runs in a separate job that mints its own token — so the
-    # round is reported as one that pushed nothing, rather than left saying
-    # "Working on…" for good.
+    # documents why it is 55: a GitHub App installation token lives exactly one
+    # hour, `create-github-app-token` cannot extend it, and the push at the end
+    # of a round uses the copy this job's checkout persisted into `.git/config`.
+    # A round past the hour 401s on the push and reports as one that pushed
+    # nothing. The five-minute gap covers the push, its `git ls-remote`
+    # confirmation and clock skew.
     #
-    # The wall is NOT shortened to 55, because that would refuse exactly the
-    # rounds the reasoning below says to allow. Closing it properly means
-    # re-minting before the push and rewriting the git credential, which is a
-    # change worth making with the App actually configured and a real round to
-    # test against — see docs/tasks/active/20260922-agent-command-verbs-todo.md.
-    timeout-minutes: 90
+    # This is the path a human is told to retry on when the autonomous one dies,
+    # so the two must agree — a tighter wall here would refuse exactly the rounds
+    # the loop could not finish either, and a looser one would promise minutes
+    # whose credential is already dead. checks.test.mjs pins both against the
+    # cancellation page's wording.
+    timeout-minutes: 55
     # Scope the API key to a protected Environment so a maintainer can require
     # approval before any run spends budget (configure in repo settings).
     environment: agent
@@ -648,6 +644,15 @@ jobs:
               green — not after every edit. Do NOT run `make test`: it needs a
               MongoDB this job does not stand up, and the push below re-runs the
               full integration lane anyway.
+
+            YOUR WALL IS ABOUT FIFTY MINUTES, and it is the credential's rather
+            than a budget: the job is killed at 55 and the token you push with
+            dies at 60 whatever the job does, so a round still working past the
+            hour cannot push at all and loses everything it did. If you are
+            running long, narrow the pass — commit the findings you have fixed,
+            report, push — instead of aiming for a clean sweep you will not
+            reach. Nothing measures this for you; the wall is the only control,
+            and it takes the work with it.
 
             REPORT WHAT YOU DID. This is required, and it is not optional
             paperwork: the next review round reads this report and hands each claim
