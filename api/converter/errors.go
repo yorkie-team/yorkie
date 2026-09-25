@@ -25,8 +25,8 @@ import (
 
 // ErrorCodeOf returns the error code of the given error.
 func ErrorCodeOf(err error) string {
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) {
+	connectErr, ok := errors.AsType[*connect.Error](err)
+	if !ok {
 		return ""
 	}
 	for _, detail := range connectErr.Details() {
@@ -44,8 +44,8 @@ func ErrorCodeOf(err error) string {
 
 // ErrorMetadataOf returns the error metadata of the given error.
 func ErrorMetadataOf(err error) map[string]string {
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) {
+	connectErr, ok := errors.AsType[*connect.Error](err)
+	if !ok {
 		return nil
 	}
 	for _, detail := range connectErr.Details() {

@@ -38,8 +38,7 @@ func ToConnectError(err error) error {
 		return nil
 	}
 
-	var connectErr *connect.Error
-	if goerrors.As(err, &connectErr) {
+	if connectErr, ok := goerrors.AsType[*connect.Error](err); ok {
 		return connectErr
 	}
 
@@ -88,9 +87,9 @@ func isStatusError(err error) bool {
 		return false
 	}
 
-	// Check error chain using errors.As
-	var statusErr errors.StatusError
-	return goerrors.As(err, &statusErr)
+	// Check error chain using errors.AsType
+	_, ok := goerrors.AsType[errors.StatusError](err)
+	return ok
 }
 
 // fromStatusError returns connect.Error from errors.StatusError.
@@ -136,8 +135,7 @@ func fromStatusError(err error) (*connect.Error, bool) {
 
 // fromFormError returns connect.Error from validation.FormError.
 func fromFormError(err error) (*connect.Error, bool) {
-	var invalidFieldsError *validation.FormError
-	if !goerrors.As(err, &invalidFieldsError) {
+	if _, ok := goerrors.AsType[*validation.FormError](err); !ok {
 		return nil, false
 	}
 
@@ -155,8 +153,8 @@ func fromFormError(err error) (*connect.Error, bool) {
 
 // badRequestFromError creates BadRequest details from validation errors.
 func badRequestFromError(err error) (*errdetails.BadRequest, bool) {
-	var invalidFieldsError *validation.FormError
-	if !goerrors.As(err, &invalidFieldsError) {
+	invalidFieldsError, ok := goerrors.AsType[*validation.FormError](err)
+	if !ok {
 		return nil, false
 	}
 
@@ -224,7 +222,7 @@ func LogLevelOf(err error) logging.Level {
 // connectCodeOf extracts a connect.Code from either a wrapped connect.Error
 // or a pkg/errors.StatusError. Returns (code, true) on success.
 func connectCodeOf(err error) (connect.Code, bool) {
-	if connectErr := new(connect.Error); goerrors.As(err, &connectErr) {
+	if connectErr, ok := goerrors.AsType[*connect.Error](err); ok {
 		return connectErr.Code(), true
 	}
 	if isStatusError(err) {

@@ -61,8 +61,7 @@ func newCreateCommand() *cobra.Command {
 			ctx := context.Background()
 			project, err := cli.CreateProject(ctx, name)
 			if err != nil {
-				var connErr *connect.Error
-				if errors.As(err, &connErr) {
+				if connErr, ok := errors.AsType[*connect.Error](err); ok {
 					for _, detail := range connErr.Details() {
 						value, err := detail.Value()
 						if err != nil {

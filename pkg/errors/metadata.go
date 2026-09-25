@@ -105,8 +105,7 @@ func Metadata(err error) map[string]string {
 	}
 
 	// Check error chain for MetadataError
-	var metaErr MetadataError
-	if errors.As(err, &metaErr) {
+	if metaErr, ok := errors.AsType[MetadataError](err); ok {
 		return metaErr.Metadata()
 	}
 
