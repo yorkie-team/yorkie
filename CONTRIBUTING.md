@@ -208,6 +208,8 @@ Type these as a **normal PR comment**, not inside an inline review thread. Only 
 
 One thing to know about `@claude loop`: when the loop converges it tries to flip the PR to ready for review, and one of its gates is that the PR body discloses autonomous AI authorship. A PR written from the template does not, so that gate refuses and the PR stays as it is — which is correct once the fixer has pushed commits to your branch, because the person picking it up should be told that before they read it. Add a line saying so, or mark the PR ready yourself.
 
+`@claude loop` also decides what the panel grades your PR *against*. The blocking `design-fit` lens reads the issue your PR body closes with `Fixes #N`, and it only trusts that issue once a maintainer has labelled it `agent:candidate` — which `@claude loop` does for you, reporting in its reply which issue it vouched for. Without a `Fixes #N`, or on a PR nobody has opted in, that lens reviews with no spec. If you are filing the issue yourself, the **Agent Task** template asks for the outcome, the acceptance criteria and the non-goals that the lens actually reads; the label stays a maintainer's to apply.
+
 Nothing here runs unless a maintainer has enabled the surface for the repository, and the verbs that push commits (`loop`, `fix`, `rerun`) additionally need a GitHub App. Until that exists they answer with a comment saying so rather than failing silently — `review` and `summarize` need neither and work as soon as the surface is on. The design, the phases, and what each one needs are in [agent-command-verbs.md](docs/design/agent-command-verbs.md).
 
 ## Contributor License Agreement (CLA)

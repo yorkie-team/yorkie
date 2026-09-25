@@ -152,6 +152,47 @@ organization membership is not repository permission. For a repository whose
 contributions arrive mostly from forks, that is the whole difference between a
 surface contributors can use and one only maintainers can.
 
+### 1.1 Who vouches for the spec
+
+`design-fit` is a **blocking** lens and it grades a diff against the
+originating issue's *outcome* and *acceptance criteria*. Both the autonomous
+panel and the on-demand `@claude review` resolve that issue from the PR body's
+`Fixes #N` — text the PR **author** writes — so neither can treat it as a spec
+on the author's word alone. The rule both apply is *the issue carries
+`agent:candidate` and was not filed by a Bot*; otherwise the lens reviews with
+no spec and logs a warning.
+
+That made the label the pipeline's provenance claim, and for the whole of
+Phase I it had exactly one writer: `agent-implement.yml`, after it opened its
+own PR. So a PR the pipeline opened was graded against a spec and a PR a human
+opened was graded against nothing — the same blocking lens, silently doing
+less work on half its input.
+
+Two things close it, and the split between them is the whole design:
+
+- **`.github/ISSUE_TEMPLATE/agent-task.yml`** collects the fields the lens
+  reads (outcome, acceptance criteria, non-goals) and **applies no labels.** A
+  form's `labels:` are applied to whatever any account submits and this
+  repository is public; auto-labelling would let an arbitrary user author the
+  text a blocking lens grades somebody else's PR against, reachable by filing
+  one issue and writing `Fixes #N`. The label currently costs an attacker
+  triage permission, and it has to keep costing that.
+- **`agent-loop.yml` applies it**, to the issue the PR body names, when a
+  maintainer opts the PR into the gating panel. That actor has already passed
+  `repos.getCollaboratorPermissionLevel`, and choosing what a PR is graded
+  against is the same decision as choosing to grade it.
+
+What this does not make safe: the issue NUMBER still comes from the PR body,
+so a maintainer running `@claude loop` on a PR whose `Fixes #N` points
+somewhere unhelpful vouches for that issue. The verb's reply names the issue it
+labelled for exactly that reason, and the label is visible and removable. The
+alternative it replaces is no spec at all.
+
+`@claude review` deliberately does **not** label: it is invocable by the PR
+author, which is the trust level the label exists to be above. An advisory
+review of an unlabelled human PR reviews without a spec, and that is the
+correct answer for it.
+
 ### 2. The phases
 
 Each phase lands on its own, is useful on its own, and is reverted by removing
@@ -425,7 +466,11 @@ withdrawn again) and have to pass.
 10. **Label the originating issue `agent:candidate`.** The panel's design-fit
     lens resolves a PR's spec from `Fixes #N` and only trusts an issue carrying
     that label, so without it every PR this verb opens is reviewed with no
-    knowledge of what it was asked to build.
+    knowledge of what it was asked to build. Two workflows read the label —
+    the panel and `agent-review-on-demand.yml`, with the same
+    `labelled && human` rule — and until 2026-09-25 this job was its only
+    writer, so the property held for agent-opened PRs and for nothing else.
+    See §1.1.
 11. **The ambient `GITHUB_TOKEN` gets `issues: write` and `pull-requests: read`,**
     which is what its only consumer needs — not the `contents`/`pull-requests`
     write the draft granted it.
