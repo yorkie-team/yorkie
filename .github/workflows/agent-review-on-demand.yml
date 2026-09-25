@@ -6,8 +6,10 @@
 # so it never touches the human-approval merge gate. "@claude loop" is the verb
 # that opts a PR into the auto-fix machinery — this one only reports.
 #
-# Trust: the PR author OR a trusted maintainer may trigger it (read-only, low
-# risk). Throttled to one review per head SHA.
+# Trust: an account with write access may trigger it, on any PR including a
+# fork's. Not the PR author as such: on a public repository that is anyone, and
+# the lenses run unattended with the Claude credential in their environment.
+# Throttled to one review per head SHA.
 #
 # ON THE REFERENCES BELOW. This file is the advisory half of a pair; the comments
 # point at "the twin step in agent-review-panel.yml" for the shared rationale.
@@ -58,7 +60,7 @@ jobs:
         run: node scripts/agent/command.mjs "$BODY" pr
 
   # Authoritative trust + throttle, BEFORE any expensive work (SDK install, panel).
-  # Authorized = PR author OR a maintainer with write access. Throttle = skip if
+  # Authorized = an account with write access. Throttle = skip if
   # this head SHA was already reviewed. Unauthorized/throttled → proceed=false and
   # everything downstream is skipped silently.
   authorize:
@@ -103,9 +105,14 @@ jobs:
               const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: actor });
               trusted = ['admin', 'maintain', 'write'].includes(data.permission);
             } catch { /* not a collaborator */ }
-            const isAuthor = pr.user && pr.user.login === actor;
-            if (!trusted && !isAuthor) {
-              core.info(`@${actor} is neither the PR author nor a maintainer; ignoring.`);
+            // WRITE ACCESS ONLY — the PR author is not enough. This gate used
+            // to let the author run it on their own PR, which on a public
+            // repository is any GitHub account: open a fork PR, comment, and a model runs
+            // unattended over attacker-chosen text in a process whose
+            // environment holds the Claude credential. A maintainer can still
+            // run it on a fork PR, having chosen to.
+            if (!trusted) {
+              core.info(`@${actor} has no write access; ignoring.`);
               return core.setOutput('proceed', 'false');
             }
 

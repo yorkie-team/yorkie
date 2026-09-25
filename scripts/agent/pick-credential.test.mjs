@@ -112,10 +112,11 @@ test("capacityLine: junk yields an empty line rather than a wrong number", () =>
 const AMBIENT_ALLOWED = new Map([
   [
     "agent-summarize.yml",
-    "Has no repo checkout at all and is deliberately built without repo credentials " +
-      "('Summarize (read-only; no repo credentials)'). Running the picker needs a trusted " +
-      "copy of it on disk, so wiring it would mean adding a checkout to the one job that " +
-      "was designed not to have one — for the least consequential step in the pipeline.",
+    "Deliberately built without a write-capable credential ('Summarize (read-only " +
+      "token; no shell)'). Its only checkout is a shallow, credential-free copy of the " +
+      "default branch for the action's own git setup, added after the picker decision; " +
+      "wiring the picker onto it is possible but not done — for the least consequential " +
+      "step in the pipeline.",
   ],
 ]);
 
