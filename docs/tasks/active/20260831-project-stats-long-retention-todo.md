@@ -24,8 +24,9 @@ tables, expression partitioning), Kubernetes CronJob (devops repo).
 
 ## Status
 
-Tasks 1-6 and 8 have landed. Task 7 (base repartitioning + 90-day TTL) has not
-been started, and the one Task 8 item gated on it stays open with it. The
+Tasks 1-6 and 8 have landed. Task 7 (base repartitioning + 90-day TTL) is
+rehearsed and its fresh-install DDL has landed; the cluster migrations have not
+started, and the one Task 8 item gated on it stays open with it. The
 branch shas quoted below are gone — every PR was squash-merged:
 
 | Task | Landed as |
@@ -427,17 +428,40 @@ Note: no CI here; correctness is verified by the rehearsal in Task 8.
 
 ### Task 7: Base partitioning + 90-day TTL (runbook — separate migration)
 
-**Not part of the code PR.** A StarRocks migration executed after Task 8 validation,
-following the `session_events` redistribution playbook.
+**Not part of the code PR.** A StarRocks migration executed after Task 8
+validation. The procedure, and why it differs from the original plan, is in the
+design doc's *Base partitioning and TTL* section: rehearsed on 3.3.22, the
+routine load follows the table id, so a resumed job would keep writing into the
+old table after the swap.
 
-- [ ] Create partitioned twins: `<t>_p` with `PARTITION BY date_trunc('day', timestamp)`, `partition_live_number = 90`.
-- [ ] Per table, low-ingest window: `PAUSE ROUTINE LOAD` → `INSERT INTO <t>_p SELECT *` → `ALTER TABLE ... RENAME` swap → recreate routine load on the new table → `RESUME`. `session_events` last, watching `ADMIN SHOW REPLICA STATUS` (replication_num=1).
+- [x] Rehearse on the deployed version (3.3.22) with a live Kafka producer:
+      in-place `ALTER ... PARTITION BY` is a silent no-op; `SWAP` + recreate the
+      job at `Progress + 1` moves every event once; `partition_ttl` drops by
+      calendar date.
+- [x] Fresh installs: init DDL (chart + local stack) partitions by day with no
+      fixed bucket count and, deliberately, no `partition_ttl`. A fresh install
+      has no summary ingest job (it ships outside the chart) and `SummaryEnabled`
+      off, so a TTL there would truncate long windows with nothing behind it.
+      A fresh install adds it later with `ALTER TABLE <t> SET ("partition_ttl"
+      = "90 DAY")` once its summaries are validated (rehearsed on 3.3.9 and
+      3.3.22); existing clusters set it on `<t>_p` in the migration below.
+- [ ] Pre-check per cluster: every completed base day's cardinality matches its
+      summary row, so the TTL drops nothing the read path still needs.
+- [ ] Per table: create `<t>_p` (`PARTITION BY date_trunc('day', timestamp)`,
+      `partition_ttl = "90 DAY"`) and its sync MV as `<mv>_p` → `PAUSE ROUTINE
+      LOAD` → copy the last 90 days into `<t>_p` → `SWAP` → `STOP` + `CREATE
+      ROUTINE LOAD` with `kafka_default_offsets = Progress + 1` (no partition
+      list), then switch it to `OFFSET_BEGINNING` → keep the old table as
+      `<t>_old`. Auto-resume
+      of paused jobs held off for the duration; largest tables in a
+      low-ingest window, watching `ADMIN SHOW REPLICA STATUS`.
 - [ ] `EXPLAIN` a fresh-day total: confirm it reads `mv_*_hll_daily`. The
       original wording asked for a raw-`timestamp` bound to prune partitions;
       `c2014efb` removed that bound on purpose, so partition count is no
       longer what this check proves.
-- [ ] Confirm old partitions actually drop (3.3.x `partition_live_number` — verify against StarRocks #39341) before relying on TTL.
-- [ ] Only after summary validation is green: enable the 90-day TTL.
+- [ ] Confirm the first scheduler tick drops the partitions outside 90 days.
+- [ ] After Task 8's 12-month check: drop `<t>_old`, then `RENAME ROLLUP
+      <mv>_p <mv>`.
 
 ---
 
