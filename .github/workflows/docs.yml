@@ -55,6 +55,15 @@ jobs:
       - name: Verify documentation links
         run: node scripts/verify-doc-links.mjs
 
+      # The other direction, and a step of its own so a failure names which
+      # question broke: the link check polices the index's claims, this one its
+      # silences. It also prints — without failing — any finished task record
+      # still sitting in `docs/tasks/active/`, which is how drift on `main`
+      # becomes visible on the next push. See the script's header for why that
+      # half does not gate.
+      - name: Verify documentation coverage
+        run: node scripts/verify-doc-index.mjs
+
       # The glob, not the directory: `node --test scripts/test/` tries to load
       # the directory as a module and dies with MODULE_NOT_FOUND.
       - name: Test the repository checks

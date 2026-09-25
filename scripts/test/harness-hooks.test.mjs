@@ -219,9 +219,13 @@ test('session-prime says nothing in CI and speaks locally', () => {
   assert.match(local.stdout, /WORKFLOW REQUIREMENTS/);
 });
 
-test('docs.yml still runs the link check, on every pull request', () => {
+test('docs.yml still runs the doc checks, on every pull request', () => {
   const wf = readFileSync(path.join(REPO, '.github', 'workflows', 'docs.yml'), 'utf8');
   assert.match(wf, /node scripts\/verify-doc-links\.mjs/);
+  // BOTH DIRECTIONS. The coverage gate has no other home — it is not in `make
+  // verify` and ci.yml ignores `**/*.md` — so dropping this step leaves
+  // nothing watching whether a new design document was ever indexed.
+  assert.match(wf, /node scripts\/verify-doc-index\.mjs/);
   // BOTH SPELLINGS. `paths-ignore:` holes the coverage exactly as badly as
   // `paths:`, and the narrower pattern would have missed it.
   assert.doesNotMatch(wf, /^\s*paths(-ignore)?:/m, 'docs.yml must stay unfiltered');
