@@ -122,7 +122,7 @@ func isValidOrigin(v string) bool {
 	if err != nil {
 		return false
 	}
-	for _, label := range strings.Split(u.Hostname(), ".") {
+	for label := range strings.SplitSeq(u.Hostname(), ".") {
 		if label == "" {
 			return false
 		}

@@ -1284,10 +1284,7 @@ func (t *Tree) Retombstone(
 	var diff resource.DataSize
 	for _, span := range spans {
 		start := span.ID.Offset
-		length := span.Length
-		if length < 1 {
-			length = 1
-		}
+		length := max(span.Length, 1)
 		end := start + length
 
 		var pieces []*TreeNode

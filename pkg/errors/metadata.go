@@ -18,6 +18,7 @@ package errors
 
 import (
 	"errors"
+	"maps"
 )
 
 // MetadataError represents an error with additional metadata.
@@ -45,11 +46,11 @@ func (e MetadataError) Unwrap() error {
 
 // Metadata returns the metadata associated with the error.
 func (e MetadataError) Metadata() map[string]string {
-	// Return a copy to prevent external modification
-	result := make(map[string]string)
-	for k, v := range e.metadata {
-		result[k] = v
-	}
+	// Return a copy to prevent external modification. maps.Clone is not
+	// interchangeable here: it returns nil for a nil source, and callers rely
+	// on this always handing back a writable map.
+	result := make(map[string]string, len(e.metadata))
+	maps.Copy(result, e.metadata)
 	return result
 }
 
@@ -71,13 +72,9 @@ func WithMetadata(err error, metadata map[string]string) error {
 
 	if existingMeta != nil {
 		// Merge existing metadata with new metadata
-		finalMeta = make(map[string]string)
-		for k, v := range existingMeta {
-			finalMeta[k] = v
-		}
-		for k, v := range metadata {
-			finalMeta[k] = v
-		}
+		finalMeta = make(map[string]string, len(existingMeta)+len(metadata))
+		maps.Copy(finalMeta, existingMeta)
+		maps.Copy(finalMeta, metadata)
 
 		// Get the underlying error without metadata wrapper
 		if metaErr, ok := err.(MetadataError); ok {
@@ -85,10 +82,8 @@ func WithMetadata(err error, metadata map[string]string) error {
 		}
 	} else {
 		// Copy metadata to prevent external modification
-		finalMeta = make(map[string]string)
-		for k, v := range metadata {
-			finalMeta[k] = v
-		}
+		finalMeta = make(map[string]string, len(metadata))
+		maps.Copy(finalMeta, metadata)
 	}
 
 	return MetadataError{

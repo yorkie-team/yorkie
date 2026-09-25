@@ -20,6 +20,7 @@ package connecthelper
 import (
 	"context"
 	goerrors "errors"
+	"maps"
 
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -117,9 +118,7 @@ func fromStatusError(err error) (*connect.Error, bool) {
 
 		// Add user-defined metadata from MetadataError if present
 		if userMetadata := errors.Metadata(err); userMetadata != nil {
-			for key, value := range userMetadata {
-				metadata[key] = value
-			}
+			maps.Copy(metadata, userMetadata)
 		}
 
 		info := &errdetails.ErrorInfo{

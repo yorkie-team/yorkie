@@ -833,7 +833,7 @@ func applyOperation(data map[string]any, op TransformOperation) error {
 func splitPath(path string) []string {
 	// Simple split by "." - doesn't handle array indices yet
 	var parts []string
-	for _, p := range strings.Split(path, ".") {
+	for p := range strings.SplitSeq(path, ".") {
 		if p != "" {
 			parts = append(parts, p)
 		}
