@@ -997,3 +997,36 @@ test("the author check ignores the branch's own .mailmap", () => {
     assert.match(r.stderr, /someone@else\.example/);
   });
 });
+
+test('setup.sh refuses hook sources that differ from origin/main', () => {
+  // The re-run inside a reviewed branch is the vector the snapshot does not
+  // cover by itself: it would persist that branch's hooks.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    writeFileSync(path.join(clone, '.githooks', 'pre-push'), '#!/usr/bin/env bash\nexit 0\n');
+    const r = runSetup(clone, env);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /YORKIE_ALLOW_LOCAL_HOOKS=1/);
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '');
+
+    const forced = runSetup(clone, { ...env, YORKIE_ALLOW_LOCAL_HOOKS: '1' });
+    assert.equal(forced.status, 0, forced.stderr);
+  });
+});
+
+test('setup.sh refuses an untracked hook it would install', () => {
+  // `git diff` ignores untracked files, but `cp .githooks/*` copies them: a
+  // new `post-checkout` dropped into the worktree became a permanent hook of
+  // the clone without the comparison ever seeing it.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    const extra = path.join(clone, '.githooks', 'post-checkout');
+    writeFileSync(extra, '#!/usr/bin/env bash\nexit 0\n');
+    chmodSync(extra, 0o755);
+    const r = runSetup(clone, env);
+    assert.equal(r.status, 1, `an untracked hook must refuse: ${r.stdout}`);
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '');
+  });
+});
