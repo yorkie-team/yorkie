@@ -236,8 +236,17 @@ test('ci.yml runs the licence gate, where the CI-fix loop can see it', () => {
   // verify` needs Node locally, and CI is the only workflow
   // `agent-iterate-ci.yml` subscribes to — a gate that reds anywhere else
   // stops an agent-managed PR with nothing watching it.
+  //
+  // THE COMMAND MOVED, THE FACT DID NOT. `ci.yml` used to spell
+  // `node scripts/verify-license.mjs` in a `run:` line; it now names the
+  // `license` LANE, and the command lives in `scripts/ci/run-lanes.mjs`. So
+  // this half asserts the invocation, and `run-lanes.test.mjs` asserts the
+  // other half — that the lane of that name still runs the licence script and
+  // not `make verify-license`, which would fail open where Node is absent.
+  // Split across two files because the second half needs the manifest, and
+  // this suite deliberately imports nothing that could execute a lane.
   const wf = readFileSync(path.join(REPO, '.github', 'workflows', 'ci.yml'), 'utf8');
-  assert.match(wf, /run: node scripts\/verify-license\.mjs/);
+  assert.match(wf, /run: node scripts\/ci\/run-lanes\.mjs license\b/);
 });
 
 test('make verify reaches the licence gate', () => {

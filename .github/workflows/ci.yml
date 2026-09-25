@@ -142,11 +142,34 @@ jobs:
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.build == 'true' }}
 
+    env:
+      # The base commit `buf breaking` compares against, and the only thing
+      # that decides whether the `proto-breaking` lane applies to this run at
+      # all. EMPTY ON A PUSH — the context does not exist there — which is
+      # exactly what the lane's precondition reads to report itself as
+      # `filtered` rather than as a lane that was skipped.
+      #
+      # Job-level rather than step-level because the finish step has to
+      # evaluate the same predicate over the whole manifest, from an
+      # environment in which the lane itself never ran.
+      LANE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Node
+        # This job already depended on the runner image's ambient Node — the
+        # licence gate is a `.mjs` file and always has been — but it was one
+        # step's problem. Now every lane goes through `run-lanes.mjs`, so an
+        # image whose Node moved would take out lint, build and test at once.
+        # Pinned to the version `docs.yml` and `agent-scripts.yml` already use,
+        # so the scripts run under one Node across the repository.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Set up buf
         # `bufbuild/buf-setup-action` and `bufbuild/buf-lint-action` are both
@@ -175,8 +198,26 @@ jobs:
       - name: Get tools dependencies
         run: make tools
 
+      # EVERY CHECK BELOW IS A NAMED LANE, and the command each one runs lives
+      # in `scripts/ci/run-lanes.mjs` rather than in the `run:` line here.
+      # Nothing about WHAT this job proves changed — each lane's command is
+      # the literal string the step used to carry, which is what keeps
+      # `review-panel.mjs`'s MECHANICAL_COVERAGE_NOTE and
+      # `docs/design/agent-command-verbs.md` §4b true without editing either.
+      # What changed is that each lane now writes a machine-readable report,
+      # uploaded at the bottom of this job, and `agent-iterate-ci.yml` renders
+      # that instead of `gh run view --log-failed | tail -c 40000`. A `-race`
+      # integration failure prints tens of megabytes, so the last 40 KB was
+      # whichever packages happened to finish last. See
+      # docs/design/ci-lane-reports.md.
+      #
+      # STILL A STEP PER LANE, deliberately. One step running the whole
+      # manifest would collapse these into "Run the CI lanes", so a human
+      # reading a red run would lose the step name that says which check
+      # failed — the reports are for the fixing agent, and the Actions UI is
+      # for people.
       - name: Lint
-        run: make lint
+        run: node scripts/ci/run-lanes.mjs lint
 
       - name: Verify licence headers
         # Here rather than in the unfiltered `docs.yml`, because
@@ -186,14 +227,16 @@ jobs:
         # This job's documentation filter costs the check nothing — it reads
         # `.go` files, and none of the filtered paths can hold one.
         #
-        # `node …`, not `make verify-license`: that target announces SKIPPED
-        # when Node is absent, and a CI gate must not fail open.
-        run: node scripts/verify-license.mjs
+        # The lane runs `node scripts/verify-license.mjs`, not `make
+        # verify-license`: that target announces SKIPPED when Node is absent,
+        # and a CI gate must not fail open. A guard in
+        # `scripts/test/run-lanes.test.mjs` pins both halves of that.
+        run: node scripts/ci/run-lanes.mjs license
 
       - name: Lint proto files
         # `buf.work.yaml` points the workspace at `api/`, which is how the
         # `buf breaking` and `buf generate` steps below resolve too.
-        run: buf lint
+        run: node scripts/ci/run-lanes.mjs proto-lint
 
       - name: Check proto for breaking changes
         # api/buf.yaml has configured `breaking: use: FILE` since before this
@@ -206,10 +249,16 @@ jobs:
         # inherits every proto change that landed since and can be failed for
         # something it did not do; and for a stacked PR, main is not the base
         # it is proposing to change at all.
-        if: github.event_name == 'pull_request'
-        run: |
-          buf breaking --against \
-            "https://github.com/yorkie-team/yorkie.git#ref=${{ github.event.pull_request.base.sha }}"
+        #
+        # NO `if:` ANY MORE, and that is not a widening. The lane declares
+        # `LANE_BASE_SHA` as a precondition, so on a push — where there is no
+        # base commit — it reports itself as `filtered` and exits 0. The
+        # condition has to be readable by the finish step below, which has to
+        # distinguish "not applicable to this event" from "an earlier lane
+        # failed"; a step-level `if:` is invisible to it, and reporting this
+        # lane as `skip` on every push would tell a fixing agent a lane was cut
+        # short when in fact it cannot run at all.
+        run: node scripts/ci/run-lanes.mjs proto-breaking
 
       - name: Check generated code is up to date
         # Two independent drifts reached main without this. The Makefile pinned
@@ -222,18 +271,12 @@ jobs:
         # and because a repository-wide check would also see artefacts left by
         # the steps above and fail for reasons that have nothing to do with
         # codegen. Untracked files count: `git diff` alone would not notice a
-        # brand new generated file that was never committed.
-        run: |
-          buf generate
-          if [ -n "$(git status --porcelain --untracked-files=all -- api/)" ]; then
-            echo "::error::Generated code is stale. Run 'make tools && buf generate' and commit the result."
-            git status --short -- api/
-            git diff -- api/
-            exit 1
-          fi
+        # brand new generated file that was never committed. `.ci-reports/` is
+        # written at the root and gitignored, so it cannot reach this check.
+        run: node scripts/ci/run-lanes.mjs codegen-fresh
 
       - name: Build
-        run: make build
+        run: node scripts/ci/run-lanes.mjs build
 
       - name: Vet tag-gated reproductions
         # Files behind a build tag are not compiled by any other job, so a
@@ -241,13 +284,62 @@ jobs:
         # without running them: the reproductions are expected to FAIL when
         # run, and that is the point of them, so they must never be executed
         # here. See docs/tasks/active/ for what each tag reproduces.
-        run: go vet -tags rgafuzz ./...
+        run: node scripts/ci/run-lanes.mjs vet-tagged
 
       - name: Stack
         run: docker compose -f build/docker/docker-compose.yml up --build -d
 
       - name: Test
-        run: go test -tags integration -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic -v ./...
+        # The lane this whole subsystem exists for: `-race` over the
+        # integration suite, tens of megabytes of output, and the `--- FAIL:`
+        # line anywhere in it. The runner streams all of it to this log
+        # unchanged and keeps a bounded report beside it.
+        run: node scripts/ci/run-lanes.mjs test
+
+      - name: Summarise the lanes
+        # `always()`, because the only run whose summary anyone reads is a red
+        # one — and on a red run the failing step is the last one that
+        # executed. Without this there is no `summary.json`, and a summary
+        # assembled from the files that happen to exist would simply not
+        # mention the lanes that never ran.
+        #
+        # Exits 0 even when a lane failed: the lane's own step already reported
+        # that, and a second red step naming nothing helps no one.
+        if: always()
+        run: node scripts/ci/run-lanes.mjs --finish
+
+      - name: Upload the lane reports
+        # WHAT `agent-iterate-ci.yml` DOWNLOADS. `continue-on-error` because a
+        # failed upload must not turn a green run red, and must not mask which
+        # lane failed on a red one — the consumer falls back to the log tail
+        # when the artifact is absent.
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-lane-reports
+          # REQUIRED, and not for the files — for the DIRECTORY.
+          # upload-artifact resolves this with @actions/glob, whose search root
+          # is `.ci-reports`; with hidden files excluded (the v4 default) the
+          # globber skips any traversed item whose basename starts with a dot,
+          # that root included, so it never reads the directory and reports
+          # "No files were found". `agent-review-panel.yml`'s stage-detail
+          # upload carries this flag for the same reason and records the five
+          # consecutive real runs that uploaded nothing without it; a guard in
+          # `scripts/agent/review-panel.test.mjs` asserts every upload step in
+          # this directory that globs a hidden path still has it.
+          path: .ci-reports/
+          include-hidden-files: true
+          # The finish step above runs `if: always()`, so files should always
+          # be here. `warn` rather than `error` because the one case that
+          # reaches it — a job that died before any lane, with the step summary
+          # already saying so — is not made better by a second red step.
+          if-no-files-found: warn
+          # Short: this is a hand-off to the CI-fix loop, which runs minutes
+          # after this job finishes. A week is long enough for a human to open
+          # one while debugging why a fixer did what it did, and these are
+          # written on every run of the busiest workflow in the repository.
+          retention-days: 7
 
       - name: Upload coverage to Codecov
         # v3 runs on a Node version current runners no longer provide, which

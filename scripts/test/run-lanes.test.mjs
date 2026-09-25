@@ -6,6 +6,13 @@
 // minutes, need MongoDB, and write `coverage.txt` into whatever tree it was
 // launched from. `runLanes` takes the manifest as an argument precisely so
 // this file never has to.
+//
+// The last section is the exception, and it is the same exception
+// `harness-hooks.test.mjs` makes for itself: three guards read THIS tree's
+// `ci.yml`, because the drift they exist to catch — a lane in the manifest
+// that no step invokes, which the finish step then reports as `skip` forever —
+// only exists between the two files. A planted copy of that pair would assert
+// only that the test agrees with itself. They read; they never write.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -20,6 +27,8 @@ import {
   createCapture,
   filteredReason,
   LANES,
+  laneByName,
+  REPORT_DIR,
   reportPath,
   runLane,
   runLanes,
@@ -27,6 +36,7 @@ import {
 } from '../ci/run-lanes.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../ci/run-lanes.mjs', import.meta.url));
+const REPO = fileURLToPath(new URL('../..', import.meta.url));
 
 /** A manifest of lanes that are instant and need no toolchain. */
 const FAKE = [
@@ -269,4 +279,53 @@ test('a report lands at one predictable path per lane', () => {
   withDir((dir) => {
     assert.equal(reportPath(dir, 'test'), path.join(dir, 'lane-test.json'));
   });
+});
+
+// ---------------------------------------------------------------------------
+// Against THIS tree. See the header for why these three are not planted.
+// ---------------------------------------------------------------------------
+
+const ciWorkflow = () => readFileSync(path.join(REPO, '.github', 'workflows', 'ci.yml'), 'utf8');
+
+test('every lane in the manifest is invoked by a step in ci.yml', () => {
+  // The silent failure: add a lane here, forget the step, and the finish step
+  // reports it as `skip` on every green run forever — a gate that exists in
+  // the manifest and runs nowhere.
+  const wf = ciWorkflow();
+  const invoked = new Set(
+    [...wf.matchAll(/run-lanes\.mjs ([a-z-]+)/g)].map((m) => m[1]).filter((n) => n !== '--finish'),
+  );
+  assert.deepEqual([...invoked].sort(), LANES.map((l) => l.name).sort());
+});
+
+test('ci.yml still runs the licence gate, where the CI-fix loop can see it', () => {
+  // Moved here from harness-hooks.test.mjs when the step became a lane. The
+  // fact being pinned is unchanged and the reason is unchanged: `make verify`
+  // needs Node locally, and CI is the only workflow `agent-iterate-ci.yml`
+  // subscribes to — a gate that reds anywhere else stops an agent-managed PR
+  // with nothing watching it. What changed is where the command is spelled,
+  // so the assertion is now made of two halves that must BOTH hold.
+  assert.match(ciWorkflow(), /run-lanes\.mjs license\b/);
+  assert.equal(laneByName('license').run, 'node scripts/verify-license.mjs');
+});
+
+test('ci.yml finishes the summary unconditionally and uploads the reports', () => {
+  // Without `--finish` under `if: always()` there is no summary.json on a red
+  // run, which is every run the consumer cares about.
+  const wf = ciWorkflow();
+  const at = wf.indexOf('run-lanes.mjs --finish');
+  assert.ok(at > 0, 'no finish step in ci.yml');
+  assert.match(wf.slice(Math.max(0, at - 400), at), /if:\s*always\(\)/);
+  assert.match(wf, new RegExp(`path:\\s*${REPORT_DIR.replace('.', '\\.')}/`));
+  assert.match(wf, /include-hidden-files:\s*true/);
+});
+
+test('the reports directory is gitignored, and is not the scratch one', () => {
+  // `.harness-reports/` was already taken: `scripts/agent/novelty.test.mjs`
+  // creates throwaway git repositories under it. Sharing the name would put a
+  // nested `.git` inside the artifact upload's search root.
+  const ignore = readFileSync(path.join(REPO, '.gitignore'), 'utf8');
+  assert.match(ignore, new RegExp(`^${REPORT_DIR.replace('.', '\\.')}/$`, 'm'));
+  assert.notEqual(REPORT_DIR, '.harness-reports');
+  assert.match(ignore, /^\.harness-reports\/$/m, 'the scratch directory must stay ignored too');
 });
