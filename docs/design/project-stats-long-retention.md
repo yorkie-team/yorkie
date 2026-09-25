@@ -484,25 +484,62 @@ The read path and summary are correct with the base tables exactly as they are
 today; partitioning and TTL are what make the summary *necessary* and what
 realise the storage saving. They come last.
 
-The event tables are `DUPLICATE KEY / DISTRIBUTED BY RANDOM BUCKETS 16 /
-replication_num = 1`, with no `PARTITION BY`. StarRocks cannot add partitioning
-to an existing table with `ALTER`, so each table is recreated with expression
-partitioning and reloaded:
+Existing event tables carry no `PARTITION BY`. StarRocks 3.3 has no in-place
+path to add it: `ALTER TABLE ... PARTITION BY date_trunc(...)` on an
+unpartitioned table is accepted and its optimize job reaches `FINISHED`, but
+the table is left unpartitioned (rehearsed on 3.3.22). So each table is
+recreated with expression partitioning and reloaded:
 
 ```sql
 CREATE TABLE user_events_p ( ... same columns ... ) ENGINE = OLAP
 DUPLICATE KEY(project_id, user_id, timestamp)
 PARTITION BY date_trunc('day', timestamp)
-DISTRIBUTED BY RANDOM BUCKETS 16
-PROPERTIES ("replication_num" = "1", "partition_live_number" = "90");  -- 90-day raw TTL
+DISTRIBUTED BY HASH(project_id)
+PROPERTIES ("replication_num" = "1", "partition_ttl" = "90 DAY");
 ```
 
-The routine load binds to the base table by name, so the swap follows the
-`session_events` redistribution playbook: `PAUSE ROUTINE LOAD`, `INSERT INTO
-..._p SELECT`, `ALTER TABLE ... RENAME` to swap, `RESUME ROUTINE LOAD`. On the
-billion-row tables this is done in a low-ingest window with replica status
-watched — `replication_num = 1` has a tablet-quorum-stall history. TTL is
-enabled last, only after the summary is backfilled and validated.
+Fresh installs create this shape directly: the init DDL in the chart and the
+local stack now partitions by day with the same TTL. `CREATE TABLE IF NOT
+EXISTS` skips a table that exists, so existing clusters still need the
+migration below.
+
+**`partition_ttl`, not `partition_live_number`.** Both work on expression
+partitions in 3.3.22. `partition_live_number = 90` keeps the 90 newest
+partitions that *exist*, so a project with quiet days retains more than 90
+calendar days; `partition_ttl = "90 DAY"` drops by calendar date, which is what
+"90-day retention" means everywhere else in this design. Future-dated
+partitions are kept by both. `partition_retention_condition` is v3.5+ only.
+
+**TTL drops are immediate and final.** The partition scheduler runs every
+`dynamic_partition_check_interval_seconds` (600s by default), and its first
+tick after the new table receives data force-drops every partition outside the
+window — not recoverable from the recycle bin. The pre-migration table is the
+only backup, so it is renamed aside (`<t>_old`) rather than dropped until the
+long windows are verified.
+
+**The routine load follows the table id, not its name.** After `ALTER TABLE
+<t> SWAP WITH <t>_p` (or a `RENAME` chain), a resumed job keeps writing into
+the old table object under its new name. Resuming is therefore the wrong move;
+the job is recreated against the new table at the offset where it stopped:
+
+1. Create `<t>_p` and its sync MV. MV names are unique per database, not per
+   table, so it takes a temporary name (`<mv>_p`) until the old table is gone.
+2. `PAUSE ROUTINE LOAD FOR <t>`; record `Progress` — the last *consumed*
+   offset per Kafka partition.
+3. `INSERT INTO <t>_p (<cols>) SELECT <cols> FROM <t>`; compare counts.
+4. `ALTER TABLE <t> SWAP WITH <t>_p`.
+5. `STOP ROUTINE LOAD FOR <t>`, then `CREATE ROUTINE LOAD` under the same name
+   `ON <t>` with the original properties plus `kafka_partitions` and
+   `kafka_offsets` set to `Progress + 1`.
+6. Once the long windows are verified, drop the old table and `ALTER TABLE <t>
+   RENAME ROLLUP <mv>_p <mv>`. Renaming first would leave two MVs of the same
+   name, since `RENAME ROLLUP` skips the uniqueness check `CREATE` enforces.
+
+Rehearsed on 3.3.22 with a producer writing through the cutover: every message
+landed once, none twice. Anything that resumes paused jobs automatically has
+to be held off for the duration, or it resumes the old job into the old table.
+On large tables this runs in a low-ingest window with replica status watched —
+`replication_num = 1` has a tablet-quorum-stall history.
 
 **Partition pruning under `DATE()`.** The MV design warned that wrapping
 `timestamp` in `DATE()` can lose partition pruning once the base is partitioned,
@@ -520,6 +557,13 @@ DATE only  : rollup: mv_client_p_hll_daily  partitions=7/7   -- unpruned, one ro
 So the fresh half stays DATE-only after partitioning too. What `EXPLAIN` must
 confirm on the deployed version is that it reads `mv_*_hll_daily`, not how many
 partitions it touches.
+
+That same absence of pruning makes the bucket count a per-partition cost. A
+sync MV on a partitioned base reads every partition's tablets (3.3.22: a
+one-day read at 91 partitions × 10 buckets opened 910 tablets, against 10 on
+the unpartitioned table). So the partitioned tables leave `BUCKETS` out and
+let StarRocks size each partition, as the summary tables already do, instead
+of carrying the fixed 16 over.
 
 ### Deployment sequencing
 
@@ -590,7 +634,8 @@ DDL only, so it gets the `CREATE TABLE` and nothing else.
 |------|------------|
 | Adding cardinalities across the split over-counts a subject active in more than one range | Union sketches with `HLL_UNION_AGG`, take cardinality once. The three ranges split on the day and are disjoint by construction — their union is exactly the window — so there is no overlap to double count. Asserted directly, day by day, over a table of windows against coverage ranges. |
 | `DATE(timestamp)` loses partition pruning once the base is partitioned, so the fresh-day scan reads every partition | Accepted: the fresh half reads the MV, which holds one row per (project, day), so every partition of it is cheaper than one raw partition of the base. Raw `timestamp` bounds would prune but would also drop the query off the MV. |
-| Repartitioning a live billion-row table (session) risks stalled ingest and quorum loss under `replication_num = 1` | New table + `INSERT SELECT` + rename swap under `PAUSE`/`RESUME ROUTINE LOAD`, in a low-ingest window, watching `ADMIN SHOW REPLICA STATUS`. Same playbook as the `session_events` redistribution. |
+| Repartitioning a live billion-row table (session) risks stalled ingest and quorum loss under `replication_num = 1` | New table + `INSERT SELECT` + `SWAP` under `PAUSE ROUTINE LOAD`, in a low-ingest window, watching `ADMIN SHOW REPLICA STATUS`. |
+| The swap strands new events in the old table: the routine load follows the table id | Recreate the job on the new table at `Progress + 1` instead of resuming it, and hold off anything that auto-resumes paused jobs (see *Base partitioning and TTL*). |
 | `MAX(dt)` is a watermark, not a coverage set: a day missing *below* it is still served from a summary that has no row for it, and reads as zero | Half fixed, half accepted, and worth reading as both. Fixed: the probe reads `MIN(dt)` as well, so coverage is the range `[MIN(dt), MAX(dt) + 1)` and a window reaching below the summary's first row reads those days from the base, in a third branch shaped exactly like the fresh one. That closes the case that actually bites — a summary added to a cluster where the flag is *already on*, as `sum_session_peak_daily` is: if the CronJob's 7-day window writes before the one-time backfill has run, `MAX(dt)` jumps to yesterday over a table holding one week, and ~83 days of a 3-month window would read as zero with nothing logged. Accepted: a hole *inside* the range is still invisible, because the probe is global rather than per project and cannot see a day missing for one project only. Contiguity there is still the writers' job — full-history backfill plus a 7-day reprocess lookback, so an interior hole heals within a week. Verified the remaining failure mode by hand: with the summary holding `[D-6, D-2]` and `D`, the missing `D-1` reads as zero. |
 | A window reaching back before any summary data runs an extra base branch that returns nothing | Accepted. The branch is the honest answer, not a regression: before raw TTL the base still holds those days and the branch returns them correctly; after raw TTL they are unavailable anywhere, and reporting them as absent beats serving them as zeroes out of a summary with no rows for them. In the steady state — a backfilled summary — the branch is not emitted at all and the SQL is unchanged. |
 | A partial day in the summary would be trusted as complete, since the split trusts every day at or below `MAX(dt)` | Both writers stop before the running UTC day: the CronJob's window is `[today-7, today)` and the backfill carries the same `< DATE(UTC_TIMESTAMP())` guard. The read path's clamp to today is the second line of defense. |
@@ -598,12 +643,12 @@ DDL only, so it gets the `CREATE TABLE` and nothing else.
 | Summary drifts from the base over time | Periodic reconciliation comparing an overlap day's summary against a base recount; the 7-day lookback self-heals recent drift. |
 | Backfill full-scans the billion-row tables | Staged per table, `session_events` in a low-ingest window; cost is the one-time base scan (~80ns/row), as measured for the MV builds. |
 | Enabling raw TTL before the summary is trusted would lose history irrecoverably | TTL is step 6, gated on steps 1–5; validation in step 3 runs while both paths overlap. |
-| Expression partitioning, `partition_live_number`, and the HLL functions need a recent StarRocks | Verify the engine clears the version floor per environment before creating the tables (deployed clusters run 3.3.x). |
+| Expression partitioning, `partition_ttl`, and the HLL functions need a recent StarRocks | Verify the engine clears the version floor per environment before creating the tables (deployed clusters run 3.3.x). |
 | A server that names `sum_session_peak_daily` reaches a cluster without it, and the single-round-trip coverage probe fails for *every* metric | Sequencing: the analytics manifest that creates and backfills the table lands and runs before the server version rolls out (steps 1–2 before step 5). The failure is loud and immediate rather than a silent wrong number, but it blanks the whole dashboard, so it is a release-order hazard, not a runtime one. |
 | `sum_session_peak_daily` lags `sum_session_hll_daily_ch`, since it is written from it | Peak has its own descriptor and its own entry in the coverage probe, so its reads split against *its* table's coverage; the days between the two tables' ranges are served from the base, exactly as for any other lagging summary. |
 | `BIGINT MAX` can only ever revise a day's peak upward, so an over-counted day cannot be corrected by re-running the refresh | Accepted, and identical in kind to `HLL_UNION`'s monotone merge on the other five tables. The input is itself monotone — a day's true peak only grows as late events land — so a re-run overwriting upward is the correct direction. A genuine over-count is repaired the same way a corrupt sketch is: drop the day's partition and rewrite it. |
 | The peak refresh maximises over a day the session summary does not hold yet, if the statements are reordered | The peak statement runs after the session-summary insert in the same script, in both the backfill and the refresh, with the dependency stated in a comment at both sites. The 7-day lookback also re-derives the day on the next run, so a one-off inversion heals. |
-| Raw-TTL enforcement may not drop partitions as expected on 3.3.x | `partition_live_number` has had drop bugs ([#39341][p39341]); the cleaner `partition_retention_condition` (Common Partition Expression TTL) is native-table-only from v3.5, past the deployed 3.3.x. Use dynamic partitioning / `partition_live_number` and confirm old partitions actually drop before relying on TTL for the storage saving. |
+| Raw-TTL enforcement may not drop partitions as expected on 3.3.x | `partition_live_number` has had drop bugs ([#39341][p39341]). Rehearsed on 3.3.22: `partition_ttl = "90 DAY"` on an expression-partitioned table drops by calendar date on the scheduler tick. The drop is forced and unrecoverable, so the pre-migration table is kept until the long windows are verified. |
 
 ## Design Decisions
 
