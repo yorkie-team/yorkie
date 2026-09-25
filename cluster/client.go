@@ -466,8 +466,8 @@ func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Requ
 // fromConnectError converts connect.Error into our StatusError where possible.
 // If conversion is not possible, returns the original error.
 func fromConnectError(err error) error {
-	var cErr *connect.Error
-	if !goerrors.As(err, &cErr) {
+	cErr, ok := goerrors.AsType[*connect.Error](err)
+	if !ok {
 		return err
 	}
 

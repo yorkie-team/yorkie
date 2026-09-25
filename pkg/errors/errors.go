@@ -142,8 +142,7 @@ func StatusOf(err error) StatusCode {
 		return statusErr.Status()
 	}
 
-	var statusErr StatusError
-	if errors.As(err, &statusErr) {
+	if statusErr, ok := errors.AsType[StatusError](err); ok {
 		return statusErr.Status()
 	}
 
@@ -198,8 +197,7 @@ func ErrorInfoOf(err error) ErrorInfo {
 
 	originalType := "StandardError"
 	code := ""
-	var statusErr StatusError
-	if errors.As(err, &statusErr) {
+	if statusErr, ok := errors.AsType[StatusError](err); ok {
 		originalType = "StatusError"
 		code = statusErr.Code()
 	}

@@ -223,8 +223,7 @@ func waitInterval(retries uint64, minWaitInterval, maxWaitInterval time.Duration
 // Refer to https://github.com/kubernetes/kubernetes/search?q=DefaultShouldRetry
 func shouldRetry(statusCode int, err error) bool {
 	// If the connection is reset, we should retry.
-	var errno syscall.Errno
-	if goerrors.As(err, &errno) {
+	if errno, ok := goerrors.AsType[syscall.Errno](err); ok {
 		return goerrors.Is(errno, syscall.ECONNRESET)
 	}
 

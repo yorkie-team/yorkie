@@ -233,8 +233,7 @@ func newUpdateCommand() *cobra.Command {
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
-				var connErr *connect.Error
-				if errors.As(err, &connErr) {
+				if connErr, ok := errors.AsType[*connect.Error](err); ok {
 					for _, detail := range connErr.Details() {
 						value, err := detail.Value()
 						if err != nil {

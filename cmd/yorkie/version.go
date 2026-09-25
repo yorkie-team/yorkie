@@ -106,8 +106,7 @@ func printServerError(cmd *cobra.Command, err error) {
 	// general-purpose error handling module for rpc communication.
 	// For more information, see the following link:
 	// https://connectrpc.com/docs/go/errors/
-	var connectErr *connect.Error
-	if errors.As(err, &connectErr) && connectErr.Code() == connect.CodeUnimplemented {
+	if connectErr, ok := errors.AsType[*connect.Error](err); ok && connectErr.Code() == connect.CodeUnimplemented {
 		cmd.Println("The server does not support this operation. You might need to check your server version.")
 		return
 	}

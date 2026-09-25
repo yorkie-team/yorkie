@@ -243,8 +243,8 @@ func TestErrorChaining(t *testing.T) {
 		wrappedErr := fmt.Errorf("validation failed: %w", baseErr)
 
 		// Test that we can unwrap to the original error
-		var statusErr StatusError
-		assert.True(t, errors.As(wrappedErr, &statusErr))
+		statusErr, ok := errors.AsType[StatusError](wrappedErr)
+		assert.True(t, ok)
 		assert.Equal(t, ErrCodeInvalidArgument, statusErr.Status())
 		assert.Equal(t, "invalid input", statusErr.Error())
 	})
@@ -307,8 +307,8 @@ func TestWithMetadata(t *testing.T) {
 		errWithMeta := WithMetadata(wrappedErr, map[string]string{"item_id": "456"})
 
 		// Should still be able to unwrap to the original error
-		var statusErr StatusError
-		assert.True(t, errors.As(errWithMeta, &statusErr))
+		statusErr, ok := errors.AsType[StatusError](errWithMeta)
+		assert.True(t, ok)
 		assert.Equal(t, ErrCodeAlreadyExists, statusErr.Status())
 
 		// Should have metadata
