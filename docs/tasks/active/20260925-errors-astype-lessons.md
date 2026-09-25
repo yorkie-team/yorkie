@@ -18,6 +18,16 @@
   allocates a throwaway `connect.Error` on every call just to give `As` a
   non-nil target. `AsType` drops the allocation as a side effect.
 
+- `go fix ./...` under Go 1.26 is not quiet on this tree: 45 files, 148
+  lines. The breakdown matters more than the count — 76 lines are
+  `interface{}` → `any`, ~70 are `for i := 0; i < n; i++` →
+  `for i := range n`, and only three are substantive (`fmt.Appendf` in
+  `pkg/cmap`, `slices.Contains`, `reflect.TypeFor`). It also rewrites
+  `api/yorkie/v1/capabilities.go`, which is off-limits. This is exactly
+  the "cosmetic-only bulk rewrites" #1872 says to exclude, so the run
+  was reverted wholesale. Anyone revisiting the `go fix` checklist item
+  should cherry-pick those three and leave the rest.
+
 ## Review rounds
 
 - `/self-review` was not run: this autonomous run is granted no tool that
