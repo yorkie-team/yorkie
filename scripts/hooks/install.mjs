@@ -34,7 +34,9 @@
 //      untrusted branch wires nothing at all — the state this repository was
 //      in before the hooks existed.
 //   2. The CODE is SNAPSHOT into `$GIT_DIR/agent-hooks/` and the wiring names
-//      those copies. `git checkout` never writes inside `$GIT_DIR`, so the
+//      those copies. A checkout materialises tracked paths into the WORKTREE
+//      and writes no tracked path under `$GIT_DIR` — it touches HEAD, the
+//      index and the reflog there, never these directories — so the
 //      scripts a session runs stay the ones present when a human ran setup,
 //      whatever branch the worktree is on.
 //

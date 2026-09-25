@@ -43,6 +43,8 @@
 // CLAUDE_CODE_OAUTH_TOKEN_1..8 in `env:`.
 
 import { appendFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTokenPool, slotSuffix, MAX_SLOTS, TOKEN_ENV } from "./token-pool.mjs";
 
 /**
@@ -97,6 +99,16 @@ function main() {
   if (out) appendFileSync(out, `slot=${slot}\nreason=${reason}\ncapacity=${note}\n`);
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// The package's own entry-point guard, not `isDirectRun` from
+// `scripts/direct-run.mjs`: four workflows run this file from
+// `cp -R scripts/agent "$RUNNER_TEMP/agent-tools"`, a copy with no parent
+// `scripts/` directory, so a `../` import would not resolve. See the `agent/`
+// row in `scripts/README.md`.
+//
+// The `file://` template this replaces was wrong for a second reason: a
+// `file:` URL percent-encodes, and `process.argv[1]` does not. A clone under
+// `~/My Projects/` gives `.../My%20Projects/...` on one side and a literal
+// space on the other, the comparison fails, and the CLI silently does not run.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main();
 }

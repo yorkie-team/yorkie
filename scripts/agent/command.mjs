@@ -19,7 +19,10 @@
 // Usage (CLI): node ./scripts/agent/command.mjs "<comment body>" <issue|pr>
 //   Emits `command=<verb>` to $GITHUB_OUTPUT (when set) and stdout.
 
+// Node builtins only, and that is a constraint rather than a coincidence —
+// see the CLI guard at the bottom of this file.
 import { appendFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // verb token in the comment -> canonical command. Order is irrelevant to
@@ -77,7 +80,17 @@ export function parseCommand(body, { surface = "pr" } = {}) {
 
 // --- CLI -------------------------------------------------------------------
 // Only run when invoked directly (not when imported by the test file).
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+//
+// NOT `isDirectRun` from `scripts/direct-run.mjs`, which is the shared version
+// of this predicate everywhere else in the repository. Six workflows check
+// this file out ALONE — `sparse-checkout: scripts/agent/command.mjs` with
+// `sparse-checkout-cone-mode: false`, which writes exactly that path and
+// nothing else — so a single relative import outside this file turns every
+// `@claude` comment into ERR_MODULE_NOT_FOUND, and the router fails silently
+// at the workflow level: an empty `command=` output reads as "no verb here".
+// `scripts/README.md`'s `agent/` row states the rule; `checks.test.mjs` pins
+// it.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const surfaceArg = (process.argv[3] ?? "pr").toLowerCase();
   const surface = surfaceArg === "issue" ? "issue" : "pr";
   const { command } = parseCommand(process.argv[2] ?? "", { surface });

@@ -40,6 +40,7 @@
 
 import { readFileSync, existsSync, statSync, appendFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { MAX_SLOTS, TOKEN_ENV, slotSuffix } from "./token-pool.mjs";
 
 // Re-exported, not redefined: `token-pool.mjs` owns the slot naming, and a second
@@ -165,6 +166,10 @@ function main(argv) {
   }
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+// Same guard, same two reasons, as `pick-credential.mjs`: this runs from the
+// parentless `$RUNNER_TEMP/agent-tools` copy, so the shared `isDirectRun` is
+// out of reach; and the `file://` template this replaces compared a
+// percent-encoded URL against a raw path.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2));
 }

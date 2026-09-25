@@ -59,6 +59,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 
 ### Development
 
+- [Local Enforcement Layer](local-enforcement-layer.md): The git hooks, Claude Code hooks and `make verify` target that gate a change before CI — all installed from a `$GIT_DIR` snapshot, so a branch cannot supply the hook code that runs on a reviewer's machine
 - [Agent Command Verbs](agent-command-verbs.md): Phased adoption of the `@claude <verb>` comment surface on issues and PRs, from a local self-review command to a gating review panel
 
 ## Maintaining the Document

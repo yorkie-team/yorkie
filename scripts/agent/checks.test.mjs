@@ -2236,3 +2236,73 @@ test("each trusted job downloads exactly the artifact its agent job uploaded", (
       `${file}: ${trustedJob} must wait for ${agentJob}`);
   }
 });
+
+// THE PACKAGE BOUNDARY IS A DEPLOYMENT FACT, not a packaging preference, and
+// nothing failed when it was crossed until this pair of tests. Every workflow
+// stages `scripts/agent/` in one of two ways, and both drop everything above
+// it:
+//
+//   - `sparse-checkout: scripts/agent` with `sparse-checkout-cone-mode: false`
+//     — set explicitly on every checkout step here. With cone mode OFF the
+//     pattern is literal: git writes `scripts/agent/**` and nothing else, so
+//     `scripts/direct-run.mjs` is simply not on disk. (With cone mode ON it
+//     would be, which is how the opposite conclusion looks true from memory.)
+//   - `cp -R scripts/agent "$RUNNER_TEMP/agent-tools"` — a copy with no parent
+//     `scripts/` directory at all.
+//
+// So a `../` import here is `ERR_MODULE_NOT_FOUND` at the top of a job, not a
+// style question. `scripts/test/harness-hooks.test.mjs` imports INTO this
+// package (`../agent/git-env.mjs`) and is safe for the reason this is not: a
+// test only ever runs from a full checkout.
+test("no agent module imports outside scripts/agent/, because its staging drops the parent", () => {
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const wfDir = path.join(HERE, "..", "..", ".github", "workflows");
+
+  // THE PREMISE, READ FROM THE WORKFLOWS rather than asserted here. If the
+  // staging ever changes — a full checkout, or a copy that brings `scripts/`
+  // along — this is the assertion that should fail first, so the constraint
+  // below gets revisited instead of being obeyed out of habit.
+  const workflows = readdirSync(wfDir)
+    .map((f) => readFileSync(path.join(wfDir, f), "utf8"))
+    .join("\n");
+  assert.match(workflows, /cp -R \S*scripts\/agent /, "no workflow copies the package out any more");
+  assert.match(workflows, /^\s*sparse-checkout-cone-mode: false$/m, "cone mode is no longer disabled");
+
+  const modules = readdirSync(HERE).filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs"));
+  assert.ok(modules.length > 20, `expected the agent package, found ${modules.length} modules`);
+  for (const file of modules) {
+    const src = readFileSync(path.join(HERE, file), "utf8");
+    const specifiers = [
+      ...src.matchAll(/\bfrom\s+["'](\.[^"']+)["']/g),
+      ...src.matchAll(/\bimport\s*\(\s*["'](\.[^"']+)["']/g),
+    ].map((m) => m[1]);
+    for (const spec of specifiers) {
+      assert.ok(
+        !spec.startsWith("../"),
+        `${file} imports ${spec}; scripts/agent/ is staged without its parent, so that is ` +
+          "ERR_MODULE_NOT_FOUND in CI. Copy what you need into this package.",
+      );
+    }
+  }
+});
+
+test("command.mjs imports nothing relative, because workflows check it out alone", () => {
+  // `sparse-checkout: scripts/agent/command.mjs` with cone mode off writes
+  // exactly ONE file. The router's failure is silent at the workflow level —
+  // a job that cannot start it reports an empty `command=`, which every
+  // consumer reads as "no verb in this comment" — so the cheap structural
+  // check is the one worth having.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const wfDir = path.join(HERE, "..", "..", ".github", "workflows");
+  const alone = readdirSync(wfDir).filter((f) =>
+    /sparse-checkout: scripts\/agent\/command\.mjs/.test(readFileSync(path.join(wfDir, f), "utf8")),
+  );
+  assert.ok(alone.length > 0, "no workflow checks command.mjs out on its own any more");
+
+  const src = readFileSync(path.join(HERE, "command.mjs"), "utf8");
+  assert.doesNotMatch(
+    src,
+    /\bfrom\s+["']\./,
+    `command.mjs is checked out alone by ${alone.join(", ")}; a relative import would not resolve`,
+  );
+});
