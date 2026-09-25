@@ -44,8 +44,10 @@ GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 # topic branch, which is how a guard gets exported to /dev/null.
 HOOK_SOURCES=(.githooks scripts/hooks scripts/setup.sh ':(glob)scripts/*.mjs')
 
+# `upstream/main` first: in a fork, `origin/main` is the fork's and may lag,
+# and current hook sources would then read as a local edit and be refused.
 UPSTREAM_REF=""
-for ref in refs/remotes/origin/main refs/remotes/origin/HEAD; do
+for ref in refs/remotes/upstream/main refs/remotes/origin/main refs/remotes/origin/HEAD; do
   if git -C "$REPO_ROOT" rev-parse --verify --quiet "$ref" >/dev/null; then
     UPSTREAM_REF="$ref"
     break

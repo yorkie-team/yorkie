@@ -930,3 +930,49 @@ test('the trust guard accepts a branch committed in another worktree', () => {
     assert.equal(r.status, 0, r.stderr);
   });
 });
+
+/**
+ * Turn the scratch clone into a fork contributor's: `origin` is a fork whose
+ * `main` lags one commit behind, and the real repository is `upstream`.
+ */
+function asStaleFork({ root, upstream, clone, at }) {
+  const fork = path.join(root, 'fork');
+  at(root)('clone', '-q', '--bare', upstream, fork);
+  at(fork)('update-ref', 'refs/heads/main', 'main~1');
+  at(clone)('remote', 'set-url', 'origin', fork);
+  at(clone)('fetch', '-q', '--prune', 'origin', '+refs/heads/main:refs/remotes/origin/main');
+  at(clone)('remote', 'add', 'upstream', upstream);
+  at(clone)('fetch', '-q', 'upstream');
+}
+
+test('the trust guard accepts a fork branch rebased onto upstream/main', () => {
+  // CONTRIBUTING.md has contributors fork: `origin` is their fork, whose
+  // `main` usually lags. Rebasing onto `upstream/main` brings in upstream
+  // commits this clone did not create, and with `origin/main` as the only
+  // trusted base every one of them read as foreign.
+  inScratchClone((ctx) => {
+    const { upstream, clone, at, env } = ctx;
+    at(upstream)('commit', '-qm', 'upstream moved', '--allow-empty', '--no-verify');
+    asStaleFork(ctx);
+    at(clone)('checkout', '-qb', 'topic', 'origin/main');
+    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
+    const rebased = at(clone)('rebase', '-q', 'upstream/main');
+    assert.equal(rebased.status, 0, rebased.stderr);
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
+test('setup.sh compares against upstream/main in a fork', () => {
+  // The same stale fork, one layer up: compared against the fork's `main`,
+  // current hook sources read as a local edit and setup refused to install
+  // the very hooks the default branch ships.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    asStaleFork(ctx);
+    at(clone)('checkout', '-q', '--detach', 'upstream/main');
+    const r = runSetup(clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});

@@ -48,25 +48,38 @@
 # kept underneath it, because a mismatched address is still worth naming in the
 # refusal — but it is the second condition, never the only one.
 #
-# Commits reachable from the upstream ref are trusted by construction: they are
-# on the default branch, which is what reviewing a pull request produces. So a
-# branch rebased onto — or merged with — a fetched `main` does not trip this.
+# Commits reachable from `origin/main` or `upstream/main` are trusted by
+# construction: they are on the default branch. So a branch rebased onto — or
+# merged with — a fetched `main` does not trip this.
 #
 # THE COST, stated because it is real: a commit you wrote on another machine and
 # fetched into this clone was not created here, so this refuses it. That is the
 # same evidence a stranger's commit presents, and the bypass below is the answer
 # — an explicit one, which is the point.
 
-# Echo the upstream default-branch ref, or fail if the clone has none.
-yorkie_upstream_ref() {
-  local ref
-  for ref in refs/remotes/origin/main refs/remotes/origin/HEAD; do
+# Echo every trusted default-branch ref this clone has, one per line, or fail
+# if it has none.
+#
+# `upstream/main` as well as `origin/main`: CONTRIBUTING.md has contributors
+# work from a fork, where `origin` is the fork and its `main` usually lags.
+# Rebasing onto `upstream/main` brings in commits this clone did not create,
+# and they are no less the default branch for arriving by another remote.
+# Only these two names — not every remote's `main`, since checking out a pull
+# request can add a remote for the author's fork.
+yorkie_upstream_refs() {
+  local ref found=1
+  for ref in refs/remotes/origin/main refs/remotes/upstream/main; do
     if git rev-parse --verify --quiet "$ref" >/dev/null; then
       printf '%s\n' "$ref"
-      return 0
+      found=0
     fi
   done
-  return 1
+  if [ "$found" -ne 0 ] &&
+    git rev-parse --verify --quiet refs/remotes/origin/HEAD >/dev/null; then
+    printf '%s\n' refs/remotes/origin/HEAD
+    found=0
+  fi
+  return "$found"
 }
 
 # Echo the OIDs this clone CREATED, one per line.
@@ -119,15 +132,16 @@ yorkie_locally_created() {
 # one command away from fixed (`git fetch origin main`, `git config
 # user.email`) and both are named in the refusal.
 yorkie_require_own_work() {
-  local hook="$1" runs="$2" upstream me commits untrusted
+  local hook="$1" runs="$2" upstreams upstream me commits untrusted
 
   if [ "${YORKIE_ALLOW_FOREIGN_TREE:-}" = "1" ]; then
     return 0
   fi
 
-  if ! upstream=$(yorkie_upstream_ref); then
-    echo "$hook: no origin/main to tell your commits from a branch you are" >&2
-    echo "        reviewing, and $runs runs this tree's code. Fetch it with" >&2
+  if ! upstreams=$(yorkie_upstream_refs); then
+    echo "$hook: no origin/main or upstream/main to tell your commits from a" >&2
+    echo "        branch you are reviewing, and $runs runs this tree's code." >&2
+    echo "        Fetch it with" >&2
     echo "        'git fetch origin main', or see the bypass below." >&2
     yorkie_print_bypass "$hook"
     return 1
@@ -143,11 +157,16 @@ yorkie_require_own_work() {
     return 1
   fi
 
+  # `upstream` names the trusted base in messages; the range excludes all of
+  # them. Word-splitting `$upstreams` is safe: these are fixed ref names.
+  upstream=$(printf '%s\n' "$upstreams" | head -n1)
+
   # Enumerated in its own command, and its status checked, because the previous
   # spelling put `git log` at the head of a pipeline: a range that failed to
   # resolve produced no output, no output read as "no foreign commits", and the
   # gate passed on the error path.
-  if ! commits=$(git log --format='%H %aE' "$upstream..HEAD" 2>/dev/null); then
+  # shellcheck disable=SC2086
+  if ! commits=$(git log --format='%H %aE' HEAD --not $upstreams 2>/dev/null); then
     echo "$hook: could not list this branch's commits against" >&2
     echo "        ${upstream#refs/remotes/}, so there is no way to tell whose code" >&2
     echo "        $runs would run. See the bypass below." >&2
