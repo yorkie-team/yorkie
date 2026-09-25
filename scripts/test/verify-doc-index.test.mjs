@@ -327,3 +327,16 @@ test('hasUncheckedBox agrees with tasks-archive.sh, quoted syntax and all', () =
   // naming files the archiver refuses to move.
   assert.equal(hasUncheckedBox('a todo with no `- [ ]` left is finished'), true);
 });
+
+test('a longer filename does not count as mentioning a shorter one', () => {
+  // WITHOUT A RIGHT-HAND ANCHOR this passes, and the gate reports coverage it
+  // does not have: a file the index never names is hidden by a passing
+  // reference to a longer name that starts with it. Directories keep prefix
+  // matching on purpose — `hooks/install.mjs` really has introduced `hooks/`.
+  assert.equal(mentions('| `setup.sh.backup` | a stale copy |', 'setup.sh'), false);
+  assert.equal(mentions('| `direct-run.mjs.orig` |', 'direct-run.mjs'), false);
+
+  assert.equal(mentions('| `setup.sh` | run once per clone |', 'setup.sh'), true);
+  assert.equal(mentions('run `bash scripts/setup.sh` once.', 'setup.sh'), true);
+  assert.equal(mentions('see `agent/ask.mjs`', 'agent/'), true);
+});

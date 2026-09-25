@@ -178,13 +178,21 @@ export function scriptEntries(repoRoot) {
  * `agent-hooks/` does not count as naming `hooks/`, and `.githooks/` does not
  * either.
  *
- * There is no right-hand anchor for directories, so `hooks/install.mjs`
- * counts as naming `hooks/`. That is the honest reading: a README that walks
- * the reader into a directory has introduced it.
+ * A DIRECTORY has no right-hand anchor, so `hooks/install.mjs` counts as
+ * naming `hooks/`. That is the honest reading: a README that walks the reader
+ * into a directory has introduced it.
+ *
+ * A FILE does, and must. Without one, `setup.sh.backup` counts as naming
+ * `setup.sh`, so a file the index never mentions is hidden by a passing
+ * reference to a longer name that happens to start with it — the gate
+ * reporting coverage it does not have, which is the failure it exists to
+ * refuse. The class excludes `.` as well as word characters and hyphens,
+ * because the collision that matters is an extension.
  */
 export function mentions(indexText, entry) {
   const escaped = entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?<![\\w-])${escaped}`).test(indexText);
+  const right = entry.endsWith('/') ? '' : '(?![\\w.-])';
+  return new RegExp(`(?<![\\w-])${escaped}${right}`).test(indexText);
 }
 
 /**

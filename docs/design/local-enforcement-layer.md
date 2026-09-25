@@ -101,10 +101,13 @@ means opening a session in a checkout of somebody's branch runs that branch's
 `scripts/hooks/*.sh`. Both halves are ordinary tracked files any contributor
 can rewrite, and the generated-file guard protects neither.
 
-`git checkout` never writes inside `$GIT_DIR`. So the hook that runs is the
-one that was present when a human ran setup, whatever branch the worktree is
-on, and a checkout of an untrusted branch wires nothing at all — the state the
-repository was in before the hooks existed.
+`git checkout` materialises tracked paths into the WORKTREE; it does not
+write the snapshot directories. (It does write inside `$GIT_DIR` — `HEAD`, the
+index, the reflog — which is why the claim has to be about those directories
+and not about `$GIT_DIR` as a whole.) So the hook that runs is the one present
+when a human ran setup, whatever branch the worktree is on, and a checkout of
+an untrusted branch wires nothing at all — the state the repository was in
+before the hooks existed.
 
 **The cost is staleness.** An improved hook reaches a clone only when somebody
 re-runs `scripts/setup.sh`. That is the right direction to fail: a stale guard
@@ -232,7 +235,7 @@ worktree.
 
 | Risk | Mitigation |
 |------|------------|
-| A branch rewrites a hook, and a reviewer's commit runs it | Hooks are snapshotted into `$GIT_DIR`, which `git checkout` never writes |
+| A branch rewrites a hook, and a reviewer's commit runs it | Hooks are snapshotted into `$GIT_DIR`, where a checkout materialises no tracked path |
 | A branch supplies what the hook *invokes* (`Makefile`, `.golangci.yml`, `TestMain`) | `trusted-tree.sh` refuses a checkout carrying commits this clone did not create |
 | The provenance check is spoofed by setting `user.email` | Decided from HEAD's reflog, which lives in `$GIT_DIR`; the author line is a second condition, never the only one |
 | `setup.sh` re-run inside a pull-request checkout persists that branch's hooks | Hook sources compared against `origin/main`; explicit `YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed |
