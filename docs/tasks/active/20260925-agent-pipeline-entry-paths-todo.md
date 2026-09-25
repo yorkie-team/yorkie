@@ -24,12 +24,12 @@ So a human-opened PR that says `Fixes #N` gets `design-fit` — a **blocking**
 lens whose rubric is written against the issue's `outcome` + `acceptance`
 criteria — reviewing with `/tmp/issue.txt` empty.
 
-- [ ] Add `.github/ISSUE_TEMPLATE/agent-task.yml`, a structured form whose
+- [x] Add `.github/ISSUE_TEMPLATE/agent-task.yml`, a structured form whose
       fields are the ones `lenses/design-fit.md` names: outcome, acceptance
       criteria, non-goals, plus context and pointers.
-- [ ] **Do NOT auto-apply `agent:candidate` from the form.** Reasoning in the
+- [x] **Do NOT auto-apply `agent:candidate` from the form.** Reasoning in the
       form's own comment and below.
-- [ ] Make the label reach human PRs: `agent-loop.yml` labels the issue named
+- [x] Make the label reach human PRs: `agent-loop.yml` labels the issue named
       by the PR body's `Fixes #N` when a maintainer opts the PR in.
 
 ### Why the form must not auto-label
@@ -92,14 +92,14 @@ directory, a new extension — counts, and `build` runs. The only way to lose
 CI on code is for a negation to match a code path, and every negation is a
 docs extension or a docs directory.
 
-- [ ] `ci.yml`: drop `pull_request.paths-ignore`; add a second
+- [x] `ci.yml`: drop `pull_request.paths-ignore`; add a second
       `dorny/paths-filter` step with `predicate-quantifier: every`
-- [ ] Point `build`'s `if:` at it
-- [ ] Update every comment in the tree that states the old mechanism:
+- [x] Point `build`'s `if:` at it
+- [x] Update every comment in the tree that states the old mechanism:
       `ci.yml`, `docs.yml`, `agent-scripts.yml`, `agent-loop.yml`'s `ciNote`,
       `mark-ready.mjs`, `review-panel.mjs`'s `MECHANICAL_COVERAGE_NOTE`,
       `checks.test.mjs`, and §2/§4b of the design doc
-- [ ] New guard in `checks.test.mjs`: no workflow-level `paths-ignore` on
+- [x] New guard in `checks.test.mjs`: no workflow-level `paths-ignore` on
       `ci.yml`'s `pull_request`, and the build filter is `**` plus negations
       only, under `every`
 
@@ -125,10 +125,10 @@ sha" (a deleted run, or one past its retention while the check runs survive) —
 and the gate's own stated rule is *fails toward NOT clear on anything
 unreadable*.
 
-- [ ] Flip the branch to refuse, with a comment recording that the docs-only
+- [x] Flip the branch to refuse, with a comment recording that the docs-only
       justification was false and what replaced it
-- [ ] Widen the refusal message to cover "no CI run is visible"
-- [ ] Invert the guard in `checks.test.mjs` that pinned the old answer
+- [x] Widen the refusal message to cover "no CI run is visible"
+- [x] Invert the guard in `checks.test.mjs` that pinned the old answer
 
 ## 4. A 90-minute wall against a 60-minute token
 
@@ -156,15 +156,15 @@ The change that would genuinely buy them is the agent handing a bundle to a
 trusted job that pushes; the design doc already names it as the next change,
 and it is a different piece of work.
 
-- [ ] `timeout-minutes: 55` on all three jobs, with the arithmetic written
+- [x] `timeout-minutes: 55` on all three jobs, with the arithmetic written
       down: the token is minted at or after job start, so a wall at 55 keeps
       the whole round inside the credential's hour with ≥5 minutes of margin
       for the final push, its `git ls-remote` confirmation and clock skew
-- [ ] Tell the agents their budget in the prompt (a convention, and labelled
+- [x] Tell the agents their budget in the prompt (a convention, and labelled
       as one)
-- [ ] The panel's cancelled-cause page states the number twice —
+- [x] The panel's cancelled-cause page states the number twice —
       `checks.test.mjs` pins page wording == wall == `agent-fix.yml`'s wall
-- [ ] Add an assertion that the wall is **under 60** and say why
+- [x] Add an assertion that the wall is **under 60** and say why
 
 ## 5. The fixer prompts do not call `make verify`
 
@@ -178,20 +178,63 @@ node is absent — but all three fixer jobs run `actions/setup-node@v4` with
 so the licence gate really runs. The switch closes a real hole rather than
 adding a line that skips.
 
-- [ ] `make lint` + `go test ./...` → `make verify` in all three prompts
-- [ ] `agent-iterate-ci.yml`'s no-log fallback text too
-- [ ] Drop the Makefile's "the prompts still spell it out" note
-- [ ] Rewrite §4c to describe what landed
+- [x] `make lint` + `go test ./...` → `make verify` in all three prompts
+- [x] `agent-iterate-ci.yml`'s no-log fallback text too
+- [x] Drop the Makefile's "the prompts still spell it out" note
+- [x] Rewrite §4c to describe what landed
 
 ## Verification
 
-- [ ] `make verify`
-- [ ] `node --test 'scripts/test/**/*.test.mjs'`
-- [ ] `cd scripts/agent && npm ci --no-audit --no-fund --ignore-scripts && npm test`
-- [ ] `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=`
-- [ ] Break each changed gate, confirm its guard fails, restore — recorded in
+- [x] `make verify`
+- [x] `node --test 'scripts/test/**/*.test.mjs'`
+- [x] `cd scripts/agent && npm ci --no-audit --no-fund --ignore-scripts && npm test`
+- [x] `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=`
+- [x] Break each changed gate, confirm its guard fails, restore — recorded in
       the lessons file
 
 ## Review
 
-(filled in on completion)
+Five commits, one intent each, on top of `cb3ed1d5`:
+
+| Commit | Item |
+| --- | --- |
+| `Plan the five entry-path defects the agent pipeline has` | this pair |
+| `Give a human-opened PR a spec the design-fit lens will trust` | 1 |
+| `Move CI's documentation filter onto the job that it exempts` | 2 + 3 |
+| `Bound every pushing agent job inside its credential's hour` | 4 |
+| `Put the licence check in the autonomous arm's verification lane` | 5 |
+
+2 and 3 are one commit because 3's resolution *depends* on 2: the carve-out's
+justification was a docs-only PR having no CI run, and 2 is what makes that
+false. Landing 3 alone would have flipped a gate on reasoning that was not yet
+true in the tree.
+
+### Verification
+
+| Lane | Before | After |
+| --- | --- | --- |
+| `make verify` | green | green |
+| `node --test 'scripts/test/**/*.test.mjs'` | 65 pass | 65 pass |
+| `scripts/agent` suite | 920 pass | **922** pass |
+| actionlint 1.7.12 | exit 0 | exit 0 |
+
+Two new tests: *ci.yml files a run for every PR, so a docs-only PR reaches the
+pipeline* and *every fixer prompt runs the same verification target*. Three
+existing tests grew assertions (the absent-run answer, the third refusal cause,
+the walls-under-60 rule). Eight deliberate breaks, each confirmed to fail its
+guard and then restored — the table is in the lessons file.
+
+### Not done, and why
+
+- **`@claude review` still reviews a human PR with no spec** unless a
+  maintainer has already opted it in or labelled the issue by hand. That verb
+  is invocable by the PR author, which is below the trust level
+  `agent:candidate` exists to represent, so labelling from it would reopen
+  exactly the hole the form refuses to open. Recorded in §1.1 of the design
+  doc as the deliberate limit rather than left to be rediscovered.
+- **The token is still the round's real bound.** 55 minutes is the credential's
+  ceiling, not a judgement that 55 is enough. Buying more means the agent
+  committing and a trusted job pushing, which the design doc already names as
+  the next change; it is a trust-model change and does not belong here.
+- **`agent-iterate-ci.yml`'s 45-minute wall was left alone.** It is already
+  under the token's hour, and the new guard covers the three that were not.

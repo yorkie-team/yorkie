@@ -45,14 +45,23 @@
 Recorded because a guard that does not fail when the thing it guards is wrong
 is worse than no guard.
 
-| Change | Broken how | Guard that failed |
+| Change | Broken how | Guard that failed, and what it said |
 | --- | --- | --- |
-| `ci.yml` pull_request filter | re-added `paths-ignore` at workflow level | `ci.yml creates a CI run for every PR, so a docs-only PR reaches the panel` — "ci.yml must not filter `pull_request` at the workflow level" |
-| `ci.yml` build filter | changed `'**'` to a positive list | same test — "the build filter must be `**` plus negations only" |
-| `agent-fix.yml` ci-clear | restored `setOutput('clear', 'true')` on the no-run branch | `the on-demand fixer refuses when CI's state for the head is unknown` |
-| fix wall | set `timeout-minutes: 90` back on the panel's `fix` | `the no-commit page fires on a timed-out fixer…` — page says 55, wall is 90; and the new under-60 assertion |
-| fix wall, the other half | set only `agent-fix.yml` back to 90 | same test — "agent-fix.yml's fix wall must match the autonomous one" |
-| `make verify` | left `make lint` in the panel prompt | `every fixer prompt runs the same verification target` |
+| `ci.yml` trigger | re-added `paths-ignore: ["**/*.md"]` under `pull_request` | *ci.yml files a run for every PR…* — "ci.yml must not filter `pull_request` at the workflow level — a filtered-out PR files no run, and the review panel and the CI-fix arm both trigger on one" |
+| `ci.yml` build filter | replaced `'**'` with `'pkg/**'` + `'server/**'` | same test — "the build filter's only positive pattern must be `**`" |
+| `ci.yml` build filter | deleted `predicate-quantifier: every` | same test — "the build filter needs `predicate-quantifier: every`, or its negations are inert" |
+| `agent-fix.yml` ci-clear | restored `setOutput('clear', 'true')` on the no-run branch | *agent-fix always answers the commenter…* — "an absent CI run means its conclusion cannot be read — refuse, like every other unknown here" |
+| fix wall | panel's `fix` back to 90, page left at 55 | *the no-commit page fires on a timed-out fixer…* — "the page says 55 minutes but the fix job's timeout-minutes is 90" |
+| fix wall | panel + `agent-fix.yml` + page all consistently back to 90 | same test, the NEW assertion — "agent-review-panel.yml's `fix` job has timeout-minutes: 90, at or past the 60-minute life of the App token it pushes with" |
+| implement wall | `agent-implement.yml` back to 90 | same assertion, naming that file — which is why it enumerates the jobs rather than checking one |
+| `make verify` | panel prompt back to `make lint` + `go test ./...` | *every fixer prompt runs the same verification target* — "the fixer prompt must call `make verify`, not a hand-written subset of it" |
+
+The fifth and sixth rows are the pair worth noting: the pre-existing guard
+catches a wall raised in ONE place, and catches nothing about a wall raised
+everywhere consistently. That is the shape the 90 arrived in — three files and
+a page all agreeing on a number that was wrong — so the new assertion is about
+the number's relationship to something outside the workflow, not about the
+three copies agreeing with each other.
 
 ## Patterns worth keeping
 
