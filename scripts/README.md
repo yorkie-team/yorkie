@@ -25,7 +25,7 @@ Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
 | Script | Invoked as | Role |
 |---|---|---|
-| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Copies `.githooks/` into `$GIT_DIR/githooks` and points `core.hooksPath` there — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — then runs `hooks/install.mjs` for the Claude Code hooks. Both are snapshots rather than the worktree, so a branch cannot supply code that runs on a reviewer's machine; re-run it to pick up hook changes. |
+| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Copies `.githooks/` into `$GIT_DIR/githooks` and points `core.hooksPath` there — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — then runs `hooks/install.mjs` for the Claude Code hooks. Both are snapshots rather than the worktree, so a branch cannot supply the hook SCRIPT that runs on a reviewer's machine; what those scripts then invoke — `make lint`, `make verify` — is still the working tree's, which is why `.githooks/trusted-tree.sh` refuses when the checkout carries commits on top of `origin/main` the local `user.email` did not write. Re-run it to pick up hook changes. |
 
 ## Directories
 

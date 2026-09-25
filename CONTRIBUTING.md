@@ -141,10 +141,13 @@ branch; if you are the one changing the hooks, say so with
 
 The snapshot pins *which* hook runs, not *what it invokes*: `make lint`
 and `make verify` resolve through the working tree's `Makefile`,
-`.golangci.yml` and test code. Committing or pushing inside a checkout
-of a branch you have not read therefore still runs that branch's build
-and test code — use `--no-verify` there, or read the diff of those
-files first.
+`.golangci.yml` and test code, so committing inside a checkout of
+someone else's branch would run that branch's build and test code. The
+two gates therefore refuse to run at all when the checkout carries
+commits on top of `origin/main` that your configured `user.email` did
+not write — the shape a reviewed pull request has and your own work
+does not. Push a fix to a contributor's branch with `--no-verify`, or,
+having read its diff, `YORKIE_ALLOW_FOREIGN_TREE=1 git push`.
 The integration lane is not in them — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.
 

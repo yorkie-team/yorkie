@@ -285,28 +285,60 @@ function wouldLint({ dir }) {
   //
   // A stub on PATH rather than deleting the check, so the hook runs exactly as
   // written and the guard still covers the refusal path's placement.
+  const bin = stubLinter(dir);
+
+  const r = runHookProbe('pre-commit', {
+    dir,
+    marker: 'WOULD_LINT',
+    // THE TRUST GUARD IS NOT THE DECISION UNDER TEST HERE. A scratch repo has
+    // no `origin/main`, so `trusted-tree.sh` refuses on every fixture and every
+    // assertion below would measure the guard instead of the staged-Go
+    // decision. It has its own tests further down, with a real upstream ref.
+    env: {
+      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      YORKIE_ALLOW_FOREIGN_TREE: '1',
+    },
+  });
+  return r.stdout.includes('WOULD_LINT');
+}
+
+/** A no-op `golangci-lint` on PATH; returns the directory to prepend. */
+function stubLinter(dir) {
   const bin = path.join(dir, '.probe-bin');
   mkdirSync(bin, { recursive: true });
   const stub = path.join(bin, 'golangci-lint');
   writeFileSync(stub, '#!/usr/bin/env bash\nexit 0\n');
   chmodSync(stub, 0o755);
+  return bin;
+}
 
-  const src = readFileSync(path.join(REPO, '.githooks', 'pre-commit'), 'utf8')
-    .replace(/^exec make lint$/m, 'echo WOULD_LINT');
-  const probe = path.join(dir, '.probe-pre-commit');
+/**
+ * Run one of the git hooks against a scratch repo with its `exec make …` tail
+ * replaced by a marker.
+ *
+ * `trusted-tree.sh` is copied in beside the probe because the hooks source it
+ * through `dirname "$0"` — which is what makes it travel with them into the
+ * `$GIT_DIR` snapshot, and what makes it have to travel here too.
+ */
+function runHookProbe(hook, { dir, marker, env = {} }) {
+  const src = readFileSync(path.join(REPO, '.githooks', hook), 'utf8').replace(
+    /^exec make (lint|verify)$/m,
+    `echo ${marker}`,
+  );
+  const probe = path.join(dir, `.probe-${hook}`);
   writeFileSync(probe, src);
+  writeFileSync(
+    path.join(dir, 'trusted-tree.sh'),
+    readFileSync(path.join(REPO, '.githooks', 'trusted-tree.sh'), 'utf8'),
+  );
 
-  const r = spawnSync('bash', [probe], {
+  return spawnSync('bash', [probe], {
     cwd: dir,
     encoding: 'utf8',
     // The hook itself runs `git diff --cached`; `git -C` above protects the
     // helper, but nothing protected the hook until this.
-    env: fixtureGitEnv(dir, {
-      ...process.env,
-      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
-    }),
+    env: fixtureGitEnv(dir, { ...process.env, ...env }),
   });
-  return r.stdout.includes('WOULD_LINT');
 }
 
 test('pre-commit refuses when Go is staged and the linter is missing', () => {
@@ -371,6 +403,104 @@ test('pre-commit skips a commit that stages no Go at all', () => {
     git('add', 'README.md');
     assert.equal(wouldLint({ dir }), false, 'a docs-only commit must not lint');
   });
+});
+
+/**
+ * A scratch repo that looks like a clone: an `origin/main` to compare against,
+ * one commit of the local identity's own work on top of it, and — when
+ * `foreign` is set — one commit somebody else wrote, which is the shape
+ * `gh pr checkout` produces.
+ */
+function inReviewedCheckout({ foreign }, body) {
+  return inScratchRepo(({ dir, git }) => {
+    git('commit', '-qm', 'base', '--allow-empty', '--no-verify');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
+    if (foreign) {
+      git('-c', 'user.email=someone@else.example', '-c', 'user.name=Someone',
+        'commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
+    }
+    writeFileSync(path.join(dir, 'a.go'), 'package a\n');
+    git('add', 'a.go');
+    return body({ dir, git, bin: stubLinter(dir) });
+  });
+}
+
+test('pre-commit refuses to run a branch it did not write', () => {
+  // THE HOLE THE $GIT_DIR SNAPSHOT DOES NOT CLOSE. Pinning WHICH script runs
+  // says nothing about what it invokes: `make lint` resolves through the
+  // working tree's `Makefile` and its `.golangci.yml`, whose `linters.custom`
+  // can name any loadable plugin. So `gh pr checkout` plus one commit used to
+  // be arbitrary local execution — a surface these hooks introduced, since the
+  // only hook before them checked the shape of a commit message.
+  inReviewedCheckout({ foreign: true }, ({ dir, bin }) => {
+    const r = runHookProbe('pre-commit', {
+      dir,
+      marker: 'WOULD_LINT',
+      env: { PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    });
+    assert.equal(r.status, 1, `a foreign checkout must refuse: ${r.stdout}${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /WOULD_LINT/, 'the branch\'s Makefile must not be reached');
+    assert.match(r.stderr, /someone@else\.example/, 'the refusal must name whose commits these are');
+    assert.match(r.stderr, /--no-verify|YORKIE_ALLOW_FOREIGN_TREE/, 'a refusal must name its bypass');
+  });
+});
+
+test('pre-commit runs on your own branch', () => {
+  // The other half: the guard is worthless if it also refuses the everyday
+  // case, because then it gets bypassed by reflex and nothing is enforced.
+  inReviewedCheckout({ foreign: false }, ({ dir, bin }) => {
+    const r = runHookProbe('pre-commit', {
+      dir,
+      marker: 'WOULD_LINT',
+      env: { PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+    });
+    assert.match(r.stdout, /WOULD_LINT/, `own work must lint: ${r.stderr}`);
+  });
+});
+
+test('pre-push refuses to run a branch it did not write', () => {
+  // `make verify` is the wider surface of the two: `go test ./...` compiles and
+  // RUNS every `_test.go` in the tree, including the branch's own `TestMain`.
+  // No file list can pin that — running the tree is what the gate is for —
+  // which is why the check is on authorship rather than on a set of paths.
+  inReviewedCheckout({ foreign: true }, ({ dir }) => {
+    const r = runHookProbe('pre-push', { dir, marker: 'WOULD_VERIFY' });
+    assert.equal(r.status, 1, `a foreign checkout must refuse: ${r.stdout}${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /WOULD_VERIFY/, "the branch's tests must not be reached");
+    assert.match(r.stderr, /someone@else\.example/);
+  });
+});
+
+test('the trust guard fails closed when it cannot tell whose work this is', () => {
+  // "I could not answer" and "it is yours" must not share an answer. A scratch
+  // repo with no `origin/main` is the never-fetched clone; the refusal has to
+  // say which one-line fix applies.
+  inScratchRepo(({ dir, git }) => {
+    git('commit', '-qm', 'only', '--allow-empty', '--no-verify');
+    writeFileSync(path.join(dir, 'a.go'), 'package a\n');
+    git('add', 'a.go');
+    const r = runHookProbe('pre-commit', {
+      dir,
+      marker: 'WOULD_LINT',
+      env: { PATH: `${stubLinter(dir)}${path.delimiter}${process.env.PATH}` },
+    });
+    assert.equal(r.status, 1, 'no upstream ref must refuse, not pass');
+    assert.match(r.stderr, /git fetch origin main/);
+  });
+});
+
+test('both git hooks still consult the trust guard', () => {
+  // Structural, because dropping the two lines is a silent change: the hooks
+  // keep working, they just start running unread branches again.
+  for (const hook of ['pre-commit', 'pre-push']) {
+    const src = readFileSync(path.join(REPO, '.githooks', hook), 'utf8');
+    assert.match(src, /trusted-tree\.sh/, `${hook} no longer sources the trust guard`);
+    const guard = src.indexOf('yorkie_require_own_work');
+    const run = src.search(/^exec make (lint|verify)$/m);
+    assert.ok(guard > 0, `${hook} no longer calls the trust guard`);
+    assert.ok(guard < run, `${hook} runs make before checking whose tree it is`);
+  }
 });
 
 test('a clone path with a space stays one argument, and stays idempotent', () => {

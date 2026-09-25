@@ -629,3 +629,95 @@ A maintainer applied the patch above, with two departures from it:
 rerun` clears the latch and buys exactly one fix attempt; a finding the fixer
 cannot push re-pages right after it. When the fix needs a permission the loop
 lacks, a human pushes it before the rerun, not after.
+
+## Panel round — the hook execution surface, and the one unflagged npm install
+
+Two majors, both fixed in one pass.
+
+**A snapshot pins the script, not what the script invokes.** `setup.sh` copies
+the hooks into `$GIT_DIR` so a branch cannot rewrite `pre-commit`, and the
+comments were careful to say that closed only half the hole — but the other
+half was left as prose telling reviewers to use `--no-verify`, and prose is not
+a control. `gh pr checkout` plus one commit ran the branch's `Makefile` and
+`.golangci.yml` (whose `linters.custom` loads a plugin by path); `pre-push`
+additionally ran `go test ./...`, i.e. the branch's `TestMain`.
+
+The tempting fix — add `Makefile` and `.golangci.yml` to `setup.sh`'s
+comparison — is wrong twice. That guard runs at INSTALL time, and the
+dangerous commit happens later in a checkout of a branch that need not exist
+yet; and no file list can cover `go test ./...`, because running the tree is
+what the gate is for. So `.githooks/trusted-tree.sh` checks the one property
+that separates "my work" from "a pull request I am reviewing": whether every
+commit in `origin/main..HEAD` was written by the configured `user.email`.
+Commits reachable from upstream are trusted by construction, so rebasing or
+merging `main` does not trip it. It fails closed on both unanswerable cases
+(no upstream ref, no `user.email`) and names the one-line fix for each.
+
+**`--ignore-scripts` is not free everywhere.** The `bench` job's
+`npm install -g @anthropic-ai/claude-code@…` was the only npm install in the
+repository without it, in the job holding `contents: write`,
+`pull-requests: write` and two tokens — a pinned top-level version does not
+pin the transitive tree, which a global install re-resolves every run with no
+lockfile. Adding the flag alone BREAKS the CLI: the npm package is a wrapper
+whose `install.cjs` links the platform-native binary, and `claude --version`
+then exits with "native binary not installed". Verified locally before and
+after. The fix runs that one script explicitly afterwards, which keeps the
+distinction that matters — the code that runs is the version we pinned, not
+whatever a transitive dependency published this morning.
+
+### Standstill: the ci.yml half cannot be pushed by this loop
+
+Same wall as the licence-gate round above, same cause. The fixer's token is a
+GitHub App installation token without the `workflows` permission, so any
+commit touching `.github/workflows/**` is rejected at push time:
+
+```text
+! [remote rejected] harness-local-enforcement -> harness-local-enforcement
+  (refusing to allow a GitHub App to create or update workflow
+   `.github/workflows/ci.yml` without `workflows` permission)
+```
+
+The hook half of the round pushed; the npm hunk was reverted out of the commit
+and is reproduced here for a maintainer to apply. It is verified: without the
+second line `claude --version` exits with "native binary not installed", and
+with it prints `2.1.273 (Claude Code)`.
+
+```diff
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -234,8 +234,27 @@ jobs:
+         # Tracks the `stable` dist-tag, not `latest`, which is ahead of it.
+         # Dependabot cannot see this — its npm ecosystem reads manifests, and
+         # this is an argument in a run step — so bumping it is manual.
++        #
++        # `--ignore-scripts`, matching every other npm install in this
++        # repository: pinning the top-level version does not pin the
++        # transitive tree, which resolves fresh on every run because a global
++        # install has no lockfile to read. Without the flag a `postinstall` in
++        # any dependency at any depth runs here, in the one job that holds
++        # `contents: write`, `pull-requests: write`, GITHUB_TOKEN and
++        # CLAUDE_CODE_OAUTH_TOKEN.
++        #
++        # THEN THE PINNED PACKAGE'S OWN INSTALL SCRIPT, BY HAND, because this
++        # CLI is one of the packages that does not work without it: the npm
++        # package is a wrapper whose `install.cjs` links the platform-native
++        # binary, and `claude --version` exits with "native binary not
++        # installed" until it has run. Invoking it explicitly keeps the
++        # distinction that matters — the code that runs is the version we
++        # pinned and audited, not whatever a transitive dependency published
++        # this morning.
+         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+-        run: npm install -g @anthropic-ai/claude-code@2.1.273
++        run: |
++          npm install -g --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.273
++          node "$(npm root -g)/@anthropic-ai/claude-code/install.cjs"
+ 
+       - name: Checkout current repository
+         uses: actions/checkout@v4
+```
+
+**Rule, now twice:** a review finding against `.github/workflows/**` cannot be
+closed by this loop at all. The panel should either route workflow findings to
+a human on the first round or the app installation should gain `workflows` —
+disputing and re-raising them costs two rounds to reach a patch a maintainer
+was always going to have to apply.

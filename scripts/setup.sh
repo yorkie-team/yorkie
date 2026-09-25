@@ -80,15 +80,22 @@ fi
 # reaches a clone on the next run of this script. The directory is wiped first
 # so a hook deleted upstream stops running here too.
 #
-# WHAT THIS DOES NOT CLOSE, said plainly because an earlier version of this
-# comment claimed the whole hole and closed half of it. The snapshot pins WHICH
-# script runs, not WHAT it runs. `pre-commit` execs `make lint` and `pre-push`
-# execs `make verify`, and both resolve through the WORKING TREE: the branch's
-# `Makefile`, its `.golangci.yml`, its `go test ./...`. A gate that checked
-# anything else would not be a gate. So committing or pushing inside a checkout
-# of a branch you have not read still runs that branch's code — bypass with
-# `--no-verify`, or read the diff of `Makefile`, `.golangci.yml` and the test
-# files first. CONTRIBUTING.md says the same thing where contributors read it.
+# WHAT THIS DOES NOT CLOSE BY ITSELF, said plainly because an earlier version
+# of this comment claimed the whole hole and closed half of it. The snapshot
+# pins WHICH script runs, not WHAT it runs. `pre-commit` execs `make lint` and
+# `pre-push` execs `make verify`, and both resolve through the WORKING TREE:
+# the branch's `Makefile`, its `.golangci.yml`, its `go test ./...`. A gate
+# that checked anything else would not be a gate.
+#
+# Nor can the comparison above reach it: that guard runs now, at install time,
+# and the commit that hands a branch's Makefile to `make` happens later, in a
+# checkout of a branch that need not exist yet. So the second half is checked
+# where it has to be, inside the hooks: `.githooks/trusted-tree.sh` refuses
+# when the checkout carries commits on top of `origin/main` that the local
+# identity did not write, which is what checking out somebody's pull request
+# produces and what writing your own does not. Bypass with `--no-verify` or
+# `YORKIE_ALLOW_FOREIGN_TREE=1`. CONTRIBUTING.md says the same thing where
+# contributors read it.
 HOOKS_SNAPSHOT="$GIT_DIR/githooks"
 rm -rf "$HOOKS_SNAPSHOT"
 mkdir -p "$HOOKS_SNAPSHOT"

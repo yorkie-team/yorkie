@@ -16,9 +16,10 @@ set -euo pipefail
 # branch's `Makefile`, its `.golangci.yml`, its `node scripts/verify-license.mjs`
 # and its `go test ./...`. `scripts/setup.sh` snapshots THIS FILE into
 # `$GIT_DIR` so a branch cannot rewrite the hook itself, and that is the only
-# half a snapshot can close: pushing from a checkout of a branch you have not
-# read still executes that branch's build and test code. Reviewing a pull
-# request by checking it out and committing in it is the case to watch.
+# half a snapshot can close. The other half is whose tree is being run, which
+# `trusted-tree.sh` answers below: it refuses when this checkout carries
+# commits somebody else wrote, so reviewing a pull request by checking it out
+# and committing in it — the case to watch — does not execute it.
 #
 # Bypass with `git push --no-verify` when you mean to — including when you are
 # standing in someone else's branch and only want the push.
@@ -37,5 +38,11 @@ if ! command -v node >/dev/null 2>&1; then
   echo "          or push with --no-verify and let the Docs workflow check it." >&2
   exit 1
 fi
+
+# `make verify` compiles and runs this tree's tests, which is the broadest of
+# the two hooks' execution surfaces. Check whose branch it is first.
+# shellcheck source=.githooks/trusted-tree.sh
+. "$(dirname "$0")/trusted-tree.sh"
+yorkie_require_own_work "pre-push" "'make verify'" || exit 1
 
 exec make verify

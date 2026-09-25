@@ -18,11 +18,13 @@ set -euo pipefail
 # cost a temporary worktree per commit; pre-push and CI both see the real
 # thing, so the cheap approximation is the right trade here.
 #
-# SAME RESIDUE AS pre-push, stated here too because the hooks are read one at
-# a time: `make lint` resolves through the WORKING TREE's `Makefile` and
-# `.golangci.yml`. The `$GIT_DIR` snapshot `scripts/setup.sh` takes pins which
-# hook runs, not what the hook invokes, so committing inside a checkout of an
-# unread branch runs that branch's lint configuration.
+# SAME EXECUTION SURFACE AS pre-push, stated here too because the hooks are
+# read one at a time: `make lint` resolves through the WORKING TREE's
+# `Makefile` and `.golangci.yml`. The `$GIT_DIR` snapshot `scripts/setup.sh`
+# takes pins which hook runs, not what the hook invokes, so committing inside a
+# checkout of an unread branch would run that branch's lint configuration —
+# which is why `trusted-tree.sh` below refuses when this checkout carries
+# somebody else's commits. Its header carries the argument.
 #
 # Bypass with `git commit --no-verify` when you mean to.
 
@@ -55,5 +57,11 @@ if ! command -v golangci-lint >/dev/null 2>&1; then
   echo "pre-commit: golangci-lint not found; run 'make tools'." >&2
   exit 1
 fi
+
+# There is Go to lint, so `make lint` — and with it this branch's Makefile and
+# .golangci.yml — is about to run. Check whose branch it is first.
+# shellcheck source=.githooks/trusted-tree.sh
+. "$(dirname "$0")/trusted-tree.sh"
+yorkie_require_own_work "pre-commit" "'make lint'" || exit 1
 
 exec make lint
