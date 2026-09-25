@@ -106,8 +106,11 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
-// element. Returns the dead position node (if any) for GC registration.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (*RGATreeListNode, error) {
+// element. Returns the dead position node (if any) for GC registration, and the
+// Live diff the move adds -- see RGATreeList.MoveAfter.
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (
+	*RGATreeListNode, resource.DataSize, error,
+) {
 	return a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
 }
 

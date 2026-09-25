@@ -383,15 +383,27 @@ func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode,
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
 // element using LWW (Last-Writer-Wins) position register semantics.
-// Returns the dead position node (if any) for GC registration.
-func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (*RGATreeListNode, error) {
+// Returns the dead position node (if any) for GC registration, and the Live
+// diff the move adds.
+//
+// That diff is the `movedAt` ticket this stamps on the element. Every
+// element's MetaSize counts it, so a rebuild from the content charges it, but
+// the accumulator never did: Move.Execute registered the dead position node
+// and added nothing to Live. Only the FIRST move of an element costs anything
+// -- a later one overwrites the ticket -- and the branch that discards this
+// move stamps nothing, so it charges nothing.
+func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (
+	*RGATreeListNode, resource.DataSize, error,
+) {
+	var diff resource.DataSize
+
 	if _, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; !ok {
-		return nil, fmt.Errorf("MoveAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
+		return nil, diff, fmt.Errorf("MoveAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
 
 	entry, ok := a.elementMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil, fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
+		return nil, diff, fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	// LWW check: if a newer move already won, this move is discarded.
@@ -399,22 +411,27 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 	// this move's position (e.g., inserts after it) can find it.
 	if entry.posMovedAt != nil && !executedAt.After(entry.posMovedAt) {
 		if _, ok := a.nodeMapByCreatedAt[executedAt.Key()]; ok {
-			return nil, nil
+			return nil, diff, nil
 		}
 
 		deadPosNode, err := a.insertPositionAfter(prevCreatedAt, executedAt)
 		if err != nil {
-			return nil, err
+			return nil, diff, err
 		}
 		deadPosNode.removedAt = executedAt
 		a.nodeMapByIndex.UpdateWeight(deadPosNode.indexNode)
-		return deadPosNode, nil
+		return deadPosNode, diff, nil
 	}
+
+	// Ask the element, not entry.posMovedAt: the ticket about to be stamped is
+	// the element's, and a snapshot can restore a position register without one
+	// (RGATreeList.AddMovedElement).
+	firstStamp := entry.elem.MovedAt() == nil
 
 	// Create a new position node after the target position.
 	newPosNode, err := a.insertPositionAfter(prevCreatedAt, executedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
 
 	// Mark old position as dead.
@@ -433,10 +450,13 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 	entry.positionNode = newPosNode
 	entry.posMovedAt = executedAt
 	entry.elem.SetMovedAt(executedAt)
+	if firstStamp {
+		diff.Meta = time.TicketSize
+	}
 
 	a.nodeMapByIndex.UpdateWeight(newPosNode.indexNode)
 
-	return oldPosNode, nil
+	return oldPosNode, diff, nil
 }
 
 // FindPrevCreatedAt returns the position node's createdAt of the previous

@@ -303,7 +303,9 @@ func TestDocumentSize(t *testing.T) {
 		}))
 		assert.Equal(t, `<doc><p>world</p></doc>`, doc.Root().GetTree("tree").ToXML())
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 168}, doc.DocSize().Live)
-		assert.Equal(t, resource.DataSize{Data: 36, Meta: 168}, doc.DocSize().GC)
+		// The attribute tombstone charges its key and nothing else: it carries
+		// no value, so "true" is not counted a second time in GC.
+		assert.Equal(t, resource.DataSize{Data: 28, Meta: 168}, doc.DocSize().GC)
 	})
 
 	t.Run("tree element split test", func(t *testing.T) {
@@ -484,8 +486,9 @@ func TestDocumentSize(t *testing.T) {
 				removeStyle(t, doc, "bold")
 				assertAgrees(t, doc, resource.DataSize{Data: 6, Meta: 144})
 			}
-			assert.Equal(t, resource.DataSize{Data: 16, Meta: 24}, doc.DocSize().GC,
-				"each cycle supersedes the previous tombstone rather than stacking")
+			assert.Equal(t, resource.DataSize{Data: 8, Meta: 24}, doc.DocSize().GC,
+				"each cycle supersedes the previous tombstone rather than stacking, "+
+					"and a tombstone charges its key alone")
 		})
 	})
 

@@ -62,18 +62,18 @@ func TestRGATreeListMoveAfterLWW(t *testing.T) {
 
 		// Order 1: Op1 then Op2
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		_, err := list1.MoveAfter(tB, tA, tMove1)
+		_, _, err := list1.MoveAfter(tB, tA, tMove1)
 		assert.NoError(t, err)
 		assert.Equal(t, `["B","A","C"]`, list1.Marshal())
-		_, err = list1.MoveAfter(tC, tA, tMove2)
+		_, _, err = list1.MoveAfter(tC, tA, tMove2)
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: Op2 then Op1
 		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		_, err = list2.MoveAfter(tC, tA, tMove2)
+		_, _, err = list2.MoveAfter(tC, tA, tMove2)
 		assert.NoError(t, err)
-		_, err = list2.MoveAfter(tB, tA, tMove1) // should be discarded (LWW)
+		_, _, err = list2.MoveAfter(tB, tA, tMove1) // should be discarded (LWW)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -103,17 +103,17 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 
 		// Order 1: Op1 → Op2
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		_, err := list1.MoveAfter(tC, tA, tOp1)
+		_, _, err := list1.MoveAfter(tC, tA, tOp1)
 		assert.NoError(t, err)
-		_, err = list1.MoveAfter(tA, tB, tOp2)
+		_, _, err = list1.MoveAfter(tA, tB, tOp2)
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: Op2 → Op1
 		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		_, err = list2.MoveAfter(tA, tB, tOp2)
+		_, _, err = list2.MoveAfter(tA, tB, tOp2)
 		assert.NoError(t, err)
-		_, err = list2.MoveAfter(tC, tA, tOp1)
+		_, _, err = list2.MoveAfter(tC, tA, tOp1)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -147,11 +147,11 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 				var err error
 				switch op {
 				case 1:
-					_, err = list.MoveAfter(tD, tA, tOp1)
+					_, _, err = list.MoveAfter(tD, tA, tOp1)
 				case 2:
-					_, err = list.MoveAfter(tA, tB, tOp2)
+					_, _, err = list.MoveAfter(tA, tB, tOp2)
 				case 3:
-					_, err = list.MoveAfter(tB, tC, tOp3)
+					_, _, err = list.MoveAfter(tB, tC, tOp3)
 				}
 				assert.NoError(t, err)
 			}
@@ -198,17 +198,17 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 
 		// Order 1: Op1 → Op2
 		list1 := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
-		_, err := list1.MoveAfter(tD, tA, tOp1)
+		_, _, err := list1.MoveAfter(tD, tA, tOp1)
 		assert.NoError(t, err)
-		_, err = list1.MoveAfter(tC, tB, tOp2)
+		_, _, err = list1.MoveAfter(tC, tB, tOp2)
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: Op2 → Op1
 		list2 := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
-		_, err = list2.MoveAfter(tC, tB, tOp2)
+		_, _, err = list2.MoveAfter(tC, tB, tOp2)
 		assert.NoError(t, err)
-		_, err = list2.MoveAfter(tD, tA, tOp1)
+		_, _, err = list2.MoveAfter(tD, tA, tOp1)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -237,7 +237,7 @@ func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
 
 		// Order 1: move then delete
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		_, err := list1.MoveAfter(tC, tB, tMove)
+		_, _, err := list1.MoveAfter(tC, tB, tMove)
 		assert.NoError(t, err)
 		assert.Equal(t, `["A","C","B"]`, list1.Marshal())
 		_, err = list1.DeleteByCreatedAt(tB, tDel)
@@ -249,7 +249,7 @@ func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
 		_, err = list2.DeleteByCreatedAt(tB, tDel)
 		assert.NoError(t, err)
 		assert.Equal(t, `["A","C"]`, list2.Marshal())
-		_, err = list2.MoveAfter(tC, tB, tMove)
+		_, _, err = list2.MoveAfter(tC, tB, tMove)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -280,17 +280,17 @@ func TestRGATreeListConcurrencyTable(t *testing.T) {
 
 		// Order 1: C0 then C1
 		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
-		_, err := list1.MoveAfter(t2, t3, tC0) // move 3 after 2
+		_, _, err := list1.MoveAfter(t2, t3, tC0) // move 3 after 2
 		assert.NoError(t, err)
-		_, err = list1.MoveAfter(t4, t2, tC1) // move 2 after 4
+		_, _, err = list1.MoveAfter(t4, t2, tC1) // move 2 after 4
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: C1 then C0
 		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
-		_, err = list2.MoveAfter(t4, t2, tC1)
+		_, _, err = list2.MoveAfter(t4, t2, tC1)
 		assert.NoError(t, err)
-		_, err = list2.MoveAfter(t2, t3, tC0)
+		_, _, err = list2.MoveAfter(t2, t3, tC0)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -316,13 +316,13 @@ func TestRGATreeListConcurrencyTable(t *testing.T) {
 		prim1, _ := crdt.NewPrimitive("5", tNewElem)
 		err := list1.InsertAfter(t2, prim1, tInsert) // insert 5 after 2
 		assert.NoError(t, err)
-		_, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
+		_, _, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: move then insert
 		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
-		_, err = list2.MoveAfter(t4, t2, tMove)
+		_, _, err = list2.MoveAfter(t4, t2, tMove)
 		assert.NoError(t, err)
 		prim2, _ := crdt.NewPrimitive("5", tNewElem)
 		err = list2.InsertAfter(t2, prim2, tInsert)
@@ -350,13 +350,13 @@ func TestRGATreeListConcurrencyTable(t *testing.T) {
 		newElem1, _ := crdt.NewPrimitive("5", tSet)
 		_, err := list1.Set(t2, newElem1, tSet) // set elem at 2's position to 5
 		assert.NoError(t, err)
-		_, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
+		_, _, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: move then set
 		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
-		_, err = list2.MoveAfter(t4, t2, tMove)
+		_, _, err = list2.MoveAfter(t4, t2, tMove)
 		assert.NoError(t, err)
 		newElem2, _ := crdt.NewPrimitive("5", tSet)
 		_, err = list2.Set(t2, newElem2, tSet)
@@ -383,13 +383,13 @@ func TestRGATreeListConcurrencyTable(t *testing.T) {
 		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
 		_, err := list1.DeleteByCreatedAt(t2, tRemove) // remove elem 2
 		assert.NoError(t, err)
-		_, err = list1.MoveAfter(t4, t2, tMove) // move (already-deleted) 2 after 4
+		_, _, err = list1.MoveAfter(t4, t2, tMove) // move (already-deleted) 2 after 4
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: move then remove
 		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
-		_, err = list2.MoveAfter(t4, t2, tMove)
+		_, _, err = list2.MoveAfter(t4, t2, tMove)
 		assert.NoError(t, err)
 		_, err = list2.DeleteByCreatedAt(t2, tRemove)
 		assert.NoError(t, err)
@@ -428,12 +428,12 @@ func TestRGATreeListLWWLosingMoveCreatesPosition(t *testing.T) {
 		list := buildList(t, []string{"A", "B", "X"}, []*time.Ticket{tA, tB, tX})
 
 		// Apply Op2 first (winner).
-		_, err := list.MoveAfter(tB, tX, tOp2)
+		_, _, err := list.MoveAfter(tB, tX, tOp2)
 		assert.NoError(t, err)
 		assert.Equal(t, `["A","B","X"]`, list.Marshal())
 
 		// Apply Op1 (loser). Must still create a dead position node for tOp1.
-		_, err = list.MoveAfter(tA, tX, tOp1)
+		_, _, err = list.MoveAfter(tA, tX, tOp1)
 		assert.NoError(t, err)
 
 		// Op3: insert Y after position tOp1 (the position created by the losing move).
@@ -473,7 +473,7 @@ func TestRGATreeList(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, prevCreatedAt.Compare(targetElement.CreatedAt()), -1)
 
-		_, err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
+		_, _, err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		assert.Equal(t, `["2","1","3"]`, elements.Marshal())
 
@@ -501,10 +501,10 @@ func TestRGATreeList(t *testing.T) {
 		_, err = elements.DeleteByCreatedAt(invalidCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
-		_, err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
+		_, _, err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
-		_, err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
+		_, _, err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
 		_, err = elements.FindPrevCreatedAt(invalidCreatedAt)

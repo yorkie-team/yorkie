@@ -63,11 +63,11 @@ func TestArrayMoveThenAddSnapshotStable(t *testing.T) {
 	// leave two dead position nodes and a moved last element).
 	pos15, err := list.PosCreatedAt(p15.CreatedAt())
 	require.NoError(t, err)
-	_, err = list.MoveAfter(pos15, p14.CreatedAt(), ctx.IssueTimeTicket())
+	_, _, err = list.MoveAfter(pos15, p14.CreatedAt(), ctx.IssueTimeTicket())
 	require.NoError(t, err)
 	pos14b, err := list.PosCreatedAt(p14.CreatedAt())
 	require.NoError(t, err)
-	_, err = list.MoveAfter(pos14b, p15.CreatedAt(), ctx.IssueTimeTicket())
+	_, _, err = list.MoveAfter(pos14b, p15.CreatedAt(), ctx.IssueTimeTicket())
 	require.NoError(t, err)
 	assert.Equal(t, "[14,15]", list.Marshal())
 

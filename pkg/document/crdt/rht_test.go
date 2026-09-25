@@ -154,7 +154,7 @@ func TestRHT_Remove(t *testing.T) {
 			insertKey:       []string{},
 			insertVal:       []string{},
 			deleteKey:       []string{key1},
-			deleteVal:       []string{val1},
+			deleteVal:       []string{``},
 			expectXML:       `key2="value2"`,
 			expectJSON:      `{"key2":"value2"}`,
 			expectTotalSize: 2,
@@ -176,7 +176,7 @@ func TestRHT_Remove(t *testing.T) {
 			insertKey:       []string{key2},
 			insertVal:       []string{val22},
 			deleteKey:       []string{key1},
-			deleteVal:       []string{val11},
+			deleteVal:       []string{``},
 			expectXML:       `key2="value22"`,
 			expectJSON:      `{"key2":"value22"}`,
 			expectTotalSize: 2,
@@ -187,7 +187,7 @@ func TestRHT_Remove(t *testing.T) {
 			insertKey:       []string{},
 			insertVal:       []string{},
 			deleteKey:       []string{key1},
-			deleteVal:       []string{val11},
+			deleteVal:       []string{``},
 			expectXML:       `key2="value22"`,
 			expectJSON:      `{"key2":"value22"}`,
 			expectTotalSize: 2,
@@ -198,7 +198,7 @@ func TestRHT_Remove(t *testing.T) {
 			insertKey:       []string{},
 			insertVal:       []string{},
 			deleteKey:       []string{key2},
-			deleteVal:       []string{val22},
+			deleteVal:       []string{``},
 			expectXML:       ``,
 			expectJSON:      `{}`,
 			expectTotalSize: 2,
@@ -228,7 +228,10 @@ func TestRHT_Remove(t *testing.T) {
 				rht.Set(key, tt.insertVal[i], ctx.IssueTimeTicket())
 			}
 			for i, key := range tt.deleteKey {
-				nodes := rht.Remove(key, ctx.IssueTimeTicket())
+				// A tombstone carries no value, whether or not the key held
+				// one: its bytes are a function of the key alone, so they do
+				// not depend on which write happened to land there first.
+				nodes := rht.Remove(key, ctx.IssueTimeTicket()).GCNodes
 				assert.Equal(t, tt.deleteVal[i], nodes[len(nodes)-1].Value())
 			}
 			assert.Equal(t, tt.expectJSON, rht.Marshal())

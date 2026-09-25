@@ -538,10 +538,13 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	deadNode, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
+	deadNode, diff, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
 	if err != nil {
 		panic(err)
 	}
+	// See operations/move.go: the movedAt ticket the move stamps, charged to
+	// the ledger holding the moved element.
+	p.context.AccMovedElement(p.Array.GetByID(createdAt), diff)
 	if deadNode != nil {
 		// See operations/move.go: a dead position node was never in Live.
 		gcSize := deadNode.DataSize()
@@ -563,10 +566,13 @@ func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	deadNode, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
+	deadNode, diff, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
 	if err != nil {
 		panic(err)
 	}
+	// See operations/move.go: the movedAt ticket the move stamps, charged to
+	// the ledger holding the moved element.
+	p.context.AccMovedElement(p.Array.GetByID(createdAt), diff)
 	if deadNode != nil {
 		// See operations/move.go: a dead position node was never in Live.
 		gcSize := deadNode.DataSize()

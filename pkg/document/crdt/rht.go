@@ -17,6 +17,7 @@
 package crdt
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -31,6 +32,11 @@ type RHTNode struct {
 	val       string
 	updatedAt *time.Ticket
 	isRemoved bool
+
+	// valLen is what the value charges, measured once here. See logicalSize
+	// for what is measured and why it is not len(val); see DataSize for why
+	// it cannot be measured on demand.
+	valLen int
 }
 
 func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNode {
@@ -39,6 +45,7 @@ func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNod
 		val:       val,
 		updatedAt: updatedAt,
 		isRemoved: isRemoved,
+		valLen:    logicalSize(val),
 	}
 }
 
@@ -76,9 +83,81 @@ func (n *RHTNode) IsRemoved() bool {
 	return n.isRemoved
 }
 
+// logicalSize returns the length of the value with the one layer of JSON
+// encoding a client may have added before storing it stripped off.
+//
+// The JS SDK's `stringifyObjectValues` stores a plain string raw and keeps the
+// quotes only on a string that itself parses as a JSON document, so that
+// reading it back can tell the string `'1'` from the number `1`. It then sizes
+// the value it started from, not the one it stored (`logicalValue` in
+// `crdt/rht.ts`). Sizing the stored string here instead made the two disagree
+// across the wire on exactly that subset -- `{b:'1'}` is stored as `"\"1\""`
+// and was charged 8 bytes by the server against the SDK's 4 -- which is a
+// divergence between two accountants describing one document, not a difference
+// in what either one stores. The storage format is deliberate and does not
+// move; only the charge follows the SDK.
+//
+// The measurement decodes as little as it can, because the value is whatever a
+// client sent and the caller is on a hot path. A value that is not wrapped in
+// quotes cannot be a JSON string literal and costs two byte compares. A quoted
+// body carrying no escape, no bare quote and no control character decodes to
+// itself, so its length is its own and no decode runs. Only an escaped body
+// reaches json.Unmarshal, and only once per node -- see newRHTNode.
+func logicalSize(val string) int {
+	// Trailing whitespace is legal after a JSON value, so it has to be
+	// discounted before the closing quote can be looked for.
+	end := len(val)
+	for end > 0 && isJSONSpace(val[end-1]) {
+		end--
+	}
+
+	if end < 2 || val[0] != '"' || val[end-1] != '"' {
+		return len(val)
+	}
+
+	body := val[1 : end-1]
+	if !needsJSONDecode(body) {
+		return len(body)
+	}
+
+	var decoded string
+	if err := json.Unmarshal([]byte(val), &decoded); err != nil {
+		return len(val)
+	}
+
+	return len(decoded)
+}
+
+// isJSONSpace reports whether c is whitespace as JSON defines it.
+func isJSONSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+}
+
+// needsJSONDecode reports whether the body of a quoted value has to go through
+// a decode to be measured. Everything it rejects either decodes to itself or
+// does not decode at all.
+func needsJSONDecode(body string) bool {
+	for i := 0; i < len(body); i++ {
+		if c := body[i]; c == '\\' || c == '"' || c < 0x20 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// DataSize returns the size of this node. A removed node charges the same as
+// the live one it replaced minus the value, because Remove mints a tombstone
+// carrying no value at all -- see Remove.
+//
+// The value's contribution is read off the node rather than measured here.
+// This runs per split, style, register and collect, and over every node of a
+// document on a rebuild, so it has to stay O(1): measuring on demand would let
+// a client whose attribute value is a long escaped string buy an O(value)
+// decode with every one of those calls.
 func (n *RHTNode) DataSize() resource.DataSize {
 	return resource.DataSize{
-		Data: (len(n.key) + len(n.val)) * 2,
+		Data: (len(n.key) + n.valLen) * 2,
 		Meta: time.TicketSize,
 	}
 }
@@ -172,7 +251,22 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) RHTWrite {
 }
 
 // SetInternal sets the value of the given key internally.
+//
+// A tombstone is installed with no value, whatever value was handed in. This is
+// the decode boundary: snapshots written before Remove stopped copying the
+// value -- and payloads from any peer that still does -- carry one on a removed
+// attribute, and restoring it would make the node's DataSize a function of what
+// happened to be at that key when the removal arrived. A replica that performed
+// the removal itself charges the key alone, so the two would disagree on
+// docSize.GC, and therefore on Total() and the size limit it gates, for the same
+// document. The value is unreachable either way: Get, Has, Elements and Marshal
+// all filter on isRemoved, and a Set that revives the tombstone replaces the
+// value wholesale. See Remove.
 func (rht *RHT) SetInternal(k string, v string, updatedAt *time.Ticket, removed bool) {
+	if removed {
+		v = ""
+	}
+
 	newNode := newRHTNode(k, v, updatedAt, removed)
 	rht.nodeMapByKey[k] = newNode
 
@@ -181,8 +275,33 @@ func (rht *RHT) SetInternal(k string, v string, updatedAt *time.Ticket, removed 
 	}
 }
 
-// Remove removes the value of the given key.
-func (rht *RHT) Remove(k string, executedAt *time.Ticket) []*RHTNode {
+// RHTRemoval reports what a Remove did, for the same reason RHTWrite reports
+// what a Set did: the caller cannot recover it by reading the map afterwards.
+type RHTRemoval struct {
+	// GCNodes are the tombstones this removal produced, in registration
+	// order. Empty when the removal lost LWW and changed nothing.
+	GCNodes []*RHTNode
+
+	// ValueDropped is what the value the tombstone does NOT carry was
+	// charging. It is non-zero only when the removal replaced a LIVE value,
+	// and it leaves whichever ledger was holding those bytes: docSize.Live
+	// while the node owning the attribute is live, docSize.GC once that node
+	// is itself a tombstone whose charge covers its live attributes.
+	ValueDropped resource.DataSize
+}
+
+// Remove removes the value of the given key and reports what the removal
+// dropped. See RHTRemoval for what the caller has to do with each field.
+//
+// The tombstone carries no value. Copying the value it replaced made a
+// tombstone's stored bytes a function of what had landed at that key when the
+// removal arrived, so a concurrent same-key set and remove charged differently
+// depending on delivery order while rendering identically. The carried value
+// was never reachable anyway -- Get, Has, Elements and Marshal all filter on
+// isRemoved, and a Set that revives a tombstone overwrites the value wholesale
+// -- so only a size accountant could observe it, and what it observed was
+// order-dependent.
+func (rht *RHT) Remove(k string, executedAt *time.Ticket) RHTRemoval {
 	// NOTE(hackerwins): We need to consider the logic and the policy of removing the element.
 	// A. RHT always overrides the value of the same key in a immutable way.
 	// B. Even if the key is not existed, RHT sets the flag `isRemoved` for concurrency.
@@ -191,11 +310,11 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) []*RHTNode {
 		rht.numberOfRemovedElement++
 		newNode := newRHTNode(k, "", executedAt, true)
 		rht.nodeMapByKey[k] = newNode
-		return []*RHTNode{newNode}
+		return RHTRemoval{GCNodes: []*RHTNode{newNode}}
 	}
 
 	if !executedAt.After(node.updatedAt) {
-		return nil
+		return RHTRemoval{}
 	}
 
 	alreadyRemoved := node.isRemoved
@@ -208,11 +327,16 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) []*RHTNode {
 		gcNodes = append(gcNodes, node)
 	}
 
-	newNode := newRHTNode(k, node.val, executedAt, true)
+	newNode := newRHTNode(k, "", executedAt, true)
 	rht.nodeMapByKey[k] = newNode
 	gcNodes = append(gcNodes, newNode)
 
-	return gcNodes
+	removal := RHTRemoval{GCNodes: gcNodes}
+	if !alreadyRemoved {
+		removal.ValueDropped = resource.DataSize{Data: node.valLen * 2}
+	}
+
+	return removal
 }
 
 // Elements returns a map of elements because the map easy to use for loop.
@@ -245,11 +369,22 @@ func (rht *RHT) Len() int {
 }
 
 // DeepCopy copies itself deeply.
+//
+// Nodes are copied as they stand rather than rebuilt through SetInternal.
+// Nodes are immutable, so the copy is equivalent -- every tombstone in the map
+// already carries the empty value SetInternal would have forced on it, since
+// Remove and SetInternal are the only ways one is made and both clear it --
+// and it carries the measured value length across instead of re-measuring
+// every attribute of the document. A clone is taken on every local update.
 func (rht *RHT) DeepCopy() *RHT {
 	instance := NewRHT()
 
-	for _, node := range rht.Nodes() {
-		instance.SetInternal(node.key, node.val, node.updatedAt, node.isRemoved)
+	for key, node := range rht.nodeMapByKey {
+		copied := *node
+		instance.nodeMapByKey[key] = &copied
+		if node.isRemoved {
+			instance.numberOfRemovedElement++
+		}
 	}
 
 	return instance
