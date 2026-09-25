@@ -219,16 +219,21 @@ test('session-prime says nothing in CI and speaks locally', () => {
   assert.match(local.stdout, /WORKFLOW REQUIREMENTS/);
 });
 
-test('docs.yml still runs both checks, on every pull request', () => {
-  // The licence gate has two homes and neither alone is sufficient: `make
-  // verify` needs Node locally, and this workflow is the only one that runs on
-  // every PR with no path filter.
+test('docs.yml still runs the link check, on every pull request', () => {
   const wf = readFileSync(path.join(REPO, '.github', 'workflows', 'docs.yml'), 'utf8');
-  assert.match(wf, /node scripts\/verify-license\.mjs/);
   assert.match(wf, /node scripts\/verify-doc-links\.mjs/);
   // BOTH SPELLINGS. `paths-ignore:` holes the coverage exactly as badly as
   // `paths:`, and the narrower pattern would have missed it.
   assert.doesNotMatch(wf, /^\s*paths(-ignore)?:/m, 'docs.yml must stay unfiltered');
+});
+
+test('ci.yml runs the licence gate, where the CI-fix loop can see it', () => {
+  // The licence gate has two homes and neither alone is sufficient: `make
+  // verify` needs Node locally, and CI is the only workflow
+  // `agent-iterate-ci.yml` subscribes to — a gate that reds anywhere else
+  // stops an agent-managed PR with nothing watching it.
+  const wf = readFileSync(path.join(REPO, '.github', 'workflows', 'ci.yml'), 'utf8');
+  assert.match(wf, /run: node scripts\/verify-license\.mjs/);
 });
 
 test('make verify reaches the licence gate', () => {

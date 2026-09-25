@@ -510,12 +510,15 @@ fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
 `.golangci.yml`. `complex-test`, `bench` and `load-test` are path-gated and do
 not run on most PRs. And `ci.yml` carries `paths-ignore: "**/*.md"`, so a
 documentation-only PR runs none of the above — only the separate `docs.yml`,
-which checks documentation links and licence headers and reads no Go behaviour.
+which checks documentation links and reads no Go behaviour.
 
 The Apache license header was on this list, as a convention with no lane behind
 it, and 17 of 486 `.go` files had drifted by the time anyone counted. It now has
-one: `scripts/verify-license.mjs`, run by `docs.yml` on every PR and by `make
-verify` locally. This paragraph is the source `review-panel.mjs`'s
+one: `scripts/verify-license.mjs`, run by `ci.yml`'s `build` job and by `make
+verify` locally. It sits in `ci.yml` rather than the unfiltered `docs.yml`
+because `agent-iterate-ci.yml` subscribes to CI alone — a gate that reds in
+another workflow stops an agent-managed PR with nothing watching it — and
+`paths-ignore` costs it nothing, since no ignored path holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
 `MECHANICAL_COVERAGE_NOTE` was derived from, so the two move together — a stale
 entry here becomes a lens instructed to hunt a class CI already reds.
 
@@ -527,7 +530,7 @@ run inside the fix job. The fixer prompts in `agent-fix.yml`,
 `agent-iterate-ci.yml` and `agent-review-panel.yml` still spell the pair out
 rather than calling the target. Switching them is NOT a pure rename: `make
 verify` also runs the licence check, so today the autonomous arm verifies
-without that gate and CI's `docs.yml` is what catches it. Deliberately not
+without that gate and CI's `build` job is what catches it. Deliberately not
 bundled with the commit that introduced the target — changing what a fixer runs
 is a behaviour change to the pipeline and belongs in its own.
 

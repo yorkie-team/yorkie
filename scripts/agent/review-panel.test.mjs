@@ -1772,7 +1772,7 @@ test("the coverage note claims only mechanisms this repo actually runs", () => {
   assert.ok(!/staticcheck|unused/.test(lintLine), `the lint claim must not imply them: ${lintLine}`);
 
   // The licence header HAS a lane — `scripts/verify-license.mjs`, run by
-  // docs.yml on every PR. This assertion was the other way round until that
+  // ci.yml's `build` job. This assertion was the other way round until that
   // lane landed, and it is pinned in both directions on purpose: the note's
   // whole failure mode is a half that has stopped being true, and a guard
   // that only checks the NOT-enforced half cannot catch a claim that moved.

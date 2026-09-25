@@ -1,15 +1,15 @@
 # A workflow of its own, because ci.yml sets `paths-ignore: "**/*.md"` — every
-# job there is skipped on exactly the pull requests these checks exist to
+# job there is skipped on exactly the pull requests this check exists to
 # police. Adding a step to that workflow would look like coverage and provide
 # none.
 #
-# The name — and the `doc-links` job id — are narrower than the contents: this
-# is where the Node-based repository checks live that must run on EVERY pull
-# request. Today that is the documentation link graph and the licence headers.
-# Renaming would churn a status-check context for no gain, so the comment
-# carries the correction instead.
+# The licence gate is NOT here, though it is also a Node script: it reads only
+# `.go` files, which no ignored path can hold, so ci.yml covers every change
+# that could break it — and ci.yml is the workflow the autonomous CI-fix loop
+# subscribes to. A gate that reds only here stops an agent-managed PR with
+# nothing watching it.
 #
-# NO PATH FILTER, deliberately, and for both checks.
+# NO PATH FILTER, deliberately.
 #
 # A link breaks when its TARGET moves, and targets are not only markdown.
 # Walked with the checker's own `linkTargets` from its three roots, the graph
@@ -17,15 +17,12 @@
 # script directories reached through their READMEs, and this workflow file.
 # (The breakdown is the durable part — a count of the markdown files it walks
 # would change on every PR that adds a doc, and nothing checks it.) Renaming
-# or deleting any of those breaks a
-# link without touching a single `.md`. There are no relative `.go` targets:
-# every Go citation in `docs/design/` is an absolute GitHub URL, which the
-# checker skips as a scheme.
-#
-# A licence header is likewise removable by a change `**/*.md` would skip.
+# or deleting any of those breaks a link without touching a single `.md`.
+# There are no relative `.go` targets: every Go citation in `docs/design/` is
+# an absolute GitHub URL, which the checker skips as a scheme.
 #
 # The job installs Node and reads text — seconds — so filtering buys nothing
-# worth a hole in the only checks that watch either.
+# worth a hole in the only check that watches links.
 name: Docs
 
 on:
@@ -57,13 +54,6 @@ jobs:
 
       - name: Verify documentation links
         run: node scripts/verify-doc-links.mjs
-
-      # Lives here rather than in ci.yml for the same reason the link check
-      # does: this workflow has no path filter. ci.yml would cover a new .go
-      # file, but a licence header can also be removed by a change that
-      # `paths-ignore` skips, and this job already has Node.
-      - name: Verify licence headers
-        run: node scripts/verify-license.mjs
 
       # The glob, not the directory: `node --test scripts/test/` tries to load
       # the directory as a module and dies with MODULE_NOT_FOUND.

@@ -85,6 +85,18 @@ jobs:
       - name: Lint
         run: make lint
 
+      - name: Verify licence headers
+        # Here rather than in the unfiltered `docs.yml`, because
+        # `agent-iterate-ci.yml` subscribes to CI alone and the review panel
+        # reads CI's conclusion alone: a gate that reds only in another
+        # workflow stops an agent-managed PR with nothing watching it.
+        # `paths-ignore` above costs nothing here — the check reads `.go`
+        # files, and none of the ignored paths can hold one.
+        #
+        # `node …`, not `make verify-license`: that target announces SKIPPED
+        # when Node is absent, and a CI gate must not fail open.
+        run: node scripts/verify-license.mjs
+
       - name: Lint proto files
         uses: bufbuild/buf-lint-action@v1
 

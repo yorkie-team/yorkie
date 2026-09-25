@@ -1445,15 +1445,16 @@ const CONFIDENCE_LEVELS = new Set(FINDING.properties.confidence.enum);
  *   - The same file DISABLES `staticcheck` and `unused`. "golangci-lint runs"
  *     on its own would have implied both and silenced the dead-code class.
  *   - The Apache 2.0 licence header CLAUDE.md requires on every Go file HAS a
- *     lane as of `scripts/verify-license.mjs`: `docs.yml` runs it on every PR
+ *     lane as of `scripts/verify-license.mjs`: `ci.yml`'s `build` job runs it
  *     and `make verify` runs it locally. It did not when this note was first
  *     written — 17 files had drifted — and the bullet lived in the NOT-enforced
  *     half until the lane landed. Moving it is the same discipline as the
  *     formatting bullet above, in the other direction: a lens told to hunt a
- *     class `docs.yml` reds in seconds spends turns for nothing.
+ *     class CI reds in seconds spends turns for nothing.
  *   - `ci.yml` carries a markdown `paths-ignore`, so on a documentation-only PR
- *     none of the lanes below run at all — only `docs.yml`, which is both the
- *     link check and the licence check.
+ *     none of the lanes below run at all — only `docs.yml`'s link check. The
+ *     licence check loses nothing by that: it reads `.go` files, and no
+ *     ignored path can hold one.
  *   - `complex-test`, `bench` and `load-test` are path-gated by the
  *     `ci-target-check` job, so most pull requests run none of them. Only the
  *     `build` job is unconditional.
@@ -1497,7 +1498,7 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "- `node scripts/verify-doc-links.mjs` and its own `node --test` suite, on every",
   "  PR with no path filter: a markdown link reachable from CLAUDE.md, AGENTS.md",
   "  or README.md must resolve on disk.",
-  "- `node scripts/verify-license.mjs`, same workflow and likewise unfiltered:",
+  "- `node scripts/verify-license.mjs`, in the same `build` job as the Go lanes:",
   "  every `.go` file must carry the Apache 2.0 grant clause in its first 40",
   "  lines. `make verify` runs it locally too.",
   "",
@@ -1510,7 +1511,7 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "- Everything above, on a documentation-only PR. `ci.yml` carries",
   "  `paths-ignore: \"**/*.md\"` (plus api/docs, build/charts, design/ and *.txt),",
   "  so such a PR runs no lint, no build and no tests — only `docs.yml`'s link",
-  "  and licence checks, neither of which reads Go behaviour.",
+  "  check, which reads no Go behaviour.",
   "- A data race on a path no test exercises. `-race` observes executions, not",
   "  code, so it proves nothing about what the suite never reached.",
   "- Whether a passing test asserts anything. The lanes prove the suite is GREEN,",
