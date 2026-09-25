@@ -498,10 +498,22 @@ DISTRIBUTED BY HASH(project_id)
 PROPERTIES ("replication_num" = "1", "partition_ttl" = "90 DAY");
 ```
 
-Fresh installs create this shape directly: the init DDL in the chart and the
-local stack now partitions by day with the same TTL. `CREATE TABLE IF NOT
-EXISTS` skips a table that exists, so existing clusters still need the
-migration below.
+Fresh installs create this shape directly, minus the TTL: the init DDL in the
+chart and the local stack partitions by day but sets no `partition_ttl`. The
+partitioning is what makes retention a partition drop rather than a delete, and
+it costs a fresh install nothing; the TTL is what shortens retention, and on a
+fresh install there is nothing behind it — the summary ingest job ships outside
+this chart and `SummaryEnabled` defaults off, so a TTL at install time would
+silently truncate windows longer than 90 days. It stays a deliberate per-cluster
+step (`ALTER TABLE <t> SET ("partition_ttl" = "90 DAY")`), after the summaries
+are validated, which is step 6 below. That also keeps an unverified table
+property out of the shipped DDL: the local stack pins 3.3.9 while `partition_ttl`
+was rehearsed on 3.3.22, and both init scripts only log a failed
+`init-create-table.sql` before continuing, so a property the engine rejects would
+leave the cluster with no event tables at all.
+
+`CREATE TABLE IF NOT EXISTS` skips a table that exists, so existing clusters
+still need the migration below.
 
 **`partition_ttl`, not `partition_live_number`.** Both work on expression
 partitions in 3.3.22. `partition_live_number = 90` keeps the 90 newest

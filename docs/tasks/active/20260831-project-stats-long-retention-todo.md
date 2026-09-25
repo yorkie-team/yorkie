@@ -438,8 +438,14 @@ old table after the swap.
       in-place `ALTER ... PARTITION BY` is a silent no-op; `SWAP` + recreate the
       job at `Progress + 1` moves every event once; `partition_ttl` drops by
       calendar date.
-- [x] Fresh installs: init DDL (chart + local stack) partitions by day with
-      `partition_ttl = "90 DAY"` and no fixed bucket count.
+- [x] Fresh installs: init DDL (chart + local stack) partitions by day with no
+      fixed bucket count and, deliberately, no `partition_ttl`. A fresh install
+      has no summary ingest job (it ships outside the chart) and `SummaryEnabled`
+      off, so a TTL there would truncate long windows with nothing behind it;
+      it is also an unverified property on the 3.3.9 the local stack pins, and a
+      rejected property would take every `CREATE TABLE` in the script down.
+      Retention stays the per-cluster `ALTER TABLE <t> SET ("partition_ttl" =
+      "90 DAY")` in the step below — TTL last.
 - [ ] Pre-check per cluster: every completed base day's cardinality matches its
       summary row, so the TTL drops nothing the read path still needs.
 - [ ] Per table: create `<t>_p` (`PARTITION BY date_trunc('day', timestamp)`,
