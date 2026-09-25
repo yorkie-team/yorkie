@@ -18,7 +18,7 @@ it is flipped on only after backfill and validation. Base partitioning + 90-day
 TTL is a separate operational migration, gated on validation.
 
 **Tech Stack:** Go (`server/backend/warehouse`), StarRocks SQL (HLL, aggregate
-tables, expression partitioning), Kubernetes CronJob (internal devops repo).
+tables, expression partitioning), Kubernetes CronJob (devops repo).
 
 **Spec:** `docs/design/project-stats-long-retention.md`
 
@@ -51,11 +51,10 @@ Where the shipped shape differs from the plan below:
   `timestamp` bound this plan called for: it drops the query off
   `mv_*_hll_daily` and full-scans the base. Pinned by
   `TestFreshHalfOmitsRawTimestampBounds`.
-- **Task 6 landed in the public `yorkie-team/devops` repo**, as the single file
-  `k8s/cluster/analytics-summary.yaml` rather than under
-  `k8s/apps/yorkie-analytics/starrocks/summary/`, because the ArgoCD app is
-  pinned at chart 0.6.0. Its runbook is that file's header plus
-  `MAINTAINING.md`, not a README.
+- **Task 6 landed in the `yorkie-team/devops` repo** as the single file
+  `k8s/cluster/analytics-summary.yaml` rather than a directory of
+  manifests, because the ArgoCD app is pinned at chart 0.6.0. Its runbook is
+  that file's header plus `MAINTAINING.md`, not a README.
 - The two "run to verify it fails" steps are ticked on the strength of the
   committed green tests; a red run leaves no artifact to verify after the fact.
 
@@ -88,7 +87,7 @@ Where the shipped shape differs from the plan below:
 - `server/backend/warehouse/starrocks.go` — rewrite the 11 metric methods to dual-read via the descriptor + helper; add `SummaryEnabled`.
 - `server/backend/warehouse/starrocks_query_test.go` — golden-string tests for the built queries (no DB).
 - `server/backend/warehouse/warehouse.go` — add `SummaryEnabled bool` to `Config`.
-- Internal devops repo `k8s/apps/yorkie-analytics/starrocks/summary/` — ingest CronJob + configmap + backfill Job (Task 6), mirroring `starrocks/mv/`.
+- devops repo `k8s/cluster/analytics-summary.yaml` — ingest CronJob + configmap + backfill Job (Task 6).
 
 ---
 
@@ -394,13 +393,13 @@ git commit -m "Route project-stats reads through the dual-read builders"
 
 ---
 
-### Task 6: Ingest CronJob + backfill (internal devops repo)
+### Task 6: Ingest CronJob + backfill (devops repo)
 
-**Files (internal `media-tool-dev/devops` repo):**
-- Create: `k8s/apps/yorkie-analytics/starrocks/summary/configmap.yaml` — the daily idempotent INSERT SQL (7-day lookback) per metric.
-- Create: `k8s/apps/yorkie-analytics/starrocks/summary/cronjob.yaml` — `starrocks/fe-ubuntu` mysql client running the SQL; `concurrencyPolicy: Forbid`, history limits, `ttlSecondsAfterFinished`.
-- Create: `k8s/apps/yorkie-analytics/starrocks/summary/backfill-job.yaml` — one-time full-history backfill, staged per table for prod (session last, low-ingest window), mirroring `starrocks/mv/prod/`.
-- Create: `k8s/apps/yorkie-analytics/starrocks/summary/README.md` — apply/verify/rollback, mirroring `starrocks/mv/README.md`.
+**Files (devops repo; see Status for where they landed):**
+- ConfigMap — the daily idempotent INSERT SQL (7-day lookback) per metric.
+- CronJob — `starrocks/fe-ubuntu` mysql client running the SQL; `concurrencyPolicy: Forbid`, history limits, `ttlSecondsAfterFinished`.
+- Backfill Job — one-time full-history backfill, staged per table (session last, low-ingest window).
+- Runbook — apply/verify/rollback.
 
 **Interfaces:**
 - Consumes: the summary tables from Task 1 (must exist first).
@@ -418,7 +417,7 @@ git commit -m "Route project-stats reads through the dual-read builders"
   `WHERE DATE(timestamp) >= DATE_SUB(DATE(UTC_TIMESTAMP()), INTERVAL 7 DAY) AND DATE(timestamp) < DATE(UTC_TIMESTAMP())`.
 
 - [x] **Step 1: Write the configmap SQL** for all 5 metrics (daily + backfill variants).
-- [x] **Step 2: Write the CronJob and backfill Job** modeled on `starrocks/mv/job.yaml` and `tools/housekeeping-trend/cronjob.yaml`.
+- [x] **Step 2: Write the CronJob and backfill Job** modeled on the existing MV job and housekeeping CronJob.
 - [x] **Step 3: Write the README** (apply order: tables → backfill → validate → enable CronJob).
 - [x] **Step 4: Commit in the devops repo** (English, per that repo's rules).
 
@@ -444,7 +443,7 @@ following the `session_events` redistribution playbook.
 
 ### Task 8: Cluster rehearsal + validation
 
-**Not TDD-able** (StarRocks not in CI). Rehearse against the local stack, then dev, then prod.
+**Not TDD-able** (StarRocks not in CI). Rehearse against the local stack, then the deployed clusters.
 
 - [x] Backfill locally; run the dashboard queries with `SummaryEnabled=true` and again with the flag off; assert **identical results** for windows fully inside current retention (this proves the union math).
 - [x] `EXPLAIN` + `fe.audit.log` `ScanRows` small for the six metrics on the summary path.

@@ -5296,3 +5296,57 @@ func TestTreeChainedMerge(t *testing.T) {
 		assert.Equal(t, runtimeNodes, snapshotNodes)
 	})
 }
+
+func TestTreeUnwrapAndMergeDelete(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("unwrap converges with a concurrent delete of the same paragraph", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		// Initial: <r><p>ab</p><p>cd</p></r>.
+		//   0   1 2 3    4   5 6 7    8
+		// <r> <p> a b </p> <p> c d </p> </r>
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "cd"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		// C1 unwraps p1: Edit(0, 1) removes only its opening token, hoisting
+		// ab into the root.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 1, nil, 0)
+			return nil
+		}))
+		// C2 deletes p1 whole -- ab included -- and p2's opening token:
+		// Edit(0, 5).
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 5, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<r>cd</r>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// C2's delete covered ab, so it is gone on both replicas.
+		assert.Equal(t, "<r>cd</r>", d1.Root().GetTree("t").ToXML())
+		assertCloneAndRootTreeEqual(t, 1, d1)
+		assertCloneAndRootTreeEqual(t, 2, d2)
+	})
+}

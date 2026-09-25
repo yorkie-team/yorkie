@@ -60,6 +60,20 @@ func deleteRange(t *testing.T, text *crdt.Text, from, to int, at *time.Ticket) {
 	assert.NoError(t, err)
 }
 
+// restoreSpans revives spans and asserts the restore itself reported no error.
+func restoreSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *time.Ticket) {
+	t.Helper()
+	_, _, _, err := text.Restore(spans, at, nil)
+	assert.NoError(t, err)
+}
+
+// retombstoneSpans re-removes spans and asserts no error.
+func retombstoneSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *time.Ticket) {
+	t.Helper()
+	_, _, err := text.Retombstone(spans, at)
+	assert.NoError(t, err)
+}
+
 func TestTextRestore(t *testing.T) {
 	// d1 deletes [4,6)="45", d2 deletes [2,8)="234567" (the doc example).
 	spanD1 := func(seed *time.Ticket) []*crdt.RestoreSpan {
@@ -82,8 +96,8 @@ func TestTextRestore(t *testing.T) {
 		_, _, _, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "0189", a.String())
-		a.Restore(spanD1(seed), tick(4), nil)
-		a.Restore(spanD2(seed), tick(5), nil)
+		restoreSpans(t, a, spanD1(seed), tick(4))
+		restoreSpans(t, a, spanD2(seed), tick(5))
 
 		// Replica B: identical deletes, restore u2 then u1.
 		b := seededText(t, seed)
@@ -93,8 +107,8 @@ func TestTextRestore(t *testing.T) {
 		assert.NoError(t, err)
 		_, _, _, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
-		b.Restore(spanD2(seed), tick(5), nil)
-		b.Restore(spanD1(seed), tick(4), nil)
+		restoreSpans(t, b, spanD2(seed), tick(5))
+		restoreSpans(t, b, spanD1(seed), tick(4))
 
 		assert.Equal(t, "0123456789", a.String(), "replica A")
 		assert.Equal(t, "0123456789", b.String(), "replica B")
@@ -113,10 +127,10 @@ func TestTextRestore(t *testing.T) {
 		// Undo only d1: it clears the tombstone on the "45" nodes, so "45"
 		// reappears while "23"/"67" stay tombstoned by d2 (design doc's
 		// "Order B": "01" + "45" + "89").
-		text.Restore(spanD1(seed), tick(4), nil)
+		restoreSpans(t, text, spanD1(seed), tick(4))
 		assert.Equal(t, "014589", text.String())
 		// Undo d2 as well: the full range comes back exactly once.
-		text.Restore(spanD2(seed), tick(5), nil)
+		restoreSpans(t, text, spanD2(seed), tick(5))
 		assert.Equal(t, "0123456789", text.String())
 	})
 
@@ -129,8 +143,8 @@ func TestTextRestore(t *testing.T) {
 		_, _, _, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 		assert.Equal(t, "016789", text.String())
 
-		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4), nil)
-		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 5, Content: "234"}}, tick(5), nil)
+		restoreSpans(t, text, []*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4))
+		restoreSpans(t, text, []*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 5, Content: "234"}}, tick(5))
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -141,13 +155,13 @@ func TestTextRestore(t *testing.T) {
 		deleteRange(t, text, 4, 6, tick(2))
 		assert.Equal(t, "01236789", text.String())
 
-		text.Restore(spanD1(seed), tick(3), nil)
+		restoreSpans(t, text, spanD1(seed), tick(3))
 		assert.Equal(t, "0123456789", text.String())
 
-		text.Retombstone(spanD1(seed), tick(4))
+		retombstoneSpans(t, text, spanD1(seed), tick(4))
 		assert.Equal(t, "01236789", text.String())
 
-		text.Restore(spanD1(seed), tick(5), nil)
+		restoreSpans(t, text, spanD1(seed), tick(5))
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -156,8 +170,8 @@ func TestTextRestore(t *testing.T) {
 		seed := tick(1)
 		text := seededText(t, seed)
 		deleteRange(t, text, 4, 6, tick(2))
-		text.Restore(spanD1(seed), tick(3), nil)
-		text.Restore(spanD1(seed), tick(3), nil) // duplicate delivery
+		restoreSpans(t, text, spanD1(seed), tick(3))
+		restoreSpans(t, text, spanD1(seed), tick(3)) // duplicate delivery
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})

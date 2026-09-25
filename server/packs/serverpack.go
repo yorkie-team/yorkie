@@ -110,6 +110,15 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
+		// These bytes were written under whatever rules held when they were
+		// stored, and the client decodes what it receives through the strict
+		// wire path (converter.FromChangePack -> FromOperations). Forwarding
+		// them raw would therefore fail the pull on exactly the legacy shapes
+		// this server tolerates on its own read path
+		// (database.ChangeInfo.ToChange -> converter.FromStoredOperations), so
+		// the same repair-and-drop pass runs here.
+		pbOps = converter.SanitizeStoredOperations(pbOps)
+
 		pbChangeID, err := converter.ToChangeID(changeID)
 		if err != nil {
 			return nil, err

@@ -425,7 +425,7 @@ func (t *Text) Restore(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
 	from *RGATreeSplitNodePos,
-) (untombstoned, recreated []*RGATreeSplitNode[*TextValue], stillTombstoned []GCPair) {
+) (untombstoned, recreated []*RGATreeSplitNode[*TextValue], stillTombstoned []GCPair, err error) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
 		attrs := NewRHT()
@@ -451,7 +451,7 @@ func (t *Text) Restore(
 func (t *Text) Retombstone(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
-) ([]GCPair, resource.DataSize) {
+) ([]GCPair, resource.DataSize, error) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
 		internal = append(internal, restoreSpanValue[*TextValue]{

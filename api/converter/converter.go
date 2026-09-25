@@ -59,4 +59,10 @@ var (
 	// negative. A split level counts element boundaries to create, so it has
 	// no meaning below zero.
 	ErrInvalidSplitLevel = errors.InvalidArgument("invalid split level").WithCode("ErrInvalidSplitLevel")
+
+	// ErrMissingTicket is returned when a time ticket a well-formed operation
+	// always carries is absent. Every such rejection wraps this sentinel so the
+	// stored-decode path (FromStoredOperations) can tell an operation that can
+	// never be applied apart from a decode failure it must surface.
+	ErrMissingTicket = errors.InvalidArgument("missing time ticket").WithCode("ErrMissingTicket")
 )

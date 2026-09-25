@@ -571,8 +571,8 @@ func (s *RGATreeSplit[V]) splitNode(
 ) (*RGATreeSplitNode[V], resource.DataSize, error) {
 	var diff resource.DataSize
 
-	if offset > node.contentLen() {
-		return nil, diff, fmt.Errorf("offset should be less than or equal to length: %s", s.ToTestString())
+	if offset < 0 || offset > node.contentLen() {
+		return nil, diff, fmt.Errorf("offset should be within the range of length: %s", s.ToTestString())
 	}
 
 	if offset == 0 {
@@ -879,7 +879,7 @@ func (s *RGATreeSplit[V]) restore(
 	spans []restoreSpanValue[V],
 	fromPos *RGATreeSplitNodePos,
 	executedAt *time.Ticket,
-) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair) {
+) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair, err error) {
 	// chainAnchor is the node last placed at the current cursor (un-tombstoned
 	// or recreated), in document order. When a recreated fragment has no
 	// surviving same-insertion anchor, chaining after this keeps a purged
@@ -905,7 +905,10 @@ func (s *RGATreeSplit[V]) restore(
 			if piece != nil && pieceStart <= cursor {
 				overlapEnd := min(pieceEnd, span.end)
 				if piece.removedAt != nil {
-					target, _ := s.isolateRange(piece, cursor, overlapEnd)
+					target, _, isoErr := s.isolateRange(piece, cursor, overlapEnd)
+					if isoErr != nil {
+						return nil, nil, nil, isoErr
+					}
 					target.SetRemovedAt(nil)
 					s.treeByIndex.Splay(target.indexNode)
 					untombstoned = append(untombstoned, target)
@@ -955,7 +958,7 @@ func (s *RGATreeSplit[V]) restore(
 	// balanced against the original tombstone's accounting (a bare
 	// un-register on a never-registered split piece would leak GC size).
 	stillTombstoned = s.drainPendingGCPairs()
-	return untombstoned, recreated, stillTombstoned
+	return untombstoned, recreated, stillTombstoned, nil
 }
 
 // retombstone re-removes the characters in spans under their original
@@ -966,7 +969,7 @@ func (s *RGATreeSplit[V]) restore(
 func (s *RGATreeSplit[V]) retombstone(
 	spans []restoreSpanValue[V],
 	executedAt *time.Ticket,
-) ([]GCPair, resource.DataSize) {
+) ([]GCPair, resource.DataSize, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
 
@@ -978,15 +981,18 @@ func (s *RGATreeSplit[V]) retombstone(
 			}
 			pieceStart := piece.ID().Offset()
 			pieceEnd := pieceStart + piece.contentLen()
-			target, splitDiff := s.isolateRange(
+			target, splitDiff, err := s.isolateRange(
 				piece, max(pieceStart, span.start), min(pieceEnd, span.end))
+			if err != nil {
+				return nil, diff, err
+			}
 			diff.Add(splitDiff)
 			target.SetRemovedAt(executedAt)
 			s.treeByIndex.Splay(target.indexNode)
 			pairs = append(pairs, GCPair{Parent: s, Child: target})
 		}
 	}
-	return pairs, diff
+	return pairs, diff, nil
 }
 
 // findPiecesOverlapping collects existing nodes (live or tombstoned) of
@@ -1040,23 +1046,38 @@ func (s *RGATreeSplit[V]) findPieceCovering(
 
 // isolateRange splits piece so a node exactly covering [from, to) exists,
 // and returns it plus the net docSize diff produced by the splits.
-// Requires pieceStart <= from < to <= pieceEnd.
+// Requires pieceStart <= from < to <= pieceEnd. A caller that violates that
+// gets splitNode's out-of-range error rather than the nil node splitNode
+// returns alongside it.
 func (s *RGATreeSplit[V]) isolateRange(
 	piece *RGATreeSplitNode[V], from, to int,
-) (*RGATreeSplitNode[V], resource.DataSize) {
+) (*RGATreeSplitNode[V], resource.DataSize, error) {
 	var diff resource.DataSize
 	node := piece
 	if from > node.ID().Offset() {
-		right, d, _ := s.splitNode(node, from-node.ID().Offset())
+		right, d, err := s.splitNode(node, from-node.ID().Offset())
+		if err != nil {
+			return nil, diff, err
+		}
+		// splitNode hands back node.next when the offset lands exactly on the
+		// end of the node, which the caller's contract (from < to <= pieceEnd)
+		// rules out. Guard anyway so a broken contract surfaces as an error
+		// instead of a nil dereference below.
+		if right == nil {
+			return nil, diff, fmt.Errorf("the node to isolate should be found: %s", s.ToTestString())
+		}
 		diff.Add(d)
 		node = right
 	}
 	newStart := node.ID().Offset()
 	if to < newStart+node.contentLen() {
-		_, d, _ := s.splitNode(node, to-newStart)
+		_, d, err := s.splitNode(node, to-newStart)
+		if err != nil {
+			return nil, diff, err
+		}
 		diff.Add(d)
 	}
-	return node, diff
+	return node, diff, nil
 }
 
 // findRestoreAnchor returns the node to insert a recreated fragment
