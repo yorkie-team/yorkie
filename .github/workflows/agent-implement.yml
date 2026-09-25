@@ -702,7 +702,7 @@ jobs:
       - name: Collect the agent's output (untrusted data)
         if: always() && needs.implement.outputs.staged == 'success'
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: claude-execution-output
           path: ${{ runner.temp }}/agent-output

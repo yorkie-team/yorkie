@@ -357,7 +357,7 @@ jobs:
           persist-credentials: false
 
       - name: Download Agent SDK (built by the unprivileged deps job)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: agent-sdk-node-modules-ondemand
           path: /tmp/agent-sdk
