@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-25
+updated: 2026-09-26
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
 | Agent pipeline: the entry paths a human PR uses (2026-09-25) | [20260925-agent-pipeline-entry-paths-todo.md](./active/20260925-agent-pipeline-entry-paths-todo.md) | [20260925-agent-pipeline-entry-paths-lessons.md](./active/20260925-agent-pipeline-entry-paths-lessons.md) |
 | A style's reached node set depends on delivery order (2026-09-24) | [20260924-style-reached-set-order-dependent-todo.md](./active/20260924-style-reached-set-order-dependent-todo.md) | [20260924-style-reached-set-order-dependent-lessons.md](./active/20260924-style-reached-set-order-dependent-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
