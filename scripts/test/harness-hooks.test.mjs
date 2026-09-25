@@ -279,6 +279,9 @@ function inScratchRepo(body) {
     git('init', '-q', '.');
     git('config', 'user.email', 'test@example.com');
     git('config', 'user.name', 'test');
+    // A contributor's global `commit.gpgsign` would otherwise make every
+    // fixture commit prompt for, or fail on, a signing key.
+    git('config', 'commit.gpgsign', 'false');
     return body({ dir, git });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -528,6 +531,7 @@ test('the trust guard is not satisfied by an author line the branch supplies', (
     up('init', '-q', '-b', 'main', '.');
     up('config', 'user.email', 'test@example.com');
     up('config', 'user.name', 'test');
+    up('config', 'commit.gpgsign', 'false');
     up('commit', '-qm', 'base', '--allow-empty', '--no-verify');
     up('checkout', '-qb', 'pr');
     up('commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
@@ -540,6 +544,7 @@ test('the trust guard is not satisfied by an author line the branch supplies', (
     git('init', '-q', '-b', 'main', '.');
     git('config', 'user.email', 'test@example.com');
     git('config', 'user.name', 'test');
+    git('config', 'commit.gpgsign', 'false');
     git('remote', 'add', 'origin', upstream);
     git('fetch', '-q', 'origin');
     git('checkout', '-q', '-B', 'main', 'origin/pr');
