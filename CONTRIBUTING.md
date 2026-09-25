@@ -144,10 +144,15 @@ and `make verify` resolve through the working tree's `Makefile`,
 `.golangci.yml` and test code, so committing inside a checkout of
 someone else's branch would run that branch's build and test code. The
 two gates therefore refuse to run at all when the checkout carries
-commits on top of `origin/main` that your configured `user.email` did
-not write — the shape a reviewed pull request has and your own work
-does not. Push a fix to a contributor's branch with `--no-verify`, or,
-having read its diff, `YORKIE_ALLOW_FOREIGN_TREE=1 git push`.
+commits on top of `origin/main` that this clone did not create — the
+shape a reviewed pull request has and your own work does not. What is
+checked is HEAD's reflog, which lives in `$GIT_DIR` and records which
+commits your git built, rather than the author address, which is a field
+the branch's author writes and so proves nothing. The cost is that a
+commit you wrote on another machine and fetched here presents the same
+evidence a stranger's does. Push a fix to a contributor's branch — or
+your own from elsewhere — with `--no-verify`, or, having read its diff,
+`YORKIE_ALLOW_FOREIGN_TREE=1 git push`.
 The integration lane is not in them — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.
 

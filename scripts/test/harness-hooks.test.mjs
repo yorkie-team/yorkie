@@ -490,6 +490,83 @@ test('the trust guard fails closed when it cannot tell whose work this is', () =
   });
 });
 
+test('the trust guard is not satisfied by an author line the branch supplies', () => {
+  // THE BYPASS THIS PINS, and the reason the guard no longer rests on `%aE`.
+  // The author address is a field the branch's own author writes: one
+  // `git config user.email <the reviewer>` before committing and an
+  // authorship check calls a stranger's pull request "your own work". Every
+  // address in this repository's history is public, so the spoof needs no
+  // secret.
+  //
+  // So the fixture IS the attack — a commit authored as the local identity,
+  // FETCHED into this clone rather than created in it, which is the shape
+  // `gh pr checkout` produces. The guard has to refuse it on the evidence
+  // that survives the spoof: HEAD's reflog, which lives in `$GIT_DIR` and
+  // records which commits this git built.
+  const root = mkdtempSync(path.join(tmpdir(), 'trusted-tree-'));
+  try {
+    const upstream = path.join(root, 'upstream');
+    const dir = path.join(root, 'clone');
+    const at = (cwd) => (...args) =>
+      spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: fixtureGitEnv(cwd) });
+
+    mkdirSync(upstream);
+    const up = at(upstream);
+    up('init', '-q', '-b', 'main', '.');
+    up('config', 'user.email', 'test@example.com');
+    up('config', 'user.name', 'test');
+    up('commit', '-qm', 'base', '--allow-empty', '--no-verify');
+    up('checkout', '-qb', 'pr');
+    up('commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
+
+    // Built by fetch rather than `git clone`, because `fixtureGitEnv` pins
+    // GIT_DIR at the directory it is given and a clone has no repository to
+    // pin yet. The resulting refs are the same ones a clone would have.
+    mkdirSync(dir);
+    const git = at(dir);
+    git('init', '-q', '-b', 'main', '.');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'test');
+    git('remote', 'add', 'origin', upstream);
+    git('fetch', '-q', 'origin');
+    git('checkout', '-q', '-B', 'main', 'origin/pr');
+
+    // The premise, asserted rather than assumed: an authorship check would
+    // have waved this branch straight through.
+    assert.equal(
+      git('log', '--format=%aE', 'refs/remotes/origin/main..HEAD').stdout.trim(),
+      'test@example.com',
+      'the fixture must carry the local identity as its author, or it tests nothing',
+    );
+
+    const r = runHookProbe('pre-push', { dir, marker: 'WOULD_VERIFY' });
+    assert.equal(r.status, 1, `a spoofed author must still refuse: ${r.stdout}${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /WOULD_VERIFY/, "the branch's tests must not be reached");
+    assert.match(r.stderr, /not created by this clone/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the trust guard refuses a commit carrying no author address at all', () => {
+  // The cheaper half of the same bypass, needing no address to forge. Git
+  // accepts `--author='A U Thor <>'` and `%aE` prints an empty line for it.
+  // The earlier check filtered the author list with `grep -vFx "$me"`, which
+  // KEPT that blank line (it is not equal to `$me`); the caller's `$(...)`
+  // then stripped it to the empty string, and empty read as "no foreign
+  // commits".
+  inScratchRepo(({ dir, git }) => {
+    git('commit', '-qm', 'base', '--allow-empty', '--no-verify');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('commit', '-qm', 'blank', '--allow-empty', '--no-verify', '--author=A U Thor <>');
+
+    const r = runHookProbe('pre-push', { dir, marker: 'WOULD_VERIFY' });
+    assert.equal(r.status, 1, `an empty author address must refuse: ${r.stdout}${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /WOULD_VERIFY/);
+    assert.match(r.stderr, /no author address/);
+  });
+});
+
 test('both git hooks still consult the trust guard', () => {
   // Structural, because dropping the two lines is a silent change: the hooks
   // keep working, they just start running unread branches again.

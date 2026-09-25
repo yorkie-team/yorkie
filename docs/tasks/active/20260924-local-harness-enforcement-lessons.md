@@ -721,3 +721,69 @@ closed by this loop at all. The panel should either route workflow findings to
 a human on the first round or the app installation should gain `workflows` —
 disputing and re-raising them costs two rounds to reach a patch a maintainer
 was always going to have to apply.
+
+## Panel round — the trust gate was authenticating on a field the attacker writes
+
+Two criticals against `trusted-tree.sh`, one repeat major against `ci.yml`.
+
+**An author address is a label, not a credential.** The gate's first revision
+compared `%aE` over `origin/main..HEAD` against the local `user.email`. That is
+not an authentication decision: the author line is written by whoever makes the
+commit, every maintainer address in this repository's history is public, and
+one `git config user.email <the reviewer>` before committing made a hostile
+pull request read as "your own work" — with `.mailmap`, also branch-supplied
+and also consulted by `%aE`, available as a second spelling. The second
+critical was the same hole for free: git accepts `--author='A U Thor <>'`,
+`%aE` prints an empty line for it, `grep -vFx "$me"` KEPT that line (it is not
+equal to `$me`), and `$(...)` then stripped it back to the empty string, which
+`[ -n "$foreign" ]` read as "no foreign commits". No address to forge at all.
+
+The credential that survives both is HEAD's reflog: it lives in `$GIT_DIR`, the
+local git writes it as it moves HEAD, and nothing a fetched branch carries can
+add an entry. A commit this clone CREATED has an entry under a commit-creating
+action (`commit`, `commit (amend)`, `rebase (pick)`, `merge`, `cherry-pick`,
+`revert`, `am`); a commit it RECEIVED is known only through `clone:`, `fetch`,
+`checkout:`, `reset:` or a `Fast-forward` — which is exactly `gh pr checkout`.
+The author check stays underneath as a second condition, never the only one,
+because a mismatched address is still worth naming in the refusal. Verified by
+fixture across the flows that must keep passing (own commit, rebase onto a
+moved `main`, `merge main`, amend, empty range) and the ones that must not
+(author-spoofed-and-fetched, empty author address, unresolvable range).
+
+Accepted cost, stated in CONTRIBUTING.md rather than hidden: a commit you wrote
+on another machine and fetched here presents the same evidence a stranger's
+does, and needs the bypass.
+
+**Two bugs found in the fix, not in review.** `git log` at the head of a
+pipeline made the error path fail OPEN — an unresolvable range produced no
+output, and no output read as "nothing foreign"; it is now its own command with
+its status checked. And the idiomatic `awk 'NR == FNR'` two-file split silently
+misreads an EMPTY first file, which is the interesting case here: a clone whose
+reflog created nothing would have had its first commit swallowed into the
+created set and walked through. The lists are concatenated around a `--`
+separator instead. The first version of the new test caught the second one.
+
+**The `ci.yml` hunk, third time asked, still cannot be pushed.** It was written
+and committed this round and re-verified against 2.1.273 on this runner —
+`npm install -g --ignore-scripts` alone leaves `claude --version` printing
+"reinstall without --ignore-scripts", and `node "$(npm root -g)/@anthropic-ai/
+claude-code/install.cjs"` after it prints `2.1.273 (Claude Code)`. Then the
+push was rejected again, for the same reason as the two rounds above.
+
+This round at least stopped guessing about it. The commit was pushed to a
+throwaway ref first — safe because every `push:` trigger in this repository is
+`main`-only, so a temporary branch starts no workflow — which returned the
+rejection without risking the half of the round that CAN land:
+
+```text
+! [remote rejected] HEAD -> probe-workflows-perm-2040 (refusing to allow a
+  GitHub App to create or update workflow `.github/workflows/ci.yml` without
+  `workflows` permission)
+```
+
+The ci.yml commit was then dropped and the throwaway ref never came into
+existence (the rejection is atomic). **Rule, now three times, and the probe is
+the only part that improved:** this loop cannot close a `.github/workflows/**`
+finding. Either the panel routes workflow findings to a human on the first
+round, or the app installation gains `workflows`. The patch above is ready to
+apply verbatim.
