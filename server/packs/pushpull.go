@@ -75,6 +75,16 @@ type PushPullOptions struct {
 	// the write and read paths so the response carries an empty presence
 	// map regardless of what any client sends.
 	DisablePresence bool
+
+	// IsAttach marks the PushPull that runs as part of AttachDocument, which
+	// is exempt from the already-stored filter in pushPack. A fresh attach
+	// seeds the client's checkpoint at 0/0 and may legitimately carry local
+	// edits made before the attach, whose clientSeq and lamport both start at
+	// 1 — below anything the same stable actor stored during an earlier
+	// attachment, and so indistinguishable from a re-send by metadata alone.
+	// Attach carries its own duplicate guard: a retried attach is rejected
+	// with ErrDocumentAlreadyAttached before it reaches PushPull.
+	IsAttach bool
 }
 
 var (
@@ -120,7 +130,7 @@ func PushPull(
 	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack, opts)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
@@ -251,6 +261,7 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
+	opts PushPullOptions,
 ) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
@@ -311,6 +322,23 @@ func pushPack(
 				connect.CodeInvalidArgument,
 				errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
 			)
+		} else if len(pushables) > 0 && !opts.IsAttach && currentDocInfo.ServerSeq > cpBeforePush.ServerSeq {
+			// 04. Drop changes the database already holds. A duplicate can only
+			// have been stored after this client was last acknowledged, so a
+			// document that has not moved since cpBeforePush rules one out
+			// without a query and keeps the single-writer path free of it.
+			remaining, maxStoredClientSeq, err := filterStoredChanges(ctx, be, docKey, currentDocInfo.ServerSeq, pushables)
+			if err != nil {
+				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+			}
+
+			if len(remaining) != len(pushables) {
+				// Acknowledge what was dropped. The client re-sent it because
+				// the checkpoint never caught up; leaving the checkpoint behind
+				// would make it re-send forever.
+				pushables = remaining
+				cpBeforePush = cpBeforePush.SyncClientSeq(maxStoredClientSeq)
+			}
 		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
@@ -339,6 +367,66 @@ func pushPack(
 	}
 
 	return pushables, docInfo, initialSeq, cpAfterPush, nil
+}
+
+// filterStoredChanges drops the changes the database already holds and returns
+// the remaining ones together with the highest clientSeq it dropped.
+//
+// The ClientSeq checkpoint on ClientInfo cannot catch these on its own.
+// PushPull is not atomic: CreateChangeInfos stores the changes and
+// UpdateClientInfoAfterPushPull advances the checkpoint, so a request can
+// store its changes and then fail before the checkpoint moves. The client
+// never sees a response, retries the same pack, and the stale checkpoint lets
+// every change through a second time. The changes collection is the
+// authoritative record of what was stored, so ask it directly.
+//
+// A change counts as already stored when the actor's latest stored change is
+// at or beyond it in BOTH clientSeq and lamport. Neither field is a dedup key
+// alone: clientSeq restarts at 1 for a client that re-attaches under the same
+// stable actor, and that client's post-attach lamports sit above everything
+// the document holds because attach syncs its clock first. Only an actual
+// re-send is behind on both.
+func filterStoredChanges(
+	ctx context.Context,
+	be *backend.Backend,
+	docKey types.DocRefKey,
+	serverSeq int64,
+	pushables []*database.ChangeInfo,
+) ([]*database.ChangeInfo, uint32, error) {
+	latestByActor := make(map[types.ID]*database.ChangeInfo)
+	var remaining []*database.ChangeInfo
+	var maxStoredClientSeq uint32
+
+	for _, info := range pushables {
+		latest, ok := latestByActor[info.ActorID]
+		if !ok {
+			var err error
+			latest, err = be.DB.FindLatestChangeInfoByActor(ctx, docKey, info.ActorID, serverSeq)
+			if err != nil && !stderrors.Is(err, database.ErrChangeNotFound) {
+				return nil, 0, err
+			}
+			latestByActor[info.ActorID] = latest
+		}
+
+		// An actor with no stored change is reported as ErrChangeNotFound by
+		// one database implementation and as a zero-valued ChangeInfo by the
+		// other; a stored change always carries a lamport of at least one.
+		if latest != nil && latest.Lamport > 0 &&
+			info.ClientSeq <= latest.ClientSeq && info.Lamport <= latest.Lamport {
+			logging.From(ctx).Warnf(
+				"change already stored, actor: %s, clientSeq: %d, lamport: %d",
+				info.ActorID,
+				info.ClientSeq,
+				info.Lamport,
+			)
+			maxStoredClientSeq = max(maxStoredClientSeq, info.ClientSeq)
+			continue
+		}
+
+		remaining = append(remaining, info)
+	}
+
+	return remaining, maxStoredClientSeq, nil
 }
 
 func pullPack(

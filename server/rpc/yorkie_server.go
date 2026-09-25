@@ -324,6 +324,7 @@ func (s *yorkieServer) AttachDocument(
 		Status:          document.StatusAttached,
 		DisableGC:       req.Msg.DisableGc,
 		DisablePresence: docInfo.DisablePresence,
+		IsAttach:        true,
 	})
 	if err != nil {
 		return nil, err

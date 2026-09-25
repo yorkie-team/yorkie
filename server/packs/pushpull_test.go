@@ -167,8 +167,7 @@ func triggerErrUpdateClientInfo(on bool) {
 }
 
 func TestPacks(t *testing.T) {
-	t.Run("cannot detect change duplication due to clientInfo update failure", func(t *testing.T) {
-		t.Skip("remove this after resolving pushpull consistency problem")
+	t.Run("detects change duplication after a clientInfo update failure", func(t *testing.T) {
 		ctx := context.Background()
 
 		projectInfo, err := testBackend.DB.FindProjectInfoByID(
