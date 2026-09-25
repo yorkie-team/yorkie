@@ -1,9 +1,11 @@
 # Develop-review loop, CI arm: when CI fails on an agent-managed branch (an
 # autonomous `agent/` branch, or a human PR opted in via the `agent:managed`
 # label / "@claude loop"), feed the harness failure diagnosis back to Claude Code
-# so it can fix and push a follow-up commit. The diagnosis is the failed steps'
-# own log, read with `gh run view --log-failed` — see the "Summarize the failure"
-# step for why this differs from the pipeline this was ported from.
+# so it can fix and push a follow-up commit. The diagnosis is `ci.yml`'s per-lane
+# reports, rendered by `scripts/ci/summarize-ci.mjs`, falling back to the failed
+# steps' own log (`gh run view --log-failed`) whenever no lane report names a
+# failure — see the "Summarize the failure" step, and
+# docs/design/ci-lane-reports.md.
 #
 # THIS WORKFLOW IS WHY THE LOOP DOES NOT DEAD-END ON RED CI. agent-review-panel's
 # `promote` and `fix` jobs both require `needs.ci.outputs.conclusion == 'success'`
@@ -202,12 +204,27 @@ jobs:
         with:
           ref: main
           path: .trusted-agent
-          sparse-checkout: scripts/agent
+          # `scripts/ci` and `scripts/direct-run.mjs` came in with the lane
+          # reports: the diagnosis step below renders them with
+          # `summarize-ci.mjs`, which is main's code reading an artifact, and
+          # must not be the BRANCH's copy of that script — the branch is what
+          # the fixer is about to be pointed at, and this step still holds a
+          # GITHUB_TOKEN that can comment and label.
+          sparse-checkout: |
+            scripts/agent
+            scripts/ci
+            scripts/direct-run.mjs
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Stage the trusted agent scripts (pre-fixer)
         run: |
           cp -R .trusted-agent/scripts/agent "${{ runner.temp }}/agent-tools"
+          # The whole `scripts` subtree as a second copy, rather than moving
+          # the steps below onto it: `agent-tools` is named in a dozen places
+          # in this file and in its siblings, and `summarize-ci.mjs` resolves
+          # `../direct-run.mjs` relative to itself, so it needs its parent
+          # directory rather than a flat copy of `scripts/ci`.
+          cp -R .trusted-agent/scripts "${{ runner.temp }}/trusted-scripts"
           rm -rf .trusted-agent
 
       # GATED, and this is the step that makes the stand-down real. Everything
@@ -369,18 +386,48 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 
-      # THE DIAGNOSIS, and it is not the one this workflow was ported with.
+      # The machine-readable half of the diagnosis. `ci.yml`'s `build` job runs
+      # each of its checks as a named lane and uploads one report per lane plus
+      # a summary; this pulls that artifact out of the run that triggered us.
       #
-      # Upstream downloads a `harness-reports` artifact and renders it with
-      # `summarize-ci.mjs`. That artifact is written by ITS verify runner; no
-      # lane in this repository writes one, so the step would have downloaded
-      # nothing (it is continue-on-error) and the digest would have been empty
-      # on every run — an agent asked to fix CI with no information at all.
+      # `run-id` + `github-token`, because the artifact belongs to ANOTHER run:
+      # without them download-artifact@v4 looks only at this workflow's own
+      # run and finds nothing. The token needs `actions: read`, which this job
+      # already holds to count prior failed CI runs.
       #
-      # `gh run view --log-failed` is what this repository actually has: the log
-      # of every step that failed, from the run that triggered us. Tailed,
-      # because a `-race` integration failure can print tens of megabytes and
-      # the prompt has to stay bounded; the tail is where the failure is.
+      # `continue-on-error`, and the step below depends on that: the artifact
+      # is legitimately absent on a branch that predates the lane runner, on a
+      # cancelled producer, and after the 7-day retention. Every one of those
+      # falls through to the log tail rather than stopping the fix.
+      - name: Download the CI lane reports
+        if: steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: ci-lane-reports
+          path: ${{ runner.temp }}/ci-reports
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # THE DIAGNOSIS, and it is two things in a strict order.
+      #
+      # FIRST the lane reports, rendered by main's `summarize-ci.mjs`: the
+      # status of every lane, one line naming what failed, and the lines the
+      # runner retained as the lane streamed. That renderer prints NOTHING on
+      # stdout unless a lane actually failed — a missing artifact, a truncated
+      # one, and a red run whose failure was outside the lanes (a `make tools`
+      # that died, a runner out of disk) all produce an empty capture here.
+      #
+      # THEN, only if that capture is empty, `gh run view --log-failed`: the
+      # log of every step that failed, tailed, because a `-race` integration
+      # failure can print tens of megabytes and the prompt has to stay bounded.
+      # This was the whole diagnosis before the lane reports existed, and it
+      # stays because a fixer dispatched with an EMPTY diagnosis is the one
+      # outcome worse than a coarse one.
+      #
+      # `$RUNNER_TEMP/trusted-scripts`, never the workspace: the checkout here
+      # is the pull request's branch, and the branch does not get to supply the
+      # script that renders what this job then puts in front of an agent.
       - name: Summarize the failure
         if: steps.guard.outputs.proceed == 'true'
         id: diag
@@ -388,12 +435,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
+          REPORTS: ${{ runner.temp }}/ci-reports
+          TOOLS: ${{ runner.temp }}/trusted-scripts
         run: |
-          DIAG="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -c 40000)"
+          DIAG=""
+          if [ -f "$TOOLS/ci/summarize-ci.mjs" ]; then
+            # `|| true` so exit 3 ("no failing lane") is a fallback and not a
+            # failed step. Stderr is left attached to the log on purpose: it
+            # says which of the two diagnoses this run used.
+            DIAG="$(node "$TOOLS/ci/summarize-ci.mjs" --dir "$REPORTS" || true)"
+          else
+            echo "summarize-ci.mjs is not on main yet; using the failed-step log"
+          fi
+          if [ -n "$DIAG" ]; then
+            echo "::notice::Diagnosis from the CI lane reports."
+          else
+            echo "::notice::No lane report to render; falling back to the failed-step log."
+            DIAG="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -c 40000)"
+          fi
           if [ -z "$DIAG" ]; then
-            DIAG="No failed-step log could be read for run $RUN_ID. Re-run the failing
-          lane locally: \`make verify\` (lint, licence headers, unit tests), then
-          \`make build\`."
+            DIAG="No lane report and no failed-step log could be read for run $RUN_ID.
+          Re-run the failing lane locally: \`make verify\` (lint, licence headers,
+          unit tests), then \`make build\`."
           fi
           # A RANDOM DELIMITER, because $DIAG is a build log and a test that
           # prints the delimiter would close the block early: the runner then
