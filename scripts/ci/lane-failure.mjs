@@ -157,6 +157,32 @@ export function isContextLine(kind, line) {
   return false;
 }
 
+/**
+ * Lines a runner prints about its own progress, which are NEITHER evidence nor
+ * the end of it.
+ *
+ * The distinction exists because of one shape. `go test` prints an assertion's
+ * output, then — when the failing subtest is not the last under its parent —
+ * `=== RUN Parent/next_case`, and only then the `--- FAIL:` that makes the
+ * assertion worth keeping. Treating that `=== RUN` as "something else" clears
+ * the lookbehind and throws away the only line naming what went wrong. It is
+ * not context either: holding it would push real context out of a small
+ * window.
+ *
+ * `--- PASS` and `--- SKIP` are deliberately NOT here. They mean the output
+ * above them belonged to a test that did not fail, so clearing the window is
+ * the right answer — that is the precision `CONTEXT_LOOKBEHIND` is documented
+ * for, and a suite case pins it. Only the announcements are neutral.
+ */
+const NEUTRAL = [/^\s*=== (RUN|PAUSE|CONT|NAME)\b/];
+
+/** True iff `line` should leave the lookbehind exactly as it is. */
+export function isNeutralLine(kind, line) {
+  if (!line) return false;
+  if (isNotableLine(kind, line)) return false;
+  return NEUTRAL.some((re) => re.test(line));
+}
+
 /** Collapse to a single line and bound it. */
 function oneLine(text) {
   const flat = String(text ?? '')
@@ -381,6 +407,19 @@ export function summarizeFailure(input = {}) {
   if (!summary) {
     const annotated = lines.find((l) => /^::error::/.test(l));
     if (annotated) summary = oneLine(annotated.replace(/^::error::(\S*::)?/, ''));
+  }
+  // THE LAST NOTABLE LINE FIRST, and only then the last line of any kind.
+  //
+  // `evidenceLines` emits the notable lines ahead of the tail and drops tail
+  // lines already among them, so when the genuinely last line of output IS
+  // notable — `make: *** [Makefile:40: build] Error 2` is exactly that — it
+  // has been moved out of last position, and `lastMeaningful` returns whatever
+  // preceded it. On a build lane that is the echoed command, so the summary
+  // read `go build ./...`: the thing that ran, not the thing that failed.
+  if (!summary) {
+    const notables = lines.filter((l) => isNotableLine(kind, l));
+    const lastNotable = notables.length ? notables[notables.length - 1] : '';
+    if (lastNotable) summary = oneLine(lastNotable);
   }
   if (!summary) {
     const last = lastMeaningful(lines);

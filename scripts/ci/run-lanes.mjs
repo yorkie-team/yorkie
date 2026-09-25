@@ -61,6 +61,7 @@ import { isDirectRun } from '../direct-run.mjs';
 import {
   CONTEXT_LOOKBEHIND,
   isContextLine,
+  isNeutralLine,
   isNotableLine,
   MAX_NOTABLE_LINES,
   summarizeFailure,
@@ -85,9 +86,22 @@ export const TAIL_BYTES = 16 * 1024;
 /**
  * The lanes, in the order `ci.yml`'s `build` job runs them.
  *
- * `run` is a shell script, executed with `bash -c`, because that is what a
- * `run:` step is: three of these lanes are already multi-command, and
- * re-expressing them as argv arrays would change them while porting them.
+ * `run` is a shell script, executed with `bash -e -c`, because that is what a
+ * `run:` step is: `codegen-fresh` is multi-command, and re-expressing it as an
+ * argv array would change it while porting it.
+ *
+ * `-e` IS NOT OPTIONAL. GitHub's default `run:` shell is `bash -e {0}`, and
+ * no step in `ci.yml` overrides it. Without the flag a multi-command lane
+ * keeps going after a failure and reports the LAST command's status:
+ * `codegen-fresh` would run `buf generate`, ignore it failing, find `api/`
+ * clean because nothing regenerated, and report **pass** — removing a CI gate
+ * while the run stays green, which is the failure this subsystem exists to
+ * make impossible.
+ *
+ * `-o pipefail` is deliberately NOT added even though it is the more careful
+ * flag. GitHub applies it only when a step sets `shell: bash` explicitly, and
+ * none here does; adding it would make a lane stricter than the step it
+ * replaced. Same fidelity rule, other direction.
  * Every string here is repository-controlled; nothing from a pull request
  * reaches it.
  *
@@ -232,6 +246,14 @@ export function createCapture(
       if (recent.length > lookbehind) recent.shift();
       return;
     }
+    // `go test`'s own bookkeeping is NEITHER, and must not clear the
+    // lookbehind. Whenever a failing subtest is not the last under its parent,
+    // `=== RUN Parent/next_case` is printed between the assertion and the
+    // `--- FAIL:` that makes it notable — so treating it as "something else"
+    // discards the one line naming what went wrong. A small lane survives that
+    // because the tail rescues it; the 40 MB `-race` lane this exists for does
+    // not.
+    if (isNeutralLine(kind, line)) return;
     // Anything else ends the run of context: the lines held above belong to
     // whatever was printing then, and a failure further down has its own.
     if (line.trim()) recent = [];
@@ -270,7 +292,7 @@ export function runLane(lane, { cwd = process.cwd(), env = process.env, onOutput
   return new Promise((resolve) => {
     const started = Date.now();
     const capture = createCapture(lane.kind);
-    const child = spawn('bash', ['-c', lane.run], {
+    const child = spawn('bash', ['-e', '-c', lane.run], {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -351,7 +373,7 @@ export function collectSummary({ dir = REPORT_DIR, lanes = LANES, env = process.
       lane: lane.name,
       title: lane.title,
       status: filtered ? 'filtered' : 'skip',
-      summary: filtered ?? 'an earlier lane failed, so this one never ran',
+      summary: filtered ?? 'did not run — an earlier lane failed, or the job ended first',
       durationMs: null,
       exitCode: null,
     });
@@ -361,10 +383,20 @@ export function collectSummary({ dir = REPORT_DIR, lanes = LANES, env = process.
   return {
     schema: 1,
     generatedAt: new Date().toISOString(),
-    // `fail` whenever any lane failed. `pass` only when at least one lane ran
-    // and none failed — a summary in which every lane is skip/filtered is
-    // `incomplete`, never `pass`, because nothing was proven.
-    status: counts.fail > 0 ? 'fail' : counts.pass > 0 ? 'pass' : 'incomplete',
+    // `fail` whenever any lane failed. ANY skip makes the job `incomplete`,
+    // not `pass`: a lane is only skipped here because it wrote no report, and
+    // when no lane failed that means something ended the job instead — the
+    // runner was killed, the job cancelled, a non-lane step failed before the
+    // lane ran. Reporting `pass` for six-of-eight would be a machine-readable
+    // statement that the job succeeded, about a job that did not.
+    status:
+      counts.fail > 0
+        ? 'fail'
+        : counts.skip > 0
+          ? 'incomplete'
+          : counts.pass > 0
+            ? 'pass'
+            : 'incomplete',
     counts,
     lanes: rows,
     repository: env.GITHUB_REPOSITORY ?? null,

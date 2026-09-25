@@ -81,8 +81,15 @@ job already ran, in the same order:
 | `test` | `go-test` | `go test -tags integration -race … -v ./...` |
 
 Each `run` is the **literal string** the step it replaced carried, executed
-with `bash -c` because that is what a `run:` step is and three of these are
-already multi-command. This is load-bearing: `review-panel.mjs`'s
+with `bash -e -c` because that is what a `run:` step is — `codegen-fresh` is
+multi-command, and `-e` is what GitHub's default shell applies. Dropping the
+flag is not a style choice: a multi-command lane would then report its LAST
+command's status, so `codegen-fresh` could ignore `buf generate` failing,
+find `api/` clean because nothing regenerated, and report **pass** — removing
+a CI gate on a green run. `-o pipefail` is deliberately absent, since GitHub
+applies it only to a step that sets `shell: bash` and none here does; adding
+it would make a lane stricter than the step it replaced. This is
+load-bearing: `review-panel.mjs`'s
 `MECHANICAL_COVERAGE_NOTE` and [agent-command-verbs.md](agent-command-verbs.md)
 §4b are an inventory of what CI proves, and both stay true only while this
 file changes how a lane is reported and never what it runs.
@@ -150,6 +157,14 @@ unmatched, because it is identical whether the test it belongs to passed or
 failed. It is kept by **lookbehind** instead: the capture holds the last eight
 context-shaped lines and flushes them only when a failure-shaped line arrives,
 which is exactly where `go test` prints them.
+
+A third category is needed for that to hold. `go test` prints
+`=== RUN Parent/next_case` between the assertion and the `--- FAIL:` whenever
+the failing subtest is not the last under its parent — the commonest shape —
+and treating that as "something else" clears the window and discards the line.
+The `===` announcements are therefore **neutral**: they leave the lookbehind
+alone. `--- PASS` and `--- SKIP` are deliberately not, because they do mean
+the output above them belonged to a test that did not fail.
 
 The full output is still streamed unchanged to the job log. Nothing is hidden;
 what is bounded is the report.

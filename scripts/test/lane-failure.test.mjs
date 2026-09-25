@@ -207,3 +207,25 @@ test('notable lines are picked by shape, never by the word "error"', () => {
   assert.equal(isNotableLine('go-test', 'WARNING: DATA RACE'), true);
   assert.equal(isNotableLine('go-test', '=== RUN   TestX'), false);
 });
+
+test('the last notable line beats the last line when they differ', () => {
+  // `evidenceLines` puts notable lines first and drops tail lines already
+  // among them, so when the genuinely last line of output IS notable it is no
+  // longer in last position. Falling straight through to "the last line of
+  // any kind" then names the command that ran instead of the failure: a build
+  // lane summarised as `go build ./...`.
+  assert.equal(
+    summarizeFailure({
+      kind: 'generic',
+      tail: 'go build ./...\nmake: *** [Makefile:40: build] Error 2\n',
+      notable: ['make: *** [Makefile:40: build] Error 2'],
+    }),
+    'make: *** [Makefile:40: build] Error 2',
+  );
+
+  // And with nothing notable at all, the last line is still the right answer.
+  assert.equal(
+    summarizeFailure({ kind: 'generic', tail: 'something odd happened\n', notable: [] }),
+    'something odd happened',
+  );
+});

@@ -268,6 +268,42 @@ test('held context lines are released only by a failure, never on their own', ()
   ]);
 });
 
+test("go test's own `=== RUN` does not discard the assertion above it", () => {
+  // THE SHAPE THAT LOSES THE ONLY USEFUL LINE. Whenever a failing subtest is
+  // not the last under its parent, `go test` prints `=== RUN Parent/next` in
+  // between the assertion and the `--- FAIL:` that makes it worth keeping.
+  // Treated as "something else" it clears the lookbehind, and the summary
+  // becomes the test's NAME with nothing about what it expected. A small lane
+  // hides this because the tail rescues the line; the 40 MB `-race` lane this
+  // subsystem exists for does not.
+  const capture = createCapture('go-test', { lookbehind: 8 });
+  capture.push('    tree_test.go:214: expected <p>ab</p>, got <p>a</p><p>b</p>\n');
+  capture.push('=== RUN   TestTreeEdit/next_case\n');
+  capture.push('--- FAIL: TestTreeEdit (0.02s)\n');
+  const { notable } = capture.finish();
+  assert.ok(
+    notable.some((l) => l.includes('tree_test.go:214')),
+    `the assertion was discarded: ${JSON.stringify(notable)}`,
+  );
+});
+
+test('a lane whose first command fails cannot report pass', () => {
+  // GitHub's default `run:` shell is `bash -e {0}`. Without the flag a
+  // multi-command lane keeps going and reports the LAST command's status, so
+  // `codegen-fresh` would ignore `buf generate` failing, find `api/` clean
+  // because nothing regenerated, and remove a CI gate on a green run.
+  const lane = {
+    name: 'probe',
+    title: 'probe',
+    kind: 'generic',
+    run: ['definitely-not-a-real-binary', 'echo still here'].join('\n'),
+  };
+  return runLane(lane, { cwd: tmpdir() }).then((r) => {
+    assert.equal(r.status, 'fail', `a failed first command was invisible: ${JSON.stringify(r)}`);
+    assert.notEqual(r.exitCode, 0);
+  });
+});
+
 test('a line split across two writes is still matched', () => {
   const capture = createCapture('go-test');
   capture.push('--- FAIL: Test');
