@@ -58,7 +58,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { isDirectRun } from '../direct-run.mjs';
-import { isNotableLine, MAX_NOTABLE_LINES, summarizeFailure } from './lane-failure.mjs';
+import {
+  CONTEXT_LOOKBEHIND,
+  isContextLine,
+  isNotableLine,
+  MAX_NOTABLE_LINES,
+  summarizeFailure,
+} from './lane-failure.mjs';
 
 const PREFIX = '[ci:lanes]';
 
@@ -193,17 +199,42 @@ function writeJson(file, value) {
  * each bounded, is what makes a report a fixed size regardless of how loud
  * the lane was.
  */
-export function createCapture(kind, { tailBytes = TAIL_BYTES, maxNotable = MAX_NOTABLE_LINES } = {}) {
+export function createCapture(
+  kind,
+  { tailBytes = TAIL_BYTES, maxNotable = MAX_NOTABLE_LINES, lookbehind = CONTEXT_LOOKBEHIND } = {},
+) {
   let tail = '';
   let bytes = 0;
   let pending = '';
   const notable = [];
   let notableDropped = 0;
+  // The last few context-shaped lines, held until a failure-shaped line
+  // arrives. `go test` prints an assertion's output directly above the
+  // `--- FAIL:` it belongs to, so this is where the useful half of a Go
+  // failure lives — and it is also the single most common line in a PASSING
+  // verbose run, which is why it cannot simply be matched and kept.
+  let recent = [];
 
-  const takeLine = (line) => {
-    if (!isNotableLine(kind, line)) return;
+  const keep = (line) => {
     if (notable.length < maxNotable) notable.push(line);
     else notableDropped += 1;
+  };
+
+  const takeLine = (line) => {
+    if (isNotableLine(kind, line)) {
+      for (const held of recent) keep(held);
+      recent = [];
+      keep(line);
+      return;
+    }
+    if (isContextLine(kind, line)) {
+      recent.push(line);
+      if (recent.length > lookbehind) recent.shift();
+      return;
+    }
+    // Anything else ends the run of context: the lines held above belong to
+    // whatever was printing then, and a failure further down has its own.
+    if (line.trim()) recent = [];
   };
 
   return {

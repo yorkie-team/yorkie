@@ -67,32 +67,60 @@ export const MAX_SUMMARY_CHARS = 200;
  * happened early, and keeping everything is not an option. Retaining the
  * matched lines as they go past is what makes the summary independent of
  * WHERE in the stream the failure occurred.
+ *
+ * FAILURE-SHAPED ONLY, and that is a correction rather than a preference.
+ * This list once matched `ok  <pkg>` and every `<file>_test.go:NN:` line.
+ * Against a real `-v ./...` run those are the overwhelming majority of the
+ * output — the budget filled with a hundred passing packages long before the
+ * stream reached the failing one, the `--- FAIL:` never made it in, and the
+ * summary came out as the word `FAIL`. A pattern that matches a PASSING run's
+ * output does not select evidence, it evicts it.
  */
 const NOTABLE = {
   common: [
     /^::(error|warning)::/,
-    /^\s*Error:\s/,
     /^make(\[\d+\])?:\s.*\bError\b/,
     /command not found/,
     /^bash:\s/,
   ],
   'go-test': [
-    /^\s*--- (FAIL|SKIP): /,
-    /^(FAIL|ok)\s+\S+/,
+    /^\s*--- FAIL: /,
+    /^FAIL\b/,
     /^\s*panic: /,
     /^\s*fatal error: /,
     /WARNING: DATA RACE/,
-    /^\s*\S+_test\.go:\d+: /,
     /^\S+\.go:\d+:\d+: /,
     /^#\s\S+/,
     /\[build failed\]/,
-    /^\s*Error Trace:/,
-    /^\s*Error:\s+/,
   ],
   'go-build': [/^\S+\.go:\d+:(\d+:)? /, /^#\s\S+/, /^\s*vet: /],
   golangci: [/^\S+\.go:\d+:\d+: /, /^level=(error|fatal)/, /^\s*ERRO\s/],
   buf: [/^\S+\.proto:\d+:\d+:/, /^Failure: /],
   license: [/^\[verify:license\]/],
+  generic: [/^\s*Error:\s/],
+};
+
+/**
+ * Lines that are evidence only when something near them failed.
+ *
+ * `    tree_test.go:214: expected <p>ab</p>, got …` is the most useful line in
+ * a Go failure and the most common line in a passing verbose run. It is kept
+ * by LOOKBEHIND instead of by pattern: the runner holds the last few of these
+ * and flushes them only when a failure-shaped line arrives, which is exactly
+ * where `go test` prints them — immediately before `--- FAIL:`.
+ */
+const CONTEXT = {
+  'go-test': [
+    /^\s+\S+_test\.go:\d+: /,
+    /^\s+Error Trace:/,
+    /^\s+Error:\s/,
+    /^\s+Test:\s/,
+    /^\s+Messages:\s/,
+  ],
+  'go-build': [],
+  golangci: [],
+  buf: [],
+  license: [],
   generic: [],
 };
 
@@ -104,12 +132,28 @@ const NOTABLE = {
  */
 export const MAX_NOTABLE_LINES = 60;
 
-/** True iff `line` is worth retaining for a lane of this `kind`. */
+/**
+ * How many context lines are held for lookbehind, and how many of them a
+ * single failure may flush. Small: `go test` prints an assertion's output
+ * directly above its `--- FAIL:`, so anything older belongs to a test that
+ * passed.
+ */
+export const CONTEXT_LOOKBEHIND = 8;
+
+/** True iff `line` is failure-shaped for a lane of this `kind`. */
 export function isNotableLine(kind, line) {
   if (!line) return false;
   const patterns = NOTABLE[kind] ?? NOTABLE.generic;
   for (const re of NOTABLE.common) if (re.test(line)) return true;
   for (const re of patterns) if (re.test(line)) return true;
+  return false;
+}
+
+/** True iff `line` is worth keeping only when a failure follows it. */
+export function isContextLine(kind, line) {
+  if (!line) return false;
+  if (isNotableLine(kind, line)) return false;
+  for (const re of CONTEXT[kind] ?? CONTEXT.generic) if (re.test(line)) return true;
   return false;
 }
 

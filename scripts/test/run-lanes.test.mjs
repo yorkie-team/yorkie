@@ -224,6 +224,50 @@ test('the capture bounds the tail and keeps notable lines from anywhere', () => 
   assert.ok(notable.includes('--- FAIL: TestLate (0.0s)'));
 });
 
+test('a passing verbose run does not evict the failure that follows it', () => {
+  // THE BUG A REAL RUN FOUND. The patterns used to match `ok  <pkg>` and every
+  // `<file>_test.go:NN:` line; against `go test -race -v ./...` those are most
+  // of the output, so the budget filled with a hundred PASSING packages before
+  // the stream reached the failing one. The `--- FAIL:` never made it in and
+  // the summary came out as the word `FAIL`.
+  const capture = createCapture('go-test', { tailBytes: 128, maxNotable: 60 });
+  for (let i = 0; i < 200; i++) {
+    capture.push(`=== RUN   TestPassing${i}\n`);
+    capture.push(`    thing_test.go:${i}: some passing test logging\n`);
+    capture.push(`--- PASS: TestPassing${i} (0.00s)\n`);
+    capture.push(`ok  \tgithub.com/yorkie-team/yorkie/pkg/p${i}\t0.01s\n`);
+  }
+  capture.push('=== RUN   TestTreeEdit\n');
+  capture.push('    tree_test.go:214: expected <p>ab</p>, got <p>a</p><p>b</p>\n');
+  capture.push('--- FAIL: TestTreeEdit (0.02s)\n');
+  capture.push('FAIL\tgithub.com/yorkie-team/yorkie/pkg/document/crdt\t0.3s\n');
+  const { notable } = capture.finish();
+
+  assert.ok(notable.some((l) => l.includes('--- FAIL: TestTreeEdit')), `evicted: ${notable.length} kept`);
+  assert.ok(!notable.some((l) => /^ok\s/.test(l)), 'a passing package is not evidence');
+  assert.ok(!notable.some((l) => l.includes('some passing test logging')));
+  // The assertion output IS kept, by lookbehind — `go test` prints it directly
+  // above the `--- FAIL:` it belongs to, which is the only place it is
+  // distinguishable from the identical lines a passing test prints.
+  assert.ok(
+    notable.some((l) => l.includes('expected <p>ab</p>')),
+    'the assertion above the failure was dropped',
+  );
+});
+
+test('held context lines are released only by a failure, never on their own', () => {
+  const capture = createCapture('go-test', { lookbehind: 4 });
+  capture.push('    thing_test.go:1: passing chatter\n');
+  capture.push('--- PASS: TestX (0.00s)\n');
+  capture.push('    other_test.go:9: the assertion that matters\n');
+  capture.push('--- FAIL: TestY (0.00s)\n');
+  const { notable } = capture.finish();
+  assert.deepEqual(notable, [
+    '    other_test.go:9: the assertion that matters',
+    '--- FAIL: TestY (0.00s)',
+  ]);
+});
+
 test('a line split across two writes is still matched', () => {
   const capture = createCapture('go-test');
   capture.push('--- FAIL: Test');

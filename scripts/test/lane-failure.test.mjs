@@ -16,7 +16,15 @@ import {
   summarizeFailure,
 } from '../ci/lane-failure.mjs';
 
-/** Split a fixture into the shape the runner hands the summariser. */
+/**
+ * Split a fixture into the shape the runner hands the summariser.
+ *
+ * DERIVED FROM THE SAME STRING, exactly as the runner does on a lane whose
+ * whole output fits in the tail. A fixture that supplied `notable` and `tail`
+ * independently would agree with whatever the implementation did and assert
+ * nothing — and it is how the duplicate-counting bug ("2 issues" rendered as
+ * "+3 more") stayed invisible until a test counted.
+ */
 function evidence(kind, output) {
   const lines = output.split('\n');
   return {

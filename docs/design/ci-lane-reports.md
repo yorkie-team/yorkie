@@ -138,6 +138,19 @@ A larger tail is not a substitute for the second. It is the same design, more
 expensive, and it still loses the early race report — which is the exact case
 this subsystem exists for.
 
+**The patterns must not match a passing run's output.** The first version
+matched `ok  <pkg>` and every `<file>_test.go:NN:` line; against a real
+`go test -race -v ./...` those are most of the 666 KB, the 60-line budget
+filled with passing packages long before the stream reached the failing one,
+and the summary came out as the word `FAIL`. A pattern that matches what a
+green run prints does not select evidence, it evicts it.
+
+That leaves the one line worth having — `    tree_test.go:214: expected …` —
+unmatched, because it is identical whether the test it belongs to passed or
+failed. It is kept by **lookbehind** instead: the capture holds the last eight
+context-shaped lines and flushes them only when a failure-shaped line arrives,
+which is exactly where `go test` prints them.
+
 The full output is still streamed unchanged to the job log. Nothing is hidden;
 what is bounded is the report.
 
