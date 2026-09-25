@@ -504,13 +504,17 @@ partitioning is what makes retention a partition drop rather than a delete, and
 it costs a fresh install nothing; the TTL is what shortens retention, and on a
 fresh install there is nothing behind it — the summary ingest job ships outside
 this chart and `SummaryEnabled` defaults off, so a TTL at install time would
-silently truncate windows longer than 90 days. It stays a deliberate per-cluster
-step (`ALTER TABLE <t> SET ("partition_ttl" = "90 DAY")`), after the summaries
-are validated, which is step 6 below. That also keeps an unverified table
-property out of the shipped DDL: the local stack pins 3.3.9 while `partition_ttl`
-was rehearsed on 3.3.22, and both init scripts only log a failed
-`init-create-table.sql` before continuing, so a property the engine rejects would
-leave the cluster with no event tables at all.
+silently truncate windows longer than 90 days. Retention is added last, per
+cluster, once its summaries are validated, and how depends on where the cluster
+started:
+
+- **A fresh install** already has the partitioned tables, so it only adds the
+  property: `ALTER TABLE <t> SET ("partition_ttl" = "90 DAY")`. Rehearsed on
+  3.3.9 and 3.3.22: the `ALTER` is accepted on an expression-partitioned table,
+  and the next scheduler tick drops the partitions outside the window.
+- **An existing cluster** gets the TTL on the replacement table it creates in
+  step 1 of the migration below, which runs only after its summaries are
+  validated.
 
 `CREATE TABLE IF NOT EXISTS` skips a table that exists, so existing clusters
 still need the migration below.
