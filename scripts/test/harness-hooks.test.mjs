@@ -28,6 +28,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -637,29 +638,145 @@ test('a clone path with shell metacharacters cannot inject', () => {
   assert.equal(existsSync('/tmp/pwned-by-hook-wiring'), false);
 });
 
+/**
+ * A scratch upstream plus a clone of it, built without `git clone` so every
+ * command can be addressed with `git -C`.
+ *
+ * NOT `fixtureGitEnv`: it pins GIT_DIR at one directory, and the worktree
+ * cases below need git's own discovery to find `.git/worktrees/<name>`.
+ * `repoScopedEnv(root)` strips every inherited location variable and sets
+ * the discovery ceiling at `root`'s parent, so nothing can climb out of the
+ * scratch directory into this repository.
+ */
+function inScratchClone(body) {
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'scratch-clone-')));
+  const env = repoScopedEnv(root);
+  const at = (cwd) => (...args) => spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env });
+  try {
+    const upstream = path.join(root, 'upstream');
+    const clone = path.join(root, 'clone');
+    for (const dir of [upstream, clone]) {
+      mkdirSync(dir);
+      const git = at(dir);
+      git('init', '-q', '-b', 'main', '.');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      git('config', 'commit.gpgsign', 'false');
+    }
+    at(upstream)('commit', '-qm', 'base', '--allow-empty', '--no-verify');
+    const git = at(clone);
+    git('remote', 'add', 'origin', upstream);
+    git('fetch', '-q', 'origin');
+    git('reset', '-q', '--hard', 'origin/main');
+    return body({ root, upstream, clone, at, env });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Run a hook from this repository, unmodified, against `dir`.
+ *
+ * Stubs rather than markers: `make` echoes what it was asked to run, and
+ * `golangci-lint` exists so pre-commit's missing-linter refusal is not the
+ * answer being measured. The hook and `trusted-tree.sh` are copied side by
+ * side, outside the checkout, as `setup.sh` lays them out.
+ */
+function runHookIn(hook, dir, env) {
+  const bin = path.join(dir, '..', 'probe-bin');
+  mkdirSync(bin, { recursive: true });
+  for (const [name, body] of [
+    ['make', '#!/usr/bin/env bash\necho "RAN make $*"\n'],
+    ['golangci-lint', '#!/usr/bin/env bash\nexit 0\n'],
+  ]) {
+    writeFileSync(path.join(bin, name), body);
+    chmodSync(path.join(bin, name), 0o755);
+  }
+  const hooks = path.join(dir, '..', 'probe-hooks');
+  mkdirSync(hooks, { recursive: true });
+  for (const f of [hook, 'trusted-tree.sh']) {
+    writeFileSync(path.join(hooks, f), readFileSync(path.join(REPO, '.githooks', f)));
+  }
+  return spawnSync('bash', [path.join(hooks, hook)], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+  });
+}
+
+/** Copy what setup.sh installs and runs into the upstream, and check it out. */
+function plantSetup({ upstream, clone, at }) {
+  for (const rel of [
+    '.githooks/commit-msg',
+    '.githooks/pre-commit',
+    '.githooks/pre-push',
+    '.githooks/trusted-tree.sh',
+    'scripts/setup.sh',
+    'scripts/direct-run.mjs',
+    ...HOOK_WIRING.map(({ script }) => `scripts/hooks/${script}`),
+    'scripts/hooks/install.mjs',
+  ]) {
+    const dest = path.join(upstream, rel);
+    mkdirSync(path.dirname(dest), { recursive: true });
+    writeFileSync(dest, readFileSync(path.join(REPO, rel)));
+    chmodSync(dest, statSync(path.join(REPO, rel)).mode);
+  }
+  at(upstream)('add', '-A');
+  at(upstream)('commit', '-qm', 'hooks', '--no-verify');
+  at(clone)('fetch', '-q', 'origin');
+  at(clone)('reset', '-q', '--hard', 'origin/main');
+}
+
+function runSetup(cwd, env) {
+  return spawnSync('bash', [path.join(cwd, 'scripts', 'setup.sh')], {
+    cwd,
+    encoding: 'utf8',
+    env,
+  });
+}
+
 test('setup.sh installs git hooks from a snapshot, not from the worktree', () => {
   // THE PROPERTY, and it is the same one install.mjs exists for. Pointing
   // `core.hooksPath` at the tracked `.githooks/` makes every hook
   // branch-controlled: a pull request rewrites `pre-commit`, a reviewer checks
   // the branch out and commits, and it runs — reaching the branch's Makefile
-  // and Go test code through `make lint` / `make verify`. Closing that for the
-  // Claude hooks and leaving it open for the git hooks would be two threat
-  // models in one change.
-  const setup = readFileSync(path.join(REPO, 'scripts', 'setup.sh'), 'utf8');
+  // and Go test code through `make lint` / `make verify`. Run for real in a
+  // scratch clone rather than read out of the script's text.
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    const r = runSetup(clone, env);
+    assert.equal(r.status, 0, r.stderr);
+    const hooksPath = at(clone)('config', '--get', 'core.hooksPath').stdout.trim();
+    assert.equal(hooksPath, path.join(clone, '.git', 'githooks'));
+    // The sourced helper travels with the hooks, or both gates fail to start.
+    statSync(path.join(hooksPath, 'trusted-tree.sh'));
+    accessSync(path.join(hooksPath, 'pre-push'), constants.X_OK);
+    statSync(path.join(clone, '.claude', 'settings.local.json'));
+  });
+});
 
-  assert.match(setup, /rev-parse --absolute-git-dir/, 'setup.sh must resolve $GIT_DIR');
-  // THE COMMAND, not the comment. The paragraph above it explains the change
-  // by quoting the old `core.hooksPath ... .githooks` form, so a naive `find`
-  // on the setting name reads the argument for the fix as the fix.
-  const hooksPath = setup
-    .split('\n')
-    .map((l) => l.trim())
-    .find((l) => l.startsWith('git config core.hooksPath'));
-  assert.ok(hooksPath, 'setup.sh no longer configures core.hooksPath');
-  assert.doesNotMatch(
-    hooksPath,
-    /REPO_ROOT|\.githooks"?$/,
-    `core.hooksPath must name the $GIT_DIR snapshot, not the worktree: ${hooksPath}`,
-  );
-  assert.match(hooksPath, /HOOKS_SNAPSHOT/);
+test('setup.sh in a worktree installs into the shared git dir', () => {
+  // `--absolute-git-dir` in a linked worktree is `.git/worktrees/<name>`,
+  // while `core.hooksPath` is shared config. Snapshotting there meant that
+  // removing the worktree deleted the hooks every checkout of the clone was
+  // pointed at — and git runs no hooks at all from a path that does not exist,
+  // so nothing said so.
+  inScratchClone((ctx) => {
+    const { root, clone, at, env } = ctx;
+    plantSetup(ctx);
+    const wt = path.join(root, 'wt');
+    at(clone)('worktree', 'add', '-q', wt, 'origin/main');
+
+    const r = runSetup(wt, env);
+    assert.equal(r.status, 0, r.stderr);
+    const hooksPath = at(clone)('config', '--get', 'core.hooksPath').stdout.trim();
+    assert.doesNotMatch(hooksPath, /worktrees/, 'git hooks snapshotted per worktree');
+    // install.mjs had the same bug for the Claude Code hooks.
+    const settings = readFileSync(path.join(wt, '.claude', 'settings.local.json'), 'utf8');
+    assert.doesNotMatch(settings, /worktrees/, 'Claude hooks snapshotted per worktree');
+
+    at(clone)('worktree', 'remove', '--force', wt);
+    statSync(path.join(hooksPath, 'pre-push')); // still there
+  });
 });

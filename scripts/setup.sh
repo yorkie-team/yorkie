@@ -2,7 +2,11 @@
 set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-GIT_DIR=$(git rev-parse --absolute-git-dir)
+# The COMMON git dir, not `--absolute-git-dir`: in a linked worktree the latter
+# is `.git/worktrees/<name>`, while `core.hooksPath` is shared config. A
+# snapshot there dies with the worktree, and git then runs no hooks at all —
+# silently, since a missing hooks directory is not an error to git.
+GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 
 # THE RE-RUN IS THE VECTOR THE SNAPSHOT DOES NOT COVER BY ITSELF. Everything
 # below copies the CURRENT worktree's hook sources into `$GIT_DIR`, where no
@@ -98,7 +102,7 @@ fi
 # `--no-verify` or
 # `YORKIE_ALLOW_FOREIGN_TREE=1`. CONTRIBUTING.md says the same thing where
 # contributors read it.
-HOOKS_SNAPSHOT="$GIT_DIR/githooks"
+HOOKS_SNAPSHOT="$GIT_COMMON/githooks"
 rm -rf "$HOOKS_SNAPSHOT"
 mkdir -p "$HOOKS_SNAPSHOT"
 cp "$REPO_ROOT/.githooks/"* "$HOOKS_SNAPSHOT/"

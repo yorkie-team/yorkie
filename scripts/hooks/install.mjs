@@ -53,6 +53,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -155,7 +156,10 @@ function gitPath(flag) {
 
 function main() {
   const root = gitPath('--show-toplevel');
-  const gitDir = gitPath('--absolute-git-dir');
+  // The COMMON git dir, shared by every worktree — see scripts/setup.sh. A
+  // snapshot under `.git/worktrees/<name>` dies with that worktree.
+  const common = gitPath('--git-common-dir');
+  const gitDir = common ? realpathSync(path.resolve(common)) : null;
   if (!root || !gitDir) {
     process.stderr.write('not a git checkout; skipping Claude Code hook install\n');
     process.exit(1);
