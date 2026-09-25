@@ -99,6 +99,7 @@ re-send.
 |------|------------|
 | Extra database round trip on the push hot path | One indexed `FindOne` per distinct actor in the pack (in practice one), gated on the document having moved since the client's last acknowledgement. The lookup uses the existing `project_id/doc_id/actor_id/server_seq` index. |
 | A legitimate change is mistaken for a duplicate and silently dropped | Requires being behind on both `ClientSeq` and `Lamport`, which a client cannot produce after syncing. The one case that can — pre-attach local edits — is excluded via `IsAttach`. Every drop is logged at warn level with actor, clientSeq and lamport. |
+| Two concurrent sessions under one client key share a `StableActorID`, so one session's changes can sit behind the other's in both fields | Out of scope here, and already broken without this filter: a shared actor also breaks self-echo dedup, version-vector liveness and lamport ordering. One logical client at a time is the assumption `StableActorID` is built on (see [Offline-Resumable Attach](offline-resumable-attach.md)). |
 | Compaction removes the stored changes a duplicate would be matched against | Compaction bumps `DocInfo.Epoch`, and the epoch check in `pushPack` discards stale-epoch changes before this filter is reached. |
 
 ### Design Decisions
