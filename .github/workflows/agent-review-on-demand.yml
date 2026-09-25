@@ -184,7 +184,7 @@ jobs:
       - run: cd scripts/agent && npm ci --no-audit --no-fund --ignore-scripts
       # Tar to preserve +x bits + symlinks that upload-artifact would strip.
       - run: cd scripts/agent && tar -czf /tmp/agent-sdk-node-modules.tgz node_modules
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: agent-sdk-node-modules-ondemand
           path: /tmp/agent-sdk-node-modules.tgz
@@ -555,7 +555,7 @@ jobs:
       - name: Upload per-lens stage detail
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           # PR number in the name — a convenience for humans and for selective
           # fetching. `meta.json` is the source of truth. See the twin step.

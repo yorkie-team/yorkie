@@ -353,7 +353,7 @@ jobs:
       # agent's own job can hold the token that posts. Only DATA crosses.
       - name: Hand the agent's output to the report job
         if: always() && steps.pr.outputs.is_agent == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-review-reply-output
           path: |

@@ -371,7 +371,7 @@ jobs:
       # review job then finds the binary present but non-executable → "binary
       # exists but failed to launch". A tarball round-trips perms + symlinks intact.
       - run: cd scripts/agent && tar -czf /tmp/agent-sdk-node-modules.tgz node_modules
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: agent-sdk-node-modules
           path: /tmp/agent-sdk-node-modules.tgz
@@ -1299,7 +1299,7 @@ jobs:
       - name: Upload review-panel execution log
         if: always() && steps.pr.outputs.number != ''
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: review-panel-execution
           path: |
@@ -1411,7 +1411,7 @@ jobs:
       - name: Upload per-lens stage detail
         if: always() && steps.pr.outputs.number != ''
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           # The PR number in the NAME is a convenience — for a human reading the
           # artifact list, and for a collector fetching selectively instead of
@@ -2261,7 +2261,7 @@ jobs:
       # window, and the `fix-report` job (also `always()`) posts them.
       - name: Hand the agent's output to the report job
         if: always() && steps.guard.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-fix-execution-output
           path: |

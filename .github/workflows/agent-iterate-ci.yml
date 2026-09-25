@@ -543,7 +543,7 @@ jobs:
       # transcript, which the report job reads with main's code.
       - name: Hand the agent's output to the report job
         if: always() && steps.guard.outputs.proceed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-ci-fix-execution-output
           path: ${{ runner.temp }}/claude-execution-output.json
