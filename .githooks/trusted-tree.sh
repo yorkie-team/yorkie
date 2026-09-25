@@ -37,9 +37,9 @@
 # consulted by `%aE` — could rewrite it after the fact. The address is a label,
 # not a credential.
 #
-# The credential is HEAD's reflog. It lives in `$GIT_DIR`, it is written by the
-# local git as it moves HEAD, and no content a fetched branch carries can add an
-# entry to it. A commit this clone CREATED has a reflog entry recording git
+# The credential is the reflog — HEAD's and the current branch's. It lives in
+# `$GIT_DIR`, it is written by the local git as it moves HEAD and the branch,
+# and no content a fetched branch carries can add an entry to it. A commit this clone CREATED has a reflog entry recording git
 # WRITING it (`commit`, `commit (amend)`, a rebase `(pick)`, a merge git made,
 # `cherry-pick`, `revert`, `am`); a commit this clone merely RECEIVED is known
 # only through `clone:`, `fetch`, `checkout:`, `reset:`, a fast-forward or a
@@ -89,8 +89,19 @@ yorkie_upstream_ref() {
 # commit HEAD lands on, which after a rebase that only fast-forwarded onto a
 # fetched branch is somebody else's. An unrecognised subject is not creating,
 # so a future git spelling fails closed rather than open.
+#
+# TWO REFLOGS. HEAD's reflog is per worktree; the current branch's reflog is
+# shared by every worktree of the clone. Reading both keeps a branch you wrote
+# in one worktree yours when you check it out in another. Both are written
+# only by the local git, so the second adds no way in.
 yorkie_locally_created() {
-  git reflog show HEAD --format='%H %gs' 2>/dev/null | awk '
+  local branch
+  {
+    git reflog show HEAD --format='%H %gs' 2>/dev/null || true
+    if branch=$(git symbolic-ref -q HEAD 2>/dev/null); then
+      git reflog show "$branch" --format='%H %gs' 2>/dev/null || true
+    fi
+  } | awk '
     tolower($0) ~ / fast-forward$/ { next }
     /^[0-9a-f]+ (commit|cherry-pick|revert|am|applypatch)( \([a-z]+\))?:/ { print $1; next }
     /^[0-9a-f]+ (rebase|pull)[^:]*\((pick|reword|edit|squash|fixup|continue)\):/ { print $1; next }

@@ -915,3 +915,18 @@ test('the trust guard refuses commits reached by cherry-pick --ff', () => {
     assert.match(r.stderr, /not created by this clone/);
   });
 });
+
+test('the trust guard accepts a branch committed in another worktree', () => {
+  // HEAD's reflog is per worktree; the branch's reflog is shared by every
+  // worktree of the clone. A branch written in a worktree and then checked
+  // out in the main checkout is still yours.
+  inScratchClone(({ root, clone, at, env }) => {
+    const wt = path.join(root, 'wt');
+    at(clone)('worktree', 'add', '-q', '-b', 'topic', wt, 'origin/main');
+    at(wt)('commit', '-qm', 'mine in a worktree', '--allow-empty', '--no-verify');
+    at(clone)('worktree', 'remove', wt);
+    at(clone)('checkout', '-q', 'topic');
+    const r = runHookIn('pre-push', clone, env);
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
