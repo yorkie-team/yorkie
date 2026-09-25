@@ -120,7 +120,8 @@ To enable the local hooks, run:
 bash scripts/setup.sh
 ```
 
-This copies `.githooks/` into your clone's `$GIT_DIR` and points
+This copies `.githooks/` into your clone's shared `$GIT_DIR` (the
+common one, so running it from a linked worktree is fine) and points
 `core.hooksPath` there, then does the same for the Claude Code hooks. The
 installed hooks validate every commit message against the format above,
 run `make lint` on commit, and run `make verify` (lint, licence headers
@@ -132,7 +133,8 @@ script the branch you have checked out supplies, so a rewritten
 cost is that an improved hook reaches your clone when you next run this
 script — and because that re-run snapshots whatever the current
 worktree holds, `setup.sh` refuses when anything it installs or runs
-differs from `origin/main`: `.githooks/`, `scripts/hooks/`, `setup.sh`
+differs from `upstream/main` (or `origin/main` without one), untracked
+files included: `.githooks/`, `scripts/hooks/`, `setup.sh`
 itself, and the shared `scripts/*.mjs` modules the installer imports —
 the last because a branch that changes only one of those still gets its
 code executed by the install it passes. Re-run it on the default
@@ -144,11 +146,12 @@ and `make verify` resolve through the working tree's `Makefile`,
 `.golangci.yml` and test code, so committing inside a checkout of
 someone else's branch would run that branch's build and test code. The
 two gates therefore refuse to run at all when the checkout carries
-commits on top of `origin/main` that this clone did not create — the
-shape a reviewed pull request has and your own work does not. What is
-checked is HEAD's reflog, which lives in `$GIT_DIR` and records which
-commits your git built, rather than the author address, which is a field
-the branch's author writes and so proves nothing. The cost is that a
+commits on top of `origin/main` (or `upstream/main`, for a fork whose
+`main` lags) that this clone did not create — the shape a reviewed pull
+request has and your own work does not. What is checked is the reflog
+(HEAD's and the current branch's), which lives in `$GIT_DIR` and records
+which commits your git built, rather than the author address, which is
+a field the branch's author writes and so proves nothing. The cost is that a
 commit you wrote on another machine and fetched here presents the same
 evidence a stranger's does. Push a fix to a contributor's branch — or
 your own from elsewhere — with `--no-verify`, or, having read its diff,

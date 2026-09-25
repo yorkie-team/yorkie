@@ -85,7 +85,11 @@ prerequisites.
 tree:
 
 1. It copies `.githooks/*` into `$GIT_DIR/githooks` and sets
-   `core.hooksPath` to **that copy**.
+   `core.hooksPath` to **that copy**. `$GIT_DIR` here is the clone's common
+   git dir (`git rev-parse --git-common-dir`), never a linked worktree's
+   `.git/worktrees/<name>`: `core.hooksPath` is shared by every worktree, so
+   a snapshot inside one died with it and left the whole clone running no
+   hooks, silently.
 2. It runs `scripts/hooks/install.mjs`, which copies `scripts/hooks/*.sh` into
    `$GIT_DIR/agent-hooks/` and writes wiring that names **those copies** into
    `.claude/settings.local.json`, which is gitignored.
@@ -133,24 +137,44 @@ of the commits this checkout carries on top of the upstream default branch. So
 that is what `.githooks/trusted-tree.sh` checks, sourced by both hooks before
 either reaches `make`.
 
-**Provenance comes from HEAD's reflog, not from the author line.** An earlier
-revision compared `%aE` against the local `user.email`, which is not an
-authentication decision at all: the author address is a field the branch's own
-author writes, so `git config user.email maintainer@example.com` before
-committing walks straight through, and `.mailmap` — also branch-supplied, also
-consulted by `%aE` — can rewrite it after the fact. Every address in this
-repository's history is public, so the spoof needs no secret.
+**Provenance comes from the reflog, not from the author line.** An earlier
+revision compared the author address against the local `user.email`, which is
+not an authentication decision at all: the author address is a field the
+branch's own author writes, so `git config user.email maintainer@example.com`
+before committing walks straight through. Every address in this repository's
+history is public, so the spoof needs no secret. The address that is still
+compared, underneath, is the raw `%ae`: the mailmapped `%aE` applies
+`.mailmap`, a tracked file the branch supplies, and would let it map its
+author onto yours.
 
-The reflog is the credential. It lives in `$GIT_DIR`, the local git writes it
-as it moves HEAD, and no content a fetched branch carries can add an entry to
-it. A commit this clone **created** has a reflog entry whose action creates a
-commit (`commit`, `commit (amend)`, `rebase (pick)`, `merge`, `cherry-pick`,
-`revert`, `am`); a commit this clone merely **received** is known only through
-`clone:`, `fetch`, `checkout:`, `reset:` or a `Fast-forward` — which is
-exactly what `gh pr checkout` produces. An unrecognised action counts as
-not-creating, so a future git spelling fails closed. Commits reachable from
-the upstream ref are trusted by construction, so rebasing onto a fetched
-`main` does not trip it.
+The reflog is the credential. It lives in `$GIT_DIR`, only the local git writes
+it, and no content a fetched branch carries can add an entry to it. Two are
+read: HEAD's, which is per worktree, and the current branch's, which every
+worktree shares — so a branch written in one worktree stays yours when it is
+checked out in another. A commit this clone **created** has an entry that
+records git writing it, matched on the whole subject: `commit` with or
+without a qualifier (`(amend)`, `(merge)`), `cherry-pick`, `revert`, `am`, a
+rebase step that writes a commit (`(pick)`, `(reword)`, `(edit)`, `(squash)`,
+`(fixup)`, `(continue)`, spelled `rebase` or `pull --rebase`), or a merge git
+made (`merge …: Merge made by`, `pull …: Merge made by`). A commit this clone
+merely **received** is known only through `clone:`, `fetch`, `checkout:`,
+`reset:`, a fast-forward in any case (`cherry-pick --ff` logs a lowercase one
+against the foreign OID), or a rebase's `(start)` / `(finish)` — `(finish)`
+names the commit HEAD lands on, which after a rebase that only fast-forwarded
+onto a fetched branch is somebody else's. An unrecognised subject counts as
+not-creating, so a future git spelling fails closed.
+
+Commits reachable from `origin/main` or `upstream/main` are trusted by
+construction, so rebasing onto a fetched `main` does not trip it. Both,
+because contributors work from forks: `origin/main` is then the fork's and
+usually lags, and every upstream commit it lacks would read as foreign. Only
+those two names — `gh pr checkout` can add a remote named after the author's
+fork, and that remote's `main` is not the default branch.
+
+What it does not catch: a branch authored under **your** address that you
+then rewrite yourself — rebase, amend, `am`, a `pull --rebase`. The rewrite
+writes the commits here and the author matches. Read the diff before
+rewriting someone else's branch.
 
 The honest cost: a commit written on another machine and fetched into this
 clone was not created here, and is refused. That is the same evidence a
@@ -166,10 +190,13 @@ a checkout of somebody's pull request, it makes that branch's `pre-commit`,
 `pre-push` and `scripts/hooks/*.sh` the permanent, checkout-proof hooks of the
 clone.
 
-So it compares the hook sources against `origin/main` first and refuses when
-they differ, with `YORKIE_ALLOW_LOCAL_HOOKS=1` as an explicit escape rather
+So it compares the hook sources against `upstream/main` (or, without one,
+`origin/main`) first and refuses when they differ — untracked files included,
+since `git diff` skips them and `cp .githooks/*` does not — with `YORKIE_ALLOW_LOCAL_HOOKS=1` as an explicit escape rather
 than a prompt — the script also runs non-interactively, and a maintainer
-editing the hooks means it where a reviewer almost never does.
+editing the hooks means it where a reviewer almost never does. This guards
+against accident only: a hostile branch's `setup.sh` can simply leave the
+check out, and running it is already running the branch's code.
 
 **What is compared is what the script runs, not what it is named after.** The
 first version of the list covered `.githooks`, `scripts/hooks` and
@@ -227,9 +254,12 @@ generated file actually present (the guard fails open by design, so a `case`
 pattern that stops matching does not error — it stops guarding), that every
 script the installer wires exists and is executable, that no
 `.claude/settings*.json` is **tracked** (asked of git, because `.gitignore` is
-not a security control), that both git hooks consult the trust guard before
-reaching `make`, and that `core.hooksPath` names the snapshot rather than the
-worktree.
+not a security control), and that both git hooks consult the trust guard
+before reaching `make`. The installer and the trust guard are exercised for
+real in scratch clones, with `make` and `golangci-lint` stubbed on `PATH`:
+`setup.sh` installing into the common git dir from a linked worktree and
+refusing changed or untracked hook sources, and one case per reflog form the
+guard accepts or refuses, per trusted base, and per worktree.
 
 ### Risks and Mitigation
 
@@ -237,8 +267,9 @@ worktree.
 |------|------------|
 | A branch rewrites a hook, and a reviewer's commit runs it | Hooks are snapshotted into `$GIT_DIR`, where a checkout materialises no tracked path |
 | A branch supplies what the hook *invokes* (`Makefile`, `.golangci.yml`, `TestMain`) | `trusted-tree.sh` refuses a checkout carrying commits this clone did not create |
-| The provenance check is spoofed by setting `user.email` | Decided from HEAD's reflog, which lives in `$GIT_DIR`; the author line is a second condition, never the only one |
-| `setup.sh` re-run inside a pull-request checkout persists that branch's hooks | Hook sources compared against `origin/main`; explicit `YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed |
+| The provenance check is spoofed by setting `user.email` | Decided from the reflog, which lives in `$GIT_DIR`; the author line (raw `%ae`, no `.mailmap`) is a second condition, never the only one |
+| `setup.sh` re-run inside a pull-request checkout persists that branch's hooks | Hook sources, untracked ones included, compared against `upstream/main` or `origin/main`; explicit `YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed |
+| `setup.sh` run in a linked worktree, which is later removed | The snapshot lives in the common git dir that `core.hooksPath`, shared config, points every worktree at |
 | A future import widens the trust surface past the compared list | The list is `:(glob)scripts/*.mjs`, not the importers |
 | The snapshot goes stale | Documented re-run of `scripts/setup.sh`; CI is the backstop, and a stale guard still refuses what it knew |
 | A cheap gate becomes expensive and gets bypassed by reflex | Layered by measurement: lint at commit, tests at push, integration in CI |
@@ -253,7 +284,7 @@ worktree.
 | `make lint` at commit, `make verify` at push | 5.5 s vs 35 s measured; the per-commit gate has to stay cheap enough to keep |
 | Snapshot into `$GIT_DIR` rather than `core.hooksPath = .githooks` | A tracked hook is branch-supplied code that runs on a reviewer's machine |
 | `.claude/settings.local.json`, gitignored, never tracked | Claude Code runs what project settings name, unconfirmed, at session start and before every edit |
-| Provenance from HEAD's reflog | The author address is a field the branch writes; the reflog is written by the local git |
+| Provenance from HEAD's and the branch's reflog | The author address is a field the branch writes; the reflog is written by the local git |
 | Opt-in via `scripts/setup.sh` | Installing hooks on a clone without being asked is the behaviour being refused, one layer up |
 | A Node licence checker rather than a Go tool | Node was already in the workflow, the `Docs` workflow was the right unfiltered home, and clause-matching is more forgiving than template comparison across two comment styles |
 | `pre-commit` lints the working tree | An index-only checkout costs a temporary worktree per commit; `pre-push` and CI see the real tree |
@@ -278,3 +309,6 @@ Track execution plans in `docs/tasks/active/` as separate task documents. The
 layer itself landed under
 [20260924-local-harness-enforcement-todo.md](../tasks/archive/2026/09/20260924-local-harness-enforcement-todo.md),
 whose lessons file records the three review rounds behind the decisions above.
+The reflog, worktree and fork fixes were found by yorkie-js-sdk's review of its
+port and brought back under
+[20260926-backport-hook-fixes-todo.md](../tasks/active/20260926-backport-hook-fixes-todo.md).

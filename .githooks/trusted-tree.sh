@@ -30,57 +30,100 @@
 # checked.
 #
 # AND "CAME FROM" IS NOT THE AUTHOR LINE. An earlier revision of this file
-# compared `%aE` against the local `user.email`, which is not an authentication
-# decision at all: the author address is a field the branch's own author writes,
-# so `git config user.email maintainer@example.com` before committing walked
-# straight through the gate, and `.mailmap` — also branch-supplied, also
-# consulted by `%aE` — could rewrite it after the fact. The address is a label,
-# not a credential.
+# compared the author address against the local `user.email`, which is not an
+# authentication decision at all: the address is a field the branch's own
+# author writes, so `git config user.email maintainer@example.com` before
+# committing walked straight through the gate. The address is a label, not a
+# credential. (It is also read raw, `%ae`: the mailmapped `%aE` let the
+# branch's own `.mailmap` rewrite it after the fact.)
 #
-# The credential is HEAD's reflog. It lives in `$GIT_DIR`, it is written by the
-# local git as it moves HEAD, and no content a fetched branch carries can add an
-# entry to it. A commit this clone CREATED has a reflog entry whose action is a
-# commit-creating one (`commit`, `commit (amend)`, `rebase (pick)`, `merge`,
+# The credential is the reflog — HEAD's and the current branch's. It lives in
+# `$GIT_DIR`, it is written by the local git as it moves HEAD and the branch,
+# and no content a fetched branch carries can add an entry to it. A commit this clone CREATED has a reflog entry recording git
+# WRITING it (`commit`, `commit (amend)`, a rebase `(pick)`, a merge git made,
 # `cherry-pick`, `revert`, `am`); a commit this clone merely RECEIVED is known
-# only through `clone:`, `fetch`, `checkout:`, `reset:` or a `Fast-forward`,
-# which is exactly the `gh pr checkout` case being refused. The author check is
+# only through `clone:`, `fetch`, `checkout:`, `reset:`, a fast-forward or a
+# rebase's `(finish)`, which is exactly the `gh pr checkout` case being
+# refused. The author check is
 # kept underneath it, because a mismatched address is still worth naming in the
 # refusal — but it is the second condition, never the only one.
 #
-# Commits reachable from the upstream ref are trusted by construction: they are
-# on the default branch, which is what reviewing a pull request produces. So a
-# branch rebased onto — or merged with — a fetched `main` does not trip this.
+# Commits reachable from `origin/main` or `upstream/main` are trusted by
+# construction: they are on the default branch. So a branch rebased onto — or
+# merged with — a fetched `main` does not trip this.
+#
+# WHAT IT DOES NOT CATCH: a branch authored under YOUR address that you then
+# rewrite yourself — rebase, amend, `am`, a `pull --rebase`. The rewrite writes
+# the commits here and the author matches. Read the diff before rewriting
+# someone else's branch.
 #
 # THE COST, stated because it is real: a commit you wrote on another machine and
 # fetched into this clone was not created here, so this refuses it. That is the
 # same evidence a stranger's commit presents, and the bypass below is the answer
 # — an explicit one, which is the point.
 
-# Echo the upstream default-branch ref, or fail if the clone has none.
-yorkie_upstream_ref() {
-  local ref
-  for ref in refs/remotes/origin/main refs/remotes/origin/HEAD; do
+# Echo every trusted default-branch ref this clone has, one per line, or fail
+# if it has none.
+#
+# `upstream/main` as well as `origin/main`: CONTRIBUTING.md has contributors
+# work from a fork, where `origin` is the fork and its `main` usually lags.
+# Rebasing onto `upstream/main` brings in commits this clone did not create,
+# and they are no less the default branch for arriving by another remote.
+# Only these two names — not every remote's `main`, since checking out a pull
+# request can add a remote for the author's fork.
+yorkie_upstream_refs() {
+  local ref found=1
+  for ref in refs/remotes/origin/main refs/remotes/upstream/main; do
     if git rev-parse --verify --quiet "$ref" >/dev/null; then
       printf '%s\n' "$ref"
-      return 0
+      found=0
     fi
   done
-  return 1
+  if [ "$found" -ne 0 ] &&
+    git rev-parse --verify --quiet refs/remotes/origin/HEAD >/dev/null; then
+    printf '%s\n' refs/remotes/origin/HEAD
+    found=0
+  fi
+  return "$found"
 }
 
 # Echo the OIDs this clone CREATED, one per line.
 #
-# `%gs` is the reflog subject, whose first word is the action. Only the
-# commit-creating actions count: `checkout:`, `reset:`, `clone:`,
-# `rebase (start):`, and any entry ending in `Fast-forward` all move HEAD onto a
-# commit that arrived from somewhere else, so an OID known only through those is
-# precisely what this refuses. An unrecognised action is not creating, so a
-# future git spelling fails closed rather than open.
+# `%gs` is the reflog subject. Only entries that record git WRITING a commit
+# count, matched on the whole subject rather than its first word:
+#
+#   - `commit`, `commit (amend)`, `commit (merge)`, `cherry-pick`, `revert`,
+#     `am`, `applypatch`;
+#   - a rebase step that writes one — `(pick)`, `(reword)`, `(edit)`,
+#     `(squash)`, `(fixup)`, `(continue)` — whether git spells the action
+#     `rebase` or `pull --rebase ...`, which is what `git pull --rebase` logs;
+#   - a merge commit git made, `merge ...: Merge made by` or
+#     `pull ...: Merge made by`.
+#
+# Everything else moves HEAD onto a commit that arrived from somewhere else:
+# `checkout:`, `reset:`, `clone:`, anything ending in `fast-forward` (any
+# case — `cherry-pick --ff` logs it lowercase, against the foreign OID), and
+# `(start)` / `(finish)` of a rebase. `(finish)` in particular names the
+# commit HEAD lands on, which after a rebase that only fast-forwarded onto a
+# fetched branch is somebody else's. An unrecognised subject is not creating,
+# so a future git spelling fails closed rather than open.
+#
+# TWO REFLOGS. HEAD's reflog is per worktree; the current branch's reflog is
+# shared by every worktree of the clone. Reading both keeps a branch you wrote
+# in one worktree yours when you check it out in another. Both are written
+# only by the local git, so the second adds no way in.
 yorkie_locally_created() {
-  git reflog show HEAD --format='%H %gs' 2>/dev/null | awk '
-    /Fast-forward$/ { next }
-    $2 == "rebase" && $3 == "(start):" { next }
-    $2 ~ /^(commit|rebase|merge|cherry-pick|revert|am|applypatch)/ { print $1 }
+  local branch
+  {
+    git reflog show HEAD --format='%H %gs' 2>/dev/null || true
+    if branch=$(git symbolic-ref -q HEAD 2>/dev/null); then
+      git reflog show "$branch" --format='%H %gs' 2>/dev/null || true
+    fi
+  } | awk '
+    tolower($0) ~ / fast-forward$/ { next }
+    /^[0-9a-f]+ (commit|cherry-pick|revert|am|applypatch)( \([a-z]+\))?:/ { print $1; next }
+    /^[0-9a-f]+ (rebase|pull)[^:]*\((pick|reword|edit|squash|fixup|continue)\):/ { print $1; next }
+    /^[0-9a-f]+ (merge|pull)[^:]*: Merge made by/ { print $1; next }
   '
 }
 
@@ -94,15 +137,16 @@ yorkie_locally_created() {
 # one command away from fixed (`git fetch origin main`, `git config
 # user.email`) and both are named in the refusal.
 yorkie_require_own_work() {
-  local hook="$1" runs="$2" upstream me commits untrusted
+  local hook="$1" runs="$2" upstreams upstream me commits untrusted
 
   if [ "${YORKIE_ALLOW_FOREIGN_TREE:-}" = "1" ]; then
     return 0
   fi
 
-  if ! upstream=$(yorkie_upstream_ref); then
-    echo "$hook: no origin/main to tell your commits from a branch you are" >&2
-    echo "        reviewing, and $runs runs this tree's code. Fetch it with" >&2
+  if ! upstreams=$(yorkie_upstream_refs); then
+    echo "$hook: no origin/main or upstream/main to tell your commits from a" >&2
+    echo "        branch you are reviewing, and $runs runs this tree's code." >&2
+    echo "        Fetch it with" >&2
     echo "        'git fetch origin main', or see the bypass below." >&2
     yorkie_print_bypass "$hook"
     return 1
@@ -118,11 +162,16 @@ yorkie_require_own_work() {
     return 1
   fi
 
+  # `upstream` names the trusted base in messages; the range excludes all of
+  # them. Word-splitting `$upstreams` is safe: these are fixed ref names.
+  upstream=$(printf '%s\n' "$upstreams" | head -n1)
+
   # Enumerated in its own command, and its status checked, because the previous
   # spelling put `git log` at the head of a pipeline: a range that failed to
   # resolve produced no output, no output read as "no foreign commits", and the
   # gate passed on the error path.
-  if ! commits=$(git log --format='%H %aE' "$upstream..HEAD" 2>/dev/null); then
+  # shellcheck disable=SC2086
+  if ! commits=$(git log --format='%H %ae' HEAD --not $upstreams 2>/dev/null); then
     echo "$hook: could not list this branch's commits against" >&2
     echo "        ${upstream#refs/remotes/}, so there is no way to tell whose code" >&2
     echo "        $runs would run. See the bypass below." >&2
@@ -134,8 +183,11 @@ yorkie_require_own_work() {
     return 0
   fi
 
-  # `%aE` is the mailmap-resolved author address, compared case-insensitively
-  # because git preserves the case a commit was made with and addresses are not
+  # `%ae` is the RAW author address. `%aE` would apply `.mailmap`, a tracked
+  # file the branch supplies, letting it map its author onto yours — which
+  # matters once you have rewritten the branch yourself (rebase, amend) and the
+  # reflog calls its commits created here. Compared case-insensitively, because
+  # git preserves the case a commit was made with and addresses are not
   # case-sensitive in practice. A commit with no author address at all
   # (`--author='A U Thor <>'`, which git accepts) yields an empty field: it is
   # reported as untrusted rather than silently compared equal to nothing, which

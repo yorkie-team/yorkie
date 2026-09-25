@@ -2,7 +2,11 @@
 set -euo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
-GIT_DIR=$(git rev-parse --absolute-git-dir)
+# The COMMON git dir, not `--absolute-git-dir`: in a linked worktree the latter
+# is `.git/worktrees/<name>`, while `core.hooksPath` is shared config. A
+# snapshot there dies with the worktree, and git then runs no hooks at all —
+# silently, since a missing hooks directory is not an error to git.
+GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 
 # THE RE-RUN IS THE VECTOR THE SNAPSHOT DOES NOT COVER BY ITSELF. Everything
 # below copies the CURRENT worktree's hook sources into `$GIT_DIR`, where no
@@ -17,6 +21,10 @@ GIT_DIR=$(git rev-parse --absolute-git-dir)
 # prompt, because this script is also run non-interactively, and it names the
 # decision out loud — a maintainer editing the hooks means it; a reviewer who
 # ran `gh pr checkout` almost never does.
+#
+# This guards against ACCIDENT only. A malicious branch's setup.sh can simply
+# leave the check out, and running that file is already running the branch's
+# code. Run setup on the default branch.
 #
 # WHAT IS COMPARED IS WHAT THIS SCRIPT RUNS, not what it is named after — and
 # the first version of this list got that wrong. It compared `.githooks`,
@@ -40,8 +48,10 @@ GIT_DIR=$(git rev-parse --absolute-git-dir)
 # topic branch, which is how a guard gets exported to /dev/null.
 HOOK_SOURCES=(.githooks scripts/hooks scripts/setup.sh ':(glob)scripts/*.mjs')
 
+# `upstream/main` first: in a fork, `origin/main` is the fork's and may lag,
+# and current hook sources would then read as a local edit and be refused.
 UPSTREAM_REF=""
-for ref in refs/remotes/origin/main refs/remotes/origin/HEAD; do
+for ref in refs/remotes/upstream/main refs/remotes/origin/main refs/remotes/origin/HEAD; do
   if git -C "$REPO_ROOT" rev-parse --verify --quiet "$ref" >/dev/null; then
     UPSTREAM_REF="$ref"
     break
@@ -51,10 +61,14 @@ done
 if [ -z "$UPSTREAM_REF" ]; then
   echo "setup: no origin/main to compare the hook sources against; installing this" >&2
   echo "       worktree's copies as-is." >&2
-elif ! git -C "$REPO_ROOT" diff --quiet "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}"; then
+elif ! git -C "$REPO_ROOT" diff --quiet "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}" ||
+  # `git diff` ignores untracked files, but `cp .githooks/*` copies them.
+  [ -n "$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "${HOOK_SOURCES[@]}")" ]; then
   if [ "${YORKIE_ALLOW_LOCAL_HOOKS:-}" != "1" ]; then
     echo "setup: this worktree's hook sources differ from ${UPSTREAM_REF#refs/remotes/}:" >&2
     git -C "$REPO_ROOT" diff --stat "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}" >&2
+    git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "${HOOK_SOURCES[@]}" |
+      sed 's/^/ (untracked) /' >&2
     echo >&2
     echo "       Installing would snapshot THESE copies into \$GIT_DIR, where no later" >&2
     echo "       checkout can replace them. If this is a branch you are reviewing rather" >&2
@@ -91,14 +105,14 @@ fi
 # and the commit that hands a branch's Makefile to `make` happens later, in a
 # checkout of a branch that need not exist yet. So the second half is checked
 # where it has to be, inside the hooks: `.githooks/trusted-tree.sh` refuses
-# when the checkout carries commits on top of `origin/main` that this clone
-# did not create — read out of HEAD's reflog, not out of the author line the
-# branch's own author writes — which is what checking out somebody's pull
+# when the checkout carries commits on top of `origin/main` or `upstream/main`
+# that this clone did not create — read out of the reflog, not out of the
+# author line the branch's own author writes — which is what checking out somebody's pull
 # request produces and what writing your own does not. Bypass with
 # `--no-verify` or
 # `YORKIE_ALLOW_FOREIGN_TREE=1`. CONTRIBUTING.md says the same thing where
 # contributors read it.
-HOOKS_SNAPSHOT="$GIT_DIR/githooks"
+HOOKS_SNAPSHOT="$GIT_COMMON/githooks"
 rm -rf "$HOOKS_SNAPSHOT"
 mkdir -p "$HOOKS_SNAPSHOT"
 cp "$REPO_ROOT/.githooks/"* "$HOOKS_SNAPSHOT/"
