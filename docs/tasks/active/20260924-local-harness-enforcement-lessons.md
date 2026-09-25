@@ -610,3 +610,22 @@ The full version, with the comments that carry the reasoning, is the
 report posted to the pull request. Landing the ci.yml hunk WITHOUT the test
 hunk is fine; landing the test hunk without the ci.yml hunk fails the suite,
 which is the direction that pair should fail in.
+
+## Standstill — applied by a maintainer
+
+The panel paged after both findings were disputed twice and upheld twice.
+A maintainer applied the patch above, with two departures from it:
+
+- The licence gate MOVED to `ci.yml` rather than being copied. It reads only
+  `.go` files and no path in `ci.yml`'s `paths-ignore` holds one, so
+  `docs.yml`'s lack of a filter bought it nothing, and two homes would have
+  meant two things to keep in step.
+- `buf-setup-action` went too, not only `buf-lint-action`: both are archived.
+  `buf-action` replaces it with `version: 1.50.0` stated, because that was the
+  old action's default and the new one has none — swapping the action must not
+  also swap the CLI that lint, breaking and generate run with.
+
+**Rule: the rebuttal bound carries forward with no provenance.** `@claude
+rerun` clears the latch and buys exactly one fix attempt; a finding the fixer
+cannot push re-pages right after it. When the fix needs a permission the loop
+lacks, a human pushes it before the rerun, not after.
