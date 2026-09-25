@@ -69,6 +69,11 @@ make lint
 > [!NOTE]  
 > If you have an old version of `golangci-lint` installed locally, running `make lint` may fail—especially if the linter doesn't support the newer version of Go. It's recommended to run `make tools` periodically to keep your tools up to date.
 
+`make verify` is the gate a commit has to pass: `make lint`, the licence
+headers, and the unit tests. It leaves out the integration lane, which needs
+MongoDB and runs in CI. The hooks installed by `scripts/setup.sh` run it for
+you — see Commit Message Format below.
+
 ### Setting for VSCode
 If you are using VSCode, add the following in your `.vscode/settings.json` so that proper language features work correctly in test files
 with build tag `integration`, `bench`, or `complex`.
@@ -109,11 +114,54 @@ detached.
 
 The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various git tools.
 
-To enable automatic commit message validation, run:
+To enable the local hooks, run:
 
 ```sh
 bash scripts/setup.sh
 ```
+
+This copies `.githooks/` into your clone's `$GIT_DIR` and points
+`core.hooksPath` there, then does the same for the Claude Code hooks. The
+installed hooks validate every commit message against the format above,
+run `make lint` on commit, and run `make verify` (lint, licence headers
+and the unit tests) on push.
+
+They are snapshots on purpose: a hook run out of the working tree is a
+script the branch you have checked out supplies, so a rewritten
+`pre-commit` would run the moment you committed in that checkout. The
+cost is that an improved hook reaches your clone when you next run this
+script — and because that re-run snapshots whatever the current
+worktree holds, `setup.sh` refuses when anything it installs or runs
+differs from `origin/main`: `.githooks/`, `scripts/hooks/`, `setup.sh`
+itself, and the shared `scripts/*.mjs` modules the installer imports —
+the last because a branch that changes only one of those still gets its
+code executed by the install it passes. Re-run it on the default
+branch; if you are the one changing the hooks, say so with
+`YORKIE_ALLOW_LOCAL_HOOKS=1 bash scripts/setup.sh`.
+
+The snapshot pins *which* hook runs, not *what it invokes*: `make lint`
+and `make verify` resolve through the working tree's `Makefile`,
+`.golangci.yml` and test code, so committing inside a checkout of
+someone else's branch would run that branch's build and test code. The
+two gates therefore refuse to run at all when the checkout carries
+commits on top of `origin/main` that this clone did not create — the
+shape a reviewed pull request has and your own work does not. What is
+checked is HEAD's reflog, which lives in `$GIT_DIR` and records which
+commits your git built, rather than the author address, which is a field
+the branch's author writes and so proves nothing. The cost is that a
+commit you wrote on another machine and fetched here presents the same
+evidence a stranger's does. Push a fix to a contributor's branch — or
+your own from elsewhere — with `--no-verify`, or, having read its diff,
+`YORKIE_ALLOW_FOREIGN_TREE=1 git push`.
+The integration lane is not in them — it needs MongoDB, so CI runs it.
+Any of the three can be bypassed with `--no-verify` when you mean to.
+
+The two gates refuse rather than skip when the tool they need is absent
+— a gate that quietly does nothing when its checker is missing is the
+case it exists to prevent. `pre-commit` needs `golangci-lint` only when
+the commit stages a `.go` file, so a documentation-only change needs no
+Go toolchain; `pre-push` needs `node` for the licence check. `make
+tools` installs the first.
 
 ### Testing
 

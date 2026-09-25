@@ -5,12 +5,24 @@
 // can never drift apart; `harvest.mjs` imports the hand-off marker for the same
 // reason.
 //
-// NO HOOK MIRRORS THIS HERE. Upstream pairs the trailer with a
-// `require-ai-disclosure.sh` harness hook that enforces it at commit time; that
-// hook is not ported (this repository's only git hook is `commit-msg`, and the
-// harness hooks are a separate subsystem). So DISCLOSURE_TRAILER is currently
-// written by the fixer prompts and read by nothing that can refuse a commit —
-// the PR-body predicate below is the gate that actually holds.
+// NO HOOK MIRRORS THIS HERE, AND PORTING ONE WOULD BE A NO-OP. Upstream pairs
+// the trailer with a `require-ai-disclosure.sh` harness hook that enforces it at
+// commit time. This repository now has a harness-hook subsystem of its own
+// (`scripts/hooks/`, wired per clone by its `install.mjs`) and three git hooks, so
+// the reason is no longer "there is nowhere to put it" — it is that the hook
+// would never fire. Upstream it is inert unless an environment variable is set,
+// and the LOCAL autonomous arm (`spec-to-pr`) is what sets it. There is no local
+// autonomous arm here, and nothing in this repository sets that variable, so the
+// ported hook would be present and permanently asleep.
+//
+// That leg is the whole argument, deliberately. An earlier version of this
+// paragraph also claimed `claude-code-action` never reads a branch's
+// `.claude/settings.json` — which is unverified, and `agent-review-panel.yml`
+// strips `.claude/` on the opposite assumption ("settings + hooks the SDK could
+// load and run"). The rejection does not need it.
+//
+// So DISCLOSURE_TRAILER is written by the fixer prompts and read by nothing that
+// can refuse a commit — the PR-body predicate below is the gate that holds.
 
 /** The commit trailer autonomous runs carry. Advisory here — see above. */
 export const DISCLOSURE_TRAILER = "Assisted-by: Claude Code (autonomous)";

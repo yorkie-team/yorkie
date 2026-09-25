@@ -42,6 +42,28 @@ fmt: ## applies format and simplify codes
 lint: ## runs the golang-ci lint, checks for lint violations
 	golangci-lint run --timeout 2m ./...
 
+# The gate a commit has to pass before it is pushed, and the one `.githooks/`
+# calls. Deliberately the lanes that need no service: `make test` needs
+# MongoDB, so the integration lane stays in CI where a container is already
+# up. Keep it in step with the "verification command" named in
+# docs/design/agent-command-verbs.md §4c.
+#
+# The CI fixer prompts still spell out `make lint` and `go test ./...` rather
+# than calling this. That is a rename worth doing separately from introducing
+# the target, and §4c records it.
+verify: lint verify-license ## runs the checks a commit must pass: lint, licence headers, unit tests
+	go test ./...
+
+# Node is not otherwise needed to build or test this repository, so the skip
+# is announced rather than silent. `.githooks/pre-push` refuses outright —
+# there, nothing reads the line.
+verify-license: ## checks every Go file carries the Apache 2.0 header
+	@if command -v node >/dev/null 2>&1; then \
+		node scripts/verify-license.mjs; \
+	else \
+		echo "[verify:license] SKIPPED - node not found; the Docs workflow still checks this."; \
+	fi
+
 coverage: ## runs coverage tests
 	go clean -testcache
 	go test -tags integration -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
@@ -96,4 +118,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest start stop swagger help
+.PHONY: tools proto build build-binaries fmt lint verify verify-license test test-complex coverage bench docker docker-latest start stop swagger help

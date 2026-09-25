@@ -12,6 +12,7 @@ make tools         # Install dev tools (run periodically)
 make build         # Build binary to bin/yorkie
 make fmt           # gofmt
 make lint          # golangci-lint
+make verify        # lint + licence headers + unit tests — the commit gate
 make proto         # Regenerate protobuf via buf
 make test          # Integration tests (-tags integration, MongoDB required)
 make test-complex  # Long-running complex tests (-tags complex)
@@ -26,8 +27,8 @@ docker compose -f build/docker/docker-compose.yml up --build -d
 ## Commit Messages
 
 Per `CONTRIBUTING.md`: subject ≤70 chars (what changed), blank line,
-body wrapped at 80 chars (why). Enable the local commit-msg validator
-once with `bash scripts/setup.sh`.
+body wrapped at 80 chars (why). `bash scripts/setup.sh`, once per clone,
+installs the hooks that check this and the gates in step 2 below.
 
 ```text
 Skip leadership write when active leader exists
@@ -75,9 +76,12 @@ changes go to `docs/design/<topic>.md`.
 1. **Plan** — write the todo file before touching code; update
    `docs/design/` if architecture changes.
 2. **Branch + commit** — topic branch from `main`; each commit
-   `make lint` green and `make test` green when MongoDB is up (or at
-   least `go test ./...` for unit-only changes); follow the
-   commit-message convention above.
+   `make verify` green, plus `make test` when MongoDB is up and the
+   change reaches the integration lane; follow the commit-message
+   convention above. `bash scripts/setup.sh` installs hooks that check
+   part of this for you — `make lint` on commit, the full `make verify`
+   on push — so the per-commit half is lint only and the tests are
+   caught one layer out, not per commit.
 3. **Self review** — `/self-review`: a bounded loop of review → fix →
    re-verify over the full branch diff, **max 3 rounds, stopping at the
    first round with no blocking findings**. Rotate what you weight per

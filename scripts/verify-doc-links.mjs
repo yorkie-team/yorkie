@@ -41,6 +41,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isDirectRun } from './direct-run.mjs';
+
 const PREFIX = '[verify:doc-links]';
 
 /** Repository-root files that seed the walk, in the order they are reported. */
@@ -225,11 +227,7 @@ export function collectFindings(repoRoot) {
   return findings;
 }
 
-const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
-
-if (isDirectRun) {
+if (isDirectRun(import.meta.url)) {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const findings = collectFindings(repoRoot);
   if (findings.length === 0) {

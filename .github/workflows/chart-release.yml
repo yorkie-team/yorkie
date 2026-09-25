@@ -23,9 +23,12 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Install Helm
-        uses: azure/setup-helm@v3
-        with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
+        # v4 for its node20 runtime; v3 declares `using: node16`, which GitHub
+        # is removing. Inputs are compatible — `version` still defaults to
+        # `latest` — and `token` is dropped rather than carried over because v4
+        # defaults it to `${{ github.token }}` and marks it deprecated
+        # ("GitHub token is no longer required").
+        uses: azure/setup-helm@v4
 
       - name: Add dependency chart repos
         run: |

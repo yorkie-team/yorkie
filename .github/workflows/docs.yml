@@ -3,12 +3,26 @@
 # police. Adding a step to that workflow would look like coverage and provide
 # none.
 #
-# NO PATH FILTER, deliberately. Filtering to `**/*.md` is the obvious economy
-# and it is wrong: a link breaks when its TARGET moves, and targets are not
-# only markdown. packages/cli-style READMEs cite source files, and deleting a
-# cited `.ts` or renaming a directory breaks a link without touching a single
-# `.md`. The job installs Node and reads text — seconds — so filtering buys
-# nothing worth a hole in the one check that watches links.
+# The licence gate is NOT here, though it is also a Node script: it reads only
+# `.go` files, which no ignored path can hold, so ci.yml covers every change
+# that could break it — and ci.yml is the workflow the autonomous CI-fix loop
+# subscribes to. A gate that reds only here stops an agent-managed PR with
+# nothing watching it.
+#
+# NO PATH FILTER, deliberately.
+#
+# A link breaks when its TARGET moves, and targets are not only markdown.
+# Walked with the checker's own `linkTargets` from its three roots, the graph
+# reaches 39 non-markdown targets: 35 images under `docs/design/media/`, three
+# script directories reached through their READMEs, and this workflow file.
+# (The breakdown is the durable part — a count of the markdown files it walks
+# would change on every PR that adds a doc, and nothing checks it.) Renaming
+# or deleting any of those breaks a link without touching a single `.md`.
+# There are no relative `.go` targets: every Go citation in `docs/design/` is
+# an absolute GitHub URL, which the checker skips as a scheme.
+#
+# The job installs Node and reads text — seconds — so filtering buys nothing
+# worth a hole in the only check that watches links.
 name: Docs
 
 on:
@@ -43,5 +57,5 @@ jobs:
 
       # The glob, not the directory: `node --test scripts/test/` tries to load
       # the directory as a module and dies with MODULE_NOT_FOUND.
-      - name: Test the link checker
+      - name: Test the repository checks
         run: node --test 'scripts/test/**/*.test.mjs'

@@ -994,6 +994,11 @@ test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
     "build/docker/sharding/docker-compose.yml",
     "scripts/ci/parse-bench.js",
     "scripts/verify-doc-links.mjs",
+    // The module both verify scripts import their "am I the entry point?"
+    // predicate from. Editing it alone makes docs.yml's two gates exit 0
+    // without checking anything, so it defines CI's behaviour exactly as much
+    // as the scripts that import it.
+    "scripts/direct-run.mjs",
   ]) {
     assert.equal(definesCi(p), true, `${p} defines what CI does and must be refused by gate 1b`);
   }

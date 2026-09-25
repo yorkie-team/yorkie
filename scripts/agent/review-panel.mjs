@@ -1444,11 +1444,17 @@ const CONFIDENCE_LEVELS = new Set(FINDING.properties.confidence.enum);
  *     class golangci-lint already reds.
  *   - The same file DISABLES `staticcheck` and `unused`. "golangci-lint runs"
  *     on its own would have implied both and silenced the dead-code class.
- *   - The Apache 2.0 licence header CLAUDE.md requires on every Go file has no
- *     lane behind it. Searched `.github/workflows/`, the Makefile and
- *     `scripts/`: no `addlicense`, no header check.
+ *   - The Apache 2.0 licence header CLAUDE.md requires on every Go file HAS a
+ *     lane as of `scripts/verify-license.mjs`: `ci.yml`'s `build` job runs it
+ *     and `make verify` runs it locally. It did not when this note was first
+ *     written — 17 files had drifted — and the bullet lived in the NOT-enforced
+ *     half until the lane landed. Moving it is the same discipline as the
+ *     formatting bullet above, in the other direction: a lens told to hunt a
+ *     class CI reds in seconds spends turns for nothing.
  *   - `ci.yml` carries a markdown `paths-ignore`, so on a documentation-only PR
- *     none of the lanes below run at all — only `docs.yml`'s link check.
+ *     none of the lanes below run at all — only `docs.yml`'s link check. The
+ *     licence check loses nothing by that: it reads `.go` files, and no
+ *     ignored path can hold one.
  *   - `complex-test`, `bench` and `load-test` are path-gated by the
  *     `ci-target-check` job, so most pull requests run none of them. Only the
  *     `build` job is unconditional.
@@ -1492,18 +1498,20 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "- `node scripts/verify-doc-links.mjs` and its own `node --test` suite, on every",
   "  PR with no path filter: a markdown link reachable from CLAUDE.md, AGENTS.md",
   "  or README.md must resolve on disk.",
+  "- `node scripts/verify-license.mjs`, in the same `build` job as the Go lanes:",
+  "  every `.go` file must carry the Apache 2.0 grant clause in its first 40",
+  "  lines. `make verify` runs it locally too.",
   "",
   "NOT ENFORCED BY ANYTHING — a real finding here is worth MORE than one the lanes",
   "above would have caught, because nothing else in the pipeline will catch it:",
   "- `staticcheck` and `unused`. Both are disabled in `.golangci.yml`, so the",
   "  whole staticcheck class and unreferenced code reach main unremarked.",
-  "- The Apache 2.0 licence header every Go file is required to carry. It is a",
-  "  convention in CLAUDE.md with no lane behind it.",
   "- `go test -tags complex` (the sharded-cluster suite), `-tags bench`, and the",
   "  k6 load test. All three are path-gated, so most pull requests run none.",
   "- Everything above, on a documentation-only PR. `ci.yml` carries",
   "  `paths-ignore: \"**/*.md\"` (plus api/docs, build/charts, design/ and *.txt),",
-  "  so such a PR runs no lint, no build and no tests — only the link check.",
+  "  so such a PR runs no lint, no build and no tests — only `docs.yml`'s link",
+  "  check, which reads no Go behaviour.",
   "- A data race on a path no test exercises. `-race` observes executions, not",
   "  code, so it proves nothing about what the suite never reached.",
   "- Whether a passing test asserts anything. The lanes prove the suite is GREEN,",

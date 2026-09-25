@@ -1441,10 +1441,14 @@ jobs:
           # The execution-log step above needs no such line only because it names
           # its files literally: each search root is then the FILE, and no hidden
           # component is ever inspected. Two steps reading the same directory,
-          # with opposite outcomes, is the shape of this bug. `ci.yml`'s
-          # `.harness-reports/` upload already carries this flag for the same
-          # reason; #641 shipped without it and produced no artifact on any of the
-          # five real panel runs that followed.
+          # with opposite outcomes, is the shape of this bug. The twin step in
+          # `agent-review-on-demand.yml` carries this flag for the same reason,
+          # and a guard in the agent suite asserts both still do — the failure
+          # is a green step that uploaded nothing, which no run reports.
+          #
+          # Do not look for a `ci.yml` precedent: it has no `upload-artifact`
+          # step at all, and `.harness-reports/` here is a gitignored scratch
+          # directory `novelty.test.mjs` writes, not a reports sink.
           #
           # The literal `.agent-review/meta.json` above is NOT immune the way the
           # execution log's literal paths are, and that is measured rather than

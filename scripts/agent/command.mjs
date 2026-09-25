@@ -33,6 +33,15 @@ const VERB_TO_COMMAND = {
   rerun: "rerun", // clear a paged/blocked agent PR and re-engage the review→fix loop
 };
 
+/**
+ * The canonical verbs, deduplicated — `summarise` and `summarize` are one
+ * command. Exported so a guard can assert that every surface which accepts a
+ * mention answers every verb: the inline review thread silently answered none
+ * of them for months, because nothing compared this list against the
+ * workflows that consume it.
+ */
+export const COMMANDS = Object.freeze([...new Set(Object.values(VERB_TO_COMMAND))]);
+
 // "@claude" + one run of whitespace + a recognized verb, as a whole word.
 // `i` = case-insensitive (@Claude / REVIEW); no `g` — we want the leftmost match.
 const COMMAND_RE = new RegExp(

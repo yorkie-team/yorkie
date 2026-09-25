@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The full local gate — lint, licence headers, unit tests — once per push.
+#
+# This is the last point at which a failure costs only local time. Past it a
+# red lane is a CI run, a PR comment, and on an agent-managed branch a fix
+# round that `agent-iterate-ci` spends out of a bound of four.
+#
+# `make test` (integration, -tags integration) is deliberately NOT here: it
+# needs MongoDB, which a push cannot assume is up. CI runs it against a real
+# container.
+#
+# IT RUNS THE WORKING TREE'S CODE, and that is not an accident of this
+# implementation — it is what verifying a tree means. `make verify` is the
+# branch's `Makefile`, its `.golangci.yml`, its `node scripts/verify-license.mjs`
+# and its `go test ./...`. `scripts/setup.sh` snapshots THIS FILE into
+# `$GIT_DIR` so a branch cannot rewrite the hook itself, and that is the only
+# half a snapshot can close. The other half is whose tree is being run, which
+# `trusted-tree.sh` answers below: it refuses when this checkout carries
+# commits somebody else wrote, so reviewing a pull request by checking it out
+# and committing in it — the case to watch — does not execute it.
+#
+# Bypass with `git push --no-verify` when you mean to — including when you are
+# standing in someone else's branch and only want the push.
+
+# REFUSE RATHER THAN SKIP, because nothing reads the skip on this path.
+# `make verify-license` announces "SKIPPED" when node is absent, which is the
+# right behaviour for a person who typed it — they see the line. Here git
+# reads only the exit status, and that line scrolls past under ~35s of test
+# output. A push would then succeed with the licence gate silently absent,
+# which is the failure this hook exists to close.
+#
+# It also makes the two tools symmetric: `make verify` already hard-fails on a
+# missing golangci-lint, since make exits non-zero through `lint`.
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node not found; the licence gate cannot run. Install node," >&2
+  echo "          or push with --no-verify and let the Docs workflow check it." >&2
+  exit 1
+fi
+
+# `make verify` compiles and runs this tree's tests, which is the broadest of
+# the two hooks' execution surfaces. Check whose branch it is first.
+# shellcheck source=.githooks/trusted-tree.sh
+. "$(dirname "$0")/trusted-tree.sh"
+yorkie_require_own_work "pre-push" "'make verify'" || exit 1
+
+exec make verify

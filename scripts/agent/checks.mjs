@@ -141,7 +141,26 @@ export const CI_DEFINING_PATHS = [
   "build/docker/**",
   // Scripts a workflow invokes directly.
   "scripts/ci/**",
-  "scripts/verify-*.mjs",
+  // …and the modules those scripts import. `scripts/*.mjs` rather than
+  // `scripts/verify-*.mjs`: `verify-doc-links.mjs` and `verify-license.mjs`
+  // both import `direct-run.mjs` for the predicate that decides whether their
+  // CLI body runs at all, so a branch editing that one file makes both of
+  // docs.yml's gates exit 0 having checked nothing — the same fail-open as
+  // editing the verify scripts themselves, one import away from the pattern
+  // that only named them. The directory holds nothing but those scripts and
+  // their shared helpers, so the wider glob costs no false refusals.
+  "scripts/*.mjs",
+  // …and the suite those scripts are graded by. `docs.yml` runs
+  // `node --test 'scripts/test/**'`, so a branch editing a guard there changes
+  // what the lane proves exactly as much as editing the script it guards.
+  "scripts/test/**",
+  // The local enforcement layer. `setup.sh` decides what `core.hooksPath` and
+  // Claude Code's hook wiring point at, and the two hook directories are what
+  // they point at — a branch rewriting any of them changes what runs on a
+  // reviewer's machine and what a contributor's clone checks before pushing.
+  "scripts/setup.sh",
+  "scripts/hooks/**",
+  ".githooks/**",
 ];
 
 // `**` spans separators, `*` does not, everything else is literal. Deliberately

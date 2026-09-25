@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The cheap half of `make verify`, run on every commit.
+#
+# CLAUDE.md step 2 requires each commit to be lint-green. Until this hook
+# existed that was a convention with nothing behind it, and the first thing
+# CI reported was a lint failure on a commit that had already been pushed.
+#
+# Lint only. `go test ./...` is ~35s against golangci-lint's ~6s, which is
+# the difference between a gate people keep and one they disable — the tests
+# run in pre-push, one layer out, where the cost is paid once per push
+# instead of once per commit.
+#
+# SCOPE: this lints the working tree, not the staged content. A commit made
+# with `git add -p` can therefore pass on code that is not being committed,
+# or fail on code that is not either. Linting an index-only checkout would
+# cost a temporary worktree per commit; pre-push and CI both see the real
+# thing, so the cheap approximation is the right trade here.
+#
+# SAME EXECUTION SURFACE AS pre-push, stated here too because the hooks are
+# read one at a time: `make lint` resolves through the WORKING TREE's
+# `Makefile` and `.golangci.yml`. The `$GIT_DIR` snapshot `scripts/setup.sh`
+# takes pins which hook runs, not what the hook invokes, so committing inside a
+# checkout of an unread branch would run that branch's lint configuration —
+# which is why `trusted-tree.sh` below refuses when this checkout carries
+# somebody else's commits. Its header carries the argument.
+#
+# Bypass with `git commit --no-verify` when you mean to.
+
+# NOTHING TO LINT IS NOT THE SAME AS NO LINTER, and the two must not share an
+# answer. A commit staging no Go cannot introduce a Go lint failure, so there
+# is nothing here to refuse — and refusing anyway would mean an outside
+# contributor fixing a typo in a README, who followed CONTRIBUTING.md and ran
+# `scripts/setup.sh`, cannot commit without installing the Go toolchain.
+#
+# NO --diff-filter. It is tempting to narrow this to added-or-modified, and
+# both plausible narrowings are wrong. `ACM` drops `R`, so a rename-with-edit
+# — which git reports as a single `R` entry above ~50% similarity — stages Go
+# and skips the lint entirely. Adding `R` still drops `D`, and a deletion
+# breaks compilation for every file that referenced the deleted one, which is
+# a failure golangci-lint reports. Any staged change to a `.go` file is a
+# reason to run.
+#
+# git's own pathspec does the filtering. A `| grep -q '\.go$'` would be the
+# obvious spelling and is a trap here: `grep -q` exits at the first match,
+# `git` takes SIGPIPE, and `set -o pipefail` then reports the pipeline as
+# FAILED — inverting the test precisely when Go files are staged.
+if [ -z "$(git diff --cached --name-only -- '*.go')" ]; then
+  exit 0
+fi
+
+# There IS Go to lint, so a missing linter is a refusal rather than a skip. A
+# lint gate that quietly does nothing when the linter is absent is the case it
+# exists to prevent.
+if ! command -v golangci-lint >/dev/null 2>&1; then
+  echo "pre-commit: golangci-lint not found; run 'make tools'." >&2
+  exit 1
+fi
+
+# There is Go to lint, so `make lint` — and with it this branch's Makefile and
+# .golangci.yml — is about to run. Check whose branch it is first.
+# shellcheck source=.githooks/trusted-tree.sh
+. "$(dirname "$0")/trusted-tree.sh"
+yorkie_require_own_work "pre-commit" "'make lint'" || exit 1
+
+exec make lint

@@ -507,15 +507,32 @@ fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
 `go test -tags integration -race ./...` against a real MongoDB.
 
 *Enforced by nothing* — `staticcheck` and `unused` are explicitly disabled in
-`.golangci.yml`. The Apache license header every Go file is required to carry
-is a convention with no lane behind it. `complex-test`, `bench` and `load-test`
-are path-gated and do not run on most PRs. And `ci.yml` carries
-`paths-ignore: "**/*.md"`, so a documentation-only PR runs none of the above —
-only the separate `docs.yml` link check.
+`.golangci.yml`. `complex-test`, `bench` and `load-test` are path-gated and do
+not run on most PRs. And `ci.yml` carries `paths-ignore: "**/*.md"`, so a
+documentation-only PR runs none of the above — only the separate `docs.yml`,
+which checks documentation links and reads no Go behaviour.
+
+The Apache license header was on this list, as a convention with no lane behind
+it, and 17 of 486 `.go` files had drifted by the time anyone counted. It now has
+one: `scripts/verify-license.mjs`, run by `ci.yml`'s `build` job and by `make
+verify` locally. It sits in `ci.yml` rather than the unfiltered `docs.yml`
+because `agent-iterate-ci.yml` subscribes to CI alone — a gate that reds in
+another workflow stops an agent-managed PR with nothing watching it — and
+`paths-ignore` costs it nothing, since no ignored path holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
+`MECHANICAL_COVERAGE_NOTE` was derived from, so the two move together — a stale
+entry here becomes a lens instructed to hunt a class CI already reds.
 
 **c. The verification command the fixer runs.** `pnpm verify:fast` becomes
-`make lint` plus `go test ./...`; the integration lane needs the docker-compose
-stack and is left to CI rather than run inside the fix job.
+`make verify` — `make lint` plus `go test ./...`, plus the licence check, which
+announces a skip rather than passing quietly where Node is absent. The
+integration lane needs the docker-compose stack and is left to CI rather than
+run inside the fix job. The fixer prompts in `agent-fix.yml`,
+`agent-iterate-ci.yml` and `agent-review-panel.yml` still spell the pair out
+rather than calling the target. Switching them is NOT a pure rename: `make
+verify` also runs the licence check, so today the autonomous arm verifies
+without that gate and CI's `build` job is what catches it. Deliberately not
+bundled with the commit that introduced the target — changing what a fixer runs
+is a behaviour change to the pipeline and belongs in its own.
 
 #### 2.1 What the port actually carried
 

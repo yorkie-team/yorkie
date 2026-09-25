@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCommand } from "./command.mjs";
+import { COMMANDS, parseCommand } from "./command.mjs";
+import { readWorkflow, skipWithout, WORKFLOW_DIR } from "./workflow-presence.mjs";
 
 const CLI = fileURLToPath(new URL("./command.mjs", import.meta.url));
 
@@ -93,4 +94,48 @@ test("CLI: prints command= to stdout and appends to $GITHUB_OUTPUT", () => {
   // Surface + fallback: bare mention on an issue → help.
   const stdout2 = execFileSync("node", [CLI, "@claude", "issue"], { encoding: "utf8" });
   assert.equal(stdout2, "command=help\n");
+});
+
+// EVERY VERB TYPEABLE ON THE INLINE SURFACE IS ANSWERED THERE.
+//
+// This is the guard the class needed and did not have.
+// `agent-review-reply.yml` is the only workflow subscribed to
+// `pull_request_review_comment`, and its `reply` job requires
+// `command == 'reply'`. So every other verb routed correctly, matched no
+// job, and produced nothing at all — no comment, no failed check. The
+// silence was invisible precisely because routing WORKED.
+//
+// Reads the workflow as text rather than parsing YAML: the list lives in an
+// `if:` expression, and the drift being caught is a verb added to
+// VERB_TO_COMMAND above and not to that expression.
+test("the inline help arm answers every canonical verb", skipWithout("agent-review-reply.yml"), () => {
+  const wf = readWorkflow("agent-review-reply.yml");
+  const m = wf.match(/contains\(fromJSON\('(\[[^']*\])'\), needs\.route\.outputs\.command\)/);
+  assert.ok(m, "agent-review-reply.yml has no inline-help verb list to check");
+
+  const answered = JSON.parse(m[1]);
+  // `reply` is a FALLBACK in parseCommand, not an entry in VERB_TO_COMMAND, so
+  // it never appears in COMMANDS and needs no filtering out. Asserted rather
+  // than assumed: if it ever became a real verb, the help list would have to
+  // exclude it — it has its own job — and this is where that would surface.
+  assert.ok(!COMMANDS.includes("reply"), "`reply` is a fallback, not a verb");
+
+  assert.deepEqual(
+    [...answered].sort(),
+    [...COMMANDS].sort(),
+    "the inline help verb list has drifted from command.mjs's VERB_TO_COMMAND",
+  );
+});
+
+test("pull_request_review_comment still has exactly one subscriber", () => {
+  // The help arm assumes it is the only responder on that surface; a second
+  // subscriber would make a mistyped verb draw two replies. If a workflow is
+  // added here deliberately, update the help arm's dedup rather than this.
+  // BOTH SPELLINGS. GitHub accepts `.yaml`, and filtering to `.yml` is the
+  // same blind spot this branch removed from the actionlint lane — a guard
+  // with the defect it was written to catch.
+  const subscribers = readdirSync(WORKFLOW_DIR)
+    .filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"))
+    .filter((f) => /^\s*pull_request_review_comment:/m.test(readWorkflow(f)));
+  assert.deepEqual(subscribers, ["agent-review-reply.yml"]);
 });
