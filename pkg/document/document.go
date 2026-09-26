@@ -672,7 +672,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 	// 04. Do Garbage collection.
 	if !d.options.DisableGC && !hasSnapshot {
-		d.GarbageCollect(pack.VersionVector)
+		// d.mu is already held by this method, so this goes to the unlocked
+		// helper rather than the exported GarbageCollect, which locks it.
+		d.garbageCollect(pack.VersionVector)
 	}
 
 	// 05. Update the status.
@@ -867,7 +869,35 @@ func (d *Document) RootObject() *crdt.Object {
 }
 
 // Root returns the root object of this document.
+//
+// d.mu is held for the whole call because the clone is shared mutable
+// state, not a read-only view: ensureClone writes d.cloneRoot, and the
+// error paths of ApplyChangePack nil it from the sync or watch goroutine.
+// Reading it unlocked could therefore observe the nil a failed remote
+// apply just stored -- between the ensureClone here and the dereference
+// below -- and panic on a change a remote peer chose to send.
+//
+// The exception is a call made from inside an updater, which already
+// holds d.mu (test/integration/tree_test.go:431 reads the document it is
+// editing) and would deadlock on the non-reentrant mutex. d.updating
+// carries exactly that signal, the same one Undo, Redo and ClearHistory
+// read to refuse rather than deadlock. It is per-document rather than
+// per-goroutine, so a read racing another goroutine's updater still runs
+// unlocked, as it did before; the remote-apply window above is what the
+// lock closes, and no updater is running during one.
 func (d *Document) Root() *json.Object {
+	if d.updating.Load() {
+		return d.root()
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.root()
+}
+
+// root builds the user-facing view of the clone with d.mu already held.
+func (d *Document) root() *json.Object {
 	if err := d.ensureClone(); err != nil {
 		panic(err)
 	}
@@ -882,7 +912,30 @@ func (d *Document) DocSize() resource.DocSize {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
+//
+// It touches the same clone Root does and so takes d.mu for the same
+// reason -- except when this process is already inside an updater, which
+// is allowed to collect while Update holds the lock (gc_test.go:136) and
+// would deadlock on the non-reentrant mutex. d.updating carries exactly
+// that signal, and is the same one Undo, Redo and ClearHistory read to
+// refuse rather than deadlock. It is per-document, not per-goroutine, so
+// a collect racing another goroutine's updater still runs unlocked --
+// unchanged from before, and not the remote-apply window Root closes.
 func (d *Document) GarbageCollect(vector time.VersionVector) int {
+	if d.updating.Load() {
+		return d.garbageCollect(vector)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.garbageCollect(vector)
+}
+
+// garbageCollect collects garbage with d.mu already held. It exists because
+// ApplyChangePack holds the lock for the whole pack and sync.RWMutex is not
+// reentrant, so calling the exported method from there would deadlock.
+func (d *Document) garbageCollect(vector time.VersionVector) int {
 	if d.cloneRoot != nil {
 		if _, err := d.cloneRoot.GarbageCollect(vector); err != nil {
 			panic(err)
