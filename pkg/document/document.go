@@ -267,6 +267,11 @@ func (d *Document) Update(
 		c := ctx.ToChange()
 		result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
 		if err != nil {
+			// NOTE(hackerwins): Execute does not roll back, so the root holds a
+			// prefix of the change the clone holds in full. Drop the clone so
+			// the next access rebuilds it from the root.
+			d.cloneRoot = nil
+			d.clonePresences = nil
 			return err
 		}
 
@@ -381,13 +386,24 @@ func (d *Document) ClearHistory() error {
 // against the document, pushing the resulting reverse operations onto the
 // opposite stack. It is the port of the JS SDK's executeUndoRedo
 // (document.ts:2049-2165).
-func (d *Document) executeUndoRedo(isUndo bool) error {
+func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 	if d.updating.Load() {
 		return ErrRefusedDuringUpdate
 	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	// NOTE(hackerwins): Execute does not roll back, so a failure after the
+	// clone took the change leaves the clone and the root apart. Drop the
+	// clone so the next access rebuilds it from the root. The refusal above
+	// returns before this runs: an updater is still using the clone.
+	defer func() {
+		if err != nil {
+			d.cloneRoot = nil
+			d.clonePresences = nil
+		}
+	}()
 
 	var entries []HistoryOperation
 	if isUndo {
@@ -667,10 +683,21 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	return nil
 }
 
-func (d *Document) applyChanges(changes []*change.Change) error {
+func (d *Document) applyChanges(changes []*change.Change) (err error) {
 	if err := d.ensureClone(); err != nil {
 		return err
 	}
+
+	// NOTE(hackerwins): Each change runs on the clone before the root and
+	// Execute does not roll back, so a change that fails partway leaves the
+	// two holding different prefixes of it. Drop the clone so the next access
+	// rebuilds it from the root.
+	defer func() {
+		if err != nil {
+			d.cloneRoot = nil
+			d.clonePresences = nil
+		}
+	}()
 
 	var events []DocEvent
 	for _, c := range changes {

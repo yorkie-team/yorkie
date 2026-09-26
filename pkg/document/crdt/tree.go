@@ -2220,7 +2220,11 @@ func restoreSpanOf(node *TreeNode) *TreeRestoreSpan {
 // node's own ID is exact. Right-sibling anchors always use the start offset,
 // which floor-resolves to the leftmost fragment — the true right neighbor.
 func leftAnchorID(sibling *TreeNode) *TreeNodeID {
-	if !sibling.IsText() {
+	// A text node with no characters has no last character to anchor on, and
+	// Length()-1 would land one code unit before its own start. Local edits
+	// never create one, but a remote peer's contents can carry it; the node's
+	// own ID floor-resolves to the same node.
+	if !sibling.IsText() || sibling.Length() == 0 {
 		return sibling.id
 	}
 
