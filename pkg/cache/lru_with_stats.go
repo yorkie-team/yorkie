@@ -19,7 +19,6 @@ package cache
 
 import (
 	"hash/maphash"
-	"sync/atomic"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 )
@@ -45,7 +44,7 @@ func NewLRU[K comparable, V any](size int, name string) (*LRU[K, V], error) {
 		name:  name,
 	}
 
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shard, err := lru.New[K, V](perShard)
 		if err != nil {
 			return nil, err
@@ -65,9 +64,9 @@ func (c *LRU[K, V]) shard(key K) int {
 func (c *LRU[K, V]) Get(key K) (V, bool) {
 	value, ok := c.shards[c.shard(key)].Get(key)
 	if ok {
-		atomic.AddInt64(&c.stats.hits, 1)
+		c.stats.hits.Add(1)
 	} else {
-		atomic.AddInt64(&c.stats.misses, 1)
+		c.stats.misses.Add(1)
 	}
 	return value, ok
 }
@@ -94,7 +93,7 @@ func (c *LRU[K, V]) Remove(key K) bool {
 
 // Purge clears all entries from the cache.
 func (c *LRU[K, V]) Purge() {
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		c.shards[i].Purge()
 	}
 }
@@ -102,7 +101,7 @@ func (c *LRU[K, V]) Purge() {
 // Len returns the number of items in the cache.
 func (c *LRU[K, V]) Len() int {
 	n := 0
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		n += c.shards[i].Len()
 	}
 	return n

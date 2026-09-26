@@ -65,9 +65,8 @@ func BenchmarkChangeReplay(b *testing.B) {
 				// takes, and it is what distinguishes a replay from a client
 				// applying the same changes remotely.
 				pack := change.NewPack("d1", change.InitialCheckpoint, tc.changes(b, cnt), nil, nil)
-				b.ResetTimer()
 
-				for range b.N {
+				for b.Loop() {
 					doc := document.NewInternalDocument("d1")
 					if err := doc.ApplyChangePack(pack, true); err != nil {
 						b.Fatal(err)
@@ -108,9 +107,8 @@ func BenchmarkRemoteApply(b *testing.B) {
 				// and reconciling against it, not a collection pass whose cost
 				// depends on the version vector the pack happens to carry.
 				pack := change.NewPack("d1", change.InitialCheckpoint, tc.changes(b, cnt), nil, nil)
-				b.ResetTimer()
 
-				for range b.N {
+				for b.Loop() {
 					b.StopTimer()
 					doc := document.New("d1", document.WithDisableGC())
 					done := drainEvents(doc)

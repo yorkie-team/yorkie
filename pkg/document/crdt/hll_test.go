@@ -50,7 +50,7 @@ func TestHLL(t *testing.T) {
 	t.Run("count many unique elements within error margin", func(t *testing.T) {
 		hll := crdt.NewHLL()
 		n := 100000
-		for i := 0; i < n; i++ {
+		for i := range n {
 			hll.Add(fmt.Sprintf("user-%d", i))
 		}
 		count := hll.Count()

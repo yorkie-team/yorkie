@@ -30,11 +30,11 @@ type Counter struct {
 	*crdt.Counter
 	context   *change.Context
 	valueType crdt.CounterType
-	value     interface{}
+	value     any
 }
 
 // NewCounter creates a new instance of Counter.
-func NewCounter(n interface{}, t crdt.CounterType) *Counter {
+func NewCounter(n any, t crdt.CounterType) *Counter {
 	return &Counter{
 		valueType: t,
 		value:     n,
@@ -55,7 +55,7 @@ func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) *Counte
 // Increase adds an increase operation. Only valid for non-dedup counters.
 // Only numeric types are allowed as operand values, excluding
 // uint64 and uintptr.
-func (p *Counter) Increase(v interface{}) *Counter {
+func (p *Counter) Increase(v any) *Counter {
 	if p.Counter.IsDedup() {
 		panic("dedup counter does not support Increase(), use Add(actor)")
 	}
@@ -139,7 +139,7 @@ func (p *Counter) Add(actor string) *Counter {
 
 // inferCounterType infers the CounterType from the Go value type.
 // int64 maps to LongCnt; all other numeric types map to IntegerCnt.
-func inferCounterType(v interface{}) crdt.CounterType {
+func inferCounterType(v any) crdt.CounterType {
 	if reflect.ValueOf(v).Kind() == reflect.Int64 {
 		return crdt.LongCnt
 	}
@@ -148,7 +148,7 @@ func inferCounterType(v interface{}) crdt.CounterType {
 
 // isAllowedOperand indicates whether
 // the operand of increase is an allowable type.
-func isAllowedOperand(v interface{}) bool {
+func isAllowedOperand(v any) bool {
 	vt := reflect.ValueOf(v).Kind()
 	if vt >= reflect.Int && vt <= reflect.Float64 && vt != reflect.Uint64 && vt != reflect.Uintptr {
 		return true
@@ -159,7 +159,7 @@ func isAllowedOperand(v interface{}) bool {
 
 // convertAssertableOperand converts the operand
 // to be used in the increase function to assertable type.
-func convertAssertableOperand(v interface{}) (interface{}, reflect.Kind) {
+func convertAssertableOperand(v any) (any, reflect.Kind) {
 	vt := reflect.ValueOf(v).Kind()
 	switch vt {
 	case reflect.Int:

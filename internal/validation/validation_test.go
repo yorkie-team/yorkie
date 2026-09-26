@@ -97,7 +97,7 @@ func TestValidation(t *testing.T) {
 
 		err = Validate(
 			"invalid custom rule",
-			[]interface{}{
+			[]any{
 				"required",
 				"min=3",
 				"max=10",

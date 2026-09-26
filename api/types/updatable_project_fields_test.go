@@ -271,7 +271,6 @@ func TestUpdatableProjectFields(t *testing.T) {
 			{"https://example.com", "https://*.example.com"},
 		}
 		for _, origins := range valid {
-			origins := origins
 			fields := &types.UpdatableProjectFields{AllowedOrigins: &origins}
 			assert.NoError(t, fields.Validate(), "expected valid: %v", origins)
 		}
@@ -288,7 +287,6 @@ func TestUpdatableProjectFields(t *testing.T) {
 			{"https://.example.com"},
 		}
 		for _, origins := range invalid {
-			origins := origins
 			fields := &types.UpdatableProjectFields{AllowedOrigins: &origins}
 			assert.ErrorAs(t, fields.Validate(), &formErr, "expected invalid: %v", origins)
 		}

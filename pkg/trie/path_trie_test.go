@@ -785,20 +785,20 @@ func TestPathTrie_RootValue(t *testing.T) {
 
 	t.Run("concurrent GetOrInsertRoot calls create once", func(t *testing.T) {
 		trie := NewPathTrie[*testValue]()
-		var createCount int32 = 0
+		var createCount atomic.Int32
 		var wg sync.WaitGroup
 
 		for range 100 {
 			wg.Go(func() {
 				trie.GetOrInsertRoot(func() *testValue {
-					atomic.AddInt32(&createCount, 1)
+					createCount.Add(1)
 					return createTestValue(1)
 				})
 			})
 		}
 
 		wg.Wait()
-		assert.Equal(t, int32(1), createCount)
+		assert.Equal(t, int32(1), createCount.Load())
 		assert.Equal(t, 1, trie.Len())
 	})
 

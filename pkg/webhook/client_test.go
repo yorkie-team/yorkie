@@ -71,9 +71,9 @@ func newHMACTestServer(t *testing.T, validSecret string, responseData testRespon
 }
 
 func newRetryServer(t *testing.T, replyAfter int, responseData testResponse) *httptest.Server {
-	var requestCount int32
+	var requestCount atomic.Int32
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		count := int(atomic.AddInt32(&requestCount, 1))
+		count := int(requestCount.Add(1))
 		if count < replyAfter {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return

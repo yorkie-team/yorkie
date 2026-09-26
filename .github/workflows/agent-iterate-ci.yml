@@ -456,7 +456,8 @@ jobs:
           if [ -z "$DIAG" ]; then
             DIAG="No lane report and no failed-step log could be read for run $RUN_ID.
           Re-run the failing lane locally: \`make verify\` (lint, licence headers,
-          unit tests), then \`make build\`."
+          go fix, unit tests; \`make modernize\` fixes the go fix check), then
+          \`make build\`."
           fi
           # A RANDOM DELIMITER, because $DIAG is a build log and a test that
           # prints the delimiter would close the block early: the runner then
@@ -564,8 +565,10 @@ jobs:
               fix genuinely requires touching others; do not refactor unrelated code.
             - Run `make verify` ONCE at the end to confirm green before pushing —
               not after every edit. It is `make lint`, the Apache licence-header
-              check and `go test ./...`, which is the whole of what this job can
-              verify. Do NOT run `make test`: it needs a MongoDB this job does
+              check, the `go fix` check and `go test ./...`, which is the whole
+              of what this job can verify. If the `go fix` check or the
+              `modernize` lane fails, run `make modernize` rather than editing
+              the idioms by hand. Do NOT run `make test`: it needs a MongoDB this job does
               not stand up, and the push re-runs the full integration lane
               anyway.
 

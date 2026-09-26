@@ -186,7 +186,7 @@ func New(key key.Key, opts ...Option) *Document {
 // Update executes the given updater to update this document.
 func (d *Document) Update(
 	updater func(root *json.Object, p *Presence) error,
-	msgAndArgs ...interface{},
+	msgAndArgs ...any,
 ) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -994,7 +994,7 @@ func (d *Document) setInternalDoc(internalDoc *InternalDocument) {
 	d.doc = internalDoc
 }
 
-func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
+func messageFromMsgAndArgs(msgAndArgs ...any) string {
 	if len(msgAndArgs) == 0 {
 		return ""
 	}

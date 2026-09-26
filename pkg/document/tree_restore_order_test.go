@@ -60,7 +60,7 @@ package document_test
 import (
 	"fmt"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -196,7 +196,7 @@ func (s treeState) liveIDs() []string {
 			ids = append(ids, strings.SplitN(n, " ", 2)[0])
 		}
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 
 	return ids
 }
@@ -221,7 +221,7 @@ func snapshotTree(t *testing.T, doc *document.Document) treeState {
 		state.Nodes = append(state.Nodes, fmt.Sprintf("%s type=%s value=%q removed=%v",
 			node.IDString(), node.Type(), node.Value, node.RemovedAt() != nil))
 	}
-	sort.Strings(state.Nodes)
+	slices.Sort(state.Nodes)
 
 	return state
 }
@@ -280,7 +280,7 @@ func assertNoOrphans(
 				node.IDString(), node.RemovedAt() != nil))
 		}
 	}
-	sort.Strings(orphans)
+	slices.Sort(orphans)
 	assert.Empty(t, orphans,
 		"%s: these nodes are still registered but no longer reachable from the root: %v\n%s",
 		label, orphans, state)

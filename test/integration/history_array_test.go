@@ -100,7 +100,6 @@ func TestHistoryArray(t *testing.T) {
 
 	// describe('Array Undo Operations') - single-op undo.
 	for _, op := range []string{"add", "move", "remove", "set"} {
-		op := op
 		t.Run(fmt.Sprintf("should handle undo of %s operation", op), func(t *testing.T) {
 			doc := document.New(helper.TestKey(t))
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {

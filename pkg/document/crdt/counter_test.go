@@ -113,7 +113,7 @@ func TestCounter(t *testing.T) {
 		assert.Equal(t, double.Marshal(), "21")
 
 		// error process test
-		unsupportedTypeErrorTest := func(v interface{}) {
+		unsupportedTypeErrorTest := func(v any) {
 			_, err = crdt.NewCounter(crdt.IntegerCnt, v, time.InitialTicket)
 			assert.ErrorIs(t, err, crdt.ErrUnsupportedType)
 		}

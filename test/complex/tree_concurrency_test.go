@@ -21,7 +21,8 @@ package complex
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,24 +37,33 @@ import (
 
 /**
  * parseSimpleXML parses the given XML string into a slice of strings.
- * For example, "<p>abc</p>" returns ["<p>", "abc", "</p>"].
+ * For example, "<p>ab</p>" returns ["<p>", "a", "b", "</p>"].
  */
 func parseSimpleXML(s string) []string {
 	var res []string
-	for i := range len(s) {
-		current := ""
+	// A three-clause loop on purpose: the tag branch advances i to the
+	// closing '>', and a range loop would discard that on the next pass.
+	for i := 0; i < len(s); i++ {
+		var current strings.Builder
 		if s[i] == '<' {
 			for i < len(s) && s[i] != '>' {
-				current += string(s[i])
+				current.WriteString(string(s[i]))
 				i++
 			}
-			current += string(s[i])
+			current.WriteString(string(s[i]))
 		} else {
-			current += string(s[i])
+			current.WriteString(string(s[i]))
 		}
-		res = append(res, current)
+		res = append(res, current.String())
 	}
 	return res
+}
+
+func TestParseSimpleXML(t *testing.T) {
+	assert.Equal(t,
+		[]string{"<r>", "<p>", "a", "b", "</p>", "</r>"},
+		parseSimpleXML("<r><p>ab</p></r>"),
+	)
 }
 
 type rangeSelector int
@@ -1281,7 +1291,7 @@ func attrEntryDescs(nodes []*crdt.RHTNode) []string {
 		descs = append(descs, fmt.Sprintf("%s=%q updatedAt=%s removed=%t",
 			node.Key(), node.Value(), node.UpdatedAt().Key(), node.IsRemoved()))
 	}
-	sort.Strings(descs)
+	slices.Sort(descs)
 
 	return descs
 }

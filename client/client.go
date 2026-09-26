@@ -382,7 +382,7 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 
 // AttachResource attaches the given resource to this client.
 // This is a generalized version of Attach that works with any Attachable resource.
-func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...interface{}) error {
+func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...any) error {
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
@@ -426,7 +426,7 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...in
 
 // Detach detaches the given resource from this client.
 // This is a generalized version of Detach that works with any Attachable resource.
-func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...interface{}) error {
+func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...any) error {
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}

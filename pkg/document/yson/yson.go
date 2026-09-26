@@ -24,8 +24,9 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -95,15 +96,15 @@ type Element interface {
 // Counter represents a counter CRDT value.
 type Counter struct {
 	Type      crdt.CounterType
-	Value     interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
-	Registers []byte      // HLL registers (dedup only; nil for normal counters)
+	Value     any    // counter value (int32 for IntegerCnt, int64 for LongCnt)
+	Registers []byte // HLL registers (dedup only; nil for normal counters)
 }
 
 // Array represents an array CRDT value.
-type Array []interface{}
+type Array []any
 
 // Object represents an object CRDT value.
-type Object map[string]interface{}
+type Object map[string]any
 
 // TreeNode is a node of Tree.
 type TreeNode struct {
@@ -149,7 +150,7 @@ func (y Text) isElement()    {}
 func (y Tree) isElement()    {}
 
 // marshalElement marshals any element type
-func marshalElement(elem interface{}) (string, error) {
+func marshalElement(elem any) (string, error) {
 	switch v := elem.(type) {
 	case Element:
 		return v.Marshal()
@@ -175,7 +176,7 @@ func quoteString(s string) (string, error) {
 	return `"` + crdt.EscapeString(s) + `"`, nil
 }
 
-func marshalPrimitive(v interface{}) (string, error) {
+func marshalPrimitive(v any) (string, error) {
 	switch v := v.(type) {
 	case nil:
 		return "null", nil
@@ -201,11 +202,8 @@ func marshalPrimitive(v interface{}) (string, error) {
 
 func (y Object) Marshal() (string, error) {
 	var pairs []string
-	keys := make([]string, 0, len(y))
-	for k := range y {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.AppendSeq(make([]string, 0, len(y)), maps.Keys(y))
+	slices.Sort(keys)
 
 	for _, key := range keys {
 		marshalled, err := marshalElement(y[key])
@@ -290,7 +288,7 @@ func marshalAttributes(attributes map[string]string) (string, error) {
 
 		attrs = append(attrs, fmt.Sprintf(`%s:%s`, key, value))
 	}
-	sort.Strings(attrs)
+	slices.Sort(attrs)
 
 	return strings.Join(attrs, ","), nil
 }
@@ -354,7 +352,7 @@ func Unmarshal(data string, elem Element) error {
 	// json.Number so that integer typed values can be validated exactly
 	// instead of being coerced through float64 (which truncates fractional
 	// values, wraps out-of-range values, and loses precision beyond 2^53).
-	var raw interface{}
+	var raw any
 	dec := gojson.NewDecoder(strings.NewReader(processedData))
 	dec.UseNumber()
 	if err := dec.Decode(&raw); err != nil {
@@ -364,14 +362,14 @@ func Unmarshal(data string, elem Element) error {
 	// tolerates trailing bytes whereas json.Unmarshal did not, and dec.More()
 	// alone misses stray closing tokens such as "]" or "}". Require the stream
 	// to be at EOF after the single top-level value.
-	if err := dec.Decode(new(interface{})); err != io.EOF {
+	if err := dec.Decode(new(any)); err != io.EOF {
 		return fmt.Errorf("unmarshal JSON: %w", ErrInvalidYSON)
 	}
 
 	// Convert the raw data into the appropriate Element type
 	switch e := elem.(type) {
 	case *Array:
-		arr, ok := raw.([]interface{})
+		arr, ok := raw.([]any)
 		if !ok {
 			return fmt.Errorf("unmarshal array: %w", ErrInvalidYSON)
 		}
@@ -381,7 +379,7 @@ func Unmarshal(data string, elem Element) error {
 		}
 		*e = parsed
 	case *Object:
-		obj, ok := raw.(map[string]interface{})
+		obj, ok := raw.(map[string]any)
 		if !ok {
 			return fmt.Errorf("unmarshal object: %w", ErrInvalidYSON)
 		}
@@ -391,12 +389,12 @@ func Unmarshal(data string, elem Element) error {
 		}
 		*e = parsed
 	case *Tree:
-		tree, ok := raw.(map[string]interface{})
+		tree, ok := raw.(map[string]any)
 		if !ok {
 			return fmt.Errorf("unmarshal tree: %w", ErrInvalidYSON)
 		}
 
-		if v, ok := tree["value"].(map[string]interface{}); ok {
+		if v, ok := tree["value"].(map[string]any); ok {
 			parsed, err := parseTree(v)
 			if err != nil {
 				return err
@@ -406,12 +404,12 @@ func Unmarshal(data string, elem Element) error {
 			return fmt.Errorf("unmarshal tree: %w", ErrInvalidYSON)
 		}
 	case *Text:
-		text, ok := raw.(map[string]interface{})
+		text, ok := raw.(map[string]any)
 		if !ok {
 			return fmt.Errorf("unmarshal text: %w", ErrInvalidYSON)
 		}
 
-		if v, ok := text["value"].([]interface{}); ok {
+		if v, ok := text["value"].([]any); ok {
 			parsed, err := parseText(v)
 			if err != nil {
 				return err
@@ -422,7 +420,7 @@ func Unmarshal(data string, elem Element) error {
 		}
 
 	case *Counter:
-		rawMap, ok := raw.(map[string]interface{})
+		rawMap, ok := raw.(map[string]any)
 		if !ok {
 			return fmt.Errorf("unmarshal counter: %w", ErrInvalidYSON)
 		}
@@ -449,7 +447,7 @@ func Unmarshal(data string, elem Element) error {
 // json.Number and is parsed with strconv.ParseInt so that fractional or
 // out-of-range values are rejected with ErrInvalidYSON instead of being
 // silently truncated, wrapped, or rounded through float64.
-func parseIntValue(v interface{}, bitSize int) (int64, error) {
+func parseIntValue(v any, bitSize int) (int64, error) {
 	n, ok := v.(gojson.Number)
 	if !ok {
 		return 0, ErrInvalidYSON
@@ -461,7 +459,7 @@ func parseIntValue(v interface{}, bitSize int) (int64, error) {
 	return i, nil
 }
 
-func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
+func parseTypedValue(raw map[string]any) (any, error) {
 	t, ok := raw["type"].(string)
 	if !ok {
 		return nil, ErrUnsupported
@@ -507,13 +505,13 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 	case "DedupCounter":
 		return parseDedupCounter(raw)
 	case ctorTree:
-		if value, ok := raw["value"].(map[string]interface{}); ok {
+		if value, ok := raw["value"].(map[string]any); ok {
 			return parseTree(value)
 		}
 
 		return nil, fmt.Errorf("parse counter: %w", ErrInvalidYSON)
 	case ctorText:
-		if value, ok := raw["value"].([]interface{}); ok {
+		if value, ok := raw["value"].([]any); ok {
 			return parseText(value)
 		}
 		return nil, fmt.Errorf("parse text: %w", ErrInvalidYSON)
@@ -522,11 +520,11 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 	return nil, ErrUnsupported
 }
 
-func parseObject(raw map[string]interface{}) (Object, error) {
+func parseObject(raw map[string]any) (Object, error) {
 	obj := Object{}
 	for k, v := range raw {
 		switch v := v.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			if _, ok := v["type"].(string); ok {
 				val, err := parseTypedValue(v)
 				if err != nil {
@@ -542,7 +540,7 @@ func parseObject(raw map[string]interface{}) (Object, error) {
 
 				obj[k] = val
 			}
-		case []interface{}:
+		case []any:
 			val, err := parseArray(v)
 			if err != nil {
 				return nil, err
@@ -564,7 +562,7 @@ func parseObject(raw map[string]interface{}) (Object, error) {
 // UseNumber arrive as json.Number; untyped (non-integer-typed) numbers are
 // converted to float64 to preserve the previous parsing behavior for plain
 // JSON numbers.
-func parsePlainValue(v interface{}) (interface{}, error) {
+func parsePlainValue(v any) (any, error) {
 	if n, ok := v.(gojson.Number); ok {
 		f, err := n.Float64()
 		if err != nil {
@@ -576,11 +574,11 @@ func parsePlainValue(v interface{}) (interface{}, error) {
 }
 
 // Helper functions to parse specific types
-func parseArray(raw []interface{}) (Array, error) {
+func parseArray(raw []any) (Array, error) {
 	var arr Array
 	for _, item := range raw {
 		switch v := item.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			if _, ok := v["type"].(string); ok {
 				val, err := parseTypedValue(v)
 				if err != nil {
@@ -594,7 +592,7 @@ func parseArray(raw []interface{}) (Array, error) {
 				}
 				arr = append(arr, val)
 			}
-		case []interface{}:
+		case []any:
 			val, err := parseArray(v)
 			if err != nil {
 				return nil, err
@@ -611,9 +609,9 @@ func parseArray(raw []interface{}) (Array, error) {
 	return arr, nil
 }
 
-func parseCounter(raw map[string]interface{}) (Counter, error) {
+func parseCounter(raw map[string]any) (Counter, error) {
 	counter := Counter{}
-	if value, ok := raw["value"].(map[string]interface{}); ok {
+	if value, ok := raw["value"].(map[string]any); ok {
 		if t, ok := value["type"].(string); ok {
 			switch t {
 			case counterTypeInt:
@@ -642,7 +640,7 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 	return counter, nil
 }
 
-func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
+func parseDedupCounter(raw map[string]any) (Counter, error) {
 	counterType, ok := raw["counterType"].(string)
 	if !ok {
 		return Counter{}, fmt.Errorf("parse dedup counter type: %w", ErrUnsupported)
@@ -679,11 +677,11 @@ func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
 	}
 }
 
-func parseText(raw []interface{}) (Text, error) {
+func parseText(raw []any) (Text, error) {
 	var text Text
 
 	for _, node := range raw {
-		n, ok := node.(map[string]interface{})
+		n, ok := node.(map[string]any)
 		if !ok {
 			return text, fmt.Errorf("parse text node: %w", ErrInvalidYSON)
 		}
@@ -696,7 +694,7 @@ func parseText(raw []interface{}) (Text, error) {
 		}
 
 		if attrsVal, present := n["attrs"]; present {
-			attrs, ok := attrsVal.(map[string]interface{})
+			attrs, ok := attrsVal.(map[string]any)
 			if !ok {
 				return text, fmt.Errorf("parse text attribute: %w", ErrInvalidYSON)
 			}
@@ -715,7 +713,7 @@ func parseText(raw []interface{}) (Text, error) {
 	return text, nil
 }
 
-func parseTree(raw map[string]interface{}) (Tree, error) {
+func parseTree(raw map[string]any) (Tree, error) {
 	root, err := parseTreeNode(raw)
 	if err != nil {
 		return Tree{}, err
@@ -724,7 +722,7 @@ func parseTree(raw map[string]interface{}) (Tree, error) {
 	return Tree{Root: root}, nil
 }
 
-func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
+func parseTreeNode(raw map[string]any) (TreeNode, error) {
 	node := TreeNode{}
 	if value, ok := raw["type"].(string); ok {
 		node.Type = value
@@ -737,7 +735,7 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 	}
 
 	if attrsVal, present := raw["attrs"]; present {
-		attrs, ok := attrsVal.(map[string]interface{})
+		attrs, ok := attrsVal.(map[string]any)
 		if !ok {
 			return TreeNode{}, fmt.Errorf("parse tree node attribute: %w", ErrInvalidYSON)
 		}
@@ -752,12 +750,12 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 	}
 
 	if childrenVal, present := raw["children"]; present {
-		children, ok := childrenVal.([]interface{})
+		children, ok := childrenVal.([]any)
 		if !ok {
 			return TreeNode{}, fmt.Errorf("parse tree node children: %w", ErrInvalidYSON)
 		}
 		for _, child := range children {
-			childRaw, ok := child.(map[string]interface{})
+			childRaw, ok := child.(map[string]any)
 			if !ok {
 				return TreeNode{}, fmt.Errorf("parse tree node child: %w", ErrInvalidYSON)
 			}

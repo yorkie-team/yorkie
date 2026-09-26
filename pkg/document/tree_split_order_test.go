@@ -251,7 +251,7 @@ func TestTreeSameBoundarySplitAfterOlderSplit(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		for older := 0; older < 2; older++ {
+		for older := range 2 {
 			t.Run(fmt.Sprintf("%s, older split by replica %d", tc.name, older), func(t *testing.T) {
 				if tc.known != "" {
 					t.Skip(tc.known)

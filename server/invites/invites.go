@@ -78,7 +78,7 @@ func Create(
 	}
 
 	// Retry on token collision.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		tok, err := newToken()
 		if err != nil {
 			return "", nil, err

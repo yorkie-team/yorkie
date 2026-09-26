@@ -168,7 +168,7 @@ func RegisterTranslation(tag, msg string) error {
 }
 
 // ValidateValue validates the value with the tag
-func ValidateValue(v interface{}, tag string) error {
+func ValidateValue(v any, tag string) error {
 	if err := defaultValidator.Var(v, tag); err != nil {
 		for _, e := range err.(validator.ValidationErrors) {
 			return Violation{
@@ -182,7 +182,7 @@ func ValidateValue(v interface{}, tag string) error {
 }
 
 // Validate validates the given string with tag.
-func Validate(v string, tagOrRules []interface{}) error {
+func Validate(v string, tagOrRules []any) error {
 	sb := strings.Builder{}
 
 	for i, tagOrRule := range tagOrRules {
@@ -221,7 +221,7 @@ func Validate(v string, tagOrRules []interface{}) error {
 }
 
 // ValidateStruct validates the struct
-func ValidateStruct(s interface{}) error {
+func ValidateStruct(s any) error {
 	if err := defaultValidator.Struct(s); err != nil {
 		formErr := &FormError{}
 		for _, e := range err.(validator.ValidationErrors) {

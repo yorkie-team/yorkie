@@ -23,6 +23,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -107,15 +108,22 @@ func TestRESTAPI(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NoError(t, cli.Activate(ctx))
 
+				// Each document gets a distinct root: GetDocumentSummaries fills
+				// summaries[i] from a goroutine per document, so identical
+				// fixtures would let a summary paired with the wrong document
+				// pass unnoticed.
 				var docs []*document.Document
+				expectedRoots := make(map[key.Key]string, numDocs)
 				for i := range numDocs {
 					doc := document.New(helper.TestKey(t, i))
 					assert.NoError(t, cli.Attach(ctx, doc,
-						client.WithInitialRoot(yson.ParseObject(`{"counter": Counter(Long(0))}`)),
+						client.WithInitialRoot(yson.ParseObject(
+							fmt.Sprintf(`{"counter": Counter(Long(%d))}`, i))),
 						client.WithPresence(presence.Data{"key": cli.Key()}),
 						client.WithRealtimeSync()))
 
 					docs = append(docs, doc)
+					expectedRoots[doc.Key()] = fmt.Sprintf(`{"counter":%d}`, i)
 				}
 
 				defer func() {
@@ -138,9 +146,16 @@ func TestRESTAPI(t *testing.T) {
 				gojson.Unmarshal(res, summaries)
 				assert.Len(t, summaries.Documents, numDocs)
 
+				remaining := maps.Clone(expectedRoots)
 				for _, docSummary := range summaries.Documents {
+					expectedRoot, ok := remaining[docSummary.Key]
+					assert.True(t, ok, "unexpected or duplicated key %s", docSummary.Key)
+					delete(remaining, docSummary.Key)
+
 					if tc.includeRoot {
-						assert.Equal(t, `{"counter":0}`, docSummary.Root)
+						// The root must be the one belonging to THIS key, not
+						// merely a well-formed root from some other document.
+						assert.Equal(t, expectedRoot, docSummary.Root)
 					} else {
 						assert.Empty(t, docSummary.Root)
 					}
@@ -152,6 +167,7 @@ func TestRESTAPI(t *testing.T) {
 						assert.Nil(t, docSummary.Presences)
 					}
 				}
+				assert.Empty(t, remaining, "every requested key must appear exactly once")
 			})
 		}
 	})

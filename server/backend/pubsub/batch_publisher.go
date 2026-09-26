@@ -30,10 +30,10 @@ import (
 
 var publisherID loggerID
 
-type loggerID int32
+type loggerID struct{ n atomic.Int32 }
 
 func (c *loggerID) next() string {
-	next := atomic.AddInt32((*int32)(c), 1)
+	next := c.n.Add(1)
 	return "p" + strconv.Itoa(int(next))
 }
 

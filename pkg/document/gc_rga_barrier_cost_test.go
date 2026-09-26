@@ -69,7 +69,7 @@ func newStringArray(t *testing.T, d *document.Document, n int) {
 	t.Helper()
 	require.NoError(t, d.Update(func(root *json.Object, p *presence.Presence) error {
 		arr := root.SetNewArray("arr")
-		for i := 0; i < n; i++ {
+		for i := range n {
 			arr.AddString(fmt.Sprintf("e%03d", i))
 		}
 		return nil
@@ -176,7 +176,7 @@ func TestBarrierCostsNothingOnConcurrentMoves(t *testing.T) {
 	syncedTotal := (&synced).Total()
 
 	peak := 0
-	for r := 0; r < rounds; r++ {
+	for r := range rounds {
 		// Concurrent: both move before either exchanges.
 		dragToFront(t, d1, 1+(r*7)%(n-1))
 		dragToFront(t, d2, 1+(r*13+3)%(n-1))
