@@ -124,3 +124,21 @@ Two findings, both applied:
 
 Three rounds, the cap. Round 3's findings were documentation only; none
 blocking.
+
+## Review panel, round 1 (test adequacy)
+
+One blocking finding, applied: `scripts/go-fix.sh` is the whole body of the
+`modernize` lane, and the three rounds above rewrote its exit-status rules
+twice — including the fail-open bug in round 1 — with nothing executing the
+script. `scripts/test/go-fix.test.mjs` now pins all three branches of
+`pending()` (clean, diff-with-non-zero-status, empty-with-non-zero-status),
+the `|| true` on the applying pass, the 3-pass ceiling, the derived tag list
+and the two hard errors, by putting a scripted `go` on PATH — the `Docs` job
+that runs the suite is Node-only, and no real toolchain can be asked to report
+"pending rewrites, non-zero status" on demand.
+
+Each assertion was checked against a mutated script rather than trusted for
+passing: making `pending()` fail open reds the two compile-failure cases,
+reading the status alone reds three, and dropping `|| true` reds the apply
+case. Rule: a test written for a gate that was already green proves nothing
+until the gate is broken on purpose and the test goes red.
