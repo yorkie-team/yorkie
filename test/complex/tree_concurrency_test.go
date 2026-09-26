@@ -21,7 +21,7 @@ package complex
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1291,7 +1291,7 @@ func attrEntryDescs(nodes []*crdt.RHTNode) []string {
 		descs = append(descs, fmt.Sprintf("%s=%q updatedAt=%s removed=%t",
 			node.Key(), node.Value(), node.UpdatedAt().Key(), node.IsRemoved()))
 	}
-	sort.Strings(descs)
+	slices.Sort(descs)
 
 	return descs
 }

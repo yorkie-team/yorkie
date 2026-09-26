@@ -18,9 +18,10 @@
 package memory
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -206,11 +207,14 @@ func (d *DB) FindClusterNodes(
 		infos = append(infos, info.DeepCopy())
 	}
 
-	sort.Slice(infos, func(i, j int) bool {
-		if infos[i].IsLeader != infos[j].IsLeader {
-			return infos[i].IsLeader && !infos[j].IsLeader
+	slices.SortFunc(infos, func(a, b *database.ClusterNodeInfo) int {
+		if a.IsLeader != b.IsLeader {
+			if a.IsLeader {
+				return -1
+			}
+			return 1
 		}
-		return infos[i].UpdatedAt.After(infos[j].UpdatedAt)
+		return b.UpdatedAt.Compare(a.UpdatedAt)
 	})
 
 	return infos, nil
@@ -1300,11 +1304,11 @@ func (d *DB) FindCompactionCandidates(
 	}
 
 	// Sort by (server_seq, _id) for consistent cursor-based pagination
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].ServerSeq != candidates[j].ServerSeq {
-			return candidates[i].ServerSeq < candidates[j].ServerSeq
-		}
-		return candidates[i].ID < candidates[j].ID
+	slices.SortFunc(candidates, func(a, b *database.DocInfo) int {
+		return cmp.Or(
+			cmp.Compare(a.ServerSeq, b.ServerSeq),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 
 	// Apply cursor-based pagination: skip documents until we pass (lastServerSeq, lastDocID)
@@ -2574,8 +2578,8 @@ func (d *DB) GetSchemaInfos(
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		infos = append(infos, raw.(*database.SchemaInfo).DeepCopy())
 	}
-	sort.Slice(infos, func(i, j int) bool {
-		return infos[i].Version > infos[j].Version
+	slices.SortFunc(infos, func(a, b *database.SchemaInfo) int {
+		return cmp.Compare(b.Version, a.Version)
 	})
 
 	if len(infos) == 0 {
@@ -2806,11 +2810,11 @@ func (d *DB) FindRevisionInfosByPaging(
 	}
 
 	// Sort by ID descending (newest first, since ID contains timestamp)
-	sort.Slice(revisions, func(i, j int) bool {
+	slices.SortFunc(revisions, func(a, b *database.RevisionInfo) int {
 		if paging.IsForward {
-			return revisions[i].ID < revisions[j].ID
+			return cmp.Compare(a.ID, b.ID)
 		}
-		return revisions[i].ID > revisions[j].ID
+		return cmp.Compare(b.ID, a.ID)
 	})
 
 	// Apply paging

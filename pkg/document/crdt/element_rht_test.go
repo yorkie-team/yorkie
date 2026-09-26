@@ -227,7 +227,7 @@ func TestElementRHTNodeOrder(t *testing.T) {
 	t.Run("breaks a PositionedAt tie by createdAt", func(t *testing.T) {
 		// Two elements cannot share a PositionedAt in practice -- tickets are
 		// unique per operation -- but the comparator must still be a total
-		// order, or sort.Slice leaves the result unstable.
+		// order, or slices.SortFunc leaves the result unstable.
 		rht := crdt.NewElementRHT()
 		actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 		shared := time.NewTicket(9, 0, actor)

@@ -24,7 +24,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
@@ -421,8 +422,8 @@ func (b *Backend) BroadcastChannelList(
 		results = append(results, ch)
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Key.String() < results[j].Key.String()
+	slices.SortFunc(results, func(a, b *types.ChannelSummary) int {
+		return strings.Compare(a.Key.String(), b.Key.String())
 	})
 
 	if len(results) > limit {

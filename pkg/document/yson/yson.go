@@ -24,8 +24,9 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -201,11 +202,8 @@ func marshalPrimitive(v any) (string, error) {
 
 func (y Object) Marshal() (string, error) {
 	var pairs []string
-	keys := make([]string, 0, len(y))
-	for k := range y {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.AppendSeq(make([]string, 0, len(y)), maps.Keys(y))
+	slices.Sort(keys)
 
 	for _, key := range keys {
 		marshalled, err := marshalElement(y[key])
@@ -290,7 +288,7 @@ func marshalAttributes(attributes map[string]string) (string, error) {
 
 		attrs = append(attrs, fmt.Sprintf(`%s:%s`, key, value))
 	}
-	sort.Strings(attrs)
+	slices.Sort(attrs)
 
 	return strings.Join(attrs, ","), nil
 }

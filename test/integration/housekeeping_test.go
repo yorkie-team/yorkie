@@ -23,7 +23,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
+	"slices"
 	"testing"
 	gotime "time"
 
@@ -153,12 +153,12 @@ func createProjects(t *testing.T, db database.Database) []*database.ProjectInfo 
 		projects = append(projects, p)
 	}
 
-	sort.Slice(projects, func(i, j int) bool {
-		iBytes, err := projects[i].ID.Bytes()
+	slices.SortFunc(projects, func(a, b *database.ProjectInfo) int {
+		aBytes, err := a.ID.Bytes()
 		assert.NoError(t, err)
-		jBytes, err := projects[j].ID.Bytes()
+		bBytes, err := b.ID.Bytes()
 		assert.NoError(t, err)
-		return bytes.Compare(iBytes, jBytes) < 0
+		return bytes.Compare(aBytes, bBytes)
 	})
 
 	return projects

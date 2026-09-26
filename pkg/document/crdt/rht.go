@@ -19,7 +19,8 @@ package crdt
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
@@ -394,14 +395,9 @@ func (rht *RHT) DeepCopy() *RHT {
 func (rht *RHT) Marshal() string {
 	members := rht.Elements()
 
-	size := len(members)
-
-	// Extract and sort the keys
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	// Sort the keys so the encoding is deterministic.
+	keys := slices.AppendSeq(make([]string, 0, len(members)), maps.Keys(members))
+	slices.Sort(keys)
 
 	sb := strings.Builder{}
 	sb.WriteString("{")

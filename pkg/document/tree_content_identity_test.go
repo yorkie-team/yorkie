@@ -17,7 +17,7 @@
 package document_test
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,7 +46,7 @@ func treeNodeIDs(t *testing.T, root *crdt.Object) []string {
 	for _, node := range tree.Nodes() {
 		ids = append(ids, node.IDString())
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 
 	return ids
 }

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -157,12 +157,8 @@ func (v VersionVector) Marshal() string {
 
 	builder.WriteRune('{')
 
-	keys := make([]ActorID, 0, len(v))
-	for k := range v {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return bytes.Compare(keys[i][:], keys[j][:]) < 0
+	keys := slices.SortedFunc(maps.Keys(v), func(a, b ActorID) int {
+		return bytes.Compare(a[:], b[:])
 	})
 
 	isFirst := true
