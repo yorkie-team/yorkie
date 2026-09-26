@@ -37,11 +37,13 @@ import (
 
 /**
  * parseSimpleXML parses the given XML string into a slice of strings.
- * For example, "<p>abc</p>" returns ["<p>", "abc", "</p>"].
+ * For example, "<p>ab</p>" returns ["<p>", "a", "b", "</p>"].
  */
 func parseSimpleXML(s string) []string {
 	var res []string
-	for i := range len(s) {
+	// A three-clause loop on purpose: the tag branch advances i to the
+	// closing '>', and a range loop would discard that on the next pass.
+	for i := 0; i < len(s); i++ {
 		var current strings.Builder
 		if s[i] == '<' {
 			for i < len(s) && s[i] != '>' {
@@ -55,6 +57,13 @@ func parseSimpleXML(s string) []string {
 		res = append(res, current.String())
 	}
 	return res
+}
+
+func TestParseSimpleXML(t *testing.T) {
+	assert.Equal(t,
+		[]string{"<r>", "<p>", "a", "b", "</p>", "</r>"},
+		parseSimpleXML("<r><p>ab</p></r>"),
+	)
 }
 
 type rangeSelector int
