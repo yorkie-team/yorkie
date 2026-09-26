@@ -570,7 +570,7 @@ func TestShardedPathTrie_InsertOverwrites(t *testing.T) {
 func TestShardedPathTrie_ConcurrentGetOrInsert(t *testing.T) {
 	st := trie.NewShardedPathTrie[int]()
 	var wg sync.WaitGroup
-	var createCount int32 = 0
+	var createCount atomic.Int32
 
 	shardKey := "p1.r1"
 	keyPath := []string{"u1"}
@@ -579,9 +579,7 @@ func TestShardedPathTrie_ConcurrentGetOrInsert(t *testing.T) {
 	for range 100 {
 		wg.Go(func() {
 			st.GetOrInsert(shardKey, keyPath, func() int {
-				count := int(createCount)
-				createCount++
-				return count
+				return int(createCount.Add(1)) - 1
 			})
 		})
 	}
@@ -589,7 +587,7 @@ func TestShardedPathTrie_ConcurrentGetOrInsert(t *testing.T) {
 	wg.Wait()
 
 	// Create should be called exactly once
-	assert.Equal(t, int32(1), createCount)
+	assert.Equal(t, int32(1), createCount.Load())
 	assert.Equal(t, 1, st.Len())
 }
 
@@ -1053,7 +1051,7 @@ func TestShardedPathTrie_ConcurrentShardKeysWithModifications(t *testing.T) {
 func TestShardedPathTrie_ConcurrentGetOrInsertRootSameKey(t *testing.T) {
 	st := trie.NewShardedPathTrie[int]()
 	var wg sync.WaitGroup
-	var createCount int32 = 0
+	var createCount atomic.Int32
 
 	shardKey := "p1.r1"
 
@@ -1062,7 +1060,7 @@ func TestShardedPathTrie_ConcurrentGetOrInsertRootSameKey(t *testing.T) {
 		wg.Go(func() {
 			st.GetOrInsert(shardKey, nil, func() int {
 				// Atomically increment to detect multiple calls
-				count := atomic.AddInt32(&createCount, 1)
+				count := createCount.Add(1)
 				return int(count)
 			})
 		})
@@ -1071,7 +1069,7 @@ func TestShardedPathTrie_ConcurrentGetOrInsertRootSameKey(t *testing.T) {
 	wg.Wait()
 
 	// Create should be called exactly once
-	assert.Equal(t, int32(1), createCount)
+	assert.Equal(t, int32(1), createCount.Load())
 	assert.Equal(t, 1, st.Len())
 	assert.Equal(t, 1, st.ShardCount())
 

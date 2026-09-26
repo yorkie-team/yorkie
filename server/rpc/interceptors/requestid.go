@@ -24,19 +24,18 @@ import (
 // requestID is used to generate a unique request ID.
 type requestID struct {
 	prefix string
-	id     int32
+	id     atomic.Int32
 }
 
 // newRequestID creates a new requestID.
 func newRequestID(prefix string) *requestID {
 	return &requestID{
 		prefix: prefix,
-		id:     0,
 	}
 }
 
 // next generates a new request ID.
 func (r *requestID) next() string {
-	next := atomic.AddInt32(&r.id, 1)
+	next := r.id.Add(1)
 	return r.prefix + strconv.Itoa(int(next))
 }

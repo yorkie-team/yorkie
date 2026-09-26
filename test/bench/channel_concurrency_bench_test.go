@@ -39,15 +39,15 @@ import (
 
 // concurrencyMockPubSub is a thread-safe mock PubSub for concurrency tests.
 type concurrencyMockPubSub struct {
-	eventCount int64
+	eventCount atomic.Int64
 }
 
 func (m *concurrencyMockPubSub) PublishChannel(ctx context.Context, event events.ChannelEvent) {
-	atomic.AddInt64(&m.eventCount, 1)
+	m.eventCount.Add(1)
 }
 
 func (m *concurrencyMockPubSub) getEventCount() int64 {
-	return atomic.LoadInt64(&m.eventCount)
+	return m.eventCount.Load()
 }
 
 // createConcurrencyTestManager creates a Manager for concurrency testing.
@@ -79,10 +79,9 @@ func BenchmarkChannelConcurrency_AttachSameChannel(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := range b.N {
+			for i := 0; b.Loop(); i++ {
 				// Create fresh manager for each iteration to avoid accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 				channelKey := types.ChannelRefKey{
@@ -91,14 +90,14 @@ func BenchmarkChannelConcurrency_AttachSameChannel(b *testing.B) {
 				}
 
 				var wg sync.WaitGroup
-				var successCount int64
+				var successCount atomic.Int64
 
 				for g := range tc.goroutineCount {
 					wg.Go(func() {
 						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, g))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						if err == nil {
-							atomic.AddInt64(&successCount, 1)
+							successCount.Add(1)
 						}
 					})
 				}
@@ -106,8 +105,8 @@ func BenchmarkChannelConcurrency_AttachSameChannel(b *testing.B) {
 				wg.Wait()
 
 				// Verify all attaches succeeded
-				if successCount != int64(tc.goroutineCount) {
-					b.Fatalf("Expected %d successful attaches, got %d", tc.goroutineCount, successCount)
+				if successCount.Load() != int64(tc.goroutineCount) {
+					b.Fatalf("Expected %d successful attaches, got %d", tc.goroutineCount, successCount.Load())
 				}
 
 				// Verify session count matches
@@ -136,14 +135,13 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				// Create fresh manager per iteration to avoid channel accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 				var wg sync.WaitGroup
-				var successCount int64
+				var successCount atomic.Int64
 
 				for g := range tc.goroutineCount {
 					wg.Go(func() {
@@ -157,7 +155,7 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 							b.Errorf("Attach failed: %v", err)
 						}
 						if sessionID != "" {
-							atomic.AddInt64(&successCount, 1)
+							successCount.Add(1)
 						}
 					})
 				}
@@ -165,7 +163,7 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 				wg.Wait()
 
 				// Verify all channels were created
-				assert.Equal(b, int64(tc.goroutineCount), successCount, "all attaches should succeed")
+				assert.Equal(b, int64(tc.goroutineCount), successCount.Load(), "all attaches should succeed")
 				assert.Equal(b, tc.goroutineCount, manager.Count(projectID), "channel count should match goroutine count")
 			}
 		})
@@ -190,10 +188,9 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				// Create fresh manager per iteration to avoid session accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 
@@ -217,30 +214,30 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				assert.Equal(b, int64(preAttachCount), manager.SessionCount(channelKey, false), "pre-attach count mismatch")
 
 				var wg sync.WaitGroup
-				var sessionIdx int32
-				var attachCount, detachCount int64
-				var attachErrors, detachErrors int64
+				var sessionIdx atomic.Int32
+				var attachCount, detachCount atomic.Int64
+				var attachErrors, detachErrors atomic.Int64
 
 				for g := range tc.goroutineCount {
 					wg.Go(func() {
 						if (g*100)/tc.goroutineCount < tc.detachRatio {
 							// Detach operation
-							idx := atomic.AddInt32(&sessionIdx, 1) - 1
+							idx := sessionIdx.Add(1) - 1
 							if int(idx) < len(sessionIDs) {
 								_, err := manager.Detach(ctx, sessionIDs[idx])
 								if err != nil {
-									atomic.AddInt64(&detachErrors, 1)
+									detachErrors.Add(1)
 								}
-								atomic.AddInt64(&detachCount, 1)
+								detachCount.Add(1)
 							}
 						} else {
 							// Attach operation
 							clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", g))
 							_, _, err := manager.Attach(ctx, channelKey, clientID)
 							if err != nil {
-								atomic.AddInt64(&attachErrors, 1)
+								attachErrors.Add(1)
 							}
-							atomic.AddInt64(&attachCount, 1)
+							attachCount.Add(1)
 						}
 					})
 				}
@@ -248,10 +245,10 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				wg.Wait()
 
 				// Verify operations happened
-				assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
-				assert.Equal(b, int64(0), detachErrors, "no detach errors should occur")
+				assert.Equal(b, int64(0), attachErrors.Load(), "no attach errors should occur")
+				assert.Equal(b, int64(0), detachErrors.Load(), "no detach errors should occur")
 				// All goroutines perform exactly one operation (either attach or detach)
-				assert.Equal(b, int64(tc.goroutineCount), attachCount+detachCount, "all operations should have occurred")
+				assert.Equal(b, int64(tc.goroutineCount), attachCount.Load()+detachCount.Load(), "all operations should have occurred")
 			}
 		})
 	}
@@ -276,10 +273,9 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				// Create fresh manager per iteration to avoid session accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 
@@ -303,7 +299,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 				var wg sync.WaitGroup
 				done := make(chan struct{})
 				var closeOnce sync.Once
-				var readCount int64
+				var readCount atomic.Int64
 
 				// Start readers
 				for r := range tc.readers {
@@ -317,7 +313,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 								count := manager.SessionCount(channelKey, r%2 == 0)
 								// Session count should always be >= 1 (initial session)
 								if count >= 1 {
-									atomic.AddInt64(&readCount, 1)
+									readCount.Add(1)
 								}
 							}
 						}
@@ -325,16 +321,16 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 				}
 
 				// Start writers
-				var writeCount int32
+				var writeCount atomic.Int32
 				for w := range tc.writers {
 					wg.Go(func() {
 						channelKey := channelKeys[w%tc.channelCount]
 						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", w))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						assert.NoError(b, err, "attach should succeed")
-						atomic.AddInt32(&writeCount, 1)
+						writeCount.Add(1)
 
-						if atomic.LoadInt32(&writeCount) >= int32(tc.writers) {
+						if writeCount.Load() >= int32(tc.writers) {
 							closeOnce.Do(func() {
 								close(done)
 							})
@@ -345,8 +341,8 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 				wg.Wait()
 
 				// Verify reads and writes happened
-				assert.Greater(b, readCount, int64(0), "some reads should have occurred")
-				assert.Equal(b, int32(tc.writers), writeCount, "all writes should have completed")
+				assert.Greater(b, readCount.Load(), int64(0), "some reads should have occurred")
+				assert.Equal(b, int32(tc.writers), writeCount.Load(), "all writes should have completed")
 			}
 		})
 	}
@@ -369,10 +365,9 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for range b.N {
+			for b.Loop() {
 				// Create fresh manager per iteration to avoid channel accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 
@@ -395,7 +390,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 				var wg sync.WaitGroup
 				done := make(chan struct{})
 				var closeOnce sync.Once
-				var listCount int64
+				var listCount atomic.Int64
 
 				// Start readers (List operations)
 				for range tc.readers {
@@ -408,7 +403,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 								results := manager.List(projectID, "", 50)
 								// List should return results (we have pre-created channels)
 								if len(results) > 0 {
-									atomic.AddInt64(&listCount, 1)
+									listCount.Add(1)
 								}
 							}
 						}
@@ -416,7 +411,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 				}
 
 				// Start writers
-				var writeCount int32
+				var writeCount atomic.Int32
 				for w := range tc.writers {
 					wg.Go(func() {
 						channelKey := types.ChannelRefKey{
@@ -426,9 +421,9 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", w))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						assert.NoError(b, err, "attach should succeed")
-						atomic.AddInt32(&writeCount, 1)
+						writeCount.Add(1)
 
-						if atomic.LoadInt32(&writeCount) >= int32(tc.writers) {
+						if writeCount.Load() >= int32(tc.writers) {
 							closeOnce.Do(func() {
 								close(done)
 							})
@@ -439,8 +434,8 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 				wg.Wait()
 
 				// Verify operations
-				assert.Greater(b, listCount, int64(0), "some list operations should have occurred")
-				assert.Equal(b, int32(tc.writers), writeCount, "all writes should have completed")
+				assert.Greater(b, listCount.Load(), int64(0), "some list operations should have occurred")
+				assert.Equal(b, int32(tc.writers), writeCount.Load(), "all writes should have completed")
 				// No deletes occur, so channel count should be exactly preCreateCount + writers
 				assert.Equal(b, preCreateCount+tc.writers, manager.Count(projectID), "channel count should equal pre-created + new channels")
 			}
@@ -469,14 +464,13 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 			ctx := context.Background()
 			manager, projectID, _ := createConcurrencyTestManager(b)
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := range b.N {
+			for i := 0; b.Loop(); i++ {
 				var wg sync.WaitGroup
 				sessionIDs := make([]types.ID, tc.goroutines)
 				var mu sync.Mutex
-				var successCount int64
+				var successCount atomic.Int64
 
 				for g := range tc.goroutines {
 					wg.Go(func() {
@@ -509,7 +503,7 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, g))
 						sessionID, _, err := manager.Attach(ctx, channelKey, clientID)
 						if err == nil && sessionID != "" {
-							atomic.AddInt64(&successCount, 1)
+							successCount.Add(1)
 						}
 						mu.Lock()
 						sessionIDs[g] = sessionID
@@ -520,21 +514,21 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 				wg.Wait()
 
 				// Verify all attaches succeeded
-				assert.Equal(b, int64(tc.goroutines), successCount, "all attaches should succeed")
+				assert.Equal(b, int64(tc.goroutines), successCount.Load(), "all attaches should succeed")
 
 				// Detach all sessions to clean up for next iteration
-				var detachCount int64
+				var detachCount atomic.Int64
 				for _, sessionID := range sessionIDs {
 					if sessionID != "" {
 						_, err := manager.Detach(ctx, sessionID)
 						if err == nil {
-							atomic.AddInt64(&detachCount, 1)
+							detachCount.Add(1)
 						}
 					}
 				}
 
 				// Verify cleanup
-				assert.Equal(b, int64(tc.goroutines), detachCount, "all detaches should succeed")
+				assert.Equal(b, int64(tc.goroutines), detachCount.Load(), "all detaches should succeed")
 			}
 		})
 	}
@@ -579,13 +573,12 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 
 			initialEventCount := pubsub.getEventCount()
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := range b.N {
+			for i := 0; b.Loop(); i++ {
 				var wg sync.WaitGroup
-				var errorCount int64
-				var attachCount, readCount int64
+				var errorCount atomic.Int64
+				var attachCount, readCount atomic.Int64
 
 				for g := range tc.goroutines {
 					wg.Go(func() {
@@ -598,39 +591,39 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 								clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%08d%08d%08d", i, g, op))
 								_, _, err := manager.Attach(ctx, channelKey, clientID)
 								if err != nil {
-									atomic.AddInt64(&errorCount, 1)
+									errorCount.Add(1)
 								} else {
-									atomic.AddInt64(&attachCount, 1)
+									attachCount.Add(1)
 								}
 							case 1:
 								// SessionCount (direct)
 								count := manager.SessionCount(channelKey, false)
 								if count >= 1 {
-									atomic.AddInt64(&readCount, 1)
+									readCount.Add(1)
 								}
 							case 2:
 								// SessionCount (with subpath)
 								count := manager.SessionCount(channelKey, true)
 								if count >= 1 {
-									atomic.AddInt64(&readCount, 1)
+									readCount.Add(1)
 								}
 							case 3:
 								// List
 								results := manager.List(projectID, "", 50)
 								if len(results) > 0 {
-									atomic.AddInt64(&readCount, 1)
+									readCount.Add(1)
 								}
 							case 4:
 								// Count
 								count := manager.Count(projectID)
 								if count >= tc.channelCount {
-									atomic.AddInt64(&readCount, 1)
+									readCount.Add(1)
 								}
 							case 5:
 								// Stats
 								stats := manager.Stats()
 								if stats["total_channels"] >= tc.channelCount {
-									atomic.AddInt64(&readCount, 1)
+									readCount.Add(1)
 								}
 							}
 						}
@@ -640,12 +633,10 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 				wg.Wait()
 
 				// Verify operations
-				assert.Equal(b, int64(0), errorCount, "no errors should occur")
-				assert.Greater(b, attachCount, int64(0), "some attaches should have occurred")
-				assert.Greater(b, readCount, int64(0), "some reads should have occurred")
+				assert.Equal(b, int64(0), errorCount.Load(), "no errors should occur")
+				assert.Greater(b, attachCount.Load(), int64(0), "some attaches should have occurred")
+				assert.Greater(b, readCount.Load(), int64(0), "some reads should have occurred")
 			}
-
-			b.StopTimer()
 
 			// Verify event count increased (system is working)
 			finalEventCount := pubsub.getEventCount()
@@ -676,11 +667,11 @@ func BenchmarkChannelConcurrency_DataRaceDetection(b *testing.B) {
 
 	b.ResetTimer()
 
-	var totalOps int64
-	var goroutineID int64
+	var totalOps atomic.Int64
+	var goroutineID atomic.Int64
 	b.RunParallel(func(pb *testing.PB) {
 		// Each goroutine gets its own session for detach/refresh operations
-		gID := atomic.AddInt64(&goroutineID, 1)
+		gID := goroutineID.Add(1)
 		localClientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024x", gID))
 		localSessionID, _, _ := manager.Attach(ctx, channelKey, localClientID)
 
@@ -716,7 +707,7 @@ func BenchmarkChannelConcurrency_DataRaceDetection(b *testing.B) {
 				// Refresh own session (10%)
 				_ = manager.Refresh(ctx, localSessionID)
 			}
-			atomic.AddInt64(&totalOps, 1)
+			totalOps.Add(1)
 			i++
 		}
 	})
@@ -724,5 +715,5 @@ func BenchmarkChannelConcurrency_DataRaceDetection(b *testing.B) {
 	b.StopTimer()
 
 	// Verify some operations happened
-	assert.Greater(b, totalOps, int64(0), "some operations should have been executed")
+	assert.Greater(b, totalOps.Load(), int64(0), "some operations should have been executed")
 }

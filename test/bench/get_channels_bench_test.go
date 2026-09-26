@@ -241,7 +241,7 @@ func benchmarkUserJourneyScenario(
 		ch3 *channel.Channel
 	}
 	var channelPairs []ClientAndChannelPair
-	for range b.N {
+	for b.Loop() {
 		// If useUniqueKeys is true, include iteration index to ensure cache misses.
 		// If false, use same prefix for all iterations to measure cache hit performance.
 		iterChannelPrefix := channelPrefix
@@ -253,8 +253,6 @@ func benchmarkUserJourneyScenario(
 		channelPairs = append(channelPairs, ClientAndChannelPair{cli, ch2, ch3})
 		iterationIdx++
 	}
-
-	b.StopTimer()
 
 	b.Cleanup(func() {
 		for _, channelPair := range channelPairs {

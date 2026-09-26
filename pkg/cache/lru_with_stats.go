@@ -19,7 +19,6 @@ package cache
 
 import (
 	"hash/maphash"
-	"sync/atomic"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 )
@@ -65,9 +64,9 @@ func (c *LRU[K, V]) shard(key K) int {
 func (c *LRU[K, V]) Get(key K) (V, bool) {
 	value, ok := c.shards[c.shard(key)].Get(key)
 	if ok {
-		atomic.AddInt64(&c.stats.hits, 1)
+		c.stats.hits.Add(1)
 	} else {
-		atomic.AddInt64(&c.stats.misses, 1)
+		c.stats.misses.Add(1)
 	}
 	return value, ok
 }

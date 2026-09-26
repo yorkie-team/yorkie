@@ -114,10 +114,8 @@ func TestHistoryStack(t *testing.T) {
 		var wg sync.WaitGroup
 		errs := make([]error, 8)
 		for i := range errs {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				errs[idx] = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			wg.Go(func() {
+				errs[i] = doc.Update(func(root *json.Object, p *presence.Presence) error {
 					// Every updater re-enters; each must be refused rather
 					// than deadlock, however the goroutines interleave.
 					if err := doc.Undo(); !errors.Is(err, document.ErrRefusedDuringUpdate) {
@@ -128,10 +126,10 @@ func TestHistoryStack(t *testing.T) {
 					}
 					assert.False(t, doc.CanUndo())
 					assert.False(t, doc.CanRedo())
-					root.SetNewCounter(fmt.Sprintf("c%d", idx), int64(0))
+					root.SetNewCounter(fmt.Sprintf("c%d", i), int64(0))
 					return nil
 				})
-			}(i)
+			})
 		}
 		wg.Wait()
 		for _, err := range errs {

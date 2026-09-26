@@ -656,13 +656,13 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 		projectID := types.NewID()
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
 
-		var createCount int32 = 0
+		var createCount atomic.Int32
 		var wg sync.WaitGroup
 
 		for range 100 {
 			wg.Go(func() {
 				trie.GetOrInsert(refKey, func() *Channel {
-					atomic.AddInt32(&createCount, 1)
+					createCount.Add(1)
 					return createTestChannel(projectID, "room-1")
 				})
 			})
@@ -670,7 +670,7 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 
 		wg.Wait()
 
-		assert.Equal(t, int32(1), createCount)
+		assert.Equal(t, int32(1), createCount.Load())
 		assert.Equal(t, 1, trie.Len())
 	})
 

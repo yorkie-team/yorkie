@@ -22,18 +22,18 @@ import (
 
 // Stats holds cache statistics.
 type Stats struct {
-	hits   int64
-	misses int64
+	hits   atomic.Int64
+	misses atomic.Int64
 }
 
 // Hits returns the number of cache hits.
 func (s *Stats) Hits() int64 {
-	return atomic.LoadInt64(&s.hits)
+	return s.hits.Load()
 }
 
 // Misses returns the number of cache misses.
 func (s *Stats) Misses() int64 {
-	return atomic.LoadInt64(&s.misses)
+	return s.misses.Load()
 }
 
 // Total returns the total number of cache operations.
@@ -52,6 +52,6 @@ func (s *Stats) HitRate() float64 {
 
 // Reset resets all statistics to zero.
 func (s *Stats) Reset() {
-	atomic.StoreInt64(&s.hits, 0)
-	atomic.StoreInt64(&s.misses, 0)
+	s.hits.Store(0)
+	s.misses.Store(0)
 }

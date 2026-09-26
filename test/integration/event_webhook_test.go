@@ -40,11 +40,11 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func newWebhookServer(t *testing.T, secretKey, docKey string) (*httptest.Server, *int32) {
-	var reqCnt int32
+func newWebhookServer(t *testing.T, secretKey, docKey string) (*httptest.Server, *atomic.Int32) {
+	var reqCnt atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&reqCnt, 1)
+		reqCnt.Add(1)
 		signatureHeader := r.Header.Get("X-Signature-256")
 		assert.NotZero(t, len(signatureHeader))
 		body, err := io.ReadAll(r.Body)
@@ -122,14 +122,14 @@ func TestRegisterEventWebhook(t *testing.T) {
 		time.Sleep(projectCacheTTL)
 
 		// 03. Check webhook received
-		prev := atomic.LoadInt32(getReqCnt)
+		prev := getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
-		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev+1, getReqCnt.Load())
 
 		// 04. Unregister event webhook
 		prj, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
@@ -144,7 +144,7 @@ func TestRegisterEventWebhook(t *testing.T) {
 		time.Sleep(projectCacheTTL)
 
 		// 06. Check webhook doesn't trigger
-		prev = atomic.LoadInt32(getReqCnt)
+		prev = getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
@@ -153,7 +153,7 @@ func TestRegisterEventWebhook(t *testing.T) {
 
 		// 07. Wait webhook received
 		assert.NoError(t, svr.Shutdown(true))
-		assert.Equal(t, prev, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev, getReqCnt.Load())
 	})
 }
 
@@ -186,14 +186,14 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 
-		prev := atomic.LoadInt32(getReqCnt)
+		prev := getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 		assert.NoError(t, svr.Shutdown(true))
-		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev+1, getReqCnt.Load())
 	})
 
 	t.Run("presence changed test", func(t *testing.T) {
@@ -223,14 +223,14 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 
-		prev := atomic.LoadInt32(getReqCnt)
+		prev := getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("update", "2")
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 		assert.NoError(t, svr.Shutdown(true))
-		assert.Equal(t, prev, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev, getReqCnt.Load())
 	})
 
 	t.Run("root element and presence changed test", func(t *testing.T) {
@@ -260,7 +260,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 
-		prev := atomic.LoadInt32(getReqCnt)
+		prev := getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("update", "3")
 			root.GetCounter("counter").Increase(1)
@@ -268,7 +268,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 		assert.NoError(t, svr.Shutdown(true))
-		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev+1, getReqCnt.Load())
 	})
 }
 
@@ -314,7 +314,7 @@ func TestEventWebhookThrottling(t *testing.T) {
 		timeCtx, cancel := context.WithTimeout(ctx, testDuration)
 		defer cancel()
 
-		initialReqCount := atomic.LoadInt32(getReqCnt)
+		initialReqCount := getReqCnt.Load()
 		// Trigger document updates repeatedly.
 		for {
 			select {
@@ -330,12 +330,12 @@ func TestEventWebhookThrottling(t *testing.T) {
 				// Wait briefly to allow any pending webhook events to be received.
 				time.Sleep(waitWebhookReceived)
 				// Expect the request count to have increased by the expected number of updates.
-				assert.Equal(t, initialReqCount+int32(numWindows), atomic.LoadInt32(getReqCnt))
+				assert.Equal(t, initialReqCount+int32(numWindows), getReqCnt.Load())
 				// Expect the trailing event webhook for eventual consistency.
 				time.Sleep(webhookThrottleWindow + debouncingTime + expirationInterval)
-				assert.Equal(t, initialReqCount+int32(numWindows+1), atomic.LoadInt32(getReqCnt))
+				assert.Equal(t, initialReqCount+int32(numWindows+1), getReqCnt.Load())
 				assert.NoError(t, svr.Shutdown(true))
-				assert.Equal(t, initialReqCount+int32(numWindows+1), atomic.LoadInt32(getReqCnt))
+				assert.Equal(t, initialReqCount+int32(numWindows+1), getReqCnt.Load())
 				return
 			}
 		}
@@ -377,23 +377,23 @@ func TestCloseEventManager(t *testing.T) {
 
 	t.Run("Force flush event when server shutdown Test", func(t *testing.T) {
 		// this triggers webhook directly.
-		prev := atomic.LoadInt32(getReqCnt)
+		prev := getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
-		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev+1, getReqCnt.Load())
 
 		// this is queued and will be flushed by closing server
-		prev = atomic.LoadInt32(getReqCnt)
+		prev = getReqCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
-		assert.Equal(t, prev, atomic.LoadInt32(getReqCnt))
+		assert.Equal(t, prev, getReqCnt.Load())
 
 		done := make(chan struct{})
 		go func() {
@@ -403,9 +403,9 @@ func TestCloseEventManager(t *testing.T) {
 
 		select {
 		case <-done:
-			assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+			assert.Equal(t, prev+1, getReqCnt.Load())
 		case <-time.After(webhookThrottleWindow + debouncingTime + expirationInterval):
-			assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+			assert.Equal(t, prev+1, getReqCnt.Load())
 			assert.Fail(t, "closing timeout")
 		}
 	})

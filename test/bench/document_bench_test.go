@@ -510,7 +510,6 @@ func BenchmarkPresenceUpdate(b *testing.B) {
 		}
 		return nil
 	}))
-	b.ResetTimer()
 
 	for b.Loop() {
 		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -923,7 +922,6 @@ func BenchmarkSnapshotEncoding(b *testing.B) {
 			}))
 			root := doc.RootObject()
 
-			b.ResetTimer()
 			for b.Loop() {
 				_, err := converter.ObjectToBytes(root)
 				assert.NoError(b, err)
