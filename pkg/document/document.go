@@ -142,6 +142,16 @@ type Document struct {
 	// is used to protect `doc.presences`.
 	clonePresences *presence.Map
 
+	// cloneStale reports whether the clone above diverged from the root and
+	// must be rebuilt before the next use. Invalidation sets this flag rather
+	// than storing nil into cloneRoot: a reader that runs unlocked -- Root and
+	// GarbageCollect do while this goroutine is inside an updater -- would
+	// otherwise be able to observe that nil between its ensureClone and its
+	// dereference and panic. With the flag, cloneRoot is nil only before the
+	// first build and is replaced by another live pointer afterwards, so the
+	// worst an unlocked reader can see is a clone one rebuild out of date.
+	cloneStale bool
+
 	// history stores the undo/redo stacks of this document.
 	history *History
 
@@ -166,6 +176,16 @@ type Document struct {
 
 	// events is the channel to send events that occurred in the document.
 	events chan DocEvent
+
+	// eventsMu serializes "mutate the document, then publish the events that
+	// mutation produced" sequences. It is acquired before d.mu and held
+	// across both halves, so state-transition order and channel-send order
+	// still coincide (yorkie#1847) while the send itself -- which blocks on a
+	// channel of capacity one until the application drains it -- happens with
+	// d.mu released. Holding d.mu across that send would let an undrained or
+	// slowly drained document wedge every reader that takes d.mu, Root()
+	// included. Never take d.mu before eventsMu.
+	eventsMu sync.Mutex
 }
 
 // New creates a new instance of Document.
@@ -210,7 +230,9 @@ func (d *Document) Update(
 		return err
 	}
 
-	actorID := d.ActorID().String()
+	// d.mu is held for writing here, so this reads the internal document
+	// directly rather than through the exported ActorID, which RLocks it.
+	actorID := d.doc.ActorID().String()
 	presenceData := d.clonePresences.LoadOrStore(actorID, presence.NewData())
 	ctx := change.NewContext(
 		d.doc.changeID,
@@ -222,10 +244,9 @@ func (d *Document) Update(
 		json.NewObject(ctx, d.cloneRoot.Object()),
 		presence.New(ctx, presenceData),
 	); err != nil {
-		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
-		// clonePresences to prevent the user from accessing the invalid state.
-		d.cloneRoot = nil
-		d.clonePresences = nil
+		// NOTE(hackerwins): If the updater fails, we need to discard the clone
+		// to prevent the user from accessing the invalid state.
+		d.invalidateClone()
 		return err
 	}
 
@@ -248,18 +269,16 @@ func (d *Document) Update(
 			for _, err := range result.Errors {
 				errorMessages = append(errorMessages, err.Message)
 			}
-			d.cloneRoot = nil
-			d.clonePresences = nil
+			d.invalidateClone()
 			return fmt.Errorf("%w: %s", ErrSchemaValidationFailed, strings.Join(errorMessages, ", "))
 		}
 	}
 
 	cloneSize := d.cloneRoot.DocSize()
 	if !ctx.IsPresenceOnlyChange() && d.MaxSizeLimit > 0 && d.MaxSizeLimit < cloneSize.Total() {
-		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
-		// clonePresences to prevent the user from accessing the invalid state.
-		d.cloneRoot = nil
-		d.clonePresences = nil
+		// NOTE(hackerwins): If the updater fails, we need to discard the clone
+		// to prevent the user from accessing the invalid state.
+		d.invalidateClone()
 		return ErrDocumentSizeExceedsLimit
 	}
 
@@ -267,6 +286,10 @@ func (d *Document) Update(
 		c := ctx.ToChange()
 		result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceLocal)
 		if err != nil {
+			// NOTE(hackerwins): Execute does not roll back, so the root holds a
+			// prefix of the change the clone holds in full. Drop the clone so
+			// the next access rebuilds it from the root.
+			d.invalidateClone()
 			return err
 		}
 
@@ -381,13 +404,23 @@ func (d *Document) ClearHistory() error {
 // against the document, pushing the resulting reverse operations onto the
 // opposite stack. It is the port of the JS SDK's executeUndoRedo
 // (document.ts:2049-2165).
-func (d *Document) executeUndoRedo(isUndo bool) error {
+func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 	if d.updating.Load() {
 		return ErrRefusedDuringUpdate
 	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	// NOTE(hackerwins): Execute does not roll back, so a failure after the
+	// clone took the change leaves the clone and the root apart. Drop the
+	// clone so the next access rebuilds it from the root. The refusal above
+	// returns before this runs: an updater is still using the clone.
+	defer func() {
+		if err != nil {
+			d.invalidateClone()
+		}
+	}()
 
 	var entries []HistoryOperation
 	if isUndo {
@@ -403,7 +436,9 @@ func (d *Document) executeUndoRedo(isUndo bool) error {
 		return err
 	}
 
-	actorID := d.ActorID().String()
+	// As in Update, d.mu is held for writing here, so this reads the internal
+	// document directly rather than through the exported ActorID.
+	actorID := d.doc.ActorID().String()
 	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)
 	for _, entry := range entries {
 		if entry.Op == nil {
@@ -603,6 +638,23 @@ func (d *Document) PushUndoForTest(ops []HistoryOperation) {
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
+	// eventsMu is taken before d.mu and held across both the apply and the
+	// publish, so a concurrent applier cannot interleave its events with
+	// these ones (yorkie#1847) even though the sends happen after d.mu is
+	// released. See Document.eventsMu for why they must.
+	d.eventsMu.Lock()
+	defer d.eventsMu.Unlock()
+
+	events, err := d.applyChangePack(pack)
+	d.publish(events)
+
+	return err
+}
+
+// applyChangePack applies the pack under d.mu and returns the events the
+// apply produced, leaving delivery to its caller. Returning them rather than
+// sending them here is what keeps the blocking send off d.mu.
+func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -610,14 +662,15 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	hasSnapshot := len(pack.Snapshot) > 0
 
 	if hasSnapshot {
-		d.cloneRoot = nil
-		d.clonePresences = nil
+		d.invalidateClone()
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.VersionVector); err != nil {
-			return err
+			return events, err
 		}
 	} else {
-		if err := d.applyChanges(pack.Changes); err != nil {
-			return err
+		applied, err := d.applyChanges(pack.Changes)
+		events = append(events, applied...)
+		if err != nil {
+			return events, err
 		}
 	}
 
@@ -631,8 +684,10 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	}
 
 	if len(pack.Snapshot) > 0 {
-		if err := d.applyChanges(d.doc.localChanges); err != nil {
-			return err
+		applied, err := d.applyChanges(d.doc.localChanges)
+		events = append(events, applied...)
+		if err != nil {
+			return events, err
 		}
 
 		// The changes just replayed are this client's own, not yet
@@ -645,7 +700,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		// such self-reconciliation along with the rest of the stacks.
 		//
 		// d.mu is already held by this method (see the top of
-		// ApplyChangePack), so this calls History directly rather than
+		// applyChangePack), so this calls History directly rather than
 		// through ClearHistory, which locks d.mu itself and would deadlock.
 		d.history.ClearUndo()
 		d.history.ClearRedo()
@@ -656,26 +711,51 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 	// 04. Do Garbage collection.
 	if !d.options.DisableGC && !hasSnapshot {
-		d.GarbageCollect(pack.VersionVector)
+		// d.mu is already held by this method, so this goes to the unlocked
+		// helper rather than the exported GarbageCollect, which locks it.
+		d.garbageCollect(pack.VersionVector)
 	}
 
 	// 05. Update the status.
 	if pack.IsRemoved {
-		d.SetStatus(StatusRemoved)
+		// d.mu is already held by this method, so this writes the internal
+		// document directly rather than through the exported SetStatus, which
+		// locks it.
+		d.doc.SetStatus(StatusRemoved)
 	}
 
-	return nil
+	return events, nil
 }
 
-func (d *Document) applyChanges(changes []*change.Change) error {
+// publish delivers the given events to the document's event channel. It must
+// be called with d.mu released and d.eventsMu held: the channel has capacity
+// one, so each send blocks until the application drains the previous event.
+func (d *Document) publish(events []DocEvent) {
+	for _, e := range events {
+		d.events <- e
+	}
+}
+
+// applyChanges applies the given changes with d.mu held and returns the
+// events they produced. The caller publishes them once it has released d.mu.
+func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, err error) {
 	if err := d.ensureClone(); err != nil {
-		return err
+		return nil, err
 	}
 
-	var events []DocEvent
+	// NOTE(hackerwins): Each change runs on the clone before the root and
+	// Execute does not roll back, so a change that fails partway leaves the
+	// two holding different prefixes of it. Drop the clone so the next access
+	// rebuilds it from the root.
+	defer func() {
+		if err != nil {
+			d.invalidateClone()
+		}
+	}()
+
 	for _, c := range changes {
 		if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
-			return err
+			return nil, err
 		}
 
 		// Applied and reconciled one change at a time, not batched over the
@@ -688,7 +768,7 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		// into the per-change reconcile at :1552-1566).
 		changeEvents, executed, err := d.doc.ApplyChanges(c)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		events = append(events, changeEvents...)
 
@@ -728,10 +808,7 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 		}
 	}
 
-	for _, e := range events {
-		d.events <- e
-	}
-	return nil
+	return events, nil
 }
 
 // InternalDocument returns the internal document.
@@ -782,7 +859,7 @@ func (d *Document) Type() attachable.ResourceType {
 
 // Checkpoint returns the checkpoint of this document.
 func (d *Document) Checkpoint() change.Checkpoint {
-	return d.doc.checkpoint
+	return readLocked(d, func() change.Checkpoint { return d.doc.checkpoint })
 }
 
 // HasLocalChanges returns whether this document has local changes or not.
@@ -795,68 +872,192 @@ func (d *Document) HasLocalChanges() bool {
 
 // Marshal returns the JSON encoding of this document.
 func (d *Document) Marshal() string {
-	return d.doc.Marshal()
+	return readLocked(d, func() string { return d.doc.Marshal() })
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.
+//
+// It reads d.doc.localChanges, d.doc.checkpoint and the version vector, all of
+// which Update and applyChangePack mutate under d.mu, so it takes the lock like
+// every other reader. The pack it returns owns its own copies of the change
+// slice and the version vector (see InternalDocument.CreateChangePack), so the
+// sync goroutine can serialize it after the lock is released.
 func (d *Document) CreateChangePack() *change.Pack {
-	return d.doc.CreateChangePack()
+	return readLocked(d, func() *change.Pack { return d.doc.CreateChangePack() })
 }
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
+//
+// It writes d.doc.changeID and every buffered local change, so it takes d.mu
+// for writing: the readers above observe those same fields under RLock.
 func (d *Document) SetActor(actor time.ActorID) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.SetActor(actor)
 }
 
 // ActorID returns ID of the actor currently editing the document.
+//
+// It reads d.doc.changeID, which SetActor and every applied change write under
+// d.mu. In-package callers that already hold the lock go to d.doc.ActorID()
+// directly rather than through here; sync.RWMutex is not reentrant.
 func (d *Document) ActorID() time.ActorID {
-	return d.doc.ActorID()
+	return readLocked(d, func() time.ActorID { return d.doc.ActorID() })
 }
 
 // Status returns the status of this document.
 func (d *Document) Status() StatusType {
-	return d.doc.status
+	return readLocked(d, func() StatusType { return d.doc.status })
 }
 
 // SetStatus updates the status of this document.
+//
+// It writes d.doc.status, which Status and IsAttached read under RLock, so it
+// takes d.mu for writing. applyChangePack already holds the lock and writes
+// d.doc.status directly instead of calling this.
 func (d *Document) SetStatus(status StatusType) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.SetStatus(status)
 }
 
 // IsAttached returns whether this document is attached or not.
 func (d *Document) IsAttached() bool {
-	return d.doc.IsAttached()
+	return readLocked(d, func() bool { return d.doc.IsAttached() })
 }
 
-// VersionVector returns the version vector of this document.
+// VersionVector returns a copy of the version vector of this document.
+//
+// time.VersionVector is a map and change.ID.SyncClocks/SetClocks mutate the
+// document's own instance in place while applying a remote pack, so handing
+// the caller that instance would let it walk a map another goroutine is
+// writing -- an unrecoverable "concurrent map read and map write" abort --
+// the moment the lock below is released. The copy is taken under the lock so
+// what the caller gets is a stable snapshot it owns.
 func (d *Document) VersionVector() time.VersionVector {
-	return d.doc.VersionVector()
+	return readLocked(d, func() time.VersionVector { return d.doc.VersionVector().DeepCopy() })
+}
+
+// readLocked runs read with d.mu held for reading, so the shared state it
+// touches -- the root, the presence maps, the status -- is never observed
+// halfway through a write by ApplyChangePack or by the watch-driven presence
+// writers, which mutate it under d.mu. Presences in particular walks the
+// plain onlineClients map that SetOnlineClients and friends write, and an
+// unsynchronized walk of it aborts the process with "concurrent map read and
+// map write" on a schedule a remote peer controls.
+//
+// A call made from inside an updater already holds d.mu for writing and runs
+// read directly instead, because sync.RWMutex is not reentrant; see Root for
+// why d.updating is the right signal for that and what it does not cover.
+func readLocked[T any](d *Document, read func() T) T {
+	if d.updating.Load() {
+		return read()
+	}
+
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return read()
 }
 
 // RootObject returns the internal root object of this document.
+//
+// The lock below covers only the pointer fetch: the object itself is the
+// document's live CRDT root, built on plain Go maps that a concurrent apply
+// mutates, so traversing the returned value after this call is not safe on a
+// document that is attached and syncing. Use Marshal or DocSize, which do
+// their whole read under the lock, unless the caller can guarantee no
+// concurrent apply -- the server's rebuild path can, a client cannot.
 func (d *Document) RootObject() *crdt.Object {
-	return d.doc.RootObject()
+	return readLocked(d, func() *crdt.Object { return d.doc.RootObject() })
 }
 
 // Root returns the root object of this document.
+//
+// d.mu is held for the whole call because the clone is shared mutable
+// state, not a read-only view: ensureClone rebuilds it, and a remote apply
+// running on the sync or watch goroutine both mutates and invalidates it.
+// The lock is a write lock, not a read lock, because ensureClone writes
+// d.cloneRoot. It is never held across a send to the event channel -- see
+// Document.eventsMu -- so an application that is slow to drain events
+// cannot wedge this read.
+//
+// The exception is a call made from inside an updater, which already
+// holds d.mu (test/integration/tree_test.go:431 reads the document it is
+// editing) and would deadlock on the non-reentrant mutex. d.updating
+// carries exactly that signal, the same one Undo, Redo and ClearHistory
+// read to refuse rather than deadlock. It is per-document rather than
+// per-goroutine, so a read racing another goroutine's updater still runs
+// unlocked, as it did before. What that unlocked read can no longer hit is
+// a nil clone: invalidation now sets d.cloneStale and leaves the pointer
+// live (see Document.cloneStale), so the worst it observes is a clone one
+// rebuild out of date, as it did before this method took the lock at all.
 func (d *Document) Root() *json.Object {
+	if d.updating.Load() {
+		return d.root()
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.root()
+}
+
+// root builds the user-facing view of the clone with d.mu already held, or
+// -- on the d.updating path through Root -- with it held by this goroutine's
+// own updater. The clone pointer is read once into a local so that the
+// context and the object it wraps cannot end up referring to two different
+// clones if that unlocked path races a rebuild.
+func (d *Document) root() *json.Object {
 	if err := d.ensureClone(); err != nil {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
-	return json.NewObject(ctx, d.cloneRoot.Object())
+	clone := d.cloneRoot
+	ctx := change.NewContext(d.doc.changeID.Next(), "", clone)
+	return json.NewObject(ctx, clone.Object())
 }
 
 // DocSize returns the size of this document.
 func (d *Document) DocSize() resource.DocSize {
-	return d.doc.root.DocSize()
+	return readLocked(d, func() resource.DocSize { return d.doc.root.DocSize() })
 }
 
 // GarbageCollect purge elements that were removed before the given time.
+//
+// It touches the same clone Root does and so takes d.mu for the same
+// reason -- except when this process is already inside an updater, which
+// is allowed to collect while Update holds the lock (gc_test.go:136) and
+// would deadlock on the non-reentrant mutex. d.updating carries exactly
+// that signal, and is the same one Undo, Redo and ClearHistory read to
+// refuse rather than deadlock. It is per-document, not per-goroutine, so
+// a collect racing another goroutine's updater still runs unlocked --
+// unchanged from before, and, as in Root, unable to observe a nil clone
+// now that invalidation leaves the pointer live (see Document.cloneStale).
 func (d *Document) GarbageCollect(vector time.VersionVector) int {
-	if d.cloneRoot != nil {
+	if d.updating.Load() {
+		return d.garbageCollect(vector)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.garbageCollect(vector)
+}
+
+// garbageCollect collects garbage with d.mu already held. It exists because
+// ApplyChangePack holds the lock for the whole pack and sync.RWMutex is not
+// reentrant, so calling the exported method from there would deadlock.
+func (d *Document) garbageCollect(vector time.VersionVector) int {
+	// A stale clone holds a prefix of a change its root never took, so
+	// collecting on it is both pointless -- ensureClone throws it away on the
+	// next access -- and unsafe, since it may not satisfy GarbageCollect's
+	// invariants. Before this PR the same state was represented by a nil
+	// cloneRoot and skipped by the nil check below.
+	if d.cloneRoot != nil && !d.cloneStale {
 		if _, err := d.cloneRoot.GarbageCollect(vector); err != nil {
 			panic(err)
 		}
@@ -872,16 +1073,31 @@ func (d *Document) GarbageCollect(vector time.VersionVector) int {
 
 // GarbageLen returns the count of removed elements.
 func (d *Document) GarbageLen() int {
-	return d.doc.GarbageLen()
+	return readLocked(d, func() int { return d.doc.GarbageLen() })
+}
+
+// invalidateClone marks the clone as diverged from the root so the next
+// ensureClone rebuilds it. It must be called with d.mu held for writing.
+//
+// It deliberately leaves d.cloneRoot pointing at the stale copy instead of
+// storing nil: Root and GarbageCollect run unlocked while this goroutine is
+// inside an updater, and a nil stored here could be observed by one of them
+// between its ensureClone and its dereference. See Document.cloneStale.
+func (d *Document) invalidateClone() {
+	d.cloneStale = true
 }
 
 func (d *Document) ensureClone() error {
-	if d.cloneRoot == nil {
+	if d.cloneRoot == nil || d.cloneStale {
 		copiedDoc, err := d.doc.root.DeepCopy()
 		if err != nil {
 			return err
 		}
 		d.cloneRoot = copiedDoc
+		d.clonePresences = d.doc.presences.DeepCopy()
+		d.cloneStale = false
+
+		return nil
 	}
 
 	if d.clonePresences == nil {
@@ -893,30 +1109,46 @@ func (d *Document) ensureClone() error {
 
 // MyPresence returns the presence of the actor.
 func (d *Document) MyPresence() presence.Data {
-	return d.doc.MyPresence()
+	return readLocked(d, func() presence.Data { return d.doc.MyPresence() })
 }
 
 // Presence returns the presence of the given client.
 // If the client is not online, it returns nil.
 func (d *Document) Presence(clientID string) presence.Data {
-	return d.doc.Presence(clientID)
+	return readLocked(d, func() presence.Data { return d.doc.Presence(clientID) })
 }
 
 // PresenceForTest returns the presence of the given client
 // regardless of whether the client is online or not.
 func (d *Document) PresenceForTest(clientID string) presence.Data {
-	return d.doc.PresenceForTest(clientID)
+	return readLocked(d, func() presence.Data { return d.doc.PresenceForTest(clientID) })
 }
 
 // Presences returns the presence map of online clients.
 func (d *Document) Presences() map[string]presence.Data {
-	return d.doc.Presences()
+	return readLocked(d, func() map[string]presence.Data { return d.doc.Presences() })
 }
 
 // AllPresences returns the presence map of all clients
 // regardless of whether the client is online or not.
 func (d *Document) AllPresences() map[string]presence.Data {
-	return d.doc.AllPresences()
+	return readLocked(d, func() map[string]presence.Data { return d.doc.AllPresences() })
+}
+
+// ResetPresences clears the presence map and the online-clients set under
+// d.mu. It exists so a caller does not have to reach through
+// InternalDocument to do it: InternalDocument.ResetPresences replaces both
+// maps with no lock, which would race every presence reader above.
+//
+// The clone is invalidated along with them, because clonePresences is a copy
+// of the map just discarded and an updater must not keep editing presences
+// that no longer exist on the root.
+func (d *Document) ResetPresences() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.doc.ResetPresences()
+	d.invalidateClone()
 }
 
 // SetOnlineClients sets the online clients.
@@ -947,11 +1179,22 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 // and emits the appropriate presence event based on the state transition
 // through the document event channel.
 //
-// The send happens while holding d.mu — the same pattern as applyChanges —
-// so that lock acquisition order, state transition order, and channel send
-// order coincide. Delivering through the caller instead reintroduces the
-// reordering race between the watch-stream and sync paths (yorkie#1847).
+// The transition and the send both happen under d.eventsMu -- the same
+// pattern as ApplyChangePack -- so that lock acquisition order, state
+// transition order, and channel send order coincide. Delivering through the
+// caller instead reintroduces the reordering race between the watch-stream
+// and sync paths (yorkie#1847). The send itself runs with d.mu released; see
+// Document.eventsMu for why it must.
 func (d *Document) AddOnlineClientAndReconcile(clientID string) {
+	d.eventsMu.Lock()
+	defer d.eventsMu.Unlock()
+
+	d.publish(d.addOnlineClientAndReconcile(clientID))
+}
+
+// addOnlineClientAndReconcile performs the state transition under d.mu and
+// returns the event it produced, leaving delivery to its caller.
+func (d *Document) addOnlineClientAndReconcile(clientID string) []DocEvent {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -962,8 +1205,10 @@ func (d *Document) AddOnlineClientAndReconcile(clientID string) {
 	d.doc.AddOnlineClient(clientID)
 
 	if event := d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence); event != nil {
-		d.events <- *event
+		return []DocEvent{*event}
 	}
+
+	return nil
 }
 
 // RemoveOnlineClientAndReconcile removes the given client from the online
@@ -971,6 +1216,15 @@ func (d *Document) AddOnlineClientAndReconcile(clientID string) {
 // transition through the document event channel. See
 // AddOnlineClientAndReconcile for why the send happens under the lock.
 func (d *Document) RemoveOnlineClientAndReconcile(clientID string) {
+	d.eventsMu.Lock()
+	defer d.eventsMu.Unlock()
+
+	d.publish(d.removeOnlineClientAndReconcile(clientID))
+}
+
+// removeOnlineClientAndReconcile performs the state transition under d.mu and
+// returns the event it produced, leaving delivery to its caller.
+func (d *Document) removeOnlineClientAndReconcile(clientID string) []DocEvent {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -981,8 +1235,10 @@ func (d *Document) RemoveOnlineClientAndReconcile(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
 
 	if event := d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence); event != nil {
-		d.events <- *event
+		return []DocEvent{*event}
 	}
+
+	return nil
 }
 
 // Events returns the events of this document.
