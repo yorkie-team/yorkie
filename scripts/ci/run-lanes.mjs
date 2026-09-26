@@ -25,15 +25,17 @@
 // are what `summarize-ci.mjs` renders instead.
 //
 // A WRAPPER, NOT A REPLACEMENT. Every `run:` below is the literal command the
-// `ci.yml` step it replaced ran. That is deliberate and load-bearing twice
-// over: `review-panel.mjs`'s `MECHANICAL_COVERAGE_NOTE` and
-// `docs/design/agent-command-verbs.md` §4b are an inventory of what CI proves,
-// and both stay true only while this file changes how a lane is REPORTED and
-// never what it RUNS. `make verify` is untouched for the same reason.
+// `ci.yml` step it replaced ran (`modernize`, added later, replaced no step and
+// runs the same `make verify-modernize` that `make verify` does). That is
+// deliberate and load-bearing twice over: `review-panel.mjs`'s
+// `MECHANICAL_COVERAGE_NOTE` and `docs/design/agent-command-verbs.md` §4b are
+// an inventory of what CI proves, and both stay true only while this file
+// changes how a lane is REPORTED and never what it RUNS. A lane that adds a
+// check updates both inventories in the same change.
 //
 // ONE LANE PER INVOCATION IN CI, which is why `ci.yml` still has a step per
 // lane. The alternative — one invocation running the whole manifest — would
-// have collapsed eight named steps into one, so a human reading a red run
+// have collapsed nine named steps into one, so a human reading a red run
 // would see "Run the CI lanes" fail rather than "Lint", and the two lanes with
 // a condition of their own would have had to move their `if:` into JavaScript.
 // Run with no arguments it does execute the whole manifest in order, stopping
@@ -166,6 +168,12 @@ export const LANES = Object.freeze([
     title: 'go vet over the tag-gated reproductions',
     kind: 'go-build',
     run: 'go vet -tags rgafuzz ./...',
+  },
+  {
+    name: 'modernize',
+    title: 'go fix has nothing to rewrite, under every build tag',
+    kind: 'generic',
+    run: 'make verify-modernize',
   },
   {
     name: 'test',
@@ -344,7 +352,7 @@ export function runLane(lane, { cwd = process.cwd(), env = process.env, onOutput
  * WRITTEN FROM THE MANIFEST, NOT FROM THE DIRECTORY, which is the whole point
  * of a separate finish step. A lane that never ran leaves no file, and a
  * summary assembled from the files present would simply not mention it — so a
- * run that died at `lint` would report one failure and seven lanes that, as
+ * run that died at `lint` would report one failure and eight lanes that, as
  * far as any reader could tell, did not exist. Naming them as `skip` (or
  * `filtered`) is what makes the summary a statement about the whole job.
  */

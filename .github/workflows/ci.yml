@@ -286,6 +286,11 @@ jobs:
         # here. See docs/tasks/active/ for what each tag reproduces.
         run: node scripts/ci/run-lanes.mjs vet-tagged
 
+      - name: Modernize
+        # The toolchain's own go fix modernizers, under every build tag, so a
+        # Go upgrade cannot leave the tag-gated tests on old idioms unnoticed.
+        run: node scripts/ci/run-lanes.mjs modernize
+
       - name: Stack
         run: docker compose -f build/docker/docker-compose.yml up --build -d
 
