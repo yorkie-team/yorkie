@@ -76,7 +76,7 @@ func (p *ClientPool) Get(rpcAddr string) (*Client, error) {
 		cli, err := Dial(rpcAddr, p.opts...)
 		if err != nil {
 			// Cleanup already created clients
-			for j := 0; j < i; j++ {
+			for j := range i {
 				clients[j].Close()
 			}
 			return nil, err

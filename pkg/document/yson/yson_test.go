@@ -187,7 +187,7 @@ func TestYSONConversion(t *testing.T) {
 		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewCounter("pv", 0).Increase(100)
 			counter := r.SetNewDedupCounter("uv")
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				counter.Add(fmt.Sprintf("user-%d", i))
 			}
 			return nil
@@ -226,7 +226,7 @@ func TestYSONConversion(t *testing.T) {
 
 		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
 			counter := r.SetNewDedupCounter("uv")
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				counter.Add(fmt.Sprintf("user-%d", i))
 			}
 			return nil

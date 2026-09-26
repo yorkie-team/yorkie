@@ -68,10 +68,7 @@ func applyTextOp1(t *testing.T, doc *document.Document, op string) {
 			if length >= 3 {
 				txt.Edit(1, 3, "12")
 			} else {
-				end := 1
-				if length < end {
-					end = length
-				}
+				end := min(length, 1)
 				txt.Edit(0, end, "R")
 			}
 		case "style":
@@ -121,7 +118,6 @@ func applyTextOp2(t *testing.T, doc *document.Document, op string) {
 func TestHistoryTextSingleClientBasic(t *testing.T) {
 	ops := []string{"insert", "delete", "replace"}
 	for _, op := range ops {
-		op := op
 		t.Run(fmt.Sprintf("should undo/redo %s", op), func(t *testing.T) {
 			doc := document.New(helper.TestKey(t))
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -155,7 +151,7 @@ func TestHistoryTextSingleClientBasic(t *testing.T) {
 		}, "insert"))
 		modified := doc.Root().GetText("t").String()
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			assert.NoError(t, doc.Undo())
 			assert.Equal(t, initial, doc.Root().GetText("t").String(), fmt.Sprintf("round %d undo failed", i))
 
@@ -244,7 +240,7 @@ func TestHistoryTextSingleClientChainedOps(t *testing.T) {
 					}
 
 					// Redo: S0 -> S1 -> S2 -> S3
-					for i := 0; i < 3; i++ {
+					for i := range 3 {
 						assert.NoError(t, doc.Redo())
 						assert.Equal(t, snapshots[i+1], doc.Root().GetText("t").String(), fmt.Sprintf("redo to S%d", i+1))
 					}
@@ -416,8 +412,7 @@ func TestHistoryTextSingleClientEdgeCases(t *testing.T) {
 		}, "init"))
 
 		states := []string{""}
-		for i := 0; i < 10; i++ {
-			i := i
+		for i := range 10 {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				length := len(root.GetText("t").String())
 				root.GetText("t").Edit(length, length, fmt.Sprintf("%d", i))

@@ -278,7 +278,7 @@ func formatFunctionName(fn string) string {
 }
 
 // extractFilterKeys extracts just the field names from filter for logging
-func (m *QueryMonitor) extractFilterKeys(filter interface{}) string {
+func (m *QueryMonitor) extractFilterKeys(filter any) string {
 	if filter == nil {
 		return "{}"
 	}
@@ -304,7 +304,7 @@ func (m *QueryMonitor) extractFilterKeys(filter interface{}) string {
 }
 
 // extractFilterFromArray extracts filter from MongoDB operation arrays (updates/deletes)
-func (m *QueryMonitor) extractFilterFromArray(value interface{}, filterKey string) string {
+func (m *QueryMonitor) extractFilterFromArray(value any, filterKey string) string {
 	if arr, ok := value.(bson.A); ok && len(arr) > 0 {
 		if doc, ok := arr[0].(bson.D); ok {
 			for _, elem := range doc {

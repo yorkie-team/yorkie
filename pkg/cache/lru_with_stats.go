@@ -45,7 +45,7 @@ func NewLRU[K comparable, V any](size int, name string) (*LRU[K, V], error) {
 		name:  name,
 	}
 
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shard, err := lru.New[K, V](perShard)
 		if err != nil {
 			return nil, err
@@ -94,7 +94,7 @@ func (c *LRU[K, V]) Remove(key K) bool {
 
 // Purge clears all entries from the cache.
 func (c *LRU[K, V]) Purge() {
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		c.shards[i].Purge()
 	}
 }
@@ -102,7 +102,7 @@ func (c *LRU[K, V]) Purge() {
 // Len returns the number of items in the cache.
 func (c *LRU[K, V]) Len() int {
 	n := 0
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		n += c.shards[i].Len()
 	}
 	return n

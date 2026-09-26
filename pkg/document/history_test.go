@@ -145,7 +145,7 @@ func TestHistoryStack(t *testing.T) {
 			root.SetNewCounter("c", int64(0))
 			return nil
 		}))
-		for i := 0; i < document.MaxUndoRedoStackDepth+10; i++ {
+		for range document.MaxUndoRedoStackDepth + 10 {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetCounter("c").Increase(1)
 				return nil

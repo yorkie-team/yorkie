@@ -53,8 +53,8 @@ func (v *stringValue) String() string {
 }
 
 type editingTrace struct {
-	Edits     [][]interface{} `json:"edits"`
-	FinalText string          `json:"finalText"`
+	Edits     [][]any `json:"edits"`
+	FinalText string  `json:"finalText"`
 }
 
 func BenchmarkSplayTree(b *testing.B) {

@@ -1319,7 +1319,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		projectID := types.NewID()
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "race-room"}
 
-		for round := 0; round < 100; round++ {
+		for round := range 100 {
 			// Attach one session
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", round))
 			sessionID, _, err := manager.Attach(ctx, refKey, clientID)
@@ -1371,10 +1371,10 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		var detachErrors int64
 
 		wg.Add(numGoroutines)
-		for g := 0; g < numGoroutines; g++ {
+		for g := range numGoroutines {
 			go func(id int) {
 				defer wg.Done()
-				for i := 0; i < opsPerGoroutine; i++ {
+				for i := range opsPerGoroutine {
 					clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%012d%012d", id, i))
 					sessionID, _, err := manager.Attach(ctx, refKey, clientID)
 					if err != nil {
@@ -1423,7 +1423,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 
 		// Concurrent detaches (0~49)
 		wg.Add(50)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			go func(idx int) {
 				defer wg.Done()
 				if _, err := manager.Detach(ctx, sessions[idx]); err != nil {
@@ -1434,7 +1434,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 
 		// Concurrent attaches with unique client IDs (hex-safe, no overlap with prefix "1")
 		wg.Add(50)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			go func(idx int) {
 				defer wg.Done()
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("f%023d", idx))
@@ -1459,10 +1459,10 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		projectID := types.NewID()
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "ephemeral-room"}
 
-		for round := 0; round < 50; round++ {
+		for round := range 50 {
 			// Attach N sessions with globally unique hex client IDs
 			sessions := make([]types.ID, 10)
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%06x%018d", round, i))
 				sid, _, err := manager.Attach(ctx, refKey, cid)
 				assert.NoError(t, err)
@@ -1502,7 +1502,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		// Attach all concurrently
 		var wg sync.WaitGroup
 		wg.Add(totalAttach)
-		for i := 0; i < totalAttach; i++ {
+		for i := range totalAttach {
 			go func(idx int) {
 				defer wg.Done()
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
@@ -1522,7 +1522,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 
 		// Detach half concurrently
 		wg.Add(totalAttach / 2)
-		for i := 0; i < totalAttach/2; i++ {
+		for i := range totalAttach / 2 {
 			go func(idx int) {
 				defer wg.Done()
 				_, err := manager.Detach(ctx, sessionIDs[idx])
@@ -1553,7 +1553,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		// Concurrently: refresh first 50, let last 50 expire
 		var wg sync.WaitGroup
 		wg.Add(50)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			go func(idx int) {
 				defer wg.Done()
 				_ = manager.Refresh(ctx, sessions[idx])

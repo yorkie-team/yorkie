@@ -90,7 +90,7 @@ func TestClient(t *testing.T) {
 
 		var patch *monkey.Patch
 		patch, err = monkey.PatchInstanceMethodByName(
-			reflect.TypeOf(testServer.yorkieServer),
+			reflect.TypeFor[*v1connect.UnimplementedYorkieServiceHandler](),
 			"ActivateClient",
 			func(
 				m *v1connect.UnimplementedYorkieServiceHandler,

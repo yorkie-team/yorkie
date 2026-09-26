@@ -74,8 +74,8 @@ func BenchmarkTextEditing(b *testing.B) {
 }
 
 type editTrace struct {
-	Edits     [][]interface{} `json:"edits"`
-	FinalText string          `json:"finalText"`
+	Edits     [][]any `json:"edits"`
+	FinalText string  `json:"finalText"`
 }
 
 // readEditingTraceFromFile reads trace from editing-trace.json.

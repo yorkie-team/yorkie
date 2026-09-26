@@ -41,7 +41,7 @@ func TestDisableGCKeepsChangeVVAtSizeOne(t *testing.T) {
 	const numActors = 5
 
 	docs := make([]*document.Document, numActors)
-	for i := 0; i < numActors; i++ {
+	for i := range numActors {
 		actor, err := time.ActorIDFromHex(fmt.Sprintf("0000000000000000000000%02d", i+1))
 		assert.NoError(t, err)
 		d := document.New("disable-gc")
@@ -71,7 +71,7 @@ func TestDisableGCKeepsChangeVVAtSizeOne(t *testing.T) {
 	// round every actor has seen every other actor at least once; if VV
 	// merging were still happening, doc.VV would jump to numActors.
 	for round := 1; round <= 3; round++ {
-		for i := 0; i < numActors; i++ {
+		for i := range numActors {
 			assert.NoError(t, docs[i].Update(func(r *json.Object, _ *presence.Presence) error {
 				r.GetCounter("c").Increase(1)
 				return nil
@@ -83,7 +83,7 @@ func TestDisableGCKeepsChangeVVAtSizeOne(t *testing.T) {
 				"round=%d actor=%d local Change.VV must stay size 1, got %s",
 				round, i, vv.Marshal())
 
-			for j := 0; j < numActors; j++ {
+			for j := range numActors {
 				if j == i {
 					continue
 				}
@@ -95,7 +95,7 @@ func TestDisableGCKeepsChangeVVAtSizeOne(t *testing.T) {
 			}
 		}
 
-		for i := 0; i < numActors; i++ {
+		for i := range numActors {
 			vv := docs[i].VersionVector()
 			assert.Equal(t, 1, len(vv),
 				"round=%d actor=%d doc.VV must stay size 1, got %s",
@@ -163,7 +163,7 @@ func TestDisableGCSnapshotPullCatchesUpLamport(t *testing.T) {
 		r.SetNewCounter("c", 0)
 		return nil
 	}))
-	for i := 0; i < numUpdates; i++ {
+	for range numUpdates {
 		assert.NoError(t, docA.Update(func(r *json.Object, _ *presence.Presence) error {
 			r.GetCounter("c").Increase(1)
 			return nil

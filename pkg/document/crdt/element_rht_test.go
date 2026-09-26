@@ -218,7 +218,7 @@ func TestElementRHTNodeOrder(t *testing.T) {
 		// object's members from here.
 		rht := build(t)
 		first := order(rht.Nodes())
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			assert.Equal(t, first, order(rht.Nodes()),
 				"call %d returned a different order", i)
 		}
@@ -231,7 +231,7 @@ func TestElementRHTNodeOrder(t *testing.T) {
 		rht := crdt.NewElementRHT()
 		actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 		shared := time.NewTicket(9, 0, actor)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			value, err := crdt.NewPrimitive("v", time.NewTicket(int64(i+1), 0, actor))
 			assert.NoError(t, err)
 			value.SetMovedAt(shared)
@@ -239,7 +239,7 @@ func TestElementRHTNodeOrder(t *testing.T) {
 		}
 
 		first := order(rht.Nodes())
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			assert.Equal(t, first, order(rht.Nodes()),
 				"call %d returned a different order", i)
 		}

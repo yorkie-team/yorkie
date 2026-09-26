@@ -60,7 +60,7 @@ func (m *Map[K, V]) shardForKey(key K) *shard[K, V] {
 		idx = uint32(k)
 	default:
 		hash := fnv.New32a()
-		if _, err := hash.Write([]byte(fmt.Sprintf("%v", key))); err != nil {
+		if _, err := hash.Write(fmt.Appendf(nil, "%v", key)); err != nil {
 			panic(fmt.Sprintf("shard for key: %s", err))
 		}
 		idx = hash.Sum32()

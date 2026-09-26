@@ -47,7 +47,7 @@ const (
 )
 
 // CounterValueFromBytes parses the given bytes into value.
-func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, error) {
+func CounterValueFromBytes(counterType CounterType, value []byte) (any, error) {
 	switch counterType {
 	case IntegerCnt, IntegerDedupCnt:
 		if len(value) < 4 {
@@ -68,7 +68,7 @@ func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, 
 // Counter represents changeable number data type.
 type Counter struct {
 	valueType CounterType
-	value     interface{}
+	value     any
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
@@ -76,7 +76,7 @@ type Counter struct {
 }
 
 // NewCounter creates a new instance of Counter.
-func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) (*Counter, error) {
+func NewCounter(valueType CounterType, value any, createdAt *time.Ticket) (*Counter, error) {
 	switch valueType {
 	case IntegerCnt:
 		intValue, err := castToInt(value)
@@ -222,7 +222,7 @@ func (p *Counter) ValueType() CounterType {
 
 // Value returns the value of this counter.
 // TODO(hackerwins): We need to use generics to avoid using interface{}.
-func (p *Counter) Value() interface{} {
+func (p *Counter) Value() any {
 	return p.value
 }
 
@@ -340,7 +340,7 @@ func (p *Counter) recomputeValue() {
 }
 
 // castToInt casts numeric type to int32.
-func castToInt(value interface{}) (int32, error) {
+func castToInt(value any) (int32, error) {
 	switch val := value.(type) {
 	case int32:
 		return val, nil
@@ -358,7 +358,7 @@ func castToInt(value interface{}) (int32, error) {
 }
 
 // castToLong casts numeric type to int64.
-func castToLong(value interface{}) (int64, error) {
+func castToLong(value any) (int64, error) {
 	switch val := value.(type) {
 	case int64:
 		return val, nil

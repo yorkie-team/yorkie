@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,17 +42,17 @@ import (
 func parseSimpleXML(s string) []string {
 	var res []string
 	for i := range len(s) {
-		current := ""
+		var current strings.Builder
 		if s[i] == '<' {
 			for i < len(s) && s[i] != '>' {
-				current += string(s[i])
+				current.WriteString(string(s[i]))
 				i++
 			}
-			current += string(s[i])
+			current.WriteString(string(s[i]))
 		} else {
-			current += string(s[i])
+			current.WriteString(string(s[i]))
 		}
-		res = append(res, current)
+		res = append(res, current.String())
 	}
 	return res
 }

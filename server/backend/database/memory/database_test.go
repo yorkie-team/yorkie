@@ -216,7 +216,7 @@ func TestFindProjectInfosForRefresh(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_, err := db.CreateProjectInfo(ctx, fmt.Sprintf("p%d", i), testOwnerID)
 		assert.NoError(t, err)
 	}
@@ -306,7 +306,7 @@ func TestCountActivatedClients(t *testing.T) {
 
 	// Activate 3 clients.
 	var clients []*database.ClientInfo
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		info, err := db.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-c%d", t.Name(), i), nil)
 		assert.NoError(t, err)
 		clients = append(clients, info)
@@ -339,7 +339,7 @@ func TestCountAliveDocuments(t *testing.T) {
 
 	// Create 2 documents.
 	var docs []*database.DocInfo
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		docKey := key.Key(fmt.Sprintf("tests$%s-d%d", t.Name(), i))
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)

@@ -91,16 +91,16 @@ func TestLRUConcurrency(t *testing.T) {
 		const numOps = 1000
 
 		// Pre-populate half the keys so Gets have a mix of hits and misses.
-		for i := 0; i < numOps/2; i++ {
+		for i := range numOps / 2 {
 			c.Add(fmt.Sprintf("key-%d", i), i)
 		}
 
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
-		for g := 0; g < numGoroutines; g++ {
+		for g := range numGoroutines {
 			go func(id int) {
 				defer wg.Done()
-				for i := 0; i < numOps; i++ {
+				for i := range numOps {
 					key := fmt.Sprintf("key-%d", i)
 					if i%2 == 0 {
 						c.Add(key, id*numOps+i)
@@ -127,10 +127,10 @@ func TestLRUConcurrency(t *testing.T) {
 
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
-		for g := 0; g < numGoroutines; g++ {
+		for range numGoroutines {
 			go func() {
 				defer wg.Done()
-				for i := 0; i < numOps; i++ {
+				for i := range numOps {
 					key := fmt.Sprintf("hot-key-%d", i%10)
 					c.Add(key, i)
 					c.Get(key)

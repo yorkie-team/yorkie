@@ -130,7 +130,6 @@ func TestHistoryTextReconcile(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
 
@@ -228,7 +227,6 @@ func TestReconcileOverlappingUndoDuplicatesContent(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
 

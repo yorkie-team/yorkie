@@ -71,7 +71,7 @@ func (m *TokenManager) Generate(username string) (string, error) {
 // Verify verifies the given token.
 func (m *TokenManager) Verify(token string) (*UserClaims, error) {
 	claims := &UserClaims{}
-	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (any, error) {
 		_, ok := token.Method.(*jwt.SigningMethodHMAC)
 		if !ok {
 			return nil, fmt.Errorf("%s: %w", token.Method.Alg(), ErrUnexpectedSigningMethod)

@@ -916,7 +916,7 @@ func BenchmarkSnapshotEncoding(b *testing.B) {
 		b.Run(fmt.Sprintf("object with %d members", members), func(b *testing.B) {
 			doc := document.New("d1")
 			assert.NoError(b, doc.Update(func(root *json.Object, p *presence.Presence) error {
-				for i := 0; i < members; i++ {
+				for i := range members {
 					root.SetString(fmt.Sprintf("k%d", i), "v")
 				}
 				return nil

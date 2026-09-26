@@ -40,11 +40,11 @@ func (h internalHeap[T]) Len() int           { return len(h.items) }
 func (h internalHeap[T]) Less(i, j int) bool { return h.less(h.items[i], h.items[j]) }
 func (h internalHeap[T]) Swap(i, j int)      { h.items[i], h.items[j] = h.items[j], h.items[i] }
 
-func (h *internalHeap[T]) Push(x interface{}) {
+func (h *internalHeap[T]) Push(x any) {
 	h.items = append(h.items, x.(T))
 }
 
-func (h *internalHeap[T]) Pop() interface{} {
+func (h *internalHeap[T]) Pop() any {
 	old := h.items
 	n := len(old)
 	x := old[n-1]

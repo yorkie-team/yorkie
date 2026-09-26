@@ -2814,10 +2814,7 @@ func (d *DB) FindRevisionInfosByPaging(
 	})
 
 	// Apply paging
-	start := paging.Offset
-	if start > len(revisions) {
-		start = len(revisions)
-	}
+	start := min(paging.Offset, len(revisions))
 	end := start + paging.PageSize
 	if paging.PageSize == 0 || end > len(revisions) {
 		end = len(revisions)

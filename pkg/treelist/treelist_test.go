@@ -165,7 +165,7 @@ func TestTreeList(t *testing.T) {
 
 		nodes := make([]*treelist.Node[*testValue], 5)
 		prev := dummyHead
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			nodes[i] = newNode(fmt.Sprintf("%c", 'A'+i))
 			tree.InsertAfter(prev, nodes[i])
 			prev = nodes[i]
@@ -300,7 +300,7 @@ func TestTreeList(t *testing.T) {
 
 		nodes := make([]*treelist.Node[*testValue], 6)
 		prev := dummyHead
-		for i := 0; i < 6; i++ {
+		for i := range 6 {
 			nodes[i] = newNode(fmt.Sprintf("%c", 'A'+i))
 			tree.InsertAfter(prev, nodes[i])
 			prev = nodes[i]
@@ -393,7 +393,7 @@ func TestTreeList(t *testing.T) {
 		const n = 100
 		nodes := make([]*treelist.Node[*testValue], n)
 		prev := dummyHead
-		for i := 0; i < n; i++ {
+		for i := range n {
 			nodes[i] = newNode(fmt.Sprintf("%d", i))
 			tree.InsertAfter(prev, nodes[i])
 			prev = nodes[i]
@@ -401,7 +401,7 @@ func TestTreeList(t *testing.T) {
 		assert.Equal(t, n, tree.Len())
 
 		// Verify all nodes are findable at correct index
-		for i := 0; i < n; i++ {
+		for i := range n {
 			found, err := tree.Find(i)
 			assert.NoError(t, err)
 			assert.Equal(t, nodes[i], found, "mismatch at index %d", i)
@@ -415,7 +415,7 @@ func TestTreeList(t *testing.T) {
 		const n = 100
 		nodes := make([]*treelist.Node[*testValue], n)
 		prev := dummyHead
-		for i := 0; i < n; i++ {
+		for i := range n {
 			nodes[i] = newNode(fmt.Sprintf("%d", i))
 			tree.InsertAfter(prev, nodes[i])
 			prev = nodes[i]
@@ -445,7 +445,7 @@ func TestTreeList(t *testing.T) {
 		const n = 100
 		nodes := make([]*treelist.Node[*testValue], n)
 		prev := dummyHead
-		for i := 0; i < n; i++ {
+		for i := range n {
 			nodes[i] = newNode(fmt.Sprintf("%d", i))
 			tree.InsertAfter(prev, nodes[i])
 			prev = nodes[i]
@@ -549,7 +549,7 @@ func TestTreeList(t *testing.T) {
 		allNodes := []*treelist.Node[*testValue]{dummyHead}
 
 		const ops = 500
-		for i := 0; i < ops; i++ {
+		for i := range ops {
 			op := rng.Intn(3)
 
 			switch {
