@@ -534,8 +534,11 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	// local presence map. The wire-side PUT was stripped by the server and
 	// never crosses the boundary, but the local InternalDocument still
 	// carries the cloned entry until we clear it here.
+	// Through Document.ResetPresences, not InternalDocument().ResetPresences():
+	// the latter replaces the presence maps with no lock held, racing every
+	// presence reader on the document.
 	if res.Msg.DisablePresence && !opts.DisablePresence {
-		d.InternalDocument().ResetPresences()
+		d.ResetPresences()
 	}
 
 	if err := d.ApplyChangePack(pack); err != nil {
@@ -545,7 +548,10 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		c.logger.Debug(fmt.Sprintf(
 			"after apply %d changes: %s",
 			len(pack.Changes),
-			d.RootObject().Marshal(),
+			// Marshal, not RootObject().Marshal(): the former does the whole
+			// traversal under the document lock, while the latter walks the
+			// live CRDT root after the lock is released.
+			d.Marshal(),
 		))
 	}
 

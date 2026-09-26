@@ -230,7 +230,9 @@ func (d *Document) Update(
 		return err
 	}
 
-	actorID := d.ActorID().String()
+	// d.mu is held for writing here, so this reads the internal document
+	// directly rather than through the exported ActorID, which RLocks it.
+	actorID := d.doc.ActorID().String()
 	presenceData := d.clonePresences.LoadOrStore(actorID, presence.NewData())
 	ctx := change.NewContext(
 		d.doc.changeID,
@@ -434,7 +436,9 @@ func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 		return err
 	}
 
-	actorID := d.ActorID().String()
+	// As in Update, d.mu is held for writing here, so this reads the internal
+	// document directly rather than through the exported ActorID.
+	actorID := d.doc.ActorID().String()
 	ctx := change.NewContext(d.doc.changeID, "", d.cloneRoot)
 	for _, entry := range entries {
 		if entry.Op == nil {
@@ -714,7 +718,10 @@ func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err er
 
 	// 05. Update the status.
 	if pack.IsRemoved {
-		d.SetStatus(StatusRemoved)
+		// d.mu is already held by this method, so this writes the internal
+		// document directly rather than through the exported SetStatus, which
+		// locks it.
+		d.doc.SetStatus(StatusRemoved)
 	}
 
 	return events, nil
@@ -869,19 +876,35 @@ func (d *Document) Marshal() string {
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.
+//
+// It reads d.doc.localChanges, d.doc.checkpoint and the version vector, all of
+// which Update and applyChangePack mutate under d.mu, so it takes the lock like
+// every other reader. The pack it returns owns its own copies of the change
+// slice and the version vector (see InternalDocument.CreateChangePack), so the
+// sync goroutine can serialize it after the lock is released.
 func (d *Document) CreateChangePack() *change.Pack {
-	return d.doc.CreateChangePack()
+	return readLocked(d, func() *change.Pack { return d.doc.CreateChangePack() })
 }
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
+//
+// It writes d.doc.changeID and every buffered local change, so it takes d.mu
+// for writing: the readers above observe those same fields under RLock.
 func (d *Document) SetActor(actor time.ActorID) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.SetActor(actor)
 }
 
 // ActorID returns ID of the actor currently editing the document.
+//
+// It reads d.doc.changeID, which SetActor and every applied change write under
+// d.mu. In-package callers that already hold the lock go to d.doc.ActorID()
+// directly rather than through here; sync.RWMutex is not reentrant.
 func (d *Document) ActorID() time.ActorID {
-	return d.doc.ActorID()
+	return readLocked(d, func() time.ActorID { return d.doc.ActorID() })
 }
 
 // Status returns the status of this document.
@@ -890,7 +913,14 @@ func (d *Document) Status() StatusType {
 }
 
 // SetStatus updates the status of this document.
+//
+// It writes d.doc.status, which Status and IsAttached read under RLock, so it
+// takes d.mu for writing. applyChangePack already holds the lock and writes
+// d.doc.status directly instead of calling this.
 func (d *Document) SetStatus(status StatusType) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.SetStatus(status)
 }
 
@@ -899,9 +929,16 @@ func (d *Document) IsAttached() bool {
 	return readLocked(d, func() bool { return d.doc.IsAttached() })
 }
 
-// VersionVector returns the version vector of this document.
+// VersionVector returns a copy of the version vector of this document.
+//
+// time.VersionVector is a map and change.ID.SyncClocks/SetClocks mutate the
+// document's own instance in place while applying a remote pack, so handing
+// the caller that instance would let it walk a map another goroutine is
+// writing -- an unrecoverable "concurrent map read and map write" abort --
+// the moment the lock below is released. The copy is taken under the lock so
+// what the caller gets is a stable snapshot it owns.
 func (d *Document) VersionVector() time.VersionVector {
-	return readLocked(d, func() time.VersionVector { return d.doc.VersionVector() })
+	return readLocked(d, func() time.VersionVector { return d.doc.VersionVector().DeepCopy() })
 }
 
 // readLocked runs read with d.mu held for reading, so the shared state it
@@ -927,6 +964,13 @@ func readLocked[T any](d *Document, read func() T) T {
 }
 
 // RootObject returns the internal root object of this document.
+//
+// The lock below covers only the pointer fetch: the object itself is the
+// document's live CRDT root, built on plain Go maps that a concurrent apply
+// mutates, so traversing the returned value after this call is not safe on a
+// document that is attached and syncing. Use Marshal or DocSize, which do
+// their whole read under the lock, unless the caller can guarantee no
+// concurrent apply -- the server's rebuild path can, a client cannot.
 func (d *Document) RootObject() *crdt.Object {
 	return readLocked(d, func() *crdt.Object { return d.doc.RootObject() })
 }
@@ -1089,6 +1133,22 @@ func (d *Document) Presences() map[string]presence.Data {
 // regardless of whether the client is online or not.
 func (d *Document) AllPresences() map[string]presence.Data {
 	return readLocked(d, func() map[string]presence.Data { return d.doc.AllPresences() })
+}
+
+// ResetPresences clears the presence map and the online-clients set under
+// d.mu. It exists so a caller does not have to reach through
+// InternalDocument to do it: InternalDocument.ResetPresences replaces both
+// maps with no lock, which would race every presence reader above.
+//
+// The clone is invalidated along with them, because clonePresences is a copy
+// of the map just discarded and an updater must not keep editing presences
+// that no longer exist on the root.
+func (d *Document) ResetPresences() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.doc.ResetPresences()
+	d.invalidateClone()
 }
 
 // SetOnlineClients sets the online clients.

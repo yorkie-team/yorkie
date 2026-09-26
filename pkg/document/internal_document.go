@@ -165,6 +165,9 @@ func (d *InternalDocument) SetDisableGC(disableGC bool) {
 // server calls this when serializing or persisting a snapshot for a
 // presenceless document so that no earlier-cached presence entry leaks
 // onto the wire or into the snapshots collection.
+//
+// It takes no lock, so a caller holding a *Document must go through
+// Document.ResetPresences instead of reaching here via InternalDocument().
 func (d *InternalDocument) ResetPresences() {
 	d.presences = presence.NewMap()
 	d.onlineClients = make(map[string]bool)
@@ -227,11 +230,17 @@ func (d *InternalDocument) Marshal() string {
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.
+//
+// The pack owns its copies of both the change slice and the version vector.
+// Document.CreateChangePack builds it under d.mu and hands it to the sync
+// goroutine, which serializes it with the lock released, while this document
+// keeps appending local changes and mutating the version vector in place.
 func (d *InternalDocument) CreateChangePack() *change.Pack {
-	changes := d.localChanges
+	changes := make([]*change.Change, len(d.localChanges))
+	copy(changes, d.localChanges)
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
-	return change.NewPack(d.key, cp, changes, d.VersionVector(), nil)
+	return change.NewPack(d.key, cp, changes, d.VersionVector().DeepCopy(), nil)
 }
 
 // SetActor sets actor into this document. This is also applied in the local
