@@ -1125,6 +1125,9 @@ test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
     // without checking anything, so it defines CI's behaviour exactly as much
     // as the scripts that import it.
     "scripts/direct-run.mjs",
+    // The entire body of ci.yml's `modernize` lane, reached through the
+    // Makefile's `verify-modernize` target and through `make verify` on push.
+    "scripts/go-fix.sh",
   ]) {
     assert.equal(definesCi(p), true, `${p} defines what CI does and must be refused by gate 1b`);
   }

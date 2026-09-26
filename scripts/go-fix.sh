@@ -52,12 +52,28 @@ for w in $words; do
 done
 tag_list=$(IFS=,; echo "${tags[*]}")
 
-# `go fix -diff` exits 0 with the diff on stdout when rewrites are pending,
-# and non-zero with nothing on stdout when the code does not compile. Both
-# the exit status and the output have to be read, or a broken tree passes.
+# The diff on stdout is what says "rewrites are pending"; the exit status
+# alone cannot, because the analyzer drivers this is built on conventionally
+# exit non-zero whenever they report anything, and `go fix -diff` reporting a
+# rewrite is indistinguishable by status from the tree failing to compile.
+# So: non-empty stdout means pending whatever the status, and a non-zero status
+# with nothing on stdout is the real failure. Reading only the status would
+# leave `apply` unable to apply anything; reading only the output would let a
+# broken tree pass as clean.
 pending() {
-  local out
-  out=$(go fix -tags "$tag_list" -diff ./...) || exit 1
+  local out status err
+  err=$(mktemp)
+  set +e
+  out=$(go fix -tags "$tag_list" -diff ./... 2>"$err")
+  status=$?
+  set -e
+  if [ -z "$out" ] && [ "$status" -ne 0 ]; then
+    cat "$err" >&2
+    rm -f "$err"
+    echo "go-fix: 'go fix -diff' failed under tags [$tag_list]." >&2
+    exit 1
+  fi
+  rm -f "$err"
   printf '%s' "$out"
 }
 
@@ -78,7 +94,10 @@ case "${1:-}" in
     for _ in 1 2 3; do
       out=$(pending)
       [ -z "$out" ] && exit 0
-      go fix -tags "$tag_list" ./...
+      # Same status ambiguity as above: `go fix` may exit non-zero merely
+      # because it rewrote something. The next `pending` call is what decides
+      # whether the tree is clean, and it reports a compile failure itself.
+      go fix -tags "$tag_list" ./... || true
     done
     out=$(pending)
     [ -z "$out" ] && exit 0
