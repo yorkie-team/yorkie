@@ -532,13 +532,15 @@ func init() {
 		&authWebhookCacheDisabled,
 		"auth-webhook-cache-disabled",
 		false,
-		"Send every authorization request to the webhook without using the response cache.",
+		"Send every authorization request to the webhook without using the response cache. "+
+			"Open watch streams are re-authorized on an interval rather than per event.",
 	)
 	cmd.Flags().DurationVar(
 		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
-		"TTL for cached authorization responses (minimum 1ms); 0 disables expiration, not caching.",
+		"TTL for cached authorization responses; must be at least 1ms. "+
+			"Use --auth-webhook-cache-disabled to bypass caching.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.Hostname,

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
 // Config is the configuration for creating a Client instance.
@@ -90,11 +92,22 @@ func (c *Config) Validate() error {
 	}
 
 	if c.ProjectCacheTTL != "" {
-		if _, err := time.ParseDuration(c.ProjectCacheTTL); err != nil {
+		ttl, err := time.ParseDuration(c.ProjectCacheTTL)
+		if err != nil {
 			return fmt.Errorf(
 				`invalid argument "%s" for project cache TTL: %w`,
 				c.ProjectCacheTTL,
 				err,
+			)
+		}
+		// The project cache is the same expirable LRU as the backend caches:
+		// a sub-millisecond TTL panics its expiry ticker and a non-positive
+		// one means "never expire". See cache.MinTTL.
+		if ttl < cache.MinTTL {
+			return fmt.Errorf(
+				`invalid argument "%s" for project cache TTL: must be at least %s`,
+				c.ProjectCacheTTL,
+				cache.MinTTL,
 			)
 		}
 	}

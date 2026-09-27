@@ -43,15 +43,32 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 	})
 
-	t.Run("reject a TTL that would panic the cache expiry ticker", func(t *testing.T) {
+	t.Run("reject a TTL the expirable cache cannot honor", func(t *testing.T) {
 		conf := newValidBackendConf()
 		conf.AuthWebhookCacheTTL = "1ns"
-		assert.ErrorContains(t, conf.Validate(), "auth webhook cache TTL")
+		assert.ErrorContains(t, conf.Validate(), "auth-webhook-cache-auth-ttl")
 
+		// Zero and negative are read as "never expire" by the expirable LRU,
+		// which would keep a revoked authorization cached until restart.
 		conf.AuthWebhookCacheTTL = "0s"
-		assert.NoError(t, conf.Validate())
+		assert.ErrorContains(t, conf.Validate(), "auth-webhook-cache-auth-ttl")
+
+		conf.AuthWebhookCacheTTL = "-1s"
+		assert.ErrorContains(t, conf.Validate(), "auth-webhook-cache-auth-ttl")
 
 		conf.AuthWebhookCacheTTL = "1ms"
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("reject a session count cache TTL the expirable cache cannot honor", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.ChannelSessionCountCacheTTL = "1ns"
+		assert.ErrorContains(t, conf.Validate(), "channel-session-count-cache-ttl")
+
+		conf.ChannelSessionCountCacheTTL = "0s"
+		assert.ErrorContains(t, conf.Validate(), "channel-session-count-cache-ttl")
+
+		conf.ChannelSessionCountCacheTTL = "1s"
 		assert.NoError(t, conf.Validate())
 	})
 

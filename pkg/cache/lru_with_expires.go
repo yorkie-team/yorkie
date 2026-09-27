@@ -33,6 +33,15 @@ type LRUWithExpires[K comparable, V any] struct {
 	name  string
 }
 
+// MinTTL is the smallest TTL an expirable LRU can safely be given. The
+// underlying implementation starts an expiry ticker at TTL / 100, so a
+// sub-millisecond TTL either ticks excessively or truncates to zero and
+// panics. A non-positive TTL is not a safe alternative either: it is
+// reinterpreted as "never expire" (~10 years), which turns the cache into a
+// store entries never leave. Callers validating operator-supplied durations
+// should reject anything below this.
+const MinTTL = time.Millisecond
+
 // NewLRUWithExpires creates a new expirable LRU with the given size and ttl.
 func NewLRUWithExpires[K comparable, V any](
 	size int,

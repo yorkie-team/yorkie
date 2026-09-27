@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -51,8 +53,9 @@ type Config struct {
 	// AuthWebhookCacheDisabled sends every authorization request to the webhook.
 	AuthWebhookCacheDisabled bool `yaml:"AuthWebhookCacheDisabled"`
 
-	// AuthWebhookCacheTTL is the TTL for cached authorization responses.
-	// Zero retains entries without expiration; use AuthWebhookCacheDisabled to bypass caching.
+	// AuthWebhookCacheTTL is the TTL for cached authorization responses. It
+	// must be at least cache.MinTTL; use AuthWebhookCacheDisabled to bypass
+	// caching instead of asking for a TTL that never expires.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
 	// SnapshotCacheSize is the cache size of the snapshot.
@@ -114,6 +117,24 @@ type Config struct {
 	ClusterSecret string `yaml:"ClusterSecret"`
 }
 
+// validateCacheTTL returns an error if the given TTL cannot be handed to an
+// expirable cache. Both sub-millisecond and non-positive durations are
+// rejected: the first panics the expiry ticker, and the second is read as
+// "never expire", which for the auth webhook cache would pin an
+// authorization decision for the life of the process so that a revocation
+// never takes effect. See cache.MinTTL.
+func validateCacheTTL(flag string, raw string, ttl time.Duration) error {
+	if ttl < cache.MinTTL {
+		return fmt.Errorf(
+			`invalid argument "%s" for "%s" flag: cache TTL must be at least %s`,
+			raw,
+			flag,
+			cache.MinTTL,
+		)
+	}
+	return nil
+}
+
 // Validate validates this config.
 func (c *Config) Validate() error {
 	ttl, err := time.ParseDuration(c.AuthWebhookCacheTTL)
@@ -124,18 +145,24 @@ func (c *Config) Validate() error {
 			err,
 		)
 	}
-	// The expirable LRU starts a ticker at TTL / 100. Sub-millisecond
-	// durations can make it tick excessively or truncate to zero and panic.
-	if ttl > 0 && ttl < time.Millisecond {
-		return fmt.Errorf("auth webhook cache TTL must be zero or at least 1ms: %s", c.AuthWebhookCacheTTL)
+	if err := validateCacheTTL("--auth-webhook-cache-auth-ttl", c.AuthWebhookCacheTTL, ttl); err != nil {
+		return err
 	}
 	if c.ChannelSessionCountCacheTTL != "" {
-		if _, err := time.ParseDuration(c.ChannelSessionCountCacheTTL); err != nil {
+		ttl, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
+		if err != nil {
 			return fmt.Errorf(
 				`invalid argument "%s" for "--channel-session-count-cache-ttl" flag: %w`,
 				c.ChannelSessionCountCacheTTL,
 				err,
 			)
+		}
+		if err := validateCacheTTL(
+			"--channel-session-count-cache-ttl",
+			c.ChannelSessionCountCacheTTL,
+			ttl,
+		); err != nil {
+			return err
 		}
 	}
 	if c.ChannelSessionTTL != "" {

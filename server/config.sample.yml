@@ -108,8 +108,9 @@ Backend:
   AuthWebhookCacheDisabled: false
 
   # AuthWebhookCacheTTL is the TTL of cached authorization responses.
-  # Zero means no expiration. Positive values must be at least 1ms.
-  # Use AuthWebhookCacheDisabled to bypass caching.
+  # It must be at least 1ms; zero and negative values are rejected because the
+  # cache reads them as "never expire". Use AuthWebhookCacheDisabled to bypass
+  # caching.
   AuthWebhookCacheTTL: "10s"
 
   # ProjectCacheSize is the size of the project metadata cache.

@@ -140,7 +140,11 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.NoError(t, err)
 		conf.Backend.AuthWebhookCacheTTL = "1ns"
 		_, err = server.New(conf)
-		assert.ErrorContains(t, err, "auth webhook cache TTL")
+		assert.ErrorContains(t, err, "auth-webhook-cache-auth-ttl")
+
+		conf.Backend.AuthWebhookCacheTTL = "0s"
+		_, err = server.New(conf)
+		assert.ErrorContains(t, err, "auth-webhook-cache-auth-ttl")
 	})
 
 	t.Run("explicit zero DeactivateConcurrency preserved (sequential opt-in)", func(t *testing.T) {
