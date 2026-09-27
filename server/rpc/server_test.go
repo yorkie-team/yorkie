@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/admin"
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -45,24 +44,12 @@ import (
 )
 
 var (
-	defaultProjectName = "default"
-	invalidSlugName    = "@#$%^&*()_+"
-
-	nilClientID     = "000000000000000000000000"
-	emptyClientID   = ""
-	invalidClientID = "invalid"
-
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
 	testBackend              *backend.Backend
-
-	invalidChangePack = &api.ChangePack{
-		DocumentKey: "invalid",
-		Checkpoint:  nil,
-	}
 )
 
 func TestMain(m *testing.M) {

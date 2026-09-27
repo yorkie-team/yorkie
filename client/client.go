@@ -1011,9 +1011,10 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			select {
 			case e := <-d.Events():
 				t := PresenceChanged
-				if e.Type == document.WatchedEvent {
+				switch e.Type {
+				case document.WatchedEvent:
 					t = DocumentWatched
-				} else if e.Type == document.UnwatchedEvent {
+				case document.UnwatchedEvent:
 					t = DocumentUnwatched
 				}
 				buf.push(WatchDocResponse{Type: t, Presences: e.Presences})

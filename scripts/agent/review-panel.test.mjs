@@ -1760,16 +1760,19 @@ test("the coverage note claims only mechanisms this repo actually runs", () => {
   assert.ok(!/write-only|no lane checks formatting/i.test(N),
     "golangci-lint formats here — do not carry over the upstream formatting gap");
 
-  // staticcheck and unused are DISABLED in .golangci.yml. "golangci-lint runs"
-  // on its own implies them, which would silence the whole dead-code class.
-  assert.match(notEnforced, /`staticcheck` and `unused`/);
-  const lintLine = N.split("\n").find((l) => l.includes("golangci-lint run"));
-  // FOUND FIRST, then read. `find` returns undefined when the bullet is reworded,
-  // `/x/.test(undefined)` tests the string "undefined", and the assertion below
-  // then passes having checked nothing — so a note that stopped mentioning
-  // golangci-lint at all would sail through the guard written to police it.
-  assert.ok(lintLine, "the note no longer has a `golangci-lint run` bullet to check");
-  assert.ok(!/staticcheck|unused/.test(lintLine), `the lint claim must not imply them: ${lintLine}`);
+  // staticcheck and unused are ENABLED in .golangci.yml, with every build tag.
+  // This was the other way round until they were turned on, and like the
+  // licence header it is pinned in both directions: a note that still listed
+  // them as unenforced would send every lens hunting a class lint reds.
+  const lintStart = enforced.indexOf("golangci-lint run");
+  // FOUND FIRST, then read. A reworded bullet would make indexOf return -1 and
+  // the slice below check some other text, passing having checked nothing.
+  assert.ok(lintStart >= 0, "the note no longer has a `golangci-lint run` bullet to check");
+  const lintBullet = enforced.slice(lintStart, enforced.indexOf("\n- ", lintStart));
+  assert.match(lintBullet, /staticcheck/);
+  assert.match(lintBullet, /unused/);
+  assert.match(lintBullet, /every build tag/);
+  assert.doesNotMatch(notEnforced, /`staticcheck` and `unused`/);
 
   // The licence header HAS a lane — `scripts/verify-license.mjs`, run by
   // ci.yml's `build` job. This assertion was the other way round until that

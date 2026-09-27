@@ -34,7 +34,6 @@ type Manager struct {
 	renewalInterval time.Duration
 
 	database database.Database
-	logger   logging.Logger
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 	mutex    sync.RWMutex

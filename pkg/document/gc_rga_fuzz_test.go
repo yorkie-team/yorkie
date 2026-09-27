@@ -184,7 +184,7 @@ func advArrayOp(c *advClient, rnd *rand.Rand, tag string, ops []int) (err error)
 }
 
 func runAdvArraySeed(seed int64, nClients, rounds int, gc bool, ops []int) (string, error) {
-	rnd := rand.New(rand.NewSource(seed))
+	rnd := rand.New(rand.NewSource(seed)) //nolint:gosec // seeded so a failing seed reproduces
 	srv := newAdvServer()
 
 	cs := make([]*advClient, 0, nClients)
@@ -333,14 +333,14 @@ func advDumpArr(d *document.Document) string {
 	var sb strings.Builder
 	for _, n := range arr.AllRGANodes() {
 		if n.Element() == nil {
-			sb.WriteString(fmt.Sprintf("[dead pos=%s] ", n.PositionCreatedAt().Key()))
+			fmt.Fprintf(&sb, "[dead pos=%s] ", n.PositionCreatedAt().Key())
 			continue
 		}
 		rm := ""
 		if n.Element().RemovedAt() != nil {
 			rm = "!"
 		}
-		sb.WriteString(fmt.Sprintf("%s%s(pos=%s) ", n.Element().Marshal(), rm, n.PositionCreatedAt().Key()))
+		fmt.Fprintf(&sb, "%s%s(pos=%s) ", n.Element().Marshal(), rm, n.PositionCreatedAt().Key())
 	}
 	return sb.String()
 }
@@ -348,7 +348,7 @@ func advDumpArr(d *document.Document) string {
 func TestAdvArrayTrace(t *testing.T) {
 	seed := int64(advTraceSeed)
 	nClients, rounds := advTraceClients, advTraceRounds
-	rnd := rand.New(rand.NewSource(seed))
+	rnd := rand.New(rand.NewSource(seed)) //nolint:gosec // seeded so a failing seed reproduces
 	srv := newAdvServer()
 
 	cs := make([]*advClient, 0, nClients)

@@ -2611,7 +2611,7 @@ func RunFindCandidatesTest(t *testing.T, db database.Database, projectID types.I
 
 		// Test pagination with limit 3
 		var allFound []*database.ClientInfo
-		var lastID types.ID = database.ZeroID
+		var lastID = database.ZeroID
 
 		for range 5 { // Max 5 pages to avoid infinite loop
 			clients, newLastID, err := db.FindActiveClients(ctx, 3, lastID)

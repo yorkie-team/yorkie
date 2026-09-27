@@ -32,8 +32,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -44,14 +47,47 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-// documentSummaries represents a list of document documentSummaries.
+// documentSummaries is a GetDocuments, ListDocuments or SearchDocuments
+// response, decoded the way a client
+// would: through protojson and the converter. The wire shape is the proto's —
+// each presence is `{"data": {...}}` — which encoding/json cannot map onto
+// types.DocumentSummary, and it fills in the map keys before failing, so a
+// plain decode with its error dropped looked like it worked.
 type documentSummaries struct {
-	Documents []*types.DocumentSummary `json:"documents"`
+	Documents []*types.DocumentSummary
 }
 
-// documentSummary represents a summary of a document.
+// UnmarshalJSON decodes the `documents` of a GetDocuments, ListDocuments or
+// SearchDocuments response. It decodes into SearchDocumentsResponse because
+// that message's fields are a superset of the other two by JSON name, so the
+// decode stays strict: an unknown field is still an error.
+func (s *documentSummaries) UnmarshalJSON(data []byte) error {
+	res := &api.SearchDocumentsResponse{}
+	if err := protojson.Unmarshal(data, res); err != nil {
+		return fmt.Errorf("unmarshal documents response: %w", err)
+	}
+	s.Documents = converter.FromDocumentSummaries(res.Documents)
+	return nil
+}
+
+// documentSummary is a GetDocument response; see documentSummaries.
 type documentSummary struct {
-	Document *types.DocumentSummary `json:"document"`
+	Document *types.DocumentSummary
+}
+
+// UnmarshalJSON decodes a GetDocumentResponse.
+func (s *documentSummary) UnmarshalJSON(data []byte) error {
+	res := &api.GetDocumentResponse{}
+	if err := protojson.Unmarshal(data, res); err != nil {
+		return fmt.Errorf("unmarshal GetDocumentResponse: %w", err)
+	}
+	// The converter dereferences the summary; a response without one is an
+	// assertion failure, not a panic in whichever goroutine decoded it.
+	if res.Document == nil {
+		return fmt.Errorf("unmarshal GetDocumentResponse: no document in %s", data)
+	}
+	s.Document = converter.FromDocumentSummary(res.Document)
+	return nil
 }
 
 func TestRESTAPI(t *testing.T) {
@@ -143,7 +179,7 @@ func TestRESTAPI(t *testing.T) {
 				)
 
 				summaries := &documentSummaries{}
-				gojson.Unmarshal(res, summaries)
+				assert.NoError(t, gojson.Unmarshal(res, summaries))
 				assert.Len(t, summaries.Documents, numDocs)
 
 				remaining := maps.Clone(expectedRoots)
@@ -162,7 +198,9 @@ func TestRESTAPI(t *testing.T) {
 
 					if tc.includePresences {
 						assert.Len(t, docSummary.Presences, clientsPerDoc)
-						assert.Contains(t, docSummary.Presences, cli.ID().String())
+						// The value, not just the key: a decode that fails
+						// after filling in keys passed the key check alone.
+						assert.Equal(t, presence.Data{"key": cli.Key()}, docSummary.Presences[cli.ID().String()])
 					} else {
 						assert.Nil(t, docSummary.Presences)
 					}
@@ -176,10 +214,10 @@ func TestRESTAPI(t *testing.T) {
 		project := helper.CreateProject(t, defaultServer, t.Name())
 		cli1, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
 		assert.NoError(t, err)
-		defer cli1.Close()
+		defer func() { assert.NoError(t, cli1.Close()) }()
 		cli2, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
 		assert.NoError(t, err)
-		defer cli2.Close()
+		defer func() { assert.NoError(t, cli2.Close()) }()
 
 		ctx := context.Background()
 		assert.NoError(t, cli1.Activate(ctx))
@@ -284,7 +322,7 @@ func TestRESTAPI(t *testing.T) {
 		cli, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
-		defer cli.Close()
+		defer func() { assert.NoError(t, cli.Close()) }()
 
 		doc := document.New(docs[0].Key())
 		assert.NoError(t, cli.Attach(ctx, doc))
@@ -292,7 +330,7 @@ func TestRESTAPI(t *testing.T) {
 			r.SetYSON(yson.Object{"arr": yson.Array{}})
 			return nil
 		}))
-		cli.Sync(ctx)
+		assert.NoError(t, cli.Sync(ctx))
 
 		res = post(
 			t,
@@ -307,7 +345,7 @@ func TestRESTAPI(t *testing.T) {
 			r.GetArray("arr").AddInteger(1)
 			return nil
 		}))
-		cli.Sync(ctx)
+		assert.NoError(t, cli.Sync(ctx))
 
 		wg := sync.WaitGroup{}
 		for range 10 {

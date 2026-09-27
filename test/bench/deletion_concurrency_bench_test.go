@@ -25,6 +25,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/key"
@@ -97,7 +98,7 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 		assert.NoError(b, err)
 
 		// 2. Initialize the text
-		clients[0].Sync(ctx)
+		assert.NoError(b, clients[0].Sync(ctx))
 		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
 			return nil
@@ -173,7 +174,7 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 		assert.NoError(b, err)
 
 		// 2. Initialize the tree
-		clients[0].Sync(ctx)
+		assert.NoError(b, clients[0].Sync(ctx))
 		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
@@ -253,7 +254,7 @@ func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 		assert.NoError(b, err)
 
 		// 2. Initialize the text
-		clients[0].Sync(ctx)
+		assert.NoError(b, clients[0].Sync(ctx))
 		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
 			return nil
@@ -311,7 +312,7 @@ func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 		assert.NoError(b, err)
 
 		// 2. Initialize the tree
-		clients[0].Sync(ctx)
+		assert.NoError(b, clients[0].Sync(ctx))
 		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "root",

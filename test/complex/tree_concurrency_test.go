@@ -95,18 +95,19 @@ type twoRangesType struct {
 func getRange(ranges twoRangesType, selector rangeSelector, user int) rangeType {
 	interval := ranges.ranges[user]
 	from, mid, to := interval.from, interval.mid, interval.to
-	if selector == RangeFront {
+	switch selector {
+	case RangeFront:
 		return rangeType{from, from}
-	} else if selector == RangeMiddle {
+	case RangeMiddle:
 		return rangeType{mid, mid}
-	} else if selector == RangeBack {
+	case RangeBack:
 		return rangeType{to, to}
-	} else if selector == RangeAll {
+	case RangeAll:
 		return rangeType{from, to}
-	} else if selector == RangeOneQuarter {
+	case RangeOneQuarter:
 		pos := (from + mid + 1) / 2
 		return rangeType{pos, pos}
-	} else if selector == RangeThreeQuarter {
+	case RangeThreeQuarter:
 		pos := (mid + to) / 2
 		return rangeType{pos, pos}
 	}
@@ -368,9 +369,10 @@ func (op styleOperationType) run(t *testing.T, doc *document.Document, user int,
 	from, to := interval.from, interval.to
 
 	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		if op.op == StyleRemove {
+		switch op.op {
+		case StyleRemove:
 			root.GetTree("t").RemoveStyle(from, to, []string{op.key})
-		} else if op.op == StyleSet {
+		case StyleSet:
 			root.GetTree("t").Style(from, to, map[string]string{op.key: op.value})
 		}
 		return nil
@@ -382,14 +384,15 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 	from, to := interval.from, interval.to
 
 	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		if op.op == EditUpdate {
+		switch op.op {
+		case EditUpdate:
 			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
-		} else if op.op == MergeUpdate {
+		case MergeUpdate:
 			mergeInterval := getMergeRange(root.GetTree("t").ToXML(), interval)
 			if isMergeable(mergeInterval) {
 				root.GetTree("t").Edit(mergeInterval.from, mergeInterval.to, op.content, op.splitLevel)
 			}
-		} else if op.op == SplitUpdate {
+		case SplitUpdate:
 			assert.NotEqual(t, 0, op.splitLevel)
 			assert.Equal(t, from, to)
 			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)

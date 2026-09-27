@@ -7,10 +7,11 @@ set -euo pipefail
 # existed that was a convention with nothing behind it, and the first thing
 # CI reported was a lint failure on a commit that had already been pushed.
 #
-# Lint only. `go test ./...` is ~35s against golangci-lint's ~6s, which is
-# the difference between a gate people keep and one they disable — the tests
-# run in pre-push, one layer out, where the cost is paid once per push
-# instead of once per commit.
+# Lint only. `go test ./...` is ~35s against `make lint`'s ~17s from a cold
+# cache and 1-2s warm (every build tag, staticcheck on; measured 2026-09-27
+# on an M1 Max), which is the difference between a gate people keep and one
+# they disable — the tests run in pre-push, one layer out, where the cost is
+# paid once per push instead of once per commit.
 #
 # SCOPE: this lints the working tree, not the staged content. A commit made
 # with `git add -p` can therefore pass on code that is not being committed,
@@ -20,11 +21,12 @@ set -euo pipefail
 #
 # SAME EXECUTION SURFACE AS pre-push, stated here too because the hooks are
 # read one at a time: `make lint` resolves through the WORKING TREE's
-# `Makefile` and `.golangci.yml`. The `$GIT_DIR` snapshot `scripts/setup.sh`
-# takes pins which hook runs, not what the hook invokes, so committing inside a
-# checkout of an unread branch would run that branch's lint configuration —
-# which is why `trusted-tree.sh` below refuses when this checkout carries
-# somebody else's commits. Its header carries the argument.
+# `Makefile`, `.golangci.yml` and `scripts/go-build-tags.sh`. The `$GIT_DIR`
+# snapshot `scripts/setup.sh` takes pins which hook runs, not what the hook
+# invokes, so committing inside a checkout of an unread branch would run that
+# branch's lint configuration — which is why `trusted-tree.sh` below refuses
+# when this checkout carries somebody else's commits. Its header carries the
+# argument.
 #
 # Bypass with `git commit --no-verify` when you mean to.
 

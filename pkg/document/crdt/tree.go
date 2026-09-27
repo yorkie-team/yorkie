@@ -257,7 +257,7 @@ func (n *TreeNode) Attributes() string {
 			sb.WriteString(" ")
 		}
 		value := members[k]
-		sb.WriteString(fmt.Sprintf(`%s="%s"`, k, EscapeString(value)))
+		fmt.Fprintf(&sb, `%s="%s"`, k, EscapeString(value))
 	}
 
 	return " " + sb.String()
@@ -1525,11 +1525,11 @@ func (t *Tree) DataSize() resource.DataSize {
 // marshal returns the JSON encoding of this Tree.
 func marshal(builder *strings.Builder, node *TreeNode) {
 	if node.IsText() {
-		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), EscapeString(node.Value)))
+		fmt.Fprintf(builder, `{"type":"%s","value":"%s"}`, node.Type(), EscapeString(node.Value))
 		return
 	}
 
-	builder.WriteString(fmt.Sprintf(`{"type":"%s","children":[`, node.Type()))
+	fmt.Fprintf(builder, `{"type":"%s","children":[`, node.Type())
 	for idx, child := range node.Index.Children() {
 		if idx != 0 {
 			builder.WriteString(",")
@@ -1539,7 +1539,7 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 	builder.WriteString(`]`)
 
 	if node.Attrs != nil && node.Attrs.Len() > 0 {
-		builder.WriteString(fmt.Sprintf(`,"attributes":`))
+		builder.WriteString(`,"attributes":`)
 		builder.WriteString(node.Attrs.Marshal())
 	}
 
@@ -1583,9 +1583,7 @@ func (t *Tree) GCPairs() []GCPair {
 			})
 		}
 
-		for _, p := range node.GCPairs() {
-			pairs = append(pairs, p)
-		}
+		pairs = append(pairs, node.GCPairs()...)
 	}
 
 	return pairs

@@ -1,7 +1,8 @@
+name: yorkie
+
 services:
   prometheus:
     image: prom/prometheus:latest
-    container_name: prometheus
     ports:
       - "9090:9090"
     command:
@@ -10,7 +11,6 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
     ports:
       - "3000:3000"
     command:
@@ -21,8 +21,7 @@ services:
     depends_on:
       - prometheus
   mongo:
-    image: mongo:latest
-    container_name: mongo
+    image: mongo:8
     restart: always
     ports:
       - "27017:27017"
@@ -30,7 +29,6 @@ services:
     build:
       context: ../../
       dockerfile: Dockerfile
-    container_name: "yorkie"
     command:
       [
         "server",
