@@ -161,9 +161,15 @@ func (p Presence) Remove(key string) {
 	delete(p, key)
 }
 
-// Clear clears the presence.
-func (p *Presence) Clear() {
-	*p = make(map[string]string)
+// Clear removes every key from the presence.
+//
+// It empties the map in place rather than rebinding the receiver to a fresh
+// one: a Presence is a map value that the document's clone and the change
+// payloads hold by header, so assigning through a pointer receiver would only
+// re-point the caller's own copy and leave every other holder -- the clone
+// included -- still reading the cleared keys.
+func (p Presence) Clear() {
+	clear(p)
 }
 
 // DeepCopy copies itself deeply.

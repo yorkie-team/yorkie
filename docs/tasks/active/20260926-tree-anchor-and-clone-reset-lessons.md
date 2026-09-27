@@ -43,3 +43,17 @@
   `sync.RWMutex` is not reentrant, so a bare `Lock()` there deadlocks the
   process rather than merely racing. `writeLocked` is `readLocked`'s
   counterpart for exactly that.
+- `inner.Presence.Clear` had a pointer receiver and assigned a fresh map
+  (`*p = make(...)`), so `proxy.Presence.Clear`'s `data := p.data;
+  data.Clear()` rebound only its own copy of the map header. `p.data` -- the
+  clone-owned map this branch introduced -- kept every key, so a `Set` after
+  a `Clear` re-broadcast the presence the user had just cleared. A map value
+  handed around by header has to be emptied in place (`clear`), never
+  reassigned through a pointer: the reassignment is invisible to every other
+  holder.
+- The `d.updating` escape is not free to apply to every reader. It is
+  per-document, so putting `HasLocalChanges` on it handed the client's sync
+  loop (`Attachment.needSync`) an unlocked read of the slice `Update`
+  appends to on the application goroutine. The escape only pays for itself
+  where a call can actually come from inside an updater; where it cannot,
+  the bare lock is both correct and what the caller wants.

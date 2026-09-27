@@ -885,11 +885,21 @@ func (d *Document) Checkpoint() change.Checkpoint {
 
 // HasLocalChanges returns whether this document has local changes or not.
 //
-// It goes through readLocked rather than taking d.mu directly so that a call
-// made from inside an updater -- which already holds the lock on this
-// goroutine -- does not deadlock on the non-reentrant mutex.
+// Unlike its neighbours it takes d.mu unconditionally instead of going
+// through readLocked: its hot caller is the client's sync loop
+// (Attachment.needSync, client/attachment.go:94), which runs on a goroutine
+// of its own and races the application goroutine appending to
+// d.doc.localChanges inside Update. readLocked's d.updating escape is
+// per-document, not per-goroutine, so it would hand exactly that racing
+// reader an unsynchronized read of the slice being appended to. Blocking
+// until the in-flight Update releases the lock is what the sync loop wants
+// anyway, and no caller reaches this from inside an updater -- Update and
+// applyChangePack already hold d.mu and call d.doc.HasLocalChanges directly.
 func (d *Document) HasLocalChanges() bool {
-	return readLocked(d, func() bool { return d.doc.HasLocalChanges() })
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return d.doc.HasLocalChanges()
 }
 
 // Marshal returns the JSON encoding of this document.

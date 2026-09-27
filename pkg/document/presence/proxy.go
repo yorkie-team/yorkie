@@ -168,7 +168,14 @@ func (p *Presence) Clear() {
 		p.recordPrevious(key)
 	}
 
-	data.Clear()
+	// The keys are dropped in place rather than through inner.Presence.Clear,
+	// which takes a pointer receiver and assigns a fresh map: called on the
+	// local `data`, it would rebind only this copy of the map header and leave
+	// p.data -- the map the clone owns for this actor -- fully populated. The
+	// clone would then keep every cleared key, and the next Set inside this
+	// document would emit a Put carrying them, re-broadcasting to every peer
+	// presence the user explicitly cleared.
+	clear(data)
 
 	p.context.SetPresenceChange(Change{
 		ChangeType: Clear,
