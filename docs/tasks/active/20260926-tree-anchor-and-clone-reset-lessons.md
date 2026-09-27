@@ -57,3 +57,20 @@
   appends to on the application goroutine. The escape only pays for itself
   where a call can actually come from inside an updater; where it cannot,
   the bare lock is both correct and what the caller wants.
+- That last trade was wrong for an *exported* reader, and the panel was
+  right to call it. `HasLocalChanges` is public API, so "no caller reaches
+  this from inside an updater" is a statement about today's callers, not a
+  guarantee -- and the failure mode of being wrong is a deadlocked process,
+  not a racy read. The per-document escape's hole is shared by every
+  accessor (`Marshal`, `CreateChangePack`); closing it for one method buys
+  nothing and costs reentrancy. It is back on `readLocked`.
+- The same map-header-rebinding bug as `Clear` lived in
+  `Presence.Initialize` (`p.data = data`), where it is quieter: the change
+  payload carries the new map, so the root looks right, and only the *next*
+  `Set` -- built from the clone that never saw the swap -- silently drops
+  the initialized keys. Fixing one instance of a hazard is worth a grep for
+  the rest of them.
+- A fix to state the user cannot read back directly still needs a test. The
+  clone survives a successful `Update`, so the assertion that catches both
+  bugs is on the presence *after the following Update's `Set`*, not right
+  after the `Clear`/`Initialize` (`presence_clone_test.go`).

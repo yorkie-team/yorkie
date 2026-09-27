@@ -79,9 +79,18 @@ func (p *Presence) Initialize(data Data) {
 		p.recordPrevious(key)
 	}
 
-	p.data = data
+	// The incoming keys replace the current ones in place, for the same
+	// reason Clear empties in place: p.data is the map the clone owns for
+	// this actor, and `p.data = data` would re-point only the proxy's own
+	// field. The clone would keep the presence from before this call, and
+	// the next Set inside this document would emit a Put built on that stale
+	// map -- silently dropping every key initialized here.
 	if p.data == nil {
 		p.data = NewData()
+	}
+	p.data.Clear()
+	for key, value := range data {
+		p.data.Set(key, value)
 	}
 
 	p.context.SetPresenceChange(Change{
@@ -168,14 +177,13 @@ func (p *Presence) Clear() {
 		p.recordPrevious(key)
 	}
 
-	// The keys are dropped in place rather than through inner.Presence.Clear,
-	// which takes a pointer receiver and assigns a fresh map: called on the
-	// local `data`, it would rebind only this copy of the map header and leave
-	// p.data -- the map the clone owns for this actor -- fully populated. The
-	// clone would then keep every cleared key, and the next Set inside this
-	// document would emit a Put carrying them, re-broadcasting to every peer
-	// presence the user explicitly cleared.
-	clear(data)
+	// inner.Presence.Clear empties the map in place, which is what this needs:
+	// `data` is the map the clone owns for this actor, so a Clear that rebound
+	// a map header instead would leave the clone fully populated. The clone
+	// would then keep every cleared key, and the next Set inside this document
+	// would emit a Put carrying them, re-broadcasting to every peer presence
+	// the user explicitly cleared.
+	data.Clear()
 
 	p.context.SetPresenceChange(Change{
 		ChangeType: Clear,
