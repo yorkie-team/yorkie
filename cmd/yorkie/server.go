@@ -83,7 +83,8 @@ var (
 
 	pprofEnabled bool
 
-	authWebhookCacheTTL time.Duration
+	authWebhookCacheTTL      time.Duration
+	authWebhookCacheDisabled bool
 
 	kafkaAddresses           string
 	kafkaUserEventsTopic     string
@@ -171,13 +172,12 @@ func newServerCmd() *cobra.Command {
 				}
 			}
 
-			// If config file is given, command-line arguments will be overwritten.
-			if flagConfPath != "" {
-				parsed, err := server.NewConfigFromFile(flagConfPath)
-				if err != nil {
-					return err
-				}
-				conf = parsed
+			// File settings override ordinary flags. An explicit cache-disable
+			// switch always wins so it cannot silently leave cached allows active.
+			var err error
+			conf, err = resolveServerConfig(conf, flagConfPath, authWebhookCacheDisabled)
+			if err != nil {
+				return err
 			}
 
 			if err := logging.SetLogLevel(flagLogLevel); err != nil {
@@ -200,6 +200,20 @@ func newServerCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func resolveServerConfig(base *server.Config, path string, disableAuthWebhookCache bool) (*server.Config, error) {
+	if path != "" {
+		parsed, err := server.NewConfigFromFile(path)
+		if err != nil {
+			return nil, err
+		}
+		base = parsed
+	}
+	if disableAuthWebhookCache {
+		base.Backend.AuthWebhookCacheDisabled = true
+	}
+	return base, nil
 }
 
 func handleSignal(r *server.Yorkie) int {
@@ -514,11 +528,17 @@ func init() {
 		server.DefaultAuthWebhookCacheSize,
 		"The cache size of the authorization webhook.",
 	)
+	cmd.Flags().BoolVar(
+		&authWebhookCacheDisabled,
+		"auth-webhook-cache-disabled",
+		false,
+		"Send every authorization request to the webhook without using the response cache.",
+	)
 	cmd.Flags().DurationVar(
 		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
-		"TTL value to set when caching authorization webhook response.",
+		"TTL for cached authorization responses (minimum 1ms); 0 disables expiration, not caching.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.Hostname,

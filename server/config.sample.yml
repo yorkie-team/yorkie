@@ -104,7 +104,12 @@ Backend:
   # AuthWebhookCacheSize is the cache size of the authorization webhook.
   AuthWebhookCacheSize: 5000
 
-  # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
+  # AuthWebhookCacheDisabled bypasses the response cache for every authorization request.
+  AuthWebhookCacheDisabled: false
+
+  # AuthWebhookCacheTTL is the TTL of cached authorization responses.
+  # Zero means no expiration. Positive values must be at least 1ms.
+  # Use AuthWebhookCacheDisabled to bypass caching.
   AuthWebhookCacheTTL: "10s"
 
   # ProjectCacheSize is the size of the project metadata cache.
