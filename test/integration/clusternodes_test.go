@@ -179,7 +179,7 @@ func TestClusterNodes(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			svrs, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
-			return 1 == len(svrs) && svrs[0].IsLeader
+			return len(svrs) == 1 && svrs[0].IsLeader
 		}, 1*gotime.Second, 50*gotime.Millisecond)
 
 		assert.NoError(t, svr.Shutdown(true))
@@ -197,7 +197,7 @@ func TestClusterNodes(t *testing.T) {
 			infos, err := svr2.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
-			return len(infos) > 0 && infos[0].IsLeader && "test-addr-1" == infos[0].RPCAddr
+			return len(infos) > 0 && infos[0].IsLeader && infos[0].RPCAddr == "test-addr-1"
 		}, 1*gotime.Second, 50*gotime.Millisecond)
 	})
 
@@ -309,7 +309,7 @@ func TestClusterNodes(t *testing.T) {
 				}
 			}
 
-			return 1 == freq
+			return freq == 1
 		}, 1*gotime.Second, 50*gotime.Millisecond)
 	})
 
@@ -324,7 +324,7 @@ func TestClusterNodes(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			infos, err := svr2.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
-			return 2 == len(infos) && infos[0].IsLeader
+			return len(infos) == 2 && infos[0].IsLeader
 		}, 1*gotime.Second, 50*gotime.Millisecond)
 
 		infos, err := svr2.Backend().ClusterNodes(ctx)

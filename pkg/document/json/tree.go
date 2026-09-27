@@ -453,9 +453,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 						attributes.Set(key, val, nodeTicket)
 					}
 				}
-				var node *crdt.TreeNode
-
-				node = crdt.NewTreeNode(crdt.NewTreeNodeID(nodeTicket, 0), content.Type, attributes, content.Value)
+				node := crdt.NewTreeNode(crdt.NewTreeNodeID(nodeTicket, 0), content.Type, attributes, content.Value)
 
 				for _, child := range content.Children {
 					if err := buildDescendants(t.context, child, node); err != nil {

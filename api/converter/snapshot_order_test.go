@@ -18,7 +18,6 @@ package converter_test
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -229,7 +228,7 @@ func TestSnapshotEncodingIsDeterministic(t *testing.T) {
 				again, err := converter.ObjectToBytes(doc.RootObject())
 				assert.NoError(t, err)
 				if !bytes.Equal(first, again) {
-					t.Fatal(fmt.Sprintf("encode #%d differs from #0: member order is not stable", i))
+					t.Fatalf("encode #%d differs from #0: member order is not stable", i)
 				}
 			}
 		})

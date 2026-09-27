@@ -229,7 +229,7 @@ func (s *ChangeStore) calcMissingRanges(from, to int64) []ChangeRange {
 	}
 
 	// Now find contiguous missing ranges
-	var inRange bool = false
+	var inRange = false
 	var startMissing int64
 
 	for seq := from; seq <= to; seq++ {

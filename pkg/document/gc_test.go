@@ -126,13 +126,14 @@ func TestTreeGC(t *testing.T) {
 			// 02. Run test steps
 			for _, s := range tc.steps {
 				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-					if s.op.code == RemoveStyle {
+					switch s.op.code {
+					case RemoveStyle:
 						root.GetTree("t").RemoveStyle(0, 1, []string{s.op.key})
-					} else if s.op.code == Style {
+					case Style:
 						root.GetTree("t").Style(0, 1, map[string]string{s.op.key: s.op.val})
-					} else if s.op.code == DeleteNode {
+					case DeleteNode:
 						root.GetTree("t").Edit(0, 2, nil, 0)
-					} else if s.op.code == GC {
+					case GC:
 						doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 					}
 					return nil
@@ -274,11 +275,12 @@ func TestTextGC(t *testing.T) {
 			// 02. Run test steps
 			for _, s := range tc.steps {
 				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-					if s.op.code == Style {
+					switch s.op.code {
+					case Style:
 						root.GetText("t").Style(0, 2, map[string]string{s.op.key: s.op.val})
-					} else if s.op.code == DeleteNode {
+					case DeleteNode:
 						root.GetText("t").Edit(0, 2, "")
-					} else if s.op.code == GC {
+					case GC:
 						doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 					}
 					return nil

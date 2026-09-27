@@ -36,7 +36,6 @@ import (
 
 var (
 	clientOnly bool
-	output     string
 )
 
 func newVersionCmd() *cobra.Command {
