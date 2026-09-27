@@ -2460,6 +2460,49 @@ func (t *Tree) beginsInside(node, declaredFromParent *TreeNode) bool {
 	})
 }
 
+// beginsAtOrInside reports whether the change's range START leaves room for
+// the change to have covered node: it began inside node, or at or before
+// node's Start token.
+//
+// beginsInside alone answers only the first. A range that began strictly
+// BEFORE node never named node as its parent, so beginsInside is false for it
+// exactly as it is for a range that began after node — and only the latter is
+// a range that never covered node. The two are separated here by document
+// order, measured with removed nodes included so that a concurrent removal
+// between the two positions moves neither.
+//
+// A from-position that no longer resolves says nothing either way, so it
+// leaves the answer at yes, the direction the §9.6 guard fails in as well.
+func (t *Tree) beginsAtOrInside(node, declaredFromParent, declaredFromLeft *TreeNode) bool {
+	if declaredFromParent == nil {
+		return true
+	}
+	if t.beginsInside(node, declaredFromParent) {
+		return true
+	}
+	if node.Index.Parent == nil || declaredFromLeft == nil {
+		return false
+	}
+
+	offset, err := node.Index.Parent.FindOffset(node.Index, true)
+	if err != nil {
+		return false
+	}
+	nodeIdx, err := t.IndexTree.IndexOf(&index.TreePos[*TreeNode]{
+		Node:   node.Index.Parent,
+		Offset: offset,
+	}, true)
+	if err != nil {
+		return false
+	}
+	declaredIdx, err := t.ToIndex(declaredFromParent, declaredFromLeft, true)
+	if err != nil || declaredIdx < 0 {
+		return false
+	}
+
+	return declaredIdx <= nodeIdx
+}
+
 // styleSkipPredicate builds the per-token skip checks shared by Style and
 // RemoveStyle, as two predicates over the same state.
 //
@@ -3413,7 +3456,7 @@ func (t *Tree) styleTargets(
 	shouldSkipToken, shouldSkipReached := t.styleSkipPredicate(
 		from, to, fromParent, versionVector, isRecoveredInterloper)
 	declaredToParent, _ := t.ToTreeNodes(to)
-	declaredFromParent, _ := t.ToTreeNodes(from)
+	declaredFromParent, declaredFromLeft := t.ToTreeNodes(from)
 
 	var targets []*TreeNode
 	seen := make(map[*TreeNode]bool)
@@ -3469,15 +3512,18 @@ func (t *Tree) styleTargets(
 				// token is in the range at all, and re-adding the family here
 				// would style the very node the guard just skipped.
 				//
-				// The change must also have begun inside that node, which is
-				// the only way its End token alone is in a range (§9.6). A
-				// split of more than one level carries the right half into a
-				// new parent, past a range that began right after the known
-				// node, and its End token then enters the range with nothing
-				// to do with the change.
+				// The change must also have begun at or inside that node: a
+				// range reaches an element it began after through neither
+				// token. A split of more than one level carries the right
+				// half into a new parent, past a range that began right after
+				// the known node, and its End token then enters the range
+				// with nothing to do with the change. That is the one shape
+				// this excludes — a range that began BEFORE the known node
+				// covered it whole, however the traversal lost it, and keeps
+				// the closure.
 				if len(family) > 0 && !shouldSkipToken(
 					index.TreeToken[*TreeNode]{Node: family[0], TokenType: index.End},
-				) && declaredFromParent != nil && t.beginsInside(family[0], declaredFromParent) {
+				) && t.beginsAtOrInside(family[0], declaredFromParent, declaredFromLeft) {
 					for _, member := range family {
 						add(member)
 					}

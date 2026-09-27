@@ -53,3 +53,31 @@ No blocking findings, so the review stops here. Non-blocking ones:
 - The JS `NOTE(js-only)` goes stale once this lands. That comment is in
   yorkie-js-sdk#1404, not here; flagged in the PR body.
 - The todo checklist was unchecked. Filled in.
+
+### Round 2 (panel, correctness)
+
+The review panel held that the begins-inside precondition is strictly
+narrower than the branch it guards. The branch fires on an End token the
+range ran past; the guard asks only whether the range STARTED inside the
+known member. A range that began strictly before that member fails the
+guard exactly as one that began after it does, and only the second never
+covered the element. Round 1 answered this with "a range that began before
+the known node reaches its Start token through the canStyle branch
+instead" — true for the split-only shapes the scans cover, and not true
+when a concurrent removal or the §9.4 from-side recovery moves the resolved
+start past that node. That is the shape the panel named, and the scans
+cannot produce it, so the round-1 search found nothing.
+
+The guard is now `beginsAtOrInside`: begins-inside, OR the declared
+range-start sits at or before the known member's Start token in document
+order, both indices taken with removed nodes included so a concurrent
+removal between them moves neither. A from-position that no longer resolves
+leaves the answer at yes, matching the §9.6 guard's fail direction instead
+of inverting it (the panel's second point). Every scan count is unchanged —
+the added disjunct fires on no pair in the split or merge families, which
+is what "the traversal usually reaches such a node on its own Start token"
+predicts — and the level-2 pair still converges.
+
+The JS guard (yorkie-js-sdk#1404) is now the narrower half of this one.
+Recorded in the design doc's known limitations: the order half has to land
+there too, or the two implementations drop the closure on different shapes.

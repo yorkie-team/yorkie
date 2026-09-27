@@ -634,16 +634,29 @@ contradict each other — the guard skips the left half on its own End
 token and `splitFamilyOf` immediately re-adds it from the right.
 
 **The family is reached through an End token only if the change began
-inside it** (Fix 27). The branch reads the End token as "the range ran
-past this element's end", and a range reaches an element through its
-End token alone only when it began inside that element (§9.6). A
-split of more than one level breaks that reading: it carries the right
-half into a *new* parent, and §2's advance stops at a parent change,
-so a range that began right after the known node now passes the right
-half's End token without ever having entered the element. The family
-is therefore added only when the change's range-start position was
-declared inside the known node, matched in both directions along the
-split lineage as §9.6 does.
+at or inside it** (Fix 27). The branch reads the End token as "the
+range ran past this element's end", which also requires the range to
+have started no later than that element. A split of more than one
+level breaks that reading: it carries the right half into a *new*
+parent, and §2's advance stops at a parent change, so a range that
+began right after the known node now passes the right half's End token
+without ever having entered the element. The family is therefore added
+only when the change's range-start position was declared inside the
+known node — matched in both directions along the split lineage as
+§9.6 does — **or** at or before it in document order, with removed
+nodes included so a concurrent removal between the two moves neither.
+
+The second half of that test is what keeps the rule from being
+narrower than the branch. A range that began strictly *before* the
+known node never named it as its parent, so the begins-inside test is
+false for it exactly as it is for a range that began after it, and
+only the latter never covered the element. The traversal usually
+reaches such a node on its own Start token and the branch never runs;
+when a concurrent removal or §9.4's from-side recovery moves the
+resolved start past it, this branch is the only thing left that styles
+the family, and document order is what distinguishes the two. A
+from-position that no longer resolves leaves the answer at yes, the
+direction §9.6 fails in as well.
 
 ```
 <r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
@@ -997,9 +1010,12 @@ set. Until it does, the divergence is the one described above.
 **Known limitations** (tracked as follow-ups):
 
 - The JS SDK port is yorkie-js-sdk#1404, which carries Fix 27 as well
-  and lands with it. Until both are released, server and JS clients
-  resolve different reached sets for the concurrent split/merge shapes
-  above (see **Cross-implementation**).
+  and lands with it. Its guard is the begins-inside half only; the
+  document-order half above has to land there too, or the two
+  implementations drop the family closure on different shapes. Until
+  both are released, server and JS clients resolve different reached
+  sets for the concurrent split/merge shapes above (see
+  **Cross-implementation**).
 - A split of the element a style's range-end position is declared in,
   before that position, still diverges: 152 of the nested scan's 11592
   pairs, all of which converged before Fix 25. The end position moves
@@ -1136,4 +1152,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
 | Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
-| Fix 27 | §9.2 | Style a split family reached by End only if the change began in it |
+| Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
