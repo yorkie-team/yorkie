@@ -60,6 +60,7 @@ func TestDocSize(t *testing.T) {
 		assert.NoError(t, err)
 
 		projectInfo, err := adminCli.GetProject(ctx, projectName)
+		assert.NoError(t, err)
 		assert.Equal(t, sizeLimit, projectInfo.MaxSizePerDocument)
 
 		cli, err := client.Dial(
@@ -111,6 +112,7 @@ func TestDocSize(t *testing.T) {
 				MaxSizePerDocument: &newSizeLimit,
 			},
 		)
+		assert.NoError(t, err)
 
 		c2, err := client.Dial(
 			svr.RPCAddr(),
@@ -142,6 +144,7 @@ func TestDocSize(t *testing.T) {
 		assert.NoError(t, err)
 
 		projectInfo, err := adminCli.GetProject(ctx, projectName)
+		assert.NoError(t, err)
 		assert.Equal(t, sizeLimit, projectInfo.MaxSizePerDocument)
 
 		cli, err := client.Dial(
@@ -227,6 +230,7 @@ func TestDocSize(t *testing.T) {
 			r.GetText("text").Edit(0, 0, "aa")
 			return nil
 		})
+		assert.NoError(t, err)
 		docSize = doc1.DocSize()
 		assert.Equal(t, 4, docSize.Live.Data)
 		assert.Equal(t, 96, docSize.Live.Meta)
@@ -279,6 +283,7 @@ func TestDocSize(t *testing.T) {
 		assert.NoError(t, err)
 
 		projectInfo, err := adminCli.GetProject(ctx, projectName)
+		assert.NoError(t, err)
 		assert.Equal(t, sizeLimit, projectInfo.MaxSizePerDocument)
 
 		c1, err := client.Dial(

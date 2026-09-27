@@ -50,7 +50,7 @@ func TestSnapshot(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer patch.Unpatch()
+	defer func() { assert.NoError(t, patch.Unpatch()) }()
 
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]

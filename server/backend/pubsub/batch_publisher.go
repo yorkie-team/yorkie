@@ -93,14 +93,12 @@ func (bp *BatchPublisher[E]) Publish(event E) {
 	defer bp.mutex.Unlock()
 
 	if bp.onEnqueue != nil {
-		newEvents, enqueued := bp.onEnqueue(bp.events, event)
-		bp.events = newEvents
-		if !enqueued {
-			return
-		}
-	} else {
-		bp.events = append(bp.events, event)
+		// Whether the event was kept or folded into another, the returned
+		// slice is the batch; nothing else here depends on which.
+		bp.events, _ = bp.onEnqueue(bp.events, event)
+		return
 	}
+	bp.events = append(bp.events, event)
 }
 
 func (bp *BatchPublisher[E]) processLoop() {

@@ -309,9 +309,7 @@ func (t *Text) GCPairs() []GCPair {
 			})
 		}
 
-		for _, p := range node.Value().GCPairs() {
-			pairs = append(pairs, p)
-		}
+		pairs = append(pairs, node.Value().GCPairs()...)
 	}
 
 	return pairs

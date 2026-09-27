@@ -48,14 +48,14 @@ func benchmarkVV(b *testing.B, svr *server.Yorkie, clientCnt int) {
 		d1, dN := docs[0], docs[clientCnt-1]
 
 		// 2.Initialize the text.
-		c1.Sync(ctx)
+		assert.NoError(b, c1.Sync(ctx))
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text")
 			return nil
 		})
 		assert.NoError(b, err)
-		c1.Sync(ctx)
-		cN.Sync(ctx)
+		assert.NoError(b, c1.Sync(ctx))
+		assert.NoError(b, cN.Sync(ctx))
 		assert.Equal(b, `{"text":[]}`, d1.Marshal())
 		assert.Equal(b, `{"text":[]}`, dN.Marshal())
 

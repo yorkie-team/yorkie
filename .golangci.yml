@@ -10,15 +10,25 @@ linters:
     - nakedret
     - revive
     - wrapcheck
-  disable:
-    - staticcheck
-    - unused
   settings:
     gosec:
       excludes:
         - G107
         - G115
         - G118
+    staticcheck:
+      # golangci-lint's default set, minus QF1008. The json package wraps each
+      # CRDT type by embedding it, and spells out `p.Array.X` / `p.Object.X`
+      # on purpose: the selector says which layer a call lands in.
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1008
     revive:
       rules:
         - name: unused-parameter
@@ -38,6 +48,21 @@ linters:
       - linters:
           - lll
         path: pkg/document/wire_forward_compat_test.go
+      # The tag-gated suites under test/ hold golden strings, the same fixture
+      # keys in every case, and table-driven tests hundreds of cases long.
+      # Line length, repeated literals and cyclomatic complexity measure none
+      # of what makes them correct. test/helper is ordinary code and stays in.
+      - linters:
+          - lll
+          - goconst
+          - gocyclo
+        path: ^test/(integration|bench|complex|fuzz)/
+      # The deprecated Watch RPCs are still served to clients that predate
+      # WatchRequest; the handlers have to name the deprecated types.
+      - linters:
+          - staticcheck
+        path: server/rpc/yorkie_server.go
+        text: "SA1019: api\\.(WatchDocument|WatchChannel)"
     paths:
       - third_party$
       - builtin$

@@ -612,9 +612,12 @@ repository rather than assumed, because the failure mode is silent — tell a
 lens something is covered when it is not and that finding class stops being
 reported. Read off this repository's lanes as of v0.7.23:
 
-*Enforced on every code PR* — `golangci-lint run ./...` with `gofmt` and
-`goimports` as formatters and `gosec`, `revive`, `lll`, `wrapcheck`, `gocyclo`,
-`goconst`, `misspell`, `nakedret`, `goprintffuncname` as linters; `buf lint`;
+*Enforced on every code PR* — `golangci-lint run ./...` under every build tag,
+with `gofmt` and `goimports` as formatters and the default set (`errcheck`,
+`govet`, `ineffassign`, `staticcheck`, `unused`) plus `gosec`, `revive`, `lll`,
+`wrapcheck`, `gocyclo`, `goconst`, `misspell`, `nakedret`, `goprintffuncname`
+as linters (`lll`, `goconst`, `gocyclo` off in the tag-gated suites under
+`test/`); `buf lint`;
 `buf breaking` against the PR's own base commit; a codegen-freshness check that
 fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
 ./...`, which compiles the tag-gated reproductions without running them;
@@ -622,8 +625,7 @@ fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
 under any build tag; and `go test -tags integration -race ./...` against a
 real MongoDB.
 
-*Enforced by nothing* — `staticcheck` and `unused` are explicitly disabled in
-`.golangci.yml`. `complex-test`, `bench` and `load-test` are path-gated and do
+*Enforced by nothing* — `complex-test`, `bench` and `load-test` are path-gated and do
 not run on most PRs. And `ci.yml`'s `build` job is filtered on `**/*.md` (plus
 `api/docs`, `build/charts`, `design/` and `*.txt`), so a documentation-only PR
 runs none of the above — only the separate `docs.yml`, which checks

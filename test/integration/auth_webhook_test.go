@@ -61,17 +61,18 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 		assert.NoError(t, err)
 
 		var res types.AuthWebhookResponse
-		if req.Token == token {
+		switch req.Token {
+		case token:
 			w.WriteHeader(http.StatusOK) // 200
 			res.Allowed = true
-		} else if req.Token == "not allowed token" {
+		case "not allowed token":
 			w.WriteHeader(http.StatusForbidden) // 403
 			res.Allowed = false
-		} else if req.Token == "" {
+		case "":
 			w.WriteHeader(http.StatusUnauthorized) // 401
 			res.Allowed = false
 			res.Reason = "no token"
-		} else {
+		default:
 			w.WriteHeader(http.StatusUnauthorized) // 401
 			res.Allowed = false
 			res.Reason = "invalid token"

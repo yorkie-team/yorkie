@@ -74,7 +74,8 @@ func keyOf(pair GCPair) gcPairKey {
 // comparableGCParent fails to compile if T is not usable in gcPairKey.
 func comparableGCParent[T comparable](T) {}
 
-// gcParentsAreComparable is never called. It exists so that making one of the
+// gcParentsAreComparable is never called; the blank assignment below only
+// keeps it compiled. It exists so that making one of the
 // GC parents non-comparable -- a struct with a slice, map or func field,
 // passed by value -- is a build failure here rather than a runtime panic
 // inside NewRoot, which the server runs on every snapshot rebuild. Add a line
@@ -86,6 +87,8 @@ func gcParentsAreComparable() {
 	comparableGCParent[*RGATreeList](nil)
 	comparableGCParent[*RGATreeSplit[*TextValue]](nil)
 }
+
+var _ = gcParentsAreComparable
 
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes

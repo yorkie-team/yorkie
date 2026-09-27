@@ -60,7 +60,7 @@ func BenchmarkLockerMoreKeys(b *testing.B) {
 	b.SetParallelism(128)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			k := keys[rand.Intn(len(keys))]
+			k := keys[rand.Intn(len(keys))] //nolint:gosec // picks a lock key, not a secret
 			l.Lock(k)
 			assert.NoError(b, l.Unlock(k))
 		}
@@ -83,7 +83,7 @@ func benchmarkRWLockerParallel(rate int, b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if rand.Intn(rate) == 0 {
+			if rand.Intn(rate) == 0 { //nolint:gosec // samples a rate, not a secret
 				l.Lock("test")
 				assert.NoError(b, l.Unlock("test"))
 			} else {

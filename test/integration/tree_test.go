@@ -292,15 +292,15 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Panics(t, func() {
-			doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.PanicsWithError(t, index.ErrUnreachablePath.Error(), func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").EditByPath([]int{0, 0, 4}, []int{0, 0, 4}, &json.TreeNode{
 					Type:     "tn",
 					Children: []json.TreeNode{},
 				}, 0)
 				return nil
-			})
-		}, index.ErrUnreachablePath)
+			}))
+		})
 	})
 
 	t.Run("edit content with path test 2", func(t *testing.T) {
@@ -607,8 +607,8 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Panics(t, func() {
-			doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.PanicsWithError(t, json.ErrEmptyTextNode.Error(), func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
 					Type:  "text",
 					Value: "c",
@@ -617,8 +617,8 @@ func TestTree(t *testing.T) {
 					Value: "",
 				}}, 0)
 				return nil
-			})
-		}, json.ErrEmptyTextNode)
+			}))
+		})
 	})
 
 	t.Run("detecting error for mixed type insertion test", func(t *testing.T) {
@@ -640,8 +640,8 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Panics(t, func() {
-			doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.PanicsWithError(t, json.ErrMixedNodeType.Error(), func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
 					Type:     "p",
 					Children: []json.TreeNode{},
@@ -650,8 +650,8 @@ func TestTree(t *testing.T) {
 					Value: "d",
 				}}, 0)
 				return nil
-			})
-		}, json.ErrMixedNodeType)
+			}))
+		})
 	})
 
 	t.Run("detecting correct error order test 1", func(t *testing.T) {
@@ -673,8 +673,8 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Panics(t, func() {
-			doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.PanicsWithError(t, json.ErrMixedNodeType.Error(), func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
 					Type:     "p",
 					Children: []json.TreeNode{{Type: "text", Value: "c"}, {Type: "text", Value: ""}},
@@ -682,8 +682,8 @@ func TestTree(t *testing.T) {
 					Type: "text", Value: "d",
 				}}, 0)
 				return nil
-			})
-		}, json.ErrMixedNodeType)
+			}))
+		})
 	})
 
 	t.Run("detecting correct error order test 2", func(t *testing.T) {
@@ -705,8 +705,8 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Panics(t, func() {
-			doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.PanicsWithError(t, json.ErrEmptyTextNode.Error(), func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
 					Type:     "p",
 					Children: []json.TreeNode{{Type: "text", Value: "c"}},
@@ -715,8 +715,8 @@ func TestTree(t *testing.T) {
 					Children: []json.TreeNode{{Type: "text", Value: ""}},
 				}}, 0)
 				return nil
-			})
-		}, json.ErrEmptyTextNode)
+			}))
+		})
 	})
 
 	t.Run("detecting correct error order test 3", func(t *testing.T) {
@@ -738,8 +738,8 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Panics(t, func() {
-			doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.PanicsWithError(t, json.ErrMixedNodeType.Error(), func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
 					Type:  "text",
 					Value: "d",
@@ -748,8 +748,8 @@ func TestTree(t *testing.T) {
 					Children: []json.TreeNode{{Type: "text", Value: "c"}},
 				}}, 0)
 				return nil
-			})
-		}, json.ErrMixedNodeType)
+			}))
+		})
 	})
 
 	t.Run("edit its content with attributes test", func(t *testing.T) {
@@ -4587,7 +4587,6 @@ func TestTreeLWW(t *testing.T) {
 		}, "second deletion <b>ab</b><a>ef</a> by c2")
 		assert.NoError(t, err)
 
-		nodes1 := d1.Root().GetTree("t").Nodes()
 		nodes2 := d2.Root().GetTree("t").Nodes()
 
 		var bNode, iNode, aNode *crdt.TreeNode
@@ -4618,7 +4617,7 @@ func TestTreeLWW(t *testing.T) {
 		// After sync, c1 and c2 should have same tree
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		nodes1 = d1.Root().GetTree("t").Nodes()
+		nodes1 := d1.Root().GetTree("t").Nodes()
 		nodes2 = d2.Root().GetTree("t").Nodes()
 
 		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")

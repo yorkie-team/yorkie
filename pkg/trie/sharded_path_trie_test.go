@@ -358,13 +358,10 @@ func TestShardedPathTrie_ConcurrentWrites(t *testing.T) {
 				st.Insert(shardKey, keyPath, value)
 
 				// Verify we can read it back
-				got, ok := st.Get(shardKey, keyPath)
-				if !ok {
+				// Only presence is checked: another goroutine writing the same key
+				// may have overwritten the value, which is expected.
+				if _, ok := st.Get(shardKey, keyPath); !ok {
 					t.Errorf("Failed to get value for shard=%s, path=%v", shardKey, keyPath)
-				}
-				if got != value {
-					// Value might have been overwritten by another goroutine with same key
-					// This is expected behavior for concurrent writes to same key
 				}
 			}
 		}(g)

@@ -78,15 +78,15 @@ func dumpRGA(t *testing.T, d *document.Document, label string) string {
 	sb.WriteString(": ")
 	for _, n := range arr.AllRGANodes() {
 		if n.Element() == nil {
-			sb.WriteString(fmt.Sprintf("[dead pos=%s] ", n.PositionCreatedAt().Key()))
+			fmt.Fprintf(&sb, "[dead pos=%s] ", n.PositionCreatedAt().Key())
 			continue
 		}
 		removed := ""
 		if n.Element().RemovedAt() != nil {
 			removed = " removed"
 		}
-		sb.WriteString(fmt.Sprintf("%s(pos=%s posAt=%s%s) ",
-			n.Element().Marshal(), n.PositionCreatedAt().Key(), n.PositionedAt().Key(), removed))
+		fmt.Fprintf(&sb, "%s(pos=%s posAt=%s%s) ",
+			n.Element().Marshal(), n.PositionCreatedAt().Key(), n.PositionedAt().Key(), removed)
 	}
 	return sb.String()
 }
