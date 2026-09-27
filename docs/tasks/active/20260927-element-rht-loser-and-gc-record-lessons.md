@@ -68,3 +68,30 @@ trade a live leak for a tombstone no version vector ever covers -- still
 emitted into every snapshot. Refusing the value leaves the document as it was.
 That also fixes the duplicate-apply tie, where the second copy of an already
 applied `Set` used to displace the live copy in `nodeMapByCreatedAt`.
+
+## A guard that only the guarded layer can see is not a guard
+
+All four review lenses landed on the same hole from different angles: the
+refusal was implemented inside `ElementRHT.SetWithExecutedAt`, but its return
+value said `nil` for both "nothing was evicted" and "I refused your value".
+`Set.Execute` could not tell the two apart, so it went on to call
+`root.UnregisterRemovedElementPair(value.CreatedAt())` and
+`root.RegisterElement(value, obj)` on a value that lives in neither member
+map. That reintroduces, one layer up, exactly what the refusal was for: the
+value is charged to `docSize.Live`, takes over its `createdAt`'s `elementMap`
+slot from whatever live copy is really there, and -- in the
+`Set`/`Remove`/replayed-`Set` sequence -- retires the collection entry of a
+tombstone that is still indexed, releasing its `GC` charge and making it
+uncollectable forever.
+
+The signature is the fix. `SetWithExecutedAt` now returns
+`(removed Element, indexed bool)` all the way up through `Object`, and
+`Set.Execute` returns an empty `ExecutionResult` -- no reverse, not
+observable -- when `indexed` is false. Nothing changed, so there is nothing to
+undo and nothing to notify. `ElementRHT.Set` keeps its single return for the
+local path, where a freshly issued ticket always wins and refusal is
+unreachable.
+
+The general shape: when a low-level call gains a new "I declined" outcome,
+the first question is whether any caller's next line assumes the old one. An
+overloaded sentinel guarantees the answer is no.

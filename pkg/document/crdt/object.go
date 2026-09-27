@@ -57,7 +57,11 @@ func (o *Object) Set(k string, v Element) Element {
 // LWW tie-break ticket instead of v's own createdAt. It is used when
 // undo/redo restores an element under its original createdAt, mirroring
 // CRDTObject.set's separate executedAt parameter in the JS SDK (object.ts).
-func (o *Object) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
+//
+// Like ElementRHT.SetWithExecutedAt, it reports whether v was taken in at
+// all: a loser that cannot be tombstoned is refused, and the caller must not
+// book a refused value into Root.
+func (o *Object) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
 	return o.memberNodes.SetWithExecutedAt(k, v, executedAt)
 }
 

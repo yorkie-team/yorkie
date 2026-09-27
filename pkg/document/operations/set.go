@@ -100,7 +100,26 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// this is behavior-preserving there; for undo/redo restoring an older
 	// value under its original createdAt, it is required for the restore to
 	// win the LWW comparison at all.
-	removed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
+	removed, indexed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
+
+	// A value the object refused is in neither of its member maps, so nothing
+	// below may run for it. RegisterElement would charge docSize.Live for an
+	// element that hangs off no container and point elementMap at it, taking
+	// the slot of whatever live copy already answers to that createdAt -- and
+	// UnregisterRemovedElementPair would retire the collection entry of a
+	// tombstone that is still indexed, which is precisely the precondition it
+	// documents as holding only because SetWithExecutedAt re-pointed the index.
+	// Either leaves data nothing can reach and nothing can collect.
+	//
+	// Refusal means the object is byte-identical to what it was, so the
+	// operation is a no-op: no reverse (there is nothing to undo) and not
+	// observable. The two reachable causes are a re-applied Set, for which a
+	// no-op is the correct idempotent outcome, and a crafted change whose
+	// createdAt does not follow the ticket that beat it. Every replica and the
+	// server's snapshot replay reach the same decision from the same state.
+	if !indexed {
+		return ExecutionResult{}, nil
+	}
 
 	// NOTE(hackerwins): A Set can restore an element under a createdAt that a
 	// tombstone already answers to (set_operation.ts:98-104) -- undoing a

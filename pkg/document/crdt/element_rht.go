@@ -102,7 +102,8 @@ func (rht *ElementRHT) Has(key string) bool {
 
 // Set sets the value of the given key. If there is an existing value, it is removed.
 func (rht *ElementRHT) Set(k string, v Element) Element {
-	return rht.SetWithExecutedAt(k, v, v.CreatedAt())
+	removed, _ := rht.SetWithExecutedAt(k, v, v.CreatedAt())
+	return removed
 }
 
 // SetWithExecutedAt behaves like Set, but uses the given executedAt as the
@@ -130,7 +131,15 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // not disagree. A separate reach of the same precondition -- a remote redo
 // deleting a restored key on a peer via GC -- is filed in
 // docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
-func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
+//
+// It returns the element evicted from the key, if any, and whether v was
+// taken into this hashtable at all. The second value is false only on the
+// refusal path below, where v is indexed by neither map and the hashtable is
+// left exactly as it was; a caller that books the value into Root has to
+// treat that as "nothing happened" rather than as "nothing was evicted",
+// which is what a lone nil return cannot distinguish. See
+// operations.Set.Execute.
+func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
 
@@ -142,7 +151,7 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 		rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
-		return removed
+		return removed, true
 	}
 
 	// The new node loses the LWW conflict. Mark it removed by its own state,
@@ -167,11 +176,11 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	// applied Set should do: its createdAt ties the occupant's positionedAt,
 	// and the index keeps naming the live copy instead of the duplicate.
 	if v.RemovedAt() == nil && !v.Remove(PositionedAt(node.elem)) {
-		return nil
+		return nil, false
 	}
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 
-	return nil
+	return nil, true
 }
 
 // PositionedAt returns elem's last-moved ticket, or its creation ticket if

@@ -438,6 +438,13 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // removal left behind now resolves, through that index, to live data -- and
 // collection would purge it. Dropping the entry is what stops that.
 //
+// That re-pointing is a precondition, not an assumption the caller may skip
+// checking: SetWithExecutedAt refuses a loser it cannot tombstone and reports
+// so, and operations.Set.Execute returns before reaching this call on that
+// path. Calling it anyway would retire the collection entry of a tombstone
+// that still holds its slot, leaving a reachable tombstone nothing can
+// collect and releasing a charge the document is still carrying.
+//
 // Deliberately narrow. The obvious alternative, deregistering the tombstone
 // and its descendants outright, reaches past the entry that is stale: the
 // tombstone's descendant set can be a strict superset of the restored copy's

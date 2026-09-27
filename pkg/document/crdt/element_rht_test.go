@@ -288,7 +288,9 @@ func TestElementRHTSetLoser(t *testing.T) {
 
 		crafted, err := crdt.NewPrimitive("x", time.NewTicket(time.MaxLamport, 0, actorB))
 		assert.NoError(t, err)
-		assert.Nil(t, rht.SetWithExecutedAt("k", crafted, time.NewTicket(5, 0, actorB)))
+		removed, indexed := rht.SetWithExecutedAt("k", crafted, time.NewTicket(5, 0, actorB))
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "a refused value was reported as taken in")
 
 		assert.Nil(t, crafted.RemovedAt(), "an untombstonable value was reported removed")
 		assert.Equal(t, occupant, rht.Get("k"))
