@@ -272,10 +272,12 @@ type styleScan struct {
 }
 
 // styleScanDivergences replays every (structural change, style range) pair the
-// caller generates in both orders and reports what the two orders did.
+// caller generates in both orders and reports what the two orders did. The
+// style ranges are every [from, to] inside the root, which is width wide.
 func styleScanDivergences(
 	t *testing.T,
 	base []*change.Change,
+	width int,
 	structural []func(tree *json.Tree),
 	style func(tree *json.Tree, from, to int),
 	countStyled func(xml string) int,
@@ -284,8 +286,8 @@ func styleScanDivergences(
 
 	var scan styleScan
 	for _, edit := range structural {
-		for from := 0; from <= 12; from++ {
-			for to := from; to <= 12; to++ {
+		for from := 0; from <= width; from++ {
+			for to := from; to <= width; to++ {
 				scan.pairs++
 				pA, pB := concurrentTreeChanges(t, base, edit,
 					func(tree *json.Tree) { style(tree, from, to) },
@@ -337,7 +339,7 @@ func TestStyleAcrossEverySplit(t *testing.T) {
 		splits = append(splits, func(tree *json.Tree) { tree.Edit(at, at, nil, 1) })
 	}
 
-	scan := styleScanDivergences(t, base, splits, styleRange, countBold)
+	scan := styleScanDivergences(t, base, 12, splits, styleRange, countBold)
 	require.Equal(t, 1001, scan.pairs)
 	require.Zero(t, scan.rendered, "split x style diverges in the rendered document")
 	require.Zero(t, scan.tombstoneOnly, "split x style diverges on tombstoned attributes")
@@ -384,7 +386,7 @@ func mergeRanges() []func(tree *json.Tree) {
 func TestStyleAcrossEveryMerge(t *testing.T) {
 	base := styleScanBase(t)
 
-	scan := styleScanDivergences(t, base, mergeRanges(), styleRange, countBold)
+	scan := styleScanDivergences(t, base, 12, mergeRanges(), styleRange, countBold)
 	t.Logf("merge x style: %+v", scan)
 	require.Equal(t, 7098, scan.pairs)
 	require.Zero(t, scan.rendered, "merge x style diverges in the rendered document")
@@ -414,7 +416,7 @@ func TestRemoveStyleAcrossEveryMerge(t *testing.T) {
 	// A paragraph RemoveStyle reached renders as `<p>`; one it did not still
 	// carries the attribute from the base.
 	cleared := func(xml string) int { return strings.Count(xml, "<p>") }
-	scan := styleScanDivergences(t, base, mergeRanges(),
+	scan := styleScanDivergences(t, base, 12, mergeRanges(),
 		func(tree *json.Tree, from, to int) { tree.RemoveStyle(from, to, []string{"b"}) },
 		cleared)
 	t.Logf("merge x remove-style: %+v", scan)
@@ -440,7 +442,7 @@ func TestRemoveStyleAcrossEverySplit(t *testing.T) {
 	// A paragraph RemoveStyle reached renders as `<p>`; one it did not still
 	// carries the attribute from the base.
 	cleared := func(xml string) int { return strings.Count(xml, "<p>") }
-	scan := styleScanDivergences(t, base, splits,
+	scan := styleScanDivergences(t, base, 12, splits,
 		func(tree *json.Tree, from, to int) { tree.RemoveStyle(from, to, []string{"b"}) },
 		cleared)
 	require.Equal(t, 1001, scan.pairs)
@@ -724,4 +726,160 @@ func TestStyleReachedSetMatchesComplexSuite(t *testing.T) {
 			require.Equal(t, baXML, abXML, "the two delivery orders render differently")
 		})
 	}
+}
+
+// splitEditBase is the complex suite's TestTreeConcurrencySplitEdit tree,
+// <r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>, every inner
+// paragraph italic:
+//
+//	0   1   2   3 4 5 6 7    8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
+//	<r> <p> <p> <p> a b c d </p> <p> e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </r>
+func splitEditBase(t *testing.T) []*change.Change {
+	t.Helper()
+
+	italic := map[string]string{"italic": "true"}
+	para := func(text string) json.TreeNode {
+		return json.TreeNode{
+			Type:       "p",
+			Attributes: italic,
+			Children:   []json.TreeNode{{Type: "text", Value: text}},
+		}
+	}
+	seed := newActor(t, "000000000000000000000009")
+	require.NoError(t, seed.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{{
+			Type: "p",
+			Children: []json.TreeNode{
+				{Type: "p", Attributes: italic, Children: []json.TreeNode{para("abcd"), para("efgh")}},
+				para("ijkl"),
+			},
+		}}})
+		return nil
+	}))
+
+	return grab(t, seed)
+}
+
+// A level-2 split of the paragraph just BEFORE a style range: the complex
+// suite's `concurrently-split-edit-test`, `A -> B`, split-2 against style and
+// remove-style. The style covered only <p>efgh</p>. The split carries the
+// right half of <p>abcd</p> into a new parent, so a traversal starting right
+// after <p>abcd</p> now passes that half's End token. The range never ran
+// past <p>abcd</p>'s end, so neither half may be styled, in either order.
+func TestStyleAfterLevelTwoSplitBeforeRange(t *testing.T) {
+	split := func(tree *json.Tree) { tree.Edit(5, 5, nil, 2) }
+
+	t.Run("style", func(t *testing.T) {
+		base := splitEditBase(t)
+		pA, pB := concurrentTreeChanges(t, base, split,
+			func(tree *json.Tree) { tree.Style(8, 14, map[string]string{"bold": "aa"}) },
+		)
+
+		ab := replayStyleOrder(t, base, pA, pB)
+		ba := replayStyleOrder(t, base, pB, pA)
+		require.Equal(t, `<r><p><p italic="true"><p italic="true">ab</p></p>`+
+			`<p italic="true"><p italic="true">cd</p><p bold="aa" italic="true">efgh</p></p>`+
+			`<p italic="true">ijkl</p></p></r>`, ba.xml)
+		require.Equal(t, ba, ab, "split-then-style diverges from style-then-split")
+	})
+
+	t.Run("remove-style", func(t *testing.T) {
+		base := splitEditBase(t)
+		pA, pB := concurrentTreeChanges(t, base, split,
+			func(tree *json.Tree) { tree.RemoveStyle(8, 14, []string{"italic"}) },
+		)
+
+		ab := replayStyleOrder(t, base, pA, pB)
+		ba := replayStyleOrder(t, base, pB, pA)
+		require.Equal(t, `<r><p><p italic="true"><p italic="true">ab</p></p>`+
+			`<p italic="true"><p italic="true">cd</p><p>efgh</p></p>`+
+			`<p italic="true">ijkl</p></p></r>`, ba.xml)
+		require.Equal(t, ba, ab, "split-then-remove-style diverges from the other order")
+	})
+}
+
+// nestedScanBase is the shape of splitEditBase, 22 wide inside the root, with
+// every paragraph carrying attrs (none when attrs is nil). The flat scans
+// above split one level of a flat tree, so a split never moves a half into a
+// new parent there; this base is where a level-2 split does.
+func nestedScanBase(t *testing.T, attrs map[string]string) []*change.Change {
+	t.Helper()
+
+	para := func(children ...json.TreeNode) json.TreeNode {
+		return json.TreeNode{Type: "p", Attributes: attrs, Children: children}
+	}
+	text := func(value string) json.TreeNode {
+		return json.TreeNode{Type: "text", Value: value}
+	}
+	seed := newActor(t, "000000000000000000000009")
+	require.NoError(t, seed.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{
+			para(para(para(text("abcd")), para(text("efgh"))), para(text("ijkl"))),
+		}})
+		return nil
+	}))
+
+	return grab(t, seed)
+}
+
+// nestedSplits is every split of nestedScanBase at levels 1 and 2: 42 of
+// them, each paired with every one of the 276 style ranges.
+func nestedSplits() []func(tree *json.Tree) {
+	var splits []func(tree *json.Tree)
+	for level := 1; level <= 2; level++ {
+		for at := 1; at <= 21; at++ {
+			splits = append(splits, func(tree *json.Tree) { tree.Edit(at, at, nil, level) })
+		}
+	}
+
+	return splits
+}
+
+// Every level-1 and level-2 split of a nested tree against every style range:
+// 42 x 276 pairs. A level-2 split carries a half into a new parent, which the
+// flat scans cannot produce; TestStyleAfterLevelTwoSplitBeforeRange is one
+// such pair.
+//
+// This family is NOT closed, and the rendered count is a ratchet. 2810 pairs
+// diverged before #2038 and 363 after it; the §9.2 begins-inside check on the
+// split-family branch brings that to 241 and turns no converging pair into a
+// diverging one. Of the 241, 152 converged before #2038, and every one of
+// them splits the element the range's end position is declared in, before
+// that position: the end moves into the new half while the declared parent
+// still names the original, and the order that splits first styles the
+// original half, which the range never reached. That is a separate rule,
+// tracked under Known limitations in docs/design/concurrent-merge-split.md,
+// and it has to land in the JS SDK too.
+func TestStyleAcrossEveryNestedSplit(t *testing.T) {
+	base := nestedScanBase(t, nil)
+
+	scan := styleScanDivergences(t, base, 22, nestedSplits(), styleRange, countBold)
+	t.Logf("nested split x style: %+v", scan)
+	require.Equal(t, 11592, scan.pairs)
+	require.LessOrEqual(t, scan.rendered, 241, "nested split x style regressed in the rendered document")
+	require.Zero(t, scan.tombstoneOnly, "nested split x style diverges on tombstoned attributes")
+	require.Zero(t, scan.errored, "nested split x style could not be replayed")
+	// Absolute, for the same reason as the flat scans. These count the
+	// split-first order, so a pair that still diverges contributes that
+	// order's reached set.
+	require.Equal(t, 9318, scan.styledPairs, "nested split x style reached a different set of ranges")
+	require.Equal(t, 33208, scan.styledNodes, "nested split x style reached a different set of nodes")
+}
+
+// The nested split scan with RemoveStyle over a base where every paragraph is
+// bold. Identical to TestStyleAcrossEveryNestedSplit on every count.
+func TestRemoveStyleAcrossEveryNestedSplit(t *testing.T) {
+	base := nestedScanBase(t, map[string]string{"b": "x"})
+
+	cleared := func(xml string) int { return strings.Count(xml, "<p>") }
+	scan := styleScanDivergences(t, base, 22, nestedSplits(),
+		func(tree *json.Tree, from, to int) { tree.RemoveStyle(from, to, []string{"b"}) },
+		cleared)
+	t.Logf("nested split x remove-style: %+v", scan)
+	require.Equal(t, 11592, scan.pairs)
+	require.LessOrEqual(t, scan.rendered, 241, "nested split x remove-style regressed in the rendered document")
+	require.Zero(t, scan.tombstoneOnly, "nested split x remove-style diverges on tombstoned attributes")
+	require.Zero(t, scan.errored, "nested split x remove-style could not be replayed")
+	require.Equal(t, 9318, scan.styledPairs, "nested split x remove-style reached a different set of ranges")
+	require.Equal(t, 33208, scan.styledNodes, "nested split x remove-style reached a different set of nodes")
 }

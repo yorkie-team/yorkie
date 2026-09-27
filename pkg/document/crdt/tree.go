@@ -3413,6 +3413,7 @@ func (t *Tree) styleTargets(
 	shouldSkipToken, shouldSkipReached := t.styleSkipPredicate(
 		from, to, fromParent, versionVector, isRecoveredInterloper)
 	declaredToParent, _ := t.ToTreeNodes(to)
+	declaredFromParent, _ := t.ToTreeNodes(from)
 
 	var targets []*TreeNode
 	seen := make(map[*TreeNode]bool)
@@ -3467,9 +3468,16 @@ func (t *Tree) styleTargets(
 				// that guard excludes it, the split is the only reason this
 				// token is in the range at all, and re-adding the family here
 				// would style the very node the guard just skipped.
+				//
+				// The change must also have begun inside that node, which is
+				// the only way its End token alone is in a range (§9.6). A
+				// split of more than one level carries the right half into a
+				// new parent, past a range that began right after the known
+				// node, and its End token then enters the range with nothing
+				// to do with the change.
 				if len(family) > 0 && !shouldSkipToken(
 					index.TreeToken[*TreeNode]{Node: family[0], TokenType: index.End},
-				) {
+				) && declaredFromParent != nil && t.beginsInside(family[0], declaredFromParent) {
 					for _, member := range family {
 						add(member)
 					}

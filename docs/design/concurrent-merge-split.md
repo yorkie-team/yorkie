@@ -633,6 +633,35 @@ dropped whole. Without that check the two halves of the fix
 contradict each other — the guard skips the left half on its own End
 token and `splitFamilyOf` immediately re-adds it from the right.
 
+**The family is reached through an End token only if the change began
+inside it** (Fix 27). The branch reads the End token as "the range ran
+past this element's end", and a range reaches an element through its
+End token alone only when it began inside that element (§9.6). A
+split of more than one level breaks that reading: it carries the right
+half into a *new* parent, and §2's advance stops at a parent change,
+so a range that began right after the known node now passes the right
+half's End token without ever having entered the element. The family
+is therefore added only when the change's range-start position was
+declared inside the known node, matched in both directions along the
+split lineage as §9.6 does.
+
+```
+<r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
+A: Edit(5, 5, nil, 2)      // <p>ab|cd</p>, two levels
+B: Style(8, 14, {bold: aa}) // <p>efgh</p> only
+
+B,A  <r><p><p><p>ab</p></p><p><p>cd</p><p bold="aa">efgh</p></p>...</r>
+A,B  without Fix 27: <p bold="aa">ab</p> and <p bold="aa">cd</p> as well
+```
+
+This is the complex suite's `concurrently-split-edit-test`, `A -> B`,
+split-2 against style and remove-style. It converged before Fix 25 and
+diverged after it; the flat scans below split one level of a flat tree
+and cannot produce the shape, and the complex suite reports a
+diverging pair with `t.Skip`, so nothing failed. The JS SDK found it
+porting Fix 25 (yorkie-js-sdk#1404), and both implementations carry
+the same check.
+
 `splitFamilyOf` collects backwards and reverses once rather than
 prepending per link: the chain length is chosen by whoever authored
 the splits, and prepending copies the slice each time. The caller also
@@ -862,11 +891,20 @@ style, both delivery orders):
 |---|---|---|---|
 | split × style | 1001 | 135 → **0** | 0 → **0** |
 | merge × style | 7098 | 297 → **0** | 2879 → **1292** |
+| nested split × style | 11592 | 2810 → 363 → **241** | 0 → **0** |
+
+The nested row splits `<r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>`
+at every position and at levels 1 and 2; its three counts are before
+Fix 25, after it, and after Fix 27. That family is not closed; see
+the known limitations below.
 
 The same numbers hold for `RemoveStyle` over a pre-bolded base, on
 every count, which is what sharing one range resolution has to mean.
-No pair that converged before diverges after, in either scan or in a
-300-seed randomised sweep.
+No pair that converged before diverges after, in either flat scan or
+in a 300-seed randomised sweep. The nested scan, added with Fix 27, is
+where that was not true: 188 of its pairs converged before Fix 25 and
+diverged after it. Fix 27 closes 36 of them and 86 older ones, and
+turns no converging pair into a diverging one; the other 152 remain.
 
 **Cross-implementation.** §9.1, §9.2, §9.5 and §9.6 change *which
 nodes* a `Tree.Style`/`Tree.RemoveStyle` writes to, and only the Go
@@ -915,7 +953,20 @@ than a re-derivation:
    before any split existed and the element is kept.
 2. **§9.2 Split-lineage closure.** A node the change reached stands for
    every product of splitting it, forwards and backwards along the
-   split lineage, token type not consulted.
+   split lineage, token type not consulted. When the traversal reaches
+   only a product the change could not have known, on its End token,
+   the family is added through the first member the change knew, and
+   only if all three hold:
+   (a) the range-end position was not declared inside the reached
+   product (its declared parent is neither that product nor below it,
+   ancestors matched along their split lineage as in rule 1);
+   (b) rule 1 and rule 4 would not skip that member's End token;
+   (c) the range-start position was declared inside that member (its
+   declared parent is the member or below it), matched in both
+   directions along the split lineage as in rule 4.
+   Condition (c) is what a split of more than one level needs: it can
+   move the right half's End token into a range that began after the
+   known member.
 3. **§9.5 Boundary elements.** Independently of the traversal, the
    reached set includes the ancestors of the change's own range-start
    position (carried as End tokens) and of its range-end position
@@ -945,9 +996,17 @@ set. Until it does, the divergence is the one described above.
 
 **Known limitations** (tracked as follow-ups):
 
-- The JS SDK has not yet been ported (see **Cross-implementation**
-  above), so server and JS clients resolve different reached sets for
-  concurrent split/merge shapes.
+- The JS SDK port is yorkie-js-sdk#1404, which carries Fix 27 as well
+  and lands with it. Until both are released, server and JS clients
+  resolve different reached sets for the concurrent split/merge shapes
+  above (see **Cross-implementation**).
+- A split of the element a style's range-end position is declared in,
+  before that position, still diverges: 152 of the nested scan's 11592
+  pairs, all of which converged before Fix 25. The end position moves
+  into the new half while its declared parent still names the original
+  half, and the order that splits first styles that original half,
+  which the range never reached. The rule belongs with §9.5's boundary
+  elements and has to land in both SDKs together.
 - An edit-only divergence independent of styling (concurrent unwrap
   versus merge-delete of the same paragraph) remains open.
 - Attributes still land on a different set of TOMBSTONES in the two
@@ -1077,3 +1136,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
 | Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
+| Fix 27 | §9.2 | Style a split family reached by End only if the change began in it |
