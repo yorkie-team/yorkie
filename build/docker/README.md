@@ -9,10 +9,10 @@ through `docker compose` command.
 
 ```bash
 # Run docker compose up and Compose starts and runs apps.
-docker compose -f docker/docker-compose.yml up --build -d
+docker compose -f build/docker/docker-compose.yml up --build -d
 
 # Shut down the apps
-docker compose -f docker/docker-compose.yml down
+docker compose -f build/docker/docker-compose.yml down
 ```
 
 The docker-compose files we use are as follows:
