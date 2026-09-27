@@ -26,6 +26,13 @@ Both files use the Compose project name `yorkie`, so containers are named
 stacks use `yorkie-sharding` and `yorkie-analytics`. Address a container by
 its service name with `docker compose -f <file> exec <service> ...`.
 
+MongoDB 8 does not start on Linux kernels 6.19 through 7.0.13
+([SERVER-125742](https://jira.mongodb.org/browse/SERVER-125742)). Containers
+use the Docker VM's kernel, so check it with
+`docker info --format '{{.KernelVersion}}'`. Docker Desktop 4.87.0 and later
+ship 7.0.12; use a kernel below 6.19 (Docker Desktop 4.86.0 or earlier) or
+7.0.14 and later.
+
 ## Subdirectories
 
 - [analytics/](./analytics/README.md): Compose stack for analytics (Kafka, StarRocks)
