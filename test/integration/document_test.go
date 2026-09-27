@@ -189,17 +189,17 @@ func TestDocument(t *testing.T) {
 		wg.Wait()
 
 		// Exactly one attach wins; the other is rejected before any RPC.
-		winner := -1
-		for i, err := range errs {
-			if err == nil {
-				assert.Equal(t, -1, winner, "both attaches succeeded")
-				winner = i
+		var winner *document.Document
+		for i, d := range docs {
+			if errs[i] == nil {
+				assert.Nil(t, winner, "both attaches succeeded")
+				winner = d
 				continue
 			}
-			assert.ErrorIs(t, err, client.ErrAlreadyAttached)
+			assert.ErrorIs(t, errs[i], client.ErrAlreadyAttached)
 		}
-		if assert.NotEqual(t, -1, winner, "no attach succeeded: %v", errs) {
-			assert.NoError(t, c1.Detach(ctx, docs[winner]))
+		if assert.NotNil(t, winner, "no attach succeeded: %v", errs) {
+			assert.NoError(t, c1.Detach(ctx, winner))
 		}
 	})
 
