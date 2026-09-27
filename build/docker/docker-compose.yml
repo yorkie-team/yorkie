@@ -1,7 +1,8 @@
+name: yorkie
+
 services:
   mongo:
-    image: mongo:latest
-    container_name: mongo
+    image: mongo:8
     restart: always
     ports:
       - "27017:27017"
