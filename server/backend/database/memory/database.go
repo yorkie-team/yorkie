@@ -1054,7 +1054,7 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 		clientInfo.Documents[docID].Status == database.DocumentAttached {
 		return nil, fmt.Errorf(
 			"try attaching %s to %s: %w",
-			docID, refKey.ClientID, database.ErrClientNotFound,
+			docID, refKey.ClientID, database.ErrDocumentAlreadyAttached,
 		)
 	}
 

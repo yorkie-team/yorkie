@@ -69,6 +69,10 @@ var (
 	// ErrNotDetached occurs when the given resource is not detached.
 	ErrNotDetached = errors.FailedPrecond("resource is not detached")
 
+	// ErrAlreadyAttached occurs when a document with the same key is already
+	// attached to, or being attached by, this client.
+	ErrAlreadyAttached = errors.FailedPrecond("document is already attached").WithCode("ErrAlreadyAttached")
+
 	// ErrInvalidResource occurs when the given resource is invalid.
 	ErrInvalidResource = errors.InvalidArgument("invalid resource")
 
@@ -99,6 +103,12 @@ type Client struct {
 	key         string
 	status      status
 	attachments *cmap.Map[key.Key, *Attachment]
+
+	// attaching holds the keys of documents with an attach in flight.
+	// attachments is only set once the attach round trip resolves, so this
+	// is what rejects a concurrent attach of the same key.
+	attachingMu sync.Mutex
+	attaching   map[key.Key]struct{}
 
 	syncCtx    context.Context
 	syncCancel context.CancelFunc
@@ -187,6 +197,7 @@ func New(opts ...Option) (*Client, error) {
 		key:         k,
 		status:      statusDeactivated,
 		attachments: cmap.New[key.Key, *Attachment](),
+		attaching:   make(map[key.Key]struct{}),
 	}, nil
 }
 
@@ -298,6 +309,19 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		return err
 	}
 
+	// The server detached every resource of this client, so drop the
+	// attachments too, as the JS SDK does. A stale entry would otherwise
+	// reject attaching the same key after the client is activated again.
+	for _, attachment := range c.attachments.Values() {
+		if attachment.resource.Status() != attachable.StatusRemoved {
+			attachment.resource.SetStatus(attachable.StatusDetached)
+		}
+		if ch, ok := attachment.resource.(*channel.Channel); ok {
+			ch.UpdateSessionCount(0, 0)
+		}
+		c.attachments.Delete(attachment.resource.Key())
+	}
+
 	c.status = statusDeactivated
 
 	return nil
@@ -390,6 +414,17 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 		return ErrNotDetached
 	}
 
+	if r.Type() == attachable.TypeDocument {
+		// Reject a second Document with the same key before any RPC or any
+		// change to it, as the JS SDK does. The server cannot tell a
+		// concurrent attach of the same key apart while the first is in
+		// flight.
+		if err := c.beginAttach(r.Key()); err != nil {
+			return err
+		}
+		defer c.endAttach(r.Key())
+	}
+
 	r.SetActor(c.id)
 
 	if r.Type() == attachable.TypeDocument {
@@ -473,6 +508,32 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...an
 	}
 
 	return nil
+}
+
+// beginAttach marks the document key k as being attached. It fails with
+// ErrAlreadyAttached when a document with k is already attached to, or being
+// attached by, this client.
+func (c *Client) beginAttach(k key.Key) error {
+	c.attachingMu.Lock()
+	defer c.attachingMu.Unlock()
+
+	if _, ok := c.attaching[k]; ok {
+		return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
+	}
+	if attachment, ok := c.attachments.Get(k); ok && attachment.Is(attachable.TypeDocument) {
+		return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
+	}
+
+	c.attaching[k] = struct{}{}
+	return nil
+}
+
+// endAttach clears the in-flight mark that beginAttach set for k.
+func (c *Client) endAttach(k key.Key) {
+	c.attachingMu.Lock()
+	defer c.attachingMu.Unlock()
+
+	delete(c.attaching, k)
 }
 
 // attachDocument attaches the given document to this client. It tells the server that

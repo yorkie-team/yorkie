@@ -97,6 +97,102 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Detach(ctx, doc3))
 	})
 
+	t.Run("duplicate attach of the same key test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. a second Document with an attached key is rejected locally.
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		err := c1.Attach(ctx, d2)
+		assert.ErrorIs(t, err, client.ErrAlreadyAttached)
+		assert.Equal(t, document.StatusDetached, d2.Status())
+
+		// 02. the attached one is untouched.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k1", "v1")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 03. after a detach, the key can be attached again.
+		assert.NoError(t, c1.Detach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d2))
+		assert.Equal(t, `{"k1":"v1"}`, d2.Marshal())
+		assert.NoError(t, c1.Detach(ctx, d2))
+	})
+
+	t.Run("retry a failed attach of the same key test", func(t *testing.T) {
+		// 01. the RPC fails: the context is already cancelled.
+		cancelled, cancel := context.WithCancel(context.Background())
+		cancel()
+		d1 := document.New(helper.TestKey(t))
+		assert.Error(t, c1.Attach(cancelled, d1))
+		assert.Equal(t, document.StatusDetached, d1.Status())
+
+		// 02. the server rejects the attach: the schema does not exist.
+		d2 := document.New(helper.TestKey(t))
+		assert.Error(t, c1.Attach(context.Background(), d2, client.WithSchema("no-such-schema@1")))
+		assert.Equal(t, document.StatusDetached, d2.Status())
+
+		// 03. neither failure leaves the key marked, so the same key attaches,
+		// with the same Document or a new one.
+		assert.NoError(t, c1.Attach(context.Background(), d1))
+		assert.NoError(t, c1.Detach(context.Background(), d1))
+		assert.NoError(t, c1.Attach(context.Background(), d2))
+		assert.NoError(t, c1.Detach(context.Background(), d2))
+	})
+
+	t.Run("attach the same key after reactivation test", func(t *testing.T) {
+		ctx := context.Background()
+		cs := activeClients(t, 1)
+		cli := cs[0]
+		defer deactivateAndCloseClients(t, cs)
+
+		// Deactivation detaches every document on the server, so the client
+		// drops its attachments too, as the JS SDK does.
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, cli.Attach(ctx, d1))
+		assert.NoError(t, cli.Deactivate(ctx))
+		assert.Equal(t, document.StatusDetached, d1.Status())
+
+		assert.NoError(t, cli.Activate(ctx))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, cli.Attach(ctx, d2))
+		assert.NoError(t, cli.Detach(ctx, d2))
+	})
+
+	t.Run("concurrent duplicate attach of the same key test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docs := []*document.Document{
+			document.New(helper.TestKey(t)),
+			document.New(helper.TestKey(t)),
+		}
+		errs := make([]error, len(docs))
+		wg := sync.WaitGroup{}
+		for i, d := range docs {
+			wg.Go(func() {
+				errs[i] = c1.Attach(ctx, d)
+			})
+		}
+		wg.Wait()
+
+		// Exactly one attach wins; the other is rejected before any RPC.
+		winner := -1
+		for i, err := range errs {
+			if err == nil {
+				assert.Equal(t, -1, winner, "both attaches succeeded")
+				winner = i
+				continue
+			}
+			assert.ErrorIs(t, err, client.ErrAlreadyAttached)
+		}
+		if assert.NotEqual(t, -1, winner, "no attach succeeded: %v", errs) {
+			assert.NoError(t, c1.Detach(ctx, docs[winner]))
+		}
+	})
+
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
