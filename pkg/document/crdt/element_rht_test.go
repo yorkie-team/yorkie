@@ -245,3 +245,51 @@ func TestElementRHTNodeOrder(t *testing.T) {
 		}
 	})
 }
+
+// TestElementRHTSetLoser pins how SetWithExecutedAt treats the value that
+// loses the LWW comparison: it is marked removed by its own state, not by
+// the occupant's. It mirrors ElementRHT.set in the JS SDK.
+func TestElementRHTSetLoser(t *testing.T) {
+	actorA := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	actorB := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+
+	t.Run("removes a live loser even when the occupant is a tombstone", func(t *testing.T) {
+		rht := crdt.NewElementRHT()
+		winner, err := crdt.NewPrimitive("v2", time.NewTicket(6, 0, actorA))
+		assert.NoError(t, err)
+		rht.Set("k", winner)
+		_, err = rht.DeleteByCreatedAt(winner.CreatedAt(), time.NewTicket(7, 0, actorA))
+		assert.NoError(t, err)
+
+		loser, err := crdt.NewPrimitive("v1", time.NewTicket(5, 0, actorB))
+		assert.NoError(t, err)
+		rht.Set("k", loser)
+
+		assert.NotNil(t, loser.RemovedAt(), "a live loser stayed live")
+		for _, node := range rht.Nodes() {
+			assert.NotNil(t, node.Element().RemovedAt(),
+				"Nodes() emits a live node the key does not answer with")
+		}
+		assert.Empty(t, rht.Elements())
+	})
+
+	t.Run("keeps the removedAt of a loser that arrives removed", func(t *testing.T) {
+		// Replays a decoded object whose members are not in positionedAt
+		// order: the tombstone of an older value arrives after the live
+		// value that replaced it.
+		rht := crdt.NewElementRHT()
+		live, err := crdt.NewPrimitive("b", time.NewTicket(3, 0, actorA))
+		assert.NoError(t, err)
+		tombstone, err := crdt.NewPrimitive("a", time.NewTicket(1, 0, actorA))
+		assert.NoError(t, err)
+		removedAt := time.NewTicket(2, 0, actorA)
+		tombstone.SetRemovedAt(removedAt)
+
+		rht.SetWithExecutedAt("k", live, crdt.PositionedAt(live))
+		rht.SetWithExecutedAt("k", tombstone, crdt.PositionedAt(tombstone))
+
+		assert.Equal(t, removedAt.Key(), tombstone.RemovedAt().Key(),
+			"the tombstone's removedAt was bumped to the occupant's ticket")
+		assert.Nil(t, live.RemovedAt())
+	})
+}

@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-26
+updated: 2026-09-27
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Mark LWW losers removed and stop leaking GC size records (2026-09-27) | [20260927-element-rht-loser-and-gc-record-todo.md](./active/20260927-element-rht-loser-and-gc-record-todo.md) | [20260927-element-rht-loser-and-gc-record-lessons.md](./active/20260927-element-rht-loser-and-gc-record-lessons.md) |
 | Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./active/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./active/20260926-backport-hook-fixes-lessons.md) |
 | Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
 | Agent pipeline: the entry paths a human PR uses (2026-09-25) | [20260925-agent-pipeline-entry-paths-todo.md](./active/20260925-agent-pipeline-entry-paths-todo.md) | [20260925-agent-pipeline-entry-paths-lessons.md](./active/20260925-agent-pipeline-entry-paths-lessons.md) |

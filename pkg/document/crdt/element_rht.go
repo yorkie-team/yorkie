@@ -142,9 +142,15 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 		}
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
-	} else if !node.isRemoved() {
-		// The new node loses the LWW conflict — mark it as removed
-		// so it doesn't appear as a duplicate during iteration.
+	} else if v.RemovedAt() == nil {
+		// The new node loses the LWW conflict. Mark it removed by its own
+		// state, not the occupant's: a live loser whose occupant is already
+		// a tombstone would otherwise stay live in nodeMapByCreatedAt --
+		// emitted by Nodes(), never booked as garbage, still charged to Live
+		// -- on the replica that saw the tombstone first and on no other. A
+		// loser that arrives removed is left alone, because Remove accepts a
+		// later ticket and would move its removedAt off the removal that
+		// actually happened.
 		v.Remove(PositionedAt(node.elem))
 	}
 
@@ -264,9 +270,11 @@ func (rht *ElementRHT) Elements() map[string]Element {
 // Ascending PositionedAt is replay order: each node arrives with a ticket
 // newer than the one occupying its key, so the LWW comparison always
 // resolves forward. SetWithExecutedAt does not need that -- it is
-// order-independent (TestSnapshotDecodeIsOrderIndependent) -- but a client
-// that has not taken the matching yorkie-js-sdk fix does, and this costs
-// nothing. That guarantee assumes no two nodes under one key share a
+// order-independent (TestSnapshotDecodeIsOrderIndependent), down to the
+// removedAt of a tombstone replayed after the member that replaced it
+// (TestElementRHTSetLoser), which it used to bump to that member's ticket --
+// but a client that has not taken the matching yorkie-js-sdk fixes does, and
+// this costs nothing. That guarantee assumes no two nodes under one key share a
 // PositionedAt, which per-operation tickets make unreachable; the createdAt
 // tie-break restores determinism, not the forward-replay property.
 //
