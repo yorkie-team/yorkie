@@ -39,8 +39,12 @@ build-binaries: ## builds binaries to attach a new release
 fmt: ## applies format and simplify codes
 	gofmt -s -w $(GO_SRC)
 
+# Every build tag, on linux/amd64 like go fix, so the tag-gated tests are
+# linted too. `|| exit 1` because a failed substitution would otherwise lint
+# with no tags and pass.
 lint: ## runs the golang-ci lint, checks for lint violations
-	golangci-lint run --timeout 2m ./...
+	@tags="$$(scripts/go-build-tags.sh)" || exit 1; \
+	GOOS=linux GOARCH=amd64 golangci-lint run --timeout 5m --build-tags "$$tags" ./...
 
 # The gate a commit has to pass before it is pushed, and the one `.githooks/`
 # calls. Deliberately the lanes that need no service: `make test` needs

@@ -11,46 +11,17 @@
 # a new tag cannot fall outside the check.
 set -euo pipefail
 
+# Resolved before the cd: the tag script sits beside this one, and it reads
+# the //go:build lines of whichever repository the caller is in.
+here=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
 cd "$(git rev-parse --show-toplevel)"
 
 # go fix analyses one platform at a time. linux/amd64 is what CI runs and it
 # covers the amd64-only test files.
 export GOOS=linux GOARCH=amd64
 
-# Every word on a //go:build line, minus the operators.
-words=$(git grep -h '^//go:build' -- '*.go' |
-  sed 's|^//go:build||' | tr -c 'A-Za-z0-9_.\n' ' ' | tr -s ' ' '\n' |
-  grep -v '^$' | sort -u)
-
-if git grep -q '^//go:build.*!' -- '*.go'; then
-  # Turning every tag on would exclude these files instead of covering them.
-  echo "go-fix: a //go:build line negates a tag; this script cannot cover it." >&2
-  git grep -n '^//go:build.*!' -- '*.go' >&2
-  exit 1
-fi
-
-platforms=$(go tool dist list | tr '/' '\n' | sort -u)
-tags=()
-for w in $words; do
-  # `ignore` marks files no build includes (generators run with `go run`), and
-  # turning it on would put a `package main` beside the library it sits in.
-  # `go1.N` is a version constraint the toolchain satisfies on its own.
-  case "$w" in
-    ignore | go1.*) continue ;;
-  esac
-  if grep -qx "$w" <<<"$platforms"; then
-    case "$w" in
-      linux | amd64) ;;
-      *)
-        echo "go-fix: //go:build names platform '$w'; only linux/amd64 is analysed." >&2
-        exit 1
-        ;;
-    esac
-  else
-    tags+=("$w")
-  fi
-done
-tag_list=$(IFS=,; echo "${tags[*]}")
+tag_list=$("$here/go-build-tags.sh")
 
 # The diff on stdout is what says "rewrites are pending"; the exit status
 # alone cannot, because the analyzer drivers this is built on conventionally
