@@ -354,3 +354,16 @@ func TestErrorHandling(t *testing.T) {
 		assert.ErrorIs(t, err, webhook.ErrInvalidJSONResponse)
 	})
 }
+
+func TestWaitInterval(t *testing.T) {
+	const minWait, maxWait = 100 * time.Millisecond, 3 * time.Second
+
+	assert.Equal(t, minWait, webhook.WaitInterval(0, minWait, maxWait))
+	assert.Equal(t, 800*time.Millisecond, webhook.WaitInterval(3, minWait, maxWait))
+	assert.Equal(t, maxWait, webhook.WaitInterval(5, minWait, maxWait))
+
+	// 2^37 * 100ms overflows int64; the wait must saturate, not go negative.
+	for _, retries := range []uint64{37, 62, 63, 64, 1 << 40} {
+		assert.Equal(t, maxWait, webhook.WaitInterval(retries, minWait, maxWait), retries)
+	}
+}

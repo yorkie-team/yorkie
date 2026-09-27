@@ -18,7 +18,9 @@ package rpc
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -26,6 +28,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -43,10 +47,10 @@ const (
 	// merely slow, rather than denied, never races the window it renews.
 	watchLeaseMargin = time.Second
 
-	// maxWatchBackoffSteps bounds how many doubling steps are summed when
-	// estimating a webhook's retry budget. Beyond it every wait is already
-	// clamped to MaxWaitInterval, and the shift would overflow.
-	maxWatchBackoffSteps = 62
+	// maxWatchBackoffSteps bounds how many backoff waits are summed one by
+	// one when estimating a webhook's retry budget. From this step on every
+	// wait is already clamped to MaxWaitInterval, so the rest are multiplied.
+	maxWatchBackoffSteps = 63
 )
 
 type watchDeadlineKey struct{}
@@ -150,14 +154,43 @@ func webhookBudget(project *types.Project) (time.Duration, error) {
 		return 0, fmt.Errorf("watch lease budget: %w", err)
 	}
 
-	budget := time.Duration(options.MaxRetries+1) * options.RequestTimeout
+	// MaxRetries is unbounded, so every step saturates rather than overflow
+	// into a negative budget that would expire the lease immediately.
+	budget := addDuration(
+		mulDuration(options.MaxRetries, options.RequestTimeout),
+		options.RequestTimeout,
+	)
 	steps := min(options.MaxRetries, maxWatchBackoffSteps)
 	for retries := range steps {
-		budget += min(time.Duration(1<<retries)*options.MinWaitInterval, options.MaxWaitInterval)
+		budget = addDuration(budget, webhook.WaitInterval(
+			retries, options.MinWaitInterval, options.MaxWaitInterval,
+		))
 	}
-	budget += time.Duration(options.MaxRetries-steps) * options.MaxWaitInterval
+	budget = addDuration(budget, mulDuration(options.MaxRetries-steps, options.MaxWaitInterval))
 
 	return budget, nil
+}
+
+// addDuration returns a+b for non-negative durations, saturating at the
+// largest representable duration.
+func addDuration(a, b time.Duration) time.Duration {
+	a, b = max(a, 0), max(b, 0)
+	if a > math.MaxInt64-b {
+		return math.MaxInt64
+	}
+	return a + b
+}
+
+// mulDuration returns n*d for a non-negative duration, saturating at the
+// largest representable duration.
+func mulDuration(n uint64, d time.Duration) time.Duration {
+	if n == 0 || d <= 0 {
+		return 0
+	}
+	if n > uint64(math.MaxInt64/d) {
+		return math.MaxInt64
+	}
+	return time.Duration(n) * d
 }
 
 // leaseExpiry returns when a check started at the given instant stops
@@ -170,7 +203,7 @@ func leaseExpiry(project *types.Project, start time.Time, interval time.Duration
 		return time.Time{}, err
 	}
 
-	return start.Add(interval + budget + watchLeaseMargin), nil
+	return start.Add(addDuration(addDuration(interval, budget), watchLeaseMargin)), nil
 }
 
 // startWatchLease checks an established stream against the project's current
@@ -246,10 +279,15 @@ func (s *yorkieServer) runWatchLease(
 		// The project captured when the stream opened is a snapshot. Re-read
 		// it so that an auth webhook enabled or widened afterwards reaches
 		// streams that are already established. A transient lookup failure
-		// keeps the last known settings rather than dropping the stream.
+		// keeps the last known settings rather than dropping the stream, but
+		// a project that no longer exists cannot vouch for it at all.
 		fresh, err := projects.GetProjectFromAPIKey(leaseCtx, s.backend, apiKey)
 		if err != nil {
 			if leaseCtx.Err() != nil {
+				return
+			}
+			if stderrors.Is(err, database.ErrProjectNotFound) {
+				lease.fail(errors.PermissionDenied("watch project no longer exists"))
 				return
 			}
 			logging.From(leaseCtx).Warnf("watch lease: reload project: %v", err)
@@ -291,7 +329,7 @@ func (s *yorkieServer) checkWatchLease(
 		return err
 	}
 
-	checkCtx, stop := context.WithTimeout(ctx, budget+watchLeaseMargin)
+	checkCtx, stop := context.WithTimeout(ctx, addDuration(budget, watchLeaseMargin))
 	defer stop()
 
 	return auth.VerifyWatchLease(checkCtx, s.backend, project, access)

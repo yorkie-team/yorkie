@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	"github.com/yorkie-team/yorkie/api/types"
 )
 
 // A write deadline must release a Watch handler even when its peer stops
@@ -103,4 +106,30 @@ func mustRequest(t *testing.T, ctx context.Context, url string) *http.Request {
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
 	return r
+}
+
+// A project may set any retry count; the lease budget must stay positive so
+// a large one never expires every stream on its first check.
+func TestWebhookBudgetSaturates(t *testing.T) {
+	project := &types.Project{
+		AuthWebhookRequestTimeout:  "3s",
+		AuthWebhookMinWaitInterval: "100ms",
+		AuthWebhookMaxWaitInterval: "3s",
+	}
+
+	project.AuthWebhookMaxRetries = 2
+	budget, err := webhookBudget(project)
+	require.NoError(t, err)
+	require.Equal(t, 3*3*time.Second+100*time.Millisecond+200*time.Millisecond, budget)
+
+	for _, retries := range []uint64{38, 100, math.MaxUint64} {
+		project.AuthWebhookMaxRetries = retries
+		budget, err := webhookBudget(project)
+		require.NoError(t, err)
+		require.Positive(t, budget, retries)
+
+		expiry, err := leaseExpiry(project, time.Now(), time.Second)
+		require.NoError(t, err)
+		require.True(t, expiry.After(time.Now()), retries)
+	}
 }

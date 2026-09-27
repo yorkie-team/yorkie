@@ -27,7 +27,6 @@ import (
 	goerrors "errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"syscall"
 	"time"
@@ -198,7 +197,7 @@ func (c *Client[Req, Res]) withExponentialBackoff(
 			return statusCode, err
 		}
 
-		waitBeforeRetry := waitInterval(retries, options.MinWaitInterval, options.MaxWaitInterval)
+		waitBeforeRetry := WaitInterval(retries, options.MinWaitInterval, options.MaxWaitInterval)
 
 		select {
 		case <-ctx.Done():
@@ -212,11 +211,19 @@ func (c *Client[Req, Res]) withExponentialBackoff(
 	return statusCode, fmt.Errorf("unexpected status code from webhook %d: %w", statusCode, ErrWebhookTimeout)
 }
 
-// waitInterval returns the interval of given retries. (2^retries * minWaitInterval) .
-func waitInterval(retries uint64, minWaitInterval, maxWaitInterval time.Duration) time.Duration {
-	interval := time.Duration(math.Pow(2, float64(retries))) * minWaitInterval
+// WaitInterval returns the wait before the given retry: 2^retries *
+// minWaitInterval, clamped to maxWaitInterval. The clamp is applied before the
+// shift, so a large retry count saturates at maxWaitInterval instead of
+// overflowing into a negative duration.
+func WaitInterval(retries uint64, minWaitInterval, maxWaitInterval time.Duration) time.Duration {
+	if minWaitInterval <= 0 || maxWaitInterval <= 0 {
+		return max(min(minWaitInterval, maxWaitInterval), 0)
+	}
+	if retries >= 63 || minWaitInterval > maxWaitInterval>>retries {
+		return maxWaitInterval
+	}
 
-	return min(interval, maxWaitInterval)
+	return minWaitInterval << retries
 }
 
 // shouldRetry returns true if the given error should be retried.
