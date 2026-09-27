@@ -18,22 +18,9 @@ package rpc
 
 import (
 	"context"
-	gotime "time"
 
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 )
-
-// authRecheckInterval is how often an open stream re-runs its authorization
-// check. Authorization is otherwise decided once, when the stream opens, so a
-// client whose token is revoked afterwards keeps receiving events for as long
-// as it stays connected — a window that no cache setting, not even disabling
-// the auth webhook cache, can close. Re-running the check on this interval
-// bounds it: for projects without an auth webhook the check returns
-// immediately, and for the rest it is answered from the cache unless caching
-// is disabled.
-//
-// A var rather than a const so tests can shorten it.
-var authRecheckInterval = 10 * gotime.Second
 
 // streamEvents reads events from a subscription and sends converted responses
 // over a stream. It blocks until the context is done, the serviceCtx is done
@@ -47,9 +34,7 @@ var authRecheckInterval = 10 * gotime.Second
 //
 // The convert function transforms an event into a response. If it returns
 // (nil, nil), the event is skipped. The optional afterSend callback is called
-// after each successful send. The optional revalidate callback re-runs the
-// authorization of the stream every authRecheckInterval; the stream ends with
-// its error when it no longer passes.
+// after each successful send.
 func streamEvents[E any, Resp any](
 	ctx context.Context,
 	serviceCtx context.Context,
@@ -57,24 +42,13 @@ func streamEvents[E any, Resp any](
 	send func(Resp) error,
 	convert func(E) (Resp, error),
 	afterSend func(E),
-	revalidate func(context.Context) error,
 ) error {
-	ticker := gotime.NewTicker(authRecheckInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-serviceCtx.Done():
 			return context.Canceled
 		case <-ctx.Done():
 			return context.Canceled
-		case <-ticker.C:
-			if revalidate == nil {
-				continue
-			}
-			if err := revalidate(ctx); err != nil {
-				return err
-			}
 		case event, ok := <-sub.Events():
 			if !ok {
 				return ErrSubscriptionsClosed

@@ -47,7 +47,6 @@ func runStreamMergedEvents(docSubs []docSub, channelSubs []channelSub) <-chan er
 			nil,
 			docSubs,
 			channelSubs,
-			nil,
 		)
 	}()
 
@@ -167,7 +166,6 @@ func TestStreamMergedEventsDeliversQueuedEvents(t *testing.T) {
 			nil,
 			nil,
 			[]channelSub{cs},
-			nil,
 		)
 	}()
 

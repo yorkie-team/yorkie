@@ -668,14 +668,10 @@ func (s *yorkieServer) Watch(
 	for i, target := range targets {
 		keys[i] = target.key()
 	}
-	// Re-run as long as the stream is open. See authRecheckInterval.
-	verifyAccess := func(ctx context.Context) error {
-		return auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-			Method:     types.Watch,
-			Attributes: types.NewAccessAttributes(keys, types.Read),
-		})
-	}
-	if err := verifyAccess(ctx); err != nil {
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.Watch,
+		Attributes: types.NewAccessAttributes(keys, types.Read),
+	}); err != nil {
 		return err
 	}
 
@@ -707,7 +703,7 @@ func (s *yorkieServer) Watch(
 		return err
 	}
 
-	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs, verifyAccess)
+	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
 }
 
 // watchTarget is a Watch resource descriptor resolved to what the rest of the
@@ -927,17 +923,12 @@ func (s *yorkieServer) subscribeChannel(
 // open and that one resource silently undelivered. Streams carry a single
 // resource today, so the two cases coincide; multiplexing several resources
 // onto one stream will have to report the partial loss on its own.
-//
-// The revalidate callback re-runs the authorization of the stream every
-// authRecheckInterval; the stream ends with its error when it no longer
-// passes.
 func (s *yorkieServer) streamMergedEvents(
 	ctx context.Context,
 	send func(*api.WatchResponse) error,
 	project *types.Project,
 	docSubs []docSub,
 	channelSubs []channelSub,
-	revalidate func(context.Context) error,
 ) error {
 	merged := make(chan taggedEvent, len(docSubs)+len(channelSubs))
 	done := make(chan struct{})
@@ -998,22 +989,12 @@ func (s *yorkieServer) streamMergedEvents(
 		}(cs)
 	}
 
-	ticker := gotime.NewTicker(authRecheckInterval)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-s.serviceCtx.Done():
 			return context.Canceled
 		case <-ctx.Done():
 			return context.Canceled
-		case <-ticker.C:
-			if revalidate == nil {
-				continue
-			}
-			if err := revalidate(ctx); err != nil {
-				return err
-			}
 		case te, ok := <-merged:
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -1153,16 +1134,10 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	// Re-run as long as the stream is open: the decision made here is only
-	// valid for as long as the token behind it is, and a stream outlives a
-	// single authorization by design. See authRecheckInterval.
-	verifyAccess := func(ctx context.Context) error {
-		return auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-			Method:     types.WatchDocument,
-			Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
-		})
-	}
-	if err := verifyAccess(ctx); err != nil {
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.WatchDocument,
+		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
+	}); err != nil {
 		return err
 	}
 
@@ -1221,7 +1196,6 @@ func (s *yorkieServer) WatchDocument(
 				event.Body.PayloadLen(),
 			)
 		},
-		verifyAccess,
 	)
 }
 
@@ -1255,14 +1229,10 @@ func (s *yorkieServer) WatchChannel(
 		return err
 	}
 
-	// Re-run as long as the stream is open. See authRecheckInterval.
-	verifyAccess := func(ctx context.Context) error {
-		return auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-			Method:     types.WatchChannel,
-			Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
-		})
-	}
-	if err := verifyAccess(ctx); err != nil {
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.WatchChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
+	}); err != nil {
 		return err
 	}
 
@@ -1320,7 +1290,6 @@ func (s *yorkieServer) WatchChannel(
 			return nil, nil
 		},
 		nil,
-		verifyAccess,
 	)
 }
 

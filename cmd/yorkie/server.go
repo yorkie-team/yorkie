@@ -533,7 +533,7 @@ func init() {
 		"auth-webhook-cache-disabled",
 		false,
 		"Send every authorization request to the webhook without using the response cache. "+
-			"Open watch streams are re-authorized on an interval rather than per event.",
+			"Existing watch streams retain their initial authorization until reconnect.",
 	)
 	cmd.Flags().DurationVar(
 		&authWebhookCacheTTL,
