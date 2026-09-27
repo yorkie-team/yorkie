@@ -318,15 +318,18 @@ func TestCounterDoubleDelta(t *testing.T) {
 		}
 	})
 
-	t.Run("non-finite delta is rejected", func(t *testing.T) {
+	t.Run("non-finite delta is a no-op", func(t *testing.T) {
 		for _, cntType := range []crdt.CounterType{crdt.IntegerCnt, crdt.LongCnt} {
 			for _, d := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 				counter, err := crdt.NewCounter(cntType, 10, time.InitialTicket)
 				assert.NoError(t, err)
 				delta, err := crdt.NewPrimitive(d, time.InitialTicket)
 				assert.NoError(t, err)
+				// Increase also applies remote changes and replays changes
+				// the server has already stored, neither of which can be
+				// skipped, so it must not fail on a delta it cannot use.
 				_, err = counter.Increase(delta)
-				assert.ErrorIs(t, err, crdt.ErrNonFiniteNumber)
+				assert.NoError(t, err)
 				assert.Equal(t, "10", counter.Marshal())
 
 				_, err = crdt.NewCounter(cntType, d, time.InitialTicket)

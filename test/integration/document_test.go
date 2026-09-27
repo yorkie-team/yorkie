@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -115,7 +116,15 @@ func TestDocument(t *testing.T) {
 		}))
 		assert.NoError(t, c1.Sync(ctx))
 
-		// 03. after a detach, the key can be attached again.
+		// 03. a Channel shares the key namespace with Documents, so one with
+		// an attached Document's key is rejected as well. Letting it through
+		// would replace the Document's attachment and orphan the Document.
+		ch, err := channel.New(d1.Key())
+		assert.NoError(t, err)
+		assert.ErrorIs(t, c1.Attach(ctx, ch), client.ErrAlreadyAttached)
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 04. after a detach, the key can be attached again.
 		assert.NoError(t, c1.Detach(ctx, d1))
 		assert.NoError(t, c1.Attach(ctx, d2))
 		assert.Equal(t, `{"k1":"v1"}`, d2.Marshal())
@@ -150,7 +159,8 @@ func TestDocument(t *testing.T) {
 		defer deactivateAndCloseClients(t, cs)
 
 		// Deactivation detaches every document on the server, so the client
-		// drops its attachments too, as the JS SDK does.
+		// marks its resources detached too, as the JS SDK does, and the key
+		// can be attached again once the client is activated again.
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, d1))
 		assert.NoError(t, cli.Deactivate(ctx))

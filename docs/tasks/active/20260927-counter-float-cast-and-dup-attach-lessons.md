@@ -105,3 +105,32 @@
   unknown schema. After either, the same key attaches again, with the
   same Document or a new one. Mutation check: dropping
   `defer c.endAttach` fails the test.
+
+## Review round 2 (panel: blast-radius, security, correctness)
+
+- **A non-finite delta had to stop erroring, not error better.** All
+  three lenses converged on the same hole: `crdt.Counter.Increase`
+  returned `ErrNonFiniteNumber` on *every* source, and `pushPack` stores
+  a pushed change before executing it, so one `NaN` Increase from a raw
+  client permanently broke replay/snapshot/attach for that document —
+  the exact poison-pill shape this PR set out to fix. Gating the reverse
+  (`NeedsReverse`) was not enough, because the apply itself failed.
+  `Increase` now drops a NaN/±Inf delta and returns the counter
+  unchanged, so the apply is total and every replica converges on the
+  same value. Local misuse still fails loudly: `json.Counter.Increase`
+  panics with `ErrNonFiniteNumber` before the operation is ever created.
+  Rule of thumb: any error the *replay* path can raise for data the
+  server already stored is a durability bug, not validation.
+- **A guard over a shared map must cover every writer of that map.**
+  `attachments` is keyed by `key.Key` alone and holds both Documents and
+  Channels, so gating only `TypeDocument` left `Attach(channel "k")`
+  free to replace a Document's entry — after which the Document was
+  orphaned and a second Document with that key attached cleanly.
+  `beginAttach` now runs for every attachable type and rejects any live
+  entry under the key.
+- **Teardown that deletes state breaks readers; marking it does not.**
+  Deactivate deleting every attachment turned "deactivate, reactivate,
+  keep the handle" into `ErrNotAttached` at every reader. It now only
+  marks resources detached (which is what lets the key be attached
+  again), and `beginAttach` evicts the stale entry when the key is
+  reattached.

@@ -245,14 +245,21 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 	if !p.IsNumericType() || !v.IsNumericType() {
 		return nil, ErrUnsupportedType
 	}
+
+	// A NaN or an infinity has no integer value to add. This apply path also
+	// runs for remote changes and for the server's replay of changes it has
+	// already stored, where an error would leave the document unbuildable
+	// forever, so such a delta is a no-op here and every replica still
+	// converges. A local increase is rejected earlier, in json.Counter.
+	if isNonFinite(v.value) {
+		return p, nil
+	}
+
 	switch p.valueType {
 	case IntegerCnt:
 		// A Double delta is added in float64 before wrapping, as the JS SDK
 		// does, so a replica applying a JS client's change gets its value.
 		if delta, ok := v.value.(float64); ok {
-			if math.IsNaN(delta) || math.IsInf(delta, 0) {
-				return nil, ErrNonFiniteNumber
-			}
 			sum, err := TruncFloatToInt32(float64(p.value.(int32)) + math.Trunc(delta))
 			if err != nil {
 				return nil, err
@@ -355,6 +362,18 @@ func (p *Counter) recomputeValue() {
 	switch p.valueType {
 	case IntegerDedupCnt:
 		p.value = int32(count)
+	}
+}
+
+// isNonFinite reports whether the given value is a NaN or an infinity.
+func isNonFinite(value any) bool {
+	switch val := value.(type) {
+	case float64:
+		return math.IsNaN(val) || math.IsInf(val, 0)
+	case float32:
+		return math.IsNaN(float64(val)) || math.IsInf(float64(val), 0)
+	default:
+		return false
 	}
 }
 

@@ -69,9 +69,10 @@ var (
 	// ErrNotDetached occurs when the given resource is not detached.
 	ErrNotDetached = errors.FailedPrecond("resource is not detached")
 
-	// ErrAlreadyAttached occurs when a document with the same key is already
+	// ErrAlreadyAttached occurs when a resource with the same key is already
 	// attached to, or being attached by, this client.
-	ErrAlreadyAttached = errors.FailedPrecond("document is already attached").WithCode("ErrAlreadyAttached")
+	ErrAlreadyAttached = errors.FailedPrecond("resource with the key is already attached").
+				WithCode("ErrAlreadyAttached")
 
 	// ErrInvalidResource occurs when the given resource is invalid.
 	ErrInvalidResource = errors.InvalidArgument("invalid resource")
@@ -309,9 +310,11 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		return err
 	}
 
-	// The server detached every resource of this client, so drop the
-	// attachments too, as the JS SDK does. A stale entry would otherwise
-	// reject attaching the same key after the client is activated again.
+	// The server detached every resource of this client, so mark them
+	// detached here too, as the JS SDK does. The attachments themselves stay
+	// in place, so their readers keep behaving as they did before this
+	// client was deactivated; beginAttach drops a detached one when its key
+	// is attached again, after the client is activated again.
 	for _, attachment := range c.attachments.Values() {
 		if attachment.resource.Status() != attachable.StatusRemoved {
 			attachment.resource.SetStatus(attachable.StatusDetached)
@@ -319,7 +322,6 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		if ch, ok := attachment.resource.(*channel.Channel); ok {
 			ch.UpdateSessionCount(0, 0)
 		}
-		c.attachments.Delete(attachment.resource.Key())
 	}
 
 	c.status = statusDeactivated
@@ -414,16 +416,16 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 		return ErrNotDetached
 	}
 
-	if r.Type() == attachable.TypeDocument {
-		// Reject a second Document with the same key before any RPC or any
-		// change to it, as the JS SDK does. The server cannot tell a
-		// concurrent attach of the same key apart while the first is in
-		// flight.
-		if err := c.beginAttach(r.Key()); err != nil {
-			return err
-		}
-		defer c.endAttach(r.Key())
+	// Reject a second resource with the same key before any RPC or any change
+	// to it, as the JS SDK does. attachments is keyed by key.Key alone and
+	// shared by every resource type, so a second attach would otherwise
+	// replace the first entry and orphan the resource behind it, whatever the
+	// two types are. The server cannot tell a concurrent attach of the same
+	// key apart while the first is in flight.
+	if err := c.beginAttach(r.Key()); err != nil {
+		return err
 	}
+	defer c.endAttach(r.Key())
 
 	r.SetActor(c.id)
 
@@ -510,8 +512,8 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...an
 	return nil
 }
 
-// beginAttach marks the document key k as being attached. It fails with
-// ErrAlreadyAttached when a document with k is already attached to, or being
+// beginAttach marks the key k as being attached. It fails with
+// ErrAlreadyAttached when a resource with k is already attached to, or being
 // attached by, this client.
 func (c *Client) beginAttach(k key.Key) error {
 	c.attachingMu.Lock()
@@ -520,8 +522,14 @@ func (c *Client) beginAttach(k key.Key) error {
 	if _, ok := c.attaching[k]; ok {
 		return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
 	}
-	if attachment, ok := c.attachments.Get(k); ok && attachment.Is(attachable.TypeDocument) {
-		return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
+	if attachment, ok := c.attachments.Get(k); ok {
+		// Deactivate leaves the attachments of the old session in place so
+		// their readers keep working, but marks their resources detached.
+		// Such an entry is stale, so drop it and let the key be used again.
+		if attachment.resource.Status() == attachable.StatusAttached {
+			return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
+		}
+		c.attachments.Delete(k)
 	}
 
 	c.attaching[k] = struct{}{}

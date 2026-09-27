@@ -17,6 +17,7 @@
 package operations_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,6 +88,41 @@ func TestIncrease(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Nil(t, result.Reverse)
 			assert.Equal(t, `{"cnt":11}`, root.Object().Marshal())
+		}
+	})
+
+	// A raw client can push an Increase carrying a NaN or an infinity. The
+	// server stores the change before executing it, so an apply that failed
+	// would break every later replay of the document: the delta is dropped
+	// instead, on every source, so all replicas still agree.
+	t.Run("execute a non-finite Double delta as a no-op", func(t *testing.T) {
+		for _, source := range []operations.OpSource{
+			operations.OpSourceLocal,
+			operations.OpSourceRemote,
+			operations.OpSourceReplay,
+			operations.OpSourceUndoRedo,
+		} {
+			for _, d := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+				for _, cntType := range []crdt.CounterType{crdt.IntegerCnt, crdt.LongCnt} {
+					root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+					actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+
+					cntTicket := time.NewTicket(1, 0, actor)
+					counter, err := crdt.NewCounter(cntType, 10, cntTicket)
+					assert.NoError(t, err)
+					set := operations.NewSet(time.InitialTicket, "cnt", counter, cntTicket)
+					_, err = set.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+					assert.NoError(t, err)
+
+					incTicket := time.NewTicket(2, 0, actor)
+					delta, err := crdt.NewPrimitive(d, incTicket)
+					assert.NoError(t, err)
+					_, err = operations.NewIncrease(cntTicket, delta, incTicket).
+						Execute(root, source, time.NewVersionVector())
+					assert.NoError(t, err, "%v on %v", d, source)
+					assert.Equal(t, `{"cnt":10}`, root.Object().Marshal())
+				}
+			}
 		}
 	})
 }
