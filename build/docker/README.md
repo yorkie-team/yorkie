@@ -21,6 +21,11 @@ The docker-compose files we use are as follows:
 - `docker-compose-full.yml`: This file builds Yorkie and launches it. It also runs
  MongoDB and monitoring tools such as Prometheus and Grafana.
 
+Both files use the Compose project name `yorkie`, so containers are named
+`yorkie-<service>-<n>` (e.g. `yorkie-mongo-1`); the sharding and analytics
+stacks use `yorkie-sharding` and `yorkie-analytics`. Address a container by
+its service name with `docker compose -f <file> exec <service> ...`.
+
 ## Subdirectories
 
 - [analytics/](./analytics/README.md): Compose stack for analytics (Kafka, StarRocks)
