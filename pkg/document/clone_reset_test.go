@@ -134,3 +134,56 @@ func TestRootDoesNotBlockOnUndrainedEvents(t *testing.T) {
 	<-target.Events()
 	require.NoError(t, <-applied)
 }
+
+// TestPresenceRollbackOnFailedUpdate covers a presence edit made by an
+// updater that then fails. The clone's presence map shares its values with
+// the root's until the updater is handed a copy it owns, so without that copy
+// presence.Set writes straight through and no clone reset can undo it.
+func TestPresenceRollbackOnFailedUpdate(t *testing.T) {
+	doc := document.New("d")
+	actorID := doc.ActorID().String()
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Set("color", "blue")
+		return nil
+	}))
+	require.Equal(t, "blue", doc.PresenceForTest(actorID)["color"])
+
+	boom := errors.New("boom")
+	require.ErrorIs(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Set("color", "red")
+		return boom
+	}), boom)
+
+	// The root kept the committed value, and the rebuilt clone serves it back
+	// to the next updater rather than the abandoned one.
+	assert.Equal(t, "blue", doc.PresenceForTest(actorID)["color"])
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Set("shape", "circle")
+		return nil
+	}))
+	assert.Equal(t, "blue", doc.PresenceForTest(actorID)["color"])
+}
+
+// TestChangePackOwnsVersionVectors covers the version vector each buffered
+// local change carries. Context.NextID hands the document the very ID the
+// change holds, so without a copy the pack the sync goroutine serializes
+// would range over the map a concurrent remote apply is writing in place.
+func TestChangePackOwnsVersionVectors(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000003")
+	require.NoError(t, err)
+
+	doc := document.New("d")
+	doc.SetActor(actor)
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetString("k", "v")
+		return nil
+	}))
+
+	packed := doc.CreateChangePack().Changes[0].ID().VersionVector()
+	require.NotEmpty(t, packed)
+
+	// Mutating the document's own vector in place, as SyncClocks does while a
+	// remote pack is applied, must not reach the packed change.
+	doc.InternalDocument().VersionVector().Set(actor, 99)
+	assert.NotEqual(t, int64(99), packed[actor])
+}

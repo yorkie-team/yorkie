@@ -233,7 +233,22 @@ func (d *Document) Update(
 	// d.mu is held for writing here, so this reads the internal document
 	// directly rather than through the exported ActorID, which RLocks it.
 	actorID := d.doc.ActorID().String()
-	presenceData := d.clonePresences.LoadOrStore(actorID, presence.NewData())
+
+	// inner.Map.DeepCopy is copy-on-write at the map level only: the clone and
+	// the root share the same Presence values, so the map LoadOrStore hands
+	// back is the very one the root holds and presence.Set would write
+	// straight through to it -- a presence edit invalidateClone could not roll
+	// back when the updater below fails. Store re-inserts a deep copy the
+	// clone alone owns (and copies the map itself on this first write), so the
+	// updater edits the clone and the root only takes the change when
+	// Change.Execute applies it.
+	presenceData := d.clonePresences.Load(actorID)
+	if presenceData == nil {
+		presenceData = presence.NewData()
+	}
+	d.clonePresences.Store(actorID, presenceData)
+	presenceData = d.clonePresences.Load(actorID)
+
 	ctx := change.NewContext(
 		d.doc.changeID,
 		messageFromMsgAndArgs(msgAndArgs...),
@@ -257,6 +272,12 @@ func (d *Document) Update(
 		ctx.DropPresenceChange()
 		ctx.ClearReversePresence()
 		d.warnPresenceDroppedOnce()
+
+		// The updater already wrote the presence into the clone, and dropping
+		// the change here means the root will never take it. Discard the clone
+		// so the next access rebuilds it from the root rather than serving a
+		// presence the document decided not to keep.
+		d.invalidateClone()
 		if !ctx.HasOperations() {
 			return nil
 		}
@@ -863,11 +884,12 @@ func (d *Document) Checkpoint() change.Checkpoint {
 }
 
 // HasLocalChanges returns whether this document has local changes or not.
+//
+// It goes through readLocked rather than taking d.mu directly so that a call
+// made from inside an updater -- which already holds the lock on this
+// goroutine -- does not deadlock on the non-reentrant mutex.
 func (d *Document) HasLocalChanges() bool {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-
-	return d.doc.HasLocalChanges()
+	return readLocked(d, func() bool { return d.doc.HasLocalChanges() })
 }
 
 // Marshal returns the JSON encoding of this document.
@@ -890,12 +912,11 @@ func (d *Document) CreateChangePack() *change.Pack {
 // changes the document has.
 //
 // It writes d.doc.changeID and every buffered local change, so it takes d.mu
-// for writing: the readers above observe those same fields under RLock.
+// for writing: the readers above observe those same fields under RLock. Like
+// every other accessor it goes through the d.updating escape, or a call made
+// from inside an updater would deadlock on the non-reentrant mutex.
 func (d *Document) SetActor(actor time.ActorID) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.doc.SetActor(actor)
+	writeLocked(d, func() { d.doc.SetActor(actor) })
 }
 
 // ActorID returns ID of the actor currently editing the document.
@@ -916,12 +937,25 @@ func (d *Document) Status() StatusType {
 //
 // It writes d.doc.status, which Status and IsAttached read under RLock, so it
 // takes d.mu for writing. applyChangePack already holds the lock and writes
-// d.doc.status directly instead of calling this.
+// d.doc.status directly instead of calling this. Like SetActor it goes
+// through the d.updating escape so a call made from inside an updater does
+// not deadlock on the non-reentrant mutex.
 func (d *Document) SetStatus(status StatusType) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	writeLocked(d, func() { d.doc.SetStatus(status) })
+}
 
-	d.doc.SetStatus(status)
+// SetMaxSizeLimit records the per-document size limit the server reported at
+// attach. Update reads d.MaxSizeLimit under d.mu, so the write takes the lock
+// too rather than leaving the Client to poke the exported field unguarded.
+func (d *Document) SetMaxSizeLimit(maxSizeLimit int) {
+	writeLocked(d, func() { d.MaxSizeLimit = maxSizeLimit })
+}
+
+// SetSchemaRules records the schema ruleset the server reported at attach.
+// Update reads d.SchemaRules under d.mu, so the write takes the lock for the
+// same reason SetMaxSizeLimit does: the slice header itself is shared state.
+func (d *Document) SetSchemaRules(rules []types.Rule) {
+	writeLocked(d, func() { d.SchemaRules = rules })
 }
 
 // IsAttached returns whether this document is attached or not.
@@ -961,6 +995,29 @@ func readLocked[T any](d *Document, read func() T) T {
 	defer d.mu.RUnlock()
 
 	return read()
+}
+
+// writeLocked runs write with d.mu held for writing. It is readLocked's
+// counterpart for the exported setters, and carries the same escape: a call
+// made from inside an updater already holds d.mu on this goroutine, and
+// sync.RWMutex is not reentrant, so taking it again would deadlock the
+// process outright. Without the escape a setter reached from an updater --
+// SetStatus from a callback that detaches, SetActor from a test that edits
+// while reassigning the actor -- would wedge rather than merely race.
+//
+// Like readLocked's, the escape is per-document rather than per-goroutine,
+// so a setter racing another goroutine's updater runs unlocked, exactly as
+// it did before these setters took the lock at all.
+func writeLocked(d *Document, write func()) {
+	if d.updating.Load() {
+		write()
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	write()
 }
 
 // RootObject returns the internal root object of this document.

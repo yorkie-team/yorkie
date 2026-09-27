@@ -24,3 +24,22 @@
   stale and leaving the pointer live removes the nil entirely: the worst an
   unlocked reader sees is a clone one rebuild out of date, which is what it
   saw before the lock existed.
+- Copying a change pack's slice is not enough to hand it to another
+  goroutine. `Context.NextID` returns the very `ID` the `Change` carries, so
+  each buffered local change's version vector is the *same map* as
+  `d.changeID`'s, and `SyncClocks`/`SetClocks` call `VersionVector.Max` on it
+  in place while a remote pack applies. `CreateChangePack` now rebuilds each
+  change with a deep-copied vector; the pack is only safe to serialize after
+  the lock drops once it owns every map it exposes.
+- `inner.Map.DeepCopy` is copy-on-write at the *map* level only: the clone
+  and the root share the same `Presence` values. `LoadOrStore` therefore
+  handed the updater the root's own map, so `presence.Set` wrote through and
+  no clone reset could undo it. Re-`Store`ing the value gives the clone an
+  owned copy, and the root takes the presence only when `Change.Execute`
+  applies it -- which is also what makes the `DisablePresence` drop path
+  need an `invalidateClone`.
+- A lock added to a setter needs the same `d.updating` escape the readers
+  got. `SetActor` and `SetStatus` are reachable from inside an updater, and
+  `sync.RWMutex` is not reentrant, so a bare `Lock()` there deadlocks the
+  process rather than merely racing. `writeLocked` is `readLocked`'s
+  counterpart for exactly that.

@@ -515,9 +515,12 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		return err
 	}
 
-	d.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
+	// Through the setters, not the exported fields: Update reads both under
+	// the document's lock, so writing them unguarded from this goroutine
+	// races every concurrent updater.
+	d.SetMaxSizeLimit(int(res.Msg.MaxSizePerDocument))
 	if res.Msg.SchemaRules != nil {
-		d.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
+		d.SetSchemaRules(converter.FromRules(res.Msg.SchemaRules))
 	}
 
 	// Record the opt-out decisions before applying the attach response so the

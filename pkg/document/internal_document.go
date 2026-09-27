@@ -231,13 +231,29 @@ func (d *InternalDocument) Marshal() string {
 
 // CreateChangePack creates pack of the local changes to send to the server.
 //
-// The pack owns its copies of both the change slice and the version vector.
-// Document.CreateChangePack builds it under d.mu and hands it to the sync
-// goroutine, which serializes it with the lock released, while this document
-// keeps appending local changes and mutating the version vector in place.
+// The pack owns its copies of the change slice, of every change's version
+// vector and of the pack-level version vector. Document.CreateChangePack
+// builds it under d.mu and hands it to the sync goroutine, which serializes
+// it with the lock released, while this document keeps appending local
+// changes and mutating version vectors in place.
+//
+// Copying each change matters as much as copying the slice: Context.NextID
+// returns the very ID the Change carries, so a buffered local change's
+// version vector is the same map as d.changeID's, and ID.SyncClocks and
+// ID.SetClocks call VersionVector.Max on it in place while a remote pack is
+// applied. Handing the converter that map would let it range over a map
+// another goroutine is writing -- an unrecoverable "concurrent map read and
+// map write" abort. The copy is shallow apart from the vector: the
+// operations are shared, and nothing mutates them after the change is built.
 func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := make([]*change.Change, len(d.localChanges))
-	copy(changes, d.localChanges)
+	for i, c := range d.localChanges {
+		id := c.ID()
+		if vector := id.VersionVector(); vector != nil {
+			id = id.SetVersionVector(vector.DeepCopy())
+		}
+		changes[i] = change.New(id, c.Message(), c.Operations(), c.PresenceChange())
+	}
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
 	return change.NewPack(d.key, cp, changes, d.VersionVector().DeepCopy(), nil)
