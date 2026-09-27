@@ -34,11 +34,11 @@ closed.
       opposite orders.
 - [x] Green: gate the losing branch on `v.RemovedAt() == nil`; re-check the
       order-independence comment on `Nodes()`.
-- [ ] Red: internal crdt test cycling remove -> restore -> collect and
+- [x] Red: internal crdt test cycling remove -> restore -> collect and
       asserting `sizeInGC` stays bounded and docSize matches a rebuild.
-- [ ] Green: retire a released element's zero record when `elementMap`
+- [x] Green: retire a released element's zero record when `elementMap`
       stops answering with it (the restored copy takes the slot over).
-- [ ] `make verify` per commit; `make test` if MongoDB is reachable.
+- [x] `make verify` per commit; `make test` (MongoDB was up) green.
 - [ ] Self review (max 3 rounds), log in lessons.
 - [ ] Rebase on `origin/main`, push, open PR.
 
@@ -61,4 +61,8 @@ would make the lifetime depend on the Go GC rather than on document state.
 
 ## Review
 
-- `go test ./pkg/document/... ./api/...` green, `make verify` green.
+- Red: `TestElementRHTSetLoser` (loser stayed live; removedAt 2 -> 3),
+  `TestSetLoserAgainstTombstoneConverges` (GarbageLen 3 vs 4, Live Data 6 vs
+  2), `TestReleasedSizeInGCRecordIsRetired` (sizeInGC 2 after one cycle, 102
+  after 51).
+- Green: all three pass; `make verify` and `make test` green.
