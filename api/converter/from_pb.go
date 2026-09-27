@@ -338,7 +338,7 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 
 // fromOperation converts a single operation. It is split out of FromOperations
 // so the stored-decode path can ask about one operation at a time; see
-// withoutUndatedOperations.
+// withoutRejectedOperations.
 func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
 	if pbOp == nil {
 		return nil, goerrors.New("operation missing")
@@ -1283,11 +1283,14 @@ func validateTicketTriple(elem crdt.Element) error {
 		return fmt.Errorf("element.created_at: %w", ErrMissingTicket)
 	}
 
-	if movedAt := elem.MovedAt(); movedAt != nil && createdAt.After(movedAt) {
-		return fmt.Errorf("element %s: moved_at precedes created_at: %w",
-			createdAt.Key(), ErrInvalidElementTicket)
-	}
-
+	// NOTE: a movedAt older than createdAt is deliberately NOT rejected. It
+	// reads as impossible and is not: undo re-identifies the value of an Add or
+	// an ArraySet reverse with a freshly issued createdAt
+	// (Document.executeUndoRedo) while leaving the copy's movedAt -- stamped by
+	// RGATreeList.MoveAfter before the removal -- untouched, so undoing the
+	// removal of a previously moved container element legitimately encodes
+	// createdAt > movedAt. Rejecting it here would fail that change at decode
+	// time on every peer and on the server.
 	if removedAt := elem.RemovedAt(); removedAt != nil && !removedAt.After(createdAt) {
 		return fmt.Errorf("element %s: removed_at does not follow created_at: %w",
 			createdAt.Key(), ErrInvalidElementTicket)
@@ -1310,13 +1313,8 @@ func validateTicketTriple(elem crdt.Element) error {
 // impossible. Reject it here instead, at the boundary, where the document has
 // not been touched yet and the error still names the change that carried it.
 //
-// Two rules, both satisfied by every element a replica produces:
+// One rule, satisfied by every element a replica produces:
 //
-//   - movedAt must not precede createdAt. A ticket is issued when the element
-//     is created and again whenever it is (re-)positioned, so the second
-//     cannot be older than the first. PositionedAt hands movedAt to every LWW
-//     comparison in ElementRHT and RGATreeList, so a movedAt older than the
-//     element itself lets a payload claim a position it never held.
 //   - removedAt must follow createdAt. That is exactly the precondition
 //     Element.Remove enforces, so a payload arriving already removed in
 //     violation of it can never be tombstoned, moved to GC or purged --

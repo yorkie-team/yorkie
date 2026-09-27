@@ -61,11 +61,6 @@ func TestSetElementRejectsImpossibleTickets(t *testing.T) {
 		name   string
 		poison func(*crdt.Primitive)
 	}{{
-		// PositionedAt hands movedAt to every LWW comparison, so one older
-		// than the element itself claims a position it never held.
-		name:   "moved_at precedes created_at",
-		poison: func(p *crdt.Primitive) { p.SetMovedAt(ticket(1)) },
-	}, {
 		// Element.Remove refuses a ticket that does not follow createdAt, and
 		// so does DeleteByCreatedAt: an element that arrives with this triple
 		// can never be tombstoned, moved to GC or purged.
@@ -81,6 +76,16 @@ func TestSetElementRejectsImpossibleTickets(t *testing.T) {
 	t.Run("tickets a replica can issue survive", func(t *testing.T) {
 		assert.NoError(t, decode(build(func(p *crdt.Primitive) {
 			p.SetRemovedAt(ticket(3))
+		})))
+	})
+
+	// Undo re-identifies the value of an Add/ArraySet reverse with a freshly
+	// issued createdAt and leaves the copy's older movedAt alone
+	// (Document.executeUndoRedo), so a movedAt preceding createdAt is a shape
+	// replicas really emit -- the boundary must let it through.
+	t.Run("moved_at preceding created_at survives", func(t *testing.T) {
+		assert.NoError(t, decode(build(func(p *crdt.Primitive) {
+			p.SetMovedAt(ticket(1))
 		})))
 	})
 }

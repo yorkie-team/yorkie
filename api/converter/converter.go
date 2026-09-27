@@ -77,9 +77,8 @@ var (
 	ErrRefusedMember = errors.InvalidArgument("refused object member").WithCode("ErrRefusedMember")
 
 	// ErrInvalidElementTicket is returned when an element payload carries a
-	// createdAt/movedAt/removedAt triple no replica could have issued: a
-	// movedAt older than the element's own creation, or a removedAt that does
-	// not follow it. See validateElementTickets.
+	// createdAt/removedAt pair no replica could have issued: a removedAt that
+	// does not follow the element's own creation. See validateElementTickets.
 	ErrInvalidElementTicket = errors.InvalidArgument("invalid element ticket").
 				WithCode("ErrInvalidElementTicket")
 )

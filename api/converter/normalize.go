@@ -30,16 +30,14 @@ import (
 // undone here for the data already written under the looser rules.
 //
 // It repairs what can be repaired (NormalizeStoredOperations) and, for the
-// rejections no repair exists for -- a time ticket a well-formed operation
-// always carries is simply absent -- drops the operation. Dropping loses
-// nothing a loadable document ever had: such an operation could never have been
-// applied anywhere, since the nil ticket faults inside Execute (nil-keyed RHT
-// lookups, Ticket.Compare) rather than being tolerated. The wire path keeps
-// rejecting all of it.
+// rejections no repair exists for, drops the operation. Dropping loses nothing
+// a loadable document ever had -- see rescuableStoredRejection for what those
+// rejections are and why each one names an operation no replica could be
+// holding state from. The wire path keeps rejecting all of it.
 //
 // The filtering pass costs nothing unless a stored operation actually hits one
 // of those rejections, which is why it runs only after the ordinary decode has
-// reported ErrMissingTicket.
+// reported one.
 func FromStoredOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	NormalizeStoredOperations(pbOps)
 
@@ -47,11 +45,43 @@ func FromStoredOperations(pbOps []*api.Operation) ([]operations.Operation, error
 	if err == nil {
 		return ops, nil
 	}
-	if !goerrors.Is(err, ErrMissingTicket) {
+	if !rescuableStoredRejection(err) {
 		return nil, err
 	}
 
-	return FromOperations(withoutUndatedOperations(pbOps))
+	return FromOperations(withoutRejectedOperations(pbOps))
+}
+
+// rescuableStoredRejection reports whether a decode failure is one the stored
+// path has to survive by dropping the operation rather than by failing the
+// read.
+//
+// Every wire-boundary rejection applies retroactively to changes persisted
+// before it existed, and a stored change that cannot be decoded makes its
+// document permanently unloadable -- the read path has no other source for it,
+// and every client's pull fails with it. So each rejection added on the wire
+// has to be answered here, and each of these names an operation whose effect no
+// replica can be holding:
+//
+//   - ErrMissingTicket: a ticket a well-formed operation always carries is
+//     absent, and the nil faults inside Execute (nil-keyed RHT lookups,
+//     Ticket.Compare) rather than being tolerated, so the operation never
+//     applied anywhere.
+//   - ErrInvalidElementTicket: the payload carries a removedAt that does not
+//     follow its createdAt. Element.Remove and DeleteByCreatedAt refuse exactly
+//     those tickets, so such an element could never be tombstoned, moved to GC
+//     or purged; it could only sit in the document charged to Live and
+//     unreachable by key.
+//   - ErrRefusedMember: an object member that can be neither indexed nor
+//     tombstoned in the decoded ElementRHT, so the payload never described a
+//     state a replica reached.
+//
+// Only the stored side calls this. The wire boundary still rejects all three:
+// there, refusing the change is the point, and the client can be told.
+func rescuableStoredRejection(err error) bool {
+	return goerrors.Is(err, ErrMissingTicket) ||
+		goerrors.Is(err, ErrInvalidElementTicket) ||
+		goerrors.Is(err, ErrRefusedMember)
 }
 
 // SanitizeStoredOperations applies the same repair-and-drop pass as
@@ -70,25 +100,27 @@ func SanitizeStoredOperations(pbOps []*api.Operation) []*api.Operation {
 	NormalizeStoredOperations(pbOps)
 
 	// Same shape as FromStoredOperations: the drop pass runs only once the
-	// ordinary decode has reported ErrMissingTicket, so intact changes -- every
-	// change, unless legacy data says otherwise -- pay one decode and no more.
-	if _, err := FromOperations(pbOps); err != nil && goerrors.Is(err, ErrMissingTicket) {
-		return withoutUndatedOperations(pbOps)
+	// ordinary decode has reported a rescuable rejection, so intact changes --
+	// every change, unless legacy data says otherwise -- pay one decode and no
+	// more.
+	if _, err := FromOperations(pbOps); err != nil && rescuableStoredRejection(err) {
+		return withoutRejectedOperations(pbOps)
 	}
 
 	return pbOps
 }
 
-// withoutUndatedOperations drops the operations FromOperations rejects for an
-// absent required time ticket, leaving every other rejection to surface.
+// withoutRejectedOperations drops the operations FromOperations rejects for one
+// of the rescuable reasons (rescuableStoredRejection), leaving every other
+// rejection to surface.
 //
-// It asks fromOperation rather than re-listing the required fields so the two
-// paths cannot drift: whatever the wire boundary decides is required is exactly
-// what the stored path drops.
-func withoutUndatedOperations(pbOps []*api.Operation) []*api.Operation {
+// It asks fromOperation rather than re-listing the checks so the two paths
+// cannot drift: whatever the wire boundary decides is malformed is exactly what
+// the stored path drops.
+func withoutRejectedOperations(pbOps []*api.Operation) []*api.Operation {
 	kept := make([]*api.Operation, 0, len(pbOps))
 	for _, pbOp := range pbOps {
-		if _, err := fromOperation(pbOp); err != nil && goerrors.Is(err, ErrMissingTicket) {
+		if _, err := fromOperation(pbOp); err != nil && rescuableStoredRejection(err) {
 			continue
 		}
 

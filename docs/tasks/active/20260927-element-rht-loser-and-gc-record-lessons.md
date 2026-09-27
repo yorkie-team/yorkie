@@ -168,3 +168,37 @@ enforces, so such an element could never be tombstoned or collected). The
 downstream refusals stay -- they are the invariant, and stored changes
 predating this check still replay through them -- but they should not be the
 first line.
+
+## Review round 4 (panel): what the new refusals broke
+
+Three blocking findings, all of them the same shape -- a refusal stated at
+the right place but reaching one caller too many.
+
+**A boundary rule has to admit what undo really emits.** The
+`movedAt must not precede createdAt` half of `validateTicketTriple` read as
+impossible and is not: `Document.executeUndoRedo` re-identifies the value of
+an `Add`/`ArraySet` reverse with a freshly issued `createdAt`
+(`document.go:465-472`) and leaves the copy's older `movedAt` -- stamped by
+`RGATreeList.MoveAfter` -- alone. Undoing the removal of a previously moved
+container element therefore encodes `createdAt > movedAt`, and every peer and
+the server would have rejected that change at decode time. Rule dropped; the
+`removedAt` half, which no replica can produce, stays.
+
+**A wire rejection is retroactive to everything already stored.**
+`ErrInvalidElementTicket` and `ErrRefusedMember` were enforced on
+`FromOperations`, which is also the DB read path (`ChangeInfo.ToChange`),
+where only `ErrMissingTicket` was rescued -- so one stored change carrying
+either shape would make its document permanently unloadable and fail every
+client's pull. `normalize.go` now names the rescuable set in one predicate
+(`rescuableStoredRejection`) that both stored entry points consult, so a
+rejection added on the wire has one obvious place to be answered.
+
+**Identity comparisons and proxies do not mix.** The new
+`pair.parent == owner` guard compares against whatever
+`RegisterRemovedElementPair` recorded, and the json layer recorded its own
+proxy (`*json.Object`/`*json.Array`), never the `*crdt` container that
+`Root.FindByCreatedAt` hands `Set.Execute`. The guard could not match on the
+clone root, which is where local undo runs -- silently skipping the retire
+this task added. The json layer now registers the embedded CRDT container,
+for `RegisterElement` too: its `parent` reaches `adoptRemovedElementPair` and
+would have recorded proxies the same way.
