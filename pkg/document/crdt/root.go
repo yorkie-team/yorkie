@@ -438,12 +438,16 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // removal left behind now resolves, through that index, to live data -- and
 // collection would purge it. Dropping the entry is what stops that.
 //
-// That re-pointing is a precondition, not an assumption the caller may skip
-// checking: SetWithExecutedAt refuses a loser it cannot tombstone and reports
-// so, and operations.Set.Execute returns before reaching this call on that
-// path. Calling it anyway would retire the collection entry of a tombstone
-// that still holds its slot, leaving a reachable tombstone nothing can
-// collect and releasing a charge the document is still carrying.
+// That re-pointing is a precondition, and this call checks the half of it
+// that it can see rather than trusting the caller for either half. The entry
+// must name a tombstone removed from owner -- the container whose
+// nodeMapByCreatedAt the restore has just re-pointed -- so an entry another
+// container registered under the same createdAt is left alone: nothing has
+// displaced that tombstone, and retiring its entry would leave a reachable
+// tombstone nothing can collect while releasing a charge the document is
+// still carrying. The other half is that the restore took at all, which
+// SetWithExecutedAt reports by refusing a loser it cannot tombstone;
+// operations.Set.Execute returns before reaching this call on that path.
 //
 // Deliberately narrow. The obvious alternative, deregistering the tombstone
 // and its descendants outright, reaches past the entry that is stale: the
@@ -468,9 +472,9 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // the same reason: nothing can reach them to collect them, so leaving them
 // would hold GarbageLen above zero forever and let a later pass subtract a cost
 // this call has already released.
-func (r *Root) UnregisterRemovedElementPair(createdAt *time.Ticket) bool {
+func (r *Root) UnregisterRemovedElementPair(owner Container, createdAt *time.Ticket) bool {
 	pair, ok := r.gcElementPairMap[createdAt.Key()]
-	if !ok {
+	if !ok || pair.parent != owner {
 		return false
 	}
 

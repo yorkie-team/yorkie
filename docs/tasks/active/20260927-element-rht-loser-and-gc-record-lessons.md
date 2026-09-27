@@ -132,3 +132,39 @@ never reaches it. The lesson is that a guard derived from the value's own
 fields (`RemovedAt() == nil`) protects only values that fill those fields
 honestly; the guard that holds regardless is the one stated over the
 structure being mutated -- here, "this slot is taken".
+
+## A per-container guard cannot state a document-wide invariant
+
+The panel's next round pointed at the same shape one level up. `ElementRHT`
+now refuses a loser whose `createdAt` a live node of *that object* already
+holds, but `Root.elementMap` is keyed by `createdAt` for the whole document:
+a value carrying the `createdAt` of a live element in any *other* container
+passes the hashtable's guard untouched, and `RegisterElement` then re-points
+the slot at it. The guard has to be stated where the map is. `Set.Execute`
+now refuses, before it mutates anything, a value that arrives already removed
+and collides with an element `Root` already knows -- the one shape that skips
+the tombstoning and can be indexed without winning a key.
+
+The mirror of it was on the winning branch: `UnregisterRemovedElementPair`
+documented "the restore re-pointed the index" as a precondition, but the call
+site only established that the restore *took*, never that the collection
+entry under that `createdAt` named a tombstone of *this* object. An entry
+another container registered is untouched by this Set, so retiring it
+released a charge the document still carries and left a tombstone nothing
+could reach. It now takes the owning container and does nothing when the
+entry is someone else's.
+
+## Validate the ticket triple where it enters, not where it hurts
+
+Every one of these refusals exists because `createdAt`, `movedAt` and
+`removedAt` are decoded independently from client bytes and nothing checks
+that they agree: `Change.SetActor` rewrites only the operation's own
+`executedAt`, and `sanitizeElement` only dropped split links. Two of the
+impossible triples are cheap to reject at the converter boundary, where the
+document has not been touched and the error still names the change that
+carried it: a `movedAt` older than the element's own creation, and a
+`removedAt` that does not follow it (exactly the precondition `Element.Remove`
+enforces, so such an element could never be tombstoned or collected). The
+downstream refusals stay -- they are the invariant, and stored changes
+predating this check still replay through them -- but they should not be the
+first line.

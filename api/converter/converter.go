@@ -75,4 +75,11 @@ var (
 	// this is a malformed payload, and dropping the member silently would
 	// hand back an object short a key the sender believes it sent.
 	ErrRefusedMember = errors.InvalidArgument("refused object member").WithCode("ErrRefusedMember")
+
+	// ErrInvalidElementTicket is returned when an element payload carries a
+	// createdAt/movedAt/removedAt triple no replica could have issued: a
+	// movedAt older than the element's own creation, or a removedAt that does
+	// not follow it. See validateElementTickets.
+	ErrInvalidElementTicket = errors.InvalidArgument("invalid element ticket").
+				WithCode("ErrInvalidElementTicket")
 )

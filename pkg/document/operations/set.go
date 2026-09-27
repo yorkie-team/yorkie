@@ -94,6 +94,36 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	if err != nil {
 		return ExecutionResult{}, err
 	}
+	// A createdAt is an identity for the whole document, not just for one
+	// object: Root.elementMap is keyed by it, and index() hands the slot to
+	// whatever was registered last. ElementRHT refuses a loser whose createdAt
+	// a live node of the same object already answers to, but it can only see
+	// the members of that one object -- a value carrying the createdAt of a
+	// live element in any other container passes that guard, and
+	// RegisterElement below then re-points elementMap at it. The live copy is
+	// stranded from there on: every operation addressed at that createdAt, and
+	// every collection and snapshot that resolves one, finds this value
+	// instead.
+	//
+	// A value that arrives already removed is the reachable shape of that. It
+	// skips the tombstoning in ElementRHT's losing branch entirely, so it is
+	// indexed without the Remove that would otherwise have to accept its
+	// tickets, and it can hijack the slot without ever winning the key. No
+	// replica emits one: the reverse of a Remove copies its target before the
+	// deletion, and the reverse of a Set copies only a live value, so every
+	// Set payload leaves its sender with removedAt unset. Only crafted or
+	// duplicated bytes reach here, and for them refusing is a no-op that
+	// leaves the document exactly as it was -- on every replica and in the
+	// server's snapshot replay, which decide from the same state.
+	//
+	// Checked before the mutation below, because the object cannot be put back
+	// afterwards. The ordinary path pays one map read.
+	if value.RemovedAt() != nil {
+		if occupant := root.FindByCreatedAt(value.CreatedAt()); occupant != nil && occupant != value {
+			return ExecutionResult{}, nil
+		}
+	}
+
 	// SetWithExecutedAt uses o.executedAt (rather than value's own createdAt)
 	// as the LWW tie-break ticket. For local and remote Sets these are
 	// always equal (the json layer issues one fresh ticket for both), so
@@ -147,9 +177,20 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// OpSourceUndoRedo spared only the replica that performed the undo and
 	// lost the member everywhere else.
 	//
+	// The entry has to belong to this object for that to hold. A collection
+	// entry names the container the tombstone was removed from, and only the
+	// one this Set just displaced from obj's nodeMapByCreatedAt has been
+	// re-pointed at live data. An entry registered under the same createdAt by
+	// any other container is untouched by this Set and still resolves to its
+	// own tombstone, so retiring it would release a charge the document is
+	// still carrying and leave a tombstone nothing can ever collect -- the
+	// mirror image, on the winning branch, of what the refusal above prevents
+	// on the losing one. Root.UnregisterRemovedElementPair takes obj for that
+	// reason and does nothing when the entry is someone else's.
+	//
 	// An ordinary Set carries a freshly issued createdAt, so the lookup
 	// normally misses and costs one map read.
-	root.UnregisterRemovedElementPair(value.CreatedAt())
+	root.UnregisterRemovedElementPair(obj, value.CreatedAt())
 	root.RegisterElement(value, obj)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
