@@ -61,6 +61,7 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultSnapshotCacheSize, conf.Backend.SnapshotCacheSize)
 
 	assert.Equal(t, server.DefaultAuthWebhookCacheSize, conf.Backend.AuthWebhookCacheSize)
+	assert.False(t, conf.Backend.AuthWebhookCacheDisabled)
 	assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
 
 	assert.Equal(t, server.DefaultHostname, conf.Backend.Hostname)
@@ -120,6 +121,26 @@ func TestNewConfigFromFile(t *testing.T) {
 		conf, err := server.NewConfigFromFile(filePath)
 		assert.NoError(t, err)
 		assertDefaultConfig(t, conf)
+	})
+
+	t.Run("read disabled auth webhook cache from file", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n  AuthWebhookCacheDisabled: true\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.True(t, conf.Backend.AuthWebhookCacheDisabled)
+	})
+
+	t.Run("reject tiny auth webhook cache TTL before startup", func(t *testing.T) {
+		conf, err := server.NewConfigFromFile("config.sample.yml")
+		assert.NoError(t, err)
+		conf.Backend.AuthWebhookCacheTTL = "1ns"
+		_, err = server.New(conf)
+		assert.ErrorContains(t, err, "auth webhook cache TTL")
 	})
 
 	t.Run("explicit zero DeactivateConcurrency preserved (sequential opt-in)", func(t *testing.T) {

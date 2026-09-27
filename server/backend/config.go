@@ -48,7 +48,11 @@ type Config struct {
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
-	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
+	// AuthWebhookCacheDisabled sends every authorization request to the webhook.
+	AuthWebhookCacheDisabled bool `yaml:"AuthWebhookCacheDisabled"`
+
+	// AuthWebhookCacheTTL is the TTL for cached authorization responses.
+	// Zero retains entries without expiration; use AuthWebhookCacheDisabled to bypass caching.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
 	// SnapshotCacheSize is the cache size of the snapshot.
@@ -112,12 +116,18 @@ type Config struct {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.AuthWebhookCacheTTL); err != nil {
+	ttl, err := time.ParseDuration(c.AuthWebhookCacheTTL)
+	if err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
 			c.AuthWebhookCacheTTL,
 			err,
 		)
+	}
+	// The expirable LRU starts a ticker at TTL / 100. Sub-millisecond
+	// durations can make it tick excessively or truncate to zero and panic.
+	if ttl > 0 && ttl < time.Millisecond {
+		return fmt.Errorf("auth webhook cache TTL must be zero or at least 1ms: %s", c.AuthWebhookCacheTTL)
 	}
 	if c.ChannelSessionCountCacheTTL != "" {
 		if _, err := time.ParseDuration(c.ChannelSessionCountCacheTTL); err != nil {

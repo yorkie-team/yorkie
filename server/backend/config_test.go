@@ -43,6 +43,18 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 	})
 
+	t.Run("reject a TTL that would panic the cache expiry ticker", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.AuthWebhookCacheTTL = "1ns"
+		assert.ErrorContains(t, conf.Validate(), "auth webhook cache TTL")
+
+		conf.AuthWebhookCacheTTL = "0s"
+		assert.NoError(t, conf.Validate())
+
+		conf.AuthWebhookCacheTTL = "1ms"
+		assert.NoError(t, conf.Validate())
+	})
+
 	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {
 		conf := newValidBackendConf()
 		conf.MaxConcurrentClusterRPCs = 0
