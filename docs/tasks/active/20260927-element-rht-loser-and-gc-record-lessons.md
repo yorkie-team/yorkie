@@ -50,3 +50,21 @@ limitations:
   they are collected, so the orphan is freed only after that.
 - Existing and out of scope: edits inside a still-addressable orphan member
   charge Live, and nothing ever collects them.
+
+## A removal that can decline is not a removal you can assume happened
+
+The review panel's security lens caught the sequel to "gate a state change on
+the value being changed": the loser branch now removes the right object, but
+it never asked whether `Element.Remove` accepted the ticket. Every
+implementation refuses one that does not follow the element's own `createdAt`,
+and `createdAt` is decoded from client bytes independently of the operation's
+`executedAt` -- so a crafted value can lose the comparison and still refuse the
+tombstone. A causal log cannot produce that, which is exactly why the
+assumption reads as safe and is not.
+
+The fix is to make indexing conditional on the removal, not to find a ticket
+that always works: there is none, and fabricating one (`MaxLamport`) would
+trade a live leak for a tombstone no version vector ever covers -- still
+emitted into every snapshot. Refusing the value leaves the document as it was.
+That also fixes the duplicate-apply tie, where the second copy of an already
+applied `Set` used to displace the live copy in `nodeMapByCreatedAt`.

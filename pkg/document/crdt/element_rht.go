@@ -133,28 +133,45 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
-	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 
-	var removed Element
 	if !ok || executedAt.After(PositionedAt(node.elem)) {
+		var removed Element
 		if ok && !node.isRemoved() && node.Remove(executedAt) {
 			removed = node.elem
 		}
+		rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
-	} else if v.RemovedAt() == nil {
-		// The new node loses the LWW conflict. Mark it removed by its own
-		// state, not the occupant's: a live loser whose occupant is already
-		// a tombstone would otherwise stay live in nodeMapByCreatedAt --
-		// emitted by Nodes(), never booked as garbage, still charged to Live
-		// -- on the replica that saw the tombstone first and on no other. A
-		// loser that arrives removed is left alone, because Remove accepts a
-		// later ticket and would move its removedAt off the removal that
-		// actually happened.
-		v.Remove(PositionedAt(node.elem))
+		return removed
 	}
 
-	return removed
+	// The new node loses the LWW conflict. Mark it removed by its own state,
+	// not the occupant's: a live loser whose occupant is already a tombstone
+	// would otherwise stay live in nodeMapByCreatedAt -- emitted by Nodes(),
+	// never booked as garbage, still charged to Live -- on the replica that
+	// saw the tombstone first and on no other. A loser that arrives removed is
+	// left alone, because Remove accepts a later ticket and would move its
+	// removedAt off the removal that actually happened.
+	//
+	// Indexing is conditional on that removal having taken. Element.Remove
+	// refuses a ticket that does not follow the element's own createdAt, so a
+	// value whose createdAt does not precede the ticket that beat it cannot be
+	// tombstoned at all -- and indexing it anyway is what leaves it live,
+	// unreachable by key, emitted into every later snapshot and collectable by
+	// nothing, since DeleteByCreatedAt refuses the same tickets Remove does. A
+	// causal change log cannot produce such a value (a Set carries a createdAt
+	// no later than its own executedAt, which is no later than the occupant's
+	// ticket here), but createdAt and executedAt are decoded independently from
+	// client bytes, so a crafted or duplicated change can. Refusing it leaves
+	// the document exactly as it was, which is also what re-applying an already
+	// applied Set should do: its createdAt ties the occupant's positionedAt,
+	// and the index keeps naming the live copy instead of the duplicate.
+	if v.RemovedAt() == nil && !v.Remove(PositionedAt(node.elem)) {
+		return nil
+	}
+	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
+
+	return nil
 }
 
 // PositionedAt returns elem's last-moved ticket, or its creation ticket if
