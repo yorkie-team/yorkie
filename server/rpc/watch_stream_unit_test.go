@@ -47,6 +47,7 @@ func runStreamMergedEvents(docSubs []docSub, channelSubs []channelSub) <-chan er
 			nil,
 			docSubs,
 			channelSubs,
+			&watchLease{},
 		)
 	}()
 
@@ -166,6 +167,7 @@ func TestStreamMergedEventsDeliversQueuedEvents(t *testing.T) {
 			nil,
 			nil,
 			[]channelSub{cs},
+			&watchLease{},
 		)
 	}()
 
@@ -179,6 +181,25 @@ func TestStreamMergedEventsDeliversQueuedEvents(t *testing.T) {
 	}
 
 	assertEndedBySelfPrune(t, errCh)
+}
+
+func TestStreamMergedEventsDropsQueuedEventAfterLeaseExpiry(t *testing.T) {
+	s := &yorkieServer{serviceCtx: context.Background()}
+	cs := newChannelSub("expired")
+	cs.sub.Events() <- events.ChannelEvent{
+		Type: events.ChannelPresenceChanged, Publisher: time.InitialActorID,
+		SessionCount: 1, Seq: 1,
+	}
+	cs.sub.Close()
+	sent := false
+	err := s.streamMergedEvents(
+		context.Background(),
+		func(*api.WatchResponse) error { sent = true; return nil },
+		nil, nil, []channelSub{cs},
+		&watchLease{expires: gotime.Now().Add(-gotime.Second)},
+	)
+	assert.ErrorIs(t, err, errWatchLeaseExpired)
+	assert.False(t, sent, "queued events must not be sent after lease expiry")
 }
 
 // TestResolveResourcesRejectsStreamWithoutSubscription verifies that a Watch

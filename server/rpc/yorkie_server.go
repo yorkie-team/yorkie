@@ -668,10 +668,12 @@ func (s *yorkieServer) Watch(
 	for i, target := range targets {
 		keys[i] = target.key()
 	}
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+	watchAccess := &types.AccessInfo{
 		Method:     types.Watch,
 		Attributes: types.NewAccessAttributes(keys, types.Read),
-	}); err != nil {
+	}
+	admissionStart := gotime.Now()
+	if err := auth.VerifyAccess(ctx, s.backend, watchAccess); err != nil {
 		return err
 	}
 
@@ -693,6 +695,15 @@ func (s *yorkieServer) Watch(
 		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
+	lease, err := s.startWatchLease(ctx, watchAccess, admissionStart)
+	if err != nil {
+		return err
+	}
+	defer lease.stop()
+	if err := lease.maySend(); err != nil {
+		return err
+	}
+
 	if err := stream.Send(&api.WatchResponse{
 		Body: &api.WatchResponse_Initialization{
 			Initialization: &api.WatchInitialization{
@@ -703,7 +714,7 @@ func (s *yorkieServer) Watch(
 		return err
 	}
 
-	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
+	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs, lease)
 }
 
 // watchTarget is a Watch resource descriptor resolved to what the rest of the
@@ -929,6 +940,7 @@ func (s *yorkieServer) streamMergedEvents(
 	project *types.Project,
 	docSubs []docSub,
 	channelSubs []channelSub,
+	lease *watchLease,
 ) error {
 	merged := make(chan taggedEvent, len(docSubs)+len(channelSubs))
 	done := make(chan struct{})
@@ -995,6 +1007,8 @@ func (s *yorkieServer) streamMergedEvents(
 			return context.Canceled
 		case <-ctx.Done():
 			return context.Canceled
+		case err := <-lease.failure:
+			return err
 		case te, ok := <-merged:
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -1018,6 +1032,9 @@ func (s *yorkieServer) streamMergedEvents(
 				)
 			}
 
+			if err := lease.maySend(); err != nil {
+				return err
+			}
 			if err := send(resp); err != nil {
 				return err
 			}
@@ -1134,10 +1151,12 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+	watchAccess := &types.AccessInfo{
 		Method:     types.WatchDocument,
 		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
-	}); err != nil {
+	}
+	admissionStart := gotime.Now()
+	if err := auth.VerifyAccess(ctx, s.backend, watchAccess); err != nil {
 		return err
 	}
 
@@ -1154,6 +1173,15 @@ func (s *yorkieServer) WatchDocument(
 		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
+	lease, err := s.startWatchLease(ctx, watchAccess, admissionStart)
+	if err != nil {
+		return err
+	}
+	defer lease.stop()
+	if err := lease.maySend(); err != nil {
+		return err
+	}
+
 	docInit := ri.GetDocumentInit()
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
@@ -1164,10 +1192,10 @@ func (s *yorkieServer) WatchDocument(
 	}); err != nil {
 		return err
 	}
-
 	return streamEvents(
 		ctx,
 		s.serviceCtx,
+		lease,
 		ds.sub,
 		stream.Send,
 		func(event events.DocEvent) (*api.WatchDocumentResponse, error) {
@@ -1229,10 +1257,12 @@ func (s *yorkieServer) WatchChannel(
 		return err
 	}
 
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+	watchAccess := &types.AccessInfo{
 		Method:     types.WatchChannel,
 		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
-	}); err != nil {
+	}
+	admissionStart := gotime.Now()
+	if err := auth.VerifyAccess(ctx, s.backend, watchAccess); err != nil {
 		return err
 	}
 
@@ -1245,6 +1275,15 @@ func (s *yorkieServer) WatchChannel(
 		s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
 	}()
 
+	lease, err := s.startWatchLease(ctx, watchAccess, admissionStart)
+	if err != nil {
+		return err
+	}
+	defer lease.stop()
+	if err := lease.maySend(); err != nil {
+		return err
+	}
+
 	chInit := ri.GetChannelInit()
 	if err := stream.Send(&api.WatchChannelResponse{
 		Body: &api.WatchChannelResponse_Initialized{
@@ -1256,10 +1295,10 @@ func (s *yorkieServer) WatchChannel(
 	}); err != nil {
 		return err
 	}
-
 	return streamEvents(
 		ctx,
 		s.serviceCtx,
+		lease,
 		cs.sub,
 		stream.Send,
 		func(event events.ChannelEvent) (*api.WatchChannelResponse, error) {

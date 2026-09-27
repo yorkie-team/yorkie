@@ -38,6 +38,7 @@ import (
 func streamEvents[E any, Resp any](
 	ctx context.Context,
 	serviceCtx context.Context,
+	lease *watchLease,
 	sub *pubsub.Subscription[E],
 	send func(Resp) error,
 	convert func(E) (Resp, error),
@@ -49,6 +50,8 @@ func streamEvents[E any, Resp any](
 			return context.Canceled
 		case <-ctx.Done():
 			return context.Canceled
+		case err := <-lease.failure:
+			return err
 		case event, ok := <-sub.Events():
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -64,6 +67,9 @@ func streamEvents[E any, Resp any](
 				continue
 			}
 
+			if err := lease.maySend(); err != nil {
+				return err
+			}
 			if err := send(resp); err != nil {
 				return err
 			}

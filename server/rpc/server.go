@@ -114,7 +114,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 			// long-lived streams such as WatchDocument.
 			ReadHeaderTimeout: readHeaderTimeout,
 			IdleTimeout:       idleTimeout,
-			Handler: h2c.NewHandler(newCORS().Handler(mux),
+			Handler: h2c.NewHandler(newCORS().Handler(withWatchWriteDeadline(mux)),
 				&http2.Server{
 					MaxConcurrentStreams: math.MaxUint32,
 					// http.Server's IdleTimeout does not reach h2c
