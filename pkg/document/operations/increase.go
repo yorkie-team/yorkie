@@ -59,7 +59,7 @@ func NewIncreaseWithActor(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
+func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
@@ -71,8 +71,11 @@ func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (E
 	// Compute the reverse before mutating the counter, mirroring the JS SDK
 	// (increase_operation.ts:95-130). A dedup counter (o.actor != "")
 	// produces no reverse: HyperLogLog cannot remove an actor once added.
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse):
+	// a remote apply or a server replay must not fail on a reverse it throws
+	// away, as every Double delta did before negatePrimitive handled it.
 	var reverseOp Operation
-	if o.actor == "" {
+	if o.actor == "" && source.NeedsReverse() {
 		negated, err := negatePrimitive(value)
 		if err != nil {
 			return ExecutionResult{}, err
@@ -117,6 +120,14 @@ func negatePrimitive(value *crdt.Primitive) (*crdt.Primitive, error) {
 		return crdt.NewPrimitive(-v, value.CreatedAt())
 	case crdt.Integer:
 		v, ok := value.Value().(int32)
+		if !ok {
+			return nil, ErrNotApplicableDataType
+		}
+		return crdt.NewPrimitive(-v, value.CreatedAt())
+	case crdt.Double:
+		// A JS client sends a fractional delta as a Double; JS negates it
+		// as a Double too.
+		v, ok := value.Value().(float64)
 		if !ok {
 			return nil, ErrNotApplicableDataType
 		}

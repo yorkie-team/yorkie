@@ -19,12 +19,14 @@ package document_test
 import (
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -423,6 +425,34 @@ func TestDocument(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
+	})
+
+	// The expected values match the JS SDK, which truncates a fractional
+	// delta toward zero and wraps it to the counter's width. Go leaves an
+	// out-of-range float-to-int conversion implementation-defined.
+	t.Run("counter out-of-range float delta test", func(t *testing.T) {
+		doc := document.New("d1")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("int", 10).
+				Increase(4294967296.5).
+				Increase(-3000000000.5)
+			root.SetNewCounter("long", int64(10)).Increase(1e20)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"int":1294967306,"long":7766279631452241930}`, doc.Marshal())
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			assert.PanicsWithError(t, crdt.ErrNonFiniteNumber.Error(), func() {
+				root.GetCounter("int").Increase(math.NaN())
+			})
+			assert.PanicsWithError(t, crdt.ErrNonFiniteNumber.Error(), func() {
+				root.GetCounter("long").Increase(math.Inf(-1))
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"int":1294967306,"long":7766279631452241930}`, doc.Marshal())
 	})
 
 	t.Run("rollback test", func(t *testing.T) {
