@@ -38,6 +38,10 @@ import (
 /**
  * parseSimpleXML parses the given XML string into a slice of strings.
  * For example, "<p>ab</p>" returns ["<p>", "a", "b", "</p>"].
+ *
+ * One element per token is what getMergeRange relies on: for a tree whose
+ * XML is parsed this way, res[i+1] is the node sitting at tree position i,
+ * so tree intervals can be mapped straight onto this slice.
  */
 func parseSimpleXML(s string) []string {
 	var res []string
@@ -50,20 +54,17 @@ func parseSimpleXML(s string) []string {
 				current.WriteString(string(s[i]))
 				i++
 			}
-			current.WriteString(string(s[i]))
+			// An unterminated tag runs off the end of the string; emit what
+			// was read instead of indexing past it.
+			if i < len(s) {
+				current.WriteString(string(s[i]))
+			}
 		} else {
 			current.WriteString(string(s[i]))
 		}
 		res = append(res, current.String())
 	}
 	return res
-}
-
-func TestParseSimpleXML(t *testing.T) {
-	assert.Equal(t,
-		[]string{"<r>", "<p>", "a", "b", "</p>", "</r>"},
-		parseSimpleXML("<r><p>ab</p></r>"),
-	)
 }
 
 type rangeSelector int
@@ -118,6 +119,90 @@ func makeTwoRanges(from1, mid1, to1 int, from2, mid2, to2 int, desc string) twoR
 	return twoRangesType{[2]rangeWithMiddleType{range0, range1}, desc}
 }
 
+// The initial XML of every suite that runs a MergeUpdate, shared with the
+// helper tests below so the two cannot drift apart.
+const (
+	editEditXML  = `<root><p>abc</p><p>def</p><p>ghi</p></root>`
+	splitEditXML = `<root><p><p italic="true"><p italic="true">abcd</p>` +
+		`<p italic="true">efgh</p></p><p italic="true">ijkl</p></p></root>`
+	editStyleXML = `<root><p color="red">a</p><p color="red">b</p><p color="red">c</p></root>`
+)
+
+// editEditRanges returns the ranges of TestTreeConcurrencyEditEdit, over
+// <root> <p> a b c </p> <p> d e f </p> <p> g h i </p> </root>.
+func editEditRanges() []twoRangesType {
+	return []twoRangesType{
+		// intersect-element: <p>abc</p><p>def</p> - <p>def</p><p>ghi</p>
+		makeTwoRanges(0, 5, 10, 5, 10, 15, `intersect-element`),
+		// intersect-text: ab - bc
+		makeTwoRanges(1, 2, 3, 2, 3, 4, `intersect-text`),
+		// contain-element: <p>abc</p><p>def</p><p>ghi</p> - <p>def</p>
+		makeTwoRanges(0, 5, 15, 5, 5, 10, `contain-element`),
+		// contain-text: abc - b
+		makeTwoRanges(1, 2, 4, 2, 2, 3, `contain-text`),
+		// contain-mixed-type: <p>abc</p><p>def</p><p>ghi</p> - def
+		makeTwoRanges(0, 5, 15, 6, 7, 9, `contain-mixed-type`),
+		// side-by-side-element: <p>abc</p> - <p>def</p>
+		makeTwoRanges(0, 5, 5, 5, 5, 10, `side-by-side-element`),
+		// side-by-side-text: a - bc
+		makeTwoRanges(1, 1, 2, 2, 3, 4, `side-by-side-text`),
+		// equal-element: <p>abc</p><p>def</p> - <p>abc</p><p>def</p>
+		makeTwoRanges(0, 5, 10, 0, 5, 10, `equal-element`),
+		// equal-text: abc - abc
+		makeTwoRanges(1, 2, 4, 1, 2, 4, `equal-text`),
+	}
+}
+
+// splitEditRanges returns the ranges of TestTreeConcurrencySplitEdit.
+func splitEditRanges() []twoRangesType {
+	return []twoRangesType{
+		// equal: <p>ab'cd</p>
+		makeTwoRanges(2, 5, 8, 2, 5, 8, `equal`),
+		// A contains B: <p>ab'cd</p> - bc
+		makeTwoRanges(2, 5, 8, 4, 5, 6, `A contains B`),
+		// B contains A: <p>ab'cd</p> - <p>abcd</p><p>efgh</p>
+		makeTwoRanges(2, 5, 8, 2, 8, 14, `B contains A`),
+		// left node(text): <p>ab'cd</p> - ab
+		makeTwoRanges(2, 5, 8, 3, 4, 5, `left node(text)`),
+		// right node(text): <p>ab'cd</p> - cd
+		makeTwoRanges(2, 5, 8, 5, 6, 7, `right node(text)`),
+		// left node(element): <p>abcd</p>'<p>efgh</p> - <p>abcd</p>
+		makeTwoRanges(2, 8, 14, 2, 5, 8, `left node(element)`),
+		// right node(element): <p>abcd</p>'<p>efgh</p> - <p>efgh</p>
+		makeTwoRanges(2, 8, 14, 8, 11, 14, `right node(element)`),
+		// A -> B: <p>ab'cd</p> - <p>efgh</p>
+		makeTwoRanges(2, 5, 8, 8, 11, 14, `A -> B`),
+		// B -> A: <p>ef'gh</p> - <p>abcd</p>
+		makeTwoRanges(8, 11, 14, 2, 5, 8, `B -> A`),
+	}
+}
+
+// editStyleRanges returns the ranges of TestTreeConcurrencyEditStyle, over
+// <root> <p> a </p> <p> b </p> <p> c </p> </root>.
+func editStyleRanges() []twoRangesType {
+	return []twoRangesType{
+		// equal: <p>b</p> - <p>b</p>
+		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),
+		// equal multiple: <p>a</p><p>b</p><p>c</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 9, 0, 3, 9, `equal multiple`),
+		// A contains B: <p>a</p><p>b</p><p>c</p> - <p>b</p>
+		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`),
+		// B contains A: <p>b</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(3, 3, 6, 0, -1, 9, `B contains A`),
+		// intersect: <p>a</p><p>b</p> - <p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 6, 3, -1, 9, `intersect`),
+		// A -> B: <p>a</p> - <p>b</p>
+		makeTwoRanges(0, 3, 3, 3, -1, 6, `A -> B`),
+		// B -> A: <p>b</p> - <p>a</p>
+		makeTwoRanges(3, 3, 6, 0, -1, 3, `B -> A`),
+	}
+}
+
+// getMergeRange derives, from the tree interval, the range whose removal
+// merges the elements the interval straddles: from is the position just
+// before the first closing tag, to the position just after the last opening
+// tag. It returns a range isMergeable rejects when the interval holds no such
+// boundary, e.g. when it covers text only or a single whole element.
 func getMergeRange(xml string, interval rangeType) rangeType {
 	content := parseSimpleXML(xml)
 	st, ed := -1, -1
@@ -130,6 +215,108 @@ func getMergeRange(xml string, interval rangeType) rangeType {
 		}
 	}
 	return rangeType{st, ed}
+}
+
+// isMergeable reports whether a range from getMergeRange describes an actual
+// edit. MergeUpdate skips the edit when it does not, so tests that care a
+// merge really ran assert on this.
+func isMergeable(r rangeType) bool {
+	return r.from != -1 && r.to != -1 && r.from < r.to
+}
+
+func TestParseSimpleXML(t *testing.T) {
+	tests := []struct {
+		desc string
+		xml  string
+		want []string
+	}{
+		{`nested elements`, `<r><p>ab</p></r>`, []string{"<r>", "<p>", "a", "b", "</p>", "</r>"}},
+		{`attributes stay in one token`, `<p color="red">a</p>`, []string{`<p color="red">`, "a", "</p>"}},
+		{`text only`, `ab`, []string{"a", "b"}},
+		{`empty`, ``, nil},
+		{`unterminated tag`, `<r><p`, []string{"<r>", "<p"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			assert.Equal(t, tc.want, parseSimpleXML(tc.xml))
+		})
+	}
+}
+
+func TestGetMergeRange(t *testing.T) {
+	// parseSimpleXML(editEditXML) indexes as:
+	//  0      1   2 3 4 5    6   7 8 9 10   11  12 13 14 15   16
+	// <root> <p> a b c </p> <p> d e f </p> <p>  g  h  i </p> </root>
+	// so tree position i is content[i+1] and a merge range straddles a
+	// </p><p> boundary.
+	tests := []struct {
+		desc     string
+		xml      string
+		interval rangeType
+		want     rangeType
+		// whether MergeUpdate actually edits the tree for that range.
+		merges bool
+	}{
+		{`straddles one boundary`, editEditXML, rangeType{0, 10}, rangeType{4, 6}, true},
+		{`straddles two boundaries`, editEditXML, rangeType{0, 15}, rangeType{4, 11}, true},
+		{`later boundary`, editEditXML, rangeType{5, 15}, rangeType{9, 11}, true},
+		{`text only holds no boundary`, editEditXML, rangeType{1, 3}, rangeType{-1, -1}, false},
+		{`one whole element holds no boundary`, editEditXML, rangeType{0, 5}, rangeType{4, 1}, false},
+		{`nested boundary`, splitEditXML, rangeType{2, 14}, rangeType{7, 9}, true},
+		{`styled boundary`, editStyleXML, rangeType{0, 6}, rangeType{2, 4}, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := getMergeRange(tc.xml, tc.interval)
+			assert.Equal(t, tc.want, got)
+			assert.Equal(t, tc.merges, isMergeable(got))
+		})
+	}
+}
+
+// TestMergeRangesAreNotVacuous pins, for every suite that runs a MergeUpdate,
+// which of its ranges make the operation edit the tree. Without this the whole
+// merge half of the concurrency matrix could silently degrade into no-ops --
+// every case would still converge, and still pass.
+func TestMergeRangesAreNotVacuous(t *testing.T) {
+	tests := []struct {
+		suite string
+		xml   string
+		// user running the MergeUpdate operation in that suite.
+		user   int
+		ranges []twoRangesType
+		// descriptions of the ranges expected to produce a real merge.
+		merging []string
+	}{
+		{`edit-edit(user 0)`, editEditXML, 0, editEditRanges(), []string{
+			`intersect-element`, `contain-element`, `contain-mixed-type`, `equal-element`,
+		}},
+		{`edit-edit(user 1)`, editEditXML, 1, editEditRanges(), []string{
+			`intersect-element`, `equal-element`,
+		}},
+		{`split-edit(user 1)`, splitEditXML, 1, splitEditRanges(), []string{
+			`B contains A`,
+		}},
+		{`edit-style(user 0)`, editStyleXML, 0, editStyleRanges(), []string{
+			`equal multiple`, `A contains B`, `intersect`,
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.suite, func(t *testing.T) {
+			var merging []string
+			for _, ranges := range tc.ranges {
+				interval := getRange(ranges, RangeAll, tc.user)
+				if isMergeable(getMergeRange(tc.xml, interval)) {
+					merging = append(merging, ranges.desc)
+				}
+			}
+			assert.Equal(t, tc.merging, merging)
+			require.NotEmpty(t, merging, "no range in this suite makes MergeUpdate edit the tree")
+		})
+	}
 }
 
 type styleOpCode int
@@ -199,8 +386,7 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
 		} else if op.op == MergeUpdate {
 			mergeInterval := getMergeRange(root.GetTree("t").ToXML(), interval)
-			from, to = mergeInterval.from, mergeInterval.to
-			if from != -1 && to != -1 && from < to {
+			if isMergeable(mergeInterval) {
 				root.GetTree("t").Edit(mergeInterval.from, mergeInterval.to, op.content, op.splitLevel)
 			}
 		} else if op.op == SplitUpdate {
@@ -280,33 +466,14 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ghi"}}},
 		},
 	}
-	initialXML := `<root><p>abc</p><p>def</p><p>ghi</p></root>`
+	initialXML := editEditXML
 
 	textNode1 := &json.TreeNode{Type: "text", Value: "A"}
 	textNode2 := &json.TreeNode{Type: "text", Value: "B"}
 	elementNode1 := &json.TreeNode{Type: "b", Children: []json.TreeNode{}}
 	elementNode2 := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
 
-	ranges := []twoRangesType{
-		// intersect-element: <p>abc</p><p>def</p> - <p>def</p><p>ghi</p>
-		makeTwoRanges(0, 5, 10, 5, 10, 15, `intersect-element`),
-		// intersect-text: ab - bc
-		makeTwoRanges(1, 2, 3, 2, 3, 4, `intersect-text`),
-		// contain-element: <p>abc</p><p>def</p><p>ghi</p> - <p>def</p>
-		makeTwoRanges(0, 5, 15, 5, 5, 10, `contain-element`),
-		// contain-text: abc - b
-		makeTwoRanges(1, 2, 4, 2, 2, 3, `contain-text`),
-		// contain-mixed-type: <p>abc</p><p>def</p><p>ghi</p> - def
-		makeTwoRanges(0, 5, 15, 6, 7, 9, `contain-mixed-type`),
-		// side-by-side-element: <p>abc</p> - <p>def</p>
-		makeTwoRanges(0, 5, 5, 5, 5, 10, `side-by-side-element`),
-		// side-by-side-text: a - bc
-		makeTwoRanges(1, 1, 2, 2, 3, 4, `side-by-side-text`),
-		// equal-element: <p>abc</p><p>def</p> - <p>abc</p><p>def</p>
-		makeTwoRanges(0, 5, 10, 0, 5, 10, `equal-element`),
-		// equal-text: abc - abc
-		makeTwoRanges(1, 2, 4, 1, 2, 4, `equal-text`),
-	}
+	ranges := editEditRanges()
 
 	editOperations1 := []operationInterface{
 		editOperationType{RangeFront, EditUpdate, textNode1, 0, `insertTextFront`},
@@ -400,30 +567,11 @@ func TestTreeConcurrencySplitEdit(t *testing.T) {
 			}},
 		},
 	}
-	initialXML := `<root><p><p italic="true"><p italic="true">abcd</p><p italic="true">efgh</p></p><p italic="true">ijkl</p></p></root>`
+	initialXML := splitEditXML
 
 	content := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
 
-	ranges := []twoRangesType{
-		// equal: <p>ab'cd</p>
-		makeTwoRanges(2, 5, 8, 2, 5, 8, `equal`),
-		// A contains B: <p>ab'cd</p> - bc
-		makeTwoRanges(2, 5, 8, 4, 5, 6, `A contains B`),
-		// B contains A: <p>ab'cd</p> - <p>abcd</p><p>efgh</p>
-		makeTwoRanges(2, 5, 8, 2, 8, 14, `B contains A`),
-		// left node(text): <p>ab'cd</p> - ab
-		makeTwoRanges(2, 5, 8, 3, 4, 5, `left node(text)`),
-		// right node(text): <p>ab'cd</p> - cd
-		makeTwoRanges(2, 5, 8, 5, 6, 7, `right node(text)`),
-		// left node(element): <p>abcd</p>'<p>efgh</p> - <p>abcd</p>
-		makeTwoRanges(2, 8, 14, 2, 5, 8, `left node(element)`),
-		// right node(element): <p>abcd</p>'<p>efgh</p> - <p>efgh</p>
-		makeTwoRanges(2, 8, 14, 8, 11, 14, `right node(element)`),
-		// A -> B: <p>ab'cd</p> - <p>efgh</p>
-		makeTwoRanges(2, 5, 8, 8, 11, 14, `A -> B`),
-		// B -> A: <p>ef'gh</p> - <p>abcd</p>
-		makeTwoRanges(8, 11, 14, 2, 5, 8, `B -> A`),
-	}
+	ranges := splitEditRanges()
 
 	splitOperations := []operationInterface{
 		editOperationType{RangeMiddle, SplitUpdate, nil, 1, `split-1`},
@@ -499,29 +647,14 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}, Attributes: map[string]string{"color": "red"}},
 		},
 	}
-	initialXML := `<root><p color="red">a</p><p color="red">b</p><p color="red">c</p></root>`
+	initialXML := editStyleXML
 
 	content := &json.TreeNode{Type: "p", Attributes: map[string]string{
 		"italic": "true",
 		"color":  "blue",
 	}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
 
-	ranges := []twoRangesType{
-		// equal: <p>b</p> - <p>b</p>
-		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),
-		// equal multiple: <p>a</p><p>b</p><p>c</p> - <p>a</p><p>b</p><p>c</p>
-		makeTwoRanges(0, 3, 9, 0, 3, 9, `equal multiple`),
-		// A contains B: <p>a</p><p>b</p><p>c</p> - <p>b</p>
-		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`),
-		// B contains A: <p>b</p> - <p>a</p><p>b</p><p>c</p>
-		makeTwoRanges(3, 3, 6, 0, -1, 9, `B contains A`),
-		// intersect: <p>a</p><p>b</p> - <p>b</p><p>c</p>
-		makeTwoRanges(0, 3, 6, 3, -1, 9, `intersect`),
-		// A -> B: <p>a</p> - <p>b</p>
-		makeTwoRanges(0, 3, 3, 3, -1, 6, `A -> B`),
-		// B -> A: <p>b</p> - <p>a</p>
-		makeTwoRanges(3, 3, 6, 0, -1, 3, `B -> A`),
-	}
+	ranges := editStyleRanges()
 
 	editOperations := []operationInterface{
 		editOperationType{RangeFront, EditUpdate, content, 0, `insertFront`},
