@@ -2,7 +2,7 @@ name: yorkie
 
 services:
   mongo:
-    image: mongo:8.0
+    image: mongo:8
     restart: always
     ports:
       - "27017:27017"

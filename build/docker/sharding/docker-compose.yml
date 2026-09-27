@@ -3,7 +3,7 @@ name: yorkie-sharding
 services:
   # Config Server
   config1:
-    image: mongo:8.0
+    image: mongo:8
     command: mongod --port 27017 --configsvr --replSet config-rs --bind_ip_all
     volumes:
       - ./scripts:/scripts
@@ -30,7 +30,7 @@ services:
   # Shards
   # Shards 1
   shard1-1:
-    image: mongo:8.0
+    image: mongo:8
     command: mongod --port 27017 --shardsvr --replSet shard-rs-1 --bind_ip_all
     volumes:
       - ./scripts:/scripts
@@ -56,7 +56,7 @@ services:
 
   # Shards 2
   shard2-1:
-    image: mongo:8.0
+    image: mongo:8
     command: mongod --port 27017 --shardsvr --replSet shard-rs-2 --bind_ip_all
     volumes:
       - ./scripts:/scripts
@@ -82,7 +82,7 @@ services:
 
   # Mongos
   mongos1:
-    image: mongo:8.0
+    image: mongo:8
     command: mongos --port 27017 --configdb config-rs/config1:27017 --bind_ip_all
     ports:
       - 27017:27017
