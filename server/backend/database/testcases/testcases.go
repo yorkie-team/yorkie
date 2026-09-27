@@ -2552,7 +2552,7 @@ func RunFindCandidatesTest(t *testing.T, db database.Database, projectID types.I
 
 		// Create some test clients
 		var activeClients []*database.ClientInfo
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			clientKey := fmt.Sprintf("test-client-%d-%d", i, gotime.Now().Unix())
 			client, err := db.ActivateClient(ctx, projectID, clientKey, map[string]string{"test": "data"})
 			assert.NoError(t, err)
@@ -2613,7 +2613,7 @@ func RunFindCandidatesTest(t *testing.T, db database.Database, projectID types.I
 		var allFound []*database.ClientInfo
 		var lastID types.ID = database.ZeroID
 
-		for page := 0; page < 5; page++ { // Max 5 pages to avoid infinite loop
+		for range 5 { // Max 5 pages to avoid infinite loop
 			clients, newLastID, err := db.FindActiveClients(ctx, 3, lastID)
 			assert.NoError(t, err)
 

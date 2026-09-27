@@ -282,7 +282,6 @@ func TestHistoryTreeSplitL1UndoRedo(t *testing.T) {
 	}
 
 	for _, tc := range splitCases {
-		tc := tc
 
 		t.Run(fmt.Sprintf("should undo split at %s", tc.pos), func(t *testing.T) {
 			doc := newDoc(t)
@@ -651,7 +650,6 @@ func TestHistoryTreeSplitL2UndoRedo(t *testing.T) {
 	}
 
 	for _, tc := range l2SplitCases {
-		tc := tc
 
 		t.Run(fmt.Sprintf("should undo split at %s", tc.pos), func(t *testing.T) {
 			doc := newDoc(t)
@@ -1116,7 +1114,7 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 		const numCycles = 4
 		var fingerprints [][]string
 
-		for cycle := 0; cycle < numCycles; cycle++ {
+		for range numCycles {
 			// Type "asdf" in the inserted block.
 			for _, ch := range "asdf" {
 				typeInSplitSecondBlock(t, doc, string(ch))
@@ -1124,7 +1122,7 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 
 			// Undo each char. These four text nodes are now tombstoned, so
 			// the block-insert's reverse op must not mention them.
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				assert.NoError(t, doc.Undo())
 			}
 
@@ -1156,7 +1154,7 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 		for _, ch := range "asdf" {
 			typeInSplitSecondBlock(t, doc, string(ch))
 		}
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			assert.NoError(t, doc.Undo())
 		}
 		assert.NoError(t, doc.Undo())
@@ -1267,7 +1265,7 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 		for _, ch := range "asdf" {
 			typeInSplitSecondBlock(t, doc, string(ch))
 		}
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			assert.NoError(t, doc.Undo())
 		}
 		assert.NoError(t, doc.Undo())
@@ -1285,11 +1283,11 @@ func TestHistoryTreeSplitReverseOpPreTombstonedFilter(t *testing.T) {
 		initSplitReproDoc(t, doc)
 		insertSplitSiblingBlock(t, doc)
 
-		for cycle := 0; cycle < 3; cycle++ {
+		for range 3 {
 			for _, ch := range "asdf" {
 				typeInSplitSecondBlock(t, doc, string(ch))
 			}
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				assert.NoError(t, doc.Undo())
 			}
 			assert.NoError(t, doc.Undo())

@@ -36,9 +36,8 @@ import (
 )
 
 func TestSnapshot(t *testing.T) {
-	var be *backend.Backend
 	patch, err := monkey.PatchInstanceMethodByName(
-		reflect.TypeOf(be),
+		reflect.TypeFor[*backend.Backend](),
 		"Go",
 		func(
 			_ *backend.Backend,

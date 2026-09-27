@@ -43,7 +43,7 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 }
 
 // SetYSON sets values from the given YSON.
-func (p *Object) SetYSON(value interface{}) {
+func (p *Object) SetYSON(value any) {
 	yObj, ok := value.(yson.Object)
 	if !ok {
 		panic(fmt.Errorf("expected JSONObjectStruct, got %T", value))
@@ -253,7 +253,7 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 }
 
 // SetYSONElement sets the given YSON for the given key.
-func (p *Object) SetYSONElement(k string, v interface{}) *Object {
+func (p *Object) SetYSONElement(k string, v any) *Object {
 	switch y := v.(type) {
 	case yson.Counter:
 		p.setNewCounter(k, y.Type, y.Value, y.Registers)

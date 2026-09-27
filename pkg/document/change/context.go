@@ -17,7 +17,7 @@
 package change
 
 import (
-	"sort"
+	"slices"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -271,7 +271,7 @@ func (c *Context) ReversePresence() (values inner.Presence, absentKeys []string)
 
 	// Map iteration order is randomized; sort so the reverse entry, and
 	// anything built from it, is the same on every run.
-	sort.Strings(absentKeys)
+	slices.Sort(absentKeys)
 	return values, absentKeys
 }
 

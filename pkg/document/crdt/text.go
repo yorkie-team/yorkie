@@ -18,7 +18,8 @@ package crdt
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"unicode/utf16"
 
@@ -559,11 +560,8 @@ func (t *Text) Style(
 		val := node.value
 
 		if !captured && node == captureFrom {
-			keys := make([]string, 0, len(attributes))
-			for key := range attributes {
-				keys = append(keys, key)
-			}
-			sort.Strings(keys)
+			keys := slices.AppendSeq(make([]string, 0, len(attributes)), maps.Keys(attributes))
+			slices.Sort(keys)
 			for _, key := range keys {
 				if val.attrs.Has(key) {
 					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: val.attrs.Get(key), Existed: true})
@@ -655,8 +653,8 @@ func (t *Text) RemoveStyle(
 		val := node.value
 
 		if !captured && node == captureFrom {
-			keys := append([]string(nil), attributesToRemove...)
-			sort.Strings(keys)
+			keys := slices.Clone(attributesToRemove)
+			slices.Sort(keys)
 			for _, key := range keys {
 				if val.attrs.Has(key) {
 					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: val.attrs.Get(key), Existed: true})

@@ -44,7 +44,7 @@ import (
 // to back are used before an undo to guarantee the deleted nodes are
 // actually purged, so restore exercises the recreate path.
 func settleTreeClients(ctx context.Context, t *testing.T, c1, c2 *client.Client) {
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 	}
@@ -96,7 +96,6 @@ func TestHistoryTreeConcurrentOverlappingUndoAfterGC(t *testing.T) {
 	}
 
 	for _, ov := range overlaps {
-		ov := ov
 
 		t.Run(fmt.Sprintf("converges on undo of overlapping deletes: %s", ov.name), func(t *testing.T) {
 			ctx := context.Background()

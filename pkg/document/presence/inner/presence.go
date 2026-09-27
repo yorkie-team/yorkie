@@ -20,6 +20,7 @@
 package inner
 
 import (
+	"maps"
 	"sync"
 	"sync/atomic"
 )
@@ -48,9 +49,7 @@ func (m *Map) Store(clientID string, presence Presence) {
 
 	if !m.copied.Load() {
 		newPresences := make(map[string]Presence, len(m.presences))
-		for k, v := range m.presences {
-			newPresences[k] = v
-		}
+		maps.Copy(newPresences, m.presences)
 		m.presences = newPresences
 		m.copied.Store(true)
 	}
@@ -84,9 +83,7 @@ func (m *Map) LoadOrStore(clientID string, presence Presence) Presence {
 
 	if !m.copied.Load() {
 		newPresences := make(map[string]Presence, len(m.presences))
-		for k, v := range m.presences {
-			newPresences[k] = v
-		}
+		maps.Copy(newPresences, m.presences)
 		m.presences = newPresences
 		m.copied.Store(true)
 	}
@@ -173,8 +170,6 @@ func (p Presence) DeepCopy() Presence {
 	}
 
 	clone := make(map[string]string, len(p))
-	for k, v := range p {
-		clone[k] = v
-	}
+	maps.Copy(clone, p)
 	return clone
 }

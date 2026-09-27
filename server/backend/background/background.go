@@ -28,10 +28,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
 
-type routineID int32
+type routineID struct{ n atomic.Int32 }
 
 func (c *routineID) next() string {
-	next := atomic.AddInt32((*int32)(c), 1)
+	next := c.n.Add(1)
 	return "b" + strconv.Itoa(int(next))
 }
 

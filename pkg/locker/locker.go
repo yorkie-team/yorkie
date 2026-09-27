@@ -53,22 +53,22 @@ type lockCtr struct {
 	mu sync.RWMutex
 	// waiters is the number of waiters waiting to acquire the lock
 	// this is int32 instead of uint32 so we can add `-1` in `dec()`
-	waiters int32
+	waiters atomic.Int32
 }
 
 // inc increments the number of waiters waiting for the lock
 func (l *lockCtr) inc() {
-	atomic.AddInt32(&l.waiters, 1)
+	l.waiters.Add(1)
 }
 
 // dec decrements the number of waiters waiting on the lock
 func (l *lockCtr) dec() {
-	atomic.AddInt32(&l.waiters, -1)
+	l.waiters.Add(-1)
 }
 
 // count gets the current number of waiters
 func (l *lockCtr) count() int32 {
-	return atomic.LoadInt32(&l.waiters)
+	return l.waiters.Load()
 }
 
 // Lock locks the mutex for writing

@@ -43,7 +43,7 @@ const (
 )
 
 // ValueFromBytes parses the given bytes into value.
-func ValueFromBytes(valueType ValueType, value []byte) (interface{}, error) {
+func ValueFromBytes(valueType ValueType, value []byte) (any, error) {
 	switch valueType {
 	case Null:
 		return nil, nil
@@ -89,14 +89,14 @@ func ValueFromBytes(valueType ValueType, value []byte) (interface{}, error) {
 // Primitive represents JSON primitive data type including logical lock.
 type Primitive struct {
 	valueType ValueType
-	value     interface{}
+	value     any
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
 // NewPrimitive creates a new instance of Primitive.
-func NewPrimitive(value interface{}, createdAt *time.Ticket) (*Primitive, error) {
+func NewPrimitive(value any, createdAt *time.Ticket) (*Primitive, error) {
 	if value == nil {
 		return &Primitive{
 			valueType: Null,
@@ -327,7 +327,7 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 }
 
 // Value returns the value of Primitive.
-func (p *Primitive) Value() interface{} {
+func (p *Primitive) Value() any {
 	return p.value
 }
 

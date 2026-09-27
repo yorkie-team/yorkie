@@ -17,8 +17,10 @@
 package crdt
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -276,11 +278,11 @@ func (rht *ElementRHT) Nodes() []*ElementRHTNode {
 	for _, node := range rht.nodeMapByCreatedAt {
 		nodes = append(nodes, node)
 	}
-	sort.Slice(nodes, func(i, j int) bool {
-		if c := PositionedAt(nodes[i].elem).Compare(PositionedAt(nodes[j].elem)); c != 0 {
-			return c < 0
-		}
-		return nodes[i].elem.CreatedAt().Compare(nodes[j].elem.CreatedAt()) < 0
+	slices.SortFunc(nodes, func(a, b *ElementRHTNode) int {
+		return cmp.Or(
+			PositionedAt(a.elem).Compare(PositionedAt(b.elem)),
+			a.elem.CreatedAt().Compare(b.elem.CreatedAt()),
+		)
 	})
 
 	return nodes
@@ -316,14 +318,9 @@ func (rht *ElementRHT) purge(elem Element) error {
 func (rht *ElementRHT) Marshal() string {
 	members := rht.Elements()
 
-	size := len(members)
-
-	// Extract and sort the keys
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	// Sort the keys so the encoding is deterministic.
+	keys := slices.AppendSeq(make([]string, 0, len(members)), maps.Keys(members))
+	slices.Sort(keys)
 
 	sb := strings.Builder{}
 	sb.WriteString("{")

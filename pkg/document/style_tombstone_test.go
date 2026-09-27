@@ -18,7 +18,7 @@ package document_test
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -86,7 +86,7 @@ func nodeAttrs(t *testing.T, doc *document.Document, key string) []string {
 			}
 			attrs = append(attrs, fmt.Sprintf("%s=%s%s", attr.Key(), attr.Value(), mark))
 		}
-		sort.Strings(attrs)
+		slices.Sort(attrs)
 
 		out = append(out, fmt.Sprintf("%q%s %v", node.Value().Value(), state, attrs))
 	}
@@ -119,7 +119,7 @@ func treeNodeAttrs(t *testing.T, doc *document.Document, key string) []string {
 				attrs = append(attrs, fmt.Sprintf("%s=%s%s", attr.Key(), attr.Value(), mark))
 			}
 		}
-		sort.Strings(attrs)
+		slices.Sort(attrs)
 
 		out = append(out, fmt.Sprintf("%s%s %v", node.Type(), state, attrs))
 	}

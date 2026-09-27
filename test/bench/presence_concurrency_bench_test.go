@@ -34,10 +34,7 @@ import (
 )
 
 func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, concurrentCnt int, syncCnt int) {
-	// Reset the timer to exclude setup time
-	b.ResetTimer()
-
-	for i := range b.N {
+	for i := 0; b.Loop(); i++ {
 		// Stop the timer during setup
 		b.StopTimer()
 
@@ -73,9 +70,11 @@ func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt i
 		}
 		wg.Wait()
 
-		// Stop the timer during cleanup
+		// Stop the timer during cleanup. b.Loop refuses to run with the timer
+		// stopped, so it is restarted before the next iteration.
 		b.StopTimer()
 		helper.CleanupClients(b, clients)
+		b.StartTimer()
 	}
 }
 

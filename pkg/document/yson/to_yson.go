@@ -24,7 +24,7 @@ import (
 )
 
 // FromCRDT converts a CRDT element to a YSON element.
-func FromCRDT(elem crdt.Element) (interface{}, error) {
+func FromCRDT(elem crdt.Element) (any, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
 		return toObject(elem)
@@ -67,7 +67,7 @@ func toArray(array *crdt.Array) (Array, error) {
 	return elements, nil
 }
 
-func toPrimitive(primitive *crdt.Primitive) interface{} {
+func toPrimitive(primitive *crdt.Primitive) any {
 	return primitive.Value()
 }
 

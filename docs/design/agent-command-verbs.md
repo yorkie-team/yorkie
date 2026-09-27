@@ -617,8 +617,10 @@ reported. Read off this repository's lanes as of v0.7.23:
 `goconst`, `misspell`, `nakedret`, `goprintffuncname` as linters; `buf lint`;
 `buf breaking` against the PR's own base commit; a codegen-freshness check that
 fails if `buf generate` dirties `api/`; `make build`; `go vet -tags rgafuzz
-./...`, which compiles the tag-gated reproductions without running them; and
-`go test -tags integration -race ./...` against a real MongoDB.
+./...`, which compiles the tag-gated reproductions without running them;
+`make verify-modernize`, which fails while `go fix` has anything to rewrite
+under any build tag; and `go test -tags integration -race ./...` against a
+real MongoDB.
 
 *Enforced by nothing* — `staticcheck` and `unused` are explicitly disabled in
 `.golangci.yml`. `complex-test`, `bench` and `load-test` are path-gated and do
@@ -641,9 +643,9 @@ holds a `.go` file. This paragraph is the source `review-panel.mjs`'s
 entry here becomes a lens instructed to hunt a class CI already reds.
 
 **c. The verification command the fixer runs.** `pnpm verify:fast` becomes
-`make verify` — `make lint` plus the licence check plus `go test ./...`. The
-integration lane needs the docker-compose stack and is left to CI rather than
-run inside the fix job.
+`make verify` — `make lint` plus the licence check plus the `go fix` check
+plus `go test ./...`. The integration lane needs the docker-compose stack and
+is left to CI rather than run inside the fix job.
 
 The three fixer prompts (`agent-fix.yml`, `agent-iterate-ci.yml`,
 `agent-review-panel.yml`) spelled out `make lint` and `go test ./...` rather

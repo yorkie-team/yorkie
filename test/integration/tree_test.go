@@ -5259,7 +5259,7 @@ func TestTreeChainedMerge(t *testing.T) {
 		assert.Equal(t, "<r><p>ab</p><p>cd</p><p><x></x>ef</p></r>", d3.Root().GetTree("t").ToXML())
 
 		// Full sync until every replica sees every operation.
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			assert.NoError(t, c1.Sync(ctx))
 			assert.NoError(t, c2.Sync(ctx))
 			assert.NoError(t, c3.Sync(ctx))

@@ -18,7 +18,7 @@ package document_test
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -502,7 +502,7 @@ func liveAttrDescs(t *testing.T, d *document.Document, withTicket bool) []string
 		}
 	}
 	walk(tree.Root())
-	sort.Strings(descs)
+	slices.Sort(descs)
 
 	return descs
 }

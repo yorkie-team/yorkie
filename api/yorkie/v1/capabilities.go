@@ -18,6 +18,8 @@
 // wire format, and the hand-written constants that describe it.
 package v1
 
+import "slices"
+
 // Wire capabilities are the names carried in ChangePack.capabilities. They live
 // beside the generated code rather than in the server configuration so that a
 // capability is versioned with the wire format it describes: a build that can
@@ -48,10 +50,5 @@ var ServerCapabilities = []string{
 // list as "probably fine" would emit operations that are silently downgraded on
 // the peer and never stored.
 func HasCapability(capabilities []string, name string) bool {
-	for _, c := range capabilities {
-		if c == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(capabilities, name)
 }

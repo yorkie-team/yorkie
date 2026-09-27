@@ -641,8 +641,10 @@ jobs:
             - Stay in scope: modify only the flagged files unless a fix genuinely
               requires touching others; do not refactor unrelated code.
             - Run `make verify` ONCE at the end to confirm green — not after
-              every edit. It is `make lint`, the Apache licence-header check and
-              `go test ./...`, which is the whole of what this job can verify.
+              every edit. It is `make lint`, the Apache licence-header check,
+              the `go fix` check and `go test ./...`, which is the whole of what
+              this job can verify. If the `go fix` check fails, run
+              `make modernize` rather than editing the idioms by hand.
               Do NOT run `make test`: it needs a MongoDB this job does not stand
               up, and the push below re-runs the full integration lane anyway.
 

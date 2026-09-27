@@ -51,8 +51,16 @@ lint: ## runs the golang-ci lint, checks for lint violations
 # The three autonomous fixer prompts (`agent-fix.yml`, `agent-iterate-ci.yml`,
 # `agent-review-panel.yml`) call this target, so a lane added here is one they
 # all gain — which is the point of them naming a target rather than a list.
-verify: lint verify-license ## runs the checks a commit must pass: lint, licence headers, unit tests
+verify: lint verify-license verify-modernize ## runs the checks a commit must pass: lint, licence headers, go fix, unit tests
 	go test ./...
+
+# The toolchain's own go fix modernizers, under every build tag found in the
+# tree, so a Go upgrade cannot leave old idioms behind unnoticed.
+verify-modernize: ## checks go fix has nothing left to rewrite under any build tag
+	@scripts/go-fix.sh check
+
+modernize: ## applies go fix under every build tag until nothing is left
+	@scripts/go-fix.sh apply
 
 # Node is not otherwise needed to build or test this repository, so the skip
 # is announced rather than silent. `.githooks/pre-push` refuses outright —
@@ -118,4 +126,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build build-binaries fmt lint verify verify-license test test-complex coverage bench docker docker-latest start stop swagger help
+.PHONY: tools proto build build-binaries fmt lint verify verify-license verify-modernize modernize test test-complex coverage bench docker docker-latest start stop swagger help

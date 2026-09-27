@@ -17,7 +17,7 @@
 package heap_test
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,7 +67,7 @@ func TestHeap(t *testing.T) {
 
 		// Get all items and sort them to verify
 		items := h.Items()
-		sort.Ints(items)
+		slices.Sort(items)
 
 		// Should contain [7, 8, 9] (top 3 from input)
 		assert.Equal(t, []int{7, 8, 9}, items)
@@ -219,7 +219,7 @@ func TestHeap(t *testing.T) {
 
 		// Get all items and sort them to verify
 		items := h.Items()
-		sort.Ints(items)
+		slices.Sort(items)
 
 		// Should contain [1, 2, 3] (bottom 3 from input)
 		assert.Equal(t, []int{1, 2, 3}, items)

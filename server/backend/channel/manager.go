@@ -21,7 +21,8 @@ import (
 	"context"
 	goerrors "errors"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	gotime "time"
@@ -622,8 +623,8 @@ func (m *Manager) List(
 		})
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
+	slices.SortFunc(results, func(a, b ChannelSessionCountInfo) int {
+		return strings.Compare(a.Key.ChannelKey.String(), b.Key.ChannelKey.String())
 	})
 	if len(results) > limit {
 		results = results[:limit]

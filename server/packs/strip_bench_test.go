@@ -72,7 +72,7 @@ func BenchmarkStripPresenceChanges(b *testing.B) {
 			}
 			b.Run(name+"/n="+itoa(n), func(b *testing.B) {
 				b.ReportAllocs()
-				for i := 0; i < b.N; i++ {
+				for b.Loop() {
 					b.StopTimer()
 					input := gen(n)
 					b.StartTimer()

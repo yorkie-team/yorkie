@@ -274,15 +274,12 @@ func GetDocumentSummaries(
 
 		// Launch goroutines for parallel cluster API calls
 		for i, docInfo := range docInfos {
-			wg.Add(1)
-			go func(idx int, info *database.DocInfo) {
-				defer wg.Done()
-
+			wg.Go(func() {
 				// Call cluster API to get only snapshot/presence data
 				summary, err := clusterClient.GetDocument(
 					ctx,
 					project,
-					info.Key.String(),
+					docInfo.Key.String(),
 					includeRoot,
 					includePresences,
 				)
@@ -293,13 +290,13 @@ func GetDocumentSummaries(
 				}
 
 				if includeRoot {
-					summaries[idx].Root = summary.Root
-					summaries[idx].DocSize = summary.DocSize
+					summaries[i].Root = summary.Root
+					summaries[i].DocSize = summary.DocSize
 				}
 				if includePresences {
-					summaries[idx].Presences = summary.Presences
+					summaries[i].Presences = summary.Presences
 				}
-			}(i, docInfo)
+			})
 		}
 
 		// Wait for all goroutines to complete

@@ -19,8 +19,8 @@ package crdt
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -247,14 +247,9 @@ func (n *TreeNode) Attributes() string {
 	}
 	members := n.Attrs.Elements()
 
-	size := len(members)
-
-	// Extract and sort the keys
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	// Sort the keys so the encoding is deterministic.
+	keys := slices.AppendSeq(make([]string, 0, len(members)), maps.Keys(members))
+	slices.Sort(keys)
 
 	sb := strings.Builder{}
 	for idx, k := range keys {
@@ -2321,11 +2316,8 @@ func (t *Tree) mergedAnchorInterloperGuard(
 // that key held (or its absence) on the given node, for the reverse Style
 // capture.
 func stylePrevAttrs(node *TreeNode, attrs map[string]string) []PrevAttr {
-	keys := make([]string, 0, len(attrs))
-	for key := range attrs {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := slices.AppendSeq(make([]string, 0, len(attrs)), maps.Keys(attrs))
+	slices.Sort(keys)
 	var prevAttrs []PrevAttr
 	for _, key := range keys {
 		if node.Attrs != nil && node.Attrs.Has(key) {
@@ -3754,8 +3746,8 @@ func (t *Tree) RemoveStyle(
 	var prevAttrs []PrevAttr
 	for i, node := range targets {
 		if i == 0 {
-			keys := append([]string(nil), attrs...)
-			sort.Strings(keys)
+			keys := slices.Clone(attrs)
+			slices.Sort(keys)
 			for _, key := range keys {
 				if node.Attrs != nil && node.Attrs.Has(key) {
 					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})

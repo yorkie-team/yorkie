@@ -181,9 +181,9 @@ test('a lane with no precondition is never filtered', () => {
 
 test('the summary is written from the MANIFEST, not from the files present', () => {
   // The regression: a job that died at the first lane leaves one report, and a
-  // summary assembled from the directory would not mention the other seven at
+  // summary assembled from the directory would not mention the other eight at
   // all — a run that reported one failure and, as far as any reader could
-  // tell, seven lanes that do not exist.
+  // tell, eight lanes that do not exist.
   withDir((dir) => {
     writeFileSync(
       reportPath(dir, 'alpha'),

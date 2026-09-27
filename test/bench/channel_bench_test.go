@@ -154,9 +154,7 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 	// Verify setup
 	assert.Equal(b, channelCount, manager.Count(projectID), "channel count mismatch after setup")
 
-	b.ResetTimer()
-
-	var attachErrors int64
+	var attachErrors atomic.Int64
 	for b.Loop() {
 		var wg sync.WaitGroup
 
@@ -172,14 +170,14 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))
 					_, _, err := manager.Attach(ctx, channelKey, clientID)
 					if err != nil {
-						atomic.AddInt64(&attachErrors, 1)
+						attachErrors.Add(1)
 					}
 				}
 			})
 		}
 
 		wg.Wait()
-		assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(b, int64(0), attachErrors.Load(), "no attach errors should occur")
 	}
 }
 
@@ -250,9 +248,7 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 	// Verify setup
 	assert.Equal(b, totalChannels, manager.Count(projectID), "channel count mismatch after setup")
 
-	b.ResetTimer()
-
-	var attachErrors int64
+	var attachErrors atomic.Int64
 	for b.Loop() {
 		var wg sync.WaitGroup
 
@@ -268,14 +264,14 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))
 					_, _, err := manager.Attach(ctx, channelKey, clientID)
 					if err != nil {
-						atomic.AddInt64(&attachErrors, 1)
+						attachErrors.Add(1)
 					}
 				}
 			})
 		}
 
 		wg.Wait()
-		assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(b, int64(0), attachErrors.Load(), "no attach errors should occur")
 	}
 }
 
@@ -315,9 +311,7 @@ func benchmarkManagerAttach(b *testing.B, clientCount int) {
 	// Create manager once outside the loop
 	manager, projectID := createBenchManager(b)
 
-	b.ResetTimer()
-
-	for i := range b.N {
+	for i := 0; b.Loop(); i++ {
 		// Use different channel key per iteration to avoid session accumulation
 		channelKey := types.ChannelRefKey{
 			ProjectID:  projectID,
@@ -326,19 +320,19 @@ func benchmarkManagerAttach(b *testing.B, clientCount int) {
 
 		var wg sync.WaitGroup
 
-		var attachErrors int64
+		var attachErrors atomic.Int64
 		for j := range clientCount {
 			wg.Go(func() {
 				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, j))
 				_, _, err := manager.Attach(ctx, channelKey, clientID)
 				if err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 			})
 		}
 
 		wg.Wait()
-		assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(b, int64(0), attachErrors.Load(), "no attach errors should occur")
 	}
 }
 
@@ -347,9 +341,7 @@ func benchmarkManagerDetach(b *testing.B, clientCount int) {
 	// Create manager once outside the loop
 	manager, projectID := createBenchManager(b)
 
-	b.ResetTimer()
-
-	for i := range b.N {
+	for i := 0; b.Loop(); i++ {
 		b.StopTimer()
 
 		// Use different channel key per iteration
@@ -374,13 +366,13 @@ func benchmarkManagerDetach(b *testing.B, clientCount int) {
 		b.StartTimer()
 
 		// Concurrent detach
-		var detachErrors int64
+		var detachErrors atomic.Int64
 		var wg sync.WaitGroup
 		for j := range clientCount {
 			wg.Go(func() {
 				_, err := manager.Detach(ctx, sessionIDs[j])
 				if err != nil {
-					atomic.AddInt64(&detachErrors, 1)
+					detachErrors.Add(1)
 				}
 			})
 		}
@@ -405,13 +397,10 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 		ChannelKey: key.Key("bench-room"),
 	}
 
-	b.ResetTimer()
-
-	for range b.N {
-
+	for b.Loop() {
 		var wg sync.WaitGroup
-		var attachErrors int64
-		var detachErrors int64
+		var attachErrors atomic.Int64
+		var detachErrors atomic.Int64
 
 		// Concurrent attach
 		sessionIDs := make([]types.ID, clientCount)
@@ -422,7 +411,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", j))
 				sessionID, _, err := manager.Attach(ctx, channelKey, clientID)
 				if err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 				mu.Lock()
 				sessionIDs[j] = sessionID
@@ -433,7 +422,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 		wg.Wait()
 
 		b.StopTimer()
-		assert.Equal(b, int64(0), attachErrors, "all attaches should succeed")
+		assert.Equal(b, int64(0), attachErrors.Load(), "all attaches should succeed")
 		assert.Equal(b, int64(clientCount), manager.SessionCount(channelKey, false), "session count should match client count")
 		b.StartTimer()
 
@@ -445,7 +434,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 				mu.Unlock()
 				_, err := manager.Detach(ctx, sessionID)
 				if err != nil {
-					atomic.AddInt64(&detachErrors, 1)
+					detachErrors.Add(1)
 				}
 			})
 		}
@@ -453,7 +442,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 		wg.Wait()
 
 		b.StopTimer()
-		assert.Equal(b, int64(0), detachErrors, "no detach errors should occur")
+		assert.Equal(b, int64(0), detachErrors.Load(), "no detach errors should occur")
 		assert.Equal(b, int64(0), manager.SessionCount(channelKey, false), "all sessions should be detached")
 		b.StartTimer()
 	}
@@ -533,8 +522,6 @@ func benchmarkManagerSessionCount(b *testing.B, levelCounts []int, includeSubPat
 	// Verify setup
 	assert.Equal(b, totalChannels, manager.Count(projectID), "channel count mismatch after setup")
 
-	b.ResetTimer()
-
 	for b.Loop() {
 		for _, channelKey := range channelKeys {
 			count := manager.SessionCount(channelKey, includeSubPath)
@@ -601,7 +588,6 @@ func benchmarkManagerList(b *testing.B, channelCount int, queryPrefix string, li
 	// Verify setup
 	assert.Equal(b, channelCount, manager.Count(projectID), "channel count mismatch after setup")
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -665,7 +651,6 @@ func benchmarkManagerListHierarchical(b *testing.B, levelCounts []int, queryPref
 	// Verify setup
 	assert.Equal(b, len(allKeyPaths), manager.Count(projectID), "channel count mismatch after setup")
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
@@ -717,8 +702,6 @@ func benchmarkManagerCleanupExpired(b *testing.B, channelCount int, sessionsPerC
 
 	// Use 1ms TTL so sessions expire immediately
 	manager := channel.NewManager(pubsub, 1*gotime.Millisecond, 60*gotime.Second, nil, broker, db)
-
-	b.ResetTimer()
 
 	iteration := 0
 	for b.Loop() {
@@ -789,7 +772,6 @@ func BenchmarkChannelCount(b *testing.B) {
 			// Verify setup
 			assert.Equal(b, tc.channelCount, manager.Count(projectID), "channel count mismatch after setup")
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
 			for b.Loop() {
@@ -844,7 +826,6 @@ func BenchmarkChannelStats(b *testing.B) {
 			assert.Equal(b, tc.channelCount, stats["total_channels"], "channel count mismatch after setup")
 			assert.Equal(b, expectedSessions, stats["total_sessions"], "session count mismatch after setup")
 
-			b.ResetTimer()
 			b.ReportAllocs()
 
 			for b.Loop() {
@@ -875,9 +856,8 @@ func BenchmarkChannel_Memory(b *testing.B) {
 		b.Run(fmt.Sprintf("insert/%s", tc.name), func(b *testing.B) {
 			ctx := context.Background()
 			b.ReportAllocs()
-			b.ResetTimer()
 
-			for range b.N {
+			for b.Loop() {
 				b.StopTimer()
 				manager, projectID := createBenchManager(b)
 				b.StartTimer()

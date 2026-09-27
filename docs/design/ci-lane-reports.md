@@ -78,7 +78,12 @@ job already ran, in the same order:
 | `codegen-fresh` | `generic` | `buf generate` + a `git status` assertion on `api/` |
 | `build` | `go-build` | `make build` |
 | `vet-tagged` | `go-build` | `go vet -tags rgafuzz ./...` |
+| `modernize` | `generic` | `make verify-modernize` |
 | `test` | `go-test` | `go test -tags integration -race … -v ./...` |
+
+`modernize` is the one lane added after the manifest rather than carried over
+from a step, so it had no earlier string to preserve; its step was written to
+call the lane from the start.
 
 Each `run` is the **literal string** the step it replaced carried, executed
 with `bash -e -c` because that is what a `run:` step is — `codegen-fresh` is
@@ -96,7 +101,7 @@ file changes how a lane is reported and never what it runs.
 
 `ci.yml` keeps one step per lane — `node scripts/ci/run-lanes.mjs <name>` —
 rather than one step running the manifest. The reports are for the fixing
-agent; the Actions UI is for people, and collapsing eight named steps into
+agent; the Actions UI is for people, and collapsing nine named steps into
 "Run the CI lanes" would take the step name that says which check failed away
 from a human to give a machine something it already had. Run with no
 arguments the CLI does execute the whole manifest in order, stopping at the
@@ -231,7 +236,7 @@ front of an agent.
 | Alternative | Why not |
 |-------------|---------|
 | Keep the log tail, just make it bigger | Same design, more expensive, and it still misses a race report that fired early in a 40 MB run |
-| One `ci.yml` step running the whole manifest | Collapses eight named steps into one in the Actions UI, and forces the two conditional lanes' `if:` into JavaScript |
+| One `ci.yml` step running the whole manifest | Collapses nine named steps into one in the Actions UI, and forces the two conditional lanes' `if:` into JavaScript |
 | A separate job that re-runs the checks to produce reports | Doubles the cost of the most expensive job in the repository to report on it |
 | Reuse `.harness-reports/` | See the decision table — the name is taken by something with incompatible contents |
 | Path-aware lane filtering | `ci.yml` already filters at the job level; a second filter is a second source of truth that can disagree |

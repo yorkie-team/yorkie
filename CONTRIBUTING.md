@@ -70,8 +70,9 @@ make lint
 > If you have an old version of `golangci-lint` installed locally, running `make lint` may fail—especially if the linter doesn't support the newer version of Go. It's recommended to run `make tools` periodically to keep your tools up to date.
 
 `make verify` is the gate a commit has to pass: `make lint`, the licence
-headers, and the unit tests. It leaves out the integration lane, which needs
-MongoDB and runs in CI. The hooks installed by `scripts/setup.sh` run it for
+headers, the `go fix` check, and the unit tests. It leaves out the integration
+lane, which needs MongoDB and runs in CI. When the `go fix` check fails, run
+`make modernize` and commit the result. The hooks installed by `scripts/setup.sh` run it for
 you — see Commit Message Format below.
 
 ### Setting for VSCode
@@ -124,8 +125,8 @@ This copies `.githooks/` into your clone's shared `$GIT_DIR` (the
 common one, so running it from a linked worktree is fine) and points
 `core.hooksPath` there, then does the same for the Claude Code hooks. The
 installed hooks validate every commit message against the format above,
-run `make lint` on commit, and run `make verify` (lint, licence headers
-and the unit tests) on push.
+run `make lint` on commit, and run `make verify` (lint, licence headers,
+the `go fix` check and the unit tests) on push.
 
 They are snapshots on purpose: a hook run out of the working tree is a
 script the branch you have checked out supplies, so a rewritten

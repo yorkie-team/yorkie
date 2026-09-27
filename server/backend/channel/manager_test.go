@@ -937,7 +937,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 
 		concurrency := 300
 		var wg sync.WaitGroup
-		var attachErrors int64
+		var attachErrors atomic.Int64
 
 		for i := range concurrency {
 			wg.Go(func() {
@@ -948,14 +948,14 @@ func TestChannelManager_Concurrency(t *testing.T) {
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 			})
 		}
 		wg.Wait()
 
 		// Should have 300 channels
-		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(t, int64(0), attachErrors.Load(), "no attach errors should occur")
 		assert.Equal(t, concurrency, manager.Count(projectID))
 	})
 
@@ -971,15 +971,15 @@ func TestChannelManager_Concurrency(t *testing.T) {
 
 		concurrency := 300
 		var wg sync.WaitGroup
-		var detachErrors int64
-		var attachErrors int64
+		var detachErrors atomic.Int64
+		var attachErrors atomic.Int64
 
 		// Concurrent detaches
 		for i := range concurrency {
 			wg.Go(func() {
 				_, err := manager.Detach(ctx, initialSessions[i])
 				if err != nil {
-					atomic.AddInt64(&detachErrors, 1)
+					detachErrors.Add(1)
 				}
 			})
 		}
@@ -990,7 +990,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("2%023d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 			})
 		}
@@ -998,8 +998,8 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		wg.Wait()
 
 		// Final count should be 300 (all old detached, all new attached)
-		assert.Equal(t, int64(0), detachErrors, "no detach errors should occur")
-		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(t, int64(0), detachErrors.Load(), "no detach errors should occur")
+		assert.Equal(t, int64(0), attachErrors.Load(), "no attach errors should occur")
 		assert.Equal(t, int64(300), manager.SessionCount(refKey, false))
 	})
 
@@ -1016,7 +1016,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		}
 
 		var wg sync.WaitGroup
-		var attachErrors int64
+		var attachErrors atomic.Int64
 
 		// Concurrent attaches to different hierarchical channels
 		for i := range 100 {
@@ -1025,7 +1025,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 			})
 		}
@@ -1034,7 +1034,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		// Verify hierarchical counts
 		totalCount := manager.SessionCount(refKeys[0], true)
 		assert.Equal(t, int64(100), totalCount)
-		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(t, int64(0), attachErrors.Load(), "no attach errors should occur")
 	})
 }
 
@@ -1112,18 +1112,18 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
 		concurrency := 300
 		var wg sync.WaitGroup
-		var attachErrors int64
+		var attachErrors atomic.Int64
 		for i := range concurrency {
 			wg.Go(func() {
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 			})
 		}
 		wg.Wait()
-		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
+		assert.Equal(t, int64(0), attachErrors.Load(), "no attach errors should occur")
 
 		// Verify all seq numbers are unique
 		pubsub.mu.Lock()
@@ -1319,7 +1319,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		projectID := types.NewID()
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "race-room"}
 
-		for round := 0; round < 100; round++ {
+		for round := range 100 {
 			// Attach one session
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", round))
 			sessionID, _, err := manager.Attach(ctx, refKey, clientID)
@@ -1367,32 +1367,32 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		const opsPerGoroutine = 20
 
 		var wg sync.WaitGroup
-		var attachErrors int64
-		var detachErrors int64
+		var attachErrors atomic.Int64
+		var detachErrors atomic.Int64
 
 		wg.Add(numGoroutines)
-		for g := 0; g < numGoroutines; g++ {
+		for g := range numGoroutines {
 			go func(id int) {
 				defer wg.Done()
-				for i := 0; i < opsPerGoroutine; i++ {
+				for i := range opsPerGoroutine {
 					clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%012d%012d", id, i))
 					sessionID, _, err := manager.Attach(ctx, refKey, clientID)
 					if err != nil {
-						atomic.AddInt64(&attachErrors, 1)
+						attachErrors.Add(1)
 						continue
 					}
 
 					_, err = manager.Detach(ctx, sessionID)
 					if err != nil {
-						atomic.AddInt64(&detachErrors, 1)
+						detachErrors.Add(1)
 					}
 				}
 			}(g)
 		}
 		wg.Wait()
 
-		assert.Equal(t, int64(0), attachErrors, "attach errors")
-		assert.Equal(t, int64(0), detachErrors, "detach errors")
+		assert.Equal(t, int64(0), attachErrors.Load(), "attach errors")
+		assert.Equal(t, int64(0), detachErrors.Load(), "detach errors")
 
 		// All sessions detached, count should be 0
 		assert.Equal(t, int64(0), manager.SessionCount(refKey, false))
@@ -1409,8 +1409,8 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		sessions := attachChannels(t, ctx, manager, refKey, 100, "1")
 
 		var wg sync.WaitGroup
-		var attachErrors int64
-		var detachErrors int64
+		var attachErrors atomic.Int64
+		var detachErrors atomic.Int64
 
 		// Concurrent refreshes on sessions that won't be detached (50~99)
 		wg.Add(50)
@@ -1423,31 +1423,31 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 
 		// Concurrent detaches (0~49)
 		wg.Add(50)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			go func(idx int) {
 				defer wg.Done()
 				if _, err := manager.Detach(ctx, sessions[idx]); err != nil {
-					atomic.AddInt64(&detachErrors, 1)
+					detachErrors.Add(1)
 				}
 			}(i)
 		}
 
 		// Concurrent attaches with unique client IDs (hex-safe, no overlap with prefix "1")
 		wg.Add(50)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			go func(idx int) {
 				defer wg.Done()
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("f%023d", idx))
 				if _, _, err := manager.Attach(ctx, refKey, cid); err != nil {
-					atomic.AddInt64(&attachErrors, 1)
+					attachErrors.Add(1)
 				}
 			}(i)
 		}
 
 		wg.Wait()
 
-		assert.Equal(t, int64(0), attachErrors, "attach errors")
-		assert.Equal(t, int64(0), detachErrors, "detach errors")
+		assert.Equal(t, int64(0), attachErrors.Load(), "attach errors")
+		assert.Equal(t, int64(0), detachErrors.Load(), "detach errors")
 		// 100 original - 50 detached + 50 new = 100
 		assert.Equal(t, int64(100), manager.SessionCount(refKey, false))
 	})
@@ -1459,10 +1459,10 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		projectID := types.NewID()
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "ephemeral-room"}
 
-		for round := 0; round < 50; round++ {
+		for round := range 50 {
 			// Attach N sessions with globally unique hex client IDs
 			sessions := make([]types.ID, 10)
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%06x%018d", round, i))
 				sid, _, err := manager.Attach(ctx, refKey, cid)
 				assert.NoError(t, err)
@@ -1502,7 +1502,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		// Attach all concurrently
 		var wg sync.WaitGroup
 		wg.Add(totalAttach)
-		for i := 0; i < totalAttach; i++ {
+		for i := range totalAttach {
 			go func(idx int) {
 				defer wg.Done()
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
@@ -1522,7 +1522,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 
 		// Detach half concurrently
 		wg.Add(totalAttach / 2)
-		for i := 0; i < totalAttach/2; i++ {
+		for i := range totalAttach / 2 {
 			go func(idx int) {
 				defer wg.Done()
 				_, err := manager.Detach(ctx, sessionIDs[idx])
@@ -1553,7 +1553,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		// Concurrently: refresh first 50, let last 50 expire
 		var wg sync.WaitGroup
 		wg.Add(50)
-		for i := 0; i < 50; i++ {
+		for i := range 50 {
 			go func(idx int) {
 				defer wg.Done()
 				_ = manager.Refresh(ctx, sessions[idx])
@@ -1579,14 +1579,14 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 // It delegates all methods to the inner DB; only FindProjectInfoByID is intercepted.
 type countingDB struct {
 	database.Database
-	findByIDCount int32
+	findByIDCount atomic.Int32
 }
 
 func (c *countingDB) FindProjectInfoByID(
 	ctx context.Context,
 	id types.ID,
 ) (*database.ProjectInfo, error) {
-	atomic.AddInt32(&c.findByIDCount, 1)
+	c.findByIDCount.Add(1)
 	return c.Database.FindProjectInfoByID(ctx, id)
 }
 
@@ -1728,12 +1728,12 @@ func TestCleanupExpired(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Reset counter after Attach calls (which don't call FindProjectInfoByID).
-		atomic.StoreInt32(&cdb.findByIDCount, 0)
+		cdb.findByIDCount.Store(0)
 
 		_, err = manager.CleanupExpired(ctx)
 		assert.NoError(t, err)
 
-		calls := atomic.LoadInt32(&cdb.findByIDCount)
+		calls := cdb.findByIDCount.Load()
 		assert.Equal(t, int32(1), calls,
 			"FindProjectInfoByID should be called exactly once per project per pass")
 	})

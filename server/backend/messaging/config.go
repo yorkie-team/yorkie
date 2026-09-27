@@ -68,8 +68,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("addresses: %w", ErrEmptyAddress)
 	}
 
-	kafkaAddresses := strings.Split(c.Addresses, ",")
-	for _, addr := range kafkaAddresses {
+	for addr := range strings.SplitSeq(c.Addresses, ",") {
 		if addr == "" {
 			return fmt.Errorf(`%s: %w`, c.Addresses, ErrEmptyAddress)
 		}
