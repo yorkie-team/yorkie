@@ -39,7 +39,7 @@ closed.
 - [x] Green: retire a released element's zero record when `elementMap`
       stops answering with it (the restored copy takes the slot over).
 - [x] `make verify` per commit; `make test` (MongoDB was up) green.
-- [ ] Self review (max 3 rounds), log in lessons.
+- [x] Self review: round 1 clean (no blocking findings), logged in lessons.
 - [ ] Rebase on `origin/main`, push, open PR.
 
 ## Design (G2)
