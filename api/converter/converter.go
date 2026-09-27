@@ -65,4 +65,14 @@ var (
 	// stored-decode path (FromStoredOperations) can tell an operation that can
 	// never be applied apart from a decode failure it must surface.
 	ErrMissingTicket = errors.InvalidArgument("missing time ticket").WithCode("ErrMissingTicket")
+
+	// ErrRefusedMember is returned when an object's member cannot be taken
+	// into the decoded ElementRHT: it loses the LWW comparison for its key to
+	// a member decoded before it, and carries a createdAt that the winning
+	// ticket does not follow, so it can be neither indexed nor tombstoned.
+	// No document state a replica can reach encodes to such bytes -- every
+	// member's createdAt precedes the ticket of whatever replaced it -- so
+	// this is a malformed payload, and dropping the member silently would
+	// hand back an object short a key the sender believes it sent.
+	ErrRefusedMember = errors.InvalidArgument("refused object member").WithCode("ErrRefusedMember")
 )

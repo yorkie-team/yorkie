@@ -88,10 +88,47 @@ The signature is the fix. `SetWithExecutedAt` now returns
 `(removed Element, indexed bool)` all the way up through `Object`, and
 `Set.Execute` returns an empty `ExecutionResult` -- no reverse, not
 observable -- when `indexed` is false. Nothing changed, so there is nothing to
-undo and nothing to notify. `ElementRHT.Set` keeps its single return for the
-local path, where a freshly issued ticket always wins and refusal is
-unreachable.
+undo and nothing to notify.
 
 The general shape: when a low-level call gains a new "I declined" outcome,
 the first question is whether any caller's next line assumes the old one. An
 overloaded sentinel guarantees the answer is no.
+
+## Round 4 (panel): "every caller" means every caller, not every operation
+
+The first pass widened `SetWithExecutedAt` and guarded `Set.Execute`, but
+left `ElementRHT.Set`/`Object.Set` collapsing the pair back to one value on
+the grounds that their one production caller -- `json.Object.setInternal` --
+issues a fresh ticket and therefore always wins. All three lenses rejected
+that: the argument is about the *operation*, while the dropped return is a
+property of the *signature*, so it has to be re-derived by every future
+caller and by any reader auditing the guard. Both now return
+`(Element, bool)`, and `setInternal` returns early without Root bookkeeping
+and without pushing the `Set` -- nothing changed locally, and a peer
+replaying it would refuse it too.
+
+The second call site was `fromJSONObject`, which replays members into a fresh
+`ElementRHT` as a bare statement. That is a reconstruction, not an operation:
+a refused member has nowhere else to go, so it would simply be absent from
+the decoded object with nothing recording it. Since the same decoder reads
+the element payload of a client-pushed `Set`/`Add`/`ArraySet`, silence there
+is a member an attacker can delete from someone else's object. It now fails
+the decode with `ErrRefusedMember`.
+
+## A refusal keyed on the value's own state cannot cover a forged one
+
+The security lens found the hole the refusal left open: it fires only when
+the loser must be tombstoned and cannot be. A loser that arrives *already*
+removed skips the tombstoning, so it was indexed unconditionally -- and a
+change carrying both a `removedAt` and the `createdAt` of a live member would
+re-point `nodeMapByCreatedAt`, and `Root.elementMap` behind it, at a
+tombstone that answers to no key. `createdAt` and `removedAt` are decoded
+independently from client bytes, so nothing upstream forbids that pair.
+
+The fix belongs where the invariant is, not where the forgery arrives: the
+loser branch now refuses any value whose `createdAt` is already held by a
+different node. A causal change log issues a fresh `createdAt` per value and
+never reaches it. The lesson is that a guard derived from the value's own
+fields (`RemovedAt() == nil`) protects only values that fill those fields
+honestly; the guard that holds regardless is the one stated over the
+structure being mutated -- here, "this slot is taken".

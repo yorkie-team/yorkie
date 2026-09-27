@@ -100,10 +100,15 @@ func (rht *ElementRHT) Has(key string) bool {
 	return false
 }
 
-// Set sets the value of the given key. If there is an existing value, it is removed.
-func (rht *ElementRHT) Set(k string, v Element) Element {
-	removed, _ := rht.SetWithExecutedAt(k, v, v.CreatedAt())
-	return removed
+// Set sets the value of the given key. If there is an existing value, it is
+// removed. It is SetWithExecutedAt with v's own createdAt as the tie-break
+// ticket, and reports the same pair: the element evicted from the key, and
+// whether v was taken into this hashtable at all. The second value must not
+// be dropped by a caller that books v into Root -- a refused v is in neither
+// map, so the bookkeeping would describe a member the hashtable does not
+// hold. See SetWithExecutedAt.
+func (rht *ElementRHT) Set(k string, v Element) (Element, bool) {
+	return rht.SetWithExecutedAt(k, v, v.CreatedAt())
 }
 
 // SetWithExecutedAt behaves like Set, but uses the given executedAt as the
@@ -175,6 +180,21 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	// the document exactly as it was, which is also what re-applying an already
 	// applied Set should do: its createdAt ties the occupant's positionedAt,
 	// and the index keeps naming the live copy instead of the duplicate.
+	// The loser is indexed by createdAt only so GC can still reach it, which
+	// means it must not take that slot from a node already holding it. The
+	// tombstoning below does not cover this: a value that arrives already
+	// removed skips it entirely, so a change carrying both a removedAt and
+	// the createdAt of a live member would otherwise re-point this index --
+	// and, through RegisterElement, Root.elementMap behind it -- at a
+	// tombstone that answers to no key, stranding the live copy in every
+	// later lookup, collection and snapshot. A causal change log issues a
+	// fresh createdAt per value and cannot reach this, but createdAt is
+	// decoded from client bytes, so a crafted or duplicated change can.
+	// Refusing leaves the hashtable exactly as it was.
+	if existing, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]; ok && existing.elem != v {
+		return nil, false
+	}
+
 	if v.RemovedAt() == nil && !v.Remove(PositionedAt(node.elem)) {
 		return nil, false
 	}

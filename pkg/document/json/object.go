@@ -420,7 +420,22 @@ func (p *Object) setInternal(
 		panic(err)
 	}
 
-	removed := p.Set(k, value)
+	// A value the object refused is in neither of its member maps, so none of
+	// the Root bookkeeping below may run for it -- the same guard
+	// operations.Set.Execute applies to the remote and replay paths.
+	// RegisterElement would charge docSize.Live for an element hanging off no
+	// container and point elementMap at it, over whatever live copy already
+	// answers to that createdAt. A local Set issues a fresh ticket that
+	// follows every ticket this client has seen, so it always wins the LWW
+	// comparison and the refusal is unreachable from here; honoring it is
+	// what keeps that an invariant of this call site rather than of every
+	// future caller. Nothing changed, so there is no operation to broadcast
+	// either: a peer replaying it would refuse it too.
+	removed, indexed := p.Set(k, value)
+	if !indexed {
+		return elem
+	}
+
 	p.context.RegisterElement(value, p)
 	if removed != nil {
 		p.context.RegisterRemovedElementPair(p, removed)
