@@ -67,6 +67,10 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 
 	conf := helper.TestConfig()
 	conf.Mongo = nil
+	// AuthWebhookCacheTTL bounds how stale an authorization decision may be,
+	// and the watch lease re-checks on that same period. Shortening it here
+	// keeps the test quick without giving the lease its own timing constant.
+	conf.Backend.AuthWebhookCacheTTL = "500ms"
 	svr, err := server.New(conf)
 	require.NoError(t, err)
 	require.NoError(t, svr.Start())
@@ -152,7 +156,8 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 		channelEnded <- channel.Err()
 	}()
 
-	// A permitted lease must renew past its original four-second deadline.
+	// A permitted lease must renew for as long as the webhook keeps allowing
+	// it, over many re-check periods.
 	keepalive := time.NewTimer(4500 * time.Millisecond)
 	defer keepalive.Stop()
 	select {
@@ -171,9 +176,10 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 	allowed.Store(false)
 	cutoff := time.NewTimer(5 * time.Second)
 	defer cutoff.Stop()
-	// A distinct denied token proves current webhook state while leaving the
-	// original token's default cached allow intact. The old stream must bypass
-	// that cache for its lease checks.
+	// A distinct denied token proves the current webhook state without
+	// disturbing the original token's cache entry. The old stream must still
+	// end: its lease shares the cache, but no entry outlives
+	// AuthWebhookCacheTTL, so the next re-check sees the revocation.
 	freshClient := v1connect.NewYorkieServiceClient(
 		http.DefaultClient,
 		"http://"+svr.RPCAddr(),

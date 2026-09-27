@@ -18,39 +18,30 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
-// VerifyWatchLease checks the current webhook decision without using the
-// admission cache. A cached allow cannot extend an established Watch lease.
-func VerifyWatchLease(ctx context.Context, be *backend.Backend, access *types.AccessInfo) error {
-	project := projects.From(ctx)
+// VerifyWatchLease re-checks an established Watch stream against the given
+// project, which the caller reloads so that settings changed after the stream
+// opened take effect.
+//
+// It shares the admission cache on purpose. AuthWebhookCacheTTL is the
+// configured bound on how stale an authorization decision may be, and the
+// caller re-checks on that same period, so a revocation is still observed
+// within the configured window while N streams of one project cost at most
+// one webhook call per TTL rather than one call per stream per re-check.
+func VerifyWatchLease(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	access *types.AccessInfo,
+) error {
 	if !project.RequireAuth(access.Method) {
 		return nil
 	}
 
-	request := types.AuthWebhookRequest{
-		Token:      metadata.From(ctx).Authorization,
-		Method:     access.Method,
-		Attributes: access.Attributes,
-	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("verify watch lease: %w", err)
-	}
-	options, err := project.GetAuthWebhookOptions()
-	if err != nil {
-		return fmt.Errorf("verify watch lease: %w", err)
-	}
-	response, status, err := be.AuthWebhookClient.Send(ctx, project.AuthWebhookURL, "", body, options)
-	if err != nil {
-		return fmt.Errorf("verify watch lease: %w", err)
-	}
-	return handleWebhookResponse(status, response)
+	return verifyAccess(ctx, be, project, metadata.From(ctx).Authorization, access)
 }
