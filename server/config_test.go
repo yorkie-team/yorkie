@@ -147,6 +147,23 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.ErrorContains(t, err, "auth-webhook-cache-auth-ttl")
 	})
 
+	// A Mongo section that omits the project cache keys used to leave
+	// ProjectCacheTTL empty: Validate() skipped it and ParseProjectCacheTTL
+	// then exited the process while building the client.
+	t.Run("fill project cache defaults for a partial Mongo section", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Mongo:\n  ConnectionURI: \"mongodb://localhost:27017\"\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, server.DefaultProjectCacheTTL.String(), conf.Mongo.ProjectCacheTTL)
+		assert.Equal(t, server.DefaultProjectCacheSize, conf.Mongo.ProjectCacheSize)
+		assert.NoError(t, conf.Mongo.Validate())
+	})
+
 	t.Run("explicit zero DeactivateConcurrency preserved (sequential opt-in)", func(t *testing.T) {
 		filePath := "config.zero-concurrency.yml"
 		file, err := os.Create(filePath)

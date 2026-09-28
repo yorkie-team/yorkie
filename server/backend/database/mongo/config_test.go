@@ -30,6 +30,7 @@ func TestConfig(t *testing.T) {
 		config := &mongo.Config{
 			ConnectionTimeout: "5s",
 			PingTimeout:       "5s",
+			ProjectCacheTTL:   "10m",
 		}
 		assert.NoError(t, config.Validate())
 
@@ -41,6 +42,29 @@ func TestConfig(t *testing.T) {
 		config.ConnectionTimeout = "5s"
 		config.PingTimeout = "5"
 		assert.Error(t, config.Validate())
+	})
+
+	// ParseProjectCacheTTL exits the process on an unparseable value, and a
+	// non-positive one is reinterpreted as "never expire" by the underlying
+	// expirable LRU. Both have to be caught here, before startup.
+	t.Run("reject unusable project cache TTL", func(t *testing.T) {
+		config := &mongo.Config{
+			ConnectionTimeout: "5s",
+			PingTimeout:       "5s",
+		}
+
+		// An omitted TTL is filled by server.ensureMongoDefaultValue; if it
+		// still reaches Validate, it is an error rather than a silent default.
+		assert.ErrorContains(t, config.Validate(), "--mongo-project-cache-ttl")
+
+		config.ProjectCacheTTL = "0s"
+		assert.ErrorContains(t, config.Validate(), "--mongo-project-cache-ttl")
+
+		config.ProjectCacheTTL = "1ns"
+		assert.ErrorContains(t, config.Validate(), "--mongo-project-cache-ttl")
+
+		config.ProjectCacheTTL = "1ms"
+		assert.NoError(t, config.Validate())
 	})
 
 	t.Run("parse monitoring test", func(t *testing.T) {

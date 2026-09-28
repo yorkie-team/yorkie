@@ -352,6 +352,15 @@ func (c *Config) ensureMongoDefaultValue() {
 	if c.Mongo.VectorCacheSize == 0 {
 		c.Mongo.VectorCacheSize = DefaultMongoVectorCacheSize
 	}
+	if c.Mongo.ProjectCacheSize == 0 {
+		c.Mongo.ProjectCacheSize = DefaultProjectCacheSize
+	}
+	// The project cache TTL has no "unset" reading: an empty value cannot be
+	// parsed into a duration, and Mongo.Validate() rejects it rather than
+	// letting client initialization fail later.
+	if c.Mongo.ProjectCacheTTL == "" {
+		c.Mongo.ProjectCacheTTL = DefaultProjectCacheTTL.String()
+	}
 }
 
 // ensureKafkaDefaultValue set the default messagebroker.Config value

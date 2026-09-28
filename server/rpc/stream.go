@@ -18,9 +18,27 @@ package rpc
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 )
+
+// isSkipped reports whether convert asked for the event to be skipped by
+// returning a nil response.
+//
+// Resp is instantiated with a pointer type (*api.WatchChannelResponse and
+// friends), so a nil response is a typed nil pointer: converting it to an
+// interface yields a non-nil interface value, and comparing `any(resp)` to
+// nil would never match. The nil has to be read off the value itself.
+func isSkipped[Resp any](resp Resp) bool {
+	v := reflect.ValueOf(&resp).Elem()
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		return v.IsNil()
+	default:
+		return false
+	}
+}
 
 // streamEvents reads events from a subscription and sends converted responses
 // over a stream. It blocks until the context is done, the serviceCtx is done
@@ -59,8 +77,8 @@ func streamEvents[E any, Resp any](
 				return err
 			}
 
-			// A nil interface value means skip this event.
-			if any(resp) == nil {
+			// A nil response means skip this event.
+			if isSkipped(resp) {
 				continue
 			}
 
