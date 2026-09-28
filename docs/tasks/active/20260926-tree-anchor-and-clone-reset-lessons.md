@@ -157,18 +157,18 @@
 
 ## Panel round (post-maintainer)
 
-- Reverting the identity rejection wholesale also un-guarded the IDs the
-  restore span itself is keyed by (`Id`, `ParentId`, `RightSiblingId`),
-  which reach `Tree.Restore`'s recreate path bounded nowhere downstream.
-  The stored-population argument does not cover those: no producer ever
-  writes them negative, so `fromTreeRestoreIdentityID` rejects there while
-  the shared `fromTreeNodeID` stays permissive for the IDs that pre-date
-  restore spans.
-- Starting the watch pump before the first response made the loop's error
-  the only thing keeping the document drained, and the reconnect site
-  dropped it. A discarded error is load-bearing the moment the failing
-  path owns a goroutine's lifetime: `retryWatchLoop` now retries until a
-  loop comes up, the document is detached, or the watch context ends.
+- A fix round put the rejection back on the restore span's own IDs (`Id`,
+  `ParentId`, `RightSiblingId`), arguing no producer writes them negative.
+  That is the same argument the maintainer round rejected: nothing
+  validated them before, the stored-change path shares the decoder, and
+  `NormalizeStoredOperations` has no repair for them. Reverted. A decoder
+  shared by the wire and stored paths cannot take a new rejection; the
+  check belongs to a wire-only pass, filed as a follow-up.
+- The same round replaced the ignored reconnect error with an unbounded
+  1s retry. It fixed a gap that was already on `main` and brought three new
+  findings of its own: no backoff, no terminal-error cut-off, and an
+  unsynchronized rewrite of `watchStream`. Reverted as well. Retry policy
+  is a design question for its own change, not a side fix in this one.
 - A `connect` server-streaming client blocks in `Watch()` until the
   handler's first `Send` flushes headers, so "publish while the first
   response is outstanding" is not reachable from a test server. What is
