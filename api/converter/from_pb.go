@@ -1170,6 +1170,11 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 // the offset arithmetic downstream. An anchor is resolved by position rather
 // than looked up by identity, so the coercion cannot merge two nodes the way
 // flooring an identity ID in fromTreeNodeID would.
+//
+// Only the offset-zero case is repaired. An empty text node at offset k > 0
+// yields k - 1, which is not negative and is decoded as sent: telling it
+// apart from a valid anchor needs the node's length, which the decoder does
+// not have.
 func fromTreeRestoreAnchorID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	createdAt, err := fromTreeNodeIDCreatedAt(pbPos)
 	if err != nil {
