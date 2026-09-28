@@ -28,8 +28,14 @@ import (
 // project, which the caller reloads so that settings changed after the stream
 // opened take effect.
 //
-// Lease renewals bypass the admission cache so they observe current webhook
-// decisions even when the configured cache TTL exceeds the Watch cutoff.
+// Lease renewals read the webhook directly rather than the admission cache, so
+// they observe current decisions even when the configured cache TTL exceeds the
+// Watch cutoff. The decision is still written back to that cache, so one
+// stream's observation of a revocation also denies the RPCs that read it.
+//
+// The cost of that directness is one webhook request per open stream per
+// re-check period, which is what bounding revocation by wall-clock time rather
+// than by the cache TTL requires; see watchLeaseInterval in the rpc package.
 func VerifyWatchLease(
 	ctx context.Context,
 	be *backend.Backend,

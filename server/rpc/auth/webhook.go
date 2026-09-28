@@ -37,26 +37,18 @@ var (
 	ErrPermissionDenied = errors.PermissionDenied("not allowed").WithCode("ErrPermissionDenied")
 )
 
-// verifyAccess verifies the given user is allowed to access the given method.
-func verifyAccess(
-	ctx context.Context,
-	be *backend.Backend,
-	prj *types.Project,
-	token string,
-	accessInfo *types.AccessInfo,
-) error {
-	return verifyAccessWithCache(ctx, be, prj, token, accessInfo, true)
-}
-
-// verifyAccessWithCache checks authorization. Watch lease renewals bypass the
-// admission cache so a revoked permission cannot be renewed from a stale allow.
+// verifyAccessWithCache checks authorization. Watch admissions and lease
+// renewals read the webhook directly, so a revoked permission is never served
+// from a stale allow; every decision they obtain is still written back to the
+// cache, so a revocation one stream observes also denies the other RPCs that
+// do read it.
 func verifyAccessWithCache(
 	ctx context.Context,
 	be *backend.Backend,
 	prj *types.Project,
 	token string,
 	accessInfo *types.AccessInfo,
-	useCache bool,
+	readCache bool,
 ) error {
 	req := types.AuthWebhookRequest{
 		Token:      token,
@@ -70,7 +62,7 @@ func verifyAccessWithCache(
 	}
 
 	cacheKey := generateCacheKey(prj.PublicKey, body)
-	if useCache {
+	if readCache {
 		if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
 			return handleWebhookResponse(entry.First, entry.Second)
 		}
@@ -92,8 +84,11 @@ func verifyAccessWithCache(
 		return fmt.Errorf("verify access: %w", err)
 	}
 
+	// A decision obtained without reading the cache is still written back, so
+	// a denial observed by a Watch lease replaces the stale allow the other
+	// RPCs would otherwise keep reading until the TTL elapsed.
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
-	if useCache && status != http.StatusUnauthorized {
+	if status != http.StatusUnauthorized {
 		be.Cache.AuthWebhook.Add(
 			cacheKey,
 			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},

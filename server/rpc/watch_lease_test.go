@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/tls"
 	stderrors "errors"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -35,6 +36,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
 // A write deadline must release a Watch handler even when its peer stops
@@ -44,14 +48,19 @@ func TestWatchWriteDeadlineUnblocksSlowReader(t *testing.T) {
 	for _, protocol := range []string{"http1", h2cProtocol} {
 		t.Run(protocol, func(t *testing.T) {
 			finished := make(chan error, 1)
+			armed := make(chan error, 1)
 			handler := withWatchWriteDeadline(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/other" {
 					w.WriteHeader(http.StatusOK)
 					return
 				}
 				setDeadline := r.Context().Value(watchDeadlineKey{}).(func(time.Time) error)
-				if err := setDeadline(time.Now().Add(200 * time.Millisecond)); err != nil {
-					finished <- err
+				// Reported separately from the write outcome: a transport that
+				// cannot arm the deadline is a failure of the feature, not the
+				// blocked write this test is looking for.
+				err := setDeadline(time.Now().Add(200 * time.Millisecond))
+				armed <- err
+				if err != nil {
 					return
 				}
 				w.WriteHeader(http.StatusOK)
@@ -87,6 +96,12 @@ func TestWatchWriteDeadlineUnblocksSlowReader(t *testing.T) {
 			}
 			response, err := client.Get(srv.URL + "/Watch")
 			require.NoError(t, err)
+			select {
+			case err := <-armed:
+				require.NoError(t, err, "the Watch write deadline must be supported by the transport")
+			case <-time.After(2 * time.Second):
+				t.Fatal("the Watch handler never armed its write deadline")
+			}
 			defer func() { require.NoError(t, response.Body.Close()) }()
 			siblingCtx, cancelSibling := context.WithTimeout(context.Background(), time.Second)
 			defer cancelSibling()
@@ -102,6 +117,47 @@ func TestWatchWriteDeadlineUnblocksSlowReader(t *testing.T) {
 			}
 		})
 	}
+}
+
+// On HTTP/1.1 the write deadline belongs to the connection, so a deadline the
+// Watch handler leaves behind — or one its lease goroutine arms a moment after
+// the handler returned — would fire on whatever request reuses that connection.
+func TestWatchWriteDeadlineIsClearedForTheNextRequest(t *testing.T) {
+	const chunk = 64 * 1024
+	renewals := make(chan func(time.Time) error, 1)
+	handler := withWatchWriteDeadline(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/Watch" {
+			setDeadline := r.Context().Value(watchDeadlineKey{}).(func(time.Time) error)
+			require.NoError(t, setDeadline(time.Now().Add(time.Hour)))
+			renewals <- setDeadline
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bytes.Repeat([]byte("x"), chunk))
+	}))
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+	client := &http.Client{Transport: &http.Transport{}}
+
+	response, err := client.Get(srv.URL + "/Watch")
+	require.NoError(t, err)
+	_, err = io.Copy(io.Discard, response.Body)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+
+	// The lease goroutine can outlive its handler by a moment: a renewal that
+	// lands then must become a no-op instead of arming a connection the
+	// stream no longer owns.
+	setDeadline := <-renewals
+	require.NoError(t, setDeadline(time.Now().Add(-time.Hour)))
+
+	sibling, err := client.Get(srv.URL + "/other")
+	require.NoError(t, err, "a stale Watch deadline must not fire on the next request")
+	body, err := io.ReadAll(sibling.Body)
+	require.NoError(t, err, "a stale Watch deadline must not fire on the next request")
+	require.Len(t, body, chunk)
+	require.NoError(t, sibling.Body.Close())
 }
 
 func mustRequest(t *testing.T, ctx context.Context, url string) *http.Request {
@@ -136,21 +192,68 @@ func TestWebhookBudgetSaturates(t *testing.T) {
 	}
 }
 
-func TestWatchProjectReloadFailsClosed(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		cause   error
-		message string
-	}{
-		{"deleted", database.ErrProjectNotFound, "watch project no longer exists"},
-		{"temporary lookup failure", stderrors.New("database unavailable"), "watch project authorization unavailable"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			err := watchProjectReloadError(tc.cause)
-			require.True(t, errors.IsStatus(err, errors.ErrCodePermissionDenied))
-			require.EqualError(t, err, tc.message)
-		})
+// A deleted project is a denial; a lookup blip only leaves the project's
+// current settings unknown, which the lease window resolves.
+func TestWatchProjectReloadClassifiesFailures(t *testing.T) {
+	deleted := watchProjectReloadError(database.ErrProjectNotFound)
+	require.True(t, errors.IsStatus(deleted, errors.ErrCodePermissionDenied))
+	require.EqualError(t, deleted, "watch project no longer exists")
+
+	blip := watchProjectReloadError(stderrors.New("database unavailable"))
+	require.False(t, errors.IsStatus(blip, errors.ErrCodePermissionDenied),
+		"a transient lookup failure is unknown authorization, not a denial")
+	require.ErrorContains(t, blip, "watch project authorization unavailable")
+}
+
+// An unconfirmed check must not drop a stream the lease window can still
+// cover, nor keep one open past that window.
+func TestWatchLeaseToleratesUnconfirmedChecks(t *testing.T) {
+	ctx := logging.With(context.Background(), logging.DefaultLogger())
+	interval := watchLeaseInterval()
+	unknown := watchProjectReloadError(stderrors.New("database unavailable"))
+
+	// A project that requires no authorization for this method has no window,
+	// so a lookup blip cannot revoke what was never required.
+	require.NoError(t, (&watchLease{}).tolerate(ctx, unknown, interval))
+
+	// Room for another attempt: the stream rides out the blip.
+	roomy := &watchLease{expires: time.Now().Add(interval + time.Second)}
+	require.NoError(t, roomy.tolerate(ctx, unknown, interval))
+
+	// No room left: the stream ends at its window rather than past it.
+	expiring := &watchLease{expires: time.Now().Add(interval / 2)}
+	require.ErrorIs(t, expiring.tolerate(ctx, unknown, interval), errWatchLeaseExpired)
+
+	// A denial ends the stream at once, whatever the window has left.
+	deleted := watchProjectReloadError(database.ErrProjectNotFound)
+	require.ErrorIs(t, (&watchLease{}).tolerate(ctx, deleted, interval), deleted)
+	require.ErrorIs(t, roomy.tolerate(ctx, auth.ErrPermissionDenied, interval), auth.ErrPermissionDenied)
+}
+
+// Without the transport hook a stream cannot be bounded at all, so admission
+// and renewal both refuse it rather than leave it unbounded.
+func TestWatchLeaseFailsClosedWithoutWriteDeadline(t *testing.T) {
+	project := &types.Project{
+		AuthWebhookURL:     "http://localhost:0",
+		AuthWebhookMethods: []string{string(types.Watch)},
 	}
+	access := &types.AccessInfo{Method: types.Watch}
+	require.True(t, project.RequireAuth(access.Method))
+
+	s := &yorkieServer{}
+	lease, err := s.startWatchLease(projects.With(context.Background(), project), access)
+	require.Nil(t, lease)
+	require.ErrorIs(t, err, auth.ErrPermissionDenied)
+
+	require.ErrorIs(t, renewWatchLease(&watchLease{}, nil, time.Now()), auth.ErrPermissionDenied)
+}
+
+// The re-check period must leave a full default webhook attempt inside the
+// window it renews.
+func TestWatchLeaseIntervalLeavesRoomForACheck(t *testing.T) {
+	require.Equal(t, database.DefaultAuthWebhookRequestTimeout, watchLeaseCheckAllowance)
+	require.Equal(t, maxWatchLeaseAge-watchLeaseCheckAllowance, watchLeaseInterval())
+	require.Positive(t, watchLeaseInterval())
 }
 
 func TestWatchLeaseCheckKeepsEarlierExpiry(t *testing.T) {

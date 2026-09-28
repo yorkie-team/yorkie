@@ -672,7 +672,6 @@ func (s *yorkieServer) Watch(
 		Method:     types.Watch,
 		Attributes: types.NewAccessAttributes(keys, types.Read),
 	}
-	admissionStart := gotime.Now()
 	if err := auth.VerifyAccess(ctx, s.backend, watchAccess); err != nil {
 		return err
 	}
@@ -695,7 +694,7 @@ func (s *yorkieServer) Watch(
 		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
-	lease, err := s.startWatchLease(ctx, watchAccess, admissionStart)
+	lease, err := s.startWatchLease(ctx, watchAccess)
 	if err != nil {
 		return err
 	}
@@ -1155,7 +1154,6 @@ func (s *yorkieServer) WatchDocument(
 		Method:     types.WatchDocument,
 		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
 	}
-	admissionStart := gotime.Now()
 	if err := auth.VerifyAccess(ctx, s.backend, watchAccess); err != nil {
 		return err
 	}
@@ -1173,7 +1171,7 @@ func (s *yorkieServer) WatchDocument(
 		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
-	lease, err := s.startWatchLease(ctx, watchAccess, admissionStart)
+	lease, err := s.startWatchLease(ctx, watchAccess)
 	if err != nil {
 		return err
 	}
@@ -1261,7 +1259,6 @@ func (s *yorkieServer) WatchChannel(
 		Method:     types.WatchChannel,
 		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
 	}
-	admissionStart := gotime.Now()
 	if err := auth.VerifyAccess(ctx, s.backend, watchAccess); err != nil {
 		return err
 	}
@@ -1275,7 +1272,7 @@ func (s *yorkieServer) WatchChannel(
 		s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
 	}()
 
-	lease, err := s.startWatchLease(ctx, watchAccess, admissionStart)
+	lease, err := s.startWatchLease(ctx, watchAccess)
 	if err != nil {
 		return err
 	}

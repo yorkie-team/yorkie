@@ -51,11 +51,23 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.Ac
 		return nil
 	}
 
-	return verifyAccess(
+	// A Watch admission reads the webhook directly. The stream it opens is
+	// bounded by a lease that re-checks without the cache, so admitting it
+	// from a cached allow would hand a revoked client the stream back simply
+	// by reconnecting, for the rest of the cache TTL.
+	return verifyAccessWithCache(
 		ctx,
 		be,
 		prj,
 		md.Authorization,
 		accessInfo,
+		!isWatchMethod(accessInfo.Method),
 	)
+}
+
+// isWatchMethod reports whether the given method opens a Watch stream.
+func isWatchMethod(method types.Method) bool {
+	return method == types.Watch ||
+		method == types.WatchDocument ||
+		method == types.WatchChannel
 }
