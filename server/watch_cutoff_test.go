@@ -20,6 +20,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,6 +43,9 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 	var allowed atomic.Bool
 	allowed.Store(true)
 	var watchChecks atomic.Int64
+	var watchAttributesMu sync.Mutex
+	var firstWatchAttributes []types.AccessAttribute
+	var watchAttributesChanged bool
 	var legacyChecks atomic.Int64
 	var channelChecks atomic.Int64
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,12 +56,26 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 		}
 		if req.Method == types.Watch {
 			watchChecks.Add(1)
+			watchAttributesMu.Lock()
+			attributes := append([]types.AccessAttribute(nil), req.Attributes...)
+			if firstWatchAttributes == nil {
+				firstWatchAttributes = attributes
+			} else if !reflect.DeepEqual(firstWatchAttributes, attributes) {
+				watchAttributesChanged = true
+			}
+			watchAttributesMu.Unlock()
 		}
 		if req.Method == types.WatchDocument {
 			legacyChecks.Add(1)
 		}
 		if req.Method == types.WatchChannel {
 			channelChecks.Add(1)
+		}
+		if !allowed.Load() && req.Method != types.Watch {
+			// A webhook that cannot answer is also an uncertain lease. Idle
+			// legacy streams must close within the same cutoff.
+			<-r.Context().Done()
+			return
 		}
 		if !allowed.Load() {
 			w.WriteHeader(http.StatusForbidden)
@@ -67,10 +86,8 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 
 	conf := helper.TestConfig()
 	conf.Mongo = nil
-	// AuthWebhookCacheTTL bounds how stale an authorization decision may be,
-	// and the watch lease re-checks on that same period. Shortening it here
-	// keeps the test quick without giving the lease its own timing constant.
-	conf.Backend.AuthWebhookCacheTTL = "500ms"
+	// The default admission cache TTL is longer than the required cutoff.
+	// Lease rechecks must still observe revocation within five seconds.
 	svr, err := server.New(conf)
 	require.NoError(t, err)
 	require.NoError(t, svr.Start())
@@ -113,6 +130,10 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 		Resources: []*api.ResourceDescriptor{{
 			Resource: &api.ResourceDescriptor_Document{
 				Document: &api.DocumentDescriptor{DocumentId: attached.Msg.DocumentId},
+			},
+		}, {
+			Resource: &api.ResourceDescriptor_Channel{
+				Channel: &api.ChannelDescriptor{ChannelKey: "unified-revocable-channel"},
 			},
 		}},
 	}
@@ -169,17 +190,16 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 		t.Fatalf("permitted WatchChannel closed before revocation: %v", err)
 	case <-keepalive.C:
 	}
-	require.GreaterOrEqual(t, watchChecks.Load(), int64(4))
-	require.GreaterOrEqual(t, legacyChecks.Load(), int64(4))
-	require.GreaterOrEqual(t, channelChecks.Load(), int64(4))
+	require.GreaterOrEqual(t, watchChecks.Load(), int64(3))
+	require.GreaterOrEqual(t, legacyChecks.Load(), int64(3))
+	require.GreaterOrEqual(t, channelChecks.Load(), int64(3))
 
 	allowed.Store(false)
 	cutoff := time.NewTimer(5 * time.Second)
 	defer cutoff.Stop()
 	// A distinct denied token proves the current webhook state without
-	// disturbing the original token's cache entry. The old stream must still
-	// end: its lease shares the cache, but no entry outlives
-	// AuthWebhookCacheTTL, so the next re-check sees the revocation.
+	// disturbing the original token's cached allow. The old stream must end
+	// even while that admission cache entry remains valid.
 	freshClient := v1connect.NewYorkieServiceClient(
 		http.DefaultClient,
 		"http://"+svr.RPCAddr(),
@@ -193,7 +213,7 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 		err = fresh.Err()
 	}
 	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
-	require.GreaterOrEqual(t, watchChecks.Load(), int64(5), "revocation was not checked by the webhook")
+	require.GreaterOrEqual(t, watchChecks.Load(), int64(4), "revocation was not checked by the webhook")
 
 	select {
 	case err := <-ended:
@@ -204,14 +224,14 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 	}
 	select {
 	case err := <-legacyEnded:
-		require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		require.Error(t, err)
 	case <-cutoff.C:
 		cancel()
 		t.Fatal("legacy WatchDocument remained open for 5 seconds after revocation")
 	}
 	select {
 	case err := <-channelEnded:
-		require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		require.Error(t, err)
 	case <-cutoff.C:
 		cancel()
 		t.Fatal("legacy WatchChannel remained open for 5 seconds after revocation")
@@ -219,4 +239,8 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 	require.GreaterOrEqual(t, watchChecks.Load(), int64(3), "unified stream was not rechecked")
 	require.GreaterOrEqual(t, legacyChecks.Load(), int64(2), "legacy stream was not rechecked")
 	require.GreaterOrEqual(t, channelChecks.Load(), int64(2), "channel stream was not rechecked")
+	watchAttributesMu.Lock()
+	require.Len(t, firstWatchAttributes, 2)
+	require.False(t, watchAttributesChanged, "Watch resource attributes changed during lease rechecks")
+	watchAttributesMu.Unlock()
 }

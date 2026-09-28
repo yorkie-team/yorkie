@@ -28,13 +28,8 @@ import (
 // project, which the caller reloads so that settings changed after the stream
 // opened take effect.
 //
-// It shares the admission cache on purpose. AuthWebhookCacheTTL is the
-// configured bound on how stale an authorization decision may be, and the
-// caller re-checks on that same period, so N streams of one project cost at
-// most one webhook call per TTL rather than one call per stream per re-check.
-// The price is revocation latency: an allow cached just before a revoke can
-// satisfy one more re-check, so a stream closes within about two TTLs plus
-// the webhook budget. A deployment that needs a tighter cutoff lowers the TTL.
+// Lease renewals bypass the admission cache so they observe current webhook
+// decisions even when the configured cache TTL exceeds the Watch cutoff.
 func VerifyWatchLease(
 	ctx context.Context,
 	be *backend.Backend,
@@ -45,5 +40,5 @@ func VerifyWatchLease(
 		return nil
 	}
 
-	return verifyAccess(ctx, be, project, metadata.From(ctx).Authorization, access)
+	return verifyAccessWithCache(ctx, be, project, metadata.From(ctx).Authorization, access, false)
 }

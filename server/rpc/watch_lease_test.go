@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	stderrors "errors"
 	"math"
 	"net"
 	"net/http"
@@ -32,6 +33,8 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // A write deadline must release a Watch handler even when its peer stops
@@ -128,8 +131,32 @@ func TestWebhookBudgetSaturates(t *testing.T) {
 		require.NoError(t, err)
 		require.Positive(t, budget, retries)
 
-		expiry, err := leaseExpiry(project, time.Now(), time.Second)
-		require.NoError(t, err)
-		require.True(t, expiry.After(time.Now()), retries)
+		start := time.Now()
+		require.Equal(t, start.Add(maxWatchLeaseAge), leaseExpiry(start), retries)
 	}
+}
+
+func TestWatchProjectReloadFailsClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cause   error
+		message string
+	}{
+		{"deleted", database.ErrProjectNotFound, "watch project no longer exists"},
+		{"temporary lookup failure", stderrors.New("database unavailable"), "watch project authorization unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := watchProjectReloadError(tc.cause)
+			require.True(t, errors.IsStatus(err, errors.ErrCodePermissionDenied))
+			require.EqualError(t, err, tc.message)
+		})
+	}
+}
+
+func TestWatchLeaseCheckKeepsEarlierExpiry(t *testing.T) {
+	start := time.Now()
+	lease := &watchLease{expires: start.Add(2 * time.Second)}
+	require.Equal(t, lease.expires, lease.checkDeadline(start))
+	lease.expires = time.Time{}
+	require.Equal(t, start.Add(maxWatchLeaseAge), lease.checkDeadline(start))
 }
