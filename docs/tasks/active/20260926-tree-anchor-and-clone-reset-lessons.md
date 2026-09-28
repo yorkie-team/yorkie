@@ -74,3 +74,15 @@
   clone survives a successful `Update`, so the assertion that catches both
   bugs is on the presence *after the following Update's `Set`*, not right
   after the `Clear`/`Initialize` (`presence_clone_test.go`).
+- The `HasLocalChanges` back-and-forth above was settled by measurement, not
+  argument. Instrumenting the escape and running the unit and integration
+  suites showed exactly which accessors are reached from inside an updater:
+  `Root`, `RootObject`, `ActorID` and `GarbageCollect`. The client's sync
+  and attach paths (`HasLocalChanges`, `CreateChangePack`, `SetMaxSizeLimit`,
+  `SetSchemaRules`, `ResetPresences`) are only ever called beside one, so
+  they lock unconditionally. `HasLocalChanges` had done that on `main`, so
+  the escape there was a regression, not a trade: a `-race` test with one
+  goroutine in `Update` and another calling it passes on `main` and fails on
+  the escape.
+- When a review loop flips a decision twice, stop weighing the two
+  arguments and collect the data that decides between them.

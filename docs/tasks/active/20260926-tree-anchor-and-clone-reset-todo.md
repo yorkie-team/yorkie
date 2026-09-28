@@ -36,6 +36,15 @@ there, this one fixes them here.
   reaching a root-only failure needs a prior divergence.
 - Mid-surrogate-pair splits and partial-failure semantics are tracked as
   design issues, not here.
+- Restore spans arriving from a peer are not checked for the empty-text
+  anchor `leftAnchorID` no longer produces: an older producer can still send
+  `Offset + Length() - 1` for an empty sibling. This was already the case
+  before this PR; a converter- or `Tree.Restore`-side guard is a follow-up.
+- `d.updating` is still per-document. Accessors that can be reached from
+  inside an updater (`Root`, `RootObject`, `ActorID`, `GarbageCollect`, and
+  the read-only views) keep the escape and so stay unlocked against another
+  goroutine's updater, as they were on `main`. Only a per-goroutine owner
+  check would close that.
 
 ## Verify
 
