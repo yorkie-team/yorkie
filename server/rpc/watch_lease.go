@@ -332,10 +332,29 @@ func (s *yorkieServer) recheckWatchLease(
 		return err
 	}
 	if !fresh.RequireAuth(access.Method) {
-		return nil
+		return releaseWatchLease(lease, setDeadline)
 	}
 
 	return renewWatchLease(lease, setDeadline, checkStart)
+}
+
+// releaseWatchLease lifts the bound from a stream whose project has stopped
+// requiring authorization for this method. Without it a webhook removed or
+// narrowed mid-stream would leave the admission window and its write deadline
+// armed with nothing left to renew them, expiring streams that are once again
+// allowed unconditionally.
+func releaseWatchLease(lease *watchLease, setDeadline func(time.Time) error) error {
+	if setDeadline != nil {
+		if err := setDeadline(time.Time{}); err != nil {
+			return err
+		}
+	}
+
+	lease.mu.Lock()
+	lease.expires = time.Time{}
+	lease.mu.Unlock()
+
+	return nil
 }
 
 // tolerate decides what an unconfirmed check means for the stream. A denial

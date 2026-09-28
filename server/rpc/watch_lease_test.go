@@ -248,6 +248,21 @@ func TestWatchLeaseFailsClosedWithoutWriteDeadline(t *testing.T) {
 	require.ErrorIs(t, renewWatchLease(&watchLease{}, nil, time.Now()), auth.ErrPermissionDenied)
 }
 
+// A project that stops requiring authorization mid-stream must release the
+// window its admission armed, not leave the stream to expire against it.
+func TestWatchLeaseReleasesWindowWhenAuthStops(t *testing.T) {
+	var cleared bool
+	lease := &watchLease{expires: time.Now().Add(-time.Second)}
+	require.ErrorIs(t, lease.maySend(), errWatchLeaseExpired)
+
+	require.NoError(t, releaseWatchLease(lease, func(at time.Time) error {
+		cleared = at.IsZero()
+		return nil
+	}))
+	require.True(t, cleared, "the transport write deadline must be cleared too")
+	require.NoError(t, lease.maySend())
+}
+
 // The re-check period must leave a full default webhook attempt inside the
 // window it renews.
 func TestWatchLeaseIntervalLeavesRoomForACheck(t *testing.T) {
