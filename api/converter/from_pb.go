@@ -1137,21 +1137,14 @@ func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
 
 // fromTreeNodeID converts a Protobuf TreeNodeID that names an identity: a
 // node's own ID, an insertion neighbor, a merge source, or either half of a
-// TreePos. A negative offset is rejected rather than coerced, because every
-// such ID is compared and keyed by (createdAt, offset): flooring one here
-// would decode two distinct wire IDs -- offset -1 and offset 0 -- onto the
-// same crdt.TreeNodeID, aliasing two nodes of a crafted snapshot or content
-// payload into one. Only a restore span's left anchor has a value a
-// well-formed producer can have written negative; see
-// fromTreeRestoreAnchorID.
+// TreePos. The offset is passed through unchanged. Rejecting a negative one
+// here would also reject it on the stored-change and snapshot paths, which
+// share this decoder, and make a document already holding one undecodable.
+// Only a restore span's left anchor is coerced; see fromTreeRestoreAnchorID.
 func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	createdAt, err := fromTreeNodeIDCreatedAt(pbPos)
 	if err != nil {
 		return nil, err
-	}
-
-	if pbPos.Offset < 0 {
-		return nil, ErrInvalidTreeNodeID
 	}
 
 	return crdt.NewTreeNodeID(
@@ -1175,8 +1168,8 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 // would have produced -- it floor-resolves to the leftmost fragment of the
 // same run, which is the node itself -- and it keeps negative offsets out of
 // the offset arithmetic downstream. An anchor is resolved by position rather
-// than looked up by identity, so unlike fromTreeNodeID the coercion cannot
-// merge two nodes.
+// than looked up by identity, so the coercion cannot merge two nodes the way
+// flooring an identity ID in fromTreeNodeID would.
 func fromTreeRestoreAnchorID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	createdAt, err := fromTreeNodeIDCreatedAt(pbPos)
 	if err != nil {

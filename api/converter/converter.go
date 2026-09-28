@@ -55,12 +55,6 @@ var (
 	// whose length doesn't match its Content.
 	ErrInvalidRestoreSpan = errors.InvalidArgument("invalid restore span").WithCode("ErrInvalidRestoreSpan")
 
-	// ErrInvalidTreeNodeID is returned when a tree node ID names an identity
-	// with a negative offset. An offset indexes into the run created by
-	// createdAt, so it is never negative on a well-formed producer, and
-	// coercing it would let two distinct wire IDs decode to one identity.
-	ErrInvalidTreeNodeID = errors.InvalidArgument("invalid tree node id").WithCode("ErrInvalidTreeNodeID")
-
 	// ErrInvalidSplitLevel is returned when a TreeEdit's split level is
 	// negative. A split level counts element boundaries to create, so it has
 	// no meaning below zero.
