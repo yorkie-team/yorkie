@@ -885,15 +885,17 @@ func (d *Document) Checkpoint() change.Checkpoint {
 
 // HasLocalChanges returns whether this document has local changes or not.
 //
-// Like every other reader it goes through readLocked, so a call made from
-// inside an updater -- where Update already holds d.mu (document.go:211) and
-// the RWMutex is not reentrant -- returns instead of deadlocking. That escape
-// is per-document rather than per-goroutine, so a sync-loop call racing an
-// in-flight Update still reads d.doc.localChanges unsynchronized; see
-// readLocked for why that hazard is shared by every accessor here and is not
-// something this one method can close on its own.
+// It takes d.mu unconditionally rather than going through readLocked. The
+// client's sync loop calls it on a goroutine of its own, and readLocked's
+// d.updating escape is per-document: it would let that call read
+// d.doc.localChanges unsynchronized whenever the application is inside an
+// updater appending to it. No updater needs to ask this -- Update and
+// applyChangePack call the internal method -- so the escape buys nothing here.
 func (d *Document) HasLocalChanges() bool {
-	return readLocked(d, func() bool { return d.doc.HasLocalChanges() })
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return d.doc.HasLocalChanges()
 }
 
 // Marshal returns the JSON encoding of this document.
@@ -908,8 +910,16 @@ func (d *Document) Marshal() string {
 // every other reader. The pack it returns owns its own copies of the change
 // slice and the version vector (see InternalDocument.CreateChangePack), so the
 // sync goroutine can serialize it after the lock is released.
+//
+// Like HasLocalChanges it skips readLocked's d.updating escape: its callers
+// are the client's sync and detach paths, which run beside the application's
+// updaters rather than inside them, so the escape would only reopen the race
+// against Update's append that the lock is here to close.
 func (d *Document) CreateChangePack() *change.Pack {
-	return readLocked(d, func() *change.Pack { return d.doc.CreateChangePack() })
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return d.doc.CreateChangePack()
 }
 
 // SetActor sets actor into this document. This is also applied in the local
