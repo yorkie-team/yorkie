@@ -37,7 +37,7 @@ func TestInternalDocumentResetPresences(t *testing.T) {
 	}))
 	assert.NotEmpty(t, doc.AllPresences(), "expected presence to be populated before reset")
 
-	doc.InternalDocument().ResetPresences()
+	doc.InternalDocumentForTest().ResetPresences()
 
 	assert.Empty(t, doc.AllPresences(),
 		"ResetPresences should clear the presence map and online-clients set")

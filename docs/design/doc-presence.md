@@ -571,8 +571,10 @@ the client decouples event production from application consumption.
 
 **Emission** — `AddOnlineClientAndReconcile` and
 `RemoveOnlineClientAndReconcile` emit the reconciled event into
-`d.events` while holding `d.mu` (the same pattern `applyChanges`
-already uses) instead of returning it to the caller.
+`d.events` instead of returning it to the caller, using the same
+pattern as `ApplyChangePack`: take `d.eventsMu`, transition the state
+under `d.mu`, release `d.mu`, then send while still holding
+`d.eventsMu`.
 `handleWatchResponse` no longer builds watch responses for
 `DocWatched`/`DocUnwatched`; it only updates state via the reconcile
 methods.
@@ -595,20 +597,24 @@ pump ──────────┘
   loop — the old pump is stopped before the new one starts, so
   `d.Events()` always has exactly one consumer.
 
-**Ordering guarantee**: sends to `d.events` happen under `d.mu`, so
-lock acquisition order = state transition order = channel send order,
+**Ordering guarantee**: every transition-and-send sequence runs under
+`d.eventsMu`, so lock acquisition order = state transition order =
+channel send order,
 and the pump/buffer/sender chain preserves FIFO. An `unwatched` event
 requires `hadPresence && wasOnline`, a state only reachable through
 the transition that emitted `watched` — so `watched` before
 `unwatched` holds structurally.
 
-**Deadlock analysis**: a producer emitting under `d.mu` waits only
-for the pump to receive, and the pump's only other action is a
+**Deadlock analysis**: a producer sends with `d.mu` released and
+`d.eventsMu` held, and waits only for the pump to receive, and the pump's only other action is a
 non-blocking buffer append — it never acquires `d.mu` and never
 touches `rch`. An application goroutine that reads `rch` and calls
 into the document (`Update`, `Sync`) therefore cannot form a wait
-cycle with producers: the sender absorbs `rch` backpressure into the
-buffer instead of propagating it to the document mutex. A naive
+cycle with producers: `Update` and the readers take `d.mu` but never
+`d.eventsMu`, so a blocked send cannot hold them up, and the sender
+absorbs `rch` backpressure into the buffer instead of propagating it
+to the document. (An earlier revision sent under `d.mu` itself; that
+let an undrained channel wedge every reader of the document.) A naive
 variant of this design — sending on the buffer-1 `d.events` under
 `d.mu` with a forwarder that writes `rch` directly — deadlocks
 exactly there (consumer in `Update` waits on `d.mu`, stream reader
