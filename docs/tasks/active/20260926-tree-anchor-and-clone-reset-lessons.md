@@ -134,4 +134,19 @@
   `ErrInvalidTreeNodeID`. Nothing legitimate ever wrote the others
   negative -- `leftAnchorID` is the sole producer, and it only feeds a
   span's left sibling -- so the rejection has no stored population to
-  strand.
+  strand. (Reverted in the maintainer round below.)
+
+## Maintainer round
+
+- "No legitimate producer" is not "no stored population". Before this
+  branch nothing validated the offset, so any client could have pushed a
+  negative identity offset, and the rejection sat on a decoder that
+  stored changes and snapshots share. One such value would have made the
+  document undecodable for every reader. The rejection was new to this
+  branch and belonged in a follow-up, so it was dropped rather than
+  patched: `fromTreeNodeID` passes the offset through as on `main`, and a
+  test pins that `FromStoredOperations` still decodes one.
+- A review loop that runs long without converging keeps adding scope. Every
+  round's fixes grew the diff the next round had to review. When it stalls,
+  sort the open findings by where they came from: introduced here, fix
+  them; already on `main`, file them.

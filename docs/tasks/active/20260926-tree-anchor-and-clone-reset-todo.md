@@ -29,6 +29,19 @@ there, this one fixes them here.
       `pkg/document/clone_reset_test.go` (remote change with a second
       operation whose parent does not exist).
 
+Added by the review rounds (see the lessons file for why each one was
+needed):
+
+- [x] Invalidate the clone by marking it stale instead of setting it to nil.
+- [x] Lock the `Document` accessors and setters (`readLocked`, locked
+      `SetActor`/`SetStatus`/`SetMaxSizeLimit`/`SetSchemaRules`/
+      `ResetPresences`), and move event sends off `d.mu` onto `eventsMu`.
+- [x] `CreateChangePack` deep-copies the version vectors it hands out.
+- [x] Presence `Clear`/`Initialize` empty and fill the clone's map in place.
+- [x] Rename `Document.InternalDocument()` to `InternalDocumentForTest()`.
+- [x] Start the watch loop's event pump before the first response.
+- [x] Floor a restore span's negative left anchor in the converter.
+
 ## Not covered
 
 - The `Update` and `executeUndoRedo` paths have no test of their own: from
@@ -36,10 +49,15 @@ there, this one fixes them here.
   reaching a root-only failure needs a prior divergence.
 - Mid-surrogate-pair splits and partial-failure semantics are tracked as
   design issues, not here.
-- Restore spans arriving from a peer are not checked for the empty-text
-  anchor `leftAnchorID` no longer produces: an older producer can still send
-  `Offset + Length() - 1` for an empty sibling. This was already the case
-  before this PR; a converter- or `Tree.Restore`-side guard is a follow-up.
+- Negative offsets on identity `TreeNodeID`s (a node's own ID, insertion
+  neighbors, merge sources, `TreePos`) are passed through as on `main`.
+  Rejecting them in the shared decoder also rejected them on the stored-change
+  and snapshot paths. A wire-only check is a follow-up.
+- The watch loop still ignores the error of a re-established stream
+  (`_ = c.runWatchLoop(ctx, d)`), as on `main`. If that restart fails, no
+  pump drains the document's events. Retry with backoff is a follow-up.
+- `MaxSizePerDocument` and schema rules are enforced only on the client.
+  This is tracked in `docs/design/document-size-limit.md`.
 - `d.updating` is still per-document. Accessors that can be reached from
   inside an updater (`Root`, `RootObject`, `ActorID`, `GarbageCollect`, and
   the read-only views) keep the escape and so stay unlocked against another
