@@ -105,6 +105,10 @@ Backend:
   AuthWebhookCacheSize: 5000
 
   # AuthWebhookCacheDisabled bypasses the response cache for every authorization request.
+  # It reaches only requests that call the webhook: a watch stream is authorized
+  # once, when it opens, so an already-open stream keeps its initial
+  # authorization until the client reconnects. Project metadata (including the
+  # webhook URL and methods) is cached separately for ProjectCacheTTL.
   AuthWebhookCacheDisabled: false
 
   # AuthWebhookCacheTTL is the TTL of cached authorization responses.

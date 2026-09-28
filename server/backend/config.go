@@ -50,7 +50,10 @@ type Config struct {
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
-	// AuthWebhookCacheDisabled sends every authorization request to the webhook.
+	// AuthWebhookCacheDisabled sends every authorization request to the
+	// webhook. It only covers requests that reach the webhook: a watch stream
+	// is authorized once, when it opens, so a client whose authorization is
+	// revoked afterwards keeps its already-open stream until it reconnects.
 	AuthWebhookCacheDisabled bool `yaml:"AuthWebhookCacheDisabled"`
 
 	// AuthWebhookCacheTTL is the TTL for cached authorization responses. It
@@ -135,72 +138,61 @@ func validateCacheTTL(flag string, raw string, ttl time.Duration) error {
 	return nil
 }
 
+// parseDuration parses an operator-settable duration. An empty value is an
+// error rather than an "unset" reading: every duration below is filled in by
+// server.Config.ensureDefaultValue or by the flag defaults, so an empty one
+// reaching Validate is a config that would otherwise pass and then take the
+// process down with os.Exit(1) in the matching Parse* helper.
+func parseDuration(flag string, raw string) (time.Duration, error) {
+	parsed, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, raw, flag, err)
+	}
+	return parsed, nil
+}
+
 // Validate validates this config.
 func (c *Config) Validate() error {
-	ttl, err := time.ParseDuration(c.AuthWebhookCacheTTL)
+	if _, err := parseDuration("--backend-admin-token-duration", c.AdminTokenDuration); err != nil {
+		return err
+	}
+
+	ttl, err := parseDuration("--auth-webhook-cache-ttl", c.AuthWebhookCacheTTL)
 	if err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
-			c.AuthWebhookCacheTTL,
-			err,
-		)
+		return err
 	}
 	if err := validateCacheTTL("--auth-webhook-cache-auth-ttl", c.AuthWebhookCacheTTL, ttl); err != nil {
 		return err
 	}
-	if c.ChannelSessionCountCacheTTL != "" {
-		ttl, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
-		if err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--channel-session-count-cache-ttl" flag: %w`,
-				c.ChannelSessionCountCacheTTL,
-				err,
-			)
-		}
-		if err := validateCacheTTL(
-			"--channel-session-count-cache-ttl",
-			c.ChannelSessionCountCacheTTL,
-			ttl,
-		); err != nil {
-			return err
-		}
+
+	countTTL, err := parseDuration("--channel-session-count-cache-ttl", c.ChannelSessionCountCacheTTL)
+	if err != nil {
+		return err
 	}
-	if c.ChannelSessionTTL != "" {
-		if _, err := time.ParseDuration(c.ChannelSessionTTL); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--channel-session-ttl" flag: %w`,
-				c.ChannelSessionTTL,
-				err,
-			)
-		}
+	if err := validateCacheTTL(
+		"--channel-session-count-cache-ttl",
+		c.ChannelSessionCountCacheTTL,
+		countTTL,
+	); err != nil {
+		return err
 	}
-	if c.ChannelSessionCleanupInterval != "" {
-		if _, err := time.ParseDuration(c.ChannelSessionCleanupInterval); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--channel-session-cleanup-interval" flag: %w`,
-				c.ChannelSessionCleanupInterval,
-				err,
-			)
-		}
+
+	if _, err := parseDuration("--channel-session-ttl", c.ChannelSessionTTL); err != nil {
+		return err
 	}
-	if c.ClusterRPCTimeout != "" {
-		if _, err := time.ParseDuration(c.ClusterRPCTimeout); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--cluster-rpc-timeout" flag: %w`,
-				c.ClusterRPCTimeout,
-				err,
-			)
-		}
+	if _, err := parseDuration(
+		"--channel-session-cleanup-interval",
+		c.ChannelSessionCleanupInterval,
+	); err != nil {
+		return err
 	}
-	if c.ClusterClientTimeout != "" {
-		if _, err := time.ParseDuration(c.ClusterClientTimeout); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--cluster-client-timeout" flag: %w`,
-				c.ClusterClientTimeout,
-				err,
-			)
-		}
+	if _, err := parseDuration("--cluster-rpc-timeout", c.ClusterRPCTimeout); err != nil {
+		return err
 	}
+	if _, err := parseDuration("--cluster-client-timeout", c.ClusterClientTimeout); err != nil {
+		return err
+	}
+
 	if c.ChannelSessionCountCacheSize <= 0 {
 		return fmt.Errorf(
 			`invalid argument "%d" for "--channel-session-count-cache-size"`,

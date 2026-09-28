@@ -53,6 +53,14 @@ func isSkipped[Resp any](resp Resp) bool {
 // The convert function transforms an event into a response. If it returns
 // (nil, nil), the event is skipped. The optional afterSend callback is called
 // after each successful send.
+//
+// Authorization is not re-evaluated here. The caller verifies access once,
+// before subscribing, and this loop runs until the client or the server ends
+// it, so a client whose authorization is revoked mid-stream keeps receiving
+// events until it reconnects. Disabling the auth webhook response cache does
+// not close that window — it only applies to requests that reach the webhook,
+// and an open stream makes none. Bounding it needs a re-authorization tick in
+// this loop, which is deliberately out of scope for this change.
 func streamEvents[E any, Resp any](
 	ctx context.Context,
 	serviceCtx context.Context,

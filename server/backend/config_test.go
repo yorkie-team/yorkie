@@ -26,11 +26,16 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
-		AdminTokenDuration:           "24h",
-		AuthWebhookCacheTTL:          "10s",
-		ChannelSessionCountCacheSize: 1,
-		ClusterClientPoolSize:        1,
-		MaxConcurrentClusterRPCs:     1,
+		AdminTokenDuration:            "24h",
+		AuthWebhookCacheTTL:           "10s",
+		ChannelSessionTTL:             "60s",
+		ChannelSessionCleanupInterval: "10s",
+		ChannelSessionCountCacheTTL:   "30s",
+		ChannelSessionCountCacheSize:  1,
+		ClusterRPCTimeout:             "10s",
+		ClusterClientTimeout:          "30s",
+		ClusterClientPoolSize:         1,
+		MaxConcurrentClusterRPCs:      1,
 	}
 }
 func TestConfig(t *testing.T) {
@@ -72,6 +77,31 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, conf.Validate())
 	})
 
+	t.Run("reject empty durations rather than read them as unset", func(t *testing.T) {
+		// A duration left empty passes through to a Parse* helper that exits
+		// the process, so every one of them has to fail Validate instead.
+		for _, tc := range []struct {
+			flag string
+			set  func(conf *backend.Config)
+		}{
+			{"admin-token-duration", func(c *backend.Config) { c.AdminTokenDuration = "" }},
+			{"auth-webhook-cache-ttl", func(c *backend.Config) { c.AuthWebhookCacheTTL = "" }},
+			{"channel-session-ttl", func(c *backend.Config) { c.ChannelSessionTTL = "" }},
+			{"channel-session-cleanup-interval", func(c *backend.Config) {
+				c.ChannelSessionCleanupInterval = ""
+			}},
+			{"channel-session-count-cache-ttl", func(c *backend.Config) {
+				c.ChannelSessionCountCacheTTL = ""
+			}},
+			{"cluster-rpc-timeout", func(c *backend.Config) { c.ClusterRPCTimeout = "" }},
+			{"cluster-client-timeout", func(c *backend.Config) { c.ClusterClientTimeout = "" }},
+		} {
+			conf := newValidBackendConf()
+			tc.set(&conf)
+			assert.ErrorContains(t, conf.Validate(), tc.flag)
+		}
+	})
+
 	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {
 		conf := newValidBackendConf()
 		conf.MaxConcurrentClusterRPCs = 0
@@ -103,8 +133,10 @@ func TestConfig(t *testing.T) {
 		conf.ClusterRPCTimeout = "5s"
 		assert.NoError(t, conf.Validate())
 
+		// Empty is not an "unset" reading: ParseClusterRPCTimeout would
+		// os.Exit(1) on it, so Validate has to refuse it first.
 		conf.ClusterRPCTimeout = ""
-		assert.NoError(t, conf.Validate())
+		assert.ErrorContains(t, conf.Validate(), "cluster-rpc-timeout")
 	})
 
 	t.Run("validate ClusterClientTimeout test", func(t *testing.T) {
@@ -116,7 +148,7 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, conf.Validate())
 
 		conf.ClusterClientTimeout = ""
-		assert.NoError(t, conf.Validate())
+		assert.ErrorContains(t, conf.Validate(), "cluster-client-timeout")
 	})
 
 	t.Run("parse test", func(t *testing.T) {
