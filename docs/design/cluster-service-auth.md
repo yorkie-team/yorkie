@@ -223,8 +223,9 @@ must pass `cluster.WithClusterSecret`.
 |------|------------|
 | Secret transmitted in plaintext over h2c | Acceptable within VPC. If cross-VPC communication is needed, enable TLS with `--cluster-secure` (already exists) |
 | Secret leaked in logs or error messages | Never log the secret value. Error messages say "invalid cluster secret", not the actual value |
-| All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD |
-| Empty `ClusterSecret` | Falls back to a random per-process secret, so the endpoint is never open. Multi-node deployments break instead, loudly: `Config.UsesGeneratedClusterSecret()` reports it and the server warns at startup |
+| All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD. Left empty, the `yorkie-cluster` chart generates one and stores it in the `<name>-cluster-secret` Secret, reusing the stored value on upgrade, so the shipped multi-replica default is not a broken cluster |
+| Secret readable from the pod spec | The chart passes it as a Secret-backed env var expanded into `--cluster-secret`, not as a literal container arg, so `get pod` shows only the reference. `clusterSecretExistingSecret` keeps it out of the Helm release's stored manifests entirely |
+| Empty `ClusterSecret` | Falls back to a random per-process secret, so the endpoint is never open. Multi-node deployments break instead, loudly: `Config.UsesGeneratedClusterSecret()` reports it, the server warns at startup, and `prepareClusterClients` logs an error naming the node count once membership reports a peer |
 | Default `SecretKey` | Irrelevant to this gate: the cluster secret never falls back to `SecretKey`, and `Validate()` rejects `--cluster-secret yorkie-secret` outright |
 | `SecretKey` on the wire | The admin-token signing key is never sent as a cluster header |
 
@@ -236,13 +237,13 @@ must pass `cluster.WithClusterSecret`.
 | Header-based over metadata-based | Connect RPC uses HTTP headers. Consistent with existing `x-shard-key` pattern |
 | Fall back to a random per-process secret when `ClusterSecret` is empty | Keeps single-node deployments working without new config and never leaves the public ClusterService endpoint guarded by a published constant. Multi-node deployments must configure the secret, and fail closed with a startup warning until they do |
 | Constant-time comparison | Prevents timing side-channel attacks on the secret |
-| No VirtualService changes needed | Authentication at server level works regardless of gateway topology. No coupling to Istio configuration |
+| Reject header-less ClusterService calls at the Istio gateway | Defence in depth, not a second gate: the server check still decides. Internal unicast also goes through the gateway (`--backend-gateway-addr` points at the gateway Service), so the path cannot simply be dropped - but no legitimate caller omits `x-cluster-secret`, so a 404 for those keeps anonymous internet callers off the handler. `x-cluster-secret` is left out of the CORS `allowHeaders` lists so a browser cannot be induced to send one |
 
 ## Alternatives Considered
 
 | Alternative | Why not |
 |-------------|---------|
-| VirtualService path blocking | Internal unicast also goes through the gateway, so it would block cluster communication too |
+| Unconditional VirtualService path blocking | Internal unicast also goes through the gateway, so blocking `/yorkie.v1.ClusterService/` outright would block cluster communication too. The chart blocks only the header-less subset |
 | Istio AuthorizationPolicy with source IP | Pod CIDR is dynamic. Fragile and breaks on node scaling |
 | Separate port for ClusterService | Requires Helm chart, Service, and Istio changes. Much larger scope for the same result |
 | mTLS between nodes | Certificate provisioning and rotation adds operational complexity. Overkill for same-VPC |

@@ -26,6 +26,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
@@ -86,6 +87,10 @@ type Backend struct {
 	MsgBroker messaging.Broker
 	// Warehouse is the warehouse instance.
 	Warehouse warehouse.Warehouse
+
+	// warnGeneratedClusterSecret makes the "peers exist but no shared cluster
+	// secret" diagnostic fire once instead of on every fan-out.
+	warnGeneratedClusterSecret gosync.Once
 }
 
 // New creates a new instance of Backend.
@@ -474,6 +479,25 @@ func (b *Backend) prepareClusterClients(ctx context.Context) ([]*database.Cluste
 	nodes, err := b.Membership.ClusterNodes(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	// A deployment that never configured --cluster-secret runs on the random
+	// per-process secret, so every call to a peer below is rejected with
+	// Unauthenticated. NewServer already warns at startup, but there it cannot
+	// tell a single node - where the generated secret is correct - from a
+	// cluster. Membership can: once it reports a peer, say so with the node
+	// count rather than leave the operator to decode a wall of Unauthenticated
+	// errors from an upgrade that only changed the binary.
+	if len(nodes) > 1 && b.Config.UsesGeneratedClusterSecret() {
+		b.warnGeneratedClusterSecret.Do(func() {
+			logging.DefaultLogger().Errorf(
+				"no --cluster-secret configured but membership reports %d nodes: "+
+					"inter-node cluster RPCs will fail with Unauthenticated until "+
+					"every node is started with the same --cluster-secret. "+
+					"See docs/design/cluster-service-auth.md",
+				len(nodes),
+			)
+		})
 	}
 
 	// Prune inactive nodes from the pool (protect gateway address)
