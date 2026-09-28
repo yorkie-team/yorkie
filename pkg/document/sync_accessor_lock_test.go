@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // TestSyncAccessorsLockDuringConcurrentUpdate covers the client's sync loop,
@@ -61,13 +62,15 @@ func TestSyncAccessorsLockDuringConcurrentUpdate(t *testing.T) {
 	require.True(t, doc.HasLocalChanges())
 }
 
-// TestAttachSettersLockDuringConcurrentUpdate covers the client's attach
-// path, which sets the size limit and schema rules while another goroutine
-// may be inside Update reading them to decide whether to reject the change.
+// TestAttachSettersLockDuringConcurrentUpdate covers the client's attach and
+// detach paths, which set the actor, the status, the size limit and the
+// schema rules while another goroutine may be inside Update reading them.
 // Like the sync loop's accessors, these setters run beside an updater, never
 // inside one, so they must take d.mu rather than the d.updating escape.
 func TestAttachSettersLockDuringConcurrentUpdate(t *testing.T) {
 	doc := document.New("d")
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -77,6 +80,8 @@ func TestAttachSettersLockDuringConcurrentUpdate(t *testing.T) {
 			case <-stop:
 				return
 			default:
+				doc.SetActor(actor)
+				doc.SetStatus(document.StatusAttached)
 				doc.SetMaxSizeLimit(1 << 20)
 				doc.SetSchemaRules(nil)
 			}

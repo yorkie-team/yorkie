@@ -926,11 +926,16 @@ func (d *Document) CreateChangePack() *change.Pack {
 // changes the document has.
 //
 // It writes d.doc.changeID and every buffered local change, so it takes d.mu
-// for writing: the readers above observe those same fields under RLock. Like
-// every other accessor it goes through the d.updating escape, or a call made
-// from inside an updater would deadlock on the non-reentrant mutex.
+// for writing: the readers above observe those same fields under RLock. The
+// lock is taken unconditionally, with no d.updating escape: the client sets
+// the actor on attach, beside a running updater rather than inside one, and
+// the per-document escape would let this write race Update's own writes to
+// d.doc.changeID and the local changes.
 func (d *Document) SetActor(actor time.ActorID) {
-	writeLocked(d, func() { d.doc.SetActor(actor) })
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.doc.SetActor(actor)
 }
 
 // ActorID returns ID of the actor currently editing the document.
@@ -951,19 +956,22 @@ func (d *Document) Status() StatusType {
 //
 // It writes d.doc.status, which Status and IsAttached read under RLock, so it
 // takes d.mu for writing. applyChangePack already holds the lock and writes
-// d.doc.status directly instead of calling this. Like SetActor it goes
-// through the d.updating escape so a call made from inside an updater does
-// not deadlock on the non-reentrant mutex.
+// d.doc.status directly instead of calling this. Like SetActor it takes the
+// lock unconditionally: the client's attach and detach paths call it beside
+// an updater, and Update reads d.doc.status to refuse a removed document.
 func (d *Document) SetStatus(status StatusType) {
-	writeLocked(d, func() { d.doc.SetStatus(status) })
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.doc.SetStatus(status)
 }
 
 // SetMaxSizeLimit records the per-document size limit the server reported at
 // attach. Update reads d.MaxSizeLimit under d.mu, so the write takes the lock
 // too rather than leaving the Client to poke the exported field unguarded.
 //
-// It takes the lock unconditionally rather than through writeLocked's
-// d.updating escape, for the reason HasLocalChanges does: the attach path
+// It takes the lock unconditionally rather than through the d.updating
+// escape, for the reason HasLocalChanges does: the attach path
 // sets it beside a running updater, never inside one, and the escape would
 // let this write race the very read in Update that enforces the limit.
 func (d *Document) SetMaxSizeLimit(maxSizeLimit int) {
@@ -1012,6 +1020,9 @@ func (d *Document) VersionVector() time.VersionVector {
 // A call made from inside an updater already holds d.mu for writing and runs
 // read directly instead, because sync.RWMutex is not reentrant; see Root for
 // why d.updating is the right signal for that and what it does not cover.
+// Setters, and the readers the client's sync loop calls beside an updater
+// (HasLocalChanges, CreateChangePack), take d.mu directly instead: the
+// escape is per-document, so for them it would only reopen a race.
 func readLocked[T any](d *Document, read func() T) T {
 	if d.updating.Load() {
 		return read()
@@ -1021,29 +1032,6 @@ func readLocked[T any](d *Document, read func() T) T {
 	defer d.mu.RUnlock()
 
 	return read()
-}
-
-// writeLocked runs write with d.mu held for writing. It is readLocked's
-// counterpart for the exported setters, and carries the same escape: a call
-// made from inside an updater already holds d.mu on this goroutine, and
-// sync.RWMutex is not reentrant, so taking it again would deadlock the
-// process outright. Without the escape a setter reached from an updater --
-// SetStatus from a callback that detaches, SetActor from a test that edits
-// while reassigning the actor -- would wedge rather than merely race.
-//
-// Like readLocked's, the escape is per-document rather than per-goroutine,
-// so a setter racing another goroutine's updater runs unlocked, exactly as
-// it did before these setters took the lock at all.
-func writeLocked(d *Document, write func()) {
-	if d.updating.Load() {
-		write()
-		return
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	write()
 }
 
 // RootObject returns the internal root object of this document.
@@ -1232,7 +1220,7 @@ func (d *Document) AllPresences() map[string]presence.Data {
 // that no longer exist on the root.
 //
 // It takes d.mu unconditionally, like HasLocalChanges, rather than through
-// writeLocked's d.updating escape: its only caller is the client's attach
+// the d.updating escape: its only caller is the client's attach
 // path, which runs beside updaters rather than inside one, and resetting
 // presences from inside an updater would pull the clone out from under it.
 func (d *Document) ResetPresences() {
