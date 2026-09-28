@@ -168,7 +168,24 @@ cluster.WithClusterSecret(b.Config.EffectiveClusterSecret())
 
 ### Single-Node Mode
 
-When running a single Yorkie server (no cluster), `ClusterSecret` is empty by default. Both the cluster client and the interceptor then fall back to `SecretKey`, so the node still talks to itself while external callers - who do not know the secret key - are rejected. `ClusterService` is mounted on the public RPC port and its RPCs (`GetDocument`, `PurgeDocument`, `DetachDocument`, `Broadcast`) read the project out of the request message without going through the auth webhook, so leaving it unauthenticated would bypass project authorization entirely.
+When running a single Yorkie server (no cluster), `ClusterSecret` is empty by default. Both the cluster client and the interceptor then fall back to `SecretKey`, so the node still talks to itself while external callers - who do not know the secret key - are rejected. This only holds when `SecretKey` has been changed from its default: the default is public, so a deployment that keeps it is not authenticated in practice and the server warns about it at startup. `ClusterService` is mounted on the public RPC port and its RPCs (`GetDocument`, `PurgeDocument`, `DetachDocument`, `Broadcast`) read the project out of the request message without going through the auth webhook, so leaving it unauthenticated would bypass project authorization entirely.
+
+### Rolling Upgrade
+
+The check fails closed, so a node running a build configured **without** any
+cluster secret sends no `x-cluster-secret` header and is rejected by an upgraded
+peer. Upgrading a running cluster therefore takes two steps:
+
+1. Set `--cluster-secret` (or a uniform non-default `--backend-secret-key`) on
+   every node **while still running the previous build**. The previous build
+   already sends the header when a secret is configured and still accepts
+   header-less requests, so this step is safe in both directions.
+2. Roll out the new build with the same secret.
+
+Skipping step 1 makes old -> new inter-node RPCs (`DetachDocument`,
+`PurgeDocument`, `Broadcast`, `GetDocument`) fail with `Unauthenticated` until
+every node has been restarted. The same applies to any external user of the
+exported `cluster` package: it must pass `cluster.WithClusterSecret`.
 
 ### Risks and Mitigation
 
@@ -177,7 +194,8 @@ When running a single Yorkie server (no cluster), `ClusterSecret` is empty by de
 | Secret transmitted in plaintext over h2c | Acceptable within VPC. If cross-VPC communication is needed, enable TLS with `--cluster-secure` (already exists) |
 | Secret leaked in logs or error messages | Never log the secret value. Error messages say "invalid cluster secret", not the actual value |
 | All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD |
-| Empty `ClusterSecret` | Falls back to `SecretKey`, which is already uniform across a cluster. Operators who leave `SecretKey` at its default `yorkie-secret` must change it, as they already must for admin tokens |
+| Empty `ClusterSecret` | Falls back to `SecretKey`, which is already uniform across a cluster. `backend.Config.Validate()` rejects an empty effective secret, so the interceptor is never built without one |
+| Default `SecretKey` | **Not protected.** `yorkie-secret` is a published constant, so anyone can satisfy the gate. `Config.UsesDefaultClusterSecret()` reports this case and the server logs a warning at startup; operators must set `--cluster-secret` or a non-default `--backend-secret-key` before exposing the RPC port |
 
 ### Design Decisions
 

@@ -26,6 +26,7 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
+		SecretKey:                     "secret-key",
 		AdminTokenDuration:            "24h",
 		AuthWebhookCacheTTL:           "10s",
 		ChannelSessionTTL:             "60s",
@@ -85,7 +86,7 @@ func TestConfig(t *testing.T) {
 			set  func(conf *backend.Config)
 		}{
 			{"admin-token-duration", func(c *backend.Config) { c.AdminTokenDuration = "" }},
-			{"auth-webhook-cache-ttl", func(c *backend.Config) { c.AuthWebhookCacheTTL = "" }},
+			{"auth-webhook-cache-auth-ttl", func(c *backend.Config) { c.AuthWebhookCacheTTL = "" }},
 			{"channel-session-ttl", func(c *backend.Config) { c.ChannelSessionTTL = "" }},
 			{"channel-session-cleanup-interval", func(c *backend.Config) {
 				c.ChannelSessionCleanupInterval = ""
@@ -100,6 +101,26 @@ func TestConfig(t *testing.T) {
 			tc.set(&conf)
 			assert.ErrorContains(t, conf.Validate(), tc.flag)
 		}
+	})
+
+	t.Run("reject an empty effective cluster secret", func(t *testing.T) {
+		// The cluster interceptor fails closed, so an empty secret would reject
+		// every inter-node RPC at runtime instead of at startup.
+		conf := newValidBackendConf()
+		conf.SecretKey = ""
+		assert.ErrorContains(t, conf.Validate(), "cluster-secret")
+
+		conf.ClusterSecret = "cluster-secret"
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("report the published default secret as unprotected", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.SecretKey = backend.DefaultSecretKey
+		assert.True(t, conf.UsesDefaultClusterSecret())
+
+		conf.ClusterSecret = "cluster-secret"
+		assert.False(t, conf.UsesDefaultClusterSecret())
 	})
 
 	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {

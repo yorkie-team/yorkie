@@ -66,6 +66,9 @@ func WithPoolSize(size int) Option {
 }
 
 // WithClusterSecret configures the shared secret for cluster authentication.
+// It is required: servers reject ClusterService RPCs whose x-cluster-secret
+// header does not match their own secret, which defaults to the backend secret
+// key when no dedicated cluster secret is configured.
 func WithClusterSecret(secret string) Option {
 	return func(o *Options) { o.ClusterSecret = secret }
 }
@@ -87,7 +90,9 @@ type Options struct {
 	// If zero, defaults to 1.
 	PoolSize int
 
-	// ClusterSecret is the shared secret for authenticating cluster RPCs.
+	// ClusterSecret is the shared secret for authenticating cluster RPCs. It
+	// must match the secret of the server being called, otherwise every RPC
+	// fails with CodeUnauthenticated.
 	ClusterSecret string
 }
 
@@ -133,13 +138,14 @@ func New(opts ...Option) (*Client, error) {
 		}
 	}
 
-	var connectOpts []connect.ClientOption
-	if options.ClusterSecret != "" {
-		secret := options.ClusterSecret
-		connectOpts = append(connectOpts, connect.WithInterceptors(
-			clusterAuthInterceptor{secret: secret},
-		))
-	}
+	// The header is attached unconditionally, including when no secret was
+	// given. Servers authenticate every ClusterService RPC against a shared
+	// secret, so a client built without WithClusterSecret is rejected either
+	// way; sending the empty header keeps the wire shape identical so the
+	// failure is an authentication mismatch rather than a missing header.
+	connectOpts := []connect.ClientOption{connect.WithInterceptors(
+		clusterAuthInterceptor{secret: options.ClusterSecret},
+	)}
 
 	return &Client{
 		conn:        conn,

@@ -66,6 +66,18 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	yorkieInterceptor := interceptors.NewYorkieServiceInterceptor(be)
 	adminInterceptor := interceptors.NewAdminServiceInterceptor(be, tokenManager)
+	// ClusterService is mounted on this public listener and its RPCs read the
+	// project out of the request message, so the shared secret is the only gate
+	// in front of them. A deployment that keeps the published default secret is
+	// therefore not protected at all: say so loudly rather than let the
+	// fail-closed interceptor read as coverage it does not provide.
+	if be.Config.UsesDefaultClusterSecret() {
+		logging.DefaultLogger().Warn(
+			"cluster RPCs are authenticated with the default secret key, " +
+				"which is public: set --cluster-secret (or a non-default " +
+				"--backend-secret-key) before exposing the RPC port",
+		)
+	}
 	clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.EffectiveClusterSecret())
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 

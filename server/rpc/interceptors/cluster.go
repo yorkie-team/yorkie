@@ -61,7 +61,13 @@ func NewClusterServiceInterceptor(be *backend.Backend, clusterSecret string) *Cl
 // going through the auth webhook, so an unconfigured secret must fail closed
 // rather than wave every caller through. Callers construct the interceptor
 // with backend.Config.EffectiveClusterSecret, which falls back to SecretKey,
-// so the empty case only happens when the server has no secret at all.
+// and backend.Config.Validate rejects an empty effective secret at startup,
+// so the empty case here is a defensive guard rather than a reachable state.
+//
+// Peers must send the header: a node still running a build that was configured
+// without any cluster secret sends none and is rejected, so a rolling upgrade
+// has to set the shared secret on the old binaries first. See
+// docs/design/cluster-service-auth.md.
 func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
 	if i.clusterSecret == "" {
 		return connect.NewError(connect.CodeUnauthenticated,

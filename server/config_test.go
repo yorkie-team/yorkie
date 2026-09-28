@@ -201,3 +201,17 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Error(t, conf.Housekeeping.Validate())
 	})
 }
+
+func TestNewWithProgrammaticConfig(t *testing.T) {
+	// A config built in code, rather than read from a file, never passes
+	// through NewConfigFromFile's defaulting step. Validate() treats an empty
+	// duration as an error, so New() has to fill the defaults itself before
+	// validating; otherwise every programmatic config fails to start.
+	conf := server.NewConfig()
+	assert.Equal(t, "", conf.Backend.AdminTokenDuration)
+
+	y, err := server.New(conf)
+	assert.NoError(t, err)
+	assert.NotNil(t, y)
+	assert.Equal(t, server.DefaultAdminTokenDuration.String(), conf.Backend.AdminTokenDuration)
+}

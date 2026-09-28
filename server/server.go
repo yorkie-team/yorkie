@@ -66,6 +66,12 @@ type Yorkie struct {
 
 // New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
+	// NOTE(hackerwins): Validation below treats an empty duration as an error
+	// rather than as "unset", so the defaults have to be filled in first.
+	// NewConfigFromFile does this for file-based configs; programmatically
+	// built ones only pass through here.
+	conf.ensureDefaultValue()
+
 	if err := conf.Validate(); err != nil {
 		return nil, err
 	}

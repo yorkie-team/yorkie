@@ -81,7 +81,7 @@ const (
 
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
-	DefaultSecretKey     = "yorkie-secret"
+	DefaultSecretKey     = backend.DefaultSecretKey
 
 	DefaultAdminTokenDuration  = 7 * 24 * time.Hour
 	DefaultGitHubUserURL       = "https://api.github.com/user"

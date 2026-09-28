@@ -213,6 +213,7 @@ var credentialFlags = map[string]func(*server.Config) *string{
 	"backend-secret-key":     func(c *server.Config) *string { return &c.Backend.SecretKey },
 	"backend-admin-user":     func(c *server.Config) *string { return &c.Backend.AdminUser },
 	"backend-admin-password": func(c *server.Config) *string { return &c.Backend.AdminPassword },
+	"cluster-secret":         func(c *server.Config) *string { return &c.Backend.ClusterSecret },
 }
 
 func resolveServerConfig(

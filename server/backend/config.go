@@ -17,12 +17,18 @@
 package backend
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
 )
+
+// DefaultSecretKey is the secret key used when the operator does not provide
+// one. It is a published constant, so any deployment that keeps it is
+// effectively running without a secret. server.DefaultSecretKey aliases this.
+const DefaultSecretKey = "yorkie-secret"
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
@@ -118,7 +124,9 @@ type Config struct {
 	// ClusterSecret is the shared secret for authenticating inter-node
 	// cluster RPCs. If empty, SecretKey is used instead: ClusterService is
 	// mounted on the public RPC port, so an empty secret must not mean
-	// "allow everyone". See EffectiveClusterSecret.
+	// "allow everyone". Deployments that also leave SecretKey at its default
+	// are not protected, since that default is published. See
+	// EffectiveClusterSecret and UsesDefaultClusterSecret.
 	ClusterSecret string `yaml:"ClusterSecret"`
 }
 
@@ -129,11 +137,24 @@ type Config struct {
 // ClusterService - mounted on the same listener as YorkieService and able to
 // purge or detach documents by project ID alone - open to anyone who can reach
 // the RPC port.
+//
+// The fallback only moves the problem when SecretKey itself is the published
+// DefaultSecretKey: the gate is then satisfied by a constant anyone can read
+// from the repository, which is what UsesDefaultClusterSecret reports so that
+// the server can warn about it at startup.
 func (c *Config) EffectiveClusterSecret() string {
 	if c.ClusterSecret != "" {
 		return c.ClusterSecret
 	}
 	return c.SecretKey
+}
+
+// UsesDefaultClusterSecret reports whether inter-node RPCs are guarded only by
+// the published DefaultSecretKey, which authenticates nobody. Operators must
+// set --cluster-secret, or at least a non-default --backend-secret-key, before
+// exposing the RPC port beyond a trusted network.
+func (c *Config) UsesDefaultClusterSecret() bool {
+	return c.EffectiveClusterSecret() == DefaultSecretKey
 }
 
 // validateCacheTTL returns an error if the given TTL cannot be handed to an
@@ -173,7 +194,7 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	ttl, err := parseDuration("--auth-webhook-cache-ttl", c.AuthWebhookCacheTTL)
+	ttl, err := parseDuration("--auth-webhook-cache-auth-ttl", c.AuthWebhookCacheTTL)
 	if err != nil {
 		return err
 	}
@@ -225,6 +246,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
 			c.MaxConcurrentClusterRPCs,
+		)
+	}
+
+	// The cluster interceptor fails closed, so an empty effective secret would
+	// reject every inter-node RPC at runtime instead of at startup. Refuse the
+	// config here rather than serving a ClusterService nobody can call.
+	if c.EffectiveClusterSecret() == "" {
+		return errors.New(
+			`invalid argument "" for "--cluster-secret" flag: ` +
+				`set --cluster-secret or --backend-secret-key`,
 		)
 	}
 	return nil
