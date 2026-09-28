@@ -456,3 +456,57 @@ func TestTreeRestoreSpanFloorsNegativeAnchorOffset(t *testing.T) {
 	assert.Equal(t, 0, got.RestoreSpans()[0].LeftSiblingID.Offset,
 		"a negative anchor offset floors to the run's start, the node itself")
 }
+
+// TestTreeNodeIDRejectsNegativeOffset is the other half of the floor above:
+// the coercion is scoped to a restore span's left anchor, the one value a
+// well-formed producer can write negative. Every other TreeNodeID names an
+// identity that is compared and keyed by (createdAt, offset), so flooring one
+// would alias offset -1 and offset 0 onto the same node. Those are rejected.
+func TestTreeNodeIDRejectsNegativeOffset(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 1))
+
+	span := func() *crdt.TreeRestoreSpan {
+		return &crdt.TreeRestoreSpan{
+			ID:            crdt.NewTreeNodeID(seed, 2),
+			NodeType:      "text",
+			IsText:        true,
+			Length:        1,
+			Value:         "x",
+			ParentID:      crdt.NewTreeNodeID(seed, 0),
+			LeftSiblingID: crdt.NewTreeNodeID(seed, 1),
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		negate func(pbEdit *api.Operation_TreeEdit)
+	}{{
+		name:   "tree position left sibling",
+		negate: func(pbEdit *api.Operation_TreeEdit) { pbEdit.From.LeftSiblingId.Offset = -1 },
+	}, {
+		name:   "tree position parent",
+		negate: func(pbEdit *api.Operation_TreeEdit) { pbEdit.To.ParentId.Offset = -1 },
+	}, {
+		name:   "restore span identity",
+		negate: func(pbEdit *api.Operation_TreeEdit) { pbEdit.RestoreSpans[0].Id.Offset = -1 },
+	}, {
+		name:   "restore span parent",
+		negate: func(pbEdit *api.Operation_TreeEdit) { pbEdit.RestoreSpans[0].ParentId.Offset = -1 },
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+				[]*crdt.TreeRestoreSpan{span()}, crdt.RestoreModeRestore, nil)
+			pbOps, err := converter.ToOperations([]operations.Operation{op})
+			assert.NoError(t, err)
+
+			tc.negate(pbOps[0].GetTreeEdit())
+
+			_, err = converter.FromOperations(pbOps)
+			assert.ErrorIs(t, err, converter.ErrInvalidTreeNodeID)
+		})
+	}
+}

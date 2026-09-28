@@ -119,3 +119,19 @@
   gap (`docs/design/document-size-limit.md`, status: proposal), not
   something this branch introduced: it only moved the client-side write
   behind a locked setter. Rebutted rather than fixed.
+
+## Panel round: the floor's blast radius
+
+- A coercion is only safe where the value is *resolved*, never where it is
+  *keyed*. Flooring the negative anchor inside `fromTreeNodeID` fixed the
+  restore span and silently rewrote every other `TreeNodeID` the same
+  decoder produces -- a node's own `Id`, `InsPrevID`/`InsNextID`/
+  `MergedFrom`, both halves of a `TreePos` -- where `(createdAt, offset)`
+  *is* the identity, so offset `-1` and offset `0` would decode onto one
+  node. Split the decoder: `fromTreeRestoreAnchorID` floors (an anchor is
+  resolved by position, and `FromStoredOperations` must stay able to
+  rebuild a document already holding one), `fromTreeNodeID` rejects with
+  `ErrInvalidTreeNodeID`. Nothing legitimate ever wrote the others
+  negative -- `leftAnchorID` is the sole producer, and it only feeds a
+  span's left sibling -- so the rejection has no stored population to
+  strand.
