@@ -84,7 +84,10 @@ func (p *Presence) Initialize(data Data) {
 	// this actor, and `p.data = data` would re-point only the proxy's own
 	// field. The clone would keep the presence from before this call, and
 	// the next Set inside this document would emit a Put built on that stale
-	// map -- silently dropping every key initialized here.
+	// map -- silently dropping every key initialized here. The incoming data
+	// is copied first: it may be p.data itself, which the Clear would empty
+	// before the loop could read it.
+	data = data.DeepCopy()
 	if p.data == nil {
 		p.data = NewData()
 	}
