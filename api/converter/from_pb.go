@@ -1140,9 +1140,7 @@ func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
 // TreePos. The offset is passed through unchanged. Rejecting a negative one
 // here would also reject it on the stored-change and snapshot paths, which
 // share this decoder, and make a document already holding one undecodable.
-// A restore span's own IDs are the exception at both ends: its left anchor is
-// coerced (fromTreeRestoreAnchorID) and its identity IDs are rejected
-// (fromTreeRestoreIdentityID), neither of which has a stored population.
+// Only a restore span's left anchor is coerced; see fromTreeRestoreAnchorID.
 func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	createdAt, err := fromTreeNodeIDCreatedAt(pbPos)
 	if err != nil {
@@ -1189,26 +1187,6 @@ func fromTreeRestoreAnchorID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	), nil
 }
 
-// fromTreeRestoreIdentityID converts a TreeNodeID a restore span keys content
-// by: the span's own id, its parent, its right sibling. These are matched by
-// identity on the recreate path, and unlike the identity IDs that pre-date
-// restore spans (TreePos halves, node ids, insertion links) no producer ever
-// writes one negative -- crdt.leftAnchorID is the only source of a negative
-// offset and it feeds left_sibling_id alone. So there is no stored population
-// to keep decodable here, and a crafted negative is rejected rather than
-// passed into Tree.Restore, which bounds the offset nowhere downstream.
-func fromTreeRestoreIdentityID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
-	id, err := fromTreeNodeID(pbPos)
-	if err != nil {
-		return nil, err
-	}
-	if id.Offset < 0 {
-		return nil, ErrInvalidRestoreSpan
-	}
-
-	return id, nil
-}
-
 // fromTreeNodeIDCreatedAt decodes the creation ticket every TreeNodeID
 // carries, shared by the identity and anchor decoders above.
 func fromTreeNodeIDCreatedAt(pbPos *api.TreeNodeID) (*time.Ticket, error) {
@@ -1240,7 +1218,7 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 		if pbSpan == nil || pbSpan.Id == nil {
 			return nil, ErrInvalidRestoreSpan
 		}
-		id, err := fromTreeRestoreIdentityID(pbSpan.Id)
+		id, err := fromTreeNodeID(pbSpan.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -1285,7 +1263,7 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 			Attributes: attrs,
 		}
 		if pbSpan.ParentId != nil {
-			span.ParentID, err = fromTreeRestoreIdentityID(pbSpan.ParentId)
+			span.ParentID, err = fromTreeNodeID(pbSpan.ParentId)
 			if err != nil {
 				return nil, err
 			}
@@ -1297,8 +1275,7 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 			// The anchor decoder, not the identity one: a left anchor is the
 			// single wire value a well-formed producer can have written
 			// negative, and it is resolved by position rather than keyed by
-			// identity. Every other ID on the span goes through
-			// fromTreeRestoreIdentityID, which rejects a negative offset.
+			// identity. Every other ID on the span stays strict.
 			if span.LeftSiblingID, err = fromTreeRestoreAnchorID(pbSpan.LeftSiblingId); err != nil {
 				return nil, err
 			}
@@ -1307,7 +1284,7 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 			}
 		}
 		if pbSpan.RightSiblingId != nil {
-			if span.RightSiblingID, err = fromTreeRestoreIdentityID(pbSpan.RightSiblingId); err != nil {
+			if span.RightSiblingID, err = fromTreeNodeID(pbSpan.RightSiblingId); err != nil {
 				return nil, err
 			}
 			if span.RightSiblingID.CreatedAt == nil {
