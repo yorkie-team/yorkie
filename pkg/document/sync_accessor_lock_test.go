@@ -37,9 +37,7 @@ func TestSyncAccessorsLockDuringConcurrentUpdate(t *testing.T) {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -49,9 +47,9 @@ func TestSyncAccessorsLockDuringConcurrentUpdate(t *testing.T) {
 				_ = doc.CreateChangePack()
 			}
 		}
-	}()
+	})
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("k", i)
 			return nil
@@ -73,9 +71,7 @@ func TestAttachSettersLockDuringConcurrentUpdate(t *testing.T) {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -85,9 +81,9 @@ func TestAttachSettersLockDuringConcurrentUpdate(t *testing.T) {
 				doc.SetSchemaRules(nil)
 			}
 		}
-	}()
+	})
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("k", i)
 			return nil
