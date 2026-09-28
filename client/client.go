@@ -537,8 +537,8 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	// local presence map. The wire-side PUT was stripped by the server and
 	// never crosses the boundary, but the local InternalDocument still
 	// carries the cloned entry until we clear it here.
-	// Through Document.ResetPresences, not InternalDocument().ResetPresences():
-	// the latter replaces the presence maps with no lock held, racing every
+	// Through Document.ResetPresences, not the internal document's: the
+	// latter replaces the presence maps with no lock held, racing every
 	// presence reader on the document.
 	if res.Msg.DisablePresence && !opts.DisablePresence {
 		d.ResetPresences()
@@ -982,22 +982,6 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 		return err
 	}
 
-	// NOTE(hackerwins): We need to receive the first response to initialize
-	// the watch stream. runWatchLoop should be blocked until the first response is
-	// received.
-	if !stream.Receive() {
-		return ErrInitNotReceived
-	}
-	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
-		return err
-	}
-	if err = stream.Err(); err != nil {
-		return err
-	}
-
-	rch := make(chan WatchDocResponse)
-	attachment.watchStream = rch
-
 	// The delivery pipeline has three goroutines with a single direction of
 	// backpressure:
 	//
@@ -1014,7 +998,15 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	buf := newWatchBuffer()
 	pumpStop := make(chan struct{})
 
-	// pump: document events -> buf.
+	// pump: document events -> buf. Started before the first response is
+	// handled, not after: handleWatchResponse below publishes presence events
+	// through the document's event channel, which has capacity one, and a
+	// publisher that blocks on it does so holding the document's event mutex
+	// -- wedging every other publisher, the sync goroutine's ApplyChangePack
+	// included. On a re-established stream the previous loop's pump has
+	// already stopped, so handling the first response before this goroutine
+	// exists leaves that publish with no consumer at all and the restart
+	// never reaches the line that would create one.
 	go func() {
 		for {
 			select {
@@ -1032,6 +1024,30 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			}
 		}
 	}()
+
+	// NOTE(hackerwins): We need to receive the first response to initialize
+	// the watch stream. runWatchLoop should be blocked until the first response is
+	// received.
+	//
+	// Each failure below stops the pump it started above. An event the pump
+	// already moved into buf is then dropped with the buffer, which is what a
+	// watch that never came up has always done -- the alternative is the
+	// publisher blocking on a channel this loop is no longer going to drain.
+	if !stream.Receive() {
+		close(pumpStop)
+		return ErrInitNotReceived
+	}
+	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
+		close(pumpStop)
+		return err
+	}
+	if err = stream.Err(); err != nil {
+		close(pumpStop)
+		return err
+	}
+
+	rch := make(chan WatchDocResponse)
+	attachment.watchStream = rch
 
 	// sender: buf -> rch.
 	go func() {

@@ -277,7 +277,16 @@ func (d *Document) Update(
 		// the change here means the root will never take it. Discard the clone
 		// so the next access rebuilds it from the root rather than serving a
 		// presence the document decided not to keep.
-		d.invalidateClone()
+		//
+		// Deferred rather than invalidated here: this branch is the only one
+		// that marks the clone stale and then keeps running, and a clone
+		// marked stale mid-flight makes every subsequent ensureClone --
+		// including the one a concurrent reader takes through the d.updating
+		// escape in Root or GarbageCollect -- DeepCopy the live root while
+		// the operations below are still executing on it. Running it on the
+		// way out keeps the window no wider than the other invalidation
+		// points, which all return immediately after marking.
+		defer d.invalidateClone()
 		if !ctx.HasOperations() {
 			return nil
 		}
@@ -832,8 +841,22 @@ func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, er
 	return events, nil
 }
 
-// InternalDocument returns the internal document.
-func (d *Document) InternalDocument() *InternalDocument {
+// InternalDocumentForTest returns the internal document.
+//
+// Every method on the returned value runs with no lock, so reaching through
+// it bypasses the whole locking discipline this type maintains: a mutator
+// called on it -- ResetPresences, SetStatus, ApplyChangePack -- writes the
+// very maps Presences, Root and Marshal read under d.mu, and a reader called
+// on it walks them while an apply is writing. Use the Document methods
+// instead; ResetPresences, SetStatus, SetActor and the accessors all have
+// locked wrappers here.
+//
+// The ForTest suffix is the enforcement: no production caller may reach the
+// internal document through a *Document, and the name is what keeps a new one
+// from appearing unnoticed. The server builds its own *InternalDocument
+// (packs.BuildInternalDocForServerSeq) rather than unwrapping a *Document,
+// so the remaining callers are tests and the shared database testcases.
+func (d *Document) InternalDocumentForTest() *InternalDocument {
 	return d.doc
 }
 

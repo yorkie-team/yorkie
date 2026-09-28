@@ -212,7 +212,7 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 12, Meta: 120}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 48}, doc.DocSize().GC)
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 
@@ -285,7 +285,7 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 168}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 20, Meta: 144}, doc.DocSize().GC)
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 
@@ -374,7 +374,7 @@ func TestDocumentSize(t *testing.T) {
 		// The incrementally maintained size has to agree with the one NewRoot
 		// recomputes from the tree, or a snapshot rebuild reports a different
 		// size than the live document for the same content.
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 	})
@@ -409,7 +409,7 @@ func TestDocumentSize(t *testing.T) {
 			doc.Root().GetTree("tree").ToXML())
 		assert.Equal(t, resource.DataSize{Data: 20, Meta: 240}, doc.DocSize().Live)
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 	})
@@ -453,7 +453,7 @@ func TestDocumentSize(t *testing.T) {
 		// where the constants would have to change.
 		assertAgrees := func(t *testing.T, doc *document.Document, live resource.DataSize) {
 			t.Helper()
-			clone, err := doc.InternalDocument().DeepCopy()
+			clone, err := doc.InternalDocumentForTest().DeepCopy()
 			assert.NoError(t, err)
 			assert.Equal(t, live, doc.DocSize().Live)
 			assert.Equal(t, clone.DocSize().Live, doc.DocSize().Live)
@@ -805,7 +805,7 @@ func TestDocumentSize(t *testing.T) {
 			return nil
 		}))
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 
@@ -904,7 +904,7 @@ func TestDocumentSize(t *testing.T) {
 			root.SetNewCounter("counter", 0)
 			return nil
 		}))
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 	})
@@ -923,7 +923,7 @@ func TestDocumentSize(t *testing.T) {
 			return nil
 		}))
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		assert.NoError(t, err)
 		assert.Equal(t, doc.DocSize(), clone.DocSize())
 	})

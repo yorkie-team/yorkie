@@ -134,7 +134,7 @@ func treeNodeAttrs(t *testing.T, doc *document.Document, key string) []string {
 func assertLedgerExact(t *testing.T, doc *document.Document, msg string, actors ...time.ActorID) {
 	t.Helper()
 
-	clone, err := doc.InternalDocument().DeepCopy()
+	clone, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live, "%s: Live", msg)
 	require.Equal(t, clone.DocSize().GC, doc.DocSize().GC, "%s: GC", msg)
@@ -492,7 +492,7 @@ func TestRecreateCarriesAttributeTombstones(t *testing.T) {
 	t.Logf("after remove+gc   gcLen=%d size=%+v", doc.GarbageLen(), doc.DocSize())
 
 	require.NoError(t, doc.Undo())
-	clone, err := doc.InternalDocument().DeepCopy()
+	clone, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 	t.Logf("after undo        gcLen=%d size=%+v", doc.GarbageLen(), doc.DocSize())
 	t.Logf("rebuilt           gcLen=%d size=%+v", clone.GarbageLen(), clone.DocSize())
@@ -567,7 +567,7 @@ func TestArrayDeadPositionNodesAreGCOnly(t *testing.T) {
 			}))
 		}
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		require.NoError(t, err)
 		require.Equal(t, moves, doc.GarbageLen(), "each move leaves one dead node")
 		require.Equal(t, clone.DocSize().Live, doc.DocSize().Live,

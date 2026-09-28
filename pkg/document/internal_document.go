@@ -167,7 +167,9 @@ func (d *InternalDocument) SetDisableGC(disableGC bool) {
 // onto the wire or into the snapshots collection.
 //
 // It takes no lock, so a caller holding a *Document must go through
-// Document.ResetPresences instead of reaching here via InternalDocument().
+// Document.ResetPresences. There is no longer a production door from a
+// *Document to here: Document.InternalDocumentForTest carries the suffix
+// precisely so that reaching the unlocked value is confined to tests.
 func (d *InternalDocument) ResetPresences() {
 	d.presences = presence.NewMap()
 	d.onlineClients = make(map[string]bool)

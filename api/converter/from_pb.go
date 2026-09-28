@@ -1148,9 +1148,27 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 		return nil, fmt.Errorf("tree_node_id.created_at: %w", ErrMissingTicket)
 	}
 
+	// An offset indexes into the run created by createdAt, so it is never
+	// negative on a well-formed producer. One value on the wire can be:
+	// crdt.leftAnchorID computes a restore span's left anchor as
+	// `start + length - 1`, which for an empty text node lands one code unit
+	// before the node's own start. That guard is producer-side only -- a peer
+	// that does not carry it, and a span already persisted by one, still
+	// deliver the negative -- and crdt.Tree.Restore floor-resolves the anchor
+	// with no bound of its own, landing the restored node after some earlier
+	// run entirely.
+	//
+	// Floored rather than rejected: this decoder also runs over stored
+	// operations (FromStoredOperations), so refusing the value would make a
+	// document that already contains one permanently unrebuildable. Zero is
+	// the anchor the guard would have produced -- it floor-resolves to the
+	// leftmost fragment of the same run, which is the node itself -- and it
+	// keeps negative offsets out of the offset arithmetic downstream.
+	offset := max(int(pbPos.Offset), 0)
+
 	return crdt.NewTreeNodeID(
 		createdAt,
-		int(pbPos.Offset),
+		offset,
 	), nil
 }
 

@@ -86,3 +86,36 @@
   the escape.
 - When a review loop flips a decision twice, stop weighing the two
   arguments and collect the data that decides between them.
+
+## Panel round: blast radius, security and correctness
+
+- The `DisablePresence` branch of `Update` was the only invalidation point
+  that marked the clone stale and then *kept running*. Every other one
+  returns on the next line, so the "stale clone" window is empty; this one
+  spanned schema validation, the size check and `Change.Execute`, during
+  which a concurrent reader taking the `d.updating` escape would
+  `DeepCopy` the live root mid-execution. `defer d.invalidateClone()` --
+  which, by LIFO, still runs under `d.mu` and before `updating` is
+  lowered -- makes it look like the others.
+- A comment is not enforcement. `Document.ResetPresences` documented that
+  callers must not reach the unlocked map through `InternalDocument()`,
+  and nothing stopped them; production had zero such callers, so the
+  contract cost nothing to make structural. `InternalDocumentForTest` is
+  the whole fix: the next production caller has to type the suffix.
+- The watch loop handled the stream's first response *before* starting the
+  pump that drains the document's event channel. With the publish now
+  under `eventsMu` rather than `d.mu`, a re-established stream could park
+  a publisher on a capacity-one channel with no consumer while the reader
+  goroutine was itself blocked on `eventsMu` -- the restart never reached
+  the line that creates the pump. Starting the pump first costs nothing
+  and removes the window.
+- A producer-side guard on a value that crosses the wire is half a fix.
+  `leftAnchorID`'s empty-text floor only corrects the anchor *this*
+  replica computes; peers without it, and spans already stored, still
+  deliver the negative offset. The decoder floors rather than rejects,
+  because `FromStoredOperations` shares it and a rejection would make an
+  affected document unrebuildable.
+- The server-side half of `MaxSizePerDocument` is a known, written-down
+  gap (`docs/design/document-size-limit.md`, status: proposal), not
+  something this branch introduced: it only moved the client-side write
+  behind a locked setter. Rebutted rather than fixed.

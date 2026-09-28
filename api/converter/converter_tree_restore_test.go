@@ -416,3 +416,43 @@ func TestRestoreSpanRejectsModeWithoutSpans(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, ops, 1)
 }
+
+// TestTreeRestoreSpanFloorsNegativeAnchorOffset is the consumer-side half of
+// the empty-text anchor guard in crdt.leftAnchorID: that guard only fixes the
+// anchor this replica computes, so a peer without it (or a span persisted
+// before it landed) can still put `start + length - 1` of an empty text node
+// on the wire. The decoder floors the offset at zero rather than rejecting the
+// operation, because the same decoder replays stored operations and a document
+// already holding one must stay rebuildable.
+func TestTreeRestoreSpanFloorsNegativeAnchorOffset(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+		[]*crdt.TreeRestoreSpan{{
+			ID:            crdt.NewTreeNodeID(seed, 2),
+			NodeType:      "text",
+			IsText:        true,
+			Length:        1,
+			Value:         "x",
+			ParentID:      crdt.NewTreeNodeID(seed, 0),
+			LeftSiblingID: crdt.NewTreeNodeID(seed, 1),
+		}}, crdt.RestoreModeRestore, nil)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+
+	// What an unpatched peer sends for an empty text left sibling created at
+	// offset 0: its last-character anchor is one code unit below its start.
+	pbOps[0].GetTreeEdit().RestoreSpans[0].LeftSiblingId.Offset = -1
+
+	ops, err := converter.FromOperations(pbOps)
+	assert.NoError(t, err)
+	assert.Len(t, ops, 1)
+	got, ok := ops[0].(*operations.TreeEdit)
+	assert.True(t, ok)
+	assert.Equal(t, 0, got.RestoreSpans()[0].LeftSiblingID.Offset,
+		"a negative anchor offset floors to the run's start, the node itself")
+}

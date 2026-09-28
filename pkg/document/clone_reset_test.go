@@ -184,6 +184,6 @@ func TestChangePackOwnsVersionVectors(t *testing.T) {
 
 	// Mutating the document's own vector in place, as SyncClocks does while a
 	// remote pack is applied, must not reach the packed change.
-	doc.InternalDocument().VersionVector().Set(actor, 99)
+	doc.InternalDocumentForTest().VersionVector().Set(actor, 99)
 	assert.NotEqual(t, int64(99), packed[actor])
 }
