@@ -1048,9 +1048,13 @@ func (d *Document) RootObject() *crdt.Object {
 
 // Root returns the root object of this document.
 //
-// d.mu is held for the whole call because the clone is shared mutable
+// d.mu is held while the view is built, because the clone is shared mutable
 // state, not a read-only view: ensureClone rebuilds it, and a remote apply
 // running on the sync or watch goroutine both mutates and invalidates it.
+// The lock covers building the view only. The returned object wraps the
+// clone itself, so -- as RootObject says of the root -- traversing it after
+// this call returns is not synchronized with a concurrent apply; read
+// through Update's root, or through Marshal, when that matters.
 // The lock is a write lock, not a read lock, because ensureClone writes
 // d.cloneRoot. It is never held across a send to the event channel -- see
 // Document.eventsMu -- so an application that is slow to drain events
@@ -1214,6 +1218,11 @@ func (d *Document) AllPresences() map[string]presence.Data {
 // The clone is invalidated along with them, because clonePresences is a copy
 // of the map just discarded and an updater must not keep editing presences
 // that no longer exist on the root.
+//
+// It takes d.mu unconditionally, like HasLocalChanges, rather than through
+// writeLocked's d.updating escape: its only caller is the client's attach
+// path, which runs beside updaters rather than inside one, and resetting
+// presences from inside an updater would pull the clone out from under it.
 func (d *Document) ResetPresences() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
