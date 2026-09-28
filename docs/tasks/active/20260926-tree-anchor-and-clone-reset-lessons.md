@@ -154,3 +154,23 @@
   round's fixes grew the diff the next round had to review. When it stalls,
   sort the open findings by where they came from: introduced here, fix
   them; already on `main`, file them.
+
+## Panel round (post-maintainer)
+
+- Reverting the identity rejection wholesale also un-guarded the IDs the
+  restore span itself is keyed by (`Id`, `ParentId`, `RightSiblingId`),
+  which reach `Tree.Restore`'s recreate path bounded nowhere downstream.
+  The stored-population argument does not cover those: no producer ever
+  writes them negative, so `fromTreeRestoreIdentityID` rejects there while
+  the shared `fromTreeNodeID` stays permissive for the IDs that pre-date
+  restore spans.
+- Starting the watch pump before the first response made the loop's error
+  the only thing keeping the document drained, and the reconnect site
+  dropped it. A discarded error is load-bearing the moment the failing
+  path owns a goroutine's lifetime: `retryWatchLoop` now retries until a
+  loop comes up, the document is detached, or the watch context ends.
+- A `connect` server-streaming client blocks in `Watch()` until the
+  handler's first `Send` flushes headers, so "publish while the first
+  response is outstanding" is not reachable from a test server. What is
+  testable is the pump draining while the stream is idle, and the pump
+  being gone after an initialization failure.
