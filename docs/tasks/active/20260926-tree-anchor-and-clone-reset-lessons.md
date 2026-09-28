@@ -42,7 +42,9 @@
   got. `SetActor` and `SetStatus` are reachable from inside an updater, and
   `sync.RWMutex` is not reentrant, so a bare `Lock()` there deadlocks the
   process rather than merely racing. `writeLocked` is `readLocked`'s
-  counterpart for exactly that.
+  counterpart for exactly that. (Superseded: measurement later showed the
+  setters are only called beside an updater, so they lock unconditionally
+  and `writeLocked` was removed.)
 - `inner.Presence.Clear` had a pointer receiver and assigned a fresh map
   (`*p = make(...)`), so `proxy.Presence.Clear`'s `data := p.data;
   data.Clear()` rebound only its own copy of the map header. `p.data` -- the
@@ -63,7 +65,9 @@
   guarantee -- and the failure mode of being wrong is a deadlocked process,
   not a racy read. The per-document escape's hole is shared by every
   accessor (`Marshal`, `CreateChangePack`); closing it for one method buys
-  nothing and costs reentrancy. It is back on `readLocked`.
+  nothing and costs reentrancy. It is back on `readLocked`. (Superseded
+  by the measurement below: `HasLocalChanges` takes the bare lock, as it
+  did on `main`.)
 - The same map-header-rebinding bug as `Clear` lived in
   `Presence.Initialize` (`p.data = data`), where it is quieter: the change
   payload carries the new map, so the root looks right, and only the *next*

@@ -67,3 +67,21 @@ needed):
 ## Verify
 
 - `make verify`: green.
+- `go test -race ./pkg/document/... ./client/... ./api/...`: green.
+
+## Review
+
+- Both original fixes shipped with tests that fail on `main`. The review
+  rounds grew the change into a locking and ownership pass over
+  `Document`; the lessons file records why each piece was needed.
+- One round's fix was reverted: rejecting negative identity offsets in the
+  shared decoder would have stranded stored documents.
+- Found during review, already on `main`, left for follow-ups:
+  - A buffered local change shares its version vector map with
+    `d.changeID`, and `SyncClocks` merges into it in place, so a change
+    pushed after a remote apply can carry an inflated vector.
+    `CreateChangePack`'s copy fixes the race, not the drift.
+  - `applyChanges` drops the events of changes already applied when a later
+    change in the same pack fails.
+  - The watch restart ignores `runWatchLoop`'s error.
+  - `d.updating` is per-document, not per-goroutine.
