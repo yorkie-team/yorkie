@@ -134,7 +134,7 @@ func TestPurgedTextAttrIsNotStrandedInLive(t *testing.T) {
 	doc.GarbageCollect(doc.VersionVector())
 	require.Equal(t, 0, doc.GarbageLen())
 
-	clone, err := doc.InternalDocument().DeepCopy()
+	clone, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 
 	require.Equal(t, before, sizeOf(doc), "the purged tombstone never left Live")
@@ -174,7 +174,7 @@ func TestOverwritingATextAttrDoesNotLeakLive(t *testing.T) {
 		}))
 	}
 
-	clone, err := doc.InternalDocument().DeepCopy()
+	clone, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live,
 		"each overwrite leaves the superseded value charged to Live")
@@ -196,7 +196,7 @@ func TestOverwritingATreeAttrDoesNotLeakLive(t *testing.T) {
 		}))
 	}
 
-	clone, err := doc.InternalDocument().DeepCopy()
+	clone, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 	require.Equal(t, clone.DocSize().Live, doc.DocSize().Live,
 		"each overwrite leaves the superseded value charged to Live")
@@ -244,7 +244,7 @@ func TestSplitCopyOfATextAttrTombstoneIsCollectable(t *testing.T) {
 		return nil
 	}))
 
-	clone, err := doc.InternalDocument().DeepCopy()
+	clone, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 
 	require.Equal(t, clone.GarbageLen(), doc.GarbageLen(),
@@ -290,7 +290,7 @@ func TestStyleStraddlingAnElementBoundaryKeepsLiveExact(t *testing.T) {
 			return nil
 		}))
 
-		clone, err := doc.InternalDocument().DeepCopy()
+		clone, err := doc.InternalDocumentForTest().DeepCopy()
 		require.NoError(t, err)
 		require.Equal(t, clone.DocSize().Live, doc.DocSize().Live,
 			"overwrite %d drifted", i+1)

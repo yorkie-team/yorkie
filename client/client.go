@@ -515,9 +515,12 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		return err
 	}
 
-	d.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
+	// Through the setters, not the exported fields: Update reads both under
+	// the document's lock, so writing them unguarded from this goroutine
+	// races every concurrent updater.
+	d.SetMaxSizeLimit(int(res.Msg.MaxSizePerDocument))
 	if res.Msg.SchemaRules != nil {
-		d.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
+		d.SetSchemaRules(converter.FromRules(res.Msg.SchemaRules))
 	}
 
 	// Record the opt-out decisions before applying the attach response so the
@@ -534,8 +537,11 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	// local presence map. The wire-side PUT was stripped by the server and
 	// never crosses the boundary, but the local InternalDocument still
 	// carries the cloned entry until we clear it here.
+	// Through Document.ResetPresences, not the internal document's: the
+	// latter replaces the presence maps with no lock held, racing every
+	// presence reader on the document.
 	if res.Msg.DisablePresence && !opts.DisablePresence {
-		d.InternalDocument().ResetPresences()
+		d.ResetPresences()
 	}
 
 	if err := d.ApplyChangePack(pack); err != nil {
@@ -545,7 +551,10 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		c.logger.Debug(fmt.Sprintf(
 			"after apply %d changes: %s",
 			len(pack.Changes),
-			d.RootObject().Marshal(),
+			// Marshal, not RootObject().Marshal(): the former does the whole
+			// traversal under the document lock, while the latter walks the
+			// live CRDT root after the lock is released.
+			d.Marshal(),
 		))
 	}
 
@@ -973,22 +982,6 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 		return err
 	}
 
-	// NOTE(hackerwins): We need to receive the first response to initialize
-	// the watch stream. runWatchLoop should be blocked until the first response is
-	// received.
-	if !stream.Receive() {
-		return ErrInitNotReceived
-	}
-	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
-		return err
-	}
-	if err = stream.Err(); err != nil {
-		return err
-	}
-
-	rch := make(chan WatchDocResponse)
-	attachment.watchStream = rch
-
 	// The delivery pipeline has three goroutines with a single direction of
 	// backpressure:
 	//
@@ -998,14 +991,20 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	//
 	// The pump is the sole consumer of the document event channel and only
 	// appends to the unbounded buffer, so producers emitting document events
-	// under the document mutex are never blocked by a slow application
+	// under the document's event mutex are never blocked by a slow application
 	// reading rch. The sender is the sole writer and closer of rch. The pump
 	// stops only after the stream reader has exited, so a reconcile emission
 	// in flight always has a live consumer.
 	buf := newWatchBuffer()
 	pumpStop := make(chan struct{})
 
-	// pump: document events -> buf.
+	// pump: document events -> buf. Started before the stream's first
+	// response rather than after it. The document's event channel has
+	// capacity one, and a publisher that blocks on it holds the document's
+	// event mutex, stalling every other publisher, the sync goroutine's
+	// ApplyChangePack included. On a re-established stream the previous
+	// loop's pump has already stopped, so starting this one first gives an
+	// in-flight publish a consumer while Receive blocks on the server.
 	go func() {
 		for {
 			select {
@@ -1023,6 +1022,30 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			}
 		}
 	}()
+
+	// NOTE(hackerwins): We need to receive the first response to initialize
+	// the watch stream. runWatchLoop should be blocked until the first response is
+	// received.
+	//
+	// Each failure below stops the pump it started above. An event the pump
+	// already moved into buf is then dropped with the buffer, which is what a
+	// watch that never came up has always done -- the alternative is the
+	// publisher blocking on a channel this loop is no longer going to drain.
+	if !stream.Receive() {
+		close(pumpStop)
+		return ErrInitNotReceived
+	}
+	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
+		close(pumpStop)
+		return err
+	}
+	if err = stream.Err(); err != nil {
+		close(pumpStop)
+		return err
+	}
+
+	rch := make(chan WatchDocResponse)
+	attachment.watchStream = rch
 
 	// sender: buf -> rch.
 	go func() {

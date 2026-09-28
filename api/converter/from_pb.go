@@ -1135,7 +1135,61 @@ func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
 	return crdt.NewTreePos(parentID, leftSiblingID), nil
 }
 
+// fromTreeNodeID converts a Protobuf TreeNodeID that names an identity: a
+// node's own ID, an insertion neighbor, a merge source, or either half of a
+// TreePos. The offset is passed through unchanged. Rejecting a negative one
+// here would also reject it on the stored-change and snapshot paths, which
+// share this decoder, and make a document already holding one undecodable.
+// Only a restore span's left anchor is coerced; see fromTreeRestoreAnchorID.
 func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
+	createdAt, err := fromTreeNodeIDCreatedAt(pbPos)
+	if err != nil {
+		return nil, err
+	}
+
+	return crdt.NewTreeNodeID(
+		createdAt,
+		int(pbPos.Offset),
+	), nil
+}
+
+// fromTreeRestoreAnchorID converts the one TreeNodeID on the wire that a
+// well-formed producer can have written with a negative offset:
+// crdt.leftAnchorID computes a restore span's left anchor as
+// `start + length - 1`, which for an empty text node lands one code unit
+// before the node's own start. That guard is producer-side only -- a peer that
+// does not carry it, and a span already persisted by one, still deliver the
+// negative -- and crdt.Tree.Restore floor-resolves the anchor with no bound of
+// its own, landing the restored node after some earlier run entirely.
+//
+// Floored rather than rejected: this decoder also runs over stored operations
+// (FromStoredOperations), so refusing the value would make a document that
+// already contains one permanently unrebuildable. Zero is the anchor the guard
+// would have produced -- it floor-resolves to the leftmost fragment of the
+// same run, which is the node itself -- and it keeps negative offsets out of
+// the offset arithmetic downstream. An anchor is resolved by position rather
+// than looked up by identity, so the coercion cannot merge two nodes the way
+// flooring an identity ID in fromTreeNodeID would.
+//
+// Only the offset-zero case is repaired. An empty text node at offset k > 0
+// yields k - 1, which is not negative and is decoded as sent: telling it
+// apart from a valid anchor needs the node's length, which the decoder does
+// not have.
+func fromTreeRestoreAnchorID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
+	createdAt, err := fromTreeNodeIDCreatedAt(pbPos)
+	if err != nil {
+		return nil, err
+	}
+
+	return crdt.NewTreeNodeID(
+		createdAt,
+		max(int(pbPos.Offset), 0),
+	), nil
+}
+
+// fromTreeNodeIDCreatedAt decodes the creation ticket every TreeNodeID
+// carries, shared by the identity and anchor decoders above.
+func fromTreeNodeIDCreatedAt(pbPos *api.TreeNodeID) (*time.Ticket, error) {
 	if pbPos == nil {
 		return nil, goerrors.New("tree node id missing")
 	}
@@ -1148,10 +1202,7 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 		return nil, fmt.Errorf("tree_node_id.created_at: %w", ErrMissingTicket)
 	}
 
-	return crdt.NewTreeNodeID(
-		createdAt,
-		int(pbPos.Offset),
-	), nil
+	return createdAt, nil
 }
 
 // fromTreeRestoreSpans converts Protobuf identity-preserving Tree restore
@@ -1221,7 +1272,11 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 			}
 		}
 		if pbSpan.LeftSiblingId != nil {
-			if span.LeftSiblingID, err = fromTreeNodeID(pbSpan.LeftSiblingId); err != nil {
+			// The anchor decoder, not the identity one: a left anchor is the
+			// single wire value a well-formed producer can have written
+			// negative, and it is resolved by position rather than keyed by
+			// identity. Every other ID on the span stays strict.
+			if span.LeftSiblingID, err = fromTreeRestoreAnchorID(pbSpan.LeftSiblingId); err != nil {
 				return nil, err
 			}
 			if span.LeftSiblingID.CreatedAt == nil {

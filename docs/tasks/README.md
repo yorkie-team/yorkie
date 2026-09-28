@@ -20,8 +20,13 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
-| Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./active/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./active/20260926-backport-hook-fixes-lessons.md) |
+| Guard empty-text anchors and reset the clone on failed applies (2026-09-26) | [20260926-tree-anchor-and-clone-reset-todo.md](./active/20260926-tree-anchor-and-clone-reset-todo.md) | [20260926-tree-anchor-and-clone-reset-lessons.md](./active/20260926-tree-anchor-and-clone-reset-lessons.md) |
 | Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
+| Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./active/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./active/20260926-backport-hook-fixes-lessons.md) |
+| `go fix` modernizations from the Go 1.26 upgrade (2026-09-25) | [20260925-go-fix-modernizations-todo.md](./active/20260925-go-fix-modernizations-todo.md) | [20260925-go-fix-modernizations-lessons.md](./active/20260925-go-fix-modernizations-lessons.md) |
+| Adopt `errors.AsType` for type-safe error inspection (2026-09-25) | [20260925-errors-astype-todo.md](./active/20260925-errors-astype-todo.md) | [20260925-errors-astype-lessons.md](./active/20260925-errors-astype-lessons.md) |
+| The index's silences: a coverage gate, a design-doc home, and the direct-run boundary (2026-09-25) | [20260925-doc-index-gate-todo.md](./active/20260925-doc-index-gate-todo.md) | [20260925-doc-index-gate-lessons.md](./active/20260925-doc-index-gate-lessons.md) |
+| Machine-readable CI lane reports (2026-09-25) | [20260925-ci-lane-reports-todo.md](./active/20260925-ci-lane-reports-todo.md) | [20260925-ci-lane-reports-lessons.md](./active/20260925-ci-lane-reports-lessons.md) |
 | Agent pipeline: the entry paths a human PR uses (2026-09-25) | [20260925-agent-pipeline-entry-paths-todo.md](./active/20260925-agent-pipeline-entry-paths-todo.md) | [20260925-agent-pipeline-entry-paths-lessons.md](./active/20260925-agent-pipeline-entry-paths-lessons.md) |
 | A style's reached node set depends on delivery order (2026-09-24) | [20260924-style-reached-set-order-dependent-todo.md](./active/20260924-style-reached-set-order-dependent-todo.md) | [20260924-style-reached-set-order-dependent-lessons.md](./active/20260924-style-reached-set-order-dependent-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
