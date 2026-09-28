@@ -1099,54 +1099,13 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			// If watch stream is disconnected, we re-establish the watch
 			// stream. The pump above has already stopped, so the new loop's
 			// pump is the sole consumer of the document event channel.
-			//
-			// Retried rather than attempted once: runWatchLoop returns an
-			// error when the re-established stream fails before its first
-			// response, and that loop stops the pump it started on the way
-			// out. A single ignored attempt would therefore leave the document
-			// with no consumer of Events() at all, and the channel has
-			// capacity one -- the next publisher blocks on it holding
-			// Document.eventsMu, wedging every other publisher, the sync
-			// goroutine's ApplyChangePack included. Keep trying until a loop
-			// comes up or the watch context ends.
-			c.retryWatchLoop(ctx, d)
+			_ = c.runWatchLoop(ctx, d)
 			return
 		}
 		buf.close()
 	}()
 
 	return nil
-}
-
-// watchRetryDelay is the pause between attempts to re-establish a watch stream
-// that failed before its first response: long enough not to spin against a
-// server that is down, short enough that a document whose event channel has no
-// consumer is not left stalled.
-const watchRetryDelay = 1 * gotime.Second
-
-// retryWatchLoop re-establishes the watch stream for the given document and
-// keeps trying until one comes up, the document is no longer attached, or ctx
-// ends. A failed attempt stops the pump it started, so an attempt whose error
-// is dropped can leave the document with no consumer of its event channel; see
-// the call site in runWatchLoop.
-func (c *Client) retryWatchLoop(ctx context.Context, d *document.Document) {
-	for {
-		if _, ok := c.attachments.Get(d.Key()); !ok {
-			return
-		}
-
-		err := c.runWatchLoop(ctx, d)
-		if err == nil {
-			return
-		}
-		logging.DefaultLogger().Warnf("re-establish watch stream: %v", err)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-gotime.After(watchRetryDelay):
-		}
-	}
 }
 
 func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*WatchDocResponse, error) {
