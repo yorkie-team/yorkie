@@ -251,7 +251,7 @@ func TestDisableGCOnAttach(t *testing.T) {
 			}))
 		}
 		assert.NoError(t, c1.Sync(ctx))
-		d1Lamport := d1.InternalDocument().Lamport()
+		d1Lamport := d1.InternalDocumentForTest().Lamport()
 
 		// 02. c2 attaches with opt-out. The attach response's pull path
 		// crosses the threshold, so the server returns a snapshot. With
@@ -260,7 +260,7 @@ func TestDisableGCOnAttach(t *testing.T) {
 		d2 := document.New(docKey)
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithDisableGC()))
 
-		d2Lamport := d2.InternalDocument().Lamport()
+		d2Lamport := d2.InternalDocumentForTest().Lamport()
 		t.Logf("d1.lamport=%d  d2.lamport after opt-out snapshot pull=%d",
 			d1Lamport, d2Lamport)
 

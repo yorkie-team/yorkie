@@ -110,7 +110,7 @@ func TestArrayMoveChargesTheMovedAtTicket(t *testing.T) {
 			moveToFrontByValue(t, doc, v)
 		}
 
-		rebuilt, err := doc.InternalDocument().DeepCopy()
+		rebuilt, err := doc.InternalDocumentForTest().DeepCopy()
 		require.NoError(t, err)
 		live, rebuiltLive := doc.DocSize().Live, rebuilt.DocSize().Live
 		require.Equal(t, (&rebuiltLive).Total(), (&live).Total())

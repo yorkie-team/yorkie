@@ -406,7 +406,7 @@ func (rht *RHT) Marshal() string {
 			sb.WriteString(",")
 		}
 		value := members[k]
-		sb.WriteString(fmt.Sprintf(`"%s":"%s"`, EscapeString(k), EscapeString(value)))
+		fmt.Fprintf(&sb, `"%s":"%s"`, EscapeString(k), EscapeString(value))
 	}
 	sb.WriteString("}")
 

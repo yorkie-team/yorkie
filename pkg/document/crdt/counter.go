@@ -150,9 +150,10 @@ func (p *Counter) MetaSize() int {
 // DataSize returns the data usage of this element.
 func (p *Counter) DataSize() resource.DataSize {
 	size := 0
-	if p.valueType == IntegerCnt || p.valueType == IntegerDedupCnt {
+	switch p.valueType {
+	case IntegerCnt, IntegerDedupCnt:
 		size = 4
-	} else if p.valueType == LongCnt {
+	case LongCnt:
 		size = 8
 	}
 	if p.IsDedup() && p.hll != nil {

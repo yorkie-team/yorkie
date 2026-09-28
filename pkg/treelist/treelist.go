@@ -251,7 +251,7 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 func (t *Tree[V]) ToTestString() string {
 	var b strings.Builder
 	traverseInOrder(t.root, func(node *Node[V]) {
-		b.WriteString(fmt.Sprintf("[%d,%d]%s", node.weight, node.Size(), node.value.String()))
+		fmt.Fprintf(&b, "[%d,%d]%s", node.weight, node.Size(), node.value.String())
 	})
 	return b.String()
 }

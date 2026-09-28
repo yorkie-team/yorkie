@@ -37,7 +37,7 @@ import (
 func assertRebuildsSame(t *testing.T, doc *document.Document, msg string) {
 	t.Helper()
 
-	rebuilt, err := doc.InternalDocument().DeepCopy()
+	rebuilt, err := doc.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 	assert.Equal(t, doc.DocSize().GC, rebuilt.DocSize().GC, "%s: gc size", msg)
 	assert.Equal(t, doc.GarbageLen(), rebuilt.GarbageLen(), "%s: garbage count", msg)
