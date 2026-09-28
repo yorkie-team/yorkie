@@ -62,3 +62,38 @@ func TestSyncAccessorsLockDuringConcurrentUpdate(t *testing.T) {
 	wg.Wait()
 	require.True(t, doc.HasLocalChanges())
 }
+
+// TestAttachSettersLockDuringConcurrentUpdate covers the client's attach
+// path, which sets the size limit and schema rules while another goroutine
+// may be inside Update reading them to decide whether to reject the change.
+// Like the sync loop's accessors, these setters run beside an updater, never
+// inside one, so they must take d.mu rather than the d.updating escape.
+func TestAttachSettersLockDuringConcurrentUpdate(t *testing.T) {
+	doc := document.New("d")
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				doc.SetMaxSizeLimit(1 << 20)
+				doc.SetSchemaRules(nil)
+			}
+		}
+	}()
+
+	for i := 0; i < 1000; i++ {
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("k", i)
+			return nil
+		}))
+	}
+
+	close(stop)
+	wg.Wait()
+}

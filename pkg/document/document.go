@@ -961,15 +961,27 @@ func (d *Document) SetStatus(status StatusType) {
 // SetMaxSizeLimit records the per-document size limit the server reported at
 // attach. Update reads d.MaxSizeLimit under d.mu, so the write takes the lock
 // too rather than leaving the Client to poke the exported field unguarded.
+//
+// It takes the lock unconditionally rather than through writeLocked's
+// d.updating escape, for the reason HasLocalChanges does: the attach path
+// sets it beside a running updater, never inside one, and the escape would
+// let this write race the very read in Update that enforces the limit.
 func (d *Document) SetMaxSizeLimit(maxSizeLimit int) {
-	writeLocked(d, func() { d.MaxSizeLimit = maxSizeLimit })
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.MaxSizeLimit = maxSizeLimit
 }
 
 // SetSchemaRules records the schema ruleset the server reported at attach.
 // Update reads d.SchemaRules under d.mu, so the write takes the lock for the
 // same reason SetMaxSizeLimit does: the slice header itself is shared state.
+// Like SetMaxSizeLimit it skips the d.updating escape.
 func (d *Document) SetSchemaRules(rules []types.Rule) {
-	writeLocked(d, func() { d.SchemaRules = rules })
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.SchemaRules = rules
 }
 
 // IsAttached returns whether this document is attached or not.
