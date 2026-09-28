@@ -292,7 +292,7 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Sequential attach/detach operations with proper waiting
 		// to ensure session state is properly synchronized
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			// Detach
 			err = clients[1].Detach(ctx, ch2)
 			require.NoError(t, err)

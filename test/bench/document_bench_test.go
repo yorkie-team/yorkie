@@ -510,7 +510,6 @@ func BenchmarkPresenceUpdate(b *testing.B) {
 		}
 		return nil
 	}))
-	b.ResetTimer()
 
 	for b.Loop() {
 		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -598,6 +597,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 			}
 			return nil
 		})
+		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
@@ -633,6 +633,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 
 			return nil
 		})
+		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
@@ -834,6 +835,7 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 			}
 			return nil
 		})
+		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
@@ -916,14 +918,13 @@ func BenchmarkSnapshotEncoding(b *testing.B) {
 		b.Run(fmt.Sprintf("object with %d members", members), func(b *testing.B) {
 			doc := document.New("d1")
 			assert.NoError(b, doc.Update(func(root *json.Object, p *presence.Presence) error {
-				for i := 0; i < members; i++ {
+				for i := range members {
 					root.SetString(fmt.Sprintf("k%d", i), "v")
 				}
 				return nil
 			}))
 			root := doc.RootObject()
 
-			b.ResetTimer()
 			for b.Loop() {
 				_, err := converter.ObjectToBytes(root)
 				assert.NoError(b, err)

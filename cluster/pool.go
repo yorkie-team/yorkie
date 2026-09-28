@@ -26,7 +26,7 @@ import (
 // It maintains multiple connections per host to reduce HTTP/2 mutex contention.
 type ClientPool struct {
 	clients  map[string][]*Client
-	counters map[string]*uint64
+	counters map[string]*atomic.Uint64
 	opts     []Option
 	poolSize int
 	mu       sync.RWMutex
@@ -41,7 +41,7 @@ func NewClientPool(opts ...Option) *ClientPool {
 
 	return &ClientPool{
 		clients:  make(map[string][]*Client),
-		counters: make(map[string]*uint64),
+		counters: make(map[string]*atomic.Uint64),
 		opts:     opts,
 		poolSize: options.PoolSize,
 	}
@@ -53,7 +53,7 @@ func (p *ClientPool) Get(rpcAddr string) (*Client, error) {
 	// Try to get existing client with read lock
 	p.mu.RLock()
 	if clients, ok := p.clients[rpcAddr]; ok {
-		counter := atomic.AddUint64(p.counters[rpcAddr], 1)
+		counter := p.counters[rpcAddr].Add(1)
 		client := clients[counter%uint64(len(clients))]
 		p.mu.RUnlock()
 		return client, nil
@@ -66,7 +66,7 @@ func (p *ClientPool) Get(rpcAddr string) (*Client, error) {
 
 	// Double-check after acquiring write lock
 	if clients, ok := p.clients[rpcAddr]; ok {
-		counter := atomic.AddUint64(p.counters[rpcAddr], 1)
+		counter := p.counters[rpcAddr].Add(1)
 		return clients[counter%uint64(len(clients))], nil
 	}
 
@@ -76,7 +76,7 @@ func (p *ClientPool) Get(rpcAddr string) (*Client, error) {
 		cli, err := Dial(rpcAddr, p.opts...)
 		if err != nil {
 			// Cleanup already created clients
-			for j := 0; j < i; j++ {
+			for j := range i {
 				clients[j].Close()
 			}
 			return nil, err
@@ -84,9 +84,8 @@ func (p *ClientPool) Get(rpcAddr string) (*Client, error) {
 		clients[i] = cli
 	}
 
-	var counter uint64
 	p.clients[rpcAddr] = clients
-	p.counters[rpcAddr] = &counter
+	p.counters[rpcAddr] = new(atomic.Uint64)
 	return clients[0], nil
 }
 
@@ -115,7 +114,7 @@ func (p *ClientPool) Close() {
 		}
 	}
 	p.clients = make(map[string][]*Client)
-	p.counters = make(map[string]*uint64)
+	p.counters = make(map[string]*atomic.Uint64)
 }
 
 // Prune removes clients that are no longer in the active nodes list.

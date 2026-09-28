@@ -51,7 +51,7 @@ func TestCounterDedupSnapshotSingleClient(t *testing.T) {
 	assert.NoError(t, c1.Attach(ctx, d1))
 
 	const actors = 15 // > helper.SnapshotThreshold (10)
-	for i := 0; i < actors; i++ {
+	for i := range actors {
 		actor := fmt.Sprintf("user-%d", i)
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			if i == 0 {
@@ -104,9 +104,9 @@ func TestCounterDedupSnapshotConcurrent(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < numClients; i++ {
+	for i := range numClients {
 		wg.Go(func() {
-			for j := 0; j < perClient; j++ {
+			for j := range perClient {
 				actor := fmt.Sprintf("user-%d-%d", i, j)
 				err := docs[i].Update(func(root *json.Object, p *presence.Presence) error {
 					root.GetCounter("uv").Add(actor)

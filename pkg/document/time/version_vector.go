@@ -19,8 +19,9 @@ package time
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -82,7 +83,7 @@ func VersionVectorFromBytes(data []byte) (VersionVector, error) {
 	}
 
 	// Read each ActorID and its corresponding version
-	for i := int64(0); i < length; i++ {
+	for range length {
 		var actorID ActorID
 		if _, err := buffer.Read(actorID[:]); err != nil {
 			return nil, fmt.Errorf("read ActorID: %w", err)
@@ -146,9 +147,7 @@ func (v VersionVector) VersionOf(id ActorID) int64 {
 // DeepCopy creates a deep copy of this VersionVector.
 func (v VersionVector) DeepCopy() VersionVector {
 	copied := NewVersionVector()
-	for k, v := range v {
-		copied[k] = v
-	}
+	maps.Copy(copied, v)
 	return copied
 }
 
@@ -158,12 +157,8 @@ func (v VersionVector) Marshal() string {
 
 	builder.WriteRune('{')
 
-	keys := make([]ActorID, 0, len(v))
-	for k := range v {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return bytes.Compare(keys[i][:], keys[j][:]) < 0
+	keys := slices.SortedFunc(maps.Keys(v), func(a, b ActorID) int {
+		return bytes.Compare(a[:], b[:])
 	})
 
 	isFirst := true
@@ -335,7 +330,7 @@ func (v VersionVector) Bytes() ([]byte, error) {
 
 func writeInt64(buffer *bytes.Buffer, value int64) error {
 	data := make([]byte, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		data[i] = byte(value >> (56 - i*8))
 	}
 
@@ -353,7 +348,7 @@ func readInt64(buffer *bytes.Reader) (int64, error) {
 	}
 
 	var value int64
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		value = (value << 8) | int64(data[i])
 	}
 	return value, nil

@@ -36,9 +36,8 @@ import (
 )
 
 func TestSnapshot(t *testing.T) {
-	var be *backend.Backend
 	patch, err := monkey.PatchInstanceMethodByName(
-		reflect.TypeOf(be),
+		reflect.TypeFor[*backend.Backend](),
 		"Go",
 		func(
 			_ *backend.Backend,
@@ -51,7 +50,7 @@ func TestSnapshot(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer patch.Unpatch()
+	defer func() { assert.NoError(t, patch.Unpatch()) }()
 
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]

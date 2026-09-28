@@ -74,7 +74,7 @@ func TestWatchEventDeliveryPipeline(t *testing.T) {
 
 		// Peer churn: repeated join, presence update, and leave produce
 		// bursts of watched/unwatched/presence-changed events.
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			d2 := document.New(d1.Key())
 			assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 			_, _, err := c2.WatchStream(d2)

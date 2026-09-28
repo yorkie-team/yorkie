@@ -80,7 +80,7 @@ func TestRefreshStatsPaginationWrap(t *testing.T) {
 	be := newTestBackend(t)
 
 	// Create 3 projects.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := be.DB.CreateProjectInfo(ctx, fmt.Sprintf("%s-p%d", t.Name(), i), testOwnerID)
 		assert.NoError(t, err)
 	}

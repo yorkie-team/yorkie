@@ -777,9 +777,7 @@ func (h *Handler) generateMigrationCode(
 		"language":   input.Language,
 		"code":       code,
 		"operations": input.Operations,
-		"usage": fmt.Sprintf(
-			"Save this code and run with your YORKIE_SECRET_KEY environment variable set.",
-		),
+		"usage":      "Save this code and run with your YORKIE_SECRET_KEY environment variable set.",
 	}, nil
 }
 

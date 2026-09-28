@@ -43,7 +43,7 @@ func testCtx() context.Context {
 
 func makeCandidates(n int) []CandidatePair {
 	pairs := make([]CandidatePair, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		pairs[i] = CandidatePair{
 			Project: &types.Project{ID: types.ID("project")},
 			Client: &database.ClientInfo{

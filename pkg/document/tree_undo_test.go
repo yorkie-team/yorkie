@@ -17,7 +17,7 @@
 package document_test
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,7 +81,7 @@ func liveTreeNodeIDs(t *testing.T, doc *document.Document) []string {
 			ids = append(ids, node.IDString())
 		}
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 
 	return ids
 }

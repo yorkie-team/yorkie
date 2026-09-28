@@ -12,7 +12,8 @@ make tools         # Install dev tools (run periodically)
 make build         # Build binary to bin/yorkie
 make fmt           # gofmt
 make lint          # golangci-lint
-make verify        # lint + licence headers + unit tests — the commit gate
+make verify        # lint + licence headers + go fix + unit tests — the commit gate
+make modernize     # Apply go fix under every build tag (fixes verify-modernize)
 make proto         # Regenerate protobuf via buf
 make test          # Integration tests (-tags integration, MongoDB required)
 make test-complex  # Long-running complex tests (-tags complex)
@@ -54,9 +55,11 @@ not `\n` inside `"..."`.
 ## Pitfalls
 
 - Build tags `integration`, `bench`, `complex` gate test files. The
-  Makefile targets pass them via `go test -tags …`; for VSCode/gopls
-  to index those files, set `gopls.build.buildFlags` per
-  `CONTRIBUTING.md`.
+  Makefile targets pass them via `go test -tags …`, and `make lint` and
+  `make verify-modernize` pass every tag `scripts/go-build-tags.sh` finds;
+  run golangci-lint through `make lint`, not bare, or the tagged files go
+  unchecked. For VSCode/gopls to index those files, set
+  `gopls.build.buildFlags` per `CONTRIBUTING.md`.
 - Apache 2.0 license header required on every Go file.
 - Follow [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md);
   every package needs a package comment (`// Package xxx provides…`).

@@ -141,6 +141,17 @@ export const CI_DEFINING_PATHS = [
   "build/docker/**",
   // Scripts a workflow invokes directly.
   "scripts/ci/**",
+  // …and the shell scripts a Makefile target a workflow invokes resolves to.
+  // `go-fix.sh` is the whole body of the `modernize` lane (`Makefile`'s
+  // `verify-modernize` runs nothing else) and it also runs on every push
+  // through `make verify`, so a branch editing it decides whether that lane
+  // checks anything at all — the same fail-open as editing the Makefile line
+  // that calls it, one file away.
+  "scripts/go-fix.sh",
+  // `go-build-tags.sh` prints the tag set both `make lint` and `go-fix.sh`
+  // run under. A branch making it print nothing would lint and modernize the
+  // default build only, with every lane still green.
+  "scripts/go-build-tags.sh",
   // …and the modules those scripts import. `scripts/*.mjs` rather than
   // `scripts/verify-*.mjs`: `verify-doc-links.mjs` and `verify-license.mjs`
   // both import `direct-run.mjs` for the predicate that decides whether their

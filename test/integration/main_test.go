@@ -35,11 +35,6 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-type testResult struct {
-	flag       bool
-	resultDesc string
-}
-
 type clientAndDocPair struct {
 	cli *client.Client
 	doc *document.Document
@@ -96,44 +91,6 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	}
 }
 
-func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
-	assert.True(t, len(pairs) > 1)
-	ctx := context.Background()
-	// Save own changes and get previous changes.
-	for i, pair := range pairs {
-		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
-		err := pair.cli.Sync(ctx)
-		assert.NoError(t, err)
-	}
-
-	// Get last client changes.
-	// Last client get all precede changes in above loop.
-	for _, pair := range pairs[:len(pairs)-1] {
-		err := pair.cli.Sync(ctx)
-		assert.NoError(t, err)
-	}
-
-	// Assert start.
-	expected := pairs[0].doc.Marshal()
-	fmt.Printf("after d1: %s\n", expected)
-	for i, pair := range pairs[1:] {
-		v := pair.doc.Marshal()
-		fmt.Printf("after d%d: %s\n", i+2, v)
-		if expected != v {
-			return false
-		}
-	}
-
-	// Check clone and root tree consistency within each document.
-	for i, pair := range pairs {
-		if !checkCloneAndRootTreeEqual(i+1, pair.doc) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // assertCloneAndRootTreeEqual asserts that each tree element in the document
 // has consistent XML between the clone and the root.
 func assertCloneAndRootTreeEqual(t *testing.T, docIdx int, doc *document.Document) {
@@ -147,25 +104,6 @@ func assertCloneAndRootTreeEqual(t *testing.T, docIdx int, doc *document.Documen
 		assert.Equal(t, cloneXML, rootXML,
 			"d%d: clone and root tree %q should match", docIdx, key)
 	}
-}
-
-// checkCloneAndRootTreeEqual checks that each tree element in the document
-// has consistent XML between the clone and the root.
-func checkCloneAndRootTreeEqual(docIdx int, doc *document.Document) bool {
-	for key, elem := range doc.RootObject().Members() {
-		tree, ok := elem.(*crdt.Tree)
-		if !ok {
-			continue
-		}
-		rootXML := tree.ToXML()
-		cloneXML := doc.Root().GetTree(key).ToXML()
-		if cloneXML != rootXML {
-			fmt.Printf("d%d: clone/root mismatch for tree %q\n  clone: %s\n  root:  %s\n",
-				docIdx, key, cloneXML, rootXML)
-			return false
-		}
-	}
-	return true
 }
 
 // activeClients creates and activates the given number of clients.

@@ -20,6 +20,7 @@ package bench
 
 import (
 	gojson "encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -46,6 +47,7 @@ func BenchmarkTextEditing(b *testing.B) {
 		root.SetNewText("text")
 		return nil
 	})
+	assert.NoError(b, err)
 
 	for _, edit := range editingTrace.Edits {
 		cursor := int(edit[0].(float64))
@@ -53,10 +55,11 @@ func BenchmarkTextEditing(b *testing.B) {
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("text")
-			if mode == 0 {
+			switch mode {
+			case 0:
 				value := edit[2].(string)
 				text.Edit(cursor, cursor, value)
-			} else if mode == 1 {
+			case 1:
 				// deletion
 				text.Edit(cursor, cursor+1, "")
 			}
@@ -74,8 +77,8 @@ func BenchmarkTextEditing(b *testing.B) {
 }
 
 type editTrace struct {
-	Edits     [][]interface{} `json:"edits"`
-	FinalText string          `json:"finalText"`
+	Edits     [][]any `json:"edits"`
+	FinalText string  `json:"finalText"`
 }
 
 // readEditingTraceFromFile reads trace from editing-trace.json.
@@ -84,7 +87,7 @@ func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
 
 	file, err := os.Open("./editing-trace.json")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open editing trace: %w", err)
 	}
 	defer func() {
 		if err = file.Close(); err != nil {
@@ -94,12 +97,12 @@ func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
 
 	byteValue, err := io.ReadAll(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read editing trace: %w", err)
 	}
 
 	if err = gojson.Unmarshal(byteValue, &trace); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal editing trace: %w", err)
 	}
 
-	return &trace, err
+	return &trace, nil
 }

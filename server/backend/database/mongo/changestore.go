@@ -17,8 +17,9 @@
 package mongo
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/google/btree"
@@ -228,7 +229,7 @@ func (s *ChangeStore) calcMissingRanges(from, to int64) []ChangeRange {
 	}
 
 	// Now find contiguous missing ranges
-	var inRange bool = false
+	var inRange = false
 	var startMissing int64
 
 	for seq := from; seq <= to; seq++ {
@@ -270,8 +271,8 @@ func mergeAdjacentRanges(ranges []ChangeRange) []ChangeRange {
 		return ranges
 	}
 
-	sort.Slice(ranges, func(i, j int) bool {
-		return ranges[i].From < ranges[j].From
+	slices.SortFunc(ranges, func(a, b ChangeRange) int {
+		return cmp.Compare(a.From, b.From)
 	})
 
 	result := make([]ChangeRange, 0, len(ranges))

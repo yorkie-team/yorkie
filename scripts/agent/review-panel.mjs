@@ -1442,8 +1442,9 @@ const CONFIDENCE_LEVELS = new Set(FINDING.properties.confidence.enum);
  *     this file was ported from, where Prettier is write-only — copying its
  *     "no lane checks formatting" bullet would have sent every lens hunting a
  *     class golangci-lint already reds.
- *   - The same file DISABLES `staticcheck` and `unused`. "golangci-lint runs"
- *     on its own would have implied both and silenced the dead-code class.
+ *   - The same file once DISABLED `staticcheck` and `unused`, and the note said
+ *     so in the NOT-enforced half. Both are enabled now, with every build tag,
+ *     so the bullet moved up — the same discipline as the licence header below.
  *   - The Apache 2.0 licence header CLAUDE.md requires on every Go file HAS a
  *     lane as of `scripts/verify-license.mjs`: `ci.yml`'s `build` job runs it
  *     and `make verify` runs it locally. It did not when this note was first
@@ -1487,9 +1488,12 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "nothing they were not about to be told anyway.",
   "",
   "ENFORCED — you may rely on these:",
-  "- `golangci-lint run ./...`: gofmt and goimports as formatters, plus gosec,",
-  "  revive, wrapcheck, gocyclo, goconst, lll, misspell, nakedret and",
-  "  goprintffuncname. Formatting and import grouping are covered here.",
+  "- `golangci-lint run ./...` under every build tag (`make lint`), with",
+  "  gofmt and goimports as formatters, plus the default set (errcheck, govet,",
+  "  ineffassign, staticcheck, unused) and gosec, revive, wrapcheck, gocyclo,",
+  "  goconst, lll, misspell, nakedret and goprintffuncname. Formatting, import",
+  "  grouping, unchecked errors and unreferenced code are covered here; lll,",
+  "  goconst and gocyclo are off in the tag-gated suites under `test/`.",
   "- `buf lint` over the protobuf, and `buf breaking` against this PR's own base",
   "  commit — a wire-incompatible proto change reds the lane.",
   "- Generated-code freshness: `buf generate` must leave `api/` clean, untracked",
@@ -1497,6 +1501,9 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "- `make build`.",
   "- `go vet -tags rgafuzz ./...`, which COMPILES the build-tag-gated",
   "  reproductions without running them.",
+  "- `make verify-modernize`: the Go toolchain's `go fix` modernizers must have",
+  "  nothing to rewrite under every build tag (range-over-int, min/max,",
+  "  slices/maps helpers, `any`, and so on). `make verify` runs it locally too.",
   "- `go test -tags integration -race -coverpkg=./... ./...` against a real",
   "  MongoDB from docker compose. The race detector is on.",
   "- `node scripts/verify-doc-links.mjs` and its own `node --test` suite, on every",
@@ -1508,8 +1515,6 @@ export const MECHANICAL_COVERAGE_NOTE = [
   "",
   "NOT ENFORCED BY ANYTHING — a real finding here is worth MORE than one the lanes",
   "above would have caught, because nothing else in the pipeline will catch it:",
-  "- `staticcheck` and `unused`. Both are disabled in `.golangci.yml`, so the",
-  "  whole staticcheck class and unreferenced code reach main unremarked.",
   "- `go test -tags complex` (the sharded-cluster suite), `-tags bench`, and the",
   "  k6 load test. All three are path-gated, so most pull requests run none.",
   "- Everything above, on a documentation-only PR. `ci.yml`'s `build` job is",

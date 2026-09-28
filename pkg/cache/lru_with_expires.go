@@ -18,7 +18,6 @@
 package cache
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -58,9 +57,9 @@ func NewLRUWithExpires[K comparable, V any](
 func (c *LRUWithExpires[K, V]) Get(key K) (V, bool) {
 	value, ok := c.cache.Get(key)
 	if ok {
-		atomic.AddInt64(&c.stats.hits, 1)
+		c.stats.hits.Add(1)
 	} else {
-		atomic.AddInt64(&c.stats.misses, 1)
+		c.stats.misses.Add(1)
 	}
 	return value, ok
 }

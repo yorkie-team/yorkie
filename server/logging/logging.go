@@ -83,7 +83,7 @@ func New(name string, fields ...Field) Logger {
 	logger := newLogger(name)
 
 	if len(fields) > 0 {
-		var args = make([]interface{}, len(fields))
+		var args = make([]any, len(fields))
 		for i, field := range fields {
 			args[i] = field
 		}

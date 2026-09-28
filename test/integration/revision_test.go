@@ -226,6 +226,7 @@ func TestRevision(t *testing.T) {
 		// Get initial doc info to check serverSeq changes
 		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
 		assert.NoError(t, err)
+		initialServerSeq := docInfo.ServerSeq
 
 		// Make enough changes to trigger snapshot creation
 		// Each Update + Sync creates one change with one operation
@@ -243,7 +244,8 @@ func TestRevision(t *testing.T) {
 		// 04. Verify serverSeq has increased
 		docInfo, err = be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
 		assert.NoError(t, err)
-		assert.Greater(t, docInfo.ServerSeq, helper.SnapshotInterval)
+		// One change per Update + Sync above, so exactly SnapshotInterval.
+		assert.Equal(t, initialServerSeq+helper.SnapshotInterval, docInfo.ServerSeq)
 
 		// 05. Check if auto revisions were created
 		revs, err := revisions.List(

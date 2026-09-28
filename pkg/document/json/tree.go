@@ -18,6 +18,7 @@ package json
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -426,13 +427,13 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		}
 
 		if contents[0].Type == index.TextNodeType {
-			value := ""
+			var value strings.Builder
 
 			for _, content := range contents {
-				value += content.Value
+				value.WriteString(content.Value)
 			}
 
-			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.TextNodeType, nil, value))
+			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.TextNodeType, nil, value.String()))
 		} else {
 			for i, content := range contents {
 				// Each node needs its own identity: positions anchor by id, and
@@ -452,9 +453,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 						attributes.Set(key, val, nodeTicket)
 					}
 				}
-				var node *crdt.TreeNode
-
-				node = crdt.NewTreeNode(crdt.NewTreeNodeID(nodeTicket, 0), content.Type, attributes, content.Value)
+				node := crdt.NewTreeNode(crdt.NewTreeNodeID(nodeTicket, 0), content.Type, attributes, content.Value)
 
 				for _, child := range content.Children {
 					if err := buildDescendants(t.context, child, node); err != nil {

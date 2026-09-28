@@ -346,7 +346,7 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 
 	// Type char by char: each Edit is a distinct insertion (createdAt = tick).
 	charAt := make([]*time.Ticket, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		charAt[i] = tick(int64(2000 + i))
 		f, e, err := text.CreateRange(i, i)
 		assert.NoError(t, err)

@@ -30,7 +30,7 @@ import (
 
 func TestPrimitive(t *testing.T) {
 	tests := []struct {
-		value     interface{}
+		value     any
 		valueType crdt.ValueType
 		marshal   string
 	}{

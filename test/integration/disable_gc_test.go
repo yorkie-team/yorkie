@@ -284,7 +284,7 @@ func TestDisableGCOnAttach(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestKey(t)
 		docs := make([]*document.Document, numClients)
-		for i := 0; i < numClients; i++ {
+		for i := range numClients {
 			docs[i] = document.New(docKey)
 			assert.NoError(t, clients[i].Attach(ctx, docs[i], client.WithDisableGC()))
 		}
@@ -299,8 +299,8 @@ func TestDisableGCOnAttach(t *testing.T) {
 		for i := 1; i < numClients; i++ {
 			assert.NoError(t, clients[i].Sync(ctx))
 		}
-		for round := 0; round < 3; round++ {
-			for i := 0; i < numClients; i++ {
+		for range 3 {
+			for i := range numClients {
 				assert.NoError(t, docs[i].Update(func(root *json.Object, p *presence.Presence) error {
 					root.GetCounter("c").Increase(1)
 					return nil
@@ -309,7 +309,7 @@ func TestDisableGCOnAttach(t *testing.T) {
 			}
 		}
 		// Flush so storeSnapshot fires in the pubsub goroutine.
-		for i := 0; i < numClients; i++ {
+		for i := range numClients {
 			assert.NoError(t, clients[i].Sync(ctx))
 		}
 
@@ -356,8 +356,8 @@ func TestDisableGCOnAttach(t *testing.T) {
 		for _, c := range clients {
 			assert.NoError(t, c.Sync(ctx))
 		}
-		for round := 0; round < 3; round++ {
-			for i := 0; i < 4; i++ {
+		for range 3 {
+			for i := range 4 {
 				assert.NoError(t, docs[i].Update(func(root *json.Object, p *presence.Presence) error {
 					root.GetCounter("c").Increase(1)
 					return nil

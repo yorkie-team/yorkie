@@ -41,10 +41,10 @@ func benchmarkSyncConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, 
 	// 01. Create n clients and attach them to the document sequentially.
 	clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, initialCnt)
 	assert.NoError(b, err)
-	docs[0].Update(func(r *json.Object, p *presence.Presence) error {
+	assert.NoError(b, docs[0].Update(func(r *json.Object, p *presence.Presence) error {
 		r.SetNewObject("field")
 		return nil
-	})
+	}))
 	assert.NoError(b, clients[0].Sync(ctx))
 	helper.CleanupClients(b, clients)
 
@@ -56,10 +56,10 @@ func benchmarkSyncConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, 
 			assert.NoError(b, err)
 
 			for range syncCnt {
-				doc.Update(func(r *json.Object, p *presence.Presence) error {
+				assert.NoError(b, doc.Update(func(r *json.Object, p *presence.Presence) error {
 					r.GetObject("field").SetBool("key", true)
 					return nil
-				})
+				}))
 				assert.NoError(b, client.Sync(ctx))
 			}
 			assert.NoError(b, client.Close())

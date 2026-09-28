@@ -19,8 +19,8 @@ package crdt
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -247,14 +247,9 @@ func (n *TreeNode) Attributes() string {
 	}
 	members := n.Attrs.Elements()
 
-	size := len(members)
-
-	// Extract and sort the keys
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	// Sort the keys so the encoding is deterministic.
+	keys := slices.AppendSeq(make([]string, 0, len(members)), maps.Keys(members))
+	slices.Sort(keys)
 
 	sb := strings.Builder{}
 	for idx, k := range keys {
@@ -262,7 +257,7 @@ func (n *TreeNode) Attributes() string {
 			sb.WriteString(" ")
 		}
 		value := members[k]
-		sb.WriteString(fmt.Sprintf(`%s="%s"`, k, EscapeString(value)))
+		fmt.Fprintf(&sb, `%s="%s"`, k, EscapeString(value))
 	}
 
 	return " " + sb.String()
@@ -1530,11 +1525,11 @@ func (t *Tree) DataSize() resource.DataSize {
 // marshal returns the JSON encoding of this Tree.
 func marshal(builder *strings.Builder, node *TreeNode) {
 	if node.IsText() {
-		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), EscapeString(node.Value)))
+		fmt.Fprintf(builder, `{"type":"%s","value":"%s"}`, node.Type(), EscapeString(node.Value))
 		return
 	}
 
-	builder.WriteString(fmt.Sprintf(`{"type":"%s","children":[`, node.Type()))
+	fmt.Fprintf(builder, `{"type":"%s","children":[`, node.Type())
 	for idx, child := range node.Index.Children() {
 		if idx != 0 {
 			builder.WriteString(",")
@@ -1544,7 +1539,7 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 	builder.WriteString(`]`)
 
 	if node.Attrs != nil && node.Attrs.Len() > 0 {
-		builder.WriteString(fmt.Sprintf(`,"attributes":`))
+		builder.WriteString(`,"attributes":`)
 		builder.WriteString(node.Attrs.Marshal())
 	}
 
@@ -1588,9 +1583,7 @@ func (t *Tree) GCPairs() []GCPair {
 			})
 		}
 
-		for _, p := range node.GCPairs() {
-			pairs = append(pairs, p)
-		}
+		pairs = append(pairs, node.GCPairs()...)
 	}
 
 	return pairs
@@ -2325,11 +2318,8 @@ func (t *Tree) mergedAnchorInterloperGuard(
 // that key held (or its absence) on the given node, for the reverse Style
 // capture.
 func stylePrevAttrs(node *TreeNode, attrs map[string]string) []PrevAttr {
-	keys := make([]string, 0, len(attrs))
-	for key := range attrs {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := slices.AppendSeq(make([]string, 0, len(attrs)), maps.Keys(attrs))
+	slices.Sort(keys)
 	var prevAttrs []PrevAttr
 	for _, key := range keys {
 		if node.Attrs != nil && node.Attrs.Has(key) {
@@ -3758,8 +3748,8 @@ func (t *Tree) RemoveStyle(
 	var prevAttrs []PrevAttr
 	for i, node := range targets {
 		if i == 0 {
-			keys := append([]string(nil), attrs...)
-			sort.Strings(keys)
+			keys := slices.Clone(attrs)
+			slices.Sort(keys)
 			for _, key := range keys {
 				if node.Attrs != nil && node.Attrs.Has(key) {
 					prevAttrs = append(prevAttrs, PrevAttr{Key: key, Value: node.Attrs.Get(key), Existed: true})

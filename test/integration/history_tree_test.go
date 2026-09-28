@@ -369,7 +369,6 @@ func applyTreeOp2(t *testing.T, doc *document.Document, op string) {
 // instances -- one per op in treeOps, plus 2 fixed cases.
 func TestHistoryTreeSingleClientBasic(t *testing.T) {
 	for _, op := range treeOps {
-		op := op
 		t.Run(fmt.Sprintf("should undo/redo %s", op), func(t *testing.T) {
 			doc := document.New(helper.TestKey(t))
 			initFoxTree(t, doc)
@@ -397,7 +396,7 @@ func TestHistoryTreeSingleClientBasic(t *testing.T) {
 		}, "insert"))
 		modified := doc.Root().GetTree("t").ToXML()
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			assert.NoError(t, doc.Undo())
 			assert.Equal(t, initial, doc.Root().GetTree("t").ToXML(), fmt.Sprintf("round %d undo failed", i))
 
@@ -481,7 +480,7 @@ func TestHistoryTreeSingleClientChainedOps(t *testing.T) {
 					}
 
 					// Redo: S0 -> S1 -> S2 -> S3
-					for i := 0; i < 3; i++ {
+					for i := range 3 {
 						assert.NoError(t, doc.Redo())
 						assert.Equal(t, snapshots[i+1], doc.Root().GetTree("t").ToXML(), fmt.Sprintf("redo to S%d", i+1))
 					}
@@ -586,8 +585,7 @@ func TestHistoryTreeSingleClientEdgeCases(t *testing.T) {
 		}, "init"))
 
 		states := []string{doc.Root().GetTree("t").ToXML()}
-		for i := 0; i < 10; i++ {
-			i := i
+		for i := range 10 {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: fmt.Sprintf("%d", i)}, 0)
 				return nil
@@ -892,7 +890,6 @@ func applyTreeStyleOp(t *testing.T, doc *document.Document, op string) {
 // mixed style/edit chains (5c).
 func TestHistoryTreeStyleUndoRedo(t *testing.T) {
 	for _, op := range treeStyleOps {
-		op := op
 		t.Run(fmt.Sprintf("should undo/redo: %s", op), func(t *testing.T) {
 			doc := document.New(helper.TestKey(t))
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1249,7 +1246,6 @@ func TestHistoryTreeUndoPastInitialRoot(t *testing.T) {
 
 	// Insert 4 characters one by one (like typing "asdf").
 	for _, ch := range []string{"a", "s", "d", "f"} {
-		ch := ch
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("content").EditByPath([]int{0, 0, 0}, []int{0, 0, 0}, &json.TreeNode{Type: "text", Value: ch}, 0)
 			return nil
@@ -1257,7 +1253,7 @@ func TestHistoryTreeUndoPastInitialRoot(t *testing.T) {
 	}
 
 	// Undo 4 times -- should revert each character.
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		assert.True(t, doc.CanUndo())
 		assert.NoError(t, doc.Undo())
 	}

@@ -76,7 +76,7 @@ func getValueByPath(obj any, path string) any {
 }
 
 // validateValue validates a value against a rule.
-func validateValue(value interface{}, rule types.Rule) ValidationResult {
+func validateValue(value any, rule types.Rule) ValidationResult {
 	switch rule.Type {
 	case "string", "boolean", "integer", "double", "long", "date", "bytes", "null":
 		return validatePrimitiveValue(value, rule)
@@ -138,7 +138,7 @@ func validateValue(value interface{}, rule types.Rule) ValidationResult {
 }
 
 // validatePrimitiveValue validates a primitive value against a rule.
-func validatePrimitiveValue(value interface{}, rule types.Rule) ValidationResult {
+func validatePrimitiveValue(value any, rule types.Rule) ValidationResult {
 	if primitive, ok := value.(*crdt.Primitive); ok {
 		switch rule.Type {
 		case "string":

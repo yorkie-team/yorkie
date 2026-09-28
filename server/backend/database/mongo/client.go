@@ -1366,7 +1366,7 @@ func (c *Client) FindActiveClients(
 		return nil, database.ZeroID, fmt.Errorf("fetch active clients: %w", err)
 	}
 
-	var lastID types.ID = database.ZeroID
+	var lastID = database.ZeroID
 	if len(infos) > 0 {
 		lastID = infos[len(infos)-1].ID
 	}
@@ -1409,7 +1409,7 @@ func (c *Client) FindCompactionCandidates(
 	}
 
 	var resultLastServerSeq int64 = 0
-	var resultLastID types.ID = database.ZeroID
+	var resultLastID = database.ZeroID
 	if len(infos) > 0 {
 		last := infos[len(infos)-1]
 		resultLastServerSeq = last.ServerSeq

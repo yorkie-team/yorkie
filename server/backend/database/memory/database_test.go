@@ -216,7 +216,7 @@ func TestFindProjectInfosForRefresh(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_, err := db.CreateProjectInfo(ctx, fmt.Sprintf("p%d", i), testOwnerID)
 		assert.NoError(t, err)
 	}
@@ -306,7 +306,7 @@ func TestCountActivatedClients(t *testing.T) {
 
 	// Activate 3 clients.
 	var clients []*database.ClientInfo
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		info, err := db.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-c%d", t.Name(), i), nil)
 		assert.NoError(t, err)
 		clients = append(clients, info)
@@ -339,7 +339,7 @@ func TestCountAliveDocuments(t *testing.T) {
 
 	// Create 2 documents.
 	var docs []*database.DocInfo
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		docKey := key.Key(fmt.Sprintf("tests$%s-d%d", t.Name(), i))
 		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
@@ -356,4 +356,90 @@ func TestCountAliveDocuments(t *testing.T) {
 	count, err = db.CountAliveDocuments(ctx, project.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestFindClusterNodesOrder(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	// The id index iterates node-a, node-b, node-c. The expected order is the
+	// leader first, then followers by updated_at descending, which differs from
+	// it at every position.
+	leader, err := db.TryLeadership(ctx, "node-c", "", time.Minute)
+	assert.NoError(t, err)
+	assert.NotNil(t, leader)
+	for _, addr := range []string{"node-a", "node-b"} {
+		time.Sleep(time.Millisecond)
+		info, err := db.TryLeadership(ctx, addr, "", time.Minute)
+		assert.NoError(t, err)
+		assert.Nil(t, info)
+	}
+
+	nodes, err := db.FindClusterNodes(ctx, time.Minute)
+	assert.NoError(t, err)
+
+	var addrs []string
+	for _, node := range nodes {
+		addrs = append(addrs, node.RPCAddr)
+	}
+	assert.Equal(t, []string{"node-c", "node-b", "node-a"}, addrs)
+}
+
+func TestGetSchemaInfosOrder(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	// Inserted out of order so that neither insertion nor id order is
+	// version order.
+	for _, version := range []int{2, 3, 1} {
+		_, err := db.CreateSchemaInfo(ctx, projectID, t.Name(), version, "{}", nil)
+		assert.NoError(t, err)
+	}
+
+	infos, err := db.GetSchemaInfos(ctx, projectID, t.Name())
+	assert.NoError(t, err)
+
+	var versions []int
+	for _, info := range infos {
+		versions = append(versions, info.Version)
+	}
+	assert.Equal(t, []int{3, 2, 1}, versions)
+}
+
+func TestFindRevisionInfosByPagingOrder(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	docRefKey := types.DocRefKey{ProjectID: projectID, DocID: types.ID("000000000000000000000abc")}
+	var created []types.ID
+	for i := range 3 {
+		info, err := db.CreateRevisionInfo(ctx, docRefKey, fmt.Sprintf("r%d", i), "", nil)
+		assert.NoError(t, err)
+		created = append(created, info.ID)
+	}
+
+	ids := func(isForward bool) []types.ID {
+		revisions, err := db.FindRevisionInfosByPaging(
+			ctx,
+			docRefKey,
+			types.Paging[int]{PageSize: 10, IsForward: isForward},
+			false,
+		)
+		assert.NoError(t, err)
+
+		var result []types.ID
+		for _, revision := range revisions {
+			result = append(result, revision.ID)
+		}
+		return result
+	}
+
+	assert.Equal(t, created, ids(true))
+	assert.Equal(t, []types.ID{created[2], created[1], created[0]}, ids(false))
 }
