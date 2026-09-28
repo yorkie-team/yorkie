@@ -991,22 +991,20 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	//
 	// The pump is the sole consumer of the document event channel and only
 	// appends to the unbounded buffer, so producers emitting document events
-	// under the document mutex are never blocked by a slow application
+	// under the document's event mutex are never blocked by a slow application
 	// reading rch. The sender is the sole writer and closer of rch. The pump
 	// stops only after the stream reader has exited, so a reconcile emission
 	// in flight always has a live consumer.
 	buf := newWatchBuffer()
 	pumpStop := make(chan struct{})
 
-	// pump: document events -> buf. Started before the first response is
-	// handled, not after: handleWatchResponse below publishes presence events
-	// through the document's event channel, which has capacity one, and a
-	// publisher that blocks on it does so holding the document's event mutex
-	// -- wedging every other publisher, the sync goroutine's ApplyChangePack
-	// included. On a re-established stream the previous loop's pump has
-	// already stopped, so handling the first response before this goroutine
-	// exists leaves that publish with no consumer at all and the restart
-	// never reaches the line that would create one.
+	// pump: document events -> buf. Started before the stream's first
+	// response rather than after it. The document's event channel has
+	// capacity one, and a publisher that blocks on it holds the document's
+	// event mutex, stalling every other publisher, the sync goroutine's
+	// ApplyChangePack included. On a re-established stream the previous
+	// loop's pump has already stopped, so starting this one first gives an
+	// in-flight publish a consumer while Receive blocks on the server.
 	go func() {
 		for {
 			select {

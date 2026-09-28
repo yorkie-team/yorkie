@@ -1153,8 +1153,8 @@ func (d *Document) garbageCollect(vector time.VersionVector) int {
 	// A stale clone holds a prefix of a change its root never took, so
 	// collecting on it is both pointless -- ensureClone throws it away on the
 	// next access -- and unsafe, since it may not satisfy GarbageCollect's
-	// invariants. Before this PR the same state was represented by a nil
-	// cloneRoot and skipped by the nil check below.
+	// invariants. A nil cloneRoot, not yet built, is skipped by the same
+	// check.
 	if d.cloneRoot != nil && !d.cloneStale {
 		if _, err := d.cloneRoot.GarbageCollect(vector); err != nil {
 			panic(err)
@@ -1317,7 +1317,7 @@ func (d *Document) addOnlineClientAndReconcile(clientID string) []DocEvent {
 // RemoveOnlineClientAndReconcile removes the given client from the online
 // clients and emits the appropriate presence event based on the state
 // transition through the document event channel. See
-// AddOnlineClientAndReconcile for why the send happens under the lock.
+// AddOnlineClientAndReconcile for why the send happens under eventsMu.
 func (d *Document) RemoveOnlineClientAndReconcile(clientID string) {
 	d.eventsMu.Lock()
 	defer d.eventsMu.Unlock()
