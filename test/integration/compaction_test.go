@@ -25,6 +25,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -81,7 +82,7 @@ func TestDocumentCompaction(t *testing.T) {
 		}))
 
 		cloneRootText := docC.Root().GetText("text").Marshal()
-		rootText := docC.InternalDocument().RootObject().Get("text").Marshal()
+		rootText := docC.InternalDocumentForTest().RootObject().Get("text").Marshal()
 		assert.Equal(t, len(cloneRootText), len(rootText))
 	})
 

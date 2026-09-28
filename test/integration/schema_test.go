@@ -104,7 +104,7 @@ func TestDocumentSchema(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 		assert.Equal(t, schemaRule1, doc.SchemaRules)
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("attach with non-existent schema test", func(t *testing.T) {
@@ -200,7 +200,7 @@ func TestDocumentSchema(t *testing.T) {
 			return nil
 		}))
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("schema sharing between clients test", func(t *testing.T) {
@@ -241,8 +241,8 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli2.Sync(ctx))
 		assert.NoError(t, cli1.Sync(ctx))
 		assert.Equal(t, doc2.Marshal(), doc.Marshal())
-		cli1.Deactivate(ctx)
-		cli2.Deactivate(ctx)
+		assert.NoError(t, cli1.Deactivate(ctx))
+		assert.NoError(t, cli2.Deactivate(ctx))
 	})
 
 	t.Run("delete schema test", func(t *testing.T) {
@@ -288,7 +288,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(schemas))
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("create schema test", func(t *testing.T) {
@@ -370,7 +370,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":123}`, doc2.Marshal())
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("reject schema update when document is attached test", func(t *testing.T) {
@@ -392,7 +392,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "document is attached")
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("reject schema update when existing root violates new schema test", func(t *testing.T) {
@@ -422,7 +422,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "expected integer at path $.title")
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("detach schema via UpdateDocument API test", func(t *testing.T) {
@@ -476,7 +476,7 @@ func TestDocumentSchema(t *testing.T) {
 		}))
 		assert.Equal(t, `{"title":123}`, doc2.Marshal())
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("attach schema via UpdateDocument API test", func(t *testing.T) {
@@ -541,7 +541,7 @@ func TestDocumentSchema(t *testing.T) {
 		})
 		assert.ErrorIs(t, err, document.ErrSchemaValidationFailed)
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("update schema only test", func(t *testing.T) {
@@ -573,7 +573,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "expected integer at path $.title")
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("update root only test", func(t *testing.T) {
@@ -608,7 +608,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":123}`, doc2.Marshal())
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("update root only when document has attached schema test", func(t *testing.T) {
@@ -663,7 +663,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.ErrorIs(t, err, document.ErrSchemaValidationFailed)
 		assert.Equal(t, schemaRule1, doc2.SchemaRules)
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("tree schema with tree node rules round-trip test", func(t *testing.T) {
@@ -705,7 +705,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.Equal(t, "bold italic", doc.SchemaRules[0].TreeNodes[1].Marks)
 		assert.Equal(t, "block", doc.SchemaRules[0].TreeNodes[1].Group)
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 
 	t.Run("reject non-tree value at tree schema path test", func(t *testing.T) {
@@ -751,6 +751,6 @@ func TestDocumentSchema(t *testing.T) {
 		// validating that tree nodes conform to the declared node types,
 		// content patterns, and allowed marks) will be added in a future PR.
 
-		cli.Deactivate(ctx)
+		assert.NoError(t, cli.Deactivate(ctx))
 	})
 }

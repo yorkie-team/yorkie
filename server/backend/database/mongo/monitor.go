@@ -259,11 +259,7 @@ func isTrackedFrame(fn string) bool {
 		}
 	}
 
-	if strings.HasPrefix(relativeFn, trackedPackagePrefix) {
-		return true
-	}
-
-	return false
+	return strings.HasPrefix(relativeFn, trackedPackagePrefix)
 }
 
 // formatFunctionName formats a full function name to a shorter, readable format

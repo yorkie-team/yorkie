@@ -1152,9 +1152,9 @@ func (s *RGATreeSplit[V]) ToTestString() string {
 	node := s.initialHead
 	for node != nil {
 		if node.removedAt != nil {
-			builder.WriteString(fmt.Sprintf("{%s}", node.toTestString()))
+			fmt.Fprintf(&builder, "{%s}", node.toTestString())
 		} else {
-			builder.WriteString(fmt.Sprintf("[%s]", node.toTestString()))
+			fmt.Fprintf(&builder, "[%s]", node.toTestString())
 		}
 		node = node.next
 	}

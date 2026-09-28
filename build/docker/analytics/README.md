@@ -20,7 +20,7 @@ docker compose -f build/docker/analytics/docker-compose.yml up -d
 open http://localhost:8989
 
 # Run StarRocks SQL client
-docker exec -it starrocks-fe mysql -P 9030 -h starrocks-fe -u root --prompt="StarRocks > "
+docker compose -f build/docker/analytics/docker-compose.yml exec starrocks-fe mysql -P 9030 -h starrocks-fe -u root --prompt="StarRocks > "
 
 # Shut down the stack
 docker compose -f build/docker/analytics/docker-compose.yml down
@@ -75,7 +75,7 @@ To check routine load status or fix a paused routine load, follow these steps:
 1. Connect to StarRocks Frontend (FE) using the following command:
 
    ```sh
-   docker exec -it starrocks-fe mysql -P 9030 -h starrocks-fe -u root --prompt="StarRocks > "
+   docker compose -f build/docker/analytics/docker-compose.yml exec starrocks-fe mysql -P 9030 -h starrocks-fe -u root --prompt="StarRocks > "
    ```
 
 2. Check the status of the routine load:
