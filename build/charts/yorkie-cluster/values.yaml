@@ -17,8 +17,9 @@ yorkie:
     # Connection URI will be generated from mongodb.credentials.databaseAdmin values
     dbConnectionUri: ""
     dbName: yorkie-meta
-    # Shared secret for authenticating inter-node cluster RPCs.
-    # If empty, all requests are allowed.
+    # Shared secret for authenticating inter-node cluster RPCs. Required here:
+    # this chart runs several replicas, and if empty each one generates its own
+    # secret and cannot call the others.
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables

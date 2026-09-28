@@ -68,14 +68,16 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	adminInterceptor := interceptors.NewAdminServiceInterceptor(be, tokenManager)
 	// ClusterService is mounted on this public listener and its RPCs read the
 	// project out of the request message, so the shared secret is the only gate
-	// in front of them. A deployment that keeps the published default secret is
-	// therefore not protected at all: say so loudly rather than let the
-	// fail-closed interceptor read as coverage it does not provide.
-	if be.Config.UsesDefaultClusterSecret() {
+	// in front of them. Without --cluster-secret the gate is a random secret
+	// this process generated, which no peer can know: that is correct for a
+	// single node and silently fatal for a cluster, so say so at startup rather
+	// than leave it to be diagnosed from Unauthenticated errors later.
+	if be.Config.UsesGeneratedClusterSecret() {
 		logging.DefaultLogger().Warn(
-			"cluster RPCs are authenticated with the default secret key, " +
-				"which is public: set --cluster-secret (or a non-default " +
-				"--backend-secret-key) before exposing the RPC port",
+			"no --cluster-secret configured: inter-node cluster RPCs are " +
+				"guarded by a secret generated for this process only. " +
+				"Start every node with the same --cluster-secret before " +
+				"running more than one node",
 		)
 	}
 	clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.EffectiveClusterSecret())

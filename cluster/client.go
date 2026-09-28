@@ -67,8 +67,9 @@ func WithPoolSize(size int) Option {
 
 // WithClusterSecret configures the shared secret for cluster authentication.
 // It is required: servers reject ClusterService RPCs whose x-cluster-secret
-// header does not match their own secret, which defaults to the backend secret
-// key when no dedicated cluster secret is configured.
+// header does not match their own --cluster-secret. A server started without
+// one generates a secret no other process can know, so it can only be reached
+// by itself.
 func WithClusterSecret(secret string) Option {
 	return func(o *Options) { o.ClusterSecret = secret }
 }

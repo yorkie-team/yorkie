@@ -104,6 +104,13 @@ func Deactivate(
 		return nil, err
 	}
 
+	// NOTE(hackerwins): Detachment is routed through ClusterService, which
+	// authenticates every call with the shared cluster secret. A node whose
+	// peers run a build started without --cluster-secret sends no header and is
+	// rejected, so deactivation fails until the whole cluster shares one secret
+	// (docs/design/cluster-service-auth.md, "Rolling Upgrade"). Name the
+	// document in the error: the bare Unauthenticated from the peer says
+	// nothing about which deactivation stalled.
 	for _, info := range docInfos {
 		if err := clusterClient.DetachDocument(
 			ctx,
@@ -112,7 +119,7 @@ func Deactivate(
 			info.ID,
 			info.Key,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("detach document %s via cluster: %w", info.ID, err)
 		}
 	}
 

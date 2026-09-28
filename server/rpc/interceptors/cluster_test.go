@@ -111,19 +111,24 @@ func TestEffectiveClusterSecretFallback(t *testing.T) {
 		assert.Equal(t, "cluster-secret", conf.EffectiveClusterSecret())
 	})
 
-	t.Run("unset cluster secret falls back to the secret key", func(t *testing.T) {
+	t.Run("unset cluster secret never falls back to the secret key", func(t *testing.T) {
 		conf := &backend.Config{SecretKey: "secret-key"}
-		assert.Equal(t, "secret-key", conf.EffectiveClusterSecret())
+		generated := conf.EffectiveClusterSecret()
+		assert.NotEqual(t, "secret-key", generated)
+		assert.NotEmpty(t, generated)
+		// The same process keeps one secret, so a node still reaches itself.
+		assert.Equal(t, generated, (&backend.Config{}).EffectiveClusterSecret())
 
-		interceptor := &ClusterServiceInterceptor{
-			clusterSecret: conf.EffectiveClusterSecret(),
-		}
+		interceptor := &ClusterServiceInterceptor{clusterSecret: generated}
 
 		header := http.Header{}
-		header.Set(clusterSecretHeader, "secret-key")
+		header.Set(clusterSecretHeader, generated)
 		assert.NoError(t, interceptor.authenticate(header))
 
-		header.Set(clusterSecretHeader, "")
-		assert.Error(t, interceptor.authenticate(header))
+		// The published default and the signing key are both just wrong values.
+		for _, secret := range []string{"", "secret-key", backend.DefaultSecretKey} {
+			header.Set(clusterSecretHeader, secret)
+			assert.Error(t, interceptor.authenticate(header))
+		}
 	})
 }

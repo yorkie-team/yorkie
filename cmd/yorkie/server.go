@@ -697,8 +697,9 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. "+
-			"If empty, the backend secret key is used instead.",
+		"The shared secret for authenticating cluster RPC calls. If empty, a "+
+			"random secret is generated for this process, so nodes cannot "+
+			"reach each other: every multi-node deployment must set this.",
 	)
 	rootCmd.AddCommand(cmd)
 }
