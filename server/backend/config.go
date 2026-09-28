@@ -116,8 +116,24 @@ type Config struct {
 	MaxConcurrentClusterRPCs int `yaml:"MaxConcurrentClusterRPCs"`
 
 	// ClusterSecret is the shared secret for authenticating inter-node
-	// cluster RPCs. If empty, all requests are allowed.
+	// cluster RPCs. If empty, SecretKey is used instead: ClusterService is
+	// mounted on the public RPC port, so an empty secret must not mean
+	// "allow everyone". See EffectiveClusterSecret.
 	ClusterSecret string `yaml:"ClusterSecret"`
+}
+
+// EffectiveClusterSecret returns the secret that both the cluster client and
+// the cluster interceptor use to authenticate inter-node RPCs. ClusterSecret
+// is optional, so it falls back to SecretKey, which is already shared by every
+// node of a cluster. Without the fallback an unset ClusterSecret would leave
+// ClusterService - mounted on the same listener as YorkieService and able to
+// purge or detach documents by project ID alone - open to anyone who can reach
+// the RPC port.
+func (c *Config) EffectiveClusterSecret() string {
+	if c.ClusterSecret != "" {
+		return c.ClusterSecret
+	}
+	return c.SecretKey
 }
 
 // validateCacheTTL returns an error if the given TTL cannot be handed to an

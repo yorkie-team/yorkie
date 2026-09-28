@@ -55,10 +55,17 @@ func NewClusterServiceInterceptor(be *backend.Backend, clusterSecret string) *Cl
 }
 
 // authenticate validates the cluster secret from the request header.
-// If no secret is configured, all requests are allowed for backward compatibility.
+//
+// ClusterService shares the listener with YorkieService and AdminService, and
+// its RPCs take the project straight out of the request message rather than
+// going through the auth webhook, so an unconfigured secret must fail closed
+// rather than wave every caller through. Callers construct the interceptor
+// with backend.Config.EffectiveClusterSecret, which falls back to SecretKey,
+// so the empty case only happens when the server has no secret at all.
 func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
 	if i.clusterSecret == "" {
-		return nil
+		return connect.NewError(connect.CodeUnauthenticated,
+			errors.New("cluster secret is not configured"))
 	}
 
 	secret := header.Get(clusterSecretHeader)

@@ -23,6 +23,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/yorkie-team/yorkie/server/backend"
 )
 
 func TestClusterServiceAuthenticate(t *testing.T) {
@@ -70,7 +72,7 @@ func TestClusterServiceAuthenticate(t *testing.T) {
 		assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 	})
 
-	t.Run("empty cluster secret allows all requests", func(t *testing.T) {
+	t.Run("empty cluster secret rejects every request", func(t *testing.T) {
 		interceptor := &ClusterServiceInterceptor{
 			clusterSecret: "",
 		}
@@ -79,10 +81,15 @@ func TestClusterServiceAuthenticate(t *testing.T) {
 		header.Set(clusterSecretHeader, "any-secret")
 
 		err := interceptor.authenticate(header)
-		assert.NoError(t, err)
+		assert.Error(t, err)
+
+		var connectErr *connect.Error
+		require.ErrorAs(t, err, &connectErr)
+		assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+		assert.Contains(t, connectErr.Message(), "cluster secret is not configured")
 	})
 
-	t.Run("empty cluster secret allows requests without header", func(t *testing.T) {
+	t.Run("empty cluster secret rejects requests without header", func(t *testing.T) {
 		interceptor := &ClusterServiceInterceptor{
 			clusterSecret: "",
 		}
@@ -90,6 +97,33 @@ func TestClusterServiceAuthenticate(t *testing.T) {
 		header := http.Header{}
 
 		err := interceptor.authenticate(header)
-		assert.NoError(t, err)
+		assert.Error(t, err)
+
+		var connectErr *connect.Error
+		require.ErrorAs(t, err, &connectErr)
+		assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
+	})
+}
+
+func TestEffectiveClusterSecretFallback(t *testing.T) {
+	t.Run("explicit cluster secret wins", func(t *testing.T) {
+		conf := &backend.Config{SecretKey: "secret-key", ClusterSecret: "cluster-secret"}
+		assert.Equal(t, "cluster-secret", conf.EffectiveClusterSecret())
+	})
+
+	t.Run("unset cluster secret falls back to the secret key", func(t *testing.T) {
+		conf := &backend.Config{SecretKey: "secret-key"}
+		assert.Equal(t, "secret-key", conf.EffectiveClusterSecret())
+
+		interceptor := &ClusterServiceInterceptor{
+			clusterSecret: conf.EffectiveClusterSecret(),
+		}
+
+		header := http.Header{}
+		header.Set(clusterSecretHeader, "secret-key")
+		assert.NoError(t, interceptor.authenticate(header))
+
+		header.Set(clusterSecretHeader, "")
+		assert.Error(t, interceptor.authenticate(header))
 	})
 }

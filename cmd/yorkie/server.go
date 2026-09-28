@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -173,9 +174,10 @@ func newServerCmd() *cobra.Command {
 			}
 
 			// File settings override ordinary flags. An explicit cache-disable
-			// switch always wins so it cannot silently leave cached allows active.
+			// switch and explicitly given credentials always win so they cannot
+			// silently leave cached allows active or fall back to the defaults.
 			var err error
-			conf, err = resolveServerConfig(conf, flagConfPath, authWebhookCacheDisabled)
+			conf, err = resolveServerConfig(conf, flagConfPath, cmd.Flags(), authWebhookCacheDisabled)
 			if err != nil {
 				return err
 			}
@@ -202,12 +204,39 @@ func newServerCmd() *cobra.Command {
 	}
 }
 
-func resolveServerConfig(base *server.Config, path string, disableAuthWebhookCache bool) (*server.Config, error) {
+// credentialFlags are the flags whose value is a credential. A config file
+// replaces the whole flag-built config, so without this list an operator who
+// passes both --config and --backend-secret-key would silently run on the
+// well-known default "yorkie-secret" - which signs and accepts admin tokens -
+// whenever the file omits the key.
+var credentialFlags = map[string]func(*server.Config) *string{
+	"backend-secret-key":     func(c *server.Config) *string { return &c.Backend.SecretKey },
+	"backend-admin-user":     func(c *server.Config) *string { return &c.Backend.AdminUser },
+	"backend-admin-password": func(c *server.Config) *string { return &c.Backend.AdminPassword },
+}
+
+func resolveServerConfig(
+	base *server.Config,
+	path string,
+	flags *pflag.FlagSet,
+	disableAuthWebhookCache bool,
+) (*server.Config, error) {
 	if path != "" {
 		parsed, err := server.NewConfigFromFile(path)
 		if err != nil {
 			return nil, err
 		}
+
+		// Credentials given explicitly on the command line survive the file,
+		// so dropping them can never downgrade the server to a default one.
+		if flags != nil {
+			for name, field := range credentialFlags {
+				if flags.Changed(name) {
+					*field(parsed) = *field(base)
+				}
+			}
+		}
+
 		base = parsed
 	}
 	if disableAuthWebhookCache {
@@ -667,7 +696,8 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed.",
+		"The shared secret for authenticating cluster RPC calls. "+
+			"If empty, the backend secret key is used instead.",
 	)
 	rootCmd.AddCommand(cmd)
 }
