@@ -633,6 +633,69 @@ dropped whole. Without that check the two halves of the fix
 contradict each other — the guard skips the left half on its own End
 token and `splitFamilyOf` immediately re-adds it from the right.
 
+**The family is reached through an End token only if the change began
+at or inside it** (Fix 27). The branch reads the End token as "the
+range ran past this element's end", which also requires the range to
+have started no later than that element. A split of more than one
+level breaks that reading: it carries the right half into a *new*
+parent, and §2's advance stops at a parent change, so a range that
+began right after the known node now passes the right half's End token
+without ever having entered the element. The family is therefore added
+only when the change's range-start position was declared inside the
+known node — matched in both directions along the split lineage as
+§9.6 does — **or** at or before it in document order, with removed
+nodes included so a concurrent removal between the two moves neither.
+
+The second half of that test is what keeps the rule from being
+narrower than the branch. A range that began strictly *before* the
+known node never named it as its parent, so the begins-inside test is
+false for it exactly as it is for a range that began after it, and
+only the latter never covered the element. The traversal usually
+reaches such a node on its own Start token and the branch never runs;
+when a concurrent removal or §9.4's from-side recovery moves the
+resolved start past it, this branch is the only thing left that styles
+the family, and document order is what distinguishes the two:
+
+```
+<r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
+A: Edit(10, 10, nil, 1); Edit(7, 9)  // <p>e|fgh</p>, then merge e left
+B: Style(0, 14, {b: x})              // both paragraphs whole
+
+B,A  <p b="x">abcde</p><p b="x">fgh</p>
+A,B  begins-inside alone: <p>fgh</p> unstyled
+```
+
+None of the scans in the table below produces that shape. A scan of
+one change that splits (levels 1 and 2) and deletes one or two
+positions, in either order, against every style range (899,668 pairs;
+not in the suite, 40 s) shows the document-order half closing 4,265
+diverging pairs and opening none; the JS port reproduces the same
+4,265.
+
+A from-position whose parent or left sibling is unknown answers no, and
+so does the document-order half when a concurrent merge has moved the
+left sibling out of the declared parent. Answering yes there closes 368
+more pairs of that scan but opens 5 that converge now, so it is not
+taken. Answering no for the begins-inside half as well opens 43,448 and
+breaks the split scans: a concurrent split moves that sibling too.
+
+```
+<r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
+A: Edit(5, 5, nil, 2)      // <p>ab|cd</p>, two levels
+B: Style(8, 14, {bold: aa}) // <p>efgh</p> only
+
+B,A  <r><p><p><p>ab</p></p><p><p>cd</p><p bold="aa">efgh</p></p>...</r>
+A,B  without Fix 27: <p bold="aa">ab</p> and <p bold="aa">cd</p> as well
+```
+
+This is the complex suite's `concurrently-split-edit-test`, `A -> B`,
+split-2 against style and remove-style. It converged before Fix 25 and
+diverged after it; the flat scans below split one level of a flat tree
+and cannot produce the shape, and the complex suite reports a
+diverging pair with `t.Skip`, so nothing failed. The JS SDK found it
+porting Fix 25 (yorkie-js-sdk#1404), and both implementations carry
+the same check.
+
 `splitFamilyOf` collects backwards and reverses once rather than
 prepending per link: the chain length is chosen by whoever authored
 the splits, and prepending copies the slice each time. The caller also
@@ -862,11 +925,20 @@ style, both delivery orders):
 |---|---|---|---|
 | split × style | 1001 | 135 → **0** | 0 → **0** |
 | merge × style | 7098 | 297 → **0** | 2879 → **1292** |
+| nested split × style | 11592 | 2810 → 363 → **241** | 0 → **0** |
+
+The nested row splits `<r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>`
+at every position and at levels 1 and 2; its three counts are before
+Fix 25, after it, and after Fix 27. That family is not closed; see
+the known limitations below.
 
 The same numbers hold for `RemoveStyle` over a pre-bolded base, on
 every count, which is what sharing one range resolution has to mean.
-No pair that converged before diverges after, in either scan or in a
-300-seed randomised sweep.
+No pair that converged before diverges after, in either flat scan or
+in a 300-seed randomised sweep. The nested scan, added with Fix 27, is
+where that was not true: 188 of its pairs converged before Fix 25 and
+diverged after it. Fix 27 closes 36 of them and 86 older ones, and
+turns no converging pair into a diverging one; the other 152 remain.
 
 **Cross-implementation.** §9.1, §9.2, §9.5 and §9.6 change *which
 nodes* a `Tree.Style`/`Tree.RemoveStyle` writes to, and only the Go
@@ -915,7 +987,28 @@ than a re-derivation:
    before any split existed and the element is kept.
 2. **§9.2 Split-lineage closure.** A node the change reached stands for
    every product of splitting it, forwards and backwards along the
-   split lineage, token type not consulted.
+   split lineage, token type not consulted. When the traversal reaches
+   only a product the change could not have known, on its End token,
+   the family is added through the first member the change knew, and
+   only if all three hold:
+   (a) the range-end position was not declared inside the reached
+   product (its declared parent is neither that product nor below it,
+   ancestors matched along their split lineage as in rule 1);
+   (b) rule 1 and rule 4 would not skip that member's End token;
+   (c) the range-start position was declared inside that member (its
+   declared parent is the member or below it), matched in both
+   directions along the split lineage as in rule 4 — or, failing
+   that, it sits at or before that member's Start token in document
+   order, both indices counted with removed nodes included.
+   A range-start position whose parent or left sibling is unknown fails
+   (c). One whose left sibling is no longer a child of its declared
+   parent fails only the document-order half: it has no index, and an
+   offset lookup that returns -1 for a missing child instead of failing
+   must refuse it explicitly. Refusing the begins-inside half too would
+   drop the closure whenever a concurrent split moved that sibling.
+   Condition (c) is what a split of more than one level needs: it can
+   move the right half's End token into a range that began after the
+   known member.
 3. **§9.5 Boundary elements.** Independently of the traversal, the
    reached set includes the ancestors of the change's own range-start
    position (carried as End tokens) and of its range-end position
@@ -945,9 +1038,25 @@ set. Until it does, the divergence is the one described above.
 
 **Known limitations** (tracked as follow-ups):
 
-- The JS SDK has not yet been ported (see **Cross-implementation**
-  above), so server and JS clients resolve different reached sets for
-  concurrent split/merge shapes.
+- The JS SDK port is yorkie-js-sdk#1404, which carries Fix 27, both
+  halves, and lands with it. Until both are released, server and JS
+  clients resolve different reached sets for the concurrent split/merge
+  shapes above (see **Cross-implementation**).
+- The two SDKs do not agree on a local edit that deletes across the
+  boundary a level-2 split just made. On the nested base,
+  `Edit(10, 10, nil, 2)` then `Edit(11, 13)` leaves the split as it is
+  in Go and merges it back under one parent in JS, so the same call
+  produces different operations. 129 pairs of the split-and-delete
+  scan above diverge in Go and not in JS, all of this shape (a level-2
+  split, then a delete right after it); the one traced comes from
+  this.
+- A split of the element a style's range-end position is declared in,
+  before that position, still diverges: 152 of the nested scan's 11592
+  pairs, all of which converged before Fix 25. The end position moves
+  into the new half while its declared parent still names the original
+  half, and the order that splits first styles that original half,
+  which the range never reached. The rule belongs with §9.5's boundary
+  elements and has to land in both SDKs together.
 - An edit-only divergence independent of styling (concurrent unwrap
   versus merge-delete of the same paragraph) remains open.
 - Attributes still land on a different set of TOMBSTONES in the two
@@ -1077,3 +1186,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 24 | §7.8 + §7.5 | Order same-boundary split products by ticket |
 | Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
+| Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
