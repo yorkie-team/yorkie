@@ -42,5 +42,23 @@ member's slot in `Root.elementMap`.
       take `dropRefused`; a snapshot drops the member (no key reached it, so
       the content is unchanged), a pushed payload still rejects it.
 
+## Code review
+
+- [x] The JS SDK's ArraySet reverse still re-inserts a removed value with a
+      newer createdAt, so the removedAt rule refused pushes from current JS
+      clients, and documents already hold that shape nested. Fix: the ticket
+      rules apply to object members and the Set value only; array elements
+      are exempt.
+- [x] The stored path dropped operations that had applied on every replica
+      before a rule existed, diverging the server's replay and breaking any
+      later operation that referred to them. Fix: the rules and the refused
+      member error move to the push boundary (`FromPushedChangePack`,
+      `ValidatePushedOperations`); every other reader decodes leniently, and
+      `normalize.go` is back to `main`.
+- [x] The createdAt-slot refusal also fired on a tombstone, so a losing undo
+      restore left C's older removedAt on one replica. Red:
+      `TestLosingUndoRestoreConverges` (green on `main`). Fix: refuse only
+      when the slot holds a live node.
+
 ## Review
 

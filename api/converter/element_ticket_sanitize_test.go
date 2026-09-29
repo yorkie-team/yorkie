@@ -53,8 +53,7 @@ func TestSetElementRejectsImpossibleTickets(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		_, err = converter.FromOperations(pbOps)
-		return err
+		return converter.ValidatePushedOperations(pbOps)
 	}
 
 	for _, tc := range []struct {
@@ -118,7 +117,36 @@ func TestSetElementRejectsImpossibleTickets(t *testing.T) {
 			operations.NewSet(ticket(1), "k", value, ticket(5)),
 		})
 		assert.NoError(t, err)
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
+	})
+
+	// The JS SDK's ArraySet reverse copies the displaced value even when a
+	// peer already removed it, and undo then re-identifies that copy, so an
+	// array element can legitimately carry a removedAt older than its
+	// createdAt -- nested, too, once its container is copied.
+	t.Run("an array element whose removed_at precedes created_at survives", func(t *testing.T) {
+		arr := crdt.NewArray(crdt.NewRGATreeList(), ticket(1))
+		elem, err := crdt.NewPrimitive("v", ticket(3))
+		assert.NoError(t, err)
+		assert.NoError(t, arr.Add(elem))
+		elem.SetRemovedAt(ticket(2))
+		assert.NoError(t, decode(arr))
+	})
+
+	// Every reader but the push boundary keeps what the server already
+	// accepted: a stored or pulled change carrying one of these shapes applied
+	// on every replica before the rule existed, so dropping or refusing it
+	// would leave the reader diverged or the document unloadable.
+	t.Run("readers other than the push boundary accept them", func(t *testing.T) {
+		pbOps, err := converter.ToOperations([]operations.Operation{
+			operations.NewSet(ticket(1), "k", build(func(p *crdt.Primitive) { p.SetRemovedAt(ticket(2)) }), ticket(9)),
+		})
+		assert.NoError(t, err)
+		ops, err := converter.FromStoredOperations(pbOps)
+		assert.NoError(t, err)
+		assert.Len(t, ops, 1)
+		assert.Equal(t, pbOps, converter.SanitizeStoredOperations(pbOps))
 		_, err = converter.FromOperations(pbOps)
-		assert.ErrorIs(t, err, converter.ErrInvalidElementTicket)
+		assert.NoError(t, err)
 	})
 }

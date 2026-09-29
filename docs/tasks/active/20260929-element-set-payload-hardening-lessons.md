@@ -167,3 +167,26 @@ shape was there all along (removedAt 4, createdAt 7), just below the check's
 reach. The test now asserts the invariant on the operation itself, which is
 what fails for Go, and names the JS path (assigning an object) that reaches
 the rejection. A test that passes before the fix is a question, not a Green.
+
+## A wire rule applies to every reader of the decoder, not just the wire
+
+The ticket rules lived in `FromOperations`, which the server's push handler,
+every client's pull, the stored-change read and the snapshot path all share.
+So each new rejection applied retroactively to data the server had already
+accepted, and the review loop kept adding rescues for the readers it broke:
+drop the operation on the stored path, sanitize it on the pull path. Dropping
+an operation that applied on every replica is not a rescue -- the server's
+replay diverges from the clients, and whatever later refers to it fails.
+
+The rule belongs to the one boundary that takes untrusted input: the server
+receiving a push (`FromPushedChangePack`). Every other reader decodes the way
+it did before the rule existed. Before adding a check to a shared decoder,
+list its callers and ask which of them can still tell the sender.
+
+## Check a "cannot happen" against the other SDK
+
+"No replica emits removedAt before createdAt" held for Go after the ArraySet
+fix and not for the JS SDK, whose ArraySet reverse still keeps the tombstone.
+A boundary rule has to accept whatever any shipped client sends, so the
+premise is checked against every SDK's producer code, not the one being
+changed.

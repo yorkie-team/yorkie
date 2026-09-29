@@ -57,6 +57,13 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
 
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {
+	return bytesToObject(snapshot, true)
+}
+
+// bytesToObject is BytesToObject with the choice of what to do with an object
+// member the ElementRHT refuses; see fromJSONObject. Only the push validator
+// asks for the refusal to surface.
+func bytesToObject(snapshot []byte, dropRefused bool) (*crdt.Object, error) {
 	if len(snapshot) == 0 {
 		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
@@ -66,7 +73,7 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 		return nil, fmt.Errorf("unmarshal element: %w", err)
 	}
 
-	obj, err := fromJSONObject(pbElem.GetJsonObject(), false)
+	obj, err := fromJSONObject(pbElem.GetJsonObject(), dropRefused)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +83,11 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 
 // BytesToArray creates a Array from the given byte array.
 func BytesToArray(snapshot []byte) (*crdt.Array, error) {
+	return bytesToArray(snapshot, true)
+}
+
+// bytesToArray is BytesToArray with the choice bytesToObject offers.
+func bytesToArray(snapshot []byte, dropRefused bool) (*crdt.Array, error) {
 	if len(snapshot) == 0 {
 		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
@@ -85,7 +97,7 @@ func BytesToArray(snapshot []byte) (*crdt.Array, error) {
 		return nil, fmt.Errorf("unmarshal array: %w", err)
 	}
 
-	array, err := fromJSONArray(pbArray.GetJsonArray(), false)
+	array, err := fromJSONArray(pbArray.GetJsonArray(), dropRefused)
 	if err != nil {
 		return nil, err
 	}
@@ -161,16 +173,12 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject, dropRefused bool) (*crdt.
 		//
 		// A refused member is a loser no key reaches. Bytes a replica can
 		// produce never carry one (a member's createdAt always precedes the
-		// ticket of whatever replaced it), but what to do with it depends on
-		// where the bytes came from:
-		//
-		//   - The element payload of a client-pushed Set/Add/ArraySet is a
-		//     change the client can be told about, so it is rejected.
-		//   - A snapshot (dropRefused) is stored state with no other source.
-		//     Rejecting it would make the document unloadable for the server
-		//     and every client that attaches, so the member is dropped -- how
-		//     this decoder read it before the refusal existed. No key reached
-		//     it, so the document's content is the same either way.
+		// ticket of whatever replaced it). Every reader drops it -- a snapshot
+		// or a stored change has no other source, and a pulled change was
+		// already accepted -- which is how this decoder read it before the
+		// refusal existed; no key reached it, so the content is the same. Only
+		// the push validator (ValidatePushedOperations) surfaces it, because a
+		// pushing client can still be told.
 		if _, indexed := members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem)); !indexed {
 			if dropRefused {
 				continue

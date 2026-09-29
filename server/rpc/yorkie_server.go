@@ -228,7 +228,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1441,7 +1441,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1535,7 +1535,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1614,7 +1614,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}

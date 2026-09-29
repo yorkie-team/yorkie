@@ -72,14 +72,14 @@ var (
 	// ticket does not follow, so it can be neither indexed nor tombstoned.
 	// No document state a replica can reach encodes to such bytes -- every
 	// member's createdAt precedes the ticket of whatever replaced it -- so
-	// this is a malformed payload, and dropping the member silently would
-	// hand back an object short a member the sender believes it sent. A
-	// snapshot drops the member instead; see fromJSONObject.
+	// a pushed payload carrying it is malformed. Only the push boundary
+	// returns it (ValidatePushedOperations); every other reader drops the
+	// member, see fromJSONObject.
 	ErrRefusedMember = errors.InvalidArgument("refused object member").WithCode("ErrRefusedMember")
 
-	// ErrInvalidElementTicket is returned when an element payload carries a
-	// createdAt/removedAt pair no replica could have issued: a removedAt that
-	// does not follow the element's own creation. See validateElementTickets.
+	// ErrInvalidElementTicket is returned when a pushed element payload
+	// carries tickets no replica could have issued. See
+	// ValidatePushedOperations.
 	ErrInvalidElementTicket = errors.InvalidArgument("invalid element ticket").
 				WithCode("ErrInvalidElementTicket")
 )

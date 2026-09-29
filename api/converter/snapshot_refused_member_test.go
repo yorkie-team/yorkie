@@ -31,13 +31,13 @@ import (
 )
 
 // TestRefusedMemberInSnapshotStaysLoadable pins that an object member the
-// ElementRHT refuses is rejected in a pushed payload but dropped from a
-// snapshot.
+// ElementRHT refuses is rejected in a pushed payload but dropped everywhere
+// else.
 //
-// Both are decoded by fromJSONObject. A payload is a change the client can be
-// told about, so refusing it is the point. A snapshot is stored state with no
-// other source: failing its decode makes the document unloadable for the
-// server and for every client that attaches. The refused member is a loser no
+// All of them are decoded by fromJSONObject. A pushed payload is a change the
+// client can be told about, so refusing it is the point. A snapshot or a
+// stored change has no other source: failing its decode makes the document
+// unloadable for the server and for every client that attaches. The refused member is a loser no
 // key reaches, so dropping it leaves the document's content unchanged -- which
 // is how the decoder read it before the refusal existed.
 func TestRefusedMemberInSnapshotStaysLoadable(t *testing.T) {
@@ -78,7 +78,7 @@ func TestRefusedMemberInSnapshotStaysLoadable(t *testing.T) {
 		assert.Equal(t, `{"k":5}`, root.Marshal())
 	})
 
-	t.Run("a pushed payload is rejected", func(t *testing.T) {
+	t.Run("a pushed payload is rejected, a stored one is not", func(t *testing.T) {
 		value, err := proto.Marshal(&api.JSONElement{
 			Body: &api.JSONElement_JsonObject{JsonObject: pbObj},
 		})
@@ -90,7 +90,12 @@ func TestRefusedMemberInSnapshotStaysLoadable(t *testing.T) {
 		require.NoError(t, err)
 		pbOps[0].GetSet().Value.Value = value
 
-		_, err = converter.FromOperations(pbOps)
-		assert.ErrorIs(t, err, converter.ErrRefusedMember)
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrRefusedMember)
+
+		// A stored or pulled change was already accepted: it decodes with the
+		// member dropped, as it did before the refusal existed.
+		ops, err := converter.FromStoredOperations(pbOps)
+		require.NoError(t, err)
+		assert.Len(t, ops, 1)
 	})
 }
