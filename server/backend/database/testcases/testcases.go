@@ -868,7 +868,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.Equal(t, int64(6), doc.Checkpoint().ServerSeq)
 
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocument()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocumentForTest()))
 
 		// 03. Find changeInfos with snapshot that reflect the latest doc info
 		snapshotInfo, _ := db.FindClosestSnapshotInfo(
@@ -1034,21 +1034,21 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 
 		docRefKey := docInfo.RefKey()
 
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest()))
 		snapshot, err := db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
 		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), snapshot.ServerSeq)
@@ -2611,7 +2611,7 @@ func RunFindCandidatesTest(t *testing.T, db database.Database, projectID types.I
 
 		// Test pagination with limit 3
 		var allFound []*database.ClientInfo
-		var lastID types.ID = database.ZeroID
+		var lastID = database.ZeroID
 
 		for range 5 { // Max 5 pages to avoid infinite loop
 			clients, newLastID, err := db.FindActiveClients(ctx, 3, lastID)

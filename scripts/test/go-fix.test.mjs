@@ -121,7 +121,7 @@ esac
  * unstaged fixture would yield an empty word list and `set -o pipefail` would
  * kill the script before it reached anything under test.
  */
-function withFixture(body, { buildLines = BUILD_LINES } = {}) {
+function withFixture(body, { buildLines = BUILD_LINES, extraFiles = [] } = {}) {
   const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'go-fix-')));
   const state = path.join(dir, '.stub');
   mkdirSync(state, { recursive: true });
@@ -133,6 +133,7 @@ function withFixture(body, { buildLines = BUILD_LINES } = {}) {
     buildLines.forEach((line, i) => {
       writeFileSync(path.join(dir, `f${i}.go`), `//go:build ${line}\n\npackage p\n`);
     });
+    for (const name of extraFiles) writeFileSync(path.join(dir, name), 'package p\n');
     git('add', '-A');
 
     const run = (subcommand, { seq = 'clean', applyExit = '0' } = {}) =>
@@ -263,6 +264,35 @@ test('a second platform is refused rather than analysed as a tag', () => {
       assert.match(r.stderr, /names platform 'darwin'/);
     },
     { buildLines: ['integration', 'darwin'] },
+  );
+});
+
+test('a platform in a file name is refused, as on a build line', () => {
+  // `_darwin.go` and `_arm64_test.go` restrict a file with no //go:build line
+  // at all; analysed as linux/amd64, they would silently drop out.
+  for (const name of ['x_darwin.go', 'y_arm64_test.go', 'z_darwin_amd64.go']) {
+    withFixture(
+      ({ run, calls }) => {
+        const r = run('check', { seq: 'clean' });
+        assert.equal(r.status, 1, `${name}: ${r.stderr}`);
+        assert.match(r.stderr, /file name names a platform/);
+        assert.match(r.stderr, new RegExp(name.replace('.', '\\.')));
+        assert.deepEqual(calls().filter((c) => c.startsWith('fix ')), []);
+      },
+      { extraFiles: [name] },
+    );
+  }
+});
+
+test('the analysed platform and platform-like words in a name pass', () => {
+  // linux/amd64 is what the script analyses; `js` and `wasm` are platforms
+  // only in the positions Go reads, not in the middle of a name.
+  withFixture(
+    ({ run }) => {
+      const r = run('check', { seq: 'clean' });
+      assert.equal(r.status, 0, r.stderr);
+    },
+    { extraFiles: ['a_linux.go', 'b_amd64.go', 'c_linux_amd64_test.go', 'split_js_links.go', 'wasm_loader.go'] },
   );
 });
 

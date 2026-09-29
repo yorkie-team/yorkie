@@ -215,10 +215,7 @@ func handleSignal(r *server.Yorkie) int {
 		return 0
 	}
 
-	graceful := false
-	if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-		graceful = true
-	}
+	graceful := sig == syscall.SIGINT || sig == syscall.SIGTERM
 
 	gracefulCh := make(chan struct{})
 	go func() {

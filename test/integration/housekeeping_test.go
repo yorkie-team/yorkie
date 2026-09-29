@@ -28,6 +28,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -92,17 +93,35 @@ func TestHousekeeping(t *testing.T) {
 
 		fetchSize := 3
 
-		var err error
-		lastClientID := database.ZeroID
+		// One more active client than a page holds, so a second page exists.
+		var activated []*database.ClientInfo
+		for i := range fetchSize + 1 {
+			info, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-%d", t.Name(), i), nil)
+			require.NoError(t, err)
+			activated = append(activated, info)
+		}
+		// Deactivated clients are not candidates, so the next subtest's
+		// candidate list is unaffected.
+		defer func() {
+			for _, info := range activated {
+				_, err := be.DB.DeactivateClient(ctx, info.RefKey())
+				assert.NoError(t, err)
+			}
+		}()
 
-		// Test with basic pagination - this will find candidates based on client IDs
-		lastClientID, _, err = clients.FindDeactivateCandidates(
-			ctx,
-			be,
-			fetchSize,
-			lastClientID,
-		)
+		// These are the only active clients here, so the cursor is exactly
+		// the last client of each page, and the page after the last is empty.
+		first, _, err := clients.FindDeactivateCandidates(ctx, be, fetchSize, database.ZeroID)
 		assert.NoError(t, err)
+		assert.Equal(t, activated[fetchSize-1].ID, first)
+
+		next, _, err := clients.FindDeactivateCandidates(ctx, be, fetchSize, first)
+		assert.NoError(t, err)
+		assert.Equal(t, activated[fetchSize].ID, next)
+
+		end, _, err := clients.FindDeactivateCandidates(ctx, be, fetchSize, next)
+		assert.NoError(t, err)
+		assert.Equal(t, database.ZeroID, end)
 	})
 
 	t.Run("FindDeactivateCandidates return clients test", func(t *testing.T) {

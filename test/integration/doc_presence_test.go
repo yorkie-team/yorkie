@@ -763,13 +763,13 @@ func TestDocPresence(t *testing.T) {
 		)
 
 		summaries := &documentSummaries{}
-		gojson.Unmarshal(resBody, summaries)
+		assert.NoError(t, gojson.Unmarshal(resBody, summaries))
 		assert.Equal(t, 1, len(summaries.Documents))
 
 		presences := summaries.Documents[0].Presences
 		assert.Equal(t, 2, len(presences), "should include presences of both WatchDocStreamd clients")
-		assert.Contains(t, presences, c1.ID().String())
-		assert.Contains(t, presences, c2.ID().String())
+		assert.Equal(t, presence.Data{"key": c1.Key()}, presences[c1.ID().String()])
+		assert.Equal(t, presence.Data{"key": c2.Key()}, presences[c2.ID().String()])
 
 		// 06. Unsubscribe c2 from the document
 		cancel2()
@@ -785,12 +785,12 @@ func TestDocPresence(t *testing.T) {
 		)
 
 		summaries = &documentSummaries{}
-		gojson.Unmarshal(resBody, summaries)
+		assert.NoError(t, gojson.Unmarshal(resBody, summaries))
 		assert.Equal(t, 1, len(summaries.Documents))
 
 		presences = summaries.Documents[0].Presences
 		assert.Equal(t, 1, len(presences), "should only include presence of WatchDocStreamd client")
-		assert.Contains(t, presences, c1.ID().String())
+		assert.Equal(t, presence.Data{"key": c1.Key()}, presences[c1.ID().String()])
 		assert.NotContains(t, presences, c2.ID().String(), "c2's presence should be filtered out")
 	})
 

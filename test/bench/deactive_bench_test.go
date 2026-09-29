@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/server"
@@ -40,7 +41,7 @@ func benchmarkDeactivate(
 	b.StopTimer()
 	c, err := client.Dial(svr.RPCAddr())
 	assert.NoError(b, err)
-	defer c.Close()
+	defer func() { assert.NoError(b, c.Close()) }()
 
 	err = c.Activate(ctx)
 	assert.NoError(b, err)

@@ -62,6 +62,7 @@ func TestDocument(t *testing.T) {
 			root.SetString("k1", "v2")
 			return nil
 		}, "update k1 with v2")
+		assert.NoError(t, err)
 
 		err = c1.Attach(ctx, doc2)
 		assert.NoError(t, err)

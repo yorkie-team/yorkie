@@ -246,12 +246,12 @@ func (t *Tree[V]) ToTestString() string {
 	var builder strings.Builder
 
 	traverseInOrder(t.root, func(node *Node[V]) {
-		builder.WriteString(fmt.Sprintf(
+		fmt.Fprintf(&builder,
 			"[%d,%d]%s",
 			node.weight,
 			node.value.Len(),
 			node.value.String(),
-		))
+		)
 	})
 	return builder.String()
 }

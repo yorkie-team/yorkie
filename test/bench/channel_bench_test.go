@@ -27,6 +27,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -135,7 +136,6 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 
 	// Pre-create channels with initial sessions
 	channelKeys := make([]types.ChannelRefKey, channelCount)
-	sessionIDs := make([]types.ID, 0, channelCount)
 
 	for i := range channelCount {
 		channelKeys[i] = types.ChannelRefKey{
@@ -148,7 +148,6 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 			b.Fatalf("Failed to attach initial session: %v", err)
 		}
 		assert.NotEmpty(b, sessionID, "session ID should not be empty")
-		sessionIDs = append(sessionIDs, sessionID)
 	}
 
 	// Verify setup

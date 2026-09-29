@@ -1249,7 +1249,7 @@ func (d *DB) FindActiveClients(
 	}
 
 	var infos []*database.ClientInfo
-	var lastID types.ID = lastClientID
+	var lastID = lastClientID
 	count := 0
 	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.ClientInfo)
@@ -1344,7 +1344,7 @@ func (d *DB) FindCompactionCandidates(
 	}
 
 	var resultLastServerSeq int64 = 0
-	var resultLastID types.ID = database.ZeroID
+	var resultLastID = database.ZeroID
 	if len(infos) > 0 {
 		last := infos[len(infos)-1]
 		resultLastServerSeq = last.ServerSeq

@@ -597,6 +597,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 			}
 			return nil
 		})
+		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
@@ -632,6 +633,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 
 			return nil
 		})
+		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
@@ -833,6 +835,7 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 			}
 			return nil
 		})
+		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")

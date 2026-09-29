@@ -129,7 +129,7 @@ func TestDisableGCStillAdvancesLamport(t *testing.T) {
 		r.GetCounter("c").Increase(1)
 		return nil
 	}))
-	beforeLamport := docB.InternalDocument().Lamport()
+	beforeLamport := docB.InternalDocumentForTest().Lamport()
 
 	packA := docA.CreateChangePack()
 	pCopy := *packA
@@ -137,7 +137,7 @@ func TestDisableGCStillAdvancesLamport(t *testing.T) {
 	pCopy.VersionVector.Set(docB.ActorID(), docB.VersionVector().VersionOf(docB.ActorID()))
 	assert.NoError(t, docB.ApplyChangePack(&pCopy))
 
-	assert.Greater(t, docB.InternalDocument().Lamport(), beforeLamport,
+	assert.Greater(t, docB.InternalDocumentForTest().Lamport(), beforeLamport,
 		"disable_gc must still advance lamport on incoming remote changes")
 	assert.Equal(t, 1, len(docB.VersionVector()),
 		"disable_gc must keep doc.VV at size 1 after consuming remote changes")
@@ -169,7 +169,7 @@ func TestDisableGCSnapshotPullCatchesUpLamport(t *testing.T) {
 			return nil
 		}))
 	}
-	docALamport := docA.InternalDocument().Lamport()
+	docALamport := docA.InternalDocumentForTest().Lamport()
 	assert.GreaterOrEqual(t, docALamport, int64(numUpdates),
 		"sanity: docA's lamport must reflect its updates")
 
@@ -194,7 +194,7 @@ func TestDisableGCSnapshotPullCatchesUpLamport(t *testing.T) {
 	)
 	assert.NoError(t, docB.ApplyChangePack(snapshotPack))
 
-	docBLamport := docB.InternalDocument().Lamport()
+	docBLamport := docB.InternalDocumentForTest().Lamport()
 	assert.GreaterOrEqual(t, docBLamport, docALamport,
 		"opt-out client must catch up to the snapshot's lamport (server=%d got=%d)",
 		docALamport, docBLamport)

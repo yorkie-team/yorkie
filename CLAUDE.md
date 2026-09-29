@@ -55,9 +55,11 @@ not `\n` inside `"..."`.
 ## Pitfalls
 
 - Build tags `integration`, `bench`, `complex` gate test files. The
-  Makefile targets pass them via `go test -tags …`; for VSCode/gopls
-  to index those files, set `gopls.build.buildFlags` per
-  `CONTRIBUTING.md`.
+  Makefile targets pass them via `go test -tags …`, and `make lint` and
+  `make verify-modernize` pass every tag `scripts/go-build-tags.sh` finds;
+  run golangci-lint through `make lint`, not bare, or the tagged files go
+  unchecked. For VSCode/gopls to index those files, set
+  `gopls.build.buildFlags` per `CONTRIBUTING.md`.
 - Apache 2.0 license header required on every Go file.
 - Follow [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md);
   every package needs a package comment (`// Package xxx provides…`).

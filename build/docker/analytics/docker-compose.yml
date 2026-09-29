@@ -1,8 +1,9 @@
+name: yorkie-analytics
+
 services:
   starrocks-fe:
     image: starrocks/fe-ubuntu:3.3.9
     hostname: starrocks-fe
-    container_name: starrocks-fe
     user: root
     ports:
       - 8030:8030
@@ -22,7 +23,6 @@ services:
   starrocks-be:
     image: starrocks/be-ubuntu:3.3.9
     hostname: starrocks-be
-    container_name: starrocks-be
     user: root
     ports:
       - 8040:8040
@@ -47,7 +47,6 @@ services:
 
   kafka:
     image: docker.io/apache/kafka:4.1.1
-    container_name: kafka
     ports:
       - "29092:29092"
     volumes:
@@ -83,7 +82,6 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui
-    container_name: kafka-ui
     ports:
       - "8989:8080"
     depends_on:
