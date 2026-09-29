@@ -31,8 +31,12 @@ member's slot in `Root.elementMap`.
       than its new createdAt. Red: `TestArraySetRedoAfterPeerRemovalKeepsTheTombstoneOut`.
       Fix: build a Remove reverse when the displaced value is a tombstone, as
       `Set.Execute` does.
-- [ ] Dropping the movedAt rule lets a crafted member be evicted without
-      being tombstoned.
+- [x] Dropping the movedAt rule lets a crafted member be evicted without
+      being tombstoned. Two ways in: a member payload with movedAt before
+      createdAt, and a Set whose executedAt precedes its value (the win
+      stamps movedAt = executedAt). Fix: reject an object member positioned
+      before its createdAt, keeping the exemption for array elements that
+      undo re-identifies, and reject a Set value created after its Set.
 - [ ] The snapshot decode path has no rescue for `ErrRefusedMember`.
 
 ## Review

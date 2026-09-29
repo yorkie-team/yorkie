@@ -441,6 +441,14 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A winning value is positioned at executedAt, so a value created after
+	// its own Set would be an object member positioned before its createdAt;
+	// see validateObjectMember. The json layer issues one ticket for both, and
+	// an undo restores an older value under a newer ticket.
+	if elem.CreatedAt().After(executedAt) {
+		return nil, fmt.Errorf("set %s: value created after the set: %w",
+			elem.CreatedAt().Key(), ErrInvalidElementTicket)
+	}
 
 	return operations.NewSet(
 		parentCreatedAt,
@@ -1353,17 +1361,33 @@ func validateTicketTriple(elem crdt.Element) error {
 		return fmt.Errorf("element.created_at: %w", ErrMissingTicket)
 	}
 
-	// NOTE: a movedAt older than createdAt is deliberately NOT rejected. It
-	// reads as impossible and is not: undo re-identifies the value of an Add or
-	// an ArraySet reverse with a freshly issued createdAt
+	// NOTE: movedAt is not checked here but for object members only, in
+	// validateObjectMember: undo re-identifies the value of an Add or an
+	// ArraySet reverse with a freshly issued createdAt
 	// (Document.executeUndoRedo) while leaving the copy's movedAt -- stamped by
-	// RGATreeList.MoveAfter before the removal -- untouched, so undoing the
-	// removal of a previously moved container element legitimately encodes
-	// createdAt > movedAt. Rejecting it here would fail that change at decode
-	// time on every peer and on the server.
+	// RGATreeList.MoveAfter before the removal -- untouched, so an array
+	// element legitimately encodes createdAt > movedAt.
 	if removedAt := elem.RemovedAt(); removedAt != nil && !removedAt.After(createdAt) {
 		return fmt.Errorf("element %s: removed_at does not follow created_at: %w",
 			createdAt.Key(), ErrInvalidElementTicket)
+	}
+
+	return nil
+}
+
+// validateObjectMember rejects an object member positioned before its own
+// createdAt. ElementRHT anchors both the LWW comparison and the eviction on
+// PositionedAt, while Element.Remove only accepts a ticket after createdAt, so
+// a later Set whose ticket falls between the two would win the key without
+// being able to tombstone the member: it would stay live, unreachable by key
+// and charged to Live. A replica positions a member with the ticket of the
+// Set that won its key, which is never older than the value (see fromSet),
+// and the re-identification that makes movedAt precede createdAt only happens
+// to array elements.
+func validateObjectMember(elem crdt.Element) error {
+	if movedAt := elem.MovedAt(); movedAt != nil && elem.CreatedAt().After(movedAt) {
+		return fmt.Errorf("element %s: moved_at precedes created_at: %w",
+			elem.CreatedAt().Key(), ErrInvalidElementTicket)
 	}
 
 	return nil
@@ -1383,7 +1407,7 @@ func validateTicketTriple(elem crdt.Element) error {
 // impossible. Reject it here instead, at the boundary, where the document has
 // not been touched yet and the error still names the change that carried it.
 //
-// One rule, satisfied by every element a replica produces:
+// Two rules, satisfied by every element a replica produces:
 //
 //   - removedAt must follow createdAt. That is exactly the precondition
 //     Element.Remove enforces, so a payload arriving already removed in
@@ -1391,6 +1415,8 @@ func validateTicketTriple(elem crdt.Element) error {
 //     DeleteByCreatedAt refuses the same tickets Remove does -- and would sit
 //     in the document, charged to Live and unreachable by key, in every
 //     snapshot built afterwards.
+//   - an object member's movedAt must not precede its createdAt. See
+//     validateObjectMember.
 //
 // Nested members are walked for the same reason DropSplitLinksInElement walks
 // them: an object or array payload carries a whole subtree, and Root registers
@@ -1406,8 +1432,12 @@ func validateElementTickets(elem crdt.Element) error {
 	}
 
 	var invalid error
-	container.Descendants(func(child crdt.Element, _ crdt.Container) bool {
-		if err := validateTicketTriple(child); err != nil && invalid == nil {
+	container.Descendants(func(child crdt.Element, parent crdt.Container) bool {
+		err := validateTicketTriple(child)
+		if _, ok := parent.(*crdt.Object); ok && err == nil {
+			err = validateObjectMember(child)
+		}
+		if err != nil && invalid == nil {
 			invalid = err
 		}
 		return invalid != nil

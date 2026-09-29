@@ -79,13 +79,46 @@ func TestSetElementRejectsImpossibleTickets(t *testing.T) {
 		})))
 	})
 
+	// ElementRHT anchors both the LWW comparison and the eviction on an
+	// occupant's positionedAt, but Element.Remove only accepts a ticket after
+	// its createdAt. A member whose movedAt precedes its createdAt loses the key
+	// to any later Set whose ticket falls between the two without being
+	// tombstoned: it stays live, unreachable by key and charged to Live. No
+	// replica places an object member that way -- a member is positioned by
+	// the Set that won its key, whose ticket is never older than the value.
+	t.Run("an object member whose moved_at precedes created_at", func(t *testing.T) {
+		err := decode(build(func(p *crdt.Primitive) { p.SetMovedAt(ticket(1)) }))
+		assert.ErrorIs(t, err, converter.ErrInvalidElementTicket)
+	})
+
 	// Undo re-identifies the value of an Add/ArraySet reverse with a freshly
 	// issued createdAt and leaves the copy's older movedAt alone
-	// (Document.executeUndoRedo), so a movedAt preceding createdAt is a shape
-	// replicas really emit -- the boundary must let it through.
-	t.Run("moved_at preceding created_at survives", func(t *testing.T) {
-		assert.NoError(t, decode(build(func(p *crdt.Primitive) {
-			p.SetMovedAt(ticket(1))
-		})))
+	// (Document.executeUndoRedo). That element lives in an array, and a payload
+	// can carry it nested once its container is restored, so an array element
+	// with a movedAt preceding its createdAt is a shape replicas really emit --
+	// the boundary must let it through.
+	t.Run("an array element whose moved_at precedes created_at survives", func(t *testing.T) {
+		arr := crdt.NewArray(crdt.NewRGATreeList(), ticket(1))
+		elem, err := crdt.NewPrimitive("v", ticket(3))
+		assert.NoError(t, err)
+		assert.NoError(t, arr.Add(elem))
+		elem.SetMovedAt(ticket(2))
+		assert.NoError(t, decode(arr))
+	})
+
+	// The value of a Set is positioned at the Set's executedAt when it wins,
+	// so a value created after the ticket that places it is the other way to
+	// an occupant positioned before its own createdAt. The json layer issues
+	// one ticket for both, and an undo restores an older value under a newer
+	// ticket; neither yields a value newer than its Set.
+	t.Run("a set value created after the set", func(t *testing.T) {
+		value, err := crdt.NewPrimitive("v", ticket(9))
+		assert.NoError(t, err)
+		pbOps, err := converter.ToOperations([]operations.Operation{
+			operations.NewSet(ticket(1), "k", value, ticket(5)),
+		})
+		assert.NoError(t, err)
+		_, err = converter.FromOperations(pbOps)
+		assert.ErrorIs(t, err, converter.ErrInvalidElementTicket)
 	})
 }
