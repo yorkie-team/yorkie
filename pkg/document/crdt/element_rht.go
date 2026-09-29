@@ -181,8 +181,8 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	// applied Set should do: its createdAt ties the occupant's positionedAt,
 	// and the index keeps naming the live copy instead of the duplicate.
 	// The loser is indexed by createdAt only so GC can still reach it, which
-	// means it must not take that slot from a node already holding it. The
-	// tombstoning below does not cover this: a value that arrives already
+	// means it must not take that slot from a live node already holding it.
+	// The tombstoning below does not cover this: a value that arrives already
 	// removed skips it entirely, so a change carrying both a removedAt and
 	// the createdAt of a live member would otherwise re-point this index --
 	// and, through RegisterElement, Root.elementMap behind it -- at a
@@ -191,7 +191,15 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	// fresh createdAt per value and cannot reach this, but createdAt is
 	// decoded from client bytes, so a crafted or duplicated change can.
 	// Refusing leaves the hashtable exactly as it was.
-	if existing, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]; ok && existing.elem != v {
+	//
+	// A tombstone in the slot is not protected. An undo that restores a
+	// replaced value re-inserts a copy under the tombstone's createdAt, and
+	// when a newer Set has already taken the key the copy lands here. It has
+	// to take the slot, tombstoned at the winner's ticket, because that is the
+	// state a replica reaches when the restore wins first and the newer Set
+	// evicts it; refusing it would leave the old tombstone and its older
+	// removedAt on this replica only.
+	if existing, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]; ok && existing.elem != v && !existing.isRemoved() {
 		return nil, false
 	}
 
