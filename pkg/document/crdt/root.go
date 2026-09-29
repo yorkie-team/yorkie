@@ -126,7 +126,9 @@ type Root struct {
 	// A zero size is not the same as no record. It says this element has been
 	// released: charged to neither side, because its subtree was orphaned by a
 	// restore and nothing will ever collect it. Anything that later charges it
-	// again has to know Live is not the side to take it from.
+	// again has to know Live is not the side to take it from. Such a record
+	// lives only as long as its element is addressable: index retires it when
+	// a restored copy takes the element's elementMap slot over.
 	sizeInGC map[Element]resource.DataSize
 }
 
@@ -241,16 +243,44 @@ func (r *Root) registerInternalGCPairs(element Element) {
 // registerLive registers the given element and its descendants to the element
 // map, and charges docSize.Live for each.
 func (r *Root) registerLive(element Element) {
-	r.elementMap[element.CreatedAt().Key()] = element
+	r.index(element)
 	r.docSize.Live.Add(element.DataSize())
 
 	if container, ok := element.(Container); ok {
 		container.Descendants(func(elem Element, _ Container) bool {
-			r.elementMap[elem.CreatedAt().Key()] = elem
+			r.index(elem)
 			r.docSize.Live.Add(elem.DataSize())
 			return false
 		})
 	}
+}
+
+// index points elementMap at the given element, and retires the release
+// record of the element whose slot it takes over.
+//
+// A release record guards a tombstone's subtree only while it can still be
+// addressed (see release), and elementMap is what addresses an element. The
+// restore that orphans a subtree re-registers a copy under the same
+// createdAts right after releasing it, so the copy's elements take those
+// slots over here, and from then on nothing can reach the released ones:
+// operations resolve their target through elementMap, and release has
+// already dropped their collection entries. Nothing else ever deletes such
+// a record -- deregisterElement never runs for an orphan -- and the map is
+// keyed by the element, so leaving it would keep a record and a dead subtree
+// alive per remove/undo cycle. A member only the tombstone carries keeps its
+// slot and its record.
+//
+// Only a zero record is a release record. A tombstone with a charge of its
+// own is still on the collection worklist, and collecting it is what
+// retires that record.
+func (r *Root) index(elem Element) {
+	key := elem.CreatedAt().Key()
+	if prev, ok := r.elementMap[key]; ok && prev != elem {
+		if charged, ok := r.sizeInGC[prev]; ok && charged == (resource.DataSize{}) {
+			delete(r.sizeInGC, prev)
+		}
+	}
+	r.elementMap[key] = elem
 }
 
 // adoptTombstones books every element of the given subtree that already carries
@@ -475,7 +505,9 @@ func (r *Root) release(elem Element) {
 	// this subtree, and moveSizeToGC would then take its size out of Live for
 	// a second time and drive docSize negative. A zero charge says Live is
 	// not holding it. A copy restored under the same createdAt has a slot of
-	// its own and is still charged normally.
+	// its own and is still charged normally. Registering that copy is also
+	// what retires this record, once the copy takes the element's elementMap
+	// slot over and nothing can address it any more (see index).
 	r.sizeInGC[elem] = resource.DataSize{}
 
 	if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
