@@ -68,3 +68,15 @@ member's slot in `Root.elementMap`.
 
 ## Review
 
+
+- Red before each fix, Green after: `TestArraySetRedoAfterPeerRemovalKeepsTheTombstoneOut`,
+  `TestSetElementRejectsImpossibleTickets`, `TestRefusedMemberInSnapshotStaysLoadable`,
+  `TestLosingUndoRestoreConverges` (green on `main`, red with the tombstone
+  refusal), and the Set subtest judging a pre-removed value before and after
+  collection.
+- Not this change: whichever of two concurrent writers evicts a value first
+  stamps its removedAt, so a displaced value's tombstone can differ between
+  replicas by delivery order. `main` has the same behavior.
+- Follow-up for yorkie-js-sdk: its ArraySet reverse still copies a removed
+  value, which the Go server now accepts as an array element.
+- `make verify` and `make test` green.
