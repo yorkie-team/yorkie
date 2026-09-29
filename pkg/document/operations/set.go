@@ -116,10 +116,18 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// leaves the document exactly as it was -- on every replica and in the
 	// server's snapshot replay, which decide from the same state.
 	//
+	// Only a live occupant is protected, as in ElementRHT's losing branch. A
+	// tombstone leaves elementMap when it is purged, and each replica and the
+	// server collect on their own schedule, so a guard that also fired on a
+	// tombstone would skip this Set on a replica still holding it and apply it
+	// on one that had collected it. A live element is never purged, so every
+	// replica that has it decides the same way.
+	//
 	// Checked before the mutation below, because the object cannot be put back
 	// afterwards. The ordinary path pays one map read.
 	if value.RemovedAt() != nil {
-		if occupant := root.FindByCreatedAt(value.CreatedAt()); occupant != nil && occupant != value {
+		occupant := root.FindByCreatedAt(value.CreatedAt())
+		if occupant != nil && occupant != value && occupant.RemovedAt() == nil {
 			return ExecutionResult{}, nil
 		}
 	}

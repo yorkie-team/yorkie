@@ -59,6 +59,12 @@ member's slot in `Root.elementMap`.
       restore left C's older removedAt on one replica. Red:
       `TestLosingUndoRestoreConverges` (green on `main`). Fix: refuse only
       when the slot holds a live node.
+- [x] (second pass) `Set.Execute` skipped a pre-removed value whenever
+      elementMap held anything under its createdAt, a tombstone included, so
+      the outcome depended on how far local GC had run. Rejecting a removed
+      Set value at the push boundary was considered and not taken: the JS
+      Remove reverse copies the key's current value, which can be a
+      tombstone. Fix: protect only a live occupant, which GC never purges.
 
 ## Review
 

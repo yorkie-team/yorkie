@@ -23,6 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -159,6 +160,65 @@ func TestSet(t *testing.T) {
 		assert.Equal(t, before, root.DocSize())
 		assert.Equal(t, elements, root.ElementMapLen())
 		assert.Equal(t, 0, root.GarbageLen())
+	})
+
+	t.Run("a pre-removed value is judged the same before and after collection", func(t *testing.T) {
+		// The guard above looks the value's createdAt up in Root.elementMap. A
+		// tombstone leaves that map when it is purged, and each replica and the
+		// server collect on their own schedule, so a guard that also fired on a
+		// tombstone would skip the Set on a replica still holding it and apply
+		// it on one that had collected it.
+		actorA, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actorA) }
+
+		apply := func(collect bool) (bool, resource.DataSize) {
+			root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+			vector := time.NewVersionVector()
+
+			inner := crdt.NewObject(crdt.NewElementRHT(), ticket(1))
+			_, err := operations.NewSet(
+				time.InitialTicket, "inner", inner, ticket(1),
+			).Execute(root, operations.OpSourceRemote, vector)
+			assert.NoError(t, err)
+			member, err := crdt.NewPrimitive(1, ticket(2))
+			assert.NoError(t, err)
+			_, err = operations.NewSet(
+				inner.CreatedAt(), "x", member, ticket(2),
+			).Execute(root, operations.OpSourceRemote, vector)
+			assert.NoError(t, err)
+			_, err = operations.NewRemove(
+				inner.CreatedAt(), ticket(2), ticket(3),
+			).Execute(root, operations.OpSourceRemote, vector)
+			assert.NoError(t, err)
+
+			if collect {
+				max := time.NewVersionVector()
+				max.Set(actorA, time.MaxLamport)
+				n, err := root.GarbageCollect(max)
+				assert.NoError(t, err)
+				assert.Equal(t, 1, n)
+			}
+
+			before := root.DocSize().Live
+			crafted, err := crdt.NewPrimitive(2, ticket(2))
+			assert.NoError(t, err)
+			crafted.SetRemovedAt(ticket(4))
+			result, err := operations.NewSet(
+				time.InitialTicket, "key", crafted, ticket(5),
+			).Execute(root, operations.OpSourceRemote, vector)
+			assert.NoError(t, err)
+			after := root.DocSize().Live
+			return result.Observable, resource.DataSize{
+				Data: after.Data - before.Data,
+				Meta: after.Meta - before.Meta,
+			}
+		}
+
+		heldApplied, heldDelta := apply(false)
+		collectedApplied, collectedDelta := apply(true)
+		assert.Equal(t, collectedApplied, heldApplied,
+			"the Set applied on one replica and was skipped on the other")
+		assert.Equal(t, collectedDelta, heldDelta)
 	})
 
 	t.Run("a Set retires only its own object's collection entry", func(t *testing.T) {
