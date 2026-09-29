@@ -273,6 +273,56 @@ func TestElementRHTSetLoser(t *testing.T) {
 		assert.Empty(t, rht.Elements())
 	})
 
+	t.Run("refuses a loser that cannot be tombstoned", func(t *testing.T) {
+		// A value's createdAt and its operation's executedAt are decoded
+		// independently from client bytes, so a crafted change can lose the
+		// LWW comparison while carrying a createdAt no ticket in the document
+		// follows. Element.Remove refuses such a ticket, and so does
+		// DeleteByCreatedAt -- indexing the value anyway would leave it live,
+		// unreachable by key, emitted into every later snapshot and
+		// collectable by nothing.
+		rht := crdt.NewElementRHT()
+		occupant, err := crdt.NewPrimitive("v", time.NewTicket(6, 0, actorA))
+		assert.NoError(t, err)
+		rht.Set("k", occupant)
+
+		crafted, err := crdt.NewPrimitive("x", time.NewTicket(time.MaxLamport, 0, actorB))
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", crafted, time.NewTicket(5, 0, actorB))
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "a refused value was reported as taken in")
+
+		assert.Nil(t, crafted.RemovedAt(), "an untombstonable value was reported removed")
+		assert.Equal(t, occupant, rht.Get("k"))
+		for _, node := range rht.Nodes() {
+			assert.NotEqual(t, crafted.CreatedAt().Key(), node.Element().CreatedAt().Key(),
+				"Nodes() emits a live node the key does not answer with")
+		}
+		_, err = rht.DeleteByCreatedAt(crafted.CreatedAt(), time.NewTicket(7, 0, actorA))
+		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
+	})
+
+	t.Run("re-applying the same set keeps the index on the live copy", func(t *testing.T) {
+		// The same Set applied twice: the second copy carries the createdAt
+		// of the first and ties its positionedAt, so it loses and cannot be
+		// tombstoned. The index must keep naming the copy the key answers
+		// with, not the duplicate.
+		rht := crdt.NewElementRHT()
+		executedAt := time.NewTicket(4, 0, actorA)
+
+		first, err := crdt.NewPrimitive("v", executedAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", first, executedAt)
+
+		duplicate, err := crdt.NewPrimitive("v", executedAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", duplicate, executedAt)
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Equal(t, first, rht.Nodes()[0].Element())
+		assert.Equal(t, first, rht.Get("k"))
+	})
+
 	t.Run("keeps the removedAt of a loser that arrives removed", func(t *testing.T) {
 		// Replays a decoded object whose members are not in positionedAt
 		// order: the tombstone of an older value arrives after the live

@@ -68,4 +68,179 @@ func TestSet(t *testing.T) {
 		assert.Equal(t, 2, root.GarbageLen())
 		assert.Equal(t, `{"key":2}`, root.Object().Marshal())
 	})
+
+	t.Run("a refused loser is not booked into the root", func(t *testing.T) {
+		// A value whose createdAt does not follow the ticket that beat it
+		// cannot be tombstoned, so the object refuses it. Booking it anyway
+		// would charge docSize.Live for an element in no container and point
+		// elementMap at it, with nothing able to collect either.
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+		actorA, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		actorB, _ := time.ActorIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbb")
+
+		occupant, err := crdt.NewPrimitive(1, time.NewTicket(6, 0, actorA))
+		assert.NoError(t, err)
+		_, err = operations.NewSet(
+			time.InitialTicket, "key", occupant, time.NewTicket(6, 0, actorA),
+		).Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		before := root.DocSize()
+		elements := root.ElementMapLen()
+
+		// createdAt is ahead of the executedAt that loses the comparison,
+		// which only a crafted or replayed change can produce.
+		crafted, err := crdt.NewPrimitive(2, time.NewTicket(time.MaxLamport, 0, actorB))
+		assert.NoError(t, err)
+		result, err := operations.NewSet(
+			time.InitialTicket, "key", crafted, time.NewTicket(5, 0, actorB),
+		).Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		assert.False(t, result.Observable, "a refused Set reported a change")
+		assert.Nil(t, result.Reverse, "a refused Set produced a reverse")
+		assert.Equal(t, `{"key":1}`, root.Object().Marshal())
+		assert.Equal(t, before, root.DocSize())
+		assert.Equal(t, elements, root.ElementMapLen())
+		assert.Nil(t, root.FindByCreatedAt(crafted.CreatedAt()),
+			"a refused value took over its createdAt's elementMap slot")
+		assert.Equal(t, 0, root.GarbageLen())
+	})
+
+	t.Run("a pre-removed value does not take a live element's slot", func(t *testing.T) {
+		// A createdAt identifies an element in the whole document, not in one
+		// object: Root.elementMap is keyed by it. ElementRHT refuses a loser
+		// whose createdAt one of its own live nodes answers to, but the live
+		// copy here sits in another container, so only Set.Execute can see the
+		// collision. The value arrives already removed, which is what lets it
+		// skip the tombstoning in the losing branch and be indexed anyway.
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+		actorA, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actorA) }
+		vector := time.NewVersionVector()
+
+		inner := crdt.NewObject(crdt.NewElementRHT(), ticket(1))
+		_, err := operations.NewSet(
+			time.InitialTicket, "inner", inner, ticket(1),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+
+		member, err := crdt.NewPrimitive(1, ticket(2))
+		assert.NoError(t, err)
+		_, err = operations.NewSet(
+			inner.CreatedAt(), "x", member, ticket(2),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+		live := root.FindByCreatedAt(ticket(2))
+		assert.NotNil(t, live)
+
+		occupant, err := crdt.NewPrimitive(9, ticket(6))
+		assert.NoError(t, err)
+		_, err = operations.NewSet(
+			time.InitialTicket, "key", occupant, ticket(6),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+
+		before := root.DocSize()
+		elements := root.ElementMapLen()
+
+		crafted, err := crdt.NewPrimitive(2, ticket(2))
+		assert.NoError(t, err)
+		crafted.SetRemovedAt(ticket(3))
+		result, err := operations.NewSet(
+			time.InitialTicket, "key", crafted, ticket(5),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+
+		assert.False(t, result.Observable, "a refused Set reported a change")
+		assert.Same(t, live, root.FindByCreatedAt(ticket(2)),
+			"a pre-removed value took the live element's elementMap slot")
+		assert.Equal(t, `{"inner":{"x":1},"key":9}`, root.Object().Marshal())
+		assert.Equal(t, before, root.DocSize())
+		assert.Equal(t, elements, root.ElementMapLen())
+		assert.Equal(t, 0, root.GarbageLen())
+	})
+
+	t.Run("a Set retires only its own object's collection entry", func(t *testing.T) {
+		// The entry retired for a restore has to be the tombstone this Set
+		// displaced. An entry another container registered under the same
+		// createdAt still resolves to its own tombstone, so retiring it would
+		// release a charge the document still carries and leave a tombstone
+		// nothing can collect.
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+		actorA, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actorA) }
+		vector := time.NewVersionVector()
+
+		inner := crdt.NewObject(crdt.NewElementRHT(), ticket(1))
+		_, err := operations.NewSet(
+			time.InitialTicket, "inner", inner, ticket(1),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+
+		member, err := crdt.NewPrimitive(1, ticket(2))
+		assert.NoError(t, err)
+		_, err = operations.NewSet(
+			inner.CreatedAt(), "x", member, ticket(2),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+
+		_, err = operations.NewRemove(
+			inner.CreatedAt(), ticket(2), ticket(3),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, root.GarbageLen())
+		gcSize := root.DocSize().GC
+
+		// A Set on the root object carrying the same createdAt. It wins its
+		// own key, but the collection entry under that createdAt belongs to
+		// inner and nothing has displaced the tombstone it names.
+		value, err := crdt.NewPrimitive(2, ticket(2))
+		assert.NoError(t, err)
+		_, err = operations.NewSet(
+			time.InitialTicket, "key", value, ticket(7),
+		).Execute(root, operations.OpSourceRemote, vector)
+		assert.NoError(t, err)
+
+		assert.Equal(t, 1, root.GarbageLen(),
+			"another container's collection entry was retired")
+		assert.Equal(t, gcSize, root.DocSize().GC)
+	})
+
+	t.Run("re-applying a Set leaves the tombstone collectable", func(t *testing.T) {
+		// The same Set applied twice around a Remove: the duplicate carries
+		// the tombstone's createdAt, so it loses and is refused. Retiring the
+		// tombstone's collection entry for it would leave a member that is
+		// still in the object uncollectable and charged to nothing.
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+		actorA, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		ticket := time.NewTicket(1, 0, actorA)
+
+		value, err := crdt.NewPrimitive(1, ticket)
+		assert.NoError(t, err)
+		set := operations.NewSet(time.InitialTicket, "key", value, ticket)
+		_, err = set.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		_, err = operations.NewRemove(
+			time.InitialTicket, ticket, time.NewTicket(2, 0, actorA),
+		).Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, root.GarbageLen())
+		gcSize := root.DocSize().GC
+
+		// The duplicate ties the tombstone's positionedAt, so it loses.
+		_, err = set.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		assert.Equal(t, 1, root.GarbageLen(), "the tombstone's collection entry was retired")
+		assert.Equal(t, gcSize, root.DocSize().GC)
+
+		vector := time.NewVersionVector()
+		vector.Set(actorA, time.MaxLamport)
+		n, err := root.GarbageCollect(vector)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, n)
+		assert.Equal(t, 0, root.GarbageLen())
+	})
 }

@@ -155,7 +155,18 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 		// silently dropped from the decoded object. Mirrors fromObject in
 		// the JS SDK (fromObject in converter.ts), which passes
 		// value.getPositionedAt() to rht.set.
-		members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem))
+		//
+		// This is a reconstruction, not an operation, so a member that is
+		// refused has nowhere else to go: it would be absent from the decoded
+		// object with nothing recording that it was ever there. Bytes a
+		// replica can produce never reach that path (a member's createdAt
+		// always precedes the ticket of whatever replaced it), and these bytes
+		// are not always server-built -- the same decoder reads the element
+		// payload of a client-pushed Set/Add/ArraySet -- so the refusal is a
+		// malformed payload to reject, not a member to quietly drop.
+		if _, indexed := members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem)); !indexed {
+			return nil, fmt.Errorf("json_object.node %s: %w", elem.CreatedAt().Key(), ErrRefusedMember)
+		}
 	}
 
 	// These bytes are not always a server-built snapshot: the same decoder reads

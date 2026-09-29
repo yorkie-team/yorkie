@@ -344,7 +344,7 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 
 // fromOperation converts a single operation. It is split out of FromOperations
 // so the stored-decode path can ask about one operation at a time; see
-// withoutUndatedOperations.
+// withoutRejectedOperations.
 func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
 	if pbOp == nil {
 		return nil, goerrors.New("operation missing")
@@ -1345,10 +1345,86 @@ func fromRequiredTimeTicket(pbTicket *api.TimeTicket, field string) (*time.Ticke
 	return ticket, nil
 }
 
-// sanitizeElement adapts a BytesTo* result: it drops the split-sibling links
+// validateTicketTriple checks one element's createdAt/movedAt/removedAt
+// against each other. See validateElementTickets.
+func validateTicketTriple(elem crdt.Element) error {
+	createdAt := elem.CreatedAt()
+	if createdAt == nil {
+		return fmt.Errorf("element.created_at: %w", ErrMissingTicket)
+	}
+
+	// NOTE: a movedAt older than createdAt is deliberately NOT rejected. It
+	// reads as impossible and is not: undo re-identifies the value of an Add or
+	// an ArraySet reverse with a freshly issued createdAt
+	// (Document.executeUndoRedo) while leaving the copy's movedAt -- stamped by
+	// RGATreeList.MoveAfter before the removal -- untouched, so undoing the
+	// removal of a previously moved container element legitimately encodes
+	// createdAt > movedAt. Rejecting it here would fail that change at decode
+	// time on every peer and on the server.
+	if removedAt := elem.RemovedAt(); removedAt != nil && !removedAt.After(createdAt) {
+		return fmt.Errorf("element %s: removed_at does not follow created_at: %w",
+			createdAt.Key(), ErrInvalidElementTicket)
+	}
+
+	return nil
+}
+
+// validateElementTickets rejects an element payload carrying a ticket triple
+// no replica could have issued.
+//
+// createdAt, movedAt and removedAt are decoded independently from
+// client-supplied bytes (fromJSONObject/fromJSONPrimitive and friends restore
+// movedAt and removedAt verbatim), and nothing between the wire and the CRDT
+// makes them agree with each other: Change.SetActor rewrites only the
+// operation's own executedAt, and sanitizeElement until now only dropped split
+// links. Every downstream refusal -- ElementRHT.SetWithExecutedAt declining a
+// loser it cannot tombstone, operations.Set.Execute skipping the Root
+// bookkeeping for it -- exists to survive a triple that is internally
+// impossible. Reject it here instead, at the boundary, where the document has
+// not been touched yet and the error still names the change that carried it.
+//
+// One rule, satisfied by every element a replica produces:
+//
+//   - removedAt must follow createdAt. That is exactly the precondition
+//     Element.Remove enforces, so a payload arriving already removed in
+//     violation of it can never be tombstoned, moved to GC or purged --
+//     DeleteByCreatedAt refuses the same tickets Remove does -- and would sit
+//     in the document, charged to Live and unreachable by key, in every
+//     snapshot built afterwards.
+//
+// Nested members are walked for the same reason DropSplitLinksInElement walks
+// them: an object or array payload carries a whole subtree, and Root registers
+// every element of it under that element's own tickets.
+func validateElementTickets(elem crdt.Element) error {
+	if err := validateTicketTriple(elem); err != nil {
+		return err
+	}
+
+	container, ok := elem.(crdt.Container)
+	if !ok {
+		return nil
+	}
+
+	var invalid error
+	container.Descendants(func(child crdt.Element, _ crdt.Container) bool {
+		if err := validateTicketTriple(child); err != nil && invalid == nil {
+			invalid = err
+		}
+		return invalid != nil
+	})
+
+	return invalid
+}
+
+// sanitizeElement adapts a BytesTo* result: it rejects an element whose
+// tickets cannot have been issued by a replica, drops the split-sibling links
 // from every tree the decoded element carries, or passes the error through.
 func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	if err != nil {
+		return nil, err
+	}
+
+	if err := validateElementTickets(elem); err != nil {
 		return nil, err
 	}
 

@@ -310,7 +310,16 @@ func (p *Object) Delete(k string) crdt.Element {
 		deleted.CreatedAt(),
 		ticket,
 	))
-	p.context.RegisterRemovedElementPair(p, deleted)
+	// The pair records the CRDT container, not this proxy. Root compares the
+	// recorded parent by identity -- UnregisterRemovedElementPair only retires
+	// an entry whose parent is the very container the Set re-pointed, and that
+	// caller (operations.Set.Execute) resolves its container through
+	// Root.FindByCreatedAt, which answers with the *crdt.Object. A proxy
+	// recorded here matches no such owner, so the local undo path running
+	// against the clone root would silently skip the retire it depends on. A
+	// proxy also outlives nothing: it is rebuilt per accessor call, while the
+	// entry it registers stays in the map until collection.
+	p.context.RegisterRemovedElementPair(p.Object, deleted)
 	return deleted
 }
 
@@ -420,10 +429,27 @@ func (p *Object) setInternal(
 		panic(err)
 	}
 
-	removed := p.Set(k, value)
-	p.context.RegisterElement(value, p)
+	// A value the object refused is in neither of its member maps, so none of
+	// the Root bookkeeping below may run for it -- the same guard
+	// operations.Set.Execute applies to the remote and replay paths.
+	// RegisterElement would charge docSize.Live for an element hanging off no
+	// container and point elementMap at it, over whatever live copy already
+	// answers to that createdAt. A local Set issues a fresh ticket that
+	// follows every ticket this client has seen, so it always wins the LWW
+	// comparison and the refusal is unreachable from here; honoring it is
+	// what keeps that an invariant of this call site rather than of every
+	// future caller. Nothing changed, so there is no operation to broadcast
+	// either: a peer replaying it would refuse it too.
+	removed, indexed := p.Set(k, value)
+	if !indexed {
+		return elem
+	}
+
+	p.context.RegisterElement(value, p.Object)
 	if removed != nil {
-		p.context.RegisterRemovedElementPair(p, removed)
+		// The CRDT container, not this proxy, for the reason Delete records
+		// it that way: Root matches the recorded parent by identity.
+		p.context.RegisterRemovedElementPair(p.Object, removed)
 	}
 
 	p.context.Push(operations.NewSet(
