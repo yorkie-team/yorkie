@@ -40,7 +40,19 @@ closed.
       stops answering with it (the restored copy takes the slot over).
 - [x] `make verify` per commit; `make test` (MongoDB was up) green.
 - [x] Self review: round 1 clean (no blocking findings), logged in lessons.
-- [ ] Rebase on `origin/main`, push, open PR.
+- [x] Rebase on `origin/main`, push, open PR (#2069).
+- [x] Split out the payload hardening the review loop grew (see Scope).
+
+## Scope
+
+The review loop on #2069 grew six rounds of hardening against crafted
+payloads on top of G1 and G2: refusing a loser that cannot be tombstoned,
+honoring that refusal at every Set call site, validating element tickets at
+the converter boundary, and rescuing the new rejections on the stored path.
+Every blocking finding of the last round sat in that layer, none in G1 or G2,
+and the hole it started from (a loser with a createdAt later than the ticket
+that beat it stays live) predates this change. It moved to
+`fix/element-set-payload-hardening` so this PR stays the two parity fixes.
 
 ## Design (G2)
 
