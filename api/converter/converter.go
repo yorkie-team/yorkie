@@ -73,7 +73,8 @@ var (
 	// No document state a replica can reach encodes to such bytes -- every
 	// member's createdAt precedes the ticket of whatever replaced it -- so
 	// this is a malformed payload, and dropping the member silently would
-	// hand back an object short a key the sender believes it sent.
+	// hand back an object short a member the sender believes it sent. A
+	// snapshot drops the member instead; see fromJSONObject.
 	ErrRefusedMember = errors.InvalidArgument("refused object member").WithCode("ErrRefusedMember")
 
 	// ErrInvalidElementTicket is returned when an element payload carries a

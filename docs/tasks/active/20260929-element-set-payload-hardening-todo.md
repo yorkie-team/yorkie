@@ -37,7 +37,10 @@ member's slot in `Root.elementMap`.
       stamps movedAt = executedAt). Fix: reject an object member positioned
       before its createdAt, keeping the exemption for array elements that
       undo re-identifies, and reject a Set value created after its Set.
-- [ ] The snapshot decode path has no rescue for `ErrRefusedMember`.
+- [x] The snapshot decode path has no rescue for `ErrRefusedMember`. Red:
+      `TestRefusedMemberInSnapshotStaysLoadable`. Fix: the container decoders
+      take `dropRefused`; a snapshot drops the member (no key reached it, so
+      the content is unchanged), a pushed payload still rejects it.
 
 ## Review
 

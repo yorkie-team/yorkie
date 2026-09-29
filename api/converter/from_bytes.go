@@ -42,7 +42,7 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
 		return nil, nil, fmt.Errorf("unmarshal snapshot: %w", err)
 	}
 
-	obj, err := fromJSONElement(pbSnapshot.GetRoot())
+	obj, err := fromJSONElement(pbSnapshot.GetRoot(), true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -66,7 +66,7 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 		return nil, fmt.Errorf("unmarshal element: %w", err)
 	}
 
-	obj, err := fromJSONObject(pbElem.GetJsonObject())
+	obj, err := fromJSONObject(pbElem.GetJsonObject(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func BytesToArray(snapshot []byte) (*crdt.Array, error) {
 		return nil, fmt.Errorf("unmarshal array: %w", err)
 	}
 
-	array, err := fromJSONArray(pbArray.GetJsonArray())
+	array, err := fromJSONArray(pbArray.GetJsonArray(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -112,15 +112,18 @@ func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
 	return tree, nil
 }
 
-func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
+// fromJSONElement decodes one element and its subtree. dropRefused decides
+// what happens to an object member the ElementRHT refuses; see
+// fromJSONObject.
+func fromJSONElement(pbElem *api.JSONElement, dropRefused bool) (crdt.Element, error) {
 	if pbElem == nil {
 		return nil, fmt.Errorf("json element is nil")
 	}
 	switch decoded := pbElem.Body.(type) {
 	case *api.JSONElement_JsonObject:
-		return fromJSONObject(decoded.JsonObject)
+		return fromJSONObject(decoded.JsonObject, dropRefused)
 	case *api.JSONElement_JsonArray:
-		return fromJSONArray(decoded.JsonArray)
+		return fromJSONArray(decoded.JsonArray, dropRefused)
 	case *api.JSONElement_Primitive_:
 		return fromJSONPrimitive(decoded.Primitive)
 	case *api.JSONElement_Text_:
@@ -134,13 +137,13 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 	}
 }
 
-func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
+func fromJSONObject(pbObj *api.JSONElement_JSONObject, dropRefused bool) (*crdt.Object, error) {
 	if pbObj == nil {
 		return nil, fmt.Errorf("json object is nil")
 	}
 	members := crdt.NewElementRHT()
 	for _, pbNode := range pbObj.Nodes {
-		elem, err := fromJSONElement(pbNode.Element)
+		elem, err := fromJSONElement(pbNode.Element, dropRefused)
 		if err != nil {
 			return nil, err
 		}
@@ -156,15 +159,22 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 		// the JS SDK (fromObject in converter.ts), which passes
 		// value.getPositionedAt() to rht.set.
 		//
-		// This is a reconstruction, not an operation, so a member that is
-		// refused has nowhere else to go: it would be absent from the decoded
-		// object with nothing recording that it was ever there. Bytes a
-		// replica can produce never reach that path (a member's createdAt
-		// always precedes the ticket of whatever replaced it), and these bytes
-		// are not always server-built -- the same decoder reads the element
-		// payload of a client-pushed Set/Add/ArraySet -- so the refusal is a
-		// malformed payload to reject, not a member to quietly drop.
+		// A refused member is a loser no key reaches. Bytes a replica can
+		// produce never carry one (a member's createdAt always precedes the
+		// ticket of whatever replaced it), but what to do with it depends on
+		// where the bytes came from:
+		//
+		//   - The element payload of a client-pushed Set/Add/ArraySet is a
+		//     change the client can be told about, so it is rejected.
+		//   - A snapshot (dropRefused) is stored state with no other source.
+		//     Rejecting it would make the document unloadable for the server
+		//     and every client that attaches, so the member is dropped -- how
+		//     this decoder read it before the refusal existed. No key reached
+		//     it, so the document's content is the same either way.
 		if _, indexed := members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem)); !indexed {
+			if dropRefused {
+				continue
+			}
 			return nil, fmt.Errorf("json_object.node %s: %w", elem.CreatedAt().Key(), ErrRefusedMember)
 		}
 	}
@@ -200,7 +210,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 	return obj, nil
 }
 
-func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
+func fromJSONArray(pbArr *api.JSONElement_JSONArray, dropRefused bool) (*crdt.Array, error) {
 	if pbArr == nil {
 		return nil, fmt.Errorf("json array is nil")
 	}
@@ -223,7 +233,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 			continue
 		}
 
-		elem, err := fromJSONElement(pbNode.Element)
+		elem, err := fromJSONElement(pbNode.Element, dropRefused)
 		if err != nil {
 			return nil, err
 		}
