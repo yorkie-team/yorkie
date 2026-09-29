@@ -156,3 +156,14 @@ clone root, which is where local undo runs -- silently skipping the retire
 this task added. The json layer now registers the embedded CRDT container,
 for `RegisterElement` too: its `parent` reaches `adoptRemovedElementPair` and
 would have recorded proxies the same way.
+
+## The repro has to reach the check it claims to trip
+
+Round 6 said an ArraySet redo would be refused at the wire. The first repro
+passed on the unfixed code: `validateElementTickets` only runs for container
+payloads, and the Go `json.Array` can only assign primitives, so a Go client
+never carries the shape to the check. Tracing the redo change showed the
+shape was there all along (removedAt 4, createdAt 7), just below the check's
+reach. The test now asserts the invariant on the operation itself, which is
+what fails for Go, and names the JS path (assigning an object) that reaches
+the rejection. A test that passes before the fix is a question, not a Green.
