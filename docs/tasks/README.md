@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Mark LWW losers removed and stop leaking GC size records (2026-09-27) | [20260927-element-rht-loser-and-gc-record-todo.md](./active/20260927-element-rht-loser-and-gc-record-todo.md) | [20260927-element-rht-loser-and-gc-record-lessons.md](./active/20260927-element-rht-loser-and-gc-record-lessons.md) |
 | Guard empty-text anchors and reset the clone on failed applies (2026-09-26) | [20260926-tree-anchor-and-clone-reset-todo.md](./active/20260926-tree-anchor-and-clone-reset-todo.md) | [20260926-tree-anchor-and-clone-reset-lessons.md](./active/20260926-tree-anchor-and-clone-reset-lessons.md) |
 | Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
 | Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./active/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./active/20260926-backport-hook-fixes-lessons.md) |
