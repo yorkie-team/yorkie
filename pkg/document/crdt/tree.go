@@ -2473,10 +2473,14 @@ func (t *Tree) beginsInside(node, declaredFromParent *TreeNode) bool {
 // order, measured with removed nodes included so that a concurrent removal
 // between the two positions moves neither.
 //
-// A from-position that does not resolve answers no: its parent or left
-// sibling is unknown here, or a concurrent merge has moved the left sibling
-// out of the declared parent. Answering yes instead turns converging pairs
-// into diverging ones. The Port specification states this case, because an
+// A from-position whose parent or left sibling is unknown here answers no.
+// One whose left sibling is no longer a child of the declared parent still
+// began inside what it declared, so beginsInside answers for it, but it has
+// no document order: a concurrent merge moved the sibling, and the index
+// lookup fails and answers no. Answering yes there instead turns converging
+// pairs into diverging ones; refusing the begins-inside half as well drops the
+// closure for a concurrent split that moved the sibling, which is the case
+// the closure exists for. The Port specification states both, because an
 // offset lookup that does not fail on a missing child (JS findOffset returns
 // -1) would resolve a position here instead of refusing it.
 func (t *Tree) beginsAtOrInside(node, declaredFromParent, declaredFromLeft *TreeNode) bool {

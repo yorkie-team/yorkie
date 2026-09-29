@@ -672,10 +672,12 @@ not in the suite, 40 s) shows the document-order half closing 4,265
 diverging pairs and opening none; the JS port reproduces the same
 4,265.
 
-A from-position that does not resolve answers no: its parent or left
-sibling is unknown, or a concurrent merge has moved the left sibling
-out of the declared parent. Answering yes there closes 368 more pairs
-of that scan but opens 5 that converge now, so it is not taken.
+A from-position whose parent or left sibling is unknown answers no, and
+so does the document-order half when a concurrent merge has moved the
+left sibling out of the declared parent. Answering yes there closes 368
+more pairs of that scan but opens 5 that converge now, so it is not
+taken. Answering no for the begins-inside half as well opens 43,448 and
+breaks the split scans: a concurrent split moves that sibling too.
 
 ```
 <r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
@@ -998,10 +1000,12 @@ than a re-derivation:
    directions along the split lineage as in rule 4 — or, failing
    that, it sits at or before that member's Start token in document
    order, both indices counted with removed nodes included.
-   A range-start position whose parent or left sibling is unknown, or
-   whose left sibling is no longer a child of its declared parent,
-   fails (c); an offset lookup that returns -1 for a missing child
-   instead of failing must refuse that case explicitly.
+   A range-start position whose parent or left sibling is unknown fails
+   (c). One whose left sibling is no longer a child of its declared
+   parent fails only the document-order half: it has no index, and an
+   offset lookup that returns -1 for a missing child instead of failing
+   must refuse it explicitly. Refusing the begins-inside half too would
+   drop the closure whenever a concurrent split moved that sibling.
    Condition (c) is what a split of more than one level needs: it can
    move the right half's End token into a range that began after the
    known member.
