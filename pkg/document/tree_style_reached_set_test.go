@@ -798,6 +798,48 @@ func TestStyleAfterLevelTwoSplitBeforeRange(t *testing.T) {
 	})
 }
 
+// A split and a merge in one change, against a range that began BEFORE the
+// split paragraph. The change splits <p>efgh</p> after "e" and then deletes
+// across the boundary before it, merging "e" into <p>abcd</p>; the style
+// covers both paragraphs whole. Applied after the style's change, the merge
+// moves the traversal past the known half's Start token, and only the
+// split-family closure styles <p>fgh</p>. The range never named that paragraph
+// as its parent, so begins-inside alone drops the closure there, and the two
+// delivery orders disagree on <p>fgh</p>. It began before the paragraph, and
+// the document-order half of the guard keeps the closure.
+func TestStyleBeforeSplitAndMergeInOneChange(t *testing.T) {
+	edit := func(tree *json.Tree) {
+		tree.Edit(10, 10, nil, 1)
+		tree.Edit(7, 9, nil, 0)
+	}
+
+	t.Run("style", func(t *testing.T) {
+		base := nestedScanBase(t, nil)
+		pA, pB := concurrentTreeChanges(t, base, edit,
+			func(tree *json.Tree) { styleRange(tree, 0, 14) },
+		)
+
+		ab := replayStyleOrder(t, base, pA, pB)
+		ba := replayStyleOrder(t, base, pB, pA)
+		require.Equal(t, `<r><p b="x"><p b="x"><p b="x">abcde</p><p b="x">fgh</p></p>`+
+			`<p>ijkl</p></p></r>`, ba.xml)
+		require.Equal(t, ba, ab, "split-and-merge-then-style diverges from the other order")
+	})
+
+	t.Run("remove-style", func(t *testing.T) {
+		base := nestedScanBase(t, map[string]string{"b": "x"})
+		pA, pB := concurrentTreeChanges(t, base, edit,
+			func(tree *json.Tree) { tree.RemoveStyle(0, 14, []string{"b"}) },
+		)
+
+		ab := replayStyleOrder(t, base, pA, pB)
+		ba := replayStyleOrder(t, base, pB, pA)
+		require.Equal(t, `<r><p><p><p>abcde</p><p>fgh</p></p>`+
+			`<p b="x">ijkl</p></p></r>`, ba.xml)
+		require.Equal(t, ba, ab, "split-and-merge-then-remove-style diverges from the other order")
+	})
+}
+
 // nestedScanBase is the shape of splitEditBase, 22 wide inside the root, with
 // every paragraph carrying attrs (none when attrs is nil). The flat scans
 // above split one level of a flat tree, so a split never moves a half into a

@@ -654,9 +654,28 @@ only the latter never covered the element. The traversal usually
 reaches such a node on its own Start token and the branch never runs;
 when a concurrent removal or §9.4's from-side recovery moves the
 resolved start past it, this branch is the only thing left that styles
-the family, and document order is what distinguishes the two. A
-from-position that no longer resolves leaves the answer at yes, the
-direction §9.6 fails in as well.
+the family, and document order is what distinguishes the two:
+
+```
+<r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
+A: Edit(10, 10, nil, 1); Edit(7, 9)  // <p>e|fgh</p>, then merge e left
+B: Style(0, 14, {b: x})              // both paragraphs whole
+
+B,A  <p b="x">abcde</p><p b="x">fgh</p>
+A,B  begins-inside alone: <p>fgh</p> unstyled
+```
+
+None of the scans in the table below produces that shape. A scan of
+one change that splits (levels 1 and 2) and deletes one or two
+positions, in either order, against every style range (899,668 pairs;
+not in the suite, 40 s) shows the document-order half closing 4,265
+diverging pairs and opening none; the JS port reproduces the same
+4,265.
+
+A from-position that does not resolve answers no: its parent or left
+sibling is unknown, or a concurrent merge has moved the left sibling
+out of the declared parent. Answering yes there closes 368 more pairs
+of that scan but opens 5 that converge now, so it is not taken.
 
 ```
 <r><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></r>
@@ -976,7 +995,13 @@ than a re-derivation:
    (b) rule 1 and rule 4 would not skip that member's End token;
    (c) the range-start position was declared inside that member (its
    declared parent is the member or below it), matched in both
-   directions along the split lineage as in rule 4.
+   directions along the split lineage as in rule 4 — or, failing
+   that, it sits at or before that member's Start token in document
+   order, both indices counted with removed nodes included.
+   A range-start position whose parent or left sibling is unknown, or
+   whose left sibling is no longer a child of its declared parent,
+   fails (c); an offset lookup that returns -1 for a missing child
+   instead of failing must refuse that case explicitly.
    Condition (c) is what a split of more than one level needs: it can
    move the right half's End token into a range that began after the
    known member.
@@ -1009,13 +1034,18 @@ set. Until it does, the divergence is the one described above.
 
 **Known limitations** (tracked as follow-ups):
 
-- The JS SDK port is yorkie-js-sdk#1404, which carries Fix 27 as well
-  and lands with it. Its guard is the begins-inside half only; the
-  document-order half above has to land there too, or the two
-  implementations drop the family closure on different shapes. Until
-  both are released, server and JS clients resolve different reached
-  sets for the concurrent split/merge shapes above (see
-  **Cross-implementation**).
+- The JS SDK port is yorkie-js-sdk#1404, which carries Fix 27, both
+  halves, and lands with it. Until both are released, server and JS
+  clients resolve different reached sets for the concurrent split/merge
+  shapes above (see **Cross-implementation**).
+- The two SDKs do not agree on a local edit that deletes across the
+  boundary a level-2 split just made. On the nested base,
+  `Edit(10, 10, nil, 2)` then `Edit(11, 13)` leaves the split as it is
+  in Go and merges it back under one parent in JS, so the same call
+  produces different operations. 129 pairs of the split-and-delete
+  scan above diverge in Go and not in JS, all of this shape (a level-2
+  split, then a delete right after it); the one traced comes from
+  this.
 - A split of the element a style's range-end position is declared in,
   before that position, still diverges: 152 of the nested scan's 11592
   pairs, all of which converged before Fix 25. The end position moves

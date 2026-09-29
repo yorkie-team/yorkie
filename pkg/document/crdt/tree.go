@@ -2473,16 +2473,20 @@ func (t *Tree) beginsInside(node, declaredFromParent *TreeNode) bool {
 // order, measured with removed nodes included so that a concurrent removal
 // between the two positions moves neither.
 //
-// A from-position that no longer resolves says nothing either way, so it
-// leaves the answer at yes, the direction the §9.6 guard fails in as well.
+// A from-position that does not resolve answers no: its parent or left
+// sibling is unknown here, or a concurrent merge has moved the left sibling
+// out of the declared parent. Answering yes instead turns converging pairs
+// into diverging ones. The Port specification states this case, because an
+// offset lookup that does not fail on a missing child (JS findOffset returns
+// -1) would resolve a position here instead of refusing it.
 func (t *Tree) beginsAtOrInside(node, declaredFromParent, declaredFromLeft *TreeNode) bool {
-	if declaredFromParent == nil {
-		return true
+	if declaredFromParent == nil || declaredFromLeft == nil {
+		return false
 	}
 	if t.beginsInside(node, declaredFromParent) {
 		return true
 	}
-	if node.Index.Parent == nil || declaredFromLeft == nil {
+	if node.Index.Parent == nil {
 		return false
 	}
 
