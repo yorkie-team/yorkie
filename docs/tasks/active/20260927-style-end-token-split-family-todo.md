@@ -40,6 +40,7 @@ reached through its End token alone only when the range began inside it
 - [x] Confirm `ac88215d^` converges on the same pair
 - [x] Fix: the split-family branch also requires
       `beginsInside(family[0], declaredFromParent)` — the JS guard verbatim
+      (round 1; widened in round 2 and settled in round 3, below)
 - [x] Green; existing scan counts unchanged (1001/759/1862, 7098/4254/6302,
       tombstone-only ≤ 1292)
 - [x] Extend the scans to a nested base with split levels 1 and 2, so this
@@ -48,6 +49,12 @@ reached through its End token alone only when the range began inside it
 - [x] `make verify`, `make test` if MongoDB is up, complex split-edit subset
 - [x] Self review (max 3 rounds), log in lessons
 - [x] Rebase, push, open PR linking yorkie-js-sdk#1404
+- [x] Round 2: widen the guard to `beginsAtOrInside` (begins inside, or at
+      or before the known member in document order)
+- [x] Round 3: reproduce the case the order half exists for, in Go and in
+      JS; make an unresolvable from-position answer no; name the case in a
+      test; state both halves and the unresolvable case in Port spec 2(c);
+      port the order half to yorkie-js-sdk#1404
 
 ## Result
 
@@ -65,6 +72,23 @@ RemoveStyle matches Style on every count. Per pair: the guard turns no
 converging pair into a diverging one; it closes 36 pairs #2038 broke and 86
 older ones. Every complex-suite split-edit pair now converges (145 pass, 0
 skipped).
+
+### Round 3: the final guard
+
+The shipped guard is `beginsAtOrInside`: the range-start was declared inside
+the known member, or at or before its Start token in document order (removed
+nodes counted); a from-position that does not resolve answers no. The order
+half fires on no pair of the scans above. It matters for one change that
+splits and then deletes, which those scans never generate:
+
+| split-and-delete x style (899,668 pairs, not in the suite) | diverging |
+|---|---|
+| begins-inside only (round 1, and #1404 before round 3) | 119,801 |
+| `beginsAtOrInside` | 115,536 (4,265 closed, 0 opened) |
+| same, unresolvable answering yes | 115,173 (368 closed, 5 opened) |
+
+The JS port, run over the same pairs, closes the same 4,265 and opens none.
+`TestStyleBeforeSplitAndMergeInOneChange` names one of them.
 
 ## Known limitation
 

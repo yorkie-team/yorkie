@@ -42,7 +42,7 @@ began before the known node reaches its Start token through the canStyle
 branch instead, and one that began inside it or a descendant passes
 `beginsInside`.
 
-No blocking findings, so the review stops here. Non-blocking ones:
+Round 1 had no blocking findings. Non-blocking ones:
 
 - Port spec rule 2 said "named that member as its parent", which is
   narrower than `beginsInside` (the member or any descendant). Reworded,
@@ -73,7 +73,7 @@ range-start sits at or before the known member's Start token in document
 order, both indices taken with removed nodes included so a concurrent
 removal between them moves neither. A from-position that no longer resolves
 leaves the answer at yes, matching the §9.6 guard's fail direction instead
-of inverting it (the panel's second point). Every scan count is unchanged —
+of inverting it (the panel's second point). (Round 3 reverses this; see below.) Every scan count is unchanged —
 the added disjunct fires on no pair in the split or merge families, which
 is what "the traversal usually reaches such a node on its own Start token"
 predicts — and the level-2 pair still converges.
@@ -81,3 +81,29 @@ predicts — and the level-2 pair still converges.
 The JS guard (yorkie-js-sdk#1404) is now the narrower half of this one.
 Recorded in the design doc's known limitations: the order half has to land
 there too, or the two implementations drop the closure on different shapes.
+
+### Round 3 (maintainer, cross-SDK reproduction)
+
+"Fires on no pair" was true, and it meant the order half had been added for
+a shape nobody had produced. Counting each branch of the guard over the unit
+scans and the complex suite gave zero decisive calls. One change that splits
+and then deletes, raced against every style range, gave 13,014 decisive
+calls, and on/off per pair gave 4,265 closed and 0 opened. A guard with no
+counterexample is only as good as the generator that failed to find one;
+widen the generator before trusting a rule, or before removing it.
+
+The fail direction was measured, not argued. Answering yes on an
+unresolvable from-position closed 368 pairs and opened 5, so it answers no,
+the same as JS's `declaredFrom &&`.
+
+The first JS port opened exactly those 5 pairs. Go's `FindOffset` fails when
+the left sibling is no longer a child of its parent; JS's `findOffset`
+returns -1 and `toTreePos` then resolves offset 0. The same predicate over
+different error surfaces is a different predicate, so Port spec 2(c) now
+names that case. Comparing the two SDKs pair by pair over one generator is
+what found it; comparing totals would have shown 4,285 against 4,265 and
+looked like JS doing better.
+
+The same comparison surfaced 129 pairs that diverge in Go only, from a local
+edit the two SDKs perform differently (a delete across a boundary a level-2
+split just made). Recorded under Known limitations; it is not this rule.
