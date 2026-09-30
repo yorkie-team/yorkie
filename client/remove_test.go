@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
+	gotime "time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
@@ -30,6 +30,9 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
@@ -57,7 +60,7 @@ func (s *removeTestServer) RemoveDocument(
 // dropping it from c.attachments without cancelling watchCtx would leak both
 // goroutines for the lifetime of the client.
 func TestRemoveStopsWatchPipeline(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*gotime.Second)
 	defer cancel()
 
 	mux := http.NewServeMux()
@@ -100,4 +103,79 @@ func TestRemoveStopsWatchPipeline(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("watch stream was not closed after the document was removed")
 	}
+}
+
+// TestStopWatchPipelineOutlivesStreamReaders pins the teardown order. The pump
+// is the sole consumer of Document.Events and Document.publish is an
+// unconditional send on a capacity-one channel made under the document's event
+// mutex, so retiring the pump while a stream reader is still reconciling
+// presence wedges that reader -- and, through the event mutex, every other
+// publisher -- for good. The teardown must drain the readers first.
+func TestStopWatchPipelineOutlivesStreamReaders(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*gotime.Second)
+	defer cancel()
+
+	doc := document.New(key.Key("stop-waits-for-readers"))
+	doc.SetStatus(document.StatusAttached)
+	peerID := givePeerPresence(t, doc)
+
+	watchCtx, closeWatch := context.WithCancel(ctx)
+	defer closeWatch()
+	attachment := &Attachment{
+		resourceID:       types.ID("000000000000000000000000"),
+		resource:         doc,
+		watchCtx:         watchCtx,
+		closeWatchStream: closeWatch,
+	}
+	startWatchPipeline(watchCtx, attachment, doc)
+
+	// Stands in for the stream reader runWatchLoop registers: it keeps
+	// publishing presence reconciliations after watchCtx is cancelled, exactly
+	// as one still working through handleWatchResponse does.
+	readerDone := make(chan struct{})
+	started := make(chan struct{})
+	attachment.watchReaders.Add(1)
+	go func() {
+		defer close(readerDone)
+		defer attachment.watchReaders.Done()
+
+		close(started)
+		for range 64 {
+			doc.AddOnlineClientAndReconcile(peerID)
+			doc.RemoveOnlineClientAndReconcile(peerID)
+		}
+	}()
+	<-started
+
+	stopWatchPipeline(attachment)
+
+	select {
+	case <-readerDone:
+	case <-ctx.Done():
+		t.Fatal("stream reader wedged: the pump was retired while it was still publishing")
+	}
+}
+
+// givePeerPresence hands the document a peer that has presence, so toggling
+// that peer online and offline emits a watched/unwatched event every time.
+func givePeerPresence(t *testing.T, d *document.Document) string {
+	t.Helper()
+
+	actor, err := time.ActorIDFromHex("000000000000000000000009")
+	require.NoError(t, err)
+
+	peer := document.New(d.Key())
+	peer.SetActor(actor)
+	require.NoError(t, peer.Update(func(_ *json.Object, p *presence.Presence) error {
+		p.Set("name", "peer")
+		return nil
+	}))
+
+	pack := peer.CreateChangePack()
+	copied := *pack
+	copied.VersionVector = pack.VersionVector.DeepCopy()
+	copied.VersionVector.Set(d.ActorID(), d.VersionVector().VersionOf(d.ActorID()))
+	require.NoError(t, d.ApplyChangePack(&copied))
+
+	return actor.String()
 }

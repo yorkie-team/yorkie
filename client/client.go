@@ -282,10 +282,11 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		c.syncLoopWg.Wait()
 	}
 
+	// The sync loop is already stopped above, so the pipelines have no
+	// ApplyChangePack left to serve; the teardown still has to drain the
+	// stream readers before retiring each pump.
 	for _, attachment := range c.attachments.Values() {
-		if attachment.closeWatchStream != nil {
-			attachment.closeWatchStream()
-		}
+		stopWatchPipeline(attachment)
 	}
 
 	_, err := c.client.DeactivateClient(
@@ -358,11 +359,18 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 			options.mode = types.SyncModePushOnly
 		}
 
+		// Cleared before the push, not after it: the stream reader sets the
+		// flag without taking syncMu, so clearing afterwards would swallow a
+		// change event that landed while the push was in flight. Restored on
+		// failure so a pending remote change still forces the next sync.
+		pending := attachment.changeEventReceived.Swap(false)
 		if err := c.pushPullChanges(ctx, options); err != nil {
+			if pending {
+				attachment.changeEventReceived.Store(true)
+			}
 			return err
 		}
 
-		attachment.changeEventReceived = false
 		return nil
 	}
 
@@ -468,9 +476,9 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...an
 	// Keep the watch pipeline alive while applying the final ChangePack. Its
 	// event pump is the sole consumer of Document.Events, so stopping it first
 	// can leave ApplyChangePack blocked when the pack emits multiple events.
-	if attachment.closeWatchStream != nil {
-		attachment.closeWatchStream()
-	}
+	// syncMu is still held here, which is what keeps a concurrent sync from
+	// applying a pack into a pipeline that is being dismantled.
+	stopWatchPipeline(attachment)
 
 	return nil
 }
@@ -573,14 +581,13 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	}
 
 	attachment := &Attachment{
-		resource:            d,
-		resourceID:          types.ID(res.Msg.DocumentId),
-		watchCtx:            watchCtx,
-		closeWatchStream:    cancelFunc,
-		syncMode:            syncMode,
-		changeEventReceived: false,
-		disableGC:           opts.DisableGC,
-		disablePresence:     res.Msg.DisablePresence,
+		resource:         d,
+		resourceID:       types.ID(res.Msg.DocumentId),
+		watchCtx:         watchCtx,
+		closeWatchStream: cancelFunc,
+		syncMode:         syncMode,
+		disableGC:        opts.DisableGC,
+		disablePresence:  res.Msg.DisablePresence,
 	}
 	if opts.IsRealtime {
 		// Start the delivery pipeline before the attachment is published and
@@ -983,19 +990,27 @@ func (c *Client) WatchStream(
 //	pump ──────────┘
 //
 // The pump and the sender are owned by the attachment, not by a single
-// runWatchLoop invocation, and run until ctx -- the attachment's watchCtx --
-// is cancelled by Detach or Deactivate. The pump is the sole consumer of the
-// document event channel and only appends to the unbounded buffer, so
-// producers emitting document events under the document's event mutex are
-// never blocked by a slow application reading the stream, nor by a watch
-// loop re-establishing its stream after a disconnect. The sender is the sole
-// writer and closer of the response channel.
+// runWatchLoop invocation. The pump is the sole consumer of the document event
+// channel and only appends to the unbounded buffer, so producers emitting
+// document events under the document's event mutex are never blocked by a slow
+// application reading the stream, nor by a watch loop re-establishing its
+// stream after a disconnect. The sender is the sole writer and closer of the
+// response channel.
+//
+// The sender stops with ctx -- the attachment's watchCtx -- but the pump stops
+// only when stopWatchPipeline closes watchPumpStop, which it does after every
+// producer has exited. Document.publish is an unconditional send on a
+// capacity-one channel held under the document's event mutex, so a pump that
+// left while a producer was still running would wedge that producer, and with
+// it every other publisher, for good.
 func startWatchPipeline(ctx context.Context, attachment *Attachment, d *document.Document) {
 	buf := newWatchBuffer()
 	rch := make(chan WatchDocResponse)
+	pumpStop := make(chan struct{})
 	pumpDone := make(chan struct{})
 	attachment.watchBuf = buf
 	attachment.watchStream = rch
+	attachment.watchPumpStop = pumpStop
 	attachment.watchPumpDone = pumpDone
 
 	// pump: document events -> buf.
@@ -1012,7 +1027,7 @@ func startWatchPipeline(ctx context.Context, attachment *Attachment, d *document
 					t = DocumentUnwatched
 				}
 				buf.push(WatchDocResponse{Type: t, Presences: e.Presences})
-			case <-ctx.Done():
+			case <-pumpStop:
 				return
 			}
 		}
@@ -1035,16 +1050,33 @@ func startWatchPipeline(ctx context.Context, attachment *Attachment, d *document
 	}()
 }
 
-// stopWatchPipeline cancels the attachment's watch context and waits for its
-// event pump to exit, so a caller rolling back a half-established attachment
-// knows no goroutine is left consuming the document's events.
+// stopWatchPipeline tears the attachment's delivery pipeline down and returns
+// once no goroutine is left consuming or producing the document's events.
+//
+// The order is producers first, pump last. Cancelling watchCtx does not stop a
+// stream reader instantly: it may be inside handleWatchResponse, publishing a
+// presence reconciliation onto the document's capacity-one event channel under
+// the document's event mutex. That send has no cancellation path, so the pump
+// has to stay until every reader has returned -- otherwise the reader blocks
+// forever and takes every other publisher, the sync goroutine's
+// ApplyChangePack included, down with it.
+//
+// Callers must not hold attachment.syncMu on behalf of another goroutine that
+// a reader waits for; the readers themselves take no client lock, which is why
+// Detach, Remove and pushPullChanges can call this under syncMu.
 func stopWatchPipeline(attachment *Attachment) {
-	if attachment.closeWatchStream != nil {
-		attachment.closeWatchStream()
-	}
-	if attachment.watchPumpDone != nil {
-		<-attachment.watchPumpDone
-	}
+	attachment.watchStopOnce.Do(func() {
+		if attachment.closeWatchStream != nil {
+			attachment.closeWatchStream()
+		}
+		attachment.watchReaders.Wait()
+		if attachment.watchPumpStop != nil {
+			close(attachment.watchPumpStop)
+		}
+		if attachment.watchPumpDone != nil {
+			<-attachment.watchPumpDone
+		}
+	})
 }
 
 // runWatchLoop subscribes to events on a given document using the unified Watch RPC.
@@ -1103,8 +1135,11 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 		return err
 	}
 
-	// stream reader: server responses -> buf.
-	go func() {
+	// stream reader: server responses -> buf. Registered with the attachment
+	// so stopWatchPipeline can wait for it; a reconnect registers its
+	// successor from inside this goroutine, before this one returns, so the
+	// counter never dips to zero across the handover.
+	attachment.watchReaders.Go(func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
@@ -1121,13 +1156,12 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 				continue
 			}
 
-			// Set remote change event flag when document change is received
+			// Set remote change event flag when document change is received.
+			// Without syncMu: this goroutine is what a teardown holding
+			// syncMu waits for, so taking the lock here would deadlock.
 			if resp.Type == DocumentChanged {
-				attachment, ok := c.attachments.Get(d.Key())
-				if ok {
-					attachment.syncMu.Lock()
-					attachment.changeEventReceived = true
-					attachment.syncMu.Unlock()
+				if attachment, ok := c.attachments.Get(d.Key()); ok {
+					attachment.changeEventReceived.Store(true)
 				}
 			}
 
@@ -1150,7 +1184,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			return
 		}
 		buf.close()
-	}()
+	})
 
 	return nil
 }
@@ -1266,7 +1300,8 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 		// dropping the attachment is not enough: without cancelling watchCtx
 		// the pump and the sender would outlive the removed document. Cancel
 		// after ApplyChangePack, as Detach does, so the pump is still
-		// consuming Document.Events while the final pack is applied.
+		// consuming Document.Events while the final pack is applied. syncMu
+		// is held by our caller, syncInternal, for the whole of that.
 		stopWatchPipeline(attachment)
 	}
 
@@ -1283,6 +1318,13 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 	if !ok {
 		return ErrNotAttached
 	}
+
+	// Held for the same reason Detach holds it: the removal ends by tearing
+	// the delivery pipeline down, and a sync running concurrently would
+	// otherwise lose the consumer of Document.Events part way through its own
+	// ApplyChangePack and wedge on the next event it publishes.
+	attachment.syncMu.Lock()
+	defer attachment.syncMu.Unlock()
 
 	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
@@ -1313,6 +1355,8 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 		c.attachments.Delete(d.Key())
 		// See pushPullChanges: the attachment owns the pipeline, so the
 		// removal has to cancel watchCtx or the pump and the sender leak.
+		// Deleted from the map first so a stream reader still winding down
+		// stops recording change events against a removed document.
 		stopWatchPipeline(attachment)
 	}
 

@@ -165,3 +165,27 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
   window it was meant to cover was long closed. Holding the successor's
   handshake open *on the server* puts the window inside the assertions — the
   rewritten test fails on the pre-fix code within 10ms.
+- **Round 4 (review panel on #2084, blast-radius lens).** Giving the pipeline
+  to the attachment made the pump outlive each `runWatchLoop`, but teardown
+  still keyed off `watchCtx`, and cancelling a context does not stop a
+  producer — it only asks. The stream reader keeps running
+  `handleWatchResponse`, which reconciles presence through
+  `Document.publish`: an unconditional send on a capacity-one channel made
+  under the document's event mutex, with no cancellation path. So a teardown
+  that cancelled and joined the pump could retire the only consumer while a
+  reader was mid-publish, wedging that reader and, through the event mutex,
+  every other publisher. The fix is an ordering, not a lock: stop the
+  producers first, the pump last. The pump now stops on its own
+  `watchPumpStop`, and `stopWatchPipeline` cancels, waits on a
+  `watchReaders` WaitGroup, and only then retires the pump.
+- Waiting for a goroutine means inheriting every lock that goroutine takes.
+  The stream reader took `attachment.syncMu` just to set
+  `changeEventReceived`, so the moment teardown waits for readers, any caller
+  holding `syncMu` — `Detach`, and `pushPullChanges` under `syncInternal` —
+  deadlocks against it. Making the flag an `atomic.Bool` severs the edge. The
+  reset then had to move *before* the push and be restored on failure:
+  without `syncMu` serialising them, clearing after the push swallows an event
+  that landed while it was in flight.
+- The lesson underneath both: "cancel and join" reads like a complete
+  shutdown, but it is only complete when the thing you join is the *last*
+  producer. Enumerate the producers before choosing what to wait on.

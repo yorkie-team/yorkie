@@ -18,6 +18,7 @@ package client
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -51,21 +52,43 @@ type Attachment struct {
 	watchCtx         context.Context
 	closeWatchStream context.CancelFunc
 
-	// watchStream, watchBuf and watchPumpDone form the watch delivery
-	// pipeline. It belongs to the attachment rather than to a single
-	// runWatchLoop invocation: the event pump and the sender live until
-	// watchCtx is cancelled, so a loop re-establishing its stream never
-	// leaves Document.Events without a consumer, and watchStream is written
-	// once, before the attachment is published, rather than rewritten from
-	// the reconnecting goroutine. All three are immutable after that point.
+	// watchStream, watchBuf, watchPumpStop and watchPumpDone form the watch
+	// delivery pipeline. It belongs to the attachment rather than to a single
+	// runWatchLoop invocation: the event pump and the sender live until the
+	// pipeline is stopped, so a loop re-establishing its stream never leaves
+	// Document.Events without a consumer, and watchStream is written once,
+	// before the attachment is published, rather than rewritten from the
+	// reconnecting goroutine. All four are immutable after that point.
+	//
+	// The pump stops on watchPumpStop rather than on watchCtx because it has
+	// to outlive every producer of document events, and the stream readers
+	// keep publishing presence reconciliations for as long as they take to
+	// notice the cancelled watchCtx. See stopWatchPipeline.
 	watchStream   <-chan WatchDocResponse
 	watchBuf      *watchBuffer
+	watchPumpStop chan struct{}
 	watchPumpDone chan struct{}
 
-	syncMu              sync.RWMutex
-	syncMode            SyncMode
-	changeEventReceived bool
-	lastSyncTime        gotime.Time
+	// watchReaders counts the stream reader goroutines runWatchLoop has
+	// started and not yet finished. A reconnect adds the new reader before
+	// the old one returns, so the counter never drops to zero mid-handover.
+	watchReaders sync.WaitGroup
+
+	// watchStopOnce guards the teardown so a second caller -- Deactivate
+	// walking an attachment a failed Attach already rolled back, say -- waits
+	// for the first teardown instead of closing watchPumpStop twice.
+	watchStopOnce sync.Once
+
+	syncMu       sync.RWMutex
+	syncMode     SyncMode
+	lastSyncTime gotime.Time
+
+	// changeEventReceived records that the watch stream reported a remote
+	// change that this client has not pulled yet. It is atomic rather than
+	// guarded by syncMu because the stream reader sets it: a reader that
+	// takes syncMu would deadlock against a teardown that holds syncMu and
+	// waits for the readers to exit.
+	changeEventReceived atomic.Bool
 
 	// disableGC is set when the document was attached with
 	// WithDisableGC. The client sets the matching wire field on every
@@ -105,7 +128,7 @@ func (a *Attachment) needSync(heartbeatInterval gotime.Duration) bool {
 		}
 
 		return a.syncMode != SyncModeManual &&
-			(doc.HasLocalChanges() || a.changeEventReceived)
+			(doc.HasLocalChanges() || a.changeEventReceived.Load())
 	}
 
 	if a.syncMode == SyncModeManual {
