@@ -1262,6 +1262,12 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	}
 	if d.Status() == document.StatusRemoved {
 		c.attachments.Delete(d.Key())
+		// The pipeline is owned by the attachment, not by the watch loop, so
+		// dropping the attachment is not enough: without cancelling watchCtx
+		// the pump and the sender would outlive the removed document. Cancel
+		// after ApplyChangePack, as Detach does, so the pump is still
+		// consuming Document.Events while the final pack is applied.
+		stopWatchPipeline(attachment)
 	}
 
 	return nil
@@ -1305,6 +1311,9 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 	}
 	if d.Status() == document.StatusRemoved {
 		c.attachments.Delete(d.Key())
+		// See pushPullChanges: the attachment owns the pipeline, so the
+		// removal has to cancel watchCtx or the pump and the sender leak.
+		stopWatchPipeline(attachment)
 	}
 
 	return nil
