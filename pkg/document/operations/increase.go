@@ -74,8 +74,21 @@ func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 	// Skipped when the source discards the reverse (see OpSource.NeedsReverse):
 	// a remote apply or a server replay must not fail on a reverse it throws
 	// away, as every Double delta did before negatePrimitive handled it.
+	//
+	// The one exception is a Double delta on an Integer counter. It is added
+	// in float64 and the sum is wrapped to 32 bits, so a large delta can
+	// round the old value away (10 + 2^60 gives 0), and its negation cannot
+	// undo that. Its reverse is the change the counter actually made, taken
+	// after the apply, which int32 arithmetic always undoes.
+	needsReverse := o.actor == "" && source.NeedsReverse()
+	reverseFromChange := needsReverse &&
+		value.ValueType() == crdt.Double && cnt.ValueType() == crdt.IntegerCnt
+
 	var reverseOp Operation
-	if o.actor == "" && source.NeedsReverse() {
+	var before int32
+	if reverseFromChange {
+		before = cnt.Value().(int32)
+	} else if needsReverse {
 		negated, err := negatePrimitive(value)
 		if err != nil {
 			return ExecutionResult{}, err
@@ -94,6 +107,14 @@ func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		if _, err := cnt.Increase(value); err != nil {
 			return ExecutionResult{}, err
 		}
+	}
+
+	if reverseFromChange {
+		change, err := crdt.NewPrimitive(before-cnt.Value().(int32), value.CreatedAt())
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+		reverseOp = NewIncrease(o.parentCreatedAt, change, o.executedAt)
 	}
 
 	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil

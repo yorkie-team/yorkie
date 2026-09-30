@@ -28,15 +28,17 @@ import (
 )
 
 func TestIncrease(t *testing.T) {
-	// A JS client sends a fractional delta as a Double primitive. Its
-	// reverse is the negated Double, as in JS IncreaseOperation.
+	// A JS client sends a fractional delta as a Double primitive. On a Long
+	// counter its reverse is the negated Double, as in JS IncreaseOperation.
+	// On an Integer counter it is the Integer change the counter made.
 	t.Run("execute a Double delta and its reverse", func(t *testing.T) {
 		for _, tc := range []struct {
-			cntType crdt.CounterType
-			want    string
+			cntType     crdt.CounterType
+			want        string
+			reverseType crdt.ValueType
 		}{
-			{crdt.IntegerCnt, "11"},
-			{crdt.LongCnt, "11"},
+			{crdt.IntegerCnt, "11", crdt.Integer},
+			{crdt.LongCnt, "11", crdt.Double},
 		} {
 			root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
 			actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
@@ -58,10 +60,56 @@ func TestIncrease(t *testing.T) {
 
 			if assert.NotNil(t, result.Reverse) {
 				reverse := result.Reverse.(*operations.Increase)
-				assert.Equal(t, crdt.Double, reverse.Value().(*crdt.Primitive).ValueType())
+				assert.Equal(t, tc.reverseType, reverse.Value().(*crdt.Primitive).ValueType())
 				_, err = reverse.Execute(root, operations.OpSourceUndoRedo, time.NewVersionVector())
 				assert.NoError(t, err)
 				assert.Equal(t, `{"cnt":10}`, root.Object().Marshal())
+			}
+		}
+	})
+
+	// An Integer counter adds a Double delta in float64 and wraps the sum, so
+	// the negated delta cannot always undo it: 10 + 2^60 rounds away the 10.
+	// The reverse records the change the counter actually made instead.
+	t.Run("undo a Double delta that wraps an Integer counter", func(t *testing.T) {
+		for _, tc := range []struct {
+			delta float64
+			want  string
+		}{
+			{1.5, "11"},
+			{-1.5, "9"},
+			{0x1p31 + 0.5, "-2147483638"},
+			{0x1p60, "0"},
+			{-0x1p60, "0"},
+			{1e20, "1661992960"},
+		} {
+			root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+			actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+
+			cntTicket := time.NewTicket(1, 0, actor)
+			counter, err := crdt.NewCounter(crdt.IntegerCnt, 10, cntTicket)
+			assert.NoError(t, err)
+			set := operations.NewSet(time.InitialTicket, "cnt", counter, cntTicket)
+			_, err = set.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+			assert.NoError(t, err)
+
+			incTicket := time.NewTicket(2, 0, actor)
+			delta, err := crdt.NewPrimitive(tc.delta, incTicket)
+			assert.NoError(t, err)
+			inc := operations.NewIncrease(cntTicket, delta, incTicket)
+			result, err := inc.Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+			assert.NoError(t, err)
+			assert.Equal(t, `{"cnt":`+tc.want+`}`, root.Object().Marshal(), "delta %v", tc.delta)
+
+			if assert.NotNil(t, result.Reverse) {
+				undo, err := result.Reverse.Execute(root, operations.OpSourceUndoRedo, time.NewVersionVector())
+				assert.NoError(t, err)
+				assert.Equal(t, `{"cnt":10}`, root.Object().Marshal(), "undo of delta %v", tc.delta)
+
+				// Redo, the reverse of the undo, applies the change again.
+				_, err = undo.Reverse.Execute(root, operations.OpSourceUndoRedo, time.NewVersionVector())
+				assert.NoError(t, err)
+				assert.Equal(t, `{"cnt":`+tc.want+`}`, root.Object().Marshal(), "redo of delta %v", tc.delta)
 			}
 		}
 	})
