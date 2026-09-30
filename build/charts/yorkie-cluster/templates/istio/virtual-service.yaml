@@ -57,31 +57,6 @@ spec:
           - grpc-message
           - grpc-status-details-bin
         allowCredentials: true
-    # ClusterService is server-to-server only: its RPCs take the project out of
-    # the request message instead of going through project auth, and they can
-    # detach, purge or read documents by project ID alone. Reject it at the
-    # gateway unless the caller presents a cluster-secret header, so an
-    # anonymous caller off the internet never reaches the handler.
-    #
-    # The rule cannot simply drop /yorkie.v1.ClusterService/*: nodes reach each
-    # other through this same gateway (--backend-gateway-addr points at the
-    # gateway Service), so legitimate inter-node traffic arrives here too. What
-    # separates it is the header, which the server then verifies in constant
-    # time - this is the outer of the two gates, not a replacement for it.
-    #
-    # x-cluster-secret is deliberately absent from the CORS allowHeaders lists
-    # below, so a browser cannot be talked into sending one cross-origin.
-    - name: {{ .Values.yorkie.name }}-cluster-service-deny
-      match:
-        - uri:
-            prefix: "/yorkie.v1.ClusterService/"
-          withoutHeaders:
-            x-cluster-secret:
-              regex: ".*"
-      directResponse:
-        status: 404
-        body:
-          string: "not found"
     # route /yorkie.v1 paths (client SDK sets x-shard-key)
     - name: {{ .Values.yorkie.name }}-rpc-service
       match:

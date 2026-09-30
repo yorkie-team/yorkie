@@ -26,7 +26,6 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
-		SecretKey:                     "secret-key",
 		AdminTokenDuration:            "24h",
 		AuthWebhookCacheTTL:           "10s",
 		ChannelSessionTTL:             "60s",
@@ -101,32 +100,6 @@ func TestConfig(t *testing.T) {
 			tc.set(&conf)
 			assert.ErrorContains(t, conf.Validate(), tc.flag)
 		}
-	})
-
-	t.Run("reject the published default as a cluster secret", func(t *testing.T) {
-		// The cluster secret is the only gate in front of ClusterService, so a
-		// value anyone can read from this repository is no gate at all.
-		conf := newValidBackendConf()
-		conf.ClusterSecret = backend.DefaultSecretKey
-		assert.ErrorContains(t, conf.Validate(), "cluster-secret")
-
-		conf.ClusterSecret = "cluster-secret"
-		assert.NoError(t, conf.Validate())
-	})
-
-	t.Run("never guard cluster RPCs with the secret key", func(t *testing.T) {
-		// Falling back to SecretKey would hand the published default to anyone
-		// who kept it, and put the admin-token signing key on the wire.
-		conf := newValidBackendConf()
-		conf.SecretKey = backend.DefaultSecretKey
-		assert.True(t, conf.UsesGeneratedClusterSecret())
-		assert.NotEqual(t, conf.SecretKey, conf.EffectiveClusterSecret())
-		assert.NotEmpty(t, conf.EffectiveClusterSecret())
-		assert.NoError(t, conf.Validate())
-
-		conf.ClusterSecret = "cluster-secret"
-		assert.False(t, conf.UsesGeneratedClusterSecret())
-		assert.Equal(t, "cluster-secret", conf.EffectiveClusterSecret())
 	})
 
 	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {

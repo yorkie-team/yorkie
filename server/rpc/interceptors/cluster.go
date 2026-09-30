@@ -55,33 +55,13 @@ func NewClusterServiceInterceptor(be *backend.Backend, clusterSecret string) *Cl
 }
 
 // authenticate validates the cluster secret from the request header.
-//
-// ClusterService shares the listener with YorkieService and AdminService, and
-// its RPCs take the project straight out of the request message rather than
-// going through the auth webhook, so an unconfigured secret must fail closed
-// rather than wave every caller through. Callers construct the interceptor
-// with backend.Config.EffectiveClusterSecret, which falls back to a random
-// per-process secret rather than to SecretKey, so the empty case here is a
-// defensive guard rather than a reachable state.
-//
-// Peers must send the header: a node still running a build that was configured
-// without any cluster secret sends none and is rejected, so a rolling upgrade
-// has to set the shared secret on the old binaries first. A missing header is
-// reported separately from a wrong one because it is the signature of exactly
-// that half-upgraded cluster. See docs/design/cluster-service-auth.md.
+// If no secret is configured, all requests are allowed for backward compatibility.
 func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
 	if i.clusterSecret == "" {
-		return connect.NewError(connect.CodeUnauthenticated,
-			errors.New("cluster secret is not configured"))
+		return nil
 	}
 
 	secret := header.Get(clusterSecretHeader)
-	if secret == "" {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New(
-			"missing cluster secret header: the caller was started without "+
-				"--cluster-secret, see docs/design/cluster-service-auth.md",
-		))
-	}
 	if subtle.ConstantTimeCompare([]byte(secret), []byte(i.clusterSecret)) != 1 {
 		return connect.NewError(connect.CodeUnauthenticated,
 			errors.New("invalid cluster secret"))

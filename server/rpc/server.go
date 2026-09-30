@@ -66,21 +66,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	yorkieInterceptor := interceptors.NewYorkieServiceInterceptor(be)
 	adminInterceptor := interceptors.NewAdminServiceInterceptor(be, tokenManager)
-	// ClusterService is mounted on this public listener and its RPCs read the
-	// project out of the request message, so the shared secret is the only gate
-	// in front of them. Without --cluster-secret the gate is a random secret
-	// this process generated, which no peer can know: that is correct for a
-	// single node and silently fatal for a cluster, so say so at startup rather
-	// than leave it to be diagnosed from Unauthenticated errors later.
-	if be.Config.UsesGeneratedClusterSecret() {
-		logging.DefaultLogger().Warn(
-			"no --cluster-secret configured: inter-node cluster RPCs are " +
-				"guarded by a secret generated for this process only. " +
-				"Start every node with the same --cluster-secret before " +
-				"running more than one node",
-		)
-	}
-	clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.EffectiveClusterSecret())
+	clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.ClusterSecret)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []connect.HandlerOption{

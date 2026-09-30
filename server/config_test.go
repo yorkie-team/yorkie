@@ -17,6 +17,7 @@
 package server_test
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -203,15 +204,35 @@ func TestNewConfigFromFile(t *testing.T) {
 }
 
 func TestNewWithProgrammaticConfig(t *testing.T) {
-	// A config built in code, rather than read from a file, never passes
-	// through NewConfigFromFile's defaulting step. Validate() treats an empty
-	// duration as an error, so New() has to fill the defaults itself before
-	// validating; otherwise every programmatic config fails to start.
 	conf := server.NewConfig()
-	assert.Equal(t, "", conf.Backend.AdminTokenDuration)
-
-	y, err := server.New(conf)
-	assert.NoError(t, err)
-	assert.NotNil(t, y)
 	assert.Equal(t, server.DefaultAdminTokenDuration.String(), conf.Backend.AdminTokenDuration)
+	assert.NoError(t, conf.Validate())
+}
+
+func TestNewRejectsExplicitInvalidCapacities(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*server.Config, int)
+	}{
+		{"channel-session-count-cache-size", func(c *server.Config, n int) {
+			c.Backend.ChannelSessionCountCacheSize = n
+		}},
+		{"cluster-client-pool-size", func(c *server.Config, n int) {
+			c.Backend.ClusterClientPoolSize = n
+		}},
+		{"max-concurrent-cluster-rpcs", func(c *server.Config, n int) {
+			c.Backend.MaxConcurrentClusterRPCs = n
+		}},
+	}
+	for _, tc := range cases {
+		for _, value := range []int{0, -1} {
+			t.Run(fmt.Sprintf("%s/%d", tc.name, value), func(t *testing.T) {
+				conf := server.NewConfig()
+				tc.set(conf, value)
+				y, err := server.New(conf)
+				assert.Nil(t, y)
+				assert.ErrorContains(t, err, tc.name)
+			})
+		}
+	}
 }

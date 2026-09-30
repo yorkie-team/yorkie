@@ -131,11 +131,7 @@ Backend:
   GatewayAddr: "localhost:8080"
 
   # ClusterSecret is the shared secret for authenticating inter-node
-  # cluster RPCs. ClusterService is served on the public RPC port, so requests
-  # without a matching secret are rejected. If empty, a random secret is
-  # generated for this process: a single node still reaches itself, but nodes
-  # cannot reach each other. Every multi-node deployment must set the same
-  # value here on every node. Generate one with: openssl rand -base64 24
+  # cluster RPCs. If empty, all requests are allowed.
   ClusterSecret: ""
 
 # Mongo is the MongoDB configuration (Optional).

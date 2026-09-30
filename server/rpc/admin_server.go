@@ -220,33 +220,6 @@ func (s *adminServer) GetProject(
 	}), nil
 }
 
-// broadcastProjectInvalidation drops the project from every node's cache after
-// its settings changed.
-//
-// The database write has already succeeded when this runs, so a failure cannot
-// fail the RPC: the caller would retry an update that is already applied. It is
-// not a routine warning either. Until this lands, peers keep serving the
-// project from their own cache - including its auth-webhook URL and method
-// list - so a revocation is only as fast as the project cache TTL, and a node
-// that stays unreachable stays stale past it. Log it at error level, naming the
-// project, so it is alertable rather than something to find later in a warning
-// stream.
-func (s *adminServer) broadcastProjectInvalidation(ctx context.Context, projectID types.ID) {
-	if err := s.backend.BroadcastCacheInvalidation(
-		ctx,
-		types.CacheTypeProject,
-		projectID.String(),
-	); err != nil {
-		logging.From(ctx).Errorf(
-			"broadcast project cache invalidation for %s: %v: "+
-				"peers keep serving the previous project settings, including "+
-				"auth-webhook configuration, until their project cache expires",
-			projectID,
-			err,
-		)
-	}
-}
-
 // UpdateProject updates the project.
 func (s *adminServer) UpdateProject(
 	ctx context.Context,
@@ -272,7 +245,13 @@ func (s *adminServer) UpdateProject(
 		return nil, err
 	}
 
-	s.broadcastProjectInvalidation(ctx, project.ID)
+	if err := s.backend.BroadcastCacheInvalidation(
+		ctx,
+		types.CacheTypeProject,
+		project.ID.String(),
+	); err != nil {
+		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
+	}
 
 	return connect.NewResponse(&api.UpdateProjectResponse{
 		Project: converter.ToProject(project),
@@ -1164,7 +1143,13 @@ func (s *adminServer) RotateProjectKeys(
 		return nil, err
 	}
 
-	s.broadcastProjectInvalidation(ctx, prev.ID)
+	if err := s.backend.BroadcastCacheInvalidation(
+		ctx,
+		types.CacheTypeProject,
+		prev.ID.String(),
+	); err != nil {
+		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
+	}
 
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{

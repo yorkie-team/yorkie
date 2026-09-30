@@ -17,48 +17,12 @@
 package backend
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
 )
-
-// DefaultSecretKey is the secret key used when the operator does not provide
-// one. It is a published constant, so any deployment that keeps it is
-// effectively running without a secret. server.DefaultSecretKey aliases this.
-const DefaultSecretKey = "yorkie-secret"
-
-var (
-	generatedClusterSecretOnce sync.Once
-	generatedClusterSecret     string
-)
-
-// clusterSecret returns the process-wide secret used when no ClusterSecret was
-// configured. It is random and never leaves the process, so a node that was not
-// given a secret still talks to itself while every other caller - including one
-// that read the published DefaultSecretKey out of this repository - is
-// rejected. Nodes in a real cluster are separate processes and therefore
-// generate different secrets, which is deliberate: a multi-node deployment has
-// to configure --cluster-secret explicitly, and until it does its inter-node
-// RPCs fail closed instead of running on a guessable shared value.
-func clusterSecret() string {
-	generatedClusterSecretOnce.Do(func() {
-		buf := make([]byte, 32)
-		if _, err := rand.Read(buf); err != nil {
-			// A server that cannot generate a secret must not fall back to a
-			// guessable one: that would re-open the public ClusterService.
-			fmt.Fprintf(os.Stderr, "generate cluster secret: %v\n", err)
-			os.Exit(1)
-		}
-		generatedClusterSecret = base64.RawURLEncoding.EncodeToString(buf)
-	})
-
-	return generatedClusterSecret
-}
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
@@ -152,39 +116,8 @@ type Config struct {
 	MaxConcurrentClusterRPCs int `yaml:"MaxConcurrentClusterRPCs"`
 
 	// ClusterSecret is the shared secret for authenticating inter-node
-	// cluster RPCs. ClusterService is mounted on the public RPC port, so an
-	// empty secret must not mean "allow everyone": it falls back to a random
-	// per-process secret instead, which keeps a single node talking to itself
-	// and rejects everyone else. Every multi-node deployment has to set this.
-	// See EffectiveClusterSecret and UsesGeneratedClusterSecret.
+	// cluster RPCs. If empty, all requests are allowed.
 	ClusterSecret string `yaml:"ClusterSecret"`
-}
-
-// EffectiveClusterSecret returns the secret that both the cluster client and
-// the cluster interceptor use to authenticate inter-node RPCs. ClusterSecret
-// is optional, so an unset one falls back to the random per-process secret
-// from clusterSecret rather than to SecretKey.
-//
-// Falling back to SecretKey would be worse than no gate at all in a default
-// deployment: SecretKey defaults to the published DefaultSecretKey, so anyone
-// who can read this repository could satisfy the only check in front of
-// ClusterService - which reads the project straight out of the request message
-// and can purge or detach documents by project ID alone. It would also put the
-// key that signs admin tokens into a plaintext header on every inter-node RPC,
-// h2c by default, so any header-logging proxy on the path could forge them.
-func (c *Config) EffectiveClusterSecret() string {
-	if c.ClusterSecret != "" {
-		return c.ClusterSecret
-	}
-	return clusterSecret()
-}
-
-// UsesGeneratedClusterSecret reports whether inter-node RPCs are guarded by the
-// random per-process secret because no ClusterSecret was configured. That is
-// safe for a single node but cannot work across nodes, since each process
-// generates its own, so the server warns about it at startup.
-func (c *Config) UsesGeneratedClusterSecret() bool {
-	return c.ClusterSecret == ""
 }
 
 // validateCacheTTL returns an error if the given TTL cannot be handed to an
@@ -276,18 +209,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
 			c.MaxConcurrentClusterRPCs,
-		)
-	}
-
-	// ClusterService is the one service whose gate is this secret alone, so a
-	// value published in this repository is no gate. An empty ClusterSecret is
-	// allowed and becomes the random per-process secret; naming the default
-	// explicitly is not.
-	if c.ClusterSecret == DefaultSecretKey {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--cluster-secret" flag: `+
-				`the default secret key is public, use a generated value`,
-			c.ClusterSecret,
 		)
 	}
 	return nil

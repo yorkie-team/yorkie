@@ -81,7 +81,7 @@ const (
 
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
-	DefaultSecretKey     = backend.DefaultSecretKey
+	DefaultSecretKey     = "yorkie-secret"
 
 	DefaultAdminTokenDuration  = 7 * 24 * time.Hour
 	DefaultGitHubUserURL       = "https://api.github.com/user"
@@ -119,7 +119,9 @@ type Config struct {
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	return newConfig(DefaultRPCPort, DefaultProfilingPort)
+	conf := newConfig(DefaultRPCPort, DefaultProfilingPort)
+	conf.ensureDefaultValue()
+	return conf
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.

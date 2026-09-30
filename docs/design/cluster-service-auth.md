@@ -46,7 +46,7 @@ Add `ClusterSecret` to `backend.Config`:
 
 ```go
 // ClusterSecret is the shared secret for authenticating inter-node
-// cluster RPCs. If empty, a random per-process secret is used.
+// cluster RPCs. If empty, all requests are allowed.
 ClusterSecret string `yaml:"ClusterSecret"`
 ```
 
@@ -118,8 +118,7 @@ func (i *ClusterServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Un
 
 func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
     if i.clusterSecret == "" {
-        return connect.NewError(connect.CodeUnauthenticated,
-            errors.New("cluster secret is not configured"))
+        return nil
     }
 
     secret := header.Get(clusterSecretHeader)
@@ -134,17 +133,12 @@ func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
 
 Key details:
 - Use `crypto/subtle.ConstantTimeCompare` to prevent timing attacks
-- Authentication fails closed: callers pass `Config.EffectiveClusterSecret()`,
-  which falls back to a random per-process secret, so an empty secret reaching
-  the interceptor means the server has no secret at all and every request is
-  rejected
-- A missing header is reported separately from a mismatched one, since that is
-  the signature of a peer that was started without a cluster secret
+- If `ClusterSecret` is empty, allow all requests (backward compatible)
 - Apply to both `WrapUnary` and `WrapStreamingHandler`
 
 ### Helm Chart (build/charts/yorkie-cluster)
 
-Pass `clusterSecret` in `values.yaml`. If set, the value is passed as `--cluster-secret` in the Deployment args. If empty, the flag is omitted and each replica generates its own secret, so inter-node RPCs fail: a multi-replica chart install has to set it.
+Pass `clusterSecret` in `values.yaml`. If set, the value is passed as `--cluster-secret` in the Deployment args. If empty, the flag is omitted and all ClusterService requests are allowed.
 
 ```yaml
 yorkie:
@@ -159,63 +153,19 @@ yorkie:
 
 ```go
 // server/rpc/server.go
-clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.EffectiveClusterSecret())
+clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.ClusterSecret)
 ```
 
 `ClusterClientPool` passes the secret when creating clients:
 
 ```go
 // server/backend/backend.go
-cluster.WithClusterSecret(b.Config.EffectiveClusterSecret())
+cluster.WithClusterSecret(b.Config.ClusterSecret)
 ```
 
 ### Single-Node Mode
 
-When running a single Yorkie server (no cluster), `ClusterSecret` is empty by
-default. Both the cluster client and the interceptor then use a secret this
-process generated with `crypto/rand` at first use, so the node still talks to
-itself while every external caller is rejected.
-
-The fallback is deliberately **not** `SecretKey`:
-
-- `SecretKey` defaults to the published constant `yorkie-secret`, so any
-  deployment that kept the default would have its ClusterService gated by a
-  value anyone can read out of this repository. `ClusterService` is mounted on
-  the public RPC port and its RPCs (`GetDocument`, `PurgeDocument`,
-  `DetachDocument`, `Broadcast`) read the project out of the request message
-  without going through the auth webhook, so that is a cross-project bypass.
-- `SecretKey` signs admin tokens. Sending it in a plaintext header on every
-  inter-node RPC - h2c by default - would expose it to any header-logging proxy
-  on the path.
-
-The generated secret is per process, so it cannot serve a real cluster. Nodes
-that must reach each other have to be started with the same
-`--cluster-secret`; `server/rpc/server.go` warns at startup whenever the
-generated secret is in use. `Config.Validate()` additionally rejects
-`--cluster-secret yorkie-secret`.
-
-### Rolling Upgrade
-
-The check fails closed, so a node running a build configured **without** any
-cluster secret sends no `x-cluster-secret` header and is rejected by an upgraded
-peer. Upgrading a running cluster therefore takes two steps:
-
-1. Set the same `--cluster-secret` on every node **while still running the
-   previous build**. The previous build already sends the header when a secret
-   is configured and still accepts header-less requests, so this step is safe
-   in both directions.
-2. Roll out the new build with the same secret.
-
-Skipping step 1 makes old -> new inter-node RPCs (`DetachDocument`,
-`PurgeDocument`, `Broadcast`, `GetDocument`) fail with `Unauthenticated` -
-reported as a missing cluster secret header - until every node has been
-restarted. Client deactivation (`server/clients/clients.go`) is the most
-visible casualty, since it detaches through ClusterService. Leaving
-`--cluster-secret` unset does not end the outage once the rollout completes:
-each node then has its own generated secret.
-
-The same applies to any external user of the exported `cluster` package: it
-must pass `cluster.WithClusterSecret`.
+When running a single Yorkie server (no cluster), `ClusterSecret` is empty by default. The interceptor allows all requests when the secret is empty, maintaining backward compatibility with existing deployments.
 
 ### Risks and Mitigation
 
@@ -223,11 +173,8 @@ must pass `cluster.WithClusterSecret`.
 |------|------------|
 | Secret transmitted in plaintext over h2c | Acceptable within VPC. If cross-VPC communication is needed, enable TLS with `--cluster-secure` (already exists) |
 | Secret leaked in logs or error messages | Never log the secret value. Error messages say "invalid cluster secret", not the actual value |
-| All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD. Left empty, the `yorkie-cluster` chart generates one and stores it in the `<name>-cluster-secret` Secret, reusing the stored value on upgrade, so the shipped multi-replica default is not a broken cluster |
-| Secret readable from the pod spec | The chart passes it as a Secret-backed env var expanded into `--cluster-secret`, not as a literal container arg, so `get pod` shows only the reference. `clusterSecretExistingSecret` keeps it out of the Helm release's stored manifests entirely |
-| Empty `ClusterSecret` | Falls back to a random per-process secret, so the endpoint is never open. Multi-node deployments break instead, loudly: `Config.UsesGeneratedClusterSecret()` reports it, the server warns at startup, and `prepareClusterClients` logs an error naming the node count once membership reports a peer |
-| Default `SecretKey` | Irrelevant to this gate: the cluster secret never falls back to `SecretKey`, and `Validate()` rejects `--cluster-secret yorkie-secret` outright |
-| `SecretKey` on the wire | The admin-token signing key is never sent as a cluster header |
+| All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD |
+| Empty secret allows all requests | Backward compatible. Operators must set a secret in production to enable authentication |
 
 ### Design Decisions
 
@@ -235,15 +182,15 @@ must pass `cluster.WithClusterSecret`.
 |----------|--------|
 | Shared secret over mTLS | mTLS requires certificate management infrastructure. Shared secret is simple and sufficient for same-VPC communication |
 | Header-based over metadata-based | Connect RPC uses HTTP headers. Consistent with existing `x-shard-key` pattern |
-| Fall back to a random per-process secret when `ClusterSecret` is empty | Keeps single-node deployments working without new config and never leaves the public ClusterService endpoint guarded by a published constant. Multi-node deployments must configure the secret, and fail closed with a startup warning until they do |
+| Allow when secret is empty | Backward compatible with existing deployments. Operators opt in to authentication by setting a secret |
 | Constant-time comparison | Prevents timing side-channel attacks on the secret |
-| Reject header-less ClusterService calls at the Istio gateway | Defence in depth, not a second gate: the server check still decides. Internal unicast also goes through the gateway (`--backend-gateway-addr` points at the gateway Service), so the path cannot simply be dropped - but no legitimate caller omits `x-cluster-secret`, so a 404 for those keeps anonymous internet callers off the handler. `x-cluster-secret` is left out of the CORS `allowHeaders` lists so a browser cannot be induced to send one |
+| No VirtualService changes needed | Authentication at server level works regardless of gateway topology. No coupling to Istio configuration |
 
 ## Alternatives Considered
 
 | Alternative | Why not |
 |-------------|---------|
-| Unconditional VirtualService path blocking | Internal unicast also goes through the gateway, so blocking `/yorkie.v1.ClusterService/` outright would block cluster communication too. The chart blocks only the header-less subset |
+| VirtualService path blocking | Internal unicast also goes through the gateway, so it would block cluster communication too |
 | Istio AuthorizationPolicy with source IP | Pod CIDR is dynamic. Fragile and breaks on node scaling |
 | Separate port for ClusterService | Requires Helm chart, Service, and Istio changes. Much larger scope for the same result |
 | mTLS between nodes | Certificate provisioning and rotation adds operational complexity. Overkill for same-VPC |

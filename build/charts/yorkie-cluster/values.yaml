@@ -17,29 +17,10 @@ yorkie:
     # Connection URI will be generated from mongodb.credentials.databaseAdmin values
     dbConnectionUri: ""
     dbName: yorkie-meta
-    # Shared secret for authenticating inter-node cluster RPCs. This chart runs
-    # several replicas, and a node started without one falls back to a secret it
-    # generated for itself, which no peer can know.
-    #
-    # Leaving this empty does NOT do that: the chart generates a value and keeps
-    # it in the "<yorkie.name>-cluster-secret" Secret, reusing the stored value
-    # on upgrade, so a default install has one shared secret across replicas.
-    # Rendering without cluster access (helm template, GitOps diff pipelines)
-    # cannot read the stored value and mints a new one each render, so set this
-    # explicitly - or point existingSecret at a Secret you manage - there.
-    #
-    # The value reaches the container through a Secret-backed env var, never as
-    # a plaintext container arg. Rotating it needs a
-    # `kubectl rollout restart deployment/<yorkie.name>` afterwards so every
-    # replica picks the new value up at once.
+    # Shared secret for authenticating inter-node cluster RPCs.
+    # If empty, all requests are allowed.
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
-    # Name of an existing Secret holding the cluster secret. When set,
-    # clusterSecret is ignored and the chart creates no Secret of its own,
-    # which keeps the value out of the Helm release's stored manifests.
-    clusterSecretExistingSecret: ""
-    # Key within the cluster-secret Secret that holds the value.
-    clusterSecretKey: cluster-secret
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated. See docs/design/project-stats-long-retention.md.

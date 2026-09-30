@@ -7,15 +7,6 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-### Security
-
-- Authenticate ClusterService with a shared secret. `--cluster-secret` is now
-  required for multi-node deployments: a server started without one generates a
-  random per-process secret, so it can only be reached by itself. The secret is
-  never derived from `--backend-secret-key`, whose default `yorkie-secret` is
-  published and whose value signs admin tokens. Upgrading a running cluster
-  needs the two-step rollout in `docs/design/cluster-service-auth.md`.
-
 ## [v0.7.23] - 2026-09-22
 
 ### Changed
