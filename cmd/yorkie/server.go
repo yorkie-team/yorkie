@@ -173,9 +173,9 @@ func newServerCmd() *cobra.Command {
 				}
 			}
 
-			// File settings override ordinary flags. An explicit cache-disable
-			// switch and explicitly given credentials always win so they cannot
-			// silently leave cached allows active or fall back to the defaults.
+			// File settings override ordinary flags. Explicit credentials, webhook
+			// URL validation and authorization-cache TTL survive the file; a true
+			// cache-disable switch always wins. server.New validates the result.
 			var err error
 			conf, err = resolveServerConfig(conf, flagConfPath, cmd.Flags(), authWebhookCacheDisabled)
 			if err != nil {
@@ -222,6 +222,15 @@ func resolveServerConfig(
 	flags *pflag.FlagSet,
 	disableAuthWebhookCache bool,
 ) (*server.Config, error) {
+	if flags != nil {
+		for name, field := range credentialFlags {
+			// ClusterSecret is optional, including an explicit empty value.
+			if name != "cluster-secret" && flags.Changed(name) && *field(base) == "" {
+				return nil, fmt.Errorf("--%s must not be empty", name)
+			}
+		}
+	}
+
 	if path != "" {
 		parsed, err := server.NewConfigFromFile(path)
 		if err != nil {
@@ -235,6 +244,14 @@ func resolveServerConfig(
 				if flags.Changed(name) {
 					*field(parsed) = *field(base)
 				}
+			}
+			// Only these explicit webhook controls override the file. Omitted
+			// flags retain file values; all other flags retain file precedence.
+			if flags.Changed("backend-enable-webhook-validation") {
+				parsed.Backend.EnableWebhookValidation = base.Backend.EnableWebhookValidation
+			}
+			if flags.Changed("auth-webhook-cache-auth-ttl") {
+				parsed.Backend.AuthWebhookCacheTTL = base.Backend.AuthWebhookCacheTTL
 			}
 		}
 
@@ -512,19 +529,19 @@ func init() {
 		&conf.Backend.AdminUser,
 		"backend-admin-user",
 		server.DefaultAdminUser,
-		"The name of the default admin user, who has full permissions.",
+		"The name of the default admin user, who has full permissions. Must not be explicitly empty.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminPassword,
 		"backend-admin-password",
 		server.DefaultAdminPassword,
-		"The password of the default admin.",
+		"The password of the default admin. Must not be explicitly empty.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.SecretKey,
 		"backend-secret-key",
 		server.DefaultSecretKey,
-		"The secret key for signing authentication tokens for admin users.",
+		"The secret key for signing authentication tokens for admin users. Must not be explicitly empty.",
 	)
 
 	cmd.Flags().BoolVar(
@@ -550,7 +567,8 @@ func init() {
 		&conf.Backend.EnableWebhookValidation,
 		"backend-enable-webhook-validation",
 		false,
-		"Whether to enable webhook URL validation to prevent SSRF attacks.",
+		"Whether to enable webhook URL validation to prevent SSRF attacks. "+
+			"Explicit true or false overrides the config file.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
@@ -569,7 +587,7 @@ func init() {
 		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
-		"TTL for cached authorization responses; must be at least 1ms. "+
+		"TTL for cached authorization responses; must be at least 1ms. Explicit values override the config file. "+
 			"Use --auth-webhook-cache-disabled to bypass caching.",
 	)
 	cmd.Flags().StringVar(
