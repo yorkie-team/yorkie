@@ -357,7 +357,39 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 
 // CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
 func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
-	return t.rgaTreeSplit.createRange(from, to)
+	fromPos, toPos, err := t.rgaTreeSplit.createRange(from, to)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := t.validateUTF16Boundary(fromPos); err != nil {
+		return nil, nil, err
+	}
+
+	if from != to {
+		if err := t.validateUTF16Boundary(toPos); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return fromPos, toPos, nil
+}
+
+// validateUTF16Boundary validates that pos does not split a surrogate pair.
+func (t *Text) validateUTF16Boundary(pos *RGATreeSplitNodePos) error {
+	node := t.rgaTreeSplit.findFloorNode(pos.id)
+	if node == nil {
+		return fmt.Errorf(
+			"the node of the given position should be found: %s",
+			pos.ToTestString(),
+		)
+	}
+
+	if !isUTF16Boundary(node.value.Value(), pos.relativeOffset) {
+		return ErrInvalidUTF16Index
+	}
+
+	return nil
 }
 
 // Edit edits the given range with the given content and attributes. Besides

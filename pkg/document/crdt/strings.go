@@ -16,9 +16,42 @@
 
 package crdt
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+	"unicode/utf16"
+)
+
+// ErrInvalidUTF16Index is returned when an index splits a UTF-16 surrogate pair.
+var ErrInvalidUTF16Index = errors.New(
+	"index must not split a UTF-16 surrogate pair",
+)
 
 const hex = "0123456789abcdef"
+
+// isUTF16Boundary reports whether offset is a valid boundary in value.
+func isUTF16Boundary(value string, offset int) bool {
+	units := utf16.Encode([]rune(value))
+
+	if offset <= 0 || offset >= len(units) {
+		return true
+	}
+
+	const (
+		highSurrogateStart = 0xD800
+		highSurrogateEnd   = 0xDBFF
+		lowSurrogateStart  = 0xDC00
+		lowSurrogateEnd    = 0xDFFF
+	)
+
+	left := units[offset-1]
+	right := units[offset]
+
+	isHighSurrogate := left >= highSurrogateStart && left <= highSurrogateEnd
+	isLowSurrogate := right >= lowSurrogateStart && right <= lowSurrogateEnd
+
+	return !isHighSurrogate || !isLowSurrogate
+}
 
 // EscapeString returns a string that is safe to embed in a JSON document.
 func EscapeString(s string) string {
