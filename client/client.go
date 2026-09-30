@@ -997,6 +997,12 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	// in flight always has a live consumer.
 	buf := newWatchBuffer()
 	pumpStop := make(chan struct{})
+	pumpDone := make(chan struct{})
+	// Wait for the consumer to exit before returning or starting its successor.
+	stopPump := func() {
+		close(pumpStop)
+		<-pumpDone
+	}
 
 	// pump: document events -> buf. Started before the stream's first
 	// response rather than after it. The document's event channel has
@@ -1006,6 +1012,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	// loop's pump has already stopped, so starting this one first gives an
 	// in-flight publish a consumer while Receive blocks on the server.
 	go func() {
+		defer close(pumpDone)
 		for {
 			select {
 			case e := <-d.Events():
@@ -1032,15 +1039,15 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	// watch that never came up has always done -- the alternative is the
 	// publisher blocking on a channel this loop is no longer going to drain.
 	if !stream.Receive() {
-		close(pumpStop)
+		stopPump()
 		return ErrInitNotReceived
 	}
 	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
-		close(pumpStop)
+		stopPump()
 		return err
 	}
 	if err = stream.Err(); err != nil {
-		close(pumpStop)
+		stopPump()
 		return err
 	}
 
@@ -1069,7 +1076,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
-				close(pumpStop)
+				stopPump()
 				buf.push(WatchDocResponse{Err: err})
 				buf.close()
 				return
@@ -1091,7 +1098,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			buf.push(*resp)
 		}
 
-		close(pumpStop)
+		stopPump()
 		if err := stream.Err(); err != nil {
 			buf.push(WatchDocResponse{Err: err})
 			buf.close()

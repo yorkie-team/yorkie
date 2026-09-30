@@ -18,8 +18,10 @@ package client_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	gotime "time"
 
@@ -79,6 +81,9 @@ func (s *watchInitServer) Watch(
 	_ *connect.Request[api.WatchRequest],
 	stream *connect.ServerStream[api.WatchResponse],
 ) error {
+	if s.firstResponse == nil {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("watch rejected"))
+	}
 	if err := stream.Send(s.firstResponse); err != nil {
 		return err
 	}
@@ -150,41 +155,191 @@ func TestWatchLoopPumpDrainsWhileStreamIsIdle(t *testing.T) {
 // A pump left running past a failed initialization is a goroutine consuming
 // the document's events for a stream nobody reads.
 func TestWatchLoopInitFailureStopsPump(t *testing.T) {
-	// A response with no body: the client cannot classify it, so
-	// handleWatchResponse fails and runWatchLoop takes an init-failure path.
-	cli, _ := dialWatchInitServer(t, &api.WatchResponse{})
+	for _, tc := range []struct {
+		name     string
+		response *api.WatchResponse
+	}{
+		{name: "malformed", response: &api.WatchResponse{}},
+		{name: "rejected"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cli, _ := dialWatchInitServer(t, tc.response)
 
-	doc := document.New("watch-init-failure")
-	peer := newPresentPeer(t, "watch-init-failure")
+			doc := document.New(key.Key("watch-init-failure-" + tc.name))
+			peer := newPresentPeer(t, "watch-init-failure-"+tc.name)
 
-	err := cli.Attach(context.Background(), doc, client.WithRealtimeSync())
-	assert.Error(t, err, "a watch stream that fails initialization must surface the error")
+			err := cli.Attach(context.Background(), doc, client.WithRealtimeSync())
+			assert.Error(t, err, "a watch stream that fails initialization must surface the error")
 
-	// The pump is gone with the failed loop: the channel takes the single
-	// event its capacity holds and the next publish has no consumer.
+			// The pump is gone with the failed loop: the channel takes the single
+			// event its capacity holds and the next publish has no consumer.
+			peerID := peer.ActorID().String()
+			doc.AddOnlineClientAndReconcile(peerID)
+			assert.NoError(t, doc.ApplyChangePack(presencePackFor(peer, doc)))
+
+			blocked := make(chan struct{})
+			go func() {
+				doc.RemoveOnlineClientAndReconcile(peerID)
+				close(blocked)
+			}()
+			select {
+			case <-blocked:
+				t.Fatal("the event pump outlived the failed watch initialization")
+			case <-gotime.After(300 * gotime.Millisecond):
+			}
+
+			// Drain so the blocked publisher finishes and releases Document.eventsMu.
+			drainDeadline := gotime.After(5 * gotime.Second)
+			for range 2 {
+				select {
+				case <-doc.Events():
+				case <-drainDeadline:
+					t.Fatal("document event drain did not finish")
+				}
+			}
+			select {
+			case <-blocked:
+			case <-gotime.After(5 * gotime.Second):
+				t.Fatal("publisher stayed blocked after the channel was drained")
+			}
+		})
+	}
+}
+
+// watchReconnectServer fails its first initialized stream and holds its
+// successor open until cancellation. Both streams use the real Connect RPC.
+type watchReconnectServer struct {
+	*watchInitServer
+	calls     atomic.Int32
+	failFirst chan struct{}
+	stopped   chan struct{}
+	peerID    string
+}
+
+func (s *watchReconnectServer) Watch(
+	ctx context.Context,
+	_ *connect.Request[api.WatchRequest],
+	stream *connect.ServerStream[api.WatchResponse],
+) error {
+	call := s.calls.Add(1)
+	if err := stream.Send(&api.WatchResponse{Body: &api.WatchResponse_Initialization{
+		Initialization: &api.WatchInitialization{},
+	}}); err != nil {
+		return err
+	}
+	if call == 1 {
+		select {
+		case <-s.failFirst:
+			return connect.NewError(connect.CodeUnavailable, errors.New("first stream ended"))
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if call != 2 {
+		return connect.NewError(connect.CodeInternal, errors.New("unexpected extra watch"))
+	}
+	defer close(s.stopped)
+	if err := stream.Send(&api.WatchResponse{Body: &api.WatchResponse_Event{
+		Event: &api.WatchEvent{Event: &api.WatchEvent_DocEvent{
+			DocEvent: &api.DocWatchEvent{Event: &api.DocEvent{
+				Type: api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED, Publisher: s.peerID,
+			}},
+		}},
+	}}); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestWatchLoopReconnectDeliversPresenceAndCancelClosesSender(t *testing.T) {
+	doc := document.New("watch-reconnect")
+	peer := newPresentPeer(t, "watch-reconnect")
 	peerID := peer.ActorID().String()
-	doc.AddOnlineClientAndReconcile(peerID)
-	assert.NoError(t, doc.ApplyChangePack(presencePackFor(peer, doc)))
-
-	blocked := make(chan struct{})
-	go func() {
-		doc.RemoveOnlineClientAndReconcile(peerID)
-		close(blocked)
-	}()
-	select {
-	case <-blocked:
-		t.Fatal("the event pump outlived the failed watch initialization")
-	case <-gotime.After(300 * gotime.Millisecond):
+	srv := &watchReconnectServer{
+		watchInitServer: &watchInitServer{},
+		failFirst:       make(chan struct{}), stopped: make(chan struct{}), peerID: peerID,
 	}
-
-	// Drain so the blocked publisher finishes and releases Document.eventsMu.
-	<-doc.Events()
-	<-doc.Events()
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(httpServer.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cli, err := client.Dial(httpServer.URL)
+	if !assert.NoError(t, err) || !assert.NoError(t, cli.Activate(ctx)) {
+		return
+	}
+	if !assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync())) {
+		return
+	}
+	first, _, err := cli.WatchStream(doc)
+	if !assert.NoError(t, err) {
+		return
+	}
+	// Keep the peer's presence offline until the successor's watched event.
+	if !assert.NoError(t, doc.ApplyChangePack(presencePackFor(peer, doc))) {
+		return
+	}
+	close(srv.failFirst)
 	select {
-	case <-blocked:
+	case response, ok := <-first:
+		if !assert.True(t, ok) || !assert.Error(t, response.Err) {
+			return
+		}
 	case <-gotime.After(5 * gotime.Second):
-		t.Fatal("publisher stayed blocked after the channel was drained")
+		t.Fatal("first stream did not report its error")
 	}
+	select {
+	case _, ok := <-first:
+		assert.False(t, ok, "first sender must close after reporting the error")
+	case <-gotime.After(5 * gotime.Second):
+		t.Fatal("first sender did not close")
+	}
+	// The successor reader sets presence under the document lock after
+	// publishing its watchStream. Observing that transition also synchronizes
+	// the WatchStream accessor with the replacement, without polling its field.
+	if !assert.Eventually(t, func() bool { return doc.Presence(peerID) != nil },
+		5*gotime.Second, gotime.Millisecond, "successor did not process its watched event") {
+		return
+	}
+	successor, _, err := cli.WatchStream(doc)
+	if !assert.NoError(t, err) || !assert.NotEqual(t, first, successor) {
+		return
+	}
+	assertWatchPresence := func(want client.WatchDocResponseType) {
+		t.Helper()
+		select {
+		case response, ok := <-successor:
+			assert.True(t, ok, "successor closed before presence delivery")
+			assert.NoError(t, response.Err)
+			assert.Equal(t, want, response.Type)
+		case <-gotime.After(5 * gotime.Second):
+			t.Fatal("successor lost a presence event to a stopped consumer")
+		}
+	}
+	assertWatchPresence(client.DocumentWatched)
+	// Each transition must reach the successor; a residual old pump must
+	// neither steal events into its closed buffer nor duplicate delivery.
+	for range 10 {
+		assertPublishes(t, "successor unwatched", func() { doc.RemoveOnlineClientAndReconcile(peerID) })
+		assertWatchPresence(client.DocumentUnwatched)
+		assertPublishes(t, "successor watched", func() { doc.AddOnlineClientAndReconcile(peerID) })
+		assertWatchPresence(client.DocumentWatched)
+	}
+	cancel()
+	select {
+	case _, ok := <-successor:
+		assert.False(t, ok, "cancellation must close the successor sender")
+	case <-gotime.After(5 * gotime.Second):
+		t.Fatal("successor sender stayed open after cancellation")
+	}
+	select {
+	case <-srv.stopped:
+	case <-gotime.After(5 * gotime.Second):
+		t.Fatal("successor RPC stayed open after cancellation")
+	}
+	assert.Equal(t, int32(2), srv.calls.Load())
 }
 
 // newPresentPeer builds a second replica of the given document key carrying
