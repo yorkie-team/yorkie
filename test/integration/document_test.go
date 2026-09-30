@@ -110,14 +110,19 @@ func TestDocument(t *testing.T) {
 		assert.ErrorIs(t, err, client.ErrAlreadyAttached)
 		assert.Equal(t, document.StatusDetached, d2.Status())
 
-		// 02. the attached one is untouched.
+		// 02. detaching the rejected Document does not detach the attached
+		// one, which shares its key.
+		assert.ErrorIs(t, c1.Detach(ctx, d2), client.ErrNotAttached)
+		assert.Equal(t, document.StatusAttached, d1.Status())
+
+		// 03. the attached one is untouched.
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
 
-		// 03. a Channel shares the key namespace with Documents, so one with
+		// 04. a Channel shares the key namespace with Documents, so one with
 		// an attached Document's key is rejected as well. Letting it through
 		// would replace the Document's attachment and orphan the Document.
 		ch, err := channel.New(d1.Key())
@@ -125,7 +130,7 @@ func TestDocument(t *testing.T) {
 		assert.ErrorIs(t, c1.Attach(ctx, ch), client.ErrAlreadyAttached)
 		assert.NoError(t, c1.Sync(ctx))
 
-		// 04. after a detach, the key can be attached again.
+		// 05. after a detach, the key can be attached again.
 		assert.NoError(t, c1.Detach(ctx, d1))
 		assert.NoError(t, c1.Attach(ctx, d2))
 		assert.Equal(t, `{"k1":"v1"}`, d2.Marshal())
@@ -170,6 +175,13 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, d2))
+
+		// The stale handle from before the deactivation cannot detach the
+		// Document that now holds its key.
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrNotAttached)
+		assert.Equal(t, document.StatusAttached, d2.Status())
+		assert.NoError(t, cli.Sync(ctx))
+
 		assert.NoError(t, cli.Detach(ctx, d2))
 	})
 

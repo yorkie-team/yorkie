@@ -467,8 +467,12 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...an
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
+	// The attachment is looked up by key, so it must also be held by r
+	// itself. Another resource with the same key, one rejected by the attach
+	// guard or a stale one from before a deactivation, would otherwise send
+	// the attached resource's ID and detach it on the server.
 	attachment, ok := c.attachments.Get(r.Key())
-	if !ok {
+	if !ok || attachment.resource != r {
 		return ErrNotAttached
 	}
 
