@@ -192,3 +192,34 @@
   change is never stored. The stored-change path decodes through
   `from_bytes.go`, which never yields a float, so existing documents are
   unaffected.
+
+## Review round 5 (panel)
+
+- **Correcting round 4's last bullet.** "The stored-change path decodes
+  through `from_bytes.go`, which never yields a float" was wrong.
+  `ChangeInfo.ToChange` decodes stored operations through
+  `converter.FromStoredOperations` -> `FromOperations` -> `fromIncrease`,
+  the same function the wire path uses, so the new
+  `ErrNonFiniteCounterDelta` applied retroactively to every change
+  already persisted with a NaN/Inf Double delta: the document became
+  permanently unloadable, and unpullable through
+  `SanitizeStoredOperations` as well. The rejection is the right rule on
+  the wire and the wrong one on a stored change, exactly as the header
+  comment on `normalize.go` says.
+- **The repair belongs where both stored paths already meet.**
+  `NormalizeStoredOperations` runs for the stored read and the pull
+  forward alike, so zeroing the non-finite delta there fixes both with
+  one change. Zero is the faithful repair rather than a convenient one:
+  `crdt.Counter.Increase` drops a non-finite delta and leaves the
+  counter unchanged, and adding zero leaves the same value on every
+  counter type. Dropping the operation would have worked too; keeping it
+  leaves the change's operation list the length every checkpoint around
+  it was computed from.
+- **A guard whose only test uses an unrelated key tests nothing.** The
+  `ErrNotAttached` assertions that "covered" the new identity checks all
+  passed a resource whose key had no attachment at all, so they held
+  identically with or without the check. `client/attachment_identity_test.go`
+  now drives `Remove`, `Detach`, `WatchStream` and `broadcast` with a
+  same-key resource the attachment does not hold, against a server that
+  implements nothing -- so a check that stopped rejecting surfaces as an
+  unimplemented RPC rather than as a pass.
