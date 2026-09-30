@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -453,6 +454,34 @@ func TestDocument(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"int":1294967306,"long":7766279631452241930}`, doc.Marshal())
+	})
+
+	// A fractional delta must cross the wire as an Integer or a Long, never
+	// as a Double: a server without this fix cannot build the reverse of a
+	// Double delta and converts it with a CPU-dependent int32(f).
+	t.Run("counter fractional delta pushed as an integer test", func(t *testing.T) {
+		doc := document.New("d1")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("int", 10).Increase(1.5)
+			root.SetNewCounter("long", int64(10)).Increase(-2.5)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"int":11,"long":8}`, doc.Marshal())
+
+		var types []crdt.ValueType
+		for _, c := range doc.CreateChangePack().Changes {
+			for _, op := range c.Operations() {
+				inc, ok := op.(*operations.Increase)
+				if !ok {
+					continue
+				}
+				prim, ok := inc.Value().(*crdt.Primitive)
+				assert.True(t, ok)
+				types = append(types, prim.ValueType())
+			}
+		}
+		assert.Equal(t, []crdt.ValueType{crdt.Integer, crdt.Long}, types)
 	})
 
 	t.Run("rollback test", func(t *testing.T) {

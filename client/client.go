@@ -311,10 +311,14 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 	}
 
 	// The server detached every resource of this client, so mark them
-	// detached here too, as the JS SDK does. The attachments themselves stay
-	// in place, so their readers keep behaving as they did before this
-	// client was deactivated; beginAttach drops a detached one when its key
-	// is attached again, after the client is activated again.
+	// detached here too, as the JS SDK does, and drop their attachments. The
+	// attachment holds the resource ID of the session the server just ended,
+	// so keeping it would let the sync loop -- which reads c.attachments and
+	// ignores resource status -- push it again the moment this client is
+	// activated anew, and would let Detach, Remove or WatchStream address a
+	// server-side attachment this client no longer holds. Dropping it leaves
+	// the resource exactly where a plain Detach leaves it: detached, with no
+	// attachment, free to be attached again.
 	for _, attachment := range c.attachments.Values() {
 		if attachment.resource.Status() != attachable.StatusRemoved {
 			attachment.resource.SetStatus(attachable.StatusDetached)
@@ -322,6 +326,7 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		if ch, ok := attachment.resource.(*channel.Channel); ok {
 			ch.UpdateSessionCount(0, 0)
 		}
+		c.attachments.Delete(attachment.resource.Key())
 	}
 
 	c.status = statusDeactivated
@@ -527,9 +532,9 @@ func (c *Client) beginAttach(k key.Key) error {
 		return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
 	}
 	if attachment, ok := c.attachments.Get(k); ok {
-		// Deactivate leaves the attachments of the old session in place so
-		// their readers keep working, but marks their resources detached.
-		// Such an entry is stale, so drop it and let the key be used again.
+		// An attachment whose resource is no longer attached -- one left by a
+		// path that detached or removed the resource without clearing the
+		// entry -- is stale, so drop it and let the key be used again.
 		if attachment.resource.Status() == attachable.StatusAttached {
 			return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
 		}
@@ -1019,8 +1024,11 @@ func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 func (c *Client) WatchStream(
 	r attachable.Attachable,
 ) (<-chan WatchDocResponse, context.CancelFunc, error) {
+	// Held by r itself, not merely keyed by r.Key(): a resource rejected by
+	// the attach guard, or a stale one from before a deactivation, would
+	// otherwise observe another resource's stream.
 	attachment, ok := c.attachments.Get(r.Key())
-	if !ok {
+	if !ok || attachment.resource != r {
 		return nil, nil, ErrNotAttached
 	}
 
@@ -1311,8 +1319,12 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 		return ErrNotActivated
 	}
 
+	// As in Detach, the attachment is looked up by key, so it must also be
+	// held by d itself. Another document with the same key, one rejected by
+	// the attach guard or a stale one from before a deactivation, would
+	// otherwise send the attached document's ID and remove it on the server.
 	attachment, ok := c.attachments.Get(d.Key())
-	if !ok {
+	if !ok || attachment.resource != d {
 		return ErrNotAttached
 	}
 
@@ -1358,8 +1370,10 @@ func (c *Client) broadcast(
 		return ErrNotActivated
 	}
 
-	_, ok := c.attachments.Get(ch.Key())
-	if !ok {
+	// Held by ch itself, not merely keyed by ch.Key(), so a rejected or stale
+	// channel cannot publish through another channel's attachment.
+	attachment, ok := c.attachments.Get(ch.Key())
+	if !ok || attachment.resource != ch {
 		return ErrNotAttached
 	}
 

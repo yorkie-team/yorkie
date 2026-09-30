@@ -165,3 +165,30 @@
   is a plain field, so `Attach` racing `Deactivate` is already a data
   race on `main`, and JS has the same interleaving. Serializing the
   client lifecycle is a change of its own.
+
+## Review round 4 (panel)
+
+- **A guard added to one caller is a guard missing from its siblings.**
+  Round 3 gave `Detach` the "attachment must be held by this resource"
+  check, but `Remove`, `WatchStream` and `broadcast` still resolved the
+  attachment by key alone, so `Remove` sent the attached document's ID
+  for a rejected duplicate handle and removed the wrong document. All
+  three now carry the same check.
+- **`Deactivate` must drop the attachments, not just mark them.**
+  Keeping them let the sync loop -- which reads `c.attachments` and
+  ignores resource status -- resume pushing a dead session's resource IDs
+  as soon as the client was activated again. Dropping them leaves the
+  resource exactly where a plain `Detach` does: detached, unattached,
+  free to be attached again.
+- **`Increase.Execute` could panic on a wire value.** `o.value.(*crdt
+  .Primitive)` had no comma-ok, and the value is whatever element the
+  pack carried. The same path still returned errors for a non-numeric
+  delta and for a dedup/normal mismatch, which is the store-then-replay
+  poison pill the non-finite fix was for. All three are now dropped as a
+  no-op off the local path (`skipUnlessLocal`).
+- **A no-op is convergence, not validation.** Go replicas dropping a
+  non-finite delta still diverge from one that applies it, so
+  `fromIncrease` now rejects a NaN/Inf delta at the RPC boundary and the
+  change is never stored. The stored-change path decodes through
+  `from_bytes.go`, which never yields a float, so existing documents are
+  unaffected.

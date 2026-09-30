@@ -173,4 +173,45 @@ func TestIncrease(t *testing.T) {
 			}
 		}
 	})
+
+	// The same rule for a delta that is not a number at all: a raw client can
+	// push an Increase whose value is any element, and the server stores the
+	// change before executing it. It must neither panic nor error off the
+	// local path, where the change is already durable.
+	t.Run("execute an inapplicable delta as a no-op off the local path", func(t *testing.T) {
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+		actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+
+		cntTicket := time.NewTicket(1, 0, actor)
+		counter, err := crdt.NewCounter(crdt.IntegerCnt, 10, cntTicket)
+		assert.NoError(t, err)
+		set := operations.NewSet(time.InitialTicket, "cnt", counter, cntTicket)
+		_, err = set.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		incTicket := time.NewTicket(2, 0, actor)
+		str, err := crdt.NewPrimitive("1", incTicket)
+		assert.NoError(t, err)
+		for _, delta := range []crdt.Element{
+			// Not a Primitive at all.
+			crdt.NewObject(crdt.NewElementRHT(), incTicket),
+			// A Primitive, but not a numeric one.
+			str,
+		} {
+			for _, source := range []operations.OpSource{
+				operations.OpSourceRemote,
+				operations.OpSourceReplay,
+			} {
+				result, err := operations.NewIncrease(cntTicket, delta, incTicket).
+					Execute(root, source, time.NewVersionVector())
+				assert.NoError(t, err, "%T on %v", delta, source)
+				assert.False(t, result.Observable)
+				assert.Equal(t, `{"cnt":10}`, root.Object().Marshal())
+			}
+
+			_, err := operations.NewIncrease(cntTicket, delta, incTicket).
+				Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+			assert.Error(t, err, "%T locally", delta)
+		}
+	})
 }

@@ -66,7 +66,18 @@ func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
-	value := o.value.(*crdt.Primitive)
+	// Comma-ok, and a no-op rather than an error off the local path: the
+	// value arrives straight off the wire (converter.fromIncrease passes
+	// whatever element the pack carries), so a raw client can push an
+	// Increase whose value is a Text, an Object or another Counter. The
+	// server stores a pushed change before executing it (packs.PushPull), so
+	// a panic here takes the RPC goroutine down and an error here makes
+	// every later replay of that document fail forever. Dropping the delta
+	// is deterministic on every replica, so they still converge.
+	value, ok := o.value.(*crdt.Primitive)
+	if !ok {
+		return skipUnlessLocal(source, ErrNotApplicableDataType)
+	}
 
 	// Compute the reverse before mutating the counter, mirroring the JS SDK
 	// (increase_operation.ts:95-130). A dedup counter (o.actor != "")
@@ -96,16 +107,21 @@ func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		reverseOp = NewIncrease(o.parentCreatedAt, negated, o.executedAt)
 	}
 
+	// Every failure below is a property of the delta the change carries -- a
+	// dedup counter increased without an actor, a non-numeric primitive --
+	// so it is fatal only for a change this replica is producing. For one
+	// another replica or the server already stored, it is dropped for the
+	// reason above: a stored change that cannot be applied is unrecoverable.
 	if cnt.IsDedup() {
 		if o.actor == "" {
-			return ExecutionResult{}, ErrNotApplicableDataType
+			return skipUnlessLocal(source, ErrNotApplicableDataType)
 		}
 		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
-			return ExecutionResult{}, err
+			return skipUnlessLocal(source, err)
 		}
 	} else {
 		if _, err := cnt.Increase(value); err != nil {
-			return ExecutionResult{}, err
+			return skipUnlessLocal(source, err)
 		}
 	}
 
@@ -118,6 +134,20 @@ func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 	}
 
 	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
+}
+
+// skipUnlessLocal returns err for an operation this replica is producing, and
+// a no-op result for one that arrived from another replica or from the
+// server's replay of a change it has already stored. Such a change cannot be
+// rejected any more -- pushpull.PushPull persists a pushed change before it is
+// ever executed -- so an error would make every later BuildInternalDocForServerSeq
+// and every snapshot of that document fail forever.
+func skipUnlessLocal(source OpSource, err error) (ExecutionResult, error) {
+	if source == OpSourceLocal || source == OpSourceUndoRedo {
+		return ExecutionResult{}, err
+	}
+
+	return ExecutionResult{Observable: false}, nil
 }
 
 // negatePrimitive returns a deep copy of the given primitive with its
