@@ -18,6 +18,8 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -243,4 +245,132 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 	require.Len(t, firstWatchAttributes, 2)
 	require.False(t, watchAttributesChanged, "Watch resource attributes changed during lease rechecks")
 	watchAttributesMu.Unlock()
+}
+
+// A cached allow for the same credentials must not admit a revoked Watch.
+func TestWatchAdmissionBypassesCachedAllowForSameCredentials(t *testing.T) {
+	for _, method := range []types.Method{types.Watch, types.WatchDocument, types.WatchChannel} {
+		t.Run(string(method), func(t *testing.T) {
+			var allowed atomic.Bool
+			allowed.Store(true)
+			var checks atomic.Int64
+			var requestMu sync.Mutex
+			var firstRequest *types.AuthWebhookRequest
+			var requestChanged bool
+			hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				req, err := types.NewAuthWebhookRequest(r.Body)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				checks.Add(1)
+				requestMu.Lock()
+				if firstRequest == nil {
+					firstRequest = req
+				} else if !reflect.DeepEqual(firstRequest, req) {
+					requestChanged = true
+				}
+				requestMu.Unlock()
+				if !allowed.Load() {
+					w.WriteHeader(http.StatusForbidden)
+				}
+				_, _ = (&types.AuthWebhookResponse{Allowed: allowed.Load()}).Write(w)
+			}))
+			defer hook.Close()
+			conf := helper.TestConfig()
+			conf.Mongo = nil
+			conf.Backend.AuthWebhookCacheTTL = "1m"
+			svr, err := server.New(conf)
+			require.NoError(t, err)
+			require.NoError(t, svr.Start())
+			defer func() { require.NoError(t, svr.Shutdown(true)) }()
+			ctx := context.Background()
+			admin := helper.CreateAdminCli(t, svr.RPCAddr())
+			defer admin.Close()
+			project, err := admin.CreateProject(ctx, "watch-cache-admission")
+			require.NoError(t, err)
+			methods := []string{string(method)}
+			_, err = admin.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+				AuthWebhookURL: &hook.URL, AuthWebhookMethods: &methods,
+			})
+			require.NoError(t, err)
+			apiClient := v1connect.NewYorkieServiceClient(http.DefaultClient, "http://"+svr.RPCAddr(),
+				connect.WithInterceptors(client.NewAuthInterceptor(project.PublicKey, "same-synthetic-token")))
+			activated, err := apiClient.ActivateClient(ctx, connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+			require.NoError(t, err)
+			attached, err := apiClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activated.Msg.ClientId,
+				ChangePack: &api.ChangePack{DocumentKey: helper.TestKey(t).String(), Checkpoint: &api.Checkpoint{}},
+			}))
+			require.NoError(t, err)
+			// Every attempt uses the same token, RPC method and resource request.
+			open := func(watchCtx context.Context) (bool, error) {
+				switch method {
+				case types.Watch:
+					stream, err := apiClient.Watch(watchCtx, connect.NewRequest(&api.WatchRequest{
+						ClientId: activated.Msg.ClientId,
+						Resources: []*api.ResourceDescriptor{{Resource: &api.ResourceDescriptor_Document{
+							Document: &api.DocumentDescriptor{DocumentId: attached.Msg.DocumentId},
+						}}},
+					}))
+					if err != nil {
+						return false, err
+					}
+					defer func() { _ = stream.Close() }()
+					received := stream.Receive()
+					return received, stream.Err()
+				case types.WatchDocument:
+					//nolint:staticcheck // Admission must protect clients using the deprecated RPC.
+					stream, err := apiClient.WatchDocument(watchCtx, connect.NewRequest(&api.WatchDocumentRequest{
+						ClientId: activated.Msg.ClientId, DocumentId: attached.Msg.DocumentId,
+					}))
+					if err != nil {
+						return false, err
+					}
+					defer func() { _ = stream.Close() }()
+					received := stream.Receive()
+					return received, stream.Err()
+				default:
+					//nolint:staticcheck // Admission must protect clients using the deprecated RPC.
+					stream, err := apiClient.WatchChannel(watchCtx, connect.NewRequest(&api.WatchChannelRequest{
+						ClientId: activated.Msg.ClientId, ChannelKey: "same-revocable-channel",
+					}))
+					if err != nil {
+						return false, err
+					}
+					defer func() { _ = stream.Close() }()
+					received := stream.Receive()
+					return received, stream.Err()
+				}
+			}
+			firstCtx, cancelFirst := context.WithTimeout(ctx, time.Second)
+			received, err := open(firstCtx)
+			cancelFirst()
+			require.NoError(t, err)
+			require.True(t, received)
+			require.Equal(t, int64(1), checks.Load())
+			requestMu.Lock()
+			body, err := json.Marshal(firstRequest)
+			requestMu.Unlock()
+			require.NoError(t, err)
+			cacheKey := fmt.Sprintf("%s:auth:%s", project.PublicKey, body)
+			cached, ok := svr.Backend().Cache.AuthWebhook.Get(cacheKey)
+			require.True(t, ok, "the same request must have a live cached allow before revocation")
+			require.True(t, cached.Second.Allowed)
+			allowed.Store(false)
+			// No established stream remains to overwrite the cached allow on a lease tick.
+			cached, ok = svr.Backend().Cache.AuthWebhook.Get(cacheKey)
+			require.True(t, ok)
+			require.True(t, cached.Second.Allowed)
+			deniedCtx, cancelDenied := context.WithTimeout(ctx, time.Second)
+			defer cancelDenied()
+			received, err = open(deniedCtx)
+			require.False(t, received, "cached allow admitted the revoked credentials")
+			require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+			require.Equal(t, int64(2), checks.Load(), "re-admission must consult the webhook")
+			requestMu.Lock()
+			defer requestMu.Unlock()
+			require.False(t, requestChanged, "re-admission changed the token, method or resource attributes")
+		})
+	}
 }

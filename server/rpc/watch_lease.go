@@ -324,6 +324,19 @@ func (s *yorkieServer) recheckWatchLease(
 		return lease.tolerate(leaseCtx, watchProjectReloadError(err), interval)
 	}
 
+	// Newly required authorization must have a finite window even if the first
+	// webhook check is uncertain. Preserve an armed window until a check succeeds.
+	if fresh.RequireAuth(access.Method) {
+		lease.mu.RLock()
+		unarmed := lease.expires.IsZero()
+		lease.mu.RUnlock()
+		if unarmed {
+			if err := renewWatchLease(lease, setDeadline, checkStart); err != nil {
+				return err
+			}
+		}
+	}
+
 	if err := s.checkWatchLease(checkCtx, fresh, access); err != nil {
 		return lease.tolerate(leaseCtx, err, interval)
 	}

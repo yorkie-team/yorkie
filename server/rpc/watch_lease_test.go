@@ -35,10 +35,14 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
+	"github.com/yorkie-team/yorkie/server/backend"
+	backendcache "github.com/yorkie-team/yorkie/server/backend/cache"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
 // A write deadline must release a Watch handler even when its peer stops
@@ -277,4 +281,101 @@ func TestWatchLeaseCheckKeepsEarlierExpiry(t *testing.T) {
 	require.Equal(t, lease.expires, lease.checkDeadline(start))
 	lease.expires = time.Time{}
 	require.Equal(t, start.Add(maxWatchLeaseAge), lease.checkDeadline(start))
+}
+
+// watchLeaseProjectDB returns the settings observed when an unprotected stream
+// first discovers that its project now requires authorization.
+type watchLeaseProjectDB struct {
+	database.Database
+	project *database.ProjectInfo
+}
+
+func (d *watchLeaseProjectDB) FindProjectInfoByPublicKey(
+	_ context.Context, _ string,
+) (*database.ProjectInfo, error) {
+	return d.project.DeepCopy(), nil
+}
+
+func TestWatchLeaseArmsBeforeNewlyRequiredAuthorization(t *testing.T) {
+	for _, method := range []types.Method{types.Watch, types.WatchDocument, types.WatchChannel} {
+		t.Run(string(method), func(t *testing.T) {
+			for _, response := range []string{"unavailable", "malformed", "timeout"} {
+				t.Run(response, func(t *testing.T) {
+					for _, armed := range []bool{false, true} {
+						name := "unarmed"
+						if armed {
+							name = "existing"
+						}
+						t.Run(name, func(t *testing.T) {
+							deadlines := make(chan time.Time, 4)
+							deadlineAtCheck := make(chan time.Time, 1)
+							hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+								_, _ = io.Copy(io.Discard, r.Body)
+								var expiry time.Time
+								select {
+								case expiry = <-deadlines:
+								default:
+								}
+								deadlineAtCheck <- expiry
+								switch response {
+								case "unavailable":
+									w.WriteHeader(http.StatusServiceUnavailable)
+								case "malformed":
+									_, _ = w.Write([]byte("invalid JSON"))
+								case "timeout":
+									<-r.Context().Done()
+								}
+							}))
+							defer hook.Close()
+							project := database.NewProjectInfo(t.Name(), database.ZeroID)
+							project.PublicKey = "synthetic-project"
+							project.AuthWebhookURL = hook.URL
+							project.AuthWebhookMethods = []string{string(method)}
+							project.AuthWebhookMaxRetries = 0
+							project.AuthWebhookMinWaitInterval = "1ms"
+							project.AuthWebhookMaxWaitInterval = "1ms"
+							project.AuthWebhookRequestTimeout = "50ms"
+							caches, err := backendcache.New(backendcache.Options{
+								AuthWebhookCacheSize: 1, AuthWebhookCacheTTL: 10 * time.Second,
+								SnapshotCacheSize: 1, ChannelSessionCountCacheSize: 1,
+								ChannelSessionCountCacheTTL: time.Second,
+							})
+							require.NoError(t, err)
+							be := &backend.Backend{
+								DB: &watchLeaseProjectDB{project: project}, Cache: caches,
+								AuthWebhookClient: webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](false),
+							}
+							defer be.AuthWebhookClient.Close()
+							s := &yorkieServer{backend: be}
+							lease := &watchLease{}
+							var previous time.Time
+							if armed {
+								previous = time.Now().Add(4 * time.Second)
+								lease.expires = previous
+								deadlines <- previous
+							}
+							setDeadline := func(at time.Time) error { deadlines <- at; return nil }
+							ctx := metadata.With(logging.With(context.Background(), logging.DefaultLogger()),
+								metadata.Metadata{APIKey: project.PublicKey, Authorization: "synthetic-token"})
+							access := &types.AccessInfo{Method: method}
+							start := time.Now()
+							require.NoError(t, s.recheckWatchLease(ctx, lease, access, setDeadline, watchLeaseInterval(), project.PublicKey))
+							observed := <-deadlineAtCheck
+							require.False(t, observed.IsZero(), "the transport must be bounded before calling the newly required webhook")
+							require.Equal(t, observed, lease.expires)
+							if armed {
+								require.Equal(t, previous, lease.expires)
+							} else {
+								require.WithinDuration(t, start.Add(maxWatchLeaseAge), lease.expires, time.Second)
+							}
+							firstExpiry := lease.expires
+							require.NoError(t, s.recheckWatchLease(ctx, lease, access, setDeadline, watchLeaseInterval(), project.PublicKey))
+							<-deadlineAtCheck
+							require.Equal(t, firstExpiry, lease.expires, "uncertain checks must not extend the lease")
+						})
+					}
+				})
+			}
+		})
+	}
 }
