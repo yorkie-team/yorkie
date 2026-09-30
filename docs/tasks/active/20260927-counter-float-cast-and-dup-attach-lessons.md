@@ -23,8 +23,11 @@
   fractional delta since the undo port (#1932, v0.7.17). Testing the
   operation layer, not only the crdt layer, is what found it.
 - Keeping the Go json layer on integer deltas (not switching to `Double`
-  like JS) matters for compatibility: servers from v0.7.17 on cannot apply
-  a `Double` delta until this fix is deployed.
+  like JS) matters for compatibility. A server from v0.7.17 on stores a
+  `Double` delta but cannot replay it: `negatePrimitive` has no `Double`
+  case, so the snapshot build fails with `internal: not applicable
+  datatype`, and from then on `PushPull` and `AttachDocument` for that
+  document fail too. That lasts until this fix is deployed.
 - `TryAttaching` in mongo is a filtered `FindOneAndUpdate`, so a miss
   cannot say why it missed. A second read only on the miss path gives a
   precise error without costing the success path a round trip.
@@ -134,3 +137,31 @@
   marks resources detached (which is what lets the key be attached
   again), and `beginAttach` evicts the stale entry when the key is
   reattached.
+
+## Review round 3 (CI flake and CodeRabbit threads)
+
+- **The red `build` was a flake on `main`, not this PR.**
+  `TestWatchLoopInitFailureStopsPump` failed 76/200 on `main` and 78/200
+  here. `close(pumpStop)` only signals the pump. While a document event
+  is also pending, the pump's `select` picks either case at random, so a
+  "stopped" pump could take one more event. `runWatchLoop` now waits for
+  the pump to exit (`stopPump`), which a re-established stream also
+  relies on. 0/300 after. `watchBuffer.push` never blocks, so the wait
+  cannot deadlock.
+- **Undo must record the change made, not the delta sent.** An Integer
+  counter adds a `Double` delta in float64 and wraps, so `10 + 2^60` is
+  `0` and `-2^60` cannot bring the 10 back. For that one case the reverse
+  is now the int32 `before - after`, which int32 arithmetic always undoes.
+  A Long counter truncates the delta exactly, so its negated `Double`
+  stays, as in JS.
+- **`Detach` looked the attachment up by key alone.** A Document rejected
+  by the new guard, or a stale handle from before `Deactivate`, detached
+  the Document that held its key on the server. `Detach` now requires the
+  attachment to be held by the given resource. Red: both new asserts in
+  the duplicate-attach and reactivation tests. On `main` a second
+  Document with the same key did the same.
+- Not fixed here, the thread is answered: an attach whose response
+  arrives after a concurrent `Deactivate` registers late. `Client.status`
+  is a plain field, so `Attach` racing `Deactivate` is already a data
+  race on `main`, and JS has the same interleaving. Serializing the
+  client lifecycle is a change of its own.

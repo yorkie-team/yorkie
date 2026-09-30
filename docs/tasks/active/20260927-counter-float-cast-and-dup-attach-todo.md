@@ -59,3 +59,12 @@ Plan:
 
 - [x] Self-review rounds logged in the lessons file.
 - [x] Rebase on `origin/main`, push, open PR.
+- [x] Round 3: fix the `TestWatchLoopInitFailureStopsPump` flake that
+      failed CI (on `main` as well).
+- [x] Round 3: build the reverse of a `Double` delta on an Integer
+      counter from the change it made (CodeRabbit).
+- [x] Round 3: `Detach` rejects a resource that does not hold the
+      attachment of its key (CodeRabbit).
+- [x] Round 3: correct the old-server note in the lessons file.
+- [x] Round 3: answer the Deactivate/in-flight attach thread; out of
+      scope, see the lessons file.
