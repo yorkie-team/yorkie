@@ -50,7 +50,17 @@ type Attachment struct {
 
 	watchCtx         context.Context
 	closeWatchStream context.CancelFunc
-	watchStream      <-chan WatchDocResponse
+
+	// watchStream, watchBuf and watchPumpDone form the watch delivery
+	// pipeline. It belongs to the attachment rather than to a single
+	// runWatchLoop invocation: the event pump and the sender live until
+	// watchCtx is cancelled, so a loop re-establishing its stream never
+	// leaves Document.Events without a consumer, and watchStream is written
+	// once, before the attachment is published, rather than rewritten from
+	// the reconnecting goroutine. All three are immutable after that point.
+	watchStream   <-chan WatchDocResponse
+	watchBuf      *watchBuffer
+	watchPumpDone chan struct{}
 
 	syncMu              sync.RWMutex
 	syncMode            SyncMode

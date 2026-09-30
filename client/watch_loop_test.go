@@ -31,6 +31,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -150,10 +151,10 @@ func TestWatchLoopPumpDrainsWhileStreamIsIdle(t *testing.T) {
 }
 
 // TestWatchLoopInitFailureStopsPump pins the other half of the same ordering:
-// the pump now starts before the stream's first response is read, so every
-// path that abandons the loop during initialization has to stop it again.
-// A pump left running past a failed initialization is a goroutine consuming
-// the document's events for a stream nobody reads.
+// the pipeline now starts before the stream's first response is read, so an
+// Attach that cannot bring the stream up has to roll the attachment back --
+// unregister it, cancel its watch context and wait for the pump -- instead of
+// leaving a registered attachment with no stream behind it.
 func TestWatchLoopInitFailureStopsPump(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -170,8 +171,20 @@ func TestWatchLoopInitFailureStopsPump(t *testing.T) {
 
 			err := cli.Attach(context.Background(), doc, client.WithRealtimeSync())
 			assert.Error(t, err, "a watch stream that fails initialization must surface the error")
+			if tc.name == "rejected" {
+				// The RPC's own failure, not the generic "no first response":
+				// a rejected Watch carries its code on stream.Err().
+				assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err),
+					"the rejected RPC's error must reach the caller")
+			}
+			// The rollback unregistered the attachment and put the document
+			// back to detached, so it can be attached anew.
+			assert.Equal(t, attachable.StatusDetached, doc.Status())
+			_, _, watchErr := cli.WatchStream(doc)
+			assert.Error(t, watchErr, "a rolled-back attachment must not stay registered")
 
-			// The pump is gone with the failed loop: the channel takes the single
+			// The pump is gone with the rolled-back attachment: the channel
+			// takes the single
 			// event its capacity holds and the next publish has no consumer.
 			peerID := peer.ActorID().String()
 			doc.AddOnlineClientAndReconcile(peerID)
@@ -207,13 +220,18 @@ func TestWatchLoopInitFailureStopsPump(t *testing.T) {
 }
 
 // watchReconnectServer fails its first initialized stream and holds its
-// successor open until cancellation. Both streams use the real Connect RPC.
+// successor open until cancellation. The successor's handshake is held by the
+// test until holdSecond is released, so the reconnect window -- the interval
+// the client spends with no established stream -- is under the test's
+// control. Both streams use the real Connect RPC.
 type watchReconnectServer struct {
 	*watchInitServer
-	calls     atomic.Int32
-	failFirst chan struct{}
-	stopped   chan struct{}
-	peerID    string
+	calls        atomic.Int32
+	failFirst    chan struct{}
+	secondCalled chan struct{}
+	holdSecond   chan struct{}
+	stopped      chan struct{}
+	peerID       string
 }
 
 func (s *watchReconnectServer) Watch(
@@ -222,6 +240,14 @@ func (s *watchReconnectServer) Watch(
 	stream *connect.ServerStream[api.WatchResponse],
 ) error {
 	call := s.calls.Add(1)
+	if call == 2 {
+		close(s.secondCalled)
+		select {
+		case <-s.holdSecond:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	if err := stream.Send(&api.WatchResponse{Body: &api.WatchResponse_Initialization{
 		Initialization: &api.WatchInitialization{},
 	}}); err != nil {
@@ -252,13 +278,29 @@ func (s *watchReconnectServer) Watch(
 	return ctx.Err()
 }
 
-func TestWatchLoopReconnectDeliversPresenceAndCancelClosesSender(t *testing.T) {
+// TestWatchLoopReconnectKeepsDrainingAndDelivering pins the contract that
+// makes the delivery pipeline the attachment's rather than one watch loop's:
+//
+//   - a document event published while the client has no established stream
+//     still finds a consumer, so a publisher holding Document.eventsMu is not
+//     stalled by the reconnect handshake, and
+//   - every such event is delivered once the successor comes up, on the same
+//     response channel the consumer already held.
+//
+// The successor's handshake is held open by the server for the whole span of
+// the publishes, so the reconnect window is inside the assertions rather than
+// a race the test happens to win.
+func TestWatchLoopReconnectKeepsDrainingAndDelivering(t *testing.T) {
 	doc := document.New("watch-reconnect")
 	peer := newPresentPeer(t, "watch-reconnect")
 	peerID := peer.ActorID().String()
 	srv := &watchReconnectServer{
 		watchInitServer: &watchInitServer{},
-		failFirst:       make(chan struct{}), stopped: make(chan struct{}), peerID: peerID,
+		failFirst:       make(chan struct{}),
+		secondCalled:    make(chan struct{}),
+		holdSecond:      make(chan struct{}),
+		stopped:         make(chan struct{}),
+		peerID:          peerID,
 	}
 	mux := http.NewServeMux()
 	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
@@ -273,66 +315,79 @@ func TestWatchLoopReconnectDeliversPresenceAndCancelClosesSender(t *testing.T) {
 	if !assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync())) {
 		return
 	}
-	first, _, err := cli.WatchStream(doc)
+	rch, _, err := cli.WatchStream(doc)
 	if !assert.NoError(t, err) {
 		return
 	}
-	// Keep the peer's presence offline until the successor's watched event.
+	// Hand the observer the peer's presence while the peer is still offline,
+	// so that reconciling it online later emits a document event.
 	if !assert.NoError(t, doc.ApplyChangePack(presencePackFor(peer, doc))) {
 		return
 	}
-	close(srv.failFirst)
-	select {
-	case response, ok := <-first:
-		if !assert.True(t, ok) || !assert.Error(t, response.Err) {
-			return
-		}
-	case <-gotime.After(5 * gotime.Second):
-		t.Fatal("first stream did not report its error")
-	}
-	select {
-	case _, ok := <-first:
-		assert.False(t, ok, "first sender must close after reporting the error")
-	case <-gotime.After(5 * gotime.Second):
-		t.Fatal("first sender did not close")
-	}
-	// The successor reader sets presence under the document lock after
-	// publishing its watchStream. Observing that transition also synchronizes
-	// the WatchStream accessor with the replacement, without polling its field.
-	if !assert.Eventually(t, func() bool { return doc.Presence(peerID) != nil },
-		5*gotime.Second, gotime.Millisecond, "successor did not process its watched event") {
-		return
-	}
-	successor, _, err := cli.WatchStream(doc)
-	if !assert.NoError(t, err) || !assert.NotEqual(t, first, successor) {
-		return
-	}
-	assertWatchPresence := func(want client.WatchDocResponseType) {
+	next := func(what string) client.WatchDocResponse {
 		t.Helper()
 		select {
-		case response, ok := <-successor:
-			assert.True(t, ok, "successor closed before presence delivery")
-			assert.NoError(t, response.Err)
-			assert.Equal(t, want, response.Type)
+		case response, ok := <-rch:
+			if !ok {
+				t.Fatalf("response channel closed while waiting for %s", what)
+			}
+			return response
 		case <-gotime.After(5 * gotime.Second):
-			t.Fatal("successor lost a presence event to a stopped consumer")
+			t.Fatalf("no response while waiting for %s", what)
 		}
+		return client.WatchDocResponse{}
 	}
-	assertWatchPresence(client.DocumentWatched)
-	// Each transition must reach the successor; a residual old pump must
-	// neither steal events into its closed buffer nor duplicate delivery.
+
+	close(srv.failFirst)
+	assert.Error(t, next("the first stream's error").Err,
+		"the broken stream must report its error to the consumer")
+
+	// The successor's handshake is in flight and held by the server: the
+	// client has no established stream at all. Publishing must still complete,
+	// and nothing published here may be lost.
+	select {
+	case <-srv.secondCalled:
+	case <-gotime.After(5 * gotime.Second):
+		t.Fatal("the client did not re-establish the watch stream")
+	}
+	var want []client.WatchDocResponseType
+	for range 3 {
+		assertPublishes(t, "watched inside the reconnect window", func() {
+			doc.AddOnlineClientAndReconcile(peerID)
+		})
+		assertPublishes(t, "unwatched inside the reconnect window", func() {
+			doc.RemoveOnlineClientAndReconcile(peerID)
+		})
+		want = append(want, client.DocumentWatched, client.DocumentUnwatched)
+	}
+	close(srv.holdSecond)
+
+	for i, w := range want {
+		response := next("an event queued inside the reconnect window")
+		assert.NoError(t, response.Err)
+		assert.Equal(t, w, response.Type, "reconnect-window event %d lost or reordered", i)
+	}
+	successor, _, err := cli.WatchStream(doc)
+	if !assert.NoError(t, err) {
+		return
+	}
+	assert.Equal(t, rch, successor, "a reconnect must keep the consumer's channel")
+
+	// The successor's own traffic continues on that same channel, and every
+	// later transition reaches it exactly once.
+	assert.Equal(t, client.DocumentWatched, next("the successor's watched event").Type)
 	for range 10 {
 		assertPublishes(t, "successor unwatched", func() { doc.RemoveOnlineClientAndReconcile(peerID) })
-		assertWatchPresence(client.DocumentUnwatched)
+		assert.Equal(t, client.DocumentUnwatched, next("successor unwatched").Type)
 		assertPublishes(t, "successor watched", func() { doc.AddOnlineClientAndReconcile(peerID) })
-		assertWatchPresence(client.DocumentWatched)
+		assert.Equal(t, client.DocumentWatched, next("successor watched").Type)
 	}
 	cancel()
 	select {
-	case _, ok := <-successor:
-		assert.False(t, ok, "cancellation must close the successor sender")
+	case _, ok := <-rch:
+		assert.False(t, ok, "cancellation must close the sender")
 	case <-gotime.After(5 * gotime.Second):
-		t.Fatal("successor sender stayed open after cancellation")
+		t.Fatal("sender stayed open after cancellation")
 	}
 	select {
 	case <-srv.stopped:

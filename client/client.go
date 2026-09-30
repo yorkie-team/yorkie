@@ -572,7 +572,7 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		syncMode = SyncModeRealtime
 	}
 
-	c.attachments.Set(d.Key(), &Attachment{
+	attachment := &Attachment{
 		resource:            d,
 		resourceID:          types.ID(res.Msg.DocumentId),
 		watchCtx:            watchCtx,
@@ -581,9 +581,26 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		changeEventReceived: false,
 		disableGC:           opts.DisableGC,
 		disablePresence:     res.Msg.DisablePresence,
-	})
+	}
+	if opts.IsRealtime {
+		// Start the delivery pipeline before the attachment is published and
+		// before the watch stream is opened: the first Receive blocks on the
+		// server, and a publisher stalled on the document's event channel in
+		// the meantime holds the event mutex against every other publisher.
+		startWatchPipeline(watchCtx, attachment, d)
+	}
+	c.attachments.Set(d.Key(), attachment)
 	if opts.IsRealtime {
 		if err = c.runWatchLoop(watchCtx, d); err != nil {
+			// Roll the half-established attachment back. Leaving it registered
+			// keeps a realtime attachment that has no watch stream and whose
+			// watchCtx is never cancelled, so its pipeline would outlive the
+			// failed Attach with nothing to feed it. The server may still hold
+			// the attachment; the document goes back to detached so the caller
+			// can retry Attach rather than being stuck with an unusable one.
+			c.attachments.Delete(d.Key())
+			stopWatchPipeline(attachment)
+			d.SetStatus(attachable.StatusDetached)
 			return err
 		}
 	}
@@ -942,7 +959,11 @@ func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 	return nil
 }
 
-// WatchStream returns a stream of watch events for testing purposes.
+// WatchStream returns a stream of watch events for testing purposes. The
+// channel belongs to the attachment and is stable: a watch loop that
+// re-establishes its stream keeps delivering on the same channel, so a
+// consumer holding it does not have to re-read this field after a
+// disconnect. It is closed once the stream ends for good.
 func (c *Client) WatchStream(
 	r attachable.Attachable,
 ) (<-chan WatchDocResponse, context.CancelFunc, error) {
@@ -954,14 +975,91 @@ func (c *Client) WatchStream(
 	return attachment.watchStream, attachment.closeWatchStream, nil
 }
 
+// startWatchPipeline starts the delivery pipeline of the given attachment.
+// It has three goroutines with a single direction of backpressure:
+//
+//	stream reader ─┐
+//	               ├─> watchBuf ─> sender ─> watchStream
+//	pump ──────────┘
+//
+// The pump and the sender are owned by the attachment, not by a single
+// runWatchLoop invocation, and run until ctx -- the attachment's watchCtx --
+// is cancelled by Detach or Deactivate. The pump is the sole consumer of the
+// document event channel and only appends to the unbounded buffer, so
+// producers emitting document events under the document's event mutex are
+// never blocked by a slow application reading the stream, nor by a watch
+// loop re-establishing its stream after a disconnect. The sender is the sole
+// writer and closer of the response channel.
+func startWatchPipeline(ctx context.Context, attachment *Attachment, d *document.Document) {
+	buf := newWatchBuffer()
+	rch := make(chan WatchDocResponse)
+	pumpDone := make(chan struct{})
+	attachment.watchBuf = buf
+	attachment.watchStream = rch
+	attachment.watchPumpDone = pumpDone
+
+	// pump: document events -> buf.
+	go func() {
+		defer close(pumpDone)
+		for {
+			select {
+			case e := <-d.Events():
+				t := PresenceChanged
+				switch e.Type {
+				case document.WatchedEvent:
+					t = DocumentWatched
+				case document.UnwatchedEvent:
+					t = DocumentUnwatched
+				}
+				buf.push(WatchDocResponse{Type: t, Presences: e.Presences})
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// sender: buf -> rch.
+	go func() {
+		defer close(rch)
+		for {
+			resp, ok := buf.pop(ctx)
+			if !ok {
+				return
+			}
+			select {
+			case rch <- resp:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+// stopWatchPipeline cancels the attachment's watch context and waits for its
+// event pump to exit, so a caller rolling back a half-established attachment
+// knows no goroutine is left consuming the document's events.
+func stopWatchPipeline(attachment *Attachment) {
+	if attachment.closeWatchStream != nil {
+		attachment.closeWatchStream()
+	}
+	if attachment.watchPumpDone != nil {
+		<-attachment.watchPumpDone
+	}
+}
+
 // runWatchLoop subscribes to events on a given document using the unified Watch RPC.
-// If an error occurs before stream initialization, the second response, error,
-// is returned. If the context "watchCtx" is canceled or timed out, returned channel
-// is closed, and "WatchResponse" from this closed channel has zero events and
-// nil "Err()".
+// If an error occurs before stream initialization, the error is returned and the
+// attachment's delivery pipeline is left untouched: it is owned by the attachment
+// and keeps draining the document until the watch context is cancelled. If the
+// context "watchCtx" is canceled or timed out, the response channel is closed, and
+// "WatchResponse" from this closed channel has zero events and nil "Err()".
 func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	attachment, ok := c.attachments.Get(d.Key())
 	if !ok {
+		return ErrNotAttached
+	}
+	buf := attachment.watchBuf
+	if buf == nil {
 		return ErrNotAttached
 	}
 
@@ -982,93 +1080,28 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 		return err
 	}
 
-	// The delivery pipeline has three goroutines with a single direction of
-	// backpressure:
-	//
-	//	stream reader ─┐
-	//	               ├─> watchBuffer ─> sender ─> rch
-	//	pump ──────────┘
-	//
-	// The pump is the sole consumer of the document event channel and only
-	// appends to the unbounded buffer, so producers emitting document events
-	// under the document's event mutex are never blocked by a slow application
-	// reading rch. The sender is the sole writer and closer of rch. The pump
-	// stops only after the stream reader has exited, so a reconcile emission
-	// in flight always has a live consumer.
-	buf := newWatchBuffer()
-	pumpStop := make(chan struct{})
-	pumpDone := make(chan struct{})
-	// Wait for the consumer to exit before returning or starting its successor.
-	stopPump := func() {
-		close(pumpStop)
-		<-pumpDone
-	}
-
-	// pump: document events -> buf. Started before the stream's first
-	// response rather than after it. The document's event channel has
-	// capacity one, and a publisher that blocks on it holds the document's
-	// event mutex, stalling every other publisher, the sync goroutine's
-	// ApplyChangePack included. On a re-established stream the previous
-	// loop's pump has already stopped, so starting this one first gives an
-	// in-flight publish a consumer while Receive blocks on the server.
-	go func() {
-		defer close(pumpDone)
-		for {
-			select {
-			case e := <-d.Events():
-				t := PresenceChanged
-				switch e.Type {
-				case document.WatchedEvent:
-					t = DocumentWatched
-				case document.UnwatchedEvent:
-					t = DocumentUnwatched
-				}
-				buf.push(WatchDocResponse{Type: t, Presences: e.Presences})
-			case <-pumpStop:
-				return
-			}
-		}
-	}()
-
 	// NOTE(hackerwins): We need to receive the first response to initialize
 	// the watch stream. runWatchLoop should be blocked until the first response is
 	// received.
 	//
-	// Each failure below stops the pump it started above. An event the pump
-	// already moved into buf is then dropped with the buffer, which is what a
-	// watch that never came up has always done -- the alternative is the
-	// publisher blocking on a channel this loop is no longer going to drain.
+	// A failure below leaves the attachment's pump and sender alone: they
+	// belong to the attachment, so the document keeps a consumer for its
+	// events whether or not this stream ever came up. Receive reporting false
+	// carries the RPC failure -- permission denied, unavailable -- on
+	// stream.Err(); ErrInitNotReceived is only for a stream that ended
+	// cleanly without sending its initialization.
 	if !stream.Receive() {
-		stopPump()
+		if err := stream.Err(); err != nil {
+			return err
+		}
 		return ErrInitNotReceived
 	}
 	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
-		stopPump()
 		return err
 	}
 	if err = stream.Err(); err != nil {
-		stopPump()
 		return err
 	}
-
-	rch := make(chan WatchDocResponse)
-	attachment.watchStream = rch
-
-	// sender: buf -> rch.
-	go func() {
-		defer close(rch)
-		for {
-			resp, ok := buf.pop(ctx)
-			if !ok {
-				return
-			}
-			select {
-			case rch <- resp:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 
 	// stream reader: server responses -> buf.
 	go func() {
@@ -1076,7 +1109,10 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
-				stopPump()
+				// Terminal: no reconnect follows, so the buffer is closed and
+				// the consumer sees the error and then end of stream. The pump
+				// keeps draining the document until the watch context is
+				// cancelled, so publishers never wedge on a dead stream.
 				buf.push(WatchDocResponse{Err: err})
 				buf.close()
 				return
@@ -1098,15 +1134,19 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			buf.push(*resp)
 		}
 
-		stopPump()
 		if err := stream.Err(); err != nil {
 			buf.push(WatchDocResponse{Err: err})
-			buf.close()
 
 			// If watch stream is disconnected, we re-establish the watch
-			// stream. The pump above has already stopped, so the new loop's
-			// pump is the sole consumer of the document event channel.
-			_ = c.runWatchLoop(ctx, d)
+			// stream. The buffer stays open and the pump keeps running across
+			// the handshake: they belong to the attachment, so the document
+			// has a consumer for the whole reconnect and the consumer keeps
+			// the same response channel. Only a reconnect that fails ends the
+			// stream for the consumer.
+			if err := c.runWatchLoop(ctx, d); err != nil {
+				c.logger.Warn(fmt.Sprintf("re-establish watch stream: %v", err))
+				buf.close()
+			}
 			return
 		}
 		buf.close()

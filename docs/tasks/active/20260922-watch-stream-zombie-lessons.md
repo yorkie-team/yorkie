@@ -142,3 +142,26 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
     ever survived a disconnect.
   - Pushed back on nothing. Two findings turned on facts the branch's own
     notes had already recorded as limitations, which is not a defence.
+- **Round 3 (the review panel on #2084, three lenses).** Joining the pump on
+  stop closed the event-stealing race but kept the pipeline owned by a single
+  `runWatchLoop` invocation, and every remaining finding fell out of that
+  ownership: nothing drains `Document.Events` between a dead loop and its
+  successor, the successor rewrites `attachment.watchStream` from the reader
+  goroutine while `WatchStream()` readers read it unlocked, and consumers
+  holding the old channel never see the replacement. Making the buffer, the
+  pump and the sender belong to the *attachment* — alive from Attach until the
+  watch context is cancelled — removes all three at once and makes the join
+  unnecessary on the reconnect path: there is only ever one pump. The lesson
+  is that a lifetime mismatch is rarely fixed by synchronising the handoff;
+  the object with the longer life has to own the resource.
+- Two smaller findings on the same diff were straightforward: `stream.Receive()
+  == false` carries the RPC's real error on `stream.Err()`, so returning
+  `ErrInitNotReceived` unconditionally hid permission-denied behind a generic
+  code; and an Attach whose watch loop fails has to roll the attachment back
+  (unregister, cancel, join the pump, reset the status) instead of leaving it
+  registered with no stream behind it.
+- The reconnect test that "passed" proved nothing: it published its events
+  after a full HTTP round trip had already established the successor, so the
+  window it was meant to cover was long closed. Holding the successor's
+  handshake open *on the server* puts the window inside the assertions — the
+  rewritten test fails on the pre-fix code within 10ms.
