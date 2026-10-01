@@ -85,7 +85,10 @@ Backend:
   AdminPassword: "admin"
 
   # SecretKey is the secret key for signing authentication tokens.
-  SecretKey: ""
+  # Replace this development value before exposing the server: it signs and
+  # accepts admin tokens. An empty value is rejected at startup rather than
+  # falling back to this default. (default: yorkie-secret).
+  SecretKey: "yorkie-secret"
 
   # AdminTokenDuration is the duration of the admin token. (default: 168h0m0s).
   AdminTokenDuration: "168h0m0s"

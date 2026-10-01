@@ -264,15 +264,12 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend == nil {
 		c.Backend = &backend.Config{}
 	}
-	if c.Backend.AdminUser == "" {
-		c.Backend.AdminUser = DefaultAdminUser
-	}
-	if c.Backend.AdminPassword == "" {
-		c.Backend.AdminPassword = DefaultAdminPassword
-	}
-	if c.Backend.SecretKey == "" {
-		c.Backend.SecretKey = DefaultSecretKey
-	}
+	// Credentials intentionally have no ensure-coercion here. newConfig()
+	// pre-seeds the defaults before YAML unmarshal, so a key omitted from the
+	// file already resolves to the default; an explicitly empty one is left for
+	// Backend.Validate() to reject. Backfilling here instead would turn
+	// `SecretKey: ""` into the well-known "yorkie-secret", which signs and
+	// accepts admin tokens, and would make that guard dead code.
 	if c.Backend.AdminTokenDuration == "" {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
@@ -425,6 +422,9 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Backend: &backend.Config{
 			UseDefaultProject: DefaultUseDefaultProject,
+			AdminUser:         DefaultAdminUser,
+			AdminPassword:     DefaultAdminPassword,
+			SecretKey:         DefaultSecretKey,
 		},
 	}
 }

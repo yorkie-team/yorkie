@@ -165,6 +165,35 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.NoError(t, conf.Mongo.Validate())
 	})
 
+	// An explicitly emptied credential in the file used to be backfilled to the
+	// well-known default, so a file carrying `SecretKey: ""` silently signed and
+	// accepted admin tokens with "yorkie-secret". It must survive ensure so that
+	// Validate() rejects it instead.
+	t.Run("explicit empty credentials survive ensure for Validate to reject", func(t *testing.T) {
+		for _, c := range []struct {
+			key  string
+			flag string
+		}{
+			{"SecretKey", "--backend-secret-key"},
+			{"AdminUser", "--backend-admin-user"},
+			{"AdminPassword", "--backend-admin-password"},
+		} {
+			t.Run(c.key, func(t *testing.T) {
+				file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+				assert.NoError(t, err)
+				_, err = file.WriteString("Backend:\n  " + c.key + ": \"\"\n")
+				assert.NoError(t, err)
+				assert.NoError(t, file.Close())
+
+				conf, err := server.NewConfigFromFile(file.Name())
+				assert.NoError(t, err)
+				err = conf.Validate()
+				assert.ErrorContains(t, err, c.flag)
+				assert.ErrorContains(t, err, "must not be empty")
+			})
+		}
+	})
+
 	t.Run("explicit zero DeactivateConcurrency preserved (sequential opt-in)", func(t *testing.T) {
 		filePath := "config.zero-concurrency.yml"
 		file, err := os.Create(filePath)

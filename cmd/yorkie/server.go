@@ -174,8 +174,8 @@ func newServerCmd() *cobra.Command {
 			}
 
 			// If config file is given, command-line arguments will be overwritten.
-			// Explicit credentials and the two security switches still apply on
-			// top; server.New validates the result.
+			// Explicit credentials and the security switches that only tighten
+			// still apply on top; server.New validates the result.
 			var err error
 			conf, err = resolveServerConfig(conf, flagConfPath, cmd.Flags(), authWebhookCacheDisabled)
 			if err != nil {
@@ -228,6 +228,11 @@ var credentialFlags = map[string]func(*server.Config) *string{
 //   - the --backend-enable-webhook-validation and --auth-webhook-cache-disabled
 //     switches when true, so neither guard can be swallowed by a file that
 //     predates it, while an explicit false cannot relax a file that enables it.
+//   - an explicit --backend-use-default-project=false, so the API key
+//     requirement an operator turned on cannot be dropped by a file that omits
+//     the key (UseDefaultProject defaults to true, so omission means "keyless
+//     requests allowed"). An explicit true never overrides, so it cannot relax
+//     a file that disables the default project.
 func resolveServerConfig(
 	base *server.Config,
 	path string,
@@ -246,6 +251,9 @@ func resolveServerConfig(
 	}
 
 	enableWebhookValidation := base.Backend.EnableWebhookValidation
+	disableDefaultProject := flags != nil &&
+		flags.Changed("backend-use-default-project") &&
+		!base.Backend.UseDefaultProject
 
 	if path != "" {
 		parsed, err := server.NewConfigFromFile(path)
@@ -269,6 +277,9 @@ func resolveServerConfig(
 	}
 	if disableAuthWebhookCache {
 		base.Backend.AuthWebhookCacheDisabled = true
+	}
+	if disableDefaultProject {
+		base.Backend.UseDefaultProject = false
 	}
 	return base, nil
 }
@@ -562,7 +573,7 @@ func init() {
 		"backend-use-default-project",
 		server.DefaultUseDefaultProject,
 		"Whether to use the default project. Even if public key is not provided from the client, "+
-			"the default project will be used for the request.",
+			"the default project will be used for the request. An explicit false overrides the config file.",
 	)
 	cmd.Flags().BoolVar(
 		&conf.Backend.SnapshotDisableGC,

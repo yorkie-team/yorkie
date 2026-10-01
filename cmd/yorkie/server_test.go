@@ -56,7 +56,7 @@ func serverConfigFlags(t *testing.T, args ...string) (*server.Config, *pflag.Fla
 	for _, name := range []string{
 		"backend-secret-key", "backend-admin-user", "backend-admin-password", "cluster-secret",
 		"backend-enable-webhook-validation", "auth-webhook-cache-auth-ttl",
-		"auth-webhook-cache-disabled", "rpc-port",
+		"auth-webhook-cache-disabled", "backend-use-default-project", "rpc-port",
 	} {
 		flag := flags.Lookup(name)
 		require.NotNil(t, flag, "server flag must be registered: %s", name)
@@ -142,6 +142,39 @@ func TestResolveServerConfigKeepsExplicitWebhookValidationOverFile(t *testing.T)
 			require.True(t, resolved.Backend.EnableWebhookValidation)
 		})
 	}
+}
+
+// --backend-use-default-project gates the API key requirement, so like the
+// other guards it only ratchets up: an explicit false survives a file that
+// omits the key (where it would resolve to the pre-seeded true), while an
+// explicit true cannot relax a file that turned the default project off.
+func TestResolveServerConfigKeepsExplicitDefaultProjectDisableOverFile(t *testing.T) {
+	t.Run("explicit false survives a file that omits the key", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "server.yml")
+		require.NoError(t, os.WriteFile(path, []byte("RPC:\n  Port: 18123\n"), 0600))
+		base, flags := serverConfigFlags(t, "--backend-use-default-project=false")
+		resolved, err := resolveServerConfig(base, path, flags, false)
+		require.NoError(t, err)
+		require.False(t, resolved.Backend.UseDefaultProject)
+	})
+
+	t.Run("explicit true does not relax a file that disables it", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "server.yml")
+		require.NoError(t, os.WriteFile(path, []byte("Backend:\n  UseDefaultProject: false\n"), 0600))
+		base, flags := serverConfigFlags(t, "--backend-use-default-project=true")
+		resolved, err := resolveServerConfig(base, path, flags, false)
+		require.NoError(t, err)
+		require.False(t, resolved.Backend.UseDefaultProject)
+	})
+
+	t.Run("untouched flag leaves the file value alone", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "server.yml")
+		require.NoError(t, os.WriteFile(path, []byte("Backend:\n  UseDefaultProject: true\n"), 0600))
+		base, flags := serverConfigFlags(t)
+		resolved, err := resolveServerConfig(base, path, flags, false)
+		require.NoError(t, err)
+		require.True(t, resolved.Backend.UseDefaultProject)
+	})
 }
 
 // An explicitly emptied credential has to be refused rather than silently
