@@ -224,11 +224,11 @@ test("countCases (Go): t.Skip/Skipf/SkipNow switch a case off, counted apart and
     "+\t\tt.Skipf(\"flaky on %s\", runtime.GOOS)",
     "+\tt.SkipNow()",
     "+\t// t.Skip(\"a comment is not a call\")",
-    "+\tb.Skip(\"a benchmark is not a case\")",
+    "+\tb.Skip(\"any receiver counts, a benchmark's too\")",
     "+func TestAddedBeside(t *testing.T) {",
   ].join("\n");
-  // Three skips are NOT netted against the added case.
-  assert.deepEqual(countCases(skipped, go), { removed: 0, added: 1, suitesOff: 3 });
+  // Four skips are NOT netted against the added case.
+  assert.deepEqual(countCases(skipped, go), { removed: 0, added: 1, suitesOff: 4 });
   // Removing a skip re-enables; rewording one is not a new disablement.
   assert.deepEqual(countCases("-\tt.Skip(\"old reason\")\n+\tt.Skip(\"new reason\")", go), { removed: 0, added: 0, suitesOff: 0 });
   assert.deepEqual(countCases("-\tt.Skip(\"todo\")", go), { removed: 0, added: 0, suitesOff: 0 });
@@ -287,4 +287,88 @@ test("aggregateCommits (Go): a reproducer committed then deleted in the round is
   const body = renderTestRemovals({ head: "h", after: "a", removals: got });
   assert.match(body, /deleted `test\/integration\/repro_test\.go` \(1 case\(s\)\)/);
   assert.match(body, /`pkg\/a_test\.go`: 1 test\(s\) or suite\(s\) switched off/);
+});
+
+// REVIEW of the port. yorkie keeps the bodies of its database and RPC suites in
+// shared `testcases/testcases.go` files (not `_test.go`): `func RunXxxTest(`
+// with the signature on the following lines, called from thin `_test.go`
+// wrappers. A skip or a deleted subtest there is a test switched off.
+test("isTestFile (Go): shared suite bodies under a testcases/ directory are test files", () => {
+  for (const f of ["server/backend/database/testcases/testcases.go", "server/rpc/testcases/testcases.go"]) {
+    assert.equal(isTestFile(f), true, f);
+  }
+  assert.equal(isTestFile("server/backend/database/testcase.go"), false);
+});
+
+test("testRemovals (Go): a skip or a deleted subtest in testcases.go is reported, and so is a deleted Run* body", () => {
+  const file = "server/backend/database/testcases/testcases.go";
+  assert.deepEqual(testRemovals([{ filename: file, status: "modified",
+    patch: " func RunFindDocInfoTest(\n \tt *testing.T,\n+\tt.Skip(\"still reproduces: #42\")" }]),
+  [{ file, deleted: false, removed: 0, added: 0, suitesOff: 1 }]);
+  assert.deepEqual(testRemovals([{ filename: file, status: "modified",
+    patch: "-\tt.Run(\"find by key\", func(t *testing.T) {\n-\t\trequire.NoError(t, err)" }]),
+  [{ file, deleted: false, removed: 1, added: 0, suitesOff: 0 }]);
+  // A whole shared body deleted: `func RunXxx(` is the case line there.
+  assert.deepEqual(testRemovals([{ filename: "server/rpc/testcases/testcases.go", status: "modified",
+    patch: "-func RunAttachAndDetachDocumentTest(\n-\tt *testing.T," }]),
+  [{ file: "server/rpc/testcases/testcases.go", deleted: false, removed: 1, added: 0, suitesOff: 0 }]);
+});
+
+// D2 tells the Go fixer to WRITE skips. A skip added in one commit and taken
+// out in a later commit of the same round is no skip at all.
+test("aggregateCommits (Go): skips and constraints net across the round's commits before clamping", () => {
+  const f = "test/integration/tree_test.go";
+  const c = (sha, patch) => ({ sha, parents: [{}], files: [{ filename: f, status: "modified", patch }] });
+  assert.deepEqual(aggregateCommits([c("c1", "+\tt.Skip(\"wip\")"), c("c2", "-\tt.Skip(\"wip\")")]), []);
+  // Constraint changed and changed back: no switch-off.
+  assert.deepEqual(aggregateCommits([
+    c("c1", "-//go:build integration\n+//go:build ignore"),
+    c("c2", "-//go:build ignore\n+//go:build integration"),
+  ]), []);
+  // Still reported when the round ends with it switched off.
+  assert.deepEqual(aggregateCommits([c("c1", "+\tt.Skip(\"a\")\n+\tt.Skip(\"b\")"), c("c2", "-\tt.Skip(\"a\")")]),
+    [{ file: f, deleted: false, removed: 0, added: 0, suitesOff: 1 }]);
+  // The case property is unchanged: committed then deleted inside the round is flagged.
+  assert.deepEqual(aggregateCommits([
+    { sha: "c1", parents: [{}], files: [{ filename: "pkg/x_test.go", status: "added", patch: "+func TestRepro(t *testing.T) {" }] },
+    { sha: "c2", parents: [{}], files: [{ filename: "pkg/x_test.go", status: "removed", patch: "-func TestRepro(t *testing.T) {" }] },
+  ]), [{ file: "pkg/x_test.go", deleted: true, removed: 1, added: 1, suitesOff: 0 }]);
+});
+
+test("aggregateCommits (JS): a suite switched off and back on inside the round nets out too", () => {
+  const f = "scripts/agent/x.test.mjs";
+  const c = (sha, patch) => ({ sha, parents: [{}], files: [{ filename: f, status: "modified", patch }] });
+  assert.deepEqual(aggregateCommits([c("c1", "-describe('a', () => {\n+describe.skip('a', () => {"), c("c2", "-describe.skip('a', () => {\n+describe('a', () => {")]), []);
+});
+
+test("testRemovals (Go): renames that stay *_test.go but leave the runner's reach are deletions", () => {
+  const got = testRemovals([
+    { filename: "pkg/crdt/testdata/tree_test.go", previous_filename: "pkg/crdt/tree_test.go", status: "renamed", patch: "" },
+    { filename: "pkg/crdt/_tree_test.go", previous_filename: "pkg/crdt/rga_test.go", status: "renamed", patch: "" },
+    { filename: "pkg/crdt/.text_test.go", previous_filename: "pkg/crdt/text_test.go", status: "renamed", patch: "" },
+    { filename: "pkg/crdt/gc_windows_test.go", previous_filename: "pkg/crdt/gc_test.go", status: "renamed", patch: "" },
+    { filename: "pkg/crdt/rht_386_test.go", previous_filename: "pkg/crdt/rht_test.go", status: "renamed", patch: "" },
+    // Still in reach on CI (linux/amd64): a move, not a removal.
+    { filename: "pkg/crdt/splay_linux_test.go", previous_filename: "pkg/crdt/splay_test.go", status: "renamed" },
+    { filename: "pkg/crdt/llrb_amd64_test.go", previous_filename: "pkg/crdt/llrb_test.go", status: "renamed" },
+  ]);
+  assert.deepEqual(got.map((r) => [r.file, r.deleted]), [
+    ["pkg/crdt/tree_test.go", true],
+    ["pkg/crdt/rga_test.go", true],
+    ["pkg/crdt/text_test.go", true],
+    ["pkg/crdt/gc_test.go", true],
+    ["pkg/crdt/rht_test.go", true],
+  ]);
+});
+
+test("countCases (Go): a NEW file that starts ignored is switched off; an ordinary new constraint is not", () => {
+  const added = { file: "test/integration/repro_test.go", status: "added" };
+  assert.equal(countCases("+//go:build ignore\n+\n+func TestRepro(t *testing.T) {", added).suitesOff, 1);
+  assert.equal(countCases("+// +build ignore\n+\n+func TestRepro(t *testing.T) {", added).suitesOff, 1);
+  assert.equal(countCases("+//go:build integration && !ignore_never\n+func TestRepro(t *testing.T) {", added).suitesOff, 0);
+});
+
+test("countCases (Go): any receiver's Skip/Skipf/SkipNow counts", () => {
+  const go = { file: "test/bench/channel_bench_test.go", status: "modified" };
+  assert.equal(countCases("+\t\tb.Skip(\"no channels\")\n+\ttb.Skipf(\"x %d\", 1)\n+\tsuite.T().SkipNow()", go).suitesOff, 3);
 });

@@ -72,16 +72,57 @@ export function safePath(file) {
   return str(file).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/`/g, "'").slice(0, 300);
 }
 
-/** This repo's test layouts: `test/` trees, `__tests__/`, `*_test.go`, and `*.test.*` / `*.spec.*` / `*_test.*` JS files. */
+/**
+ * This repo's test layouts: `test/` trees, `__tests__/`, `*_test.go`, Go files
+ * under a `testcases/` directory, and `*.test.*` / `*.spec.*` / `*_test.*` JS
+ * files.
+ *
+ * `testcases/` because yorkie keeps the bodies of its database and RPC suites
+ * in shared, non-`_test.go` files (`server/backend/database/testcases/`,
+ * `server/rpc/testcases/`) that thin `_test.go` wrappers call. Decided by the
+ * PATH, not by whether the patch shows `*testing.T`: whether a signature is in
+ * a hunk's context depends on how much context the diff carries, and the
+ * record must not change with it.
+ */
 export function isTestFile(file) {
   const f = str(file);
-  return /(^|\/)(test|tests|__tests__)\//.test(f) || isRunnableTest(f);
+  return /(^|\/)(test|tests|__tests__)\//.test(f) || isSharedGoSuite(f) || isRunnableTest(f);
 }
 
-/** A file the runners pick up by NAME (`*_test.go`; `*.test.*`, `*.spec.*`, `*_test.*` in JS), wherever it lives. */
+/** A shared Go suite body: a `.go` file under a `testcases/` directory. */
+function isSharedGoSuite(file) {
+  return /(^|\/)testcases\/(.*\/)?[^/]*\.go$/.test(str(file));
+}
+
+// What `go test ./...` on CI (linux/amd64) skips by NAME: a path element named
+// `testdata` or starting with `_` or `.`, and a `_GOOS`/`_GOARCH` (or
+// `_GOOS_GOARCH`) suffix for another platform.
+const GOOS = new Set(["aix", "android", "darwin", "dragonfly", "freebsd", "hurd", "illumos", "ios", "js", "linux", "nacl", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows", "zos"]);
+const GOARCH = new Set(["386", "amd64", "amd64p32", "arm", "armbe", "arm64", "arm64be", "loong64", "mips", "mipsle", "mips64", "mips64le", "mips64p32", "mips64p32le", "ppc", "ppc64", "ppc64le", "riscv", "riscv64", "s390", "s390x", "sparc", "sparc64", "wasm"]);
+const CI_GOOS = "linux";
+const CI_GOARCH = "amd64";
+
+function goTestInReach(file) {
+  const parts = file.split("/");
+  if (parts.some((p) => p === "testdata" || p.startsWith("_") || p.startsWith("."))) return false;
+  // `name_GOOS_GOARCH_test.go`: go/build ignores the FIRST element as a
+  // constraint, so `linux_test.go` alone runs everywhere.
+  const elems = parts[parts.length - 1].replace(/_test\.go$/, "").split("_");
+  if (elems.length < 2) return true;
+  const last = elems[elems.length - 1];
+  const prev = elems.length >= 3 ? elems[elems.length - 2] : "";
+  if (GOARCH.has(last)) {
+    if (last !== CI_GOARCH) return false;
+    return !(GOOS.has(prev) && prev !== CI_GOOS);
+  }
+  return !(GOOS.has(last) && last !== CI_GOOS);
+}
+
+/** A file the runners pick up by NAME (`*_test.go` in reach of `go test` on CI; `*.test.*`, `*.spec.*`, `*_test.*` in JS), wherever it lives. */
 export function isRunnableTest(file) {
   const f = str(file);
-  return /_test\.go$/.test(f) || /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
+  if (/_test\.go$/.test(f)) return goTestInReach(f);
+  return /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
 }
 
 const isGo = (file) => /\.go$/.test(str(file));
@@ -108,41 +149,73 @@ const SUITE_OFF = /^[-+]\s*describe(?:\.\w+)*\.(?:skip|todo|skipIf|runIf)\s*[(`]
 // does not run them, so they cannot show that a finding reproduces. Rows of a
 // table-driven test are not seen — a known gap, stated rather than guessed at.
 const GO_CASE = /^[-+]func\s+(?:Test|Fuzz)(?![a-z])\w*\s*\(\s*\w+\s+\*testing\.[TF]\s*\)/;
+// In a shared suite body (`testcases/`), a top-level `func RunXxx(` is the case:
+// gofmt breaks its signature over the following lines, so the parameter type
+// is not on the line to check.
+const GO_SHARED_CASE = /^[-+]func\s+Run[A-Z0-9_]\w*\s*\(/;
 const GO_SUBTEST = /^[-+]\s*[\w.]+\.Run\(.*func\s*\(\s*\w+\s+\*testing\.T\s*\)/;
 // A case switched off in place. Unlike `it.skip`, `t.Skip` is a new line in an
 // unchanged function, so it is counted apart from cases, like a disabled suite,
-// and netted only against skips the same patch removes. Comment lines are not
-// calls.
-const GO_SKIP = /^[-+](?!\s*\/\/).*\b[tf]\.Skip(?:f|Now)?\(/;
-// A build constraint. In an existing test file, a new or changed `//go:build`
-// expression can take the whole file out of every lane that runs it
+// and netted only against skips removed in the same file. Any receiver
+// (`t`, `b`, `tb`, `s.T()`). Comment lines are not calls.
+const GO_SKIP = /^[-+](?!\s*\/\/).*[\w)]\.Skip(?:f|Now)?\(/;
+// A build constraint, current or legacy. In an existing test file, a new or
+// changed expression can take the whole file out of every lane that runs it
 // (`//go:build integration` → `//go:build ignore`), the Go form of a disabled
-// suite. A new file's constraint is not: it was never running.
-const GO_BUILD = /^([-+])\/\/go:build\s+(.*?)\s*$/;
+// suite. A new file's constraint is not — it was never running — unless it
+// names the `ignore` tag, which no lane sets: a test born ignored is a test
+// switched off.
+const GO_BUILD = /^([-+])\/\/(?:go:build|\s*\+build)\s+(.*?)\s*$/;
+const ignores = (expr) => /(^|[^\w!])ignore(?!\w)/.test(expr);
 
-/** The Go half of `countCases`; see the rules above. */
-function countGoCases(patch, status) {
-  let removed = 0, added = 0, skipAdded = 0, skipRemoved = 0;
+/**
+ * Build-constraint expressions added that the same span never removed. `added`
+ * and `removed` are the expressions seen on `+` and `-` lines, unioned over a
+ * patch or over a whole round, so a constraint changed and changed back nets
+ * out. `newFile`: the file did not exist before the span.
+ */
+function constraintsOff(added, removed, newFile) {
+  return [...added].filter((e) => !removed.has(e) && (!newFile || ignores(e))).length;
+}
+
+/**
+ * The raw tally behind `countCases`, kept SIGNED so a round can net it across
+ * commits before clamping: `offNet` is suites/skips switched off minus those
+ * switched back on, and the build-constraint sets are left for the caller.
+ */
+function tally(patch, { file = "", status = "" } = {}) {
+  const go = isGo(file);
+  const shared = go && isSharedGoSuite(file);
+  let removed = 0, added = 0, offNet = 0;
   const builds = { "+": new Set(), "-": new Set() };
   for (const line of str(patch).split("\n")) {
     if (line.startsWith("---") || line.startsWith("+++")) continue;
-    const b = GO_BUILD.exec(line);
-    if (b) {
-      builds[b[1]].add(b[2]);
-      continue;
+    const sign = line[0] === "+" ? 1 : -1;
+    if (go) {
+      const b = GO_BUILD.exec(line);
+      if (b) {
+        builds[b[1]].add(b[2]);
+        continue;
+      }
+      if (GO_SKIP.test(line)) {
+        offNet += sign;
+        continue;
+      }
+      if (!GO_CASE.test(line) && !GO_SUBTEST.test(line) && !(shared && GO_SHARED_CASE.test(line))) continue;
+    } else {
+      if (SUITE_OFF.test(line)) {
+        offNet += sign;
+        continue;
+      }
+      if (!CASE.test(line)) continue;
     }
-    if (GO_SKIP.test(line)) {
-      if (line[0] === "+") skipAdded++;
-      else skipRemoved++;
-      continue;
-    }
-    if (!GO_CASE.test(line) && !GO_SUBTEST.test(line)) continue;
-    if (line[0] === "-") removed++;
+    if (sign < 0) removed++;
     else added++;
   }
-  const constraintsOff = status === "added" ? 0 : [...builds["+"]].filter((e) => !builds["-"].has(e)).length;
-  return { removed, added, suitesOff: Math.max(0, skipAdded - skipRemoved) + constraintsOff };
+  return { removed, added, offNet, buildsAdded: builds["+"], buildsRemoved: builds["-"], newFile: status === "added" };
 }
+
+const suitesOffOf = (t) => Math.max(0, t.offNet) + constraintsOff(t.buildsAdded, t.buildsRemoved, t.newFile);
 
 /**
  * Active cases a unified diff removes and adds, and how many suites it newly
@@ -152,21 +225,9 @@ function countGoCases(patch, status) {
  * JS ones); `status` is the file's GitHub status, which only the Go
  * build-constraint rule reads.
  */
-export function countCases(patch, { file = "", status = "" } = {}) {
-  if (isGo(file)) return countGoCases(patch, status);
-  let removed = 0, added = 0, offAdded = 0, offRemoved = 0;
-  for (const line of str(patch).split("\n")) {
-    if (line.startsWith("---") || line.startsWith("+++")) continue;
-    if (SUITE_OFF.test(line)) {
-      if (line[0] === "+") offAdded++;
-      else offRemoved++;
-      continue;
-    }
-    if (!CASE.test(line)) continue;
-    if (line[0] === "-") removed++;
-    else added++;
-  }
-  return { removed, added, suitesOff: Math.max(0, offAdded - offRemoved) };
+export function countCases(patch, opts = {}) {
+  const t = tally(patch, opts);
+  return { removed: t.removed, added: t.added, suitesOff: suitesOffOf(t) };
 }
 
 /** One commit's (or one compare's) files → per-path entries. Not yet filtered. */
@@ -188,7 +249,8 @@ function entries(files) {
       if (deleted || f.status === "modified") out.push({ file: was, deleted, removed: 0, added: 0, suitesOff: 0, unreadable: true });
       continue;
     }
-    out.push({ file: was, deleted, renamedAway, ...countCases(f.patch, { file: was, status: f.status }) });
+    const t = tally(f.patch, { file: was, status: f.status });
+    out.push({ file: was, deleted, renamedAway, removed: t.removed, added: t.added, suitesOff: suitesOffOf(t), raw: t });
   }
   return out;
 }
@@ -199,7 +261,7 @@ function removalsOf(list) {
   for (const e of list) {
     const hit = e.unreadable || e.renamedAway || e.suitesOff > 0 || (e.deleted ? e.removed > 0 : e.removed > e.added);
     if (!hit) continue;
-    const { renamedAway: _r, ...rest } = e;
+    const { renamedAway: _r, raw: _t, ...rest } = e;
     out.push(rest);
   }
   return out;
@@ -219,16 +281,31 @@ export function testRemovals(files) {
  * skipped: they bring in main, not the fixer's work. A test added in one commit
  * and deleted in a later one is a deletion that held cases — exactly what a
  * three-dot compare cannot see.
+ *
+ * Cases are summed; switch-offs are NETTED across the round before they are
+ * clamped. The Go fixer is told to write skips, so a skip added in one commit
+ * and taken out in a later one — or a constraint changed and changed back — is
+ * no switch-off at all, and clamping per commit would report it.
  */
 export function aggregateCommits(commits) {
   const byFile = new Map();
   for (const c of Array.isArray(commits) ? commits : []) {
     if (Array.isArray(c?.parents) && c.parents.length > 1) continue;
     for (const e of entries(c?.files)) {
-      const cur = byFile.get(e.file) ?? { file: e.file, deleted: false, removed: 0, added: 0, suitesOff: 0 };
+      const fresh = !byFile.has(e.file);
+      const cur = byFile.get(e.file) ?? {
+        file: e.file, deleted: false, removed: 0, added: 0, suitesOff: 0,
+        raw: { offNet: 0, buildsAdded: new Set(), buildsRemoved: new Set(), newFile: e.raw?.newFile === true },
+      };
+      if (fresh && !e.raw) cur.raw.newFile = false;
       cur.removed += e.removed;
       cur.added += e.added;
-      cur.suitesOff += e.suitesOff;
+      if (e.raw) {
+        cur.raw.offNet += e.raw.offNet;
+        for (const x of e.raw.buildsAdded) cur.raw.buildsAdded.add(x);
+        for (const x of e.raw.buildsRemoved) cur.raw.buildsRemoved.add(x);
+      }
+      cur.suitesOff = suitesOffOf(cur.raw);
       cur.deleted = e.deleted || (cur.deleted && e.removed === 0 && e.added === 0);
       if (e.unreadable) cur.unreadable = true;
       if (e.renamedAway) cur.renamedAway = true;

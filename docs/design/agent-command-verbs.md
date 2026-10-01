@@ -738,17 +738,25 @@ failures.
 - **Go tests, not JS ones.** Upstream counts `it(`/`test(` cases. Here the
   fixer edits Go, so `test-removals.mjs` also reads `_test.go` files: top-level
   `func TestXxx(t *testing.T)` and `func FuzzXxx(f *testing.F)` cases, `t.Run`
-  subtests, `t.Skip`/`t.Skipf`/`t.SkipNow` as a case switched off, and a new or
-  changed `//go:build` line in an existing test file as a file switched off.
-  The JS rules stay, for `scripts/agent/*.test.mjs`. Rows of a table-driven test
-  are not seen.
+  subtests, any receiver's `Skip`/`Skipf`/`SkipNow` as a case switched off, and
+  a new or changed `//go:build` line in an existing test file (or a new file
+  born `ignore`) as a file switched off. The shared suite bodies under
+  `testcases/` (`func RunXxx(` and their `t.Run` subtests) count as tests, and
+  a rename into `testdata/`, to a `_`/`.` prefix or to another platform's
+  `_GOOS`/`_GOARCH` suffix counts as a deletion. Switch-offs are netted across
+  the round's commits before they are clamped, so a skip added and removed
+  inside one round is not reported. The JS rules stay, for
+  `scripts/agent/*.test.mjs`. Rows of a table-driven test are not seen.
 - **No `it.fails` in Go.** Upstream's prompt says to keep a reproducing test as
   `it.fails`, which still runs and is not counted. Go has no equivalent, so the
   fixer keeps the test, makes `t.Skip("still reproduces: <finding>")` its first
   statement with a comment naming the finding, and reports the item
-  `--skipped`. The skip IS recorded: beside a `--skipped` claim it is the honest
-  record, beside a `--fixed` claim it is the contradiction the adjudicator is
-  shown it to catch.
+  `--skipped`. The skip IS recorded: beside a `--fixed` claim it is the
+  contradiction the adjudicator is shown it to catch. It is never shown beside
+  its own `--skipped` claim, because a skipped claim is upheld without an
+  adjudication session; the record reaches the adjudicator only through the
+  same round's `--fixed` claims and disputes, and a maintainer reads it on the
+  PR.
 - **No spec, no scope verdict.** Without a human-filed `agent:candidate` issue,
   design-fit is told it has no spec, and scope findings are `minor` at most. An
   issue that failed to load is not reported as no spec.
@@ -767,7 +775,7 @@ failures.
 | Two verb tables disagree | One table, in `CONTRIBUTING.md`, generated from nothing else. Upstream carries two and records the disagreement as a known risk |
 | Main changes what an unchanged diff MEANS, and a carry hides it | CI must pass on the carried head before promote, and the third carry in a row is a full review |
 | A fixer forges an execution log to look like an infra failure | The worst it can choose is which page a human reads; the PR is latched either way |
-| A fixer's skipped reproducer reads as a removal | It is meant to: the record is evidence beside the claim, and a skip beside a `--skipped` claim is consistent. A conditional skip copied into a new test is reported too |
+| A fixer's skipped reproducer reads as a removal | It is meant to: the record is evidence for the round's `--fixed` claims and disputes, and a skip that pairs with a `--skipped` item is consistent with it. A conditional skip copied into a new test is reported too |
 
 ### Design Decisions
 
