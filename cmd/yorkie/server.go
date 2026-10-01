@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -173,11 +172,10 @@ func newServerCmd() *cobra.Command {
 				}
 			}
 
-			// File settings override ordinary flags. Explicit credentials, webhook
-			// URL validation and authorization-cache TTL survive the file; a true
-			// cache-disable switch always wins. server.New validates the result.
+			// If config file is given, command-line arguments will be overwritten.
+			// An explicit --auth-webhook-cache-disabled still applies on top.
 			var err error
-			conf, err = resolveServerConfig(conf, flagConfPath, cmd.Flags(), authWebhookCacheDisabled)
+			conf, err = resolveServerConfig(conf, flagConfPath, authWebhookCacheDisabled)
 			if err != nil {
 				return err
 			}
@@ -204,59 +202,25 @@ func newServerCmd() *cobra.Command {
 	}
 }
 
-// credentialFlags are the flags whose value is a credential. A config file
-// replaces the whole flag-built config, so without this list an operator who
-// passes both --config and --backend-secret-key would silently run on the
-// well-known default "yorkie-secret" - which signs and accepts admin tokens -
-// whenever the file omits the key.
-var credentialFlags = map[string]func(*server.Config) *string{
-	"backend-secret-key":     func(c *server.Config) *string { return &c.Backend.SecretKey },
-	"backend-admin-user":     func(c *server.Config) *string { return &c.Backend.AdminUser },
-	"backend-admin-password": func(c *server.Config) *string { return &c.Backend.AdminPassword },
-	"cluster-secret":         func(c *server.Config) *string { return &c.Backend.ClusterSecret },
-}
-
+// resolveServerConfig applies the config file on top of the flag-built config.
+// The file keeps its long-standing precedence: when --config is given it
+// replaces the whole flag-built config, so no flag can silently override a
+// value an operator wrote into the file. Only --auth-webhook-cache-disabled is
+// applied afterwards, so the kill switch cannot be swallowed by a file that
+// predates it.
 func resolveServerConfig(
 	base *server.Config,
 	path string,
-	flags *pflag.FlagSet,
 	disableAuthWebhookCache bool,
 ) (*server.Config, error) {
-	if flags != nil {
-		for name, field := range credentialFlags {
-			// ClusterSecret is optional, including an explicit empty value.
-			if name != "cluster-secret" && flags.Changed(name) && *field(base) == "" {
-				return nil, fmt.Errorf("--%s must not be empty", name)
-			}
-		}
-	}
-
 	if path != "" {
 		parsed, err := server.NewConfigFromFile(path)
 		if err != nil {
 			return nil, err
 		}
-
-		// Credentials given explicitly on the command line survive the file,
-		// so dropping them can never downgrade the server to a default one.
-		if flags != nil {
-			for name, field := range credentialFlags {
-				if flags.Changed(name) {
-					*field(parsed) = *field(base)
-				}
-			}
-			// Only these explicit webhook controls override the file. Omitted
-			// flags retain file values; all other flags retain file precedence.
-			if flags.Changed("backend-enable-webhook-validation") {
-				parsed.Backend.EnableWebhookValidation = base.Backend.EnableWebhookValidation
-			}
-			if flags.Changed("auth-webhook-cache-auth-ttl") {
-				parsed.Backend.AuthWebhookCacheTTL = base.Backend.AuthWebhookCacheTTL
-			}
-		}
-
 		base = parsed
 	}
+
 	if disableAuthWebhookCache {
 		base.Backend.AuthWebhookCacheDisabled = true
 	}
@@ -567,8 +531,7 @@ func init() {
 		&conf.Backend.EnableWebhookValidation,
 		"backend-enable-webhook-validation",
 		false,
-		"Whether to enable webhook URL validation to prevent SSRF attacks. "+
-			"Explicit true or false overrides the config file.",
+		"Whether to enable webhook URL validation to prevent SSRF attacks.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
@@ -587,7 +550,7 @@ func init() {
 		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
-		"TTL for cached authorization responses; must be at least 1ms. Explicit values override the config file. "+
+		"TTL for cached authorization responses; must be at least 1ms. "+
 			"Use --auth-webhook-cache-disabled to bypass caching.",
 	)
 	cmd.Flags().StringVar(

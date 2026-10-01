@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/server"
@@ -33,51 +32,22 @@ func TestResolveServerConfigKeepsExplicitCacheDisable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	require.NoError(t, os.WriteFile(path, []byte("Backend:\n  AuthWebhookCacheDisabled: false\n"), 0600))
 
-	conf, err := resolveServerConfig(server.NewConfig(), path, nil, true)
+	conf, err := resolveServerConfig(server.NewConfig(), path, true)
 	require.NoError(t, err)
 	require.True(t, conf.Backend.AuthWebhookCacheDisabled)
 
-	conf, err = resolveServerConfig(server.NewConfig(), path, nil, false)
+	conf, err = resolveServerConfig(server.NewConfig(), path, false)
 	require.NoError(t, err)
 	require.False(t, conf.Backend.AuthWebhookCacheDisabled)
 
-	conf, err = resolveServerConfig(server.NewConfig(), "", nil, true)
+	conf, err = resolveServerConfig(server.NewConfig(), "", true)
 	require.NoError(t, err)
 	require.True(t, conf.Backend.AuthWebhookCacheDisabled)
-}
-
-func TestResolveServerConfigKeepsExplicitCredentials(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "server.yml")
-	require.NoError(t, os.WriteFile(path, []byte("Backend:\n  UseDefaultProject: true\n"), 0600))
-
-	t.Run("explicit flags survive the config file", func(t *testing.T) {
-		base, flags := serverConfigFlags(t,
-			"--backend-secret-key=flag-secret",
-			"--backend-admin-user=flag-user",
-			"--backend-admin-password=flag-password",
-		)
-
-		conf, err := resolveServerConfig(base, path, flags, false)
-		require.NoError(t, err)
-		require.Equal(t, "flag-secret", conf.Backend.SecretKey)
-		require.Equal(t, "flag-user", conf.Backend.AdminUser)
-		require.Equal(t, "flag-password", conf.Backend.AdminPassword)
-	})
-
-	t.Run("untouched flags leave the file value alone", func(t *testing.T) {
-		filePath := filepath.Join(t.TempDir(), "server.yml")
-		require.NoError(t, os.WriteFile(filePath, []byte("Backend:\n  SecretKey: file-secret\n"), 0600))
-
-		base, flags := serverConfigFlags(t)
-		conf, err := resolveServerConfig(base, filePath, flags, false)
-		require.NoError(t, err)
-		require.Equal(t, "file-secret", conf.Backend.SecretKey)
-	})
 }
 
 // serverConfigFlags parses the registered server flags without starting a server.
 // Restore their bound values so each case has an independent configuration.
-func serverConfigFlags(t *testing.T, args ...string) (*server.Config, *pflag.FlagSet) {
+func serverConfigFlags(t *testing.T, args ...string) *server.Config {
 	t.Helper()
 	cmd, _, err := rootCmd.Find([]string{"server"})
 	require.NoError(t, err)
@@ -100,25 +70,52 @@ func serverConfigFlags(t *testing.T, args ...string) (*server.Config, *pflag.Fla
 	backend := *conf.Backend
 	base.Backend = &backend
 	base.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-	return &base, flags
+	return &base
 }
 
-func TestResolveServerConfigRejectsExplicitEmptyCredentials(t *testing.T) {
+// A config file keeps its long-standing precedence over every flag, so no
+// command line can quietly replace a secret, a cluster secret or an SSRF
+// guard that the operator wrote into the file.
+func TestResolveServerConfigKeepsFileValuesOverFlags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	require.NoError(t, os.WriteFile(path, []byte("RPC:\n  Port: 18123\nBackend:\n"+
+		"  SecretKey: file-secret\n  AdminUser: file-user\n  AdminPassword: file-password\n"+
+		"  ClusterSecret: file-cluster-secret\n  EnableWebhookValidation: true\n"+
+		"  AuthWebhookCacheTTL: 1h\n"), 0600))
+
+	base := serverConfigFlags(t,
+		"--backend-secret-key=flag-secret",
+		"--backend-admin-user=flag-user",
+		"--backend-admin-password=flag-password",
+		"--cluster-secret=",
+		"--backend-enable-webhook-validation=false",
+		"--auth-webhook-cache-auth-ttl=1ms",
+		"--rpc-port=18124",
+	)
+	resolved, err := resolveServerConfig(base, path, false)
+	require.NoError(t, err)
+	require.Equal(t, "file-secret", resolved.Backend.SecretKey)
+	require.Equal(t, "file-user", resolved.Backend.AdminUser)
+	require.Equal(t, "file-password", resolved.Backend.AdminPassword)
+	require.Equal(t, "file-cluster-secret", resolved.Backend.ClusterSecret)
+	require.True(t, resolved.Backend.EnableWebhookValidation)
+	require.Equal(t, time.Hour, resolved.Backend.ParseAuthWebhookCacheTTL())
+	require.Equal(t, 18123, resolved.RPC.Port)
+	require.NoError(t, resolved.Validate())
+}
+
+// Without a config file the flags are the whole configuration, and an
+// explicitly emptied credential has to be refused by validation rather than
+// silently signing admin tokens with the empty key.
+func TestServerConfigRejectsExplicitEmptyCredentials(t *testing.T) {
 	for _, name := range []string{"backend-secret-key", "backend-admin-user", "backend-admin-password"} {
-		for _, withFile := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/config=%t", name, withFile), func(t *testing.T) {
-				path := ""
-				if withFile {
-					path = filepath.Join(t.TempDir(), "server.yml")
-					require.NoError(t, os.WriteFile(path, []byte("Backend:\n  SecretKey: test-file-key\n"+
-						"  AdminUser: test-file-user\n  AdminPassword: test-file-password\n"), 0600))
-				}
-				base, flags := serverConfigFlags(t, "--"+name+"=")
-				resolved, err := resolveServerConfig(base, path, flags, false)
-				require.EqualError(t, err, "--"+name+" must not be empty")
-				require.Nil(t, resolved)
-			})
-		}
+		t.Run(name, func(t *testing.T) {
+			base := serverConfigFlags(t, "--"+name+"=")
+			resolved, err := resolveServerConfig(base, "", false)
+			require.NoError(t, err)
+			require.ErrorContains(t, resolved.Validate(), "--"+name)
+			require.ErrorContains(t, resolved.Validate(), "must not be empty")
+		})
 	}
 }
 
@@ -130,84 +127,22 @@ func TestResolveServerConfigPreservesOptionalClusterSecretAndDefaults(t *testing
 				path = filepath.Join(t.TempDir(), "server.yml")
 				require.NoError(t, os.WriteFile(path, []byte("Backend:\n  UseDefaultProject: true\n"), 0600))
 			}
-			base, flags := serverConfigFlags(t)
-			resolved, err := resolveServerConfig(base, path, flags, false)
+			resolved, err := resolveServerConfig(serverConfigFlags(t), path, false)
 			require.NoError(t, err)
-			require.True(t, resolved.Backend.SecretKey == server.DefaultSecretKey)
-			require.True(t, resolved.Backend.AdminUser == server.DefaultAdminUser)
-			require.True(t, resolved.Backend.AdminPassword == server.DefaultAdminPassword)
+			require.Equal(t, server.DefaultSecretKey, resolved.Backend.SecretKey)
+			require.Equal(t, server.DefaultAdminUser, resolved.Backend.AdminUser)
+			require.Equal(t, server.DefaultAdminPassword, resolved.Backend.AdminPassword)
 			require.Empty(t, resolved.Backend.ClusterSecret)
-		})
-		t.Run(fmt.Sprintf("empty cluster secret/config=%t", withFile), func(t *testing.T) {
-			path := ""
-			if withFile {
-				path = filepath.Join(t.TempDir(), "server.yml")
-				require.NoError(t, os.WriteFile(path, []byte("Backend:\n  ClusterSecret: test-cluster-secret\n"), 0600))
-			}
-			base, flags := serverConfigFlags(t, "--cluster-secret=")
-			resolved, err := resolveServerConfig(base, path, flags, false)
-			require.NoError(t, err)
-			require.Empty(t, resolved.Backend.ClusterSecret)
-		})
-	}
-}
-
-func TestResolveServerConfigKeepsExplicitWebhookSecurityFlags(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		file          string
-		args          []string
-		validation    bool
-		ttl           time.Duration
-		cacheDisabled bool
-	}{
-		{"validation true", "false", []string{"--backend-enable-webhook-validation=true"}, true, time.Hour, false},
-		{"validation false", "true", []string{"--backend-enable-webhook-validation=false"}, false, time.Hour, false},
-		{"explicit TTL", "true", []string{"--auth-webhook-cache-auth-ttl=1ms"}, true, time.Millisecond, false},
-		{"omitted flags", "true", nil, true, time.Hour, false},
-		{"cache disabled", "true", []string{"--auth-webhook-cache-disabled", "--auth-webhook-cache-auth-ttl=1ms"},
-			true, time.Millisecond, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "server.yml")
-			require.NoError(t, os.WriteFile(path, []byte("RPC:\n  Port: 18123\nBackend:\n"+
-				"  EnableWebhookValidation: "+tc.file+"\n  AuthWebhookCacheTTL: 1h\n"+
-				"  AuthWebhookCacheDisabled: false\n"), 0600))
-			base, flags := serverConfigFlags(t, append(tc.args, "--rpc-port=18124")...)
-			resolved, err := resolveServerConfig(base, path, flags, authWebhookCacheDisabled)
-			require.NoError(t, err)
-			require.Equal(t, tc.validation, resolved.Backend.EnableWebhookValidation)
-			require.Equal(t, tc.ttl, resolved.Backend.ParseAuthWebhookCacheTTL())
-			require.Equal(t, tc.cacheDisabled, resolved.Backend.AuthWebhookCacheDisabled)
-			require.Equal(t, 18123, resolved.RPC.Port, "ordinary flags retain file precedence")
 			require.NoError(t, resolved.Validate())
 		})
-	}
-}
-
-func TestResolveServerConfigDoesNotDiscardInvalidExplicitWebhookTTL(t *testing.T) {
-	for _, ttl := range []string{"0s", "-1s", "1ns"} {
-		for _, disabled := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/disabled=%t", ttl, disabled), func(t *testing.T) {
-				path := filepath.Join(t.TempDir(), "server.yml")
-				require.NoError(t, os.WriteFile(path, []byte("Backend:\n  AuthWebhookCacheTTL: 1h\n"), 0600))
-				base, flags := serverConfigFlags(t, "--auth-webhook-cache-auth-ttl="+ttl,
-					fmt.Sprintf("--auth-webhook-cache-disabled=%t", disabled))
-				resolved, err := resolveServerConfig(base, path, flags, authWebhookCacheDisabled)
-				require.NoError(t, err)
-				err = resolved.Validate()
-				require.ErrorContains(t, err, "--auth-webhook-cache-auth-ttl")
-				require.ErrorContains(t, err, "at least 1ms")
-			})
-		}
 	}
 }
 
 func TestResolveServerConfigKeepsFileCacheDisableWithFalseFlag(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "server.yml")
 	require.NoError(t, os.WriteFile(path, []byte("Backend:\n  AuthWebhookCacheDisabled: true\n"), 0600))
-	base, flags := serverConfigFlags(t, "--auth-webhook-cache-disabled=false")
-	resolved, err := resolveServerConfig(base, path, flags, authWebhookCacheDisabled)
+	base := serverConfigFlags(t, "--auth-webhook-cache-disabled=false")
+	resolved, err := resolveServerConfig(base, path, authWebhookCacheDisabled)
 	require.NoError(t, err)
 	require.True(t, resolved.Backend.AuthWebhookCacheDisabled)
 }
@@ -215,15 +150,30 @@ func TestResolveServerConfigKeepsFileCacheDisableWithFalseFlag(t *testing.T) {
 func TestResolveServerConfigKeepsWebhookFlagsWithoutFile(t *testing.T) {
 	for _, validation := range []bool{false, true} {
 		t.Run(fmt.Sprintf("validation=%t", validation), func(t *testing.T) {
-			base, flags := serverConfigFlags(t,
+			base := serverConfigFlags(t,
 				fmt.Sprintf("--backend-enable-webhook-validation=%t", validation),
 				"--auth-webhook-cache-auth-ttl=1ms", "--auth-webhook-cache-disabled")
-			resolved, err := resolveServerConfig(base, "", flags, authWebhookCacheDisabled)
+			resolved, err := resolveServerConfig(base, "", authWebhookCacheDisabled)
 			require.NoError(t, err)
 			require.Equal(t, validation, resolved.Backend.EnableWebhookValidation)
 			require.Equal(t, time.Millisecond, resolved.Backend.ParseAuthWebhookCacheTTL())
 			require.True(t, resolved.Backend.AuthWebhookCacheDisabled)
 			require.NoError(t, resolved.Validate())
+		})
+	}
+}
+
+// An invalid TTL supplied on the command line must fail validation instead of
+// being accepted; the file-precedence rule only applies when a file is given.
+func TestServerConfigRejectsInvalidWebhookTTLWithoutFile(t *testing.T) {
+	for _, ttl := range []string{"0s", "-1s", "1ns"} {
+		t.Run(ttl, func(t *testing.T) {
+			base := serverConfigFlags(t, "--auth-webhook-cache-auth-ttl="+ttl)
+			resolved, err := resolveServerConfig(base, "", authWebhookCacheDisabled)
+			require.NoError(t, err)
+			err = resolved.Validate()
+			require.ErrorContains(t, err, "--auth-webhook-cache-auth-ttl")
+			require.ErrorContains(t, err, "at least 1ms")
 		})
 	}
 }

@@ -153,6 +153,24 @@ func parseDuration(flag string, raw string) (time.Duration, error) {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
+	// Credentials are filled in by server.Config.ensureDefaultValue, so an
+	// empty one here means it was explicitly cleared. An empty SecretKey would
+	// sign and accept admin tokens with the empty key, and empty admin
+	// credentials would create an admin that cannot be logged in as. Every
+	// entry point reaches this check, not only the `yorkie server` command.
+	for _, cred := range []struct {
+		flag  string
+		value string
+	}{
+		{"--backend-secret-key", c.SecretKey},
+		{"--backend-admin-user", c.AdminUser},
+		{"--backend-admin-password", c.AdminPassword},
+	} {
+		if cred.value == "" {
+			return fmt.Errorf(`invalid argument "" for "%s" flag: must not be empty`, cred.flag)
+		}
+	}
+
 	if _, err := parseDuration("--backend-admin-token-duration", c.AdminTokenDuration); err != nil {
 		return err
 	}

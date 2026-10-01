@@ -26,6 +26,9 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
+		AdminUser:                     "admin",
+		AdminPassword:                 "admin",
+		SecretKey:                     "yorkie-secret",
 		AdminTokenDuration:            "24h",
 		AuthWebhookCacheTTL:           "10s",
 		ChannelSessionTTL:             "60s",
@@ -99,6 +102,25 @@ func TestConfig(t *testing.T) {
 			conf := newValidBackendConf()
 			tc.set(&conf)
 			assert.ErrorContains(t, conf.Validate(), tc.flag)
+		}
+	})
+
+	t.Run("reject empty credentials from any entry point", func(t *testing.T) {
+		// server.New only calls Validate, so an embedder or a helper that
+		// builds the config literally has to be refused here too: an empty
+		// SecretKey would sign and accept admin tokens with the empty key.
+		for _, tc := range []struct {
+			flag string
+			set  func(conf *backend.Config)
+		}{
+			{"backend-secret-key", func(c *backend.Config) { c.SecretKey = "" }},
+			{"backend-admin-user", func(c *backend.Config) { c.AdminUser = "" }},
+			{"backend-admin-password", func(c *backend.Config) { c.AdminPassword = "" }},
+		} {
+			conf := newValidBackendConf()
+			tc.set(&conf)
+			assert.ErrorContains(t, conf.Validate(), tc.flag)
+			assert.ErrorContains(t, conf.Validate(), "must not be empty")
 		}
 	})
 
