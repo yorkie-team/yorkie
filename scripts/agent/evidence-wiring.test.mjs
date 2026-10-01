@@ -58,3 +58,13 @@ for (const file of ["agent-review-panel.yml", "agent-review-on-demand.yml"]) {
     assert.match(src, /--issue-file \/tmp\/issue\.txt\n\s+--issue-state \/tmp\/issue\.state/);
   });
 }
+
+// ghLines JSON.parses every output line, so each --jq it gets must print JSON.
+// `.[].sha` printed bare shas, the parse threw, and the record was never
+// posted: main() logged "could not read the round's commits" every time.
+test("every --jq the removal CLI parses as JSON lines prints JSON", () => {
+  const src = readFileSync(path.join(HERE, "test-removals.mjs"), "utf8");
+  const jqs = [...src.matchAll(/ghLines\(\[[^\]]*?"--jq",\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(jqs.length >= 3, `found the ghLines calls (${jqs.length})`);
+  for (const jq of jqs) assert.match(jq.trim(), /(\}|\[\]|tojson)$/, `--jq ${jq} must print JSON`);
+});

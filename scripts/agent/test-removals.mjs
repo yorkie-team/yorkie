@@ -485,7 +485,7 @@ function main() {
     const status = ghJson(["api", `repos/{owner}/{repo}/compare/${before}...${after}`, "--jq", "{status: .status, behind: .behind_by}"]);
     rewritten = status.status === "diverged" || Number(status.behind) > 0;
     const inRound = ghLines(["api", "--paginate", `repos/{owner}/{repo}/compare/${before}...${after}?per_page=100`, "--jq", ".commits[] | {sha, n: (.parents | length)}"]);
-    const prShas = new Set(ghLines(["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/commits?per_page=100`, "--jq", ".[].sha"]));
+    const prShas = new Set(ghLines(["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/commits?per_page=100`, "--jq", ".[].sha | tojson"]));
     commits = [];
     for (const { sha } of roundCommits(inRound, prShas).slice(0, 50)) {
       const files = ghLines(["api", "--paginate", `repos/{owner}/{repo}/commits/${sha}?per_page=100`, "--jq", ".files[]"]);
