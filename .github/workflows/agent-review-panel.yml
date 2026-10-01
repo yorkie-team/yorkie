@@ -549,7 +549,12 @@ jobs:
                 } else {
                   core.warning(`Ignoring issue #${issue.number} as spec (labelled=${labelled}, human=${human}); design-fit runs without a spec.`);
                 }
-              } catch {}
+              } catch (e) {
+                // Recorded, not swallowed: an UNREAD spec must not be reported
+                // to design-fit as "no spec" (review-panel.mjs NO_SPEC_NOTE).
+                core.warning(`could not read issue #${m[1]} (${e.message}); design-fit is not told it has no spec.`);
+                fs.writeFileSync('/tmp/issue.state', 'unreadable');
+              }
             }
             fs.writeFileSync('/tmp/issue.txt', text);
 
@@ -960,6 +965,7 @@ jobs:
           node .trusted/scripts/agent/review-panel.mjs
           --diff-file /tmp/pr.diff
           --issue-file /tmp/issue.txt
+          --issue-state /tmp/issue.state
           --changed-files /tmp/changed.txt
           --prior-findings /tmp/prior-findings.json
           --rebuttals /tmp/rebuttals.json
@@ -2290,6 +2296,16 @@ jobs:
               `make modernize` rather than editing the idioms by hand.
               Do NOT run `make test`: it needs a MongoDB this job does not stand
               up, and the push below re-runs the full integration lane anyway.
+            - NEVER DELETE A TEST THAT SHOWS A FINDING STILL REPRODUCES.
+              If a test you wrote (or found) still fails, the finding is not
+              fixed. Go has no `it.fails`, so keep the test and make its first
+              statement `t.Skip("still reproduces: <finding>")`, with a comment
+              naming the finding, and report that item `--skipped` with the
+              reason. Do not claim it `--fixed`. The pipeline records every
+              test a fix round removes or switches off with
+              `t.Skip`/`t.Skipf`/`t.SkipNow`, and shows it to the next round's
+              adjudicator beside your claims: a skipped reproducer beside a
+              `--skipped` claim is honest, beside a `--fixed` claim it is not.
 
             YOUR WALL IS ABOUT FIFTY MINUTES, and it is the credential's rather
             than a budget: the job is killed at 55 and the token you push with
@@ -2521,6 +2537,26 @@ jobs:
           else
             echo "advanced=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # WHAT THE ROUND TOOK AWAY FROM THE TESTS. On #1426 (e6900da) a fixer wrote a
+      # test, watched it fail, deleted it, and reported the finding "Fixed". This
+      # compares the heads before and after through the API (never a checkout the
+      # agent touched) and, when a test file was deleted or lost active cases,
+      # posts a `<!-- agent-fix-tests -->` record as github-actions[bot]. The next
+      # round puts it in front of the adjudicator beside every "fixed" claim
+      # (fix-report.mjs). Evidence, not a gate; best-effort.
+      - name: Record tests the fix round removed
+        if: always() && steps.after.outputs.advanced == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.review-panel.outputs.pr }}
+          BEFORE: ${{ needs.fix.outputs.before }}
+          AFTER: ${{ steps.after.outputs.sha }}
+          # The head the fix report names, so the record joins to it even when
+          # the branch moved between CI and the fixer's start.
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/agent/test-removals.mjs post "$PR" --before "$BEFORE" --after "$AFTER" --head "$HEAD_SHA"
 
       # DISPUTES FIRST, then the report, so the report's count includes them.
       # Both are RE-RENDERED, never posted as written: the files came from a

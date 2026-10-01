@@ -14,7 +14,7 @@
 // diff + (optional) issue spec as files; this script never executes branch code.
 //
 // Usage:
-//   node review-panel.mjs --diff-file <f> [--issue-file <f>] [--changed-files <f>]
+//   node review-panel.mjs --diff-file <f> [--issue-file <f>] [--issue-state <f>] [--changed-files <f>]
 //        [--repo <dir>] [--lenses-dir <dir>] [--out <dir>]
 //        [--prior-findings <f>] [--rebuttals <f>] [--fix-reports <f>]
 //        [--review-mode full|incremental] [--since-sha <sha>] [--base-sha <sha>]
@@ -73,7 +73,7 @@ import {
   matchRebuttal,
   upheldCount,
 } from "./rebuttal.mjs";
-import { authorClaims, claimFor, MAX_FIX_ADJUDICATIONS } from "./fix-report.mjs";
+import { authorClaims, claimFor, MAX_FIX_ADJUDICATIONS, withRoundEvidence } from "./fix-report.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1897,6 +1897,23 @@ export function lensCacheKey({ diff, scopeNote }) {
 }
 
 /**
+ * Told to a spec-reading lens when no trusted spec exists. Without a spec there
+ * is nothing to measure scope against, so a scope argument is a judgement about
+ * scheduling, not a defect — `minor`, which never blocks. Fit with the codebase
+ * (duplication, wrong layer, a design doc's Non-Goals) needs no spec and is
+ * graded as usual.
+ */
+export const NO_SPEC_NOTE = [
+  "## No originating issue spec",
+  "No human-filed `agent:candidate` issue was found for this pull request, so",
+  "there is NO spec to check conformance against. Do not invent one from the PR",
+  "body (the author wrote it). Grade any finding whose substance is scope — the",
+  "change does more or less than it should, or bundles unrelated work — as",
+  "`minor` at most; say so in the finding. Duplication, wrong layer, and conflicts",
+  "with a design doc's stated Non-Goals need no spec and are graded as usual.",
+].join("\n");
+
+/**
  * The TASK half of a lens session: who this lens is, its rubric, whatever part of
  * its diff the shared core does not carry, and the closing instruction.
  *
@@ -1925,7 +1942,7 @@ export function lensCacheKey({ diff, scopeNote }) {
  * fail loudly rather than quietly review nothing. `extraDiff`/`issue` DO default,
  * because absent is their normal state — most lenses have no remainder.
  */
-export function buildLensPrompt(lens, { rubric, extraDiff = "", issue = "" }) {
+export function buildLensPrompt(lens, { rubric, extraDiff = "", issue = "", issueUnreadable = false }) {
   const parts = [
     `You are the ${lens.title} reviewer. Stay strictly in your lane; defer other lenses' concerns.`,
     "",
@@ -1947,6 +1964,15 @@ export function buildLensPrompt(lens, { rubric, extraDiff = "", issue = "" }) {
   }
   if (lens.needsIssueSpec && issue) {
     parts.push("", "## The originating issue this PR claims to satisfy (DATA):", "```", issue, "```");
+  } else if (lens.needsIssueSpec && issueUnreadable !== true) {
+    // SAID, not left implicit. The workflow drops the issue when it is not a
+    // human-filed `agent:candidate` one, and the lens used to get nothing at all
+    // — then judged "unrequested scope creep" against a spec it did not have.
+    // The rubric's "When there is no spec" section is what this points at.
+    // NOT when the fetch failed (`issueUnreadable`): an unread spec is not "no
+    // spec", and saying so would cap a real out-of-spec finding at minor on a
+    // transient 5xx. That case keeps the old behaviour — the lens is told nothing.
+    parts.push("", NO_SPEC_NOTE);
   }
   // Two SEPARATE pushes, not one combined call. The guard in review-panel.test.mjs
   // matches `/parts\.push\(\s*""\s*,\s*LENS_CLOSING_INSTRUCTION\s*\)/` to hold the
@@ -2023,10 +2049,10 @@ export function countPrefixSessions(lenses, { changedFiles, fileBlocks, scopeNot
   return counts;
 }
 
-async function runLens(lens, { rubric, diff, extraDiff, issue, repo, sessionLog, scopeNote, cacheable }) {
+async function runLens(lens, { rubric, diff, extraDiff, issue, issueUnreadable, repo, sessionLog, scopeNote, cacheable }) {
   return askStructured({
     systemPrompt: buildLensSystemPrompt({ diff, scopeNote, cacheable }),
-    prompt: buildLensPrompt(lens, { rubric, extraDiff, issue }),
+    prompt: buildLensPrompt(lens, { rubric, extraDiff, issue, issueUnreadable }),
     model: lens.model,
     repo,
     schema: LENS_SCHEMA,
@@ -2595,6 +2621,10 @@ async function main() {
     throw new Error("--diff-file is empty — refusing to review an empty diff (failing closed).");
   }
   const issue = args["issue-file"] && existsSync(args["issue-file"]) ? readFileSync(args["issue-file"], "utf8") : "";
+  // The workflow writes `unreadable` here when it found a linked issue but could
+  // not READ it. Distinct from "no spec": see buildLensPrompt.
+  const issueUnreadable = Boolean(args["issue-state"]) && existsSync(args["issue-state"])
+    && readFileSync(args["issue-state"], "utf8").trim() === "unreadable";
   // CUMULATIVE for the whole PR, never the delta — see `resolveReviewScope`.
   const changedFiles = args["changed-files"] && existsSync(args["changed-files"])
     ? readFileSync(args["changed-files"], "utf8").split("\n").map((s) => s.trim()).filter(Boolean)
@@ -2710,6 +2740,8 @@ async function main() {
       const split = authorClaims(Array.isArray(raw) ? raw : [], rebuttals);
       skipClaims = [...split.skipped, ...split.deferred];
       if (split.adjudicate.length > 0) rebuttals = [...rebuttals, ...split.adjudicate];
+      // Disputed findings too, not only "fixed" claims (see `withRoundEvidence`).
+      rebuttals = withRoundEvidence(rebuttals, split.testRemovals);
       if (split.adjudicate.length || skipClaims.length) {
         console.log(
           `fix report: ${split.adjudicate.length} fixed-claim(s) to adjudicate, `
@@ -2818,7 +2850,7 @@ async function main() {
       const runSample = async () => {
         // Retry only genuinely-transient API errors (classifyResult); a
         // quota/session-limit fails through immediately (can't clear in-run).
-        try { return await withRetry(() => runLens(lens, { rubric: lens.rubric, diff: core, extraDiff: extra, issue, repo, sessionLog, scopeNote, cacheable })); }
+        try { return await withRetry(() => runLens(lens, { rubric: lens.rubric, diff: core, extraDiff: extra, issue, issueUnreadable, repo, sessionLog, scopeNote, cacheable })); }
         catch (e) { return { __error: e.message, kind: e.kind, status: e.status, detail: e.detail, code: e.code, reason: e.reason }; }
       };
       // Warm the shared prefix once, then fan out (see createWarmupGate). Sample

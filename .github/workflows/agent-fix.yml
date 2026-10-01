@@ -647,6 +647,16 @@ jobs:
               `make modernize` rather than editing the idioms by hand.
               Do NOT run `make test`: it needs a MongoDB this job does not stand
               up, and the push below re-runs the full integration lane anyway.
+            - NEVER DELETE A TEST THAT SHOWS A FINDING STILL REPRODUCES.
+              If a test you wrote (or found) still fails, the finding is not
+              fixed. Go has no `it.fails`, so keep the test and make its first
+              statement `t.Skip("still reproduces: <finding>")`, with a comment
+              naming the finding, and report that item `--skipped` with the
+              reason. Do not claim it `--fixed`. The pipeline records every
+              test a fix round removes or switches off with
+              `t.Skip`/`t.Skipf`/`t.SkipNow`, and shows it to the next round's
+              adjudicator beside your claims: a skipped reproducer beside a
+              `--skipped` claim is honest, beside a `--fixed` claim it is not.
 
             YOUR WALL IS ABOUT FIFTY MINUTES, and it is the credential's rather
             than a budget: the job is killed at 55 and the token you push with
@@ -899,6 +909,26 @@ jobs:
             exit 0
           fi
           node scripts/agent/disclose-pr.mjs "$PR"
+
+      # WHAT THE ROUND TOOK AWAY FROM THE TESTS — the same record the panel's
+      # fix-report job posts (see agent-review-panel.yml), so a `@claude fix`
+      # round's "fixed" claims reach the next adjudicator with it too.
+      - name: Record tests the fix round removed
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.issue.number }}
+          BEFORE: ${{ needs.fix.outputs.before }}
+          BRANCH: ${{ needs.fix.outputs.branch }}
+          HEAD_SHA: ${{ needs.fix.outputs.head }}
+        run: |
+          AFTER="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || echo '')"
+          if [ -z "$BEFORE" ] || [ -z "$AFTER" ] || [ "$BEFORE" = "$AFTER" ]; then
+            echo "the branch head did not advance; nothing to compare"
+            exit 0
+          fi
+          node scripts/agent/test-removals.mjs post "$PR" --before "$BEFORE" --after "$AFTER" --head "$HEAD_SHA"
 
       # Replace the placeholder with what actually happened.
       #
