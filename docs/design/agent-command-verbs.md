@@ -717,7 +717,12 @@ failures.
   head that fingerprints the same as a head every lens approved has that
   approval re-stamped on it, and no lens runs. Carries are capped at 2 in a
   row, and promote still needs green CI on the new head. A merge that touched
-  the PR's hunks or their context changes the fingerprint and is reviewed.
+  the PR's hunks or their context changes the fingerprint and is reviewed. A
+  rebase rewrites every commit, so the approved head is no longer in the PR's
+  commit list: it is found through the PR's force-push events (GraphQL
+  `beforeCommit`; the REST event names only the new head), whose check runs
+  stay readable. A replaced head is used only when it holds the newest
+  verdicts, and only to carry; anything else reads the branch's own state.
 - **Reuse.** A rerun on a commit that already has verdicts re-stamps them, so a
   blocking verdict goes straight to the fixer. `@claude rerun review` asks for a
   fresh sample.

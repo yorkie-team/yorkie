@@ -39,7 +39,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendFileSync, readFileSync } from "node:fs";
 import { agreedReviewedSha, resolveReviewMode, latestLensRuns } from "./review-state.mjs";
-import { gh, prCommitsWithCheckRuns, allCheckRuns, parseArgs, permissionResolver } from "./gh-checks.mjs";
+import { gh, prCommitsWithCheckRuns, commitCheckRuns, allCheckRuns, parseArgs, permissionResolver } from "./gh-checks.mjs";
 import { lensApplies } from "./review-panel.mjs";
 import { groupReviewRounds, isRerunCommand } from "./rounds.mjs";
 import { parseCommand } from "./command.mjs";
@@ -213,6 +213,56 @@ export function notFoundIsNoAccess(api) {
   };
 }
 
+/** How many of the latest force-pushes `replacedHeads` looks behind. */
+const MAX_REPLACED_HEADS = 10;
+
+/**
+ * The heads that force-pushes to this PR replaced, newest first, and none of the
+ * commits still on it.
+ *
+ * WHY: a rebase rewrites every commit of the PR, so `pulls/{pr}/commits` no
+ * longer lists the head the lenses approved, and its check runs — the review
+ * state carry compares against — would be invisible. GitHub keeps both: the
+ * timeline's force-push events name the replaced head, and that SHA's check runs
+ * stay readable. Only GraphQL exposes the replaced head (`beforeCommit`); the
+ * REST timeline event carries the new one alone.
+ *
+ * Who pushed is irrelevant. A carry from a replaced head still needs that head's
+ * own recorded fingerprint to equal this head's, every lens's approval, and green
+ * CI on this head before promote. The runs pass the same `latestLensRuns`
+ * filters as any other.
+ *
+ * Fails to `[]`, which is today's answer: no carry across the rewrite.
+ */
+export function replacedHeads(pr, { api = gh, log = console.error, onBranch = new Set() } = {}) {
+  let d;
+  try {
+    d = api([
+      "api", "graphql",
+      "-F", "owner={owner}", "-F", "repo={repo}", "-F", `pr=${pr}`,
+      "-f", `query=query($owner: String!, $repo: String!, $pr: Int!) {
+  repository(owner: $owner, name: $repo) { pullRequest(number: $pr) {
+    timelineItems(itemTypes: [HEAD_REF_FORCE_PUSHED_EVENT], last: ${MAX_REPLACED_HEADS}) {
+      nodes { ... on HeadRefForcePushedEvent { beforeCommit { oid } } }
+    }
+  } }
+}`,
+    ]);
+  } catch (err) {
+    log(`review-scope: could not read the force-push history (${err.message}); no carry across a rewrite.`);
+    return [];
+  }
+  const nodes = d?.data?.repository?.pullRequest?.timelineItems?.nodes;
+  const out = [];
+  for (const n of (Array.isArray(nodes) ? nodes : []).slice().reverse()) {
+    const oid = n?.beforeCommit?.oid;
+    if (typeof oid !== "string" || !SHA.test(oid)) continue;
+    const s = oid.toLowerCase();
+    if (!onBranch.has(s) && !out.includes(s)) out.push(s);
+  }
+  return out;
+}
+
 /**
  * The whole decision, with the API and git injected. Exported so the TWO-PHASE
  * composition is executed by tests, not just its parts: the hazard this shape
@@ -243,19 +293,57 @@ export async function decideScope(opts) {
   // `partial` or not), so no per-run back-fill is paid for here.
   const rounds = groupReviewRounds(commits, lensCheckNames).length;
   // The pointer lives in `external_id`; `resolveReviewMode` parses and validates it.
-  const latest = latestLensRuns(allCheckRuns(commits), lensCheckNames);
+  const onBranchRuns = allCheckRuns(commits);
+  const latest = latestLensRuns(onBranchRuns, lensCheckNames);
   const states = new Map([...latest].map(([name, r]) => [name, r?.external_id]));
   // From the SAME runs the pointers come from, so a verdict and the state it is
   // read beside cannot belong to different rounds.
   const priorConclusions = new Map([...latest].map(([name, r]) => [name, r?.conclusion]));
-  // STARTED, not completed: see `reviewRequested`.
-  const newest = [...latest.values()]
+
+  // The same, with the runs on heads a force-push replaced (see `replacedHeads`).
+  // Used only to decide a carry, and only when such a head holds the NEWEST
+  // verdicts: an older approval there must not outvote a newer verdict here.
+  const onBranch = new Set(commits.map((c) => String(c.sha).toLowerCase()));
+  const replacedRuns = [];
+  for (const sha of lensIds.length ? replacedHeads(pr, { api, log, onBranch }) : []) {
+    try {
+      replacedRuns.push(...commitCheckRuns(sha, { api }));
+    } catch (err) {
+      log(`review-scope: could not read check runs on replaced head ${sha.slice(0, 12)} (${err.message}).`);
+    }
+  }
+  const latestAll = replacedRuns.length ? latestLensRuns([...onBranchRuns, ...replacedRuns], lensCheckNames) : latest;
+
+  // STARTED, not completed: see `reviewRequested`. Over every run read, so a
+  // request a round on a replaced head already answered is not asked again.
+  const newest = [...latestAll.values()]
     .map((r) => Date.parse(String(r?.started_at ?? r?.completed_at ?? "")))
     .filter((n) => Number.isFinite(n));
   const forceReview = reviewRequested(comments, {
     trusts,
     after: newest.length ? new Date(Math.max(...newest)).toISOString() : null,
   });
+
+  // A rewrite (rebase, amend) left the newest verdicts on a head no longer on
+  // the branch. No range to measure from there, so no git facts: the answer is a
+  // carry, or one of the overrides that already beat a carry. Anything else
+  // falls through to the branch's own state, exactly as before this existed.
+  if (latestAll !== latest) {
+    const statesAll = new Map([...latestAll].map(([name, r]) => [name, r?.external_id]));
+    const agreedAll = agreedReviewedSha(lensIds, statesAll);
+    if (agreedAll.sha && !onBranch.has(agreedAll.sha)) {
+      const d = resolveReviewMode({
+        lensIds, states: statesAll, headSha: head, roundIndex: rounds, fullEvery, maxDeltaLines,
+        isAncestor: null, hasMergeInRange: null, deltaLines: null,
+        fingerprint, forceReview,
+        priorConclusions: new Map([...latestAll].map(([name, r]) => [name, r?.conclusion])),
+      });
+      if (d.mode === "carry" || d.reason === "carry-cap" || d.reason === "review-requested") {
+        log(`review-scope: ${d.mode} (${d.reason}) from replaced head ${agreedAll.sha.slice(0, 12)} — round ${rounds}`);
+        return { ...d, rounds };
+      }
+    }
+  }
 
   // Phase 1: is there a range at all? Measuring git before knowing `since` would
   // measure the wrong range — see the caller contract on `resolveReviewMode`.

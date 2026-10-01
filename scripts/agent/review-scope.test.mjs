@@ -136,10 +136,19 @@ const stampedAt = (sha) =>
 // check-runs. An earlier version of this stub indexed argv[1] for both, which made
 // every call throw, every commit list come back empty, and four tests fail —
 // including one that then "passed" for the wrong reason.
-const apiFor = (runsBySha) => (args) => {
+//
+// `commits` overrides the PR's commit list (default: every sha with runs), and
+// `forcePushedFrom` lists the heads force-pushes replaced, oldest first, as the
+// GraphQL timeline returns them.
+const apiFor = (runsBySha, { commits, forcePushedFrom = [] } = {}) => (args) => {
+  if (args[1] === "graphql") {
+    return { data: { repository: { pullRequest: { timelineItems: {
+      nodes: forcePushedFrom.map((oid) => ({ beforeCommit: oid ? { oid } : null })),
+    } } } } };
+  }
   const p = args.find((a) => typeof a === "string" && a.startsWith("repos/"));
   assert.ok(p, `no path in gh args: ${args.join(" ")}`);
-  if (p.includes("/commits?")) return Object.keys(runsBySha).map((sha) => ({ sha }));
+  if (p.includes("/commits?")) return (commits ?? Object.keys(runsBySha)).map((sha) => ({ sha }));
   const sha = p.split("/commits/")[1].split("/")[0];
   return [{ check_runs: runsBySha[sha] ?? [] }];
 };
@@ -400,4 +409,73 @@ test("notFoundIsNoAccess: a 404 permission lookup is a definite no; any other fa
   // A successful lookup passes through untouched.
   const ok = permissionResolver({ api: notFoundIsNoAccess(() => ({ permission: "write" })), log: quiet });
   assert.equal(ok("maintainer"), true);
+});
+
+// --- carry across a rebase -----------------------------------------------------
+
+const C = "c".repeat(40);
+const later = (runs, at) => runs.map((r) => ({ ...r, id: r.id + 100, started_at: at, completed_at: at }));
+
+test("decideScope: a clean rebase of an approved head carries from the head the force-push replaced", async () => {
+  // After a rebase the PR's commit list holds only the rewritten commits, so the
+  // approved head's runs are reachable only through the force-push that dropped it.
+  const base = {
+    pr: "1426", head: B, manifest: MANIFEST, changedFiles: CODE, fingerprint: FP,
+    run: runner({ "cat-file -e": { ok: false, status: 1, stdout: "" } }),
+    comments: [], trusts: trustAll, log: quiet,
+  };
+  const got = await decideScope({ ...base, api: apiFor({ [A]: approvedAt(A) }, { commits: [B], forcePushedFrom: [A] }) });
+  assert.equal(got.mode, "carry");
+  assert.equal(got.sourceSha, A);
+  assert.equal(got.carry, 1);
+  assert.equal(got.reason, "pr-diff-unchanged");
+  // A rebase that changed the diff (conflict resolution) is reviewed in full.
+  const changed = await decideScope({ ...base, fingerprint: "e".repeat(40), api: apiFor({ [A]: approvedAt(A) }, { commits: [B], forcePushedFrom: [A] }) });
+  assert.equal(changed.mode, "full");
+  // Only an approval carries.
+  const blocked = await decideScope({ ...base, api: apiFor({ [A]: blockedAt(A) }, { commits: [B], forcePushedFrom: [A] }) });
+  assert.equal(blocked.mode, "full");
+  // The cap still counts the carries recorded on the replaced head.
+  const capped = await decideScope({ ...base, api: apiFor({ [A]: approvedAt(A, { mode: "carry", carry: 2 }) }, { commits: [B], forcePushedFrom: [A] }) });
+  assert.equal(capped.reason, "carry-cap");
+  // And `rerun review` still overrides it.
+  const asked = await decideScope({ ...base, comments: [human("@claude rerun review", "2026-07-21T00:00:00Z")], api: apiFor({ [A]: approvedAt(A) }, { commits: [B], forcePushedFrom: [A] }) });
+  assert.equal(asked.reason, "review-requested");
+});
+
+test("decideScope: a replaced head is consulted only when it holds the NEWEST verdicts", async () => {
+  // An older approval on a replaced head must not outvote a newer verdict on the
+  // branch: that would pick the sample it liked.
+  const got = await decideScope({
+    pr: "1426", head: B, manifest: MANIFEST, changedFiles: CODE, fingerprint: FP,
+    api: apiFor({ [A]: approvedAt(A), [C]: later(blockedAt(C), "2026-07-21T10:00:00Z") }, { commits: [C, B], forcePushedFrom: [A] }),
+    run: merged, comments: [], trusts: trustAll, log: quiet,
+  });
+  assert.notEqual(got.mode, "carry");
+  // A replaced head whose verdicts do not carry falls back to the branch's own
+  // state, exactly as before: an amend after an older on-branch round narrows
+  // from that round's pointer.
+  const amended = await decideScope({
+    pr: "581", head: B, manifest: MANIFEST, changedFiles: CODE, fingerprint: "e".repeat(40),
+    api: apiFor({ [A]: stampedAt(A), [C]: later(approvedAt(C), "2026-07-21T10:00:00Z") }, { commits: [A, B], forcePushedFrom: [C] }),
+    run: runner(), comments: [], trusts: trustAll, log: quiet,
+  });
+  assert.equal(amended.mode, "incremental");
+  assert.equal(amended.sinceSha, A);
+});
+
+test("decideScope: an unreadable force-push history or replaced head costs only the carry", async () => {
+  const throwing = (what) => (args) => {
+    if (what === "graphql" && args[1] === "graphql") throw new Error("gh: 502");
+    if (what === "runs" && args.some((a) => String(a).includes(`/commits/${A}/`))) throw new Error("gh: 422");
+    return apiFor({ [A]: approvedAt(A) }, { commits: [B], forcePushedFrom: [A, null, "junk"] })(args);
+  };
+  for (const what of ["graphql", "runs"]) {
+    const got = await decideScope({
+      pr: "1426", head: B, manifest: MANIFEST, changedFiles: CODE, fingerprint: FP,
+      api: throwing(what), run: runner(), comments: [], trusts: trustAll, log: quiet,
+    });
+    assert.equal(got.mode, "full", what);
+    assert.equal(got.reason, "no-prior-state", what);
+  }
 });
