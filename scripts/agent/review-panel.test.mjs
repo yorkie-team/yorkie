@@ -896,6 +896,14 @@ test("resolveReviewScope: stamps a pointer only when --head-sha is given", () =>
   // with no signal.
   assert.throws(() => resolveReviewScope({ "head-sha": "nope" }, []), /'reviewed' must be a 40-hex sha/);
   assert.throws(() => resolveReviewScope({ "head-sha": HEAD, "base-sha": "nope" }, []), /'base'/);
+
+  // The PR-diff fingerprint rides along, so a later head with the same diff can
+  // carry this round's approval instead of re-sampling it (#1426). Absent or
+  // empty stamps the old shape exactly; junk fails before a token is spent.
+  const FP = "f".repeat(40);
+  assert.equal(JSON.parse(resolveReviewScope({ "head-sha": HEAD, "base-sha": BASE, "diff-fingerprint": FP }, []).stateExternalId).fp, FP);
+  assert.equal(JSON.parse(resolveReviewScope({ "head-sha": HEAD, "diff-fingerprint": "" }, []).stateExternalId).fp, undefined);
+  assert.throws(() => resolveReviewScope({ "head-sha": HEAD, "diff-fingerprint": "nope" }, []), /'fp'/);
 });
 
 // The scope note reaches the model only if main() threads it through runLens, and

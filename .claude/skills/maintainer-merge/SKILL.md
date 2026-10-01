@@ -62,6 +62,21 @@ successful push and time the command out, and a `commit-msg` hook that rejected
 a conflict-resolution commit leaves you force-pushing a no-op. The remote SHA
 must be your new commit.
 
+## Agent-managed PRs
+
+**On an `agent:managed` PR the new head re-runs the panel**, and the panel is
+a sample. A rebase or merge of main that leaves the PR's own diff unchanged
+(same `git patch-id --verbatim`) carries an approval instead: the lens checks
+on the new head read "carried from <sha>" and `agent:ready` stays. A merge or
+rebase that touched the PR's hunks or their context, such as a conflict
+resolution, is a full review again. With the fix budget spent, that review can
+move a ready PR to `agent:blocked` on code nobody changed. That happened on
+yorkie-js-sdk#1426 before carry existed. So check the panel's verdict on the
+new head, not only CI, before you merge.
+
+`@claude rerun` on a head that already has verdicts reuses them. To ask for a
+fresh review, use `@claude rerun review`.
+
 ## PRs touching `.github/workflows/*`
 
 `gh pr merge` fails with *refusing to allow an OAuth App to create or update

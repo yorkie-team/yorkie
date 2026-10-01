@@ -252,3 +252,93 @@ test("decideScope: the periodic rebaseline fires on the round count from the API
   });
   assert.equal(raised.mode, "incremental");
 });
+
+// --- carry, reuse and `@claude rerun review` ----------------------------------
+
+const FP = "f".repeat(40);
+const verdictRun = (name, id, sha, conclusion, extra = {}) => ({
+  ...lensRun(name, id, serializeReviewState({ reviewed: sha, mode: "full", fp: FP, ...extra })),
+  conclusion,
+});
+const approvedAt = (sha, extra) => LENS_NAMES.map((n, i) => verdictRun(n, 10 + i, sha, "success", extra));
+const blockedAt = (sha) => LENS_NAMES.map((n, i) => verdictRun(n, 10 + i, sha, i === 0 ? "failure" : "success"));
+const human = (body, at, login = "maintainer") => ({
+  body, created_at: at, user: { login, type: "User" }, author_association: "MEMBER",
+});
+const trustAll = () => true;
+const merged = runner({ "rev-list --merges": { ok: true, status: 0, stdout: `${B}\n` } });
+
+test("decideScope: a diff-neutral merge of an approved head carries, and hands back the source (#1426)", async () => {
+  const got = await decideScope({
+    pr: "1426", head: B, manifest: MANIFEST, changedFiles: CODE, fingerprint: FP,
+    api: apiFor({ [A]: approvedAt(A) }), run: merged, comments: [], trusts: trustAll, log: quiet,
+  });
+  assert.equal(got.mode, "carry");
+  assert.equal(got.sourceSha, A);
+  assert.equal(got.carry, 1);
+  assert.equal(got.reason, "pr-diff-unchanged");
+  // A different fingerprint is a changed diff: the merge-in-range review stands.
+  const changed = await decideScope({
+    pr: "1426", head: B, manifest: MANIFEST, changedFiles: CODE, fingerprint: "e".repeat(40),
+    api: apiFor({ [A]: approvedAt(A) }), run: merged, comments: [], trusts: trustAll, log: quiet,
+  });
+  assert.equal(changed.reason, "merge-in-range");
+});
+
+test("decideScope: a rerun on the same head reuses its verdicts; `rerun review` forces a review", async () => {
+  const base = {
+    pr: "1426", head: A, manifest: MANIFEST, changedFiles: CODE, fingerprint: FP,
+    api: apiFor({ [A]: blockedAt(A) }), run: runner(), trusts: trustAll, log: quiet,
+  };
+  const reuse = await decideScope({ ...base, comments: [human("@claude rerun", "2026-07-21T00:00:00Z")] });
+  assert.equal(reuse.mode, "reuse");
+  assert.equal(reuse.sourceSha, A);
+  // The rerun asked for a review, after the verdict it would otherwise reuse.
+  const forced = await decideScope({ ...base, comments: [human("@claude rerun review", "2026-07-21T00:00:00Z")] });
+  assert.equal(forced.mode, "full");
+  assert.equal(forced.reason, "review-requested");
+  // A `rerun review` OLDER than the verdict was already answered by it.
+  const answered = await decideScope({ ...base, comments: [human("@claude rerun review", "2026-07-19T00:00:00Z")] });
+  assert.equal(answered.mode, "reuse");
+  // Only the LATEST rerun speaks: a plain rerun after a `rerun review` reuses.
+  const latest = await decideScope({
+    ...base,
+    comments: [human("@claude rerun review", "2026-07-21T00:00:00Z"), human("@claude rerun", "2026-07-22T00:00:00Z")],
+  });
+  assert.equal(latest.mode, "reuse");
+  // An untrusted commenter cannot force (or block) anything.
+  const stranger = await decideScope({
+    ...base, trusts: (login) => login === "maintainer",
+    comments: [human("@claude rerun review", "2026-07-21T00:00:00Z", "drive-by")],
+  });
+  assert.equal(stranger.mode, "reuse");
+  // A bot cannot either, whatever it writes.
+  const bot = await decideScope({
+    ...base, comments: [{ ...human("@claude rerun review", "2026-07-21T00:00:00Z", "x[bot]"), user: { login: "x[bot]", type: "Bot" } }],
+  });
+  assert.equal(bot.mode, "reuse");
+});
+
+test("decideScope: comments that cannot be read force a review — never a reuse on a guess", async () => {
+  // A request we could not read may have been `rerun review`. Reusing on that
+  // doubt would skip the review a human asked for; reviewing costs only tokens.
+  const got = await decideScope({
+    pr: "1426", head: A, manifest: MANIFEST, changedFiles: CODE, fingerprint: FP,
+    api: apiFor({ [A]: blockedAt(A) }), run: runner(), comments: null, trusts: trustAll, log: quiet,
+  });
+  assert.equal(got.mode, "full");
+  assert.equal(got.reason, "review-requested");
+});
+
+test("reviewRequested: answered only by a round that STARTED after the request; an unresolved author fails toward reviewing", async () => {
+  const { reviewRequested } = await import("./review-scope.mjs");
+  const ask = human("@claude rerun review", "2026-07-21T00:00:00Z");
+  // A panel already in flight when the request was made finished after it — it
+  // did not answer it, so `after` is the newest START, and the request stands.
+  assert.equal(reviewRequested([ask], { trusts: trustAll, after: "2026-07-20T23:00:00Z" }), true);
+  assert.equal(reviewRequested([ask], { trusts: trustAll, after: "2026-07-21T00:05:00Z" }), false);
+  // A permission lookup that FAILED (null) is not a "no": the request stands.
+  assert.equal(reviewRequested([ask], { trusts: () => null }), true);
+  // A definite "no" is still ignored.
+  assert.equal(reviewRequested([ask], { trusts: () => false }), false);
+});

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { slotSuffix, chooseCredential, readPoolState, capacityNote } from "./pick-fix-credential.mjs";
+import { slotSuffix, chooseCredential, readPoolState, capacityNote, candidateNames, probeCredentials, classifyProbeFailure, probeEnv } from "./pick-fix-credential.mjs";
 import { MAX_SLOTS, TOKEN_ENV } from "./token-pool.mjs";
 
 // --- slotSuffix: the name→suffix map, and the security boundary ---------------
@@ -331,4 +331,81 @@ test("the panel's pool-state version matches the one the picker gates on", () =>
     read[1],
     `the panel writes v:${written[1]} but the picker accepts only v:${read[1]} — the gate would be permanently off`,
   );
+});
+
+// --- the probe: prove a credential answers BEFORE a round is spent on it -----
+//
+// #1426: the picker named CLAUDE_CODE_OAUTH_TOKEN ("live-slot", "0 retired")
+// and the fixer died 0.5 s after init at $0. The pool state only knows what the
+// PANEL's sessions saw; a slot the panel never touched, or one that closed after
+// the panel finished, reads as live. A one-word query per candidate settles it
+// for a few cents, against the ~$10 panel round already paid for.
+
+const T0 = TOKEN_ENV, T1 = `${TOKEN_ENV}_1`, T3 = `${TOKEN_ENV}_3`;
+const live = (names) => ({ v: 1, size: 3, maxSlots: MAX_SLOTS, live: names, retired: [] });
+
+test("candidateNames: the panel's live slots first, filtered to what is configured", () => {
+  assert.deepEqual(candidateNames(live([T1, T3]), [T0, T1, T3]), [T1, T3]);
+  // A live name with no secret behind it cannot be probed, or handed out.
+  assert.deepEqual(candidateNames(live([T1, T3]), [T0, T1]), [T1]);
+  // No readable state (a reused round has no panel run): every configured slot.
+  for (const state of [null, { v: 9 }, { v: 1, live: "x" }]) {
+    assert.deepEqual(candidateNames(state, [T0, T1]), [T0, T1], JSON.stringify(state));
+  }
+  // A KNOWN-drained pool has no candidates — the existing refusal stands.
+  assert.deepEqual(candidateNames({ v: 1, size: 2, maxSlots: MAX_SLOTS, live: [], retired: [T0, T1] }, [T0, T1]), []);
+});
+
+test("classifyProbeFailure: quota and auth are named; everything else is unknown", () => {
+  assert.equal(classifyProbeFailure("You've hit your weekly limit · resets 11pm"), "quota");
+  assert.equal(classifyProbeFailure("Not logged in · Please run /login"), "auth");
+  assert.equal(classifyProbeFailure("401 Unauthorized"), "auth");
+  assert.equal(classifyProbeFailure("socket hang up"), "unknown");
+  assert.equal(classifyProbeFailure(undefined), "unknown");
+});
+
+test("probeCredentials: the first slot that answers wins", async () => {
+  const tried = [];
+  const check = async (name) => { tried.push(name); return name === T3 ? { ok: true } : { ok: false, kind: "quota" }; };
+  assert.deepEqual(await probeCredentials({ names: [T0, T1, T3], check }), { slot: "3", available: true, reason: "probed-live" });
+  assert.deepEqual(tried, [T0, T1, T3]);
+});
+
+test("probeCredentials: every slot REFUSED is a known-dead pool — no round is spent", async () => {
+  const check = async (name) => ({ ok: false, kind: name === T0 ? "auth" : "quota" });
+  assert.deepEqual(await probeCredentials({ names: [T0, T1], check }), { slot: "", available: false, reason: "probe-all-refused" });
+});
+
+test("probeCredentials: anything inconclusive proceeds, as the picker always has", async () => {
+  // An unclassified failure or a timeout is not evidence the fixer would fail.
+  const check = async (name) => ({ ok: false, kind: name === T1 ? "unknown" : "quota" });
+  assert.deepEqual(await probeCredentials({ names: [T0, T1], check }), { slot: "1", available: true, reason: "probe-inconclusive" });
+  const throws = async () => { throw new Error("boom"); };
+  assert.deepEqual(await probeCredentials({ names: [T1], check: throws }), { slot: "1", available: true, reason: "probe-inconclusive" });
+  // Nothing to probe is not a verdict either: the caller falls back to the state.
+  assert.equal(await probeCredentials({ names: [], check }), null);
+});
+
+test("probeEnv: a probe child sees ONE token and no real home", () => {
+  const prev = { ...process.env };
+  process.env[`${TOKEN_ENV}_2`] = "other-slot-secret";
+  try {
+    const env = probeEnv("the-one", "/tmp/probe-x");
+    assert.deepEqual(Object.keys(env).sort(), ["CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "HOME", "PATH"]);
+    assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, "the-one");
+    assert.equal(env.HOME, "/tmp/probe-x");
+    assert.ok(!Object.values(env).includes("other-slot-secret"));
+  } finally {
+    process.env = prev;
+  }
+});
+
+test("classifyProbeFailure: a transient overload is NOT a refusal — it must not latch a PR", () => {
+  // review: a 30 s API-wide 429/529 made every slot look dead, `available=false`
+  // posted the paged latch, and the PR stalled until a human reran it. Only a
+  // closed usage WINDOW (it stays closed until it resets) is a refusal.
+  for (const msg of ["429 Too Many Requests", "rate limit exceeded", "Overloaded (529)", "quota exceeded, retry later"]) {
+    assert.equal(classifyProbeFailure(msg), "unknown", msg);
+  }
+  assert.equal(classifyProbeFailure("429 · You've hit your session limit · resets 3am"), "quota");
 });

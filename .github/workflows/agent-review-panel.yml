@@ -492,6 +492,35 @@ jobs:
             git diff origin/main...HEAD > /tmp/pr.diff
           fi
 
+      # THE PR-DIFF FINGERPRINT: `git patch-id --verbatim` of the PR's own diff.
+      # It ignores line numbers, so it survives a merge of main that touches none
+      # of the PR's hunks or their context, and a clean rebase; it changes on
+      # anything else — including a merge that resolved a conflict. On #1426 the
+      # approved b9a3ecc and the `update-branch` merge d593a98 both fingerprint
+      # to `b0832c12…`; the conflict-resolving 6915bc6 does not.
+      #
+      # `--verbatim`, NOT `--stable`: `--stable` discards whitespace, so moving
+      # a Python call out of an `if` by indentation alone fingerprinted the same
+      # and would have carried an approval over a change in behaviour.
+      # `--no-ext-diff --no-textconv` so no driver can rewrite what is hashed.
+      # fingerprint.test.mjs runs this exact line against real repositories. Stamped into every lens's review
+      # state, it is what lets a later head carry an approval instead of
+      # re-sampling it (see review-state.mjs).
+      #
+      # UNFILTERED, unlike the reviewed diff: a generated-file change must break
+      # the fingerprint too. A separate step, so "Compute diff + changed files"
+      # stays byte-identical to the on-demand workflow's copy. An empty or failed
+      # fingerprint is "" — never carried on, so it fails toward reviewing.
+      - name: Fingerprint the PR diff
+        id: fp
+        if: steps.pr.outputs.number != ''
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          FP="$(git diff --no-color --no-ext-diff --no-textconv "$(git merge-base origin/main HEAD)" HEAD | git patch-id --verbatim | cut -d' ' -f1)"
+          echo "fp=$FP" >> "$GITHUB_OUTPUT"
+          echo "PR-diff fingerprint: ${FP:-<empty>}" >&2
+
       - name: Fetch originating issue spec (for design-fit)
         if: steps.pr.outputs.number != ''
         uses: actions/github-script@v7
@@ -589,12 +618,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ steps.pr.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          DIFF_FP: ${{ steps.fp.outputs.fp }}
         run: >-
           node .trusted/scripts/agent/review-scope.mjs "$PR"
           --head "$HEAD_SHA"
           --lenses .trusted/scripts/agent/lenses/lenses.json
           --changed-files /tmp/changed.txt
           --repo "$GITHUB_WORKSPACE"
+          --fingerprint "$DIFF_FP"
 
       # Why this round did what it did, in the run UI. Without it "we never narrow"
       # and "we narrow and it saves nothing" are indistinguishable from the outside,
@@ -608,6 +639,45 @@ jobs:
           ROUNDS: ${{ steps.scope.outputs.rounds }}
         run: |
           echo "Review scope: **$MODE** (\`$REASON\`), round $ROUNDS" >> "$GITHUB_STEP_SUMMARY"
+
+      # CARRY OR REUSE: no lens runs this round. The scope step found either an
+      # unchanged PR diff since a head every lens approved (`carry`, #1426's
+      # `update-branch` merge), or a rerun on the very commit the verdicts are on
+      # (`reuse`, #1426's round 8). This writes `.agent-review/` from the verdicts
+      # already recorded on `source`, and "Post per-lens check runs" below posts
+      # them on this head as it posts a reviewed round's.
+      #
+      # `ok=true` is the ONLY thing that skips the panel. A refusal, a crash or a
+      # skipped step leaves it empty and the panel reviews in full — always
+      # correct, merely the cost this exists to avoid. `continue-on-error` for the
+      # same reason the scope step has it: a bug here must cost a review, never a
+      # blocked PR.
+      - name: Carry the prior verdicts
+        id: carry
+        if: >-
+          steps.pr.outputs.number != '' &&
+          (steps.scope.outputs.mode == 'carry' || steps.scope.outputs.mode == 'reuse')
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          MODE: ${{ steps.scope.outputs.mode }}
+          SOURCE: ${{ steps.scope.outputs.source }}
+          CARRY: ${{ steps.scope.outputs.carry }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          BASE_SHA: ${{ steps.diff.outputs.base }}
+          DIFF_FP: ${{ steps.fp.outputs.fp }}
+        run: >-
+          node .trusted/scripts/agent/carry-verdicts.mjs "$PR"
+          --mode "$MODE"
+          --source "$SOURCE"
+          --head "$HEAD_SHA"
+          --base "$BASE_SHA"
+          --fingerprint "$DIFF_FP"
+          --carry "$CARRY"
+          --lenses .trusted/scripts/agent/lenses/lenses.json
+          --changed-files /tmp/changed.txt
+          --out .agent-review
 
       # INCREMENTAL REVIEW, part 2 of 2: replace /tmp/pr.diff with the delta.
       #
@@ -766,7 +836,7 @@ jobs:
       # back to creating fresh checks; the stalled job closes any left spinning).
       - name: Mark lens checks in progress
         id: inprogress
-        if: steps.pr.outputs.number != ''
+        if: steps.pr.outputs.number != '' && steps.carry.outputs.ok != 'true'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -797,7 +867,7 @@ jobs:
             fs.writeFileSync(`${process.env.RUNNER_TEMP}/lens-check-ids.json`, JSON.stringify(ids));
 
       - name: Run review panel
-        if: steps.pr.outputs.number != ''
+        if: steps.pr.outputs.number != '' && steps.carry.outputs.ok != 'true'
         # continue-on-error: a crash must not skip the needs-gated promote/fix
         # jobs — the post step below then fails closed (per-lens failure checks).
         continue-on-error: true
@@ -841,6 +911,8 @@ jobs:
           # the Claude token, and repo convention keeps workflow expressions out
           # of shell commands in jobs that hold secrets.
           BASE_SHA: ${{ steps.diff.outputs.base }}
+          # Stamped into each lens's review state; see "Fingerprint the PR diff".
+          DIFF_FP: ${{ steps.fp.outputs.fp }}
           # Where the review surface froze — the head when the fixer was first
           # dispatched. Empty when the resolver found no ledger (round 1, a PR older
           # than the ledger) or failed outright, and review-panel.mjs reads empty as
@@ -897,6 +969,7 @@ jobs:
           --frozen-sha "$FROZEN_SHA"
           --review-mode "$REVIEW_MODE"
           --since-sha "$SINCE_SHA"
+          --diff-fingerprint "$DIFF_FP"
           --repo "$GITHUB_WORKSPACE"
           --lenses-dir .trusted/scripts/agent/lenses
           --out .agent-review
@@ -946,13 +1019,21 @@ jobs:
           # reading a verdict knows it saw a delta rather than the whole PR. Empty
           # in full mode, which keeps those titles byte-identical to before.
           NARROWED_SINCE: ${{ steps.narrow.outputs.mode == 'incremental' && steps.scope.outputs.since || '' }}
+          # Set only when "Carry the prior verdicts" wrote this round. Names the
+          # head the verdict came from on the check-run title, so nobody reads a
+          # carried verdict as a fresh review.
+          CARRIED_MODE: ${{ steps.carry.outputs.ok == 'true' && steps.scope.outputs.mode || '' }}
+          CARRIED_FROM: ${{ steps.carry.outputs.ok == 'true' && steps.scope.outputs.source || '' }}
         with:
           retries: 3
           script: |
             const fs = require('fs');
             const sha = context.payload.workflow_run.head_sha;
             const since = process.env.NARROWED_SINCE || '';
-            const scopeSuffix = since ? ` (delta since ${since.slice(0, 12)})` : '';
+            const carriedFrom = process.env.CARRIED_FROM || '';
+            const scopeSuffix = carriedFrom
+              ? (process.env.CARRIED_MODE === 'reuse' ? ' (reused verdict)' : ` (carried from ${carriedFrom.slice(0, 12)})`)
+              : since ? ` (delta since ${since.slice(0, 12)})` : '';
             // Single source of truth for the lens set: the TRUSTED manifest. The
             // orchestrator writes panel.json (one entry per lens incl. skipped);
             // any manifest lens missing from panel.json = orchestrator crash → fail closed.
@@ -996,7 +1077,20 @@ jobs:
               // an empty carry-forward for an infra lens; its check still fails via
               // `conclusion` above, so nothing promotes. `p.infraError` is the same
               // signal the honest-paging path uses, so the two cannot disagree.
-              if (p && p.infraError) {
+              // A carried or reused round: the findings payload already on the
+              // source run, VERBATIM — it was filtered to the gating findings when
+              // it was first written, and on a reuse it is the fixer's work list.
+              // carry-verdicts.mjs refused the carry if it did not parse as a list.
+              // ONLY on a carried round: a carry that crashed half-way could leave
+              // these files behind, and on a reviewed round they would replace
+              // the findings the panel just produced.
+              let carriedText = null;
+              if (carriedFrom) {
+                try { carriedText = fs.readFileSync(`.agent-review/${lens.id}/carried-text.json`, 'utf8'); } catch {}
+              }
+              if (carriedText !== null && carriedText.length <= 60000) {
+                findingsText = carriedText;
+              } else if (p && p.infraError) {
                 findingsText = '[]';
               } else try {
                 const v = JSON.parse(fs.readFileSync(`.agent-review/${lens.id}/verdict.json`, 'utf8'));
@@ -1109,9 +1203,11 @@ jobs:
       # tally exists to prevent, wearing a different hat. An ordinary FAILURE still
       # publishes: a lens that crashed while others deferred findings is a round
       # worth recording.
+      # Not on a carried round: nothing was reviewed, so there is nothing new to
+      # defer, and the source head's record stays the one of record.
       - name: Record the deferred findings
         if: >-
-          !cancelled() && steps.pr.outputs.number != ''
+          !cancelled() && steps.pr.outputs.number != '' && steps.carry.outputs.ok != 'true'
         continue-on-error: true
         # [ -f ] guard: .trusted is the DEFAULT BRANCH's copy, so until this script
         # has merged the step must skip quietly, not red every panel run.
@@ -1137,7 +1233,7 @@ jobs:
 
       - name: Post the deferred-findings check run
         if: >-
-          !cancelled() && steps.pr.outputs.number != ''
+          !cancelled() && steps.pr.outputs.number != '' && steps.carry.outputs.ok != 'true'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -1234,9 +1330,11 @@ jobs:
       # output takes the fail-closed branch and writes "every lens fails closed"
       # onto the dashboard — describing a failure that did not happen, at the
       # moment a fresher round is starting.
+      # Not on a carried round: the round comment renders a REVIEW, and none ran.
+      # The check-run titles and the loop status below say what happened instead.
       - name: Post this round's findings
         if: >-
-          !cancelled() && steps.pr.outputs.number != ''
+          !cancelled() && steps.pr.outputs.number != '' && steps.carry.outputs.ok != 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1275,9 +1373,15 @@ jobs:
           PR: ${{ steps.pr.outputs.number }}
           BLOCKED: ${{ steps.panel.outputs.blocked }}
           MAX_ROUNDS: ${{ env.MAX_REVIEW_ROUNDS }}
+          CARRIED_MODE: ${{ steps.carry.outputs.ok == 'true' && steps.scope.outputs.mode || '' }}
+          CARRIED_FROM: ${{ steps.carry.outputs.ok == 'true' && steps.scope.outputs.source || '' }}
         run: |
           [ -f .trusted/scripts/agent/loop-status.mjs ] || { echo "loop-status.mjs not on main yet; skipping"; exit 0; }
-          if [ "$BLOCKED" = "true" ]; then
+          if [ "$CARRIED_MODE" = "carry" ]; then
+            NOTE="Carried the approval from \`${CARRIED_FROM:0:9}\` — this PR's own diff is unchanged, so no lens re-ran. The ready gate promotes once CI is green."
+          elif [ "$CARRIED_MODE" = "reuse" ]; then
+            NOTE="Reused the verdicts already on this commit — no lens re-ran. \`@claude rerun review\` asks for a fresh review."
+          elif [ "$BLOCKED" = "true" ]; then
             NOTE="Panel requested changes — see the agent-review-* checks on this commit; the round guard decides whether another fix round runs."
           elif [ "$BLOCKED" = "false" ]; then
             NOTE="Panel approved — the ready gate promotes once CI is green."
@@ -1901,6 +2005,62 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         run: cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"
 
+      # WHICH CREDENTIAL THE FIXER GETS, and whether one exists at all — PROVEN,
+      # not inferred.
+      #
+      # `claude-code-action` takes ONE credential and cannot consult
+      # `token-pool.mjs`. The picker used to name a slot from the pool state the
+      # panel recorded, and that state only knows what the PANEL's sessions saw:
+      # on #1426 it named CLAUDE_CODE_OAUTH_TOKEN ("live-slot", "0 retired") and
+      # the fixer died 0.5 s after init at $0 with the round already charged
+      # (#876 was the same shape). So `--probe` sends each candidate a one-word
+      # query and hands out the first that answers. A reused round has no panel
+      # run and no pool state; the probe then tries every configured slot.
+      #
+      # HERE, BEFORE THE APP TOKEN AND THE BRANCH CHECKOUT, and that placement is
+      # the security property: the step holds every pool secret, and at this
+      # point the workspace is still trusted main with no branch code on disk.
+      # TRUSTED copy from `$RUNNER_TEMP/agent-tools`, with the Agent SDK the
+      # unprivileged `deps` job built unpacked beside it.
+      #
+      # `continue-on-error` with a fail-open default: only an explicit
+      # `available=false` stops the dispatch below — every candidate REFUSED on
+      # quota or auth, or a pool state that proves every slot retired. A missing
+      # artifact, an SDK that will not load, a timeout or an unclassified error
+      # leaves `available` empty or true, which is exactly the old behaviour.
+      - name: Download the Agent SDK (for the credential probe)
+        if: steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-sdk-node-modules
+          path: /tmp/agent-sdk
+      - name: Unpack the Agent SDK beside the trusted scripts
+        if: steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        run: tar -xzf /tmp/agent-sdk/agent-sdk-node-modules.tgz -C "$RUNNER_TEMP/agent-tools"
+      - name: Pick a live fixer credential
+        id: cred
+        if: steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_OAUTH_TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_1 }}
+          CLAUDE_CODE_OAUTH_TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          CLAUDE_CODE_OAUTH_TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          CLAUDE_CODE_OAUTH_TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          CLAUDE_CODE_OAUTH_TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+          CLAUDE_CODE_OAUTH_TOKEN_6: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_6 }}
+          CLAUDE_CODE_OAUTH_TOKEN_7: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_7 }}
+          CLAUDE_CODE_OAUTH_TOKEN_8: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_8 }}
+        run: |
+          [ -f "$RUNNER_TEMP/agent-tools/pick-fix-credential.mjs" ] || {
+            echo "pick-fix-credential.mjs is not on main yet; proceeding as before"
+            exit 0
+          }
+          node "$RUNNER_TEMP/agent-tools/pick-fix-credential.mjs" --state /tmp/review-panel-execution --probe --model claude-opus-5
+
+
       # THE ONLY APP TOKEN THIS JOB MINTS. The fix push goes through the App so
       # it re-triggers CI (and a fresh panel). `contents: write` +
       # `pull-requests: write` in one token is the exact pair that submits an
@@ -2001,40 +2161,6 @@ jobs:
       # the fixer is reached; the `stalled` net then pages. `test -s` catches the
       # staged file being absent or empty, which would otherwise post nothing and
       # succeed.
-      # WHICH CREDENTIAL THE FIXER GETS, and whether one exists at all.
-      #
-      # `claude-code-action` takes ONE credential and cannot consult
-      # `token-pool.mjs`, so this step reads the pool state the panel recorded and
-      # names a slot the panel has not retired. Without it the fixer runs on
-      # `secrets.CLAUDE_CODE_OAUTH_TOKEN` — slot ZERO of that same pool — i.e. the
-      # credential the panel is likeliest to have just burned. On #876 that killed
-      # the fixer 1.6s after init (`is_error:true`, turns=1, tokens=0) AFTER the
-      # round had been recorded, so the PR paid a fix round for a session that never
-      # started.
-      #
-      # TRUSTED copy from `$RUNNER_TEMP/agent-tools`, which "Stage the trusted agent
-      # scripts" above snapshotted from trusted main BEFORE the branch was checked
-      # out. By this point the workspace holds the UNTRUSTED branch, so
-      # `./scripts/agent` is the branch's own copy and `.trusted/` does not exist in
-      # this job at all — that directory belongs to the review-panel job. Every other
-      # script here runs from the staged path for exactly this reason.
-      #
-      # `continue-on-error` with a fail-open default: only an explicit
-      # `available=false` stops the dispatch below. A missing artifact or a broken
-      # picker leaves `available` empty, which reads as "proceed" and is exactly
-      # today's behaviour — this must never be able to block a fixer that would have
-      # worked.
-      - name: Pick a live fixer credential
-        id: cred
-        if: steps.guard.outputs.proceed == 'true'
-        continue-on-error: true
-        run: |
-          [ -f "$RUNNER_TEMP/agent-tools/pick-fix-credential.mjs" ] || {
-            echo "pick-fix-credential.mjs is not on main yet; proceeding as before"
-            exit 0
-          }
-          node "$RUNNER_TEMP/agent-tools/pick-fix-credential.mjs" --state /tmp/review-panel-execution
-
       # NO LIVE CREDENTIAL — page, and spend nothing.
       #
       # This is its own page because the `stalled` net cannot see it: skipping the
@@ -2071,6 +2197,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ needs.review-panel.outputs.pr }}
           CAPACITY: ${{ steps.cred.outputs.capacity }}
+          CRED_REASON: ${{ steps.cred.outputs.reason }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         # Body assembled with printf into a file, then posted with --body-file. An
         # UNQUOTED heredoc would interpolate the marker and the backticks as shell;
@@ -2080,7 +2207,14 @@ jobs:
         run: |
           {
             printf '%s\n' '<!-- agent-review-paged -->'
-            printf '%s\n\n' '🛑 The fix agent was **not dispatched**: no Claude credential had an open usage window, so a fix round would have been spent on a session that could not start.'
+            # Two different findings, said differently: the probe TRIED every
+            # slot and each refused, or the panel's pool state already showed
+            # every slot retired and nothing was tried.
+            if [ "$CRED_REASON" = "probe-all-refused" ]; then
+              printf '%s\n\n' '🛑 The fix agent was **not dispatched**: every Claude credential was probed and each refused — a closed usage window or a rejected credential — so a fix round would have been spent on a session that could not start.'
+            else
+              printf '%s\n\n' '🛑 The fix agent was **not dispatched**: the review panel had already retired every Claude credential this round (closed usage windows), so a fix round would have been spent on a session that could not start.'
+            fi
             printf '%s\n\n' '**No fix round was consumed** — this PR'"'"'s budget is untouched.'
             printf 'Credential capacity: %s\n\n' "${CAPACITY:-unknown}"
             printf '%s\n\n' 'This often clears by itself, because usage windows reset. Comment `@claude rerun` once they have, or register more `CLAUDE_CODE_OAUTH_TOKEN_N` repository secrets so a heavy review round cannot starve the fixer.'
@@ -2319,6 +2453,10 @@ jobs:
       needs.fix.outputs.available != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # `stalled` reads this to stand down: an infra failure is paged here, with
+    # its cause, and must not be paged a second time as "the fixer failed".
+    outputs:
+      infra_paged: ${{ steps.infra.outputs.paged }}
     permissions:
       contents: read
       pull-requests: write # loop-status comments on the PR (GITHUB_TOKEN)
@@ -2405,6 +2543,37 @@ jobs:
           PR: ${{ needs.review-panel.outputs.pr }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: node scripts/agent/fix-report.mjs republish "$PR" --from "$RUNNER_TEMP/agent-output/fix-report.md" --head "$HEAD_SHA"
+
+      # AN INFRA FAILURE IS NOT A FIXER THAT GAVE UP. On #1426, fix rounds died
+      # with `is_error` after 25 turns and 0.5 s after init — an API that stopped
+      # answering — and `stalled` paged each as "the fixer agent failed", sending
+      # a human after a fixer that could not converge. When the fixer step
+      # FAILED, nothing is KNOWN to have been pushed, and the session ended on an
+      # API error, this pages with the cause and the next step, and `stalled`
+      # stands down. Otherwise it does nothing and the existing nets page.
+      #
+      # NOT continue-on-error: a page that failed to post must red this job, so
+      # `stalled` (which tests `fix-report` failing) still pages.
+      - name: Page an infrastructure failure
+        id: infra
+        # `steps.after.outcome == 'success'`: "nothing was pushed" must be KNOWN.
+        # When the head could not be read, `stalled` pages as before.
+        if: >-
+          always() && needs.fix.outputs.fixer == 'failure' &&
+          steps.after.outcome == 'success' && steps.after.outputs.advanced == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.review-panel.outputs.pr }}
+          FIXER_OUTCOME: ${{ needs.fix.outputs.fixer }}
+          ADVANCED: ${{ steps.after.outputs.advanced }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node scripts/agent/fix-outcome.mjs page "$PR" \
+            --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" \
+            --fixer "$FIXER_OUTCOME" --advanced "$ADVANCED" --run-url "$RUN_URL"
+          if grep -q '^paged=true$' "$GITHUB_OUTPUT"; then
+            node scripts/agent/set-state.mjs "$PR" blocked || true
+          fi
 
       # OBSERVABILITY (Phase 1): the fixer session's turns/cost/outcome on the
       # run page.
@@ -2762,7 +2931,7 @@ jobs:
          needs.review-panel.result == 'cancelled' ||
          needs.promote.result == 'failure' ||
          needs.promote.result == 'cancelled' ||
-         needs.fix.result == 'failure' ||
+         (needs.fix.result == 'failure' && needs.fix-report.outputs.infra_paged != 'true') ||
          needs.fix-report.result == 'failure' ||
          (needs.ci.result == 'success' &&
           needs.ci.outputs.conclusion != 'success' &&

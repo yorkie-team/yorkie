@@ -9,10 +9,16 @@
 // Usage:
 //   node review-scope.mjs <pr> --head <sha> --lenses <lenses.json>
 //                              --changed-files <f> [--repo <dir>]
+//                              [--fingerprint <patch-id>]
 //                              [--full-every N] [--max-delta-lines N]
 //
 // Outputs (appended to $GITHUB_OUTPUT when set, always logged):
-//   mode=full|incremental   since=<sha40 or empty>   reason=<why>   rounds=<n>
+//   mode=full|incremental|carry|reuse   since=<sha40 or empty>   reason=<why>
+//   rounds=<n>   source=<sha40 or empty>   carry=<n>
+//
+// `carry` and `reuse` mean NO lens runs this round: the workflow re-stamps the
+// verdicts recorded on `source` (see carry-verdicts.mjs). `since` stays empty
+// for both, so nothing keyed on it can mistake them for a narrowed review.
 //
 // FAIL DIRECTION — the whole file. This ALWAYS exits 0 with a usable mode, and
 // EVERY failure path resolves to `mode=full`. Unlike the rest of the pipeline,
@@ -33,9 +39,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendFileSync, readFileSync } from "node:fs";
 import { agreedReviewedSha, resolveReviewMode, latestLensRuns } from "./review-state.mjs";
-import { gh, prCommitsWithCheckRuns, allCheckRuns, parseArgs } from "./gh-checks.mjs";
+import { gh, prCommitsWithCheckRuns, allCheckRuns, parseArgs, permissionResolver } from "./gh-checks.mjs";
 import { lensApplies } from "./review-panel.mjs";
-import { groupReviewRounds } from "./rounds.mjs";
+import { groupReviewRounds, isRerunCommand } from "./rounds.mjs";
+import { parseCommand } from "./command.mjs";
 
 const execFileAsync = promisify(execFile);
 const SHA = /^[0-9a-fA-F]{40}$/;
@@ -136,6 +143,45 @@ export function reviewingLensIds(manifest, changedFiles) {
 }
 
 /**
+ * Did a maintainer ask for a FRESH review after the verdicts on record?
+ *
+ * `@claude rerun review` is the opt-out from `reuse`: a rerun on the same head
+ * otherwise re-stamps its verdicts rather than drawing a new sample. Only the
+ * LATEST rerun speaks, and only when it is newer than `after` — the newest lens
+ * run's START. A verdict from a round already in flight when the request was
+ * made finishes after it but did not answer it.
+ *
+ * FAILS TOWARD REVIEWING, in both places a fact can be missing:
+ *   - `comments === null` is "could not read them", and an unread request may
+ *     have been exactly this one;
+ *   - a commenter whose permission lookup FAILED (`trusts` → null) is not a
+ *     "no" — the request stands. Only a definite "no" (`false`) or a bot is
+ *     ignored, so nobody untrusted can force anything but a review, and a
+ *     review costs only tokens.
+ */
+export function reviewRequested(comments, { trusts, after } = {}) {
+  if (comments === null) return true;
+  const believed = (c) => {
+    if (c?.user?.type === "Bot") return false;
+    if (typeof trusts === "function") {
+      if (parseCommand(String(c?.body ?? ""), { surface: "pr" }).command !== "rerun") return false;
+      return trusts(String(c?.user?.login ?? "")) !== false;
+    }
+    return isRerunCommand(c, { trusts });
+  };
+  const reruns = (Array.isArray(comments) ? comments : [])
+    .filter(believed)
+    .map((c) => ({ c, at: Date.parse(String(c.created_at ?? "")) }))
+    .filter((x) => Number.isFinite(x.at))
+    .sort((a, b) => a.at - b.at);
+  const last = reruns.at(-1);
+  if (!last) return false;
+  const a = Date.parse(String(after ?? ""));
+  if (Number.isFinite(a) && last.at <= a) return false;
+  return /^review\b/i.test(parseCommand(String(last.c.body ?? ""), { surface: "pr" }).rest);
+}
+
+/**
  * The whole decision, with the API and git injected. Exported so the TWO-PHASE
  * composition is executed by tests, not just its parts: the hazard this shape
  * exists to avoid is measuring git over one range and narrowing to another, and
@@ -147,6 +193,7 @@ export async function decideScope(opts) {
   const {
     pr, head, manifest, changedFiles, repo,
     fullEvery = 3, maxDeltaLines = 400,
+    fingerprint = "", comments = [], trusts,
     api = gh, run = git, log = console.error,
   } = opts && typeof opts === "object" ? opts : {};
   const full = (reason, rounds = 0) => ({ mode: "full", sinceSha: "", reason, rounds });
@@ -164,9 +211,19 @@ export async function decideScope(opts) {
   // `partial` or not), so no per-run back-fill is paid for here.
   const rounds = groupReviewRounds(commits, lensCheckNames).length;
   // The pointer lives in `external_id`; `resolveReviewMode` parses and validates it.
-  const states = new Map(
-    [...latestLensRuns(allCheckRuns(commits), lensCheckNames)].map(([name, r]) => [name, r?.external_id]),
-  );
+  const latest = latestLensRuns(allCheckRuns(commits), lensCheckNames);
+  const states = new Map([...latest].map(([name, r]) => [name, r?.external_id]));
+  // From the SAME runs the pointers come from, so a verdict and the state it is
+  // read beside cannot belong to different rounds.
+  const priorConclusions = new Map([...latest].map(([name, r]) => [name, r?.conclusion]));
+  // STARTED, not completed: see `reviewRequested`.
+  const newest = [...latest.values()]
+    .map((r) => Date.parse(String(r?.started_at ?? r?.completed_at ?? "")))
+    .filter((n) => Number.isFinite(n));
+  const forceReview = reviewRequested(comments, {
+    trusts,
+    after: newest.length ? new Date(Math.max(...newest)).toISOString() : null,
+  });
 
   // Phase 1: is there a range at all? Measuring git before knowing `since` would
   // measure the wrong range — see the caller contract on `resolveReviewMode`.
@@ -180,6 +237,7 @@ export async function decideScope(opts) {
   const facts = await gitFacts({ since: agreed.sha, head, repo, run });
   const decision = resolveReviewMode({
     lensIds, states, headSha: head, roundIndex: rounds, fullEvery, maxDeltaLines, ...facts,
+    fingerprint, priorConclusions, forceReview,
   });
   log(
     `review-scope: ${decision.mode} (${decision.reason}) — round ${rounds}, ${lensIds.length} lens(es), ` +
@@ -202,7 +260,7 @@ function setOutput(name, value) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`);
 }
 
-function emit({ mode, sinceSha, reason, rounds }) {
+function emit({ mode, sinceSha, reason, rounds, sourceSha = "", carry = 0 }) {
   // `since` is only ever non-empty for `incremental`, and the workflow keys the
   // narrowed `git diff` off `mode`. Emitting both keeps the pair inseparable:
   // review-panel.mjs REFUSES `--since-sha` without `--review-mode incremental`
@@ -212,6 +270,11 @@ function emit({ mode, sinceSha, reason, rounds }) {
   setOutput("since", mode === "incremental" ? sinceSha : "");
   setOutput("reason", reason);
   setOutput("rounds", String(rounds ?? 0));
+  // Only for the two modes that run no lens; empty otherwise, so a workflow
+  // condition on `source != ''` cannot fire on an ordinary review.
+  const reused = mode === "carry" || mode === "reuse";
+  setOutput("source", reused ? sourceSha : "");
+  setOutput("carry", String(mode === "carry" ? carry : 0));
 }
 
 async function main() {
@@ -229,9 +292,19 @@ async function main() {
     // and it saved nothing" look identical from the outside otherwise.
     console.error(`review-scope: could not read --lenses '${args.lenses}' (${err.message}).`);
   }
+  // `null` (unreadable), never `[]`, on failure: see `reviewRequested`.
+  let comments = null;
+  try {
+    comments = gh(["api", "--paginate", `repos/{owner}/{repo}/issues/${args._[0]}/comments?per_page=100`]);
+  } catch (err) {
+    console.error(`review-scope: could not read PR comments (${err.message}); a requested review cannot be ruled out.`);
+  }
   emit(
     await decideScope({
       pr: args._[0],
+      fingerprint: typeof args.fingerprint === "string" ? args.fingerprint.trim() : "",
+      comments: Array.isArray(comments) ? comments : null,
+      trusts: permissionResolver({ api: gh }),
       head: typeof args.head === "string" ? args.head.trim() : "",
       manifest,
       changedFiles: readLines(args["changed-files"]),
