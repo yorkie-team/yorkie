@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -173,9 +174,10 @@ func newServerCmd() *cobra.Command {
 			}
 
 			// If config file is given, command-line arguments will be overwritten.
-			// An explicit --auth-webhook-cache-disabled still applies on top.
+			// Explicit credentials and the two security switches still apply on
+			// top; server.New validates the result.
 			var err error
-			conf, err = resolveServerConfig(conf, flagConfPath, authWebhookCacheDisabled)
+			conf, err = resolveServerConfig(conf, flagConfPath, cmd.Flags(), authWebhookCacheDisabled)
 			if err != nil {
 				return err
 			}
@@ -202,25 +204,69 @@ func newServerCmd() *cobra.Command {
 	}
 }
 
+// credentialFlags are the flags whose value is a credential. A config file
+// replaces the whole flag-built config, so without this list an operator who
+// passes both --config and --backend-secret-key would silently run on the
+// well-known default "yorkie-secret" - which signs and accepts admin tokens -
+// whenever the file omits the key, and an operator who passes --cluster-secret
+// would leave ClusterService authentication disabled entirely.
+var credentialFlags = map[string]func(*server.Config) *string{
+	"backend-secret-key":     func(c *server.Config) *string { return &c.Backend.SecretKey },
+	"backend-admin-user":     func(c *server.Config) *string { return &c.Backend.AdminUser },
+	"backend-admin-password": func(c *server.Config) *string { return &c.Backend.AdminPassword },
+	"cluster-secret":         func(c *server.Config) *string { return &c.Backend.ClusterSecret },
+}
+
 // resolveServerConfig applies the config file on top of the flag-built config.
-// The file keeps its long-standing precedence: when --config is given it
-// replaces the whole flag-built config, so no flag can silently override a
-// value an operator wrote into the file. Only --auth-webhook-cache-disabled is
-// applied afterwards, so the kill switch cannot be swallowed by a file that
-// predates it.
+// The file keeps its long-standing precedence for ordinary settings: when
+// --config is given it replaces the whole flag-built config. Two kinds of value
+// survive it, and both only ever tighten the result:
+//
+//   - an explicitly given, non-empty credential, so injecting a secret from a
+//     store next to --config cannot silently fall back to a default. An empty
+//     value never overrides, so it cannot wipe a credential the file sets.
+//   - the --backend-enable-webhook-validation and --auth-webhook-cache-disabled
+//     switches when true, so neither guard can be swallowed by a file that
+//     predates it, while an explicit false cannot relax a file that enables it.
 func resolveServerConfig(
 	base *server.Config,
 	path string,
+	flags *pflag.FlagSet,
 	disableAuthWebhookCache bool,
 ) (*server.Config, error) {
+	if flags != nil {
+		for name, field := range credentialFlags {
+			// ClusterSecret is optional, including an explicit empty value; the
+			// rest are not, so an explicitly emptied one is refused rather than
+			// quietly ignored in favor of a default or a file value.
+			if name != "cluster-secret" && flags.Changed(name) && *field(base) == "" {
+				return nil, fmt.Errorf(`invalid argument "" for "--%s" flag: must not be empty`, name)
+			}
+		}
+	}
+
+	enableWebhookValidation := base.Backend.EnableWebhookValidation
+
 	if path != "" {
 		parsed, err := server.NewConfigFromFile(path)
 		if err != nil {
 			return nil, err
 		}
+
+		if flags != nil {
+			for name, field := range credentialFlags {
+				if flags.Changed(name) && *field(base) != "" {
+					*field(parsed) = *field(base)
+				}
+			}
+		}
+
 		base = parsed
 	}
 
+	if enableWebhookValidation {
+		base.Backend.EnableWebhookValidation = true
+	}
 	if disableAuthWebhookCache {
 		base.Backend.AuthWebhookCacheDisabled = true
 	}
@@ -493,19 +539,22 @@ func init() {
 		&conf.Backend.AdminUser,
 		"backend-admin-user",
 		server.DefaultAdminUser,
-		"The name of the default admin user, who has full permissions. Must not be explicitly empty.",
+		"The name of the default admin user, who has full permissions. Must not be explicitly empty. "+
+			"An explicit value overrides the config file.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminPassword,
 		"backend-admin-password",
 		server.DefaultAdminPassword,
-		"The password of the default admin. Must not be explicitly empty.",
+		"The password of the default admin. Must not be explicitly empty. "+
+			"An explicit value overrides the config file.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.SecretKey,
 		"backend-secret-key",
 		server.DefaultSecretKey,
-		"The secret key for signing authentication tokens for admin users. Must not be explicitly empty.",
+		"The secret key for signing authentication tokens for admin users. Must not be explicitly empty. "+
+			"An explicit value overrides the config file.",
 	)
 
 	cmd.Flags().BoolVar(
@@ -531,7 +580,8 @@ func init() {
 		&conf.Backend.EnableWebhookValidation,
 		"backend-enable-webhook-validation",
 		false,
-		"Whether to enable webhook URL validation to prevent SSRF attacks.",
+		"Whether to enable webhook URL validation to prevent SSRF attacks. "+
+			"An explicit true overrides the config file.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
@@ -678,7 +728,8 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed.",
+		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed. "+
+			"An explicit non-empty value overrides the config file.",
 	)
 	rootCmd.AddCommand(cmd)
 }
