@@ -20,33 +20,22 @@ import (
 	"context"
 	"fmt"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
-// leaseChecks coalesces re-checks that would ask the webhook the same
-// question at the same time. Without it a client could multiply its load on
-// the webhook by opening more streams; with it, streams sharing a token,
-// method and resource set cost one request per re-check period however many
-// of them are open.
-var leaseChecks singleflight.Group
-
 // VerifyWatchLease re-checks an established Watch stream against the given
 // project, which the caller reloads so that settings changed after the stream
 // opened take effect.
 //
-// Lease renewals read the webhook directly rather than the admission cache, so
-// they observe current decisions even when the configured cache TTL exceeds the
-// Watch cutoff. The decision is still written back to that cache, so one
+// A cached denial answers the check on the spot, so a revoked stream costs the
+// webhook nothing; a cached allow does not, because the whole point of the
+// lease is to notice a revocation the cached allow still hides. The re-check
+// period is the operator's own AuthWebhookCacheTTL (see watchLeaseInterval in
+// the rpc package), so one stream asks the webhook no more often than that
+// cache would have let it. The decision is written back to the cache, so one
 // stream's observation of a revocation also denies the RPCs that read it.
-//
-// Directness costs one webhook request per re-check period, which is what
-// bounding revocation by wall-clock time rather than by the cache TTL
-// requires; identical checks are coalesced so that cost is per question asked
-// rather than per stream open. See watchLeaseInterval in the rpc package.
 func VerifyWatchLease(
 	ctx context.Context,
 	be *backend.Backend,
@@ -58,22 +47,7 @@ func VerifyWatchLease(
 	}
 
 	token := metadata.From(ctx).Authorization
-	key := fmt.Sprintf("%s:lease:%s:%s:%v", project.PublicKey, token, access.Method, access.Attributes)
-
-	// The shared call outlives the cancellation of whichever stream happens to
-	// make it, so one stream ending does not fail the checks waiting on it. It
-	// stays bounded by that stream's deadline, which the lease window sets.
-	callCtx := context.WithoutCancel(ctx)
-	if deadline, ok := ctx.Deadline(); ok {
-		var stop context.CancelFunc
-		callCtx, stop = context.WithDeadline(callCtx, deadline)
-		defer stop()
-	}
-
-	_, err, _ := leaseChecks.Do(key, func() (any, error) {
-		return nil, verifyAccessWithCache(callCtx, be, project, token, access, false)
-	})
-	if err != nil {
+	if err := verifyAccessWithCache(ctx, be, project, token, access, cacheDenialsOnly); err != nil {
 		return fmt.Errorf("verify watch lease: %w", err)
 	}
 

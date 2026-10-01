@@ -37,18 +37,34 @@ var (
 	ErrPermissionDenied = errors.PermissionDenied("not allowed").WithCode("ErrPermissionDenied")
 )
 
-// verifyAccessWithCache checks authorization. Watch admissions and lease
-// renewals read the webhook directly, so a revoked permission is never served
-// from a stale allow; every decision they obtain is still written back to the
-// cache, so a revocation one stream observes also denies the other RPCs that
-// do read it.
+// cachePolicy decides which cached authorization decisions a check may be
+// answered from.
+type cachePolicy int
+
+const (
+	// cacheAnyDecision answers from whatever decision is cached, which is the
+	// amortization the configured AuthWebhookCacheTTL exists to provide.
+	cacheAnyDecision cachePolicy = iota
+
+	// cacheDenialsOnly answers a denial from the cache but asks the webhook
+	// again before allowing. Watch admissions and lease renewals use it: a
+	// revoked client must not get the stream back from a stale allow, while a
+	// client retrying a denied request is still answered from the cache
+	// instead of being amplified into the project's webhook.
+	cacheDenialsOnly
+)
+
+// verifyAccessWithCache checks authorization against the cache and, when the
+// cache cannot answer under the given policy, against the webhook. Every
+// decision obtained from the webhook is written back to the cache, so a
+// revocation one Watch stream observes also denies the other RPCs that read it.
 func verifyAccessWithCache(
 	ctx context.Context,
 	be *backend.Backend,
 	prj *types.Project,
 	token string,
 	accessInfo *types.AccessInfo,
-	readCache bool,
+	policy cachePolicy,
 ) error {
 	req := types.AuthWebhookRequest{
 		Token:      token,
@@ -62,9 +78,10 @@ func verifyAccessWithCache(
 	}
 
 	cacheKey := generateCacheKey(prj.PublicKey, body)
-	if readCache {
-		if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
-			return handleWebhookResponse(entry.First, entry.Second)
+	if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
+		decision := handleWebhookResponse(entry.First, entry.Second)
+		if policy == cacheAnyDecision || isDenial(decision) {
+			return decision
 		}
 	}
 
@@ -84,9 +101,9 @@ func verifyAccessWithCache(
 		return fmt.Errorf("verify access: %w", err)
 	}
 
-	// A decision obtained without reading the cache is still written back, so
-	// a denial observed by a Watch lease replaces the stale allow the other
-	// RPCs would otherwise keep reading until the TTL elapsed.
+	// A decision obtained past a cached allow is still written back, so a
+	// denial observed by a Watch lease replaces the stale allow the other RPCs
+	// would otherwise keep reading until the TTL elapsed.
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
 	if status != http.StatusUnauthorized {
 		be.Cache.AuthWebhook.Add(
@@ -96,6 +113,13 @@ func verifyAccessWithCache(
 	}
 
 	return handleWebhookResponse(status, res)
+}
+
+// isDenial reports whether the given decision refused the access, as opposed
+// to leaving it unanswered.
+func isDenial(err error) bool {
+	return errors.IsStatus(err, errors.ErrCodePermissionDenied) ||
+		errors.IsStatus(err, errors.ErrCodeUnauthenticated)
 }
 
 // generateCacheKey creates a unique key for caching webhook responses.

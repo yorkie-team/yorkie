@@ -51,18 +51,17 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.Ac
 		return nil
 	}
 
-	// A Watch admission reads the webhook directly. The stream it opens is
-	// bounded by a lease that re-checks without the cache, so admitting it
-	// from a cached allow would hand a revoked client the stream back simply
-	// by reconnecting, for the rest of the cache TTL.
-	return verifyAccessWithCache(
-		ctx,
-		be,
-		prj,
-		md.Authorization,
-		accessInfo,
-		!isWatchMethod(accessInfo.Method),
-	)
+	// A Watch admission is not answered by a cached allow: it opens a stream
+	// the client keeps, so admitting it from a stale allow would hand a revoked
+	// client the stream back simply by reconnecting, for the rest of the cache
+	// TTL. A cached denial still answers on the spot, so repeated refused
+	// attempts are not amplified into the project's webhook.
+	policy := cacheAnyDecision
+	if isWatchMethod(accessInfo.Method) {
+		policy = cacheDenialsOnly
+	}
+
+	return verifyAccessWithCache(ctx, be, prj, md.Authorization, accessInfo, policy)
 }
 
 // isWatchMethod reports whether the given method opens a Watch stream.

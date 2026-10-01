@@ -88,8 +88,10 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 
 	conf := helper.TestConfig()
 	conf.Mongo = nil
-	// The default admission cache TTL is longer than the required cutoff.
-	// Lease rechecks must still observe revocation within five seconds.
+	// The lease re-checks once per configured auth webhook cache TTL, so the
+	// revocation window this test asserts is the operator's own setting rather
+	// than a hardcoded server policy.
+	conf.Backend.AuthWebhookCacheTTL = "1s"
 	svr, err := server.New(conf)
 	require.NoError(t, err)
 	require.NoError(t, svr.Start())
@@ -101,9 +103,15 @@ func TestWatchStreamEndsAfterWebhookRevocation(t *testing.T) {
 	project, err := admin.CreateProject(ctx, "watch-cutoff")
 	require.NoError(t, err)
 	methods := []string{string(types.Watch), string(types.WatchDocument), string(types.WatchChannel)}
+	// A single attempt the project's own timeout allows always fits inside the
+	// window, so the window is one re-check period plus that timeout.
+	requestTimeout := "500ms"
+	var noRetries uint64
 	_, err = admin.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-		AuthWebhookURL:     &authServer.URL,
-		AuthWebhookMethods: &methods,
+		AuthWebhookURL:            &authServer.URL,
+		AuthWebhookMethods:        &methods,
+		AuthWebhookRequestTimeout: &requestTimeout,
+		AuthWebhookMaxRetries:     &noRetries,
 	})
 	require.NoError(t, err)
 

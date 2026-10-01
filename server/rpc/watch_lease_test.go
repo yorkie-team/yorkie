@@ -171,28 +171,65 @@ func mustRequest(t *testing.T, ctx context.Context, url string) *http.Request {
 	return r
 }
 
-// A project may set any retry count; the lease budget must stay positive so
-// a large one never expires every stream on its first check.
-func TestWebhookBudgetSaturates(t *testing.T) {
+// The window must never cut a single legal webhook attempt short, and the
+// re-check period must follow the operator's configured cache TTL rather than
+// a hardcoded server policy.
+func TestWatchLeaseWindowFollowsConfiguration(t *testing.T) {
 	project := &types.Project{
-		AuthWebhookRequestTimeout:  "3s",
+		AuthWebhookRequestTimeout:  "7s",
 		AuthWebhookMinWaitInterval: "100ms",
 		AuthWebhookMaxWaitInterval: "3s",
+		AuthWebhookMaxRetries:      10,
 	}
 
-	project.AuthWebhookMaxRetries = 2
-	budget, err := webhookBudget(project)
+	allowance, err := watchLeaseAllowance(project)
 	require.NoError(t, err)
-	require.Equal(t, 3*3*time.Second+100*time.Millisecond+200*time.Millisecond, budget)
+	require.Equal(t, 7*time.Second+watchLeaseMargin, allowance,
+		"a single attempt the project's own timeout allows must fit")
 
-	for _, retries := range []uint64{38, 100, math.MaxUint64} {
-		project.AuthWebhookMaxRetries = retries
-		budget, err := webhookBudget(project)
-		require.NoError(t, err)
-		require.Positive(t, budget, retries)
+	s := &yorkieServer{backend: &backend.Backend{Config: &backend.Config{AuthWebhookCacheTTL: "30s"}}}
+	require.Equal(t, 30*time.Second, s.watchLeaseInterval())
+	window, err := s.watchLeaseWindow(project)
+	require.NoError(t, err)
+	require.Equal(t, 30*time.Second+allowance, window)
 
-		start := time.Now()
-		require.Equal(t, start.Add(maxWatchLeaseAge), leaseExpiry(start), retries)
+	// A TTL shorter than the floor cannot turn the lease into a busy loop.
+	s.backend.Config.AuthWebhookCacheTTL = time.Millisecond.String()
+	require.Equal(t, minWatchLeaseInterval, s.watchLeaseInterval())
+
+	// A saturating timeout must not wrap into a window that expires at once.
+	project.AuthWebhookRequestTimeout = time.Duration(math.MaxInt64).String()
+	window, err = s.watchLeaseWindow(project)
+	require.NoError(t, err)
+	require.Positive(t, window)
+}
+
+// An unconfirmed check ends the stream retriably: nothing denied this client,
+// so the SDK must re-establish the watch rather than treat it as refused.
+func TestWatchLeaseExpiryIsRetriable(t *testing.T) {
+	require.True(t, errors.IsStatus(errWatchLeaseExpired, errors.ErrCodeUnavailable))
+	require.False(t, errors.IsStatus(errWatchLeaseExpired, errors.ErrCodePermissionDenied))
+}
+
+// A terminal failure must reach a handler already blocked in send(), including
+// one whose project required no authorization when the stream opened.
+func TestWatchLeaseFailureBoundsBlockedSend(t *testing.T) {
+	armed := make(chan time.Time, 1)
+	lease := &watchLease{
+		failure:     make(chan error, 1),
+		setDeadline: func(at time.Time) error { armed <- at; return nil },
+	}
+
+	lease.fail(errWatchLeaseExpired)
+
+	require.ErrorIs(t, <-lease.failure, errWatchLeaseExpired)
+	require.ErrorIs(t, lease.maySend(), errWatchLeaseExpired)
+	select {
+	case at := <-armed:
+		require.False(t, at.IsZero(), "a blocked write must be bounded by the failure")
+		require.WithinDuration(t, time.Now().Add(watchLeaseMargin), at, time.Second)
+	default:
+		t.Fatal("a terminal lease failure left the transport unbounded")
 	}
 }
 
@@ -213,43 +250,72 @@ func TestWatchProjectReloadClassifiesFailures(t *testing.T) {
 // cover, nor keep one open past that window.
 func TestWatchLeaseToleratesUnconfirmedChecks(t *testing.T) {
 	ctx := logging.With(context.Background(), logging.DefaultLogger())
-	interval := watchLeaseInterval()
+	const interval = 2 * time.Second
+	window := interval + time.Second
+	noop := func(time.Time) error { return nil }
 	unknown := watchProjectReloadError(stderrors.New("database unavailable"))
 
-	// A project that requires no authorization for this method has no window,
-	// so a lookup blip cannot revoke what was never required.
-	require.NoError(t, (&watchLease{}).tolerate(ctx, unknown, interval))
+	// A lease with no window yet must not stay unbounded through uncertainty:
+	// tolerating the blip arms a window the next blip can run down.
+	unarmed := &watchLease{window: window, setDeadline: noop}
+	start := time.Now()
+	require.NoError(t, unarmed.tolerate(ctx, unknown, interval, start))
+	require.Equal(t, start.Add(window), unarmed.expires)
+	// Once that window has no room for another attempt the stream ends, rather
+	// than failing open for as long as the uncertainty lasts.
+	unarmed.expires = time.Now().Add(interval / 2)
+	require.ErrorIs(t, unarmed.tolerate(ctx, unknown, interval, time.Now()), errWatchLeaseExpired)
 
 	// Room for another attempt: the stream rides out the blip.
 	roomy := &watchLease{expires: time.Now().Add(interval + time.Second)}
-	require.NoError(t, roomy.tolerate(ctx, unknown, interval))
+	require.NoError(t, roomy.tolerate(ctx, unknown, interval, time.Now()))
 
 	// No room left: the stream ends at its window rather than past it.
 	expiring := &watchLease{expires: time.Now().Add(interval / 2)}
-	require.ErrorIs(t, expiring.tolerate(ctx, unknown, interval), errWatchLeaseExpired)
+	require.ErrorIs(t, expiring.tolerate(ctx, unknown, interval, time.Now()), errWatchLeaseExpired)
 
 	// A denial ends the stream at once, whatever the window has left.
 	deleted := watchProjectReloadError(database.ErrProjectNotFound)
-	require.ErrorIs(t, (&watchLease{}).tolerate(ctx, deleted, interval), deleted)
-	require.ErrorIs(t, roomy.tolerate(ctx, auth.ErrPermissionDenied, interval), auth.ErrPermissionDenied)
+	blank := &watchLease{window: window, setDeadline: noop}
+	require.ErrorIs(t, blank.tolerate(ctx, deleted, interval, time.Now()), deleted)
+	require.ErrorIs(t, roomy.tolerate(ctx, auth.ErrPermissionDenied, interval, time.Now()),
+		auth.ErrPermissionDenied)
 }
 
 // Without the transport hook a stream cannot be bounded at all, so admission
-// and renewal both refuse it rather than leave it unbounded.
+// refuses it and a mid-stream renewal ends it rather than leaving it unbounded.
 func TestWatchLeaseFailsClosedWithoutWriteDeadline(t *testing.T) {
 	project := &types.Project{
-		AuthWebhookURL:     "http://localhost:0",
-		AuthWebhookMethods: []string{string(types.Watch)},
+		AuthWebhookURL:             "http://localhost:0",
+		AuthWebhookMethods:         []string{string(types.Watch)},
+		AuthWebhookMinWaitInterval: "100ms",
+		AuthWebhookMaxWaitInterval: "3s",
+		AuthWebhookRequestTimeout:  "3s",
 	}
 	access := &types.AccessInfo{Method: types.Watch}
 	require.True(t, project.RequireAuth(access.Method))
 
-	s := &yorkieServer{}
+	s := &yorkieServer{backend: &backend.Backend{Config: &backend.Config{AuthWebhookCacheTTL: "10s"}}}
 	lease, err := s.startWatchLease(projects.With(context.Background(), project), access)
 	require.Nil(t, lease)
 	require.ErrorIs(t, err, auth.ErrPermissionDenied)
 
-	require.ErrorIs(t, renewWatchLease(&watchLease{}, nil, time.Now()), auth.ErrPermissionDenied)
+	require.ErrorIs(t, (&watchLease{window: time.Second}).arm(time.Now()), errWatchLeaseExpired)
+}
+
+// A deployment with no auth webhook has nothing to revoke, so its streams must
+// not pay for a lease goroutine, a ticker or a project reload.
+func TestWatchLeaseIsNotStartedWithoutAnAuthWebhook(t *testing.T) {
+	s := &yorkieServer{}
+	lease, err := s.startWatchLease(
+		projects.With(context.Background(), &types.Project{}),
+		&types.AccessInfo{Method: types.Watch},
+	)
+	require.NoError(t, err)
+	require.NoError(t, lease.maySend())
+	require.Nil(t, lease.cancel, "an unprotected project must not run a lease goroutine")
+	require.Nil(t, lease.failure)
+	lease.stop()
 }
 
 // A project that stops requiring authorization mid-stream must release the
@@ -257,30 +323,23 @@ func TestWatchLeaseFailsClosedWithoutWriteDeadline(t *testing.T) {
 func TestWatchLeaseReleasesWindowWhenAuthStops(t *testing.T) {
 	var cleared bool
 	lease := &watchLease{expires: time.Now().Add(-time.Second)}
-	require.ErrorIs(t, lease.maySend(), errWatchLeaseExpired)
-
-	require.NoError(t, releaseWatchLease(lease, func(at time.Time) error {
+	lease.setDeadline = func(at time.Time) error {
 		cleared = at.IsZero()
 		return nil
-	}))
+	}
+	require.ErrorIs(t, lease.maySend(), errWatchLeaseExpired)
+
+	require.NoError(t, lease.release())
 	require.True(t, cleared, "the transport write deadline must be cleared too")
 	require.NoError(t, lease.maySend())
 }
 
-// The re-check period must leave a full default webhook attempt inside the
-// window it renews.
-func TestWatchLeaseIntervalLeavesRoomForACheck(t *testing.T) {
-	require.Equal(t, database.DefaultAuthWebhookRequestTimeout, watchLeaseCheckAllowance)
-	require.Equal(t, maxWatchLeaseAge-watchLeaseCheckAllowance, watchLeaseInterval())
-	require.Positive(t, watchLeaseInterval())
-}
-
 func TestWatchLeaseCheckKeepsEarlierExpiry(t *testing.T) {
 	start := time.Now()
-	lease := &watchLease{expires: start.Add(2 * time.Second)}
+	lease := &watchLease{window: 5 * time.Second, expires: start.Add(2 * time.Second)}
 	require.Equal(t, lease.expires, lease.checkDeadline(start))
 	lease.expires = time.Time{}
-	require.Equal(t, start.Add(maxWatchLeaseAge), lease.checkDeadline(start))
+	require.Equal(t, start.Add(lease.window), lease.checkDeadline(start))
 }
 
 // watchLeaseProjectDB returns the settings observed when an unprotected stream
@@ -343,33 +402,37 @@ func TestWatchLeaseArmsBeforeNewlyRequiredAuthorization(t *testing.T) {
 							require.NoError(t, err)
 							be := &backend.Backend{
 								DB: &watchLeaseProjectDB{project: project}, Cache: caches,
+								Config:            &backend.Config{AuthWebhookCacheTTL: "1s"},
 								AuthWebhookClient: webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](false),
 							}
 							defer be.AuthWebhookClient.Close()
 							s := &yorkieServer{backend: be}
-							lease := &watchLease{}
+							setDeadline := func(at time.Time) error { deadlines <- at; return nil }
+							interval := s.watchLeaseInterval()
+							window, err := s.watchLeaseWindow(project.ToProject())
+							require.NoError(t, err)
+							lease := &watchLease{window: window, setDeadline: setDeadline}
 							var previous time.Time
 							if armed {
 								previous = time.Now().Add(4 * time.Second)
 								lease.expires = previous
 								deadlines <- previous
 							}
-							setDeadline := func(at time.Time) error { deadlines <- at; return nil }
 							ctx := metadata.With(logging.With(context.Background(), logging.DefaultLogger()),
 								metadata.Metadata{APIKey: project.PublicKey, Authorization: "synthetic-token"})
 							access := &types.AccessInfo{Method: method}
 							start := time.Now()
-							require.NoError(t, s.recheckWatchLease(ctx, lease, access, setDeadline, watchLeaseInterval(), project.PublicKey))
+							require.NoError(t, s.recheckWatchLease(ctx, lease, access, interval, project.PublicKey))
 							observed := <-deadlineAtCheck
 							require.False(t, observed.IsZero(), "the transport must be bounded before calling the newly required webhook")
 							require.Equal(t, observed, lease.expires)
 							if armed {
 								require.Equal(t, previous, lease.expires)
 							} else {
-								require.WithinDuration(t, start.Add(maxWatchLeaseAge), lease.expires, time.Second)
+								require.WithinDuration(t, start.Add(window), lease.expires, time.Second)
 							}
 							firstExpiry := lease.expires
-							require.NoError(t, s.recheckWatchLease(ctx, lease, access, setDeadline, watchLeaseInterval(), project.PublicKey))
+							require.NoError(t, s.recheckWatchLease(ctx, lease, access, interval, project.PublicKey))
 							<-deadlineAtCheck
 							require.Equal(t, firstExpiry, lease.expires, "uncertain checks must not extend the lease")
 						})

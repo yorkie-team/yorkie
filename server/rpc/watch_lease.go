@@ -28,7 +28,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
-	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -37,45 +36,35 @@ import (
 )
 
 const (
-	// maxWatchLeaseAge bounds how long a stream may keep delivering events
-	// after the last time its authorization was confirmed. It is a server
-	// policy: a deployment answers for revocation within this window no
-	// matter how long its admission cache TTL is.
-	maxWatchLeaseAge = 5 * time.Second
-
-	// watchLeaseCheckAllowance is the part of the window reserved for a
-	// re-check to answer. It is the default per-request webhook timeout, so a
-	// single default attempt fits; a project whose webhook needs longer than
-	// the allowance does not renew on that attempt, and the lease retries on
-	// its next tick rather than letting the retry policy run past the cutoff.
-	watchLeaseCheckAllowance = 3 * time.Second
-
-	// minWatchLeaseInterval floors the re-check period so a short window
-	// cannot turn every stream into a busy loop.
+	// minWatchLeaseInterval floors the re-check period so a very short cache
+	// TTL cannot turn every stream into a busy loop.
 	minWatchLeaseInterval = time.Second
 
-	// watchLeaseMargin is slack added to a check's own timeout so a check
-	// that is merely slow, rather than denied, never races the webhook's own
-	// retry budget.
+	// watchLeaseMargin is slack added to the room a single re-check has, so a
+	// check that is merely slow, rather than denied, is not cut off by the
+	// window a hair before its own request timeout would have answered.
 	watchLeaseMargin = time.Second
-
-	// maxWatchBackoffSteps bounds how many backoff waits are summed one by
-	// one when estimating a webhook's retry budget. From this step on every
-	// wait is already clamped to MaxWaitInterval, so the rest are multiplied.
-	maxWatchBackoffSteps = 63
 )
 
 type watchDeadlineKey struct{}
 
-var errWatchLeaseExpired = errors.PermissionDenied("watch authorization lease expired")
+// errWatchLeaseExpired ends a stream whose authorization could not be
+// confirmed inside its window. It is deliberately Unavailable rather than
+// PermissionDenied: nothing denied this client, the server merely stopped
+// being able to vouch for it, and the SDK convention for a server-side stream
+// termination the client never asked for is a retriable status (see
+// ErrSubscriptionsClosed in docs/design/pub-sub.md).
+var errWatchLeaseExpired = errors.Unavailable("watch authorization lease expired")
 
 type watchLease struct {
-	failure  chan error
-	cancel   context.CancelFunc
-	done     chan struct{}
-	mu       sync.RWMutex
-	expires  time.Time
-	terminal error
+	failure     chan error
+	cancel      context.CancelFunc
+	done        chan struct{}
+	setDeadline func(time.Time) error
+	mu          sync.RWMutex
+	window      time.Duration
+	expires     time.Time
+	terminal    error
 }
 
 func (l *watchLease) maySend() error {
@@ -91,11 +80,11 @@ func (l *watchLease) maySend() error {
 }
 
 // checkDeadline limits a recheck to the earlier of the current lease expiry
-// and five seconds from this check's start.
+// and one whole window from this check's start.
 func (l *watchLease) checkDeadline(start time.Time) time.Time {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	deadline := leaseExpiry(start)
+	deadline := start.Add(l.window)
 	if !l.expires.IsZero() && l.expires.Before(deadline) {
 		return l.expires
 	}
@@ -109,10 +98,23 @@ func (l *watchLease) stop() {
 	}
 }
 
+// fail records the error that ends the stream and hands it to the handler.
+//
+// The write deadline is pulled in as well: a handler already blocked in send()
+// never reaches maySend again, and a stream whose project required no
+// authorization when it opened may have no deadline armed at all, so without
+// this the failure would sit in the channel while the stream kept hanging. The
+// deadline is one margin out rather than now, so a handler that is not blocked
+// still has room to write the status that tells the client why it ended.
 func (l *watchLease) fail(err error) {
 	l.mu.Lock()
 	l.terminal = err
 	l.mu.Unlock()
+
+	if l.setDeadline != nil {
+		_ = l.setDeadline(time.Now().Add(watchLeaseMargin))
+	}
+
 	l.failure <- err
 }
 
@@ -159,40 +161,44 @@ func withWatchWriteDeadline(next http.Handler) http.Handler {
 	})
 }
 
-// watchLeaseInterval is the re-check period: the longest one that still
-// leaves a re-check time to answer inside the lease window. It does not track
-// AuthWebhookCacheTTL, because renewals do not read that cache; the cost of
-// that is one webhook request per open stream per period, which is the price
-// of bounding revocation by wall-clock time instead of by the TTL.
-func watchLeaseInterval() time.Duration {
-	return max(maxWatchLeaseAge-watchLeaseCheckAllowance, minWatchLeaseInterval)
+// watchLeaseInterval is how often an established stream is re-checked. It is
+// the operator's own AuthWebhookCacheTTL: a decision older than that TTL is not
+// served to any other RPC either, so re-checking at that period asks the
+// project's webhook no more often than the configured cache already permits.
+// Raising the TTL to shield a rate-limited webhook therefore also widens this
+// period, instead of being silently overridden by a server policy.
+func (s *yorkieServer) watchLeaseInterval() time.Duration {
+	return max(s.backend.Config.ParseAuthWebhookCacheTTL(), minWatchLeaseInterval)
 }
 
-// webhookBudget returns the longest a single auth webhook call may legally
-// take under the project's own request timeout, retry count and backoff. It
-// bounds a re-check's own timeout, so the project's configuration is never
-// cut short by anything other than the lease window itself.
-func webhookBudget(project *types.Project) (time.Duration, error) {
+// watchLeaseWindow is how long a stream may keep delivering events after its
+// authorization was last confirmed: one re-check period plus the room a single
+// re-check has to answer. Revocation is therefore bounded by the operator's own
+// cache TTL rather than by a hardcoded cutoff.
+func (s *yorkieServer) watchLeaseWindow(project *types.Project) (time.Duration, error) {
+	allowance, err := watchLeaseAllowance(project)
+	if err != nil {
+		return 0, err
+	}
+
+	return addDuration(s.watchLeaseInterval(), allowance), nil
+}
+
+// watchLeaseAllowance is the room a single re-check has to answer: the
+// project's own per-request webhook timeout plus slack.
+//
+// The project's retry budget is deliberately not stacked inside one window:
+// the lease's next tick is its retry, so an attempt that fails transiently is
+// repeated a period later instead of consuming the whole window. What the
+// window must never cut short is a single attempt the project's own timeout
+// considers legal.
+func watchLeaseAllowance(project *types.Project) (time.Duration, error) {
 	options, err := project.GetAuthWebhookOptions()
 	if err != nil {
-		return 0, fmt.Errorf("watch lease budget: %w", err)
+		return 0, fmt.Errorf("watch lease allowance: %w", err)
 	}
 
-	// MaxRetries is unbounded, so every step saturates rather than overflow
-	// into a negative budget that would expire the lease immediately.
-	budget := addDuration(
-		mulDuration(options.MaxRetries, options.RequestTimeout),
-		options.RequestTimeout,
-	)
-	steps := min(options.MaxRetries, maxWatchBackoffSteps)
-	for retries := range steps {
-		budget = addDuration(budget, webhook.WaitInterval(
-			retries, options.MinWaitInterval, options.MaxWaitInterval,
-		))
-	}
-	budget = addDuration(budget, mulDuration(options.MaxRetries-steps, options.MaxWaitInterval))
-
-	return budget, nil
+	return addDuration(options.RequestTimeout, watchLeaseMargin), nil
 }
 
 // addDuration returns a+b for non-negative durations, saturating at the
@@ -205,30 +211,15 @@ func addDuration(a, b time.Duration) time.Duration {
 	return a + b
 }
 
-// mulDuration returns n*d for a non-negative duration, saturating at the
-// largest representable duration.
-func mulDuration(n uint64, d time.Duration) time.Duration {
-	if n == 0 || d <= 0 {
-		return 0
-	}
-	if n > uint64(math.MaxInt64/d) {
-		return math.MaxInt64
-	}
-	return time.Duration(n) * d
-}
-
-// leaseExpiry bounds a stream to five seconds from the moment its
-// authorization was last confirmed. A slow or uncertain webhook cannot extend
-// an established stream past this age.
-func leaseExpiry(confirmedAt time.Time) time.Time {
-	return confirmedAt.Add(maxWatchLeaseAge)
-}
-
 // startWatchLease checks an established stream against the project's current
 // authorization settings. A denial stops the stream; the write deadline
-// prevents a slow send from outliving the bounded lease. The lease runs even
-// when the project does not require auth today, so a project that enables or
-// widens its auth webhook afterwards still cuts off streams opened before.
+// prevents a slow send from outliving the bounded lease.
+//
+// A project with no auth webhook at all — the default deployment — has nothing
+// to revoke, so it gets no goroutine, no ticker and no project reload. Once a
+// webhook is configured the lease runs even for methods it does not cover
+// today, so a project that widens its webhook afterwards still cuts off streams
+// opened before.
 //
 // The window runs from the caller's admission check returning, not from when
 // it started: an admission that legally spent the project's whole retry budget
@@ -238,20 +229,26 @@ func (s *yorkieServer) startWatchLease(
 	ctx context.Context,
 	access *types.AccessInfo,
 ) (*watchLease, error) {
-	lease := &watchLease{}
 	project := projects.From(ctx)
+	if project.AuthWebhookURL == "" {
+		return &watchLease{}, nil
+	}
+
+	window, err := s.watchLeaseWindow(project)
+	if err != nil {
+		return nil, err
+	}
+
 	setDeadline, _ := ctx.Value(watchDeadlineKey{}).(func(time.Time) error)
-	interval := watchLeaseInterval()
+	lease := &watchLease{setDeadline: setDeadline, window: window}
 
 	if project.RequireAuth(access.Method) {
 		if setDeadline == nil {
 			return nil, auth.ErrPermissionDenied
 		}
-		expiry := leaseExpiry(time.Now())
-		if err := setDeadline(expiry); err != nil {
+		if err := lease.arm(time.Now()); err != nil {
 			return nil, err
 		}
-		lease.expires = expiry
 	}
 
 	leaseCtx, cancel := context.WithCancel(ctx)
@@ -261,7 +258,7 @@ func (s *yorkieServer) startWatchLease(
 	// Read on the handler goroutine: a panic here is recovered by net/http,
 	// whereas one in the detached lease goroutine would take the server down.
 	apiKey := metadata.From(ctx).APIKey
-	go s.runWatchLease(leaseCtx, lease, access, setDeadline, interval, apiKey)
+	go s.runWatchLease(leaseCtx, lease, access, s.watchLeaseInterval(), apiKey)
 
 	return lease, nil
 }
@@ -272,7 +269,6 @@ func (s *yorkieServer) runWatchLease(
 	leaseCtx context.Context,
 	lease *watchLease,
 	access *types.AccessInfo,
-	setDeadline func(time.Time) error,
 	interval time.Duration,
 	apiKey string,
 ) {
@@ -290,7 +286,7 @@ func (s *yorkieServer) runWatchLease(
 		case <-ticker.C:
 		}
 
-		if err := s.recheckWatchLease(leaseCtx, lease, access, setDeadline, interval, apiKey); err != nil {
+		if err := s.recheckWatchLease(leaseCtx, lease, access, interval, apiKey); err != nil {
 			if leaseCtx.Err() != nil {
 				return
 			}
@@ -308,7 +304,6 @@ func (s *yorkieServer) recheckWatchLease(
 	leaseCtx context.Context,
 	lease *watchLease,
 	access *types.AccessInfo,
-	setDeadline func(time.Time) error,
 	interval time.Duration,
 	apiKey string,
 ) error {
@@ -321,51 +316,58 @@ func (s *yorkieServer) recheckWatchLease(
 	// that are already established.
 	fresh, err := projects.GetProjectFromAPIKey(checkCtx, s.backend, apiKey)
 	if err != nil {
-		return lease.tolerate(leaseCtx, watchProjectReloadError(err), interval)
+		return lease.tolerate(leaseCtx, watchProjectReloadError(err), interval, checkStart)
 	}
+
+	// The window follows the project's current settings, so a webhook request
+	// timeout raised mid-stream widens the room its checks have rather than
+	// being cut short by the window the stream opened with.
+	window, err := s.watchLeaseWindow(fresh)
+	if err != nil {
+		return lease.tolerate(leaseCtx, err, interval, checkStart)
+	}
+	lease.mu.Lock()
+	lease.window = window
+	unarmed := lease.expires.IsZero()
+	lease.mu.Unlock()
 
 	// Newly required authorization must have a finite window even if the first
 	// webhook check is uncertain. Preserve an armed window until a check succeeds.
-	if fresh.RequireAuth(access.Method) {
-		lease.mu.RLock()
-		unarmed := lease.expires.IsZero()
-		lease.mu.RUnlock()
-		if unarmed {
-			if err := renewWatchLease(lease, setDeadline, checkStart); err != nil {
-				return err
-			}
+	if fresh.RequireAuth(access.Method) && unarmed {
+		if err := lease.arm(checkStart); err != nil {
+			return err
 		}
 	}
 
 	if err := s.checkWatchLease(checkCtx, fresh, access); err != nil {
-		return lease.tolerate(leaseCtx, err, interval)
+		return lease.tolerate(leaseCtx, err, interval, checkStart)
 	}
 
 	if err := lease.maySend(); err != nil {
 		return err
 	}
 	if !fresh.RequireAuth(access.Method) {
-		return releaseWatchLease(lease, setDeadline)
+		return lease.release()
 	}
 
-	return renewWatchLease(lease, setDeadline, checkStart)
+	return lease.arm(checkStart)
 }
 
-// releaseWatchLease lifts the bound from a stream whose project has stopped
-// requiring authorization for this method. Without it a webhook removed or
-// narrowed mid-stream would leave the admission window and its write deadline
-// armed with nothing left to renew them, expiring streams that are once again
-// allowed unconditionally.
-func releaseWatchLease(lease *watchLease, setDeadline func(time.Time) error) error {
-	if setDeadline != nil {
-		if err := setDeadline(time.Time{}); err != nil {
+// release lifts the bound from a stream whose project has stopped requiring
+// authorization for this method. Without it a webhook removed or narrowed
+// mid-stream would leave the admission window and its write deadline armed with
+// nothing left to renew them, expiring streams that are once again allowed
+// unconditionally.
+func (l *watchLease) release() error {
+	if l.setDeadline != nil {
+		if err := l.setDeadline(time.Time{}); err != nil {
 			return err
 		}
 	}
 
-	lease.mu.Lock()
-	lease.expires = time.Time{}
-	lease.mu.Unlock()
+	l.mu.Lock()
+	l.expires = time.Time{}
+	l.mu.Unlock()
 
 	return nil
 }
@@ -374,10 +376,18 @@ func releaseWatchLease(lease *watchLease, setDeadline func(time.Time) error) err
 // ends it immediately. Anything else — a lookup blip, a webhook outage —
 // leaves current authorization unknown rather than revoked: the stream
 // survives while another attempt still fits inside its window, and ends when
-// no attempt does. A lease with no window, which is a project that requires no
-// authorization for this method, cannot be revoked by uncertainty, so a blip
-// does not drop every such stream on the node at once.
-func (l *watchLease) tolerate(ctx context.Context, cause error, interval time.Duration) error {
+// no attempt does.
+//
+// A lease with no window yet is one whose project required no authorization
+// for this method at the last confirmed check. Uncertainty must not leave such
+// a stream unbounded forever, so a window is armed from this check instead: the
+// stream rides out the blip and ends if the uncertainty outlasts the window.
+func (l *watchLease) tolerate(
+	ctx context.Context,
+	cause error,
+	interval time.Duration,
+	checkStart time.Time,
+) error {
 	if errors.IsStatus(cause, errors.ErrCodePermissionDenied) ||
 		errors.IsStatus(cause, errors.ErrCodeUnauthenticated) {
 		return cause
@@ -387,7 +397,15 @@ func (l *watchLease) tolerate(ctx context.Context, cause error, interval time.Du
 	expires := l.expires
 	l.mu.RUnlock()
 
-	if expires.IsZero() || time.Now().Add(interval).Before(expires) {
+	if expires.IsZero() {
+		if err := l.arm(checkStart); err != nil {
+			return err
+		}
+		logging.From(ctx).Warnf("watch lease: authorization unconfirmed, bounding stream: %v", cause)
+		return nil
+	}
+
+	if time.Now().Add(interval).Before(expires) {
 		logging.From(ctx).Warnf("watch lease: authorization unconfirmed, retrying: %v", cause)
 		return nil
 	}
@@ -407,9 +425,9 @@ func watchProjectReloadError(err error) error {
 }
 
 // checkWatchLease asks the auth webhook whether the stream is still allowed.
-// The project's own request timeout and retry policy bound the call; the lease
-// window bounds it further through ctx, so a check that cannot answer inside
-// the window does not renew the lease instead of running past the cutoff.
+// The project's own request timeout bounds the call; the lease window bounds it
+// further through ctx, so a check that cannot answer inside the window does not
+// renew the lease instead of running past the cutoff.
 func (s *yorkieServer) checkWatchLease(
 	ctx context.Context,
 	project *types.Project,
@@ -419,40 +437,42 @@ func (s *yorkieServer) checkWatchLease(
 		return nil
 	}
 
-	budget, err := webhookBudget(project)
+	allowance, err := watchLeaseAllowance(project)
 	if err != nil {
 		return err
 	}
 
-	checkCtx, stop := context.WithTimeout(ctx, addDuration(budget, watchLeaseMargin))
+	checkCtx, stop := context.WithTimeout(ctx, allowance)
 	defer stop()
 
 	return auth.VerifyWatchLease(checkCtx, s.backend, project, access)
 }
 
-// renewWatchLease extends the stream's window after a successful check.
-func renewWatchLease(
-	lease *watchLease,
-	setDeadline func(time.Time) error,
-	checkStart time.Time,
-) error {
+// arm extends the stream's window from the moment its authorization was
+// confirmed, bounding the transport write with the same instant.
+func (l *watchLease) arm(confirmedAt time.Time) error {
+	l.mu.RLock()
+	window := l.window
+	l.mu.RUnlock()
+
 	// A project that starts requiring auth mid-stream cannot be bounded
-	// without the transport hook, so such a stream fails closed.
-	if setDeadline == nil {
-		return auth.ErrPermissionDenied
+	// without the transport hook, so such a stream ends rather than running
+	// on unbounded. Nothing denied this client, so it ends retriably.
+	if l.setDeadline == nil {
+		return errWatchLeaseExpired
 	}
 
-	expiry := leaseExpiry(checkStart)
+	expiry := confirmedAt.Add(window)
 	if !time.Now().Before(expiry) {
 		return errWatchLeaseExpired
 	}
-	if err := setDeadline(expiry); err != nil {
+	if err := l.setDeadline(expiry); err != nil {
 		return err
 	}
 
-	lease.mu.Lock()
-	lease.expires = expiry
-	lease.mu.Unlock()
+	l.mu.Lock()
+	l.expires = expiry
+	l.mu.Unlock()
 
 	return nil
 }
