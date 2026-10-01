@@ -168,6 +168,18 @@ failed first, then passed.
   pass. Over the last 400 commits, 26 now report something (24 before), the
   difference coming from the `testcases/` files.
 
+- **The fingerprint test wrote to the real repo under a git hook.** On the
+  wafflebase port, the first `git push` ran `fingerprint.test.mjs` under the
+  pre-push hook with `GIT_DIR` exported. The test's fixture commands set
+  `core.bare` and a `t@t` identity in the shared config and committed over the
+  working branch. yorkie's copy is the same file, and with an inherited
+  `GIT_DIR` it wrote `user.email=t@t` into a decoy repo (Red). It now uses
+  `fixtureGitEnv`, and `git-env.test.mjs` fails on any test that spawns git and
+  runs `init` without `git-env.mjs`. yorkie's pre-push hook does not run
+  `scripts/agent`, which is why this push was safe. **yorkie-js-sdk's copy
+  needs the same fix.**
+- After this fix: `scripts/agent` 1002 of 1002 pass.
+
 ### Not verified
 
 - Nothing ran on GitHub. No real yorkie PR has gone through carry, reuse, the

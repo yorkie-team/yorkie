@@ -32,3 +32,7 @@
 - An inherited `|| echo ''` turns "could not read" into "read nothing", and a
   step outcome downstream then proves nothing. Gate on the value having been
   read, not on the step having succeeded.
+- A byte-identical port inherits the source repo's blind spots, not the
+  target's guards. `fingerprint.test.mjs` came from js-sdk without
+  `fixtureGitEnv`, although this repo already had the helper. Before porting a
+  test that shells out to git, check it against the target's own git-env rules.

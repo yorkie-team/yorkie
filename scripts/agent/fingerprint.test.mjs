@@ -14,6 +14,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { fixtureGitEnv } from "./git-env.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WF = readFileSync(path.join(HERE, "..", "..", ".github", "workflows", "agent-review-panel.yml"), "utf8");
@@ -28,14 +29,17 @@ const CMD = (() => {
 
 function repo() {
   const dir = mkdtempSync(path.join(tmpdir(), "fp-"));
-  const git = (...a) => execFileSync("git", a, { cwd: dir, encoding: "utf8" });
+  // Pinned to the fixture: under the pre-push hook git exports GIT_DIR, and an
+  // inherited one turns every command below into a write to the real repo.
+  const env = fixtureGitEnv(dir);
+  const git = (...a) => execFileSync("git", a, { cwd: dir, env, encoding: "utf8" });
   git("init", "-q", "-b", "main");
   git("config", "user.email", "t@t");
   git("config", "user.name", "t");
   const write = (f, s) => writeFileSync(path.join(dir, f), s);
   const commit = (m) => { git("add", "-A"); git("commit", "-qm", m); return git("rev-parse", "HEAD").trim(); };
   // `origin/main` is what the step measures against.
-  const fp = () => execFileSync("bash", ["-c", `git update-ref refs/remotes/origin/main main && ${CMD}`], { cwd: dir, encoding: "utf8" }).trim();
+  const fp = () => execFileSync("bash", ["-c", `git update-ref refs/remotes/origin/main main && ${CMD}`], { cwd: dir, env, encoding: "utf8" }).trim();
   return { git, write, commit, fp };
 }
 
