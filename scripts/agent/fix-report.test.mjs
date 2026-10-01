@@ -703,3 +703,45 @@ test("withRoundEvidence: genuine rebuttals get the round's removals; converted c
   const src = readFileSync(new URL("./review-panel.mjs", import.meta.url), "utf8");
   assert.match(src, /rebuttals = withRoundEvidence\(rebuttals, split\.testRemovals\);/);
 });
+
+// /code-review: two records for one head (a re-run report job, or a later run
+// that read more of the round) were joined last-wins, so the later one could
+// drop files the earlier one recorded. They are now unioned per file.
+test("readFixReports: every removal record for a head is unioned per file, never last-wins", () => {
+  const report = agentComment(serializeFixReport({ ...REC, head: "6915bc6a7" }));
+  const rec = (removals, extra = {}) => ({
+    id: 9, user: PIPELINE,
+    body: renderTestRemovals({ head: "6915bc6a7", after: "e6900da64", removals, ...extra }),
+  });
+  const first = rec([
+    { file: "test/a_test.ts", deleted: true, removed: 2, added: 0 },
+    { file: "test/b_test.ts", deleted: false, removed: 1, added: 0, unreadable: true },
+  ]);
+  const second = rec([
+    { file: "test/b_test.ts", deleted: false, removed: 3, added: 1, suitesOff: 1 },
+    { file: "test/c_test.ts", deleted: false, removed: 0, added: 0, suitesOff: 2 },
+  ]);
+  // An empty record that only says history was rewritten adds nothing and hides nothing.
+  const empty = rec([], { rewritten: true });
+  const [got] = readFixReports("1426", { api: () => [report, first, second, empty] });
+  const byFile = Object.fromEntries(got.testRemovals.map((r) => [r.file, r]));
+  assert.deepEqual(Object.keys(byFile).sort(), ["test/a_test.ts", "test/b_test.ts", "test/c_test.ts"]);
+  assert.equal(byFile["test/a_test.ts"].deleted, true);
+  assert.equal(byFile["test/a_test.ts"].removed, 2);
+  // Counts take the max across records; a flag set by any record stays set.
+  assert.equal(byFile["test/b_test.ts"].removed, 3);
+  assert.equal(byFile["test/b_test.ts"].added, 1);
+  assert.equal(byFile["test/b_test.ts"].suitesOff, 1);
+  assert.equal(byFile["test/b_test.ts"].unreadable, true);
+  assert.equal(byFile["test/c_test.ts"].suitesOff, 2);
+  // Order of the records does not matter.
+  const [flipped] = readFixReports("1426", { api: () => [report, empty, second, first] });
+  assert.deepEqual(
+    flipped.testRemovals.map((r) => r.file).sort(),
+    got.testRemovals.map((r) => r.file).sort(),
+  );
+  assert.equal(flipped.testRemovals.find((r) => r.file === "test/b_test.ts").unreadable, true);
+  // A head with only an empty record gets no field.
+  const [bare] = readFixReports("1426", { api: () => [report, empty] });
+  assert.equal(bare.testRemovals, undefined);
+});

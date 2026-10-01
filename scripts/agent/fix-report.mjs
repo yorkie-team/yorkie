@@ -534,6 +534,41 @@ function gh(args) {
 }
 
 /**
+ * The removals of several records for one head, as one list: one entry per
+ * file, each count the largest any record gave, and `deleted` / `unreadable` set
+ * if any record set them.
+ *
+ * Not last-wins. A second record for the same head (a re-run report job, or one
+ * that read more of the round) must not be able to drop a file an earlier one
+ * recorded, and an empty record (history rewritten) adds nothing and hides
+ * nothing. Over-stating is the safe side: this is evidence the adjudicator
+ * weighs against a claim while re-reading the code, never a gate.
+ */
+function unionRemovals(records) {
+  const byFile = new Map();
+  for (const rec of Array.isArray(records) ? records : []) {
+    for (const r of Array.isArray(rec?.removals) ? rec.removals : []) {
+      const file = str(r?.file);
+      const cur = byFile.get(file);
+      const n = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
+      if (!cur) {
+        byFile.set(file, { ...r, file });
+        continue;
+      }
+      byFile.set(file, {
+        ...cur,
+        deleted: cur.deleted === true || r?.deleted === true,
+        removed: Math.max(n(cur.removed), n(r?.removed)),
+        added: Math.max(n(cur.added), n(r?.added)),
+        suitesOff: Math.max(n(cur.suitesOff), n(r?.suitesOff)),
+        ...(cur.unreadable === true || r?.unreadable === true ? { unreadable: true } : {}),
+      });
+    }
+  }
+  return [...byFile.values()];
+}
+
+/**
  * Every fix report on a PR. Degrades to `[]`.
  *
  * `issues/{pr}/comments` is a BARE-ARRAY endpoint, so plain `--paginate` is
@@ -544,14 +579,14 @@ function gh(args) {
 export function readFixReports(pr, { api = gh, log = console.error } = {}) {
   try {
     const comments = api(["api", "--paginate", `repos/{owner}/{repo}/issues/${pr}/comments?per_page=100`]);
-    // Join each report to the pipeline's removal record for the same head (the
+    // Join each report to the pipeline's removal records for the same head (the
     // commit the fix round started from). Prefix-matched: either side may carry
-    // a short sha. The LAST record for a head wins.
+    // a short sha. EVERY record for the head counts (see `unionRemovals`).
     const removals = collectTestRemovals(comments);
     const same = (a, b) => a.length >= 7 && b.length >= 7 && (a.startsWith(b) || b.startsWith(a));
     return collectFixReports(comments).map((r) => {
-      const rec = removals.filter((x) => same(str(x.head), str(r.head))).at(-1);
-      return rec ? { ...r, testRemovals: rec.removals } : r;
+      const merged = unionRemovals(removals.filter((x) => same(str(x.head), str(r.head))));
+      return merged.length ? { ...r, testRemovals: merged } : r;
     });
   } catch (err) {
     // Degrades to "no reports", which is exactly the pre-existing behaviour: every
