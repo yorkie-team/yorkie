@@ -1861,6 +1861,7 @@ jobs:
       proceed: ${{ steps.guard.outputs.proceed }}
       available: ${{ steps.cred.outputs.available }}
       before: ${{ steps.before-fix.outputs.sha }}
+      before_at: ${{ steps.before-fix.outputs.at }}
       fixer: ${{ steps.fixer.outcome }}
     steps:
       # Everything below runs against UNTRUSTED PR data (commit list,
@@ -2153,7 +2154,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+        # `at` bounds the removal record to this round's own pushes
+        # (test-removals.mjs `fixerHead`). Written here, before the agent runs,
+        # so nothing the agent does can move it.
+        run: |
+          echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+          echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       # SPEND THE ROUND HERE — the LAST step before the fixer, not back at the
       # guard where the record is written.
@@ -2560,11 +2566,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ needs.review-panel.outputs.pr }}
           BEFORE: ${{ needs.fix.outputs.before }}
+          # AFTER is the live head, read after the fixer finished. The script
+          # ends the round at the App's own last push from BEFORE instead, so a
+          # commit a human pushed later is not blamed on the round. PUSHER is
+          # the App's identity from this job's token; SINCE was recorded before
+          # the agent ran.
+          PUSHER: ${{ steps.app-token.outputs.app-slug }}[bot]
+          SINCE: ${{ needs.fix.outputs.before_at }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
           AFTER: ${{ steps.after.outputs.sha }}
           # The head the fix report names, so the record joins to it even when
           # the branch moved between CI and the fixer's start.
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: node scripts/agent/test-removals.mjs post "$PR" --before "$BEFORE" --after "$AFTER" --head "$HEAD_SHA"
+        run: node scripts/agent/test-removals.mjs post "$PR" --before "$BEFORE" --after "$AFTER" --head "$HEAD_SHA" --pusher "$PUSHER" --since "$SINCE" --branch "$BRANCH"
 
       # DISPUTES FIRST, then the report, so the report's count includes them.
       # Both are RE-RENDERED, never posted as written: the files came from a

@@ -372,3 +372,53 @@ test("countCases (Go): any receiver's Skip/Skipf/SkipNow counts", () => {
   const go = { file: "test/bench/channel_bench_test.go", status: "modified" };
   assert.equal(countCases("+\t\tb.Skip(\"no channels\")\n+\ttb.Skipf(\"x %d\", 1)\n+\tsuite.T().SkipNow()", go).suitesOff, 3);
 });
+
+// --- the fixer's own head (/code-review) ----------------------------------------
+//
+// The report job read AFTER from the live branch ref, so a commit a human pushed
+// once the fixer was done was blamed on the round. The round ends at the last
+// push the App made in a chain from `before`, by GitHub's record of WHO PUSHED,
+// which the fixer cannot choose (unlike a commit's author or committer).
+
+const sha = (c) => c.repeat(40);
+const push = (before, after, login, timestamp, type = "push") => ({
+  ref: "refs/heads/agent/x", before: sha(before), after: sha(after), activity_type: type,
+  actor: { login, type: login.endsWith("[bot]") ? "Bot" : "User" }, timestamp,
+});
+const APP = "agent-app[bot]";
+const SINCE = "2026-10-01T10:00:00Z";
+const opts = { before: sha("a"), pusher: APP, since: SINCE, ref: "refs/heads/agent/x" };
+
+test("fixerHead: stops at the last push the App made, before a human's", async () => {
+  const { fixerHead } = await import("./test-removals.mjs");
+  // Newest first, as the API lists them.
+  const acts = [
+    push("c", "d", "maintainer", "2026-10-01T10:30:00Z"),
+    push("b", "c", APP, "2026-10-01T10:20:00Z"),
+    push("a", "b", APP, "2026-10-01T10:10:00Z"),
+  ];
+  assert.equal(fixerHead(acts, opts), sha("c"));
+  // A force-push by the App is still the App's.
+  assert.equal(fixerHead([push("a", "e", APP, "2026-10-01T10:10:00Z", "force_push")], opts), sha("e"));
+});
+
+test("fixerHead: unknown (empty) whenever the chain cannot be proven to start at `before`", async () => {
+  const { fixerHead } = await import("./test-removals.mjs");
+  // A human pushed first: no push of the App's follows `before`.
+  assert.equal(fixerHead([push("b", "c", APP, "2026-10-01T10:20:00Z"), push("a", "b", "maintainer", "2026-10-01T10:10:00Z")], opts), "");
+  // An App push from before the round started is not this round's, even when
+  // the branch was reset back to the same `before`.
+  assert.equal(fixerHead([push("a", "b", APP, "2026-10-01T09:00:00Z")], opts), "");
+  // Another branch, no pushes, junk, or no `since` to bound the round by.
+  assert.equal(fixerHead([{ ...push("a", "b", APP, "2026-10-01T10:10:00Z"), ref: "refs/heads/other" }], opts), "");
+  assert.equal(fixerHead([], opts), "");
+  assert.equal(fixerHead(null, opts), "");
+  assert.equal(fixerHead([null, 7, {}], opts), "");
+  assert.equal(fixerHead([push("a", "b", APP, "2026-10-01T10:10:00Z")], { ...opts, since: "" }), "");
+  assert.equal(fixerHead([push("a", "b", APP, "2026-10-01T10:10:00Z")], { ...opts, pusher: "" }), "");
+});
+
+test("fixerHead: a branch name or a full ref both match", async () => {
+  const { fixerHead } = await import("./test-removals.mjs");
+  assert.equal(fixerHead([push("a", "b", APP, "2026-10-01T10:10:00Z")], { ...opts, ref: "agent/x" }), sha("b"));
+});

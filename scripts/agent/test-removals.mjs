@@ -45,8 +45,11 @@
 //
 // Usage:
 //   node test-removals.mjs post <pr> --before <sha> --after <sha> [--head <sha>]
+//     [--pusher <app>[bot] --since <iso> --branch <name>]
 // `--head` is the sha the fix report names (the round's reviewed head), which
-// the record is joined on; it defaults to `--before`. Posts only when something
+// the record is joined on; it defaults to `--before`. With `--pusher`, `--since`
+// and `--branch`, the round ends at the App's own last push (`fixerHead`)
+// rather than at `--after`, the live head. Posts only when something
 // was removed or history was rewritten. Always exits 0: an unread round is "no
 // evidence", which is exactly the behaviour before this existed.
 
@@ -328,6 +331,49 @@ export function roundCommits(compareCommits, prShas) {
     .filter((c) => c && prShas.has(c.sha) && Number(c.n) === 1);
 }
 
+/**
+ * The head the fix round itself pushed, or "" when that cannot be proven.
+ *
+ * The report job runs after the fixer, so the live branch ref may already hold
+ * commits a human pushed once the fixer was done; counting them would blame the
+ * round for them. GitHub's activity log records WHO PUSHED each ref update, and
+ * the fixer cannot choose that: it holds only the App's token. A commit's author
+ * and committer, by contrast, are whatever the fixer's shell set, so bounding
+ * the round by commit identity would let a fixer opt its own commits out of the
+ * record.
+ *
+ * So: start at `before`, follow pushes newer than `since` (when the round
+ * recorded `before`) whose `before` is the current head, and stop at the first
+ * push the App did not make. The result is the App's last head in that chain.
+ * "" (no such push, no bound, unreadable input) tells the caller to fall back to
+ * the live ref, the over-attributing side, as before this existed.
+ */
+export function fixerHead(activities, { before, pusher, since, ref } = {}) {
+  const t0 = Date.parse(str(since));
+  const login = str(pusher);
+  const full = str(ref).startsWith("refs/") ? str(ref) : `refs/heads/${str(ref)}`;
+  const start = str(before).toLowerCase();
+  if (!Number.isFinite(t0) || login === "" || str(ref) === "" || !/^[0-9a-f]{40}$/.test(start)) return "";
+  const list = (Array.isArray(activities) ? activities : [])
+    .filter((a) => a && typeof a === "object" && a.ref === full)
+    .filter((a) => a.activity_type === "push" || a.activity_type === "force_push")
+    .map((a) => ({ a, at: Date.parse(str(a.timestamp)) }))
+    .filter((x) => Number.isFinite(x.at) && x.at >= t0)
+    .sort((x, y) => x.at - y.at)
+    .map((x) => x.a);
+  let cur = start;
+  const used = new Set();
+  for (;;) {
+    const next = list.find((a) => !used.has(a) && str(a.before).toLowerCase() === cur);
+    if (!next || str(next.actor?.login) !== login) break;
+    const to = str(next.after).toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(to)) break;
+    used.add(next);
+    cur = to;
+  }
+  return cur === start ? "" : cur;
+}
+
 /** The hidden record. The terminator is escaped, as every record here does. */
 export function serializeTestRemovals({ head = "", after = "", removals = [], rewritten = false } = {}) {
   const payload = {
@@ -409,13 +455,26 @@ function main() {
     return i >= 0 ? str(argv[i + 1]) : "";
   };
   const before = flag("before");
-  const after = flag("after");
+  let after = flag("after");
   const head = /^[0-9a-f]{7,40}$/i.test(flag("head")) ? flag("head") : before;
   if (verb !== "post" || !/^\d+$/.test(str(pr)) || !/^[0-9a-f]{40}$/i.test(before) || !/^[0-9a-f]{40}$/i.test(after)) {
-    console.error("usage: test-removals.mjs post <pr> --before <sha40> --after <sha40> [--head <sha>]");
+    console.error("usage: test-removals.mjs post <pr> --before <sha40> --after <sha40> [--head <sha>] [--pusher <login> --since <iso> --branch <name>]");
     return;
   }
   const ghJson = (args) => JSON.parse(execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }));
+  // End the round at the App's own last push (see `fixerHead`), not at whatever
+  // the branch holds now. Unprovable → the live ref, as before.
+  if (flag("pusher") && flag("since") && flag("branch")) {
+    try {
+      const acts = ghJson(["api", `repos/{owner}/{repo}/activity?ref=${encodeURIComponent(flag("branch"))}&per_page=100`]);
+      const own = fixerHead(acts, { before, pusher: flag("pusher"), since: flag("since"), ref: flag("branch") });
+      if (own && own !== after.toLowerCase()) console.error(`test-removals: the round ends at the App's last push ${own.slice(0, 12)}, not the live head ${after.slice(0, 12)}.`);
+      if (own) after = own;
+      else console.error("test-removals: no push of the App's follows the round's start; using the live head.");
+    } catch (err) {
+      console.error(`test-removals: could not read the branch's push activity (${err.message}); using the live head.`);
+    }
+  }
   const ghLines = (args) => execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
     .split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
   let commits;
