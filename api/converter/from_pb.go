@@ -19,6 +19,7 @@ package converter
 import (
 	goerrors "errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	gotime "time"
@@ -43,6 +44,11 @@ var (
 
 	// ErrInvalidSchemaKey is returned when the given schema key is invalid.
 	ErrInvalidSchemaKey = errors.InvalidArgument("invalid schema key").WithCode("ErrInvalidSchemaKey")
+
+	// ErrNonFiniteCounterDelta is returned when an increase operation carries a
+	// NaN or an infinity as its delta.
+	ErrNonFiniteCounterDelta = errors.InvalidArgument("non-finite counter delta").
+					WithCode("ErrNonFiniteCounterDelta")
 )
 
 // FromUser converts the given Protobuf formats to model format.
@@ -710,6 +716,15 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	elem, err := fromElement(pbInc.Value)
 	if err != nil {
 		return nil, err
+	}
+	// A NaN or an infinity has no integer value to add, so every replica
+	// drops it (crdt.Counter.Increase) and the counter silently diverges from
+	// one that does not. Reject it here, at the boundary, so the change is
+	// never stored or broadcast rather than merely ignored by Go replicas.
+	if prim, ok := elem.(*crdt.Primitive); ok {
+		if f, ok := prim.Value().(float64); ok && (math.IsNaN(f) || math.IsInf(f, 0)) {
+			return nil, ErrNonFiniteCounterDelta
+		}
 	}
 	executedAt, err := fromRequiredTimeTicket(pbInc.ExecutedAt, "increase.executed_at")
 	if err != nil {
