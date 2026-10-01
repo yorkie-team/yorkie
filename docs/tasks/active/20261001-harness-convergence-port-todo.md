@@ -57,7 +57,7 @@ None of the SDK source changes in those PRs.
 ### What was verified
 
 - `cd scripts/agent && npm test`: 994 tests, 994 pass, 0 fail (925 before the
-  port; 1001 after the review fixes below, 1015 after the code review). This includes the structural workflow tests (`checks.test.mjs`,
+  port; 1001 after the review fixes below, 1016 after the code review). This includes the structural workflow tests (`checks.test.mjs`,
   `carry-wiring`, `infra-wiring`, `evidence-wiring`) and `fingerprint.test.mjs`,
   which runs the workflow's exact `patch-id --verbatim` line on real
   repositories.
@@ -257,7 +257,13 @@ panel has the same probe placement (4), and its `test-removals.mjs` and both
 report jobs read AFTER the same way (5; its `test-removals.mjs` is the JS-only
 original, so `fixerHead` and the CLI flags port by hand).
 
-- After these fixes: `scripts/agent` 1015 of 1015 pass, `scripts/test` 179 of
+- **Found on the wafflebase port: the removal CLI never posted.** `ghLines`
+  parses each output line as JSON, and `--jq .[].sha` printed bare shas, so the
+  parse threw and `main()` logged "could not read the round's commits" every
+  time. It is now `.[].sha | tojson`. `evidence-wiring.test.mjs` requires every
+  `--jq` given to `ghLines` to print JSON. It was Red before the fix.
+  **yorkie-js-sdk has the same line.**
+- After these fixes: `scripts/agent` 1016 of 1016 pass, `scripts/test` 179 of
   179 pass, `rhysd/actionlint:1.7.12` clean, doc gates pass.
 
 ### Not verified
