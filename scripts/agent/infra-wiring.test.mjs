@@ -50,6 +50,10 @@ test("an infra failure is paged by fix-report with its cause, and `stalled` stan
   // Only a FAILED fixer that is KNOWN to have pushed nothing — an unread head is
   // `stalled`'s case, paged generically as before.
   assert.match(infra.text, /needs\.fix\.outputs\.fixer == 'failure' &&\s+steps\.after\.outcome == 'success' && steps\.after\.outputs\.advanced == 'false'/);
+  // `steps.after` swallows a failed `gh api` read (`|| echo ''`) and then says
+  // `advanced=false`, so its outcome alone cannot prove "nothing was pushed":
+  // both heads must have been READ.
+  assert.match(infra.text, /steps\.after\.outputs\.sha != '' && needs\.fix\.outputs\.before != ''/);
   // A latch the gate believes: github-actions[bot].
   assert.match(infra.text, /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
   assert.doesNotMatch(infra.text, /continue-on-error/, "a page that failed to post must red the job for `stalled`");

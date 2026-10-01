@@ -2592,11 +2592,15 @@ jobs:
       # `stalled` (which tests `fix-report` failing) still pages.
       - name: Page an infrastructure failure
         id: infra
-        # `steps.after.outcome == 'success'`: "nothing was pushed" must be KNOWN.
-        # When the head could not be read, `stalled` pages as before.
+        # "Nothing was pushed" must be KNOWN. `steps.after` swallows a failed
+        # `gh api` read (`|| echo ''`) and still succeeds with `advanced=false`,
+        # so its outcome alone does not prove it: both heads must have been
+        # read, non-empty. When either could not be read, `stalled` pages as
+        # before.
         if: >-
           always() && needs.fix.outputs.fixer == 'failure' &&
-          steps.after.outcome == 'success' && steps.after.outputs.advanced == 'false'
+          steps.after.outcome == 'success' && steps.after.outputs.advanced == 'false' &&
+          steps.after.outputs.sha != '' && needs.fix.outputs.before != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ needs.review-panel.outputs.pr }}
