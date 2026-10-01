@@ -725,17 +725,23 @@ failures.
   verdicts, and only to carry; anything else reads the branch's own state.
 - **Reuse.** A rerun on a commit that already has verdicts re-stamps them, so a
   blocking verdict goes straight to the fixer. `@claude rerun review` asks for a
-  fresh sample.
+  fresh sample. The latest rerun from someone with write access decides. A
+  rerun whose author's permission lookup failed may force a review but never
+  withdraw one; a read-only account or a login that does not exist is ignored.
 - **Probe before dispatch.** The fixer's credential is proven with a one-word
   query before the round is recorded. Only a closed usage window or a rejected
   credential counts as a refusal; a transient overload proceeds. The probe holds
-  the pool secrets, so it runs before the App token and the branch checkout.
+  the pool secrets, so it runs before the App token and the branch checkout. A
+  refusal skips those and every other setup step and goes straight to its page.
 - **Honest infra pages.** A fixer that fails on an API error with nothing
   pushed is paged with its cause and the next step, not as "the fixer failed".
 - **Evidence beside claims.** When a fix round's own commits delete, disable
   or rename tests out of the runner's reach, the trusted report job records it.
   "Own commits" means the round's commits that are in the PR's commit list and
-  are not merges, so main's changes are not blamed on the fixer. The next
+  are not merges, so main's changes are not blamed on the fixer, and the round
+  ends at the App's last push from the starting head, by GitHub's record of who
+  pushed, so a human's later commit is not blamed either. Every record for a
+  head counts, unioned per file. The next
   round's adjudicator sees the record, ahead of the author's text, for every
   claim and dispute it adjudicates. It only sees COMMITTED tests: a test written
   and deleted in the working tree never reaches a compare, and the fixer
@@ -796,6 +802,7 @@ failures.
 | Only an approval carries | Carrying a blocking verdict to a new head would dispatch a fixer on findings read against another commit |
 | Credentials are probed before the round, not retried after | Nothing may run after the agent in its own job, and a probe spends no round at all |
 | Test removals are evidence for the adjudicator, not a gate | Removing a test can be legitimate; the adjudicator already re-reads the code |
+| A fix round ends at the App's last push, found by pusher, not by commit identity | The fixer's shell sets a commit's author and committer, so filtering on them would let it hide its own commits; it cannot choose who GitHub records as the pusher |
 | A Go reproducer is kept behind `t.Skip`, not left failing | A red test hands the PR to the CI-fix arm, whose job is to make CI pass, which deleting the test also does; a recorded skip keeps the reproducer committed and visible |
 
 ## Alternatives Considered

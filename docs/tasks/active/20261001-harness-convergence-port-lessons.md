@@ -36,3 +36,19 @@
   target's guards. `fingerprint.test.mjs` came from js-sdk without
   `fixtureGitEnv`, although this repo already had the helper. Before porting a
   test that shells out to git, check it against the target's own git-env rules.
+- Check an API claim against the API before fixing to it. The review said a
+  non-collaborator's permission lookup 404s; on a public repo it is a 200 with
+  `read`. The defect was real, but in how an unknown was weighed, not where the
+  finding put it.
+- An unknown that may only push one way must be weighed per command, not per
+  author. "Believe unless definitely no" is safe for a request and unsafe for
+  a withdrawal of one; the same `null` had to mean both.
+- A fix round's boundary must come from something the fixer cannot write.
+  Commit author and committer are its own shell's choice; the pusher GitHub
+  records is not. Check every proposed filter by asking whether the party it
+  measures could opt out of it.
+- "Covers a clean rebase" was a claim no test made. A doc sentence about a
+  case is a test to write: here it failed at once, because a rebase drops the
+  very commits the state was read from.
+- A count in a structural test (`exactly two gated steps`) breaks the first
+  time the gate is applied correctly somewhere else. Pin the steps by name.

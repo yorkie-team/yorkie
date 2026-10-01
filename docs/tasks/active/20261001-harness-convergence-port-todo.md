@@ -49,13 +49,15 @@ None of the SDK source changes in those PRs.
   gates, and a diff of every workflow against js-sdk's.
 - [x] Address the independent review (see "Review fixes" below), each Red
   then Green.
+- [x] Verify and fix the `/code-review high` findings (see "Code review"
+  below), each Red then Green.
 
 ## Review
 
 ### What was verified
 
 - `cd scripts/agent && npm test`: 994 tests, 994 pass, 0 fail (925 before the
-  port; 1001 after the review fixes below). This includes the structural workflow tests (`checks.test.mjs`,
+  port; 1001 after the review fixes below, 1015 after the code review). This includes the structural workflow tests (`checks.test.mjs`,
   `carry-wiring`, `infra-wiring`, `evidence-wiring`) and `fingerprint.test.mjs`,
   which runs the workflow's exact `patch-id --verbatim` line on real
   repositories.
@@ -180,12 +182,93 @@ failed first, then passed.
   needs the same fix.**
 - After this fix: `scripts/agent` 1002 of 1002 pass.
 
+### Code review (/code-review high)
+
+`/code-review high` raised six findings, unverified. Each was checked against
+the code; the real ones got a test that failed first, then passed.
+
+- **1. Untrusted reruns in `reviewRequested` (partly confirmed).** The premise
+  that GitHub answers 404 for a non-collaborator is wrong for a public repo:
+  `collaborators/{login}/permission` returns 200 with `read` for an outside
+  account (checked live), which is already `false`. A 404 comes only for a
+  login that is not a user. The real defect stood: any `null` (a failed lookup)
+  was believed, and only the latest believed rerun counted, so an unresolved
+  plain `@claude rerun` could withdraw a maintainer's `@claude rerun review`.
+  Fixed: the latest TRUSTED rerun decides; a `null` may force a review with
+  `rerun review` but its plain `rerun` is skipped, so it can never cancel one.
+  A 404 is now a definite "no": `notFoundIsNoAccess` wraps the `gh` caller in
+  `review-scope.mjs` (from `gh`'s `(HTTP 404)` on stderr), so `gh-checks.mjs`
+  stays as it is. Docstring rewritten to match.
+- **7. A permission call per historical rerun (confirmed).** Fixed with 1:
+  bots, non-commands and reruns older than `after` are dropped first, then
+  trust is resolved newest first and the walk stops at the first rerun that
+  decides. The test counts the lookups.
+- **2. Carry does not survive a rebase (confirmed).** `decideScope` read lens
+  states only from `pulls/{pr}/commits`; after a rebase the approved head is
+  not listed, so the result was `no-prior-state` → full (Red test). Chose (a):
+  the REST timeline's `head_ref_force_pushed` event carries only the new head,
+  but GraphQL's `HeadRefForcePushedEvent.beforeCommit` names the replaced one,
+  and check runs on a replaced SHA stay readable (both checked live on
+  yorkie#2085). `replacedHeads` reads the last 10 force-pushes; their runs are
+  merged in only to decide a carry, and only when a replaced head holds the
+  NEWEST verdicts, so an older approval cannot outvote a newer verdict on the
+  branch. The carry still compares that head's recorded `fp` with this head's,
+  still needs every lens's approval, and the carry cap and `rerun review` still
+  apply. A replaced head that does not carry falls back to the branch's own
+  state, exactly as before (an amend still narrows from an older on-branch
+  pointer). An unreadable timeline or replaced head costs only the carry. The
+  pusher is irrelevant: promote still needs green CI on the new head. Design
+  §6 says how the replaced head is found.
+- **6. Last removal record wins (confirmed).** A second record for the same
+  head dropped files only the first had, and an empty `rewritten` record
+  replaced a real one with `[]`. `readFixReports` now unions every record for
+  the head per file: each count is the max, `deleted` and `unreadable` stay set
+  once set. The record has no `truncated` field; `rewritten` is per record and
+  was never joined onto a report.
+- **4. A drained pool still ran the setup (confirmed in
+  `agent-review-panel.yml`; not applicable to `agent-fix.yml`, which has no
+  probe).** The agent token, the branch checkout, `setup-go`, the linter
+  install, "Set state → fixing" and "Record branch head before fix" now carry
+  `steps.cred.outputs.available != 'false'`. The no-credential page needs only
+  the scripts staged before the probe, `GITHUB_TOKEN` and the workflow-level
+  `GH_REPO`; `fix-report` is already skipped on this path, so nothing reads the
+  skipped `before`. `infra-wiring.test.mjs` pins every step between the probe
+  and the page. `pick-fix-credential.test.mjs` counted exactly two gated steps;
+  it now checks the dispatch record and the fixer by name and allows more.
+- **5. AFTER blames later pushes on the round (confirmed).** Both report jobs
+  read the live branch ref after the fixer. update-branch merges were already
+  excluded by `roundCommits` (merge commits, and main's commits are not in the
+  PR's list), but a human's commit was not. Neither suggested alternative is
+  sound: a commit's author and committer are whatever the fixer's shell sets,
+  so filtering on the bot identity lets a fixer commit as someone else and
+  drop out of its own record. GitHub's activity log records WHO PUSHED, which
+  the fixer cannot choose (it holds only the App token). `fixerHead` follows
+  the push chain from BEFORE, newer than a start time the fix job records in
+  "Record branch head before fix" (before the agent), and stops at the first
+  push the App did not make. When the chain cannot be proven (no App push
+  first, a fork branch, an unreadable log, a clock skew), the live head is used
+  as before. The App's login is `app-slug` of the report job's own token. The
+  activity endpoint and its `ref` filter were checked live on a js-sdk agent
+  branch.
+
+**yorkie-js-sdk needs the same fixes.** Its `review-scope.mjs` and
+`fix-report.mjs` are byte-identical to the old copies here (1, 7, 2, 6), its
+panel has the same probe placement (4), and its `test-removals.mjs` and both
+report jobs read AFTER the same way (5; its `test-removals.mjs` is the JS-only
+original, so `fixerHead` and the CLI flags port by hand).
+
+- After these fixes: `scripts/agent` 1015 of 1015 pass, `scripts/test` 179 of
+  179 pass, `rhysd/actionlint:1.7.12` clean, doc gates pass.
+
 ### Not verified
 
 - Nothing ran on GitHub. No real yorkie PR has gone through carry, reuse, the
   probe, an infra page or a removal record. The structural tests pin step order
   and conditions; the end-to-end wiring is unproven here, as it was upstream at
   merge time.
+- None of the code review fixes ran on GitHub either. The GraphQL force-push
+  query, check runs on a replaced head, the activity log and its `ref` filter
+  were each called live with `gh`; the workflow wiring is pinned structurally.
 - The probe was not run against a real credential here. The module is
   byte-identical to the one upstream checked with a bogus token.
 - The Go detector was checked against local `git show` patches, not GitHub's
