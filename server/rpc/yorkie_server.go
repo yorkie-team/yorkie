@@ -1441,7 +1441,10 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
+	// Leaving drops a pack the push rules refuse instead of failing it, so a
+	// client holding such a change can still get out of the document and back
+	// in with a clean copy. See converter.FromLeavingChangePack.
+	pack, err := converter.FromLeavingChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1614,7 +1617,10 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
+	// Leaving drops a pack the push rules refuse instead of failing it, so a
+	// client holding such a change can still get out of the document and back
+	// in with a clean copy. See converter.FromLeavingChangePack.
+	pack, err := converter.FromLeavingChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}

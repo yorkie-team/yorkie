@@ -49,6 +49,47 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	return pack, nil
 }
 
+// FromLeavingChangePack is FromPushedChangePack for the pack that accompanies
+// a client leaving a document -- Detach and Remove. It applies the same rules,
+// but a pack that breaks one leaves with its changes dropped instead of
+// failing the request.
+//
+// This is the repair path for the rejection FromPushedChangePack performs, and
+// the reason that rejection is survivable at all. The readers are deliberately
+// lenient (see above), so a document can already hold a shape the push rules
+// refuse -- written before the rule existed, or pulled from a peer that wrote
+// it then. A client whose local change carries that shape nested in a Set or
+// an undo reverse is rejected on every push, and a client does not discard a
+// change a push rejected: it resends the same pack forever. Were Detach and
+// Remove to reject it too, that client could not even leave the document to
+// get a clean copy, and the rejection would be permanent rather than a
+// setback.
+//
+// Dropping is what leaving can afford and syncing cannot. The changes in this
+// pack are the departing client's last local edits; losing them loses an edit,
+// while applying them is what the rules exist to prevent, and refusing them is
+// what wedges the client. The whole list goes, not the offending change alone:
+// later changes in the pack build on the one dropped, and the server has no
+// way to rebase them. The detach itself proceeds, the client's checkpoint for
+// this document is discarded with its attachment, and re-attaching rebuilds
+// the document from the server's snapshot -- which the lenient readers can
+// always read.
+func FromLeavingChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
+	pack, err := FromChangePack(pbPack)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pbChange := range pbPack.Changes {
+		if err := ValidatePushedOperations(pbChange.Operations); err != nil {
+			pack.Changes = nil
+			return pack, nil
+		}
+	}
+
+	return pack, nil
+}
+
 // ValidatePushedOperations rejects an operation whose element payload carries
 // tickets no replica could have issued.
 //
@@ -71,11 +112,20 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 //   - An object member the decoded ElementRHT refuses is an error, not a
 //     member to drop; see fromJSONObject.
 //
+// A false positive here is a setback rather than a dead end: see
+// FromLeavingChangePack, which lets a client whose document holds a shape
+// these rules refuse detach and re-attach to get a clean copy.
+//
 // Array elements are exempt from the ticket rules. Undo re-identifies the
 // value of an Add or an ArraySet reverse with a freshly issued createdAt
 // (Document.executeUndoRedo) while the copy keeps its older movedAt, and the
 // JS SDK's ArraySet reverse also keeps an older removedAt, so replicas really
 // emit both shapes there and documents already hold them nested in containers.
+// The hazard the rules cover for an object member -- a value taking the
+// identity of a live element -- is answered for an array element at execution
+// time instead, by the guard Add.Execute and ArraySet.Execute share with
+// Set.Execute (operations.hijacksLiveElement), which refuses the payload
+// rather than the pack and so converges on every replica.
 // The JS SDK assigns one ticket to a Set and its value, restores an older value
 // under a newer ticket on undo, and never re-identifies an object member, so
 // none of the rules above rejects anything a replica sends.
@@ -120,6 +170,22 @@ func validatePushedOperation(pbOp *api.Operation) error {
 			return err
 		}
 		return validateObjectMembers(elem)
+	case *api.Operation_Increase_:
+		// Increase carries a JSONElementSimple too, and fromElement decodes it
+		// as whatever type the payload names -- an Object, an Array, a Text or
+		// a Tree are all accepted there. Increase.Execute wants a Primitive,
+		// and only a numeric one: Counter.Increase is the only consumer. A
+		// replica never sends anything else, so rejecting here costs nothing
+		// and keeps a crafted payload from reaching the type switch at all.
+		elem, err := fromElement(decoded.Increase.GetValue())
+		if err != nil {
+			return err
+		}
+		if _, ok := elem.(*crdt.Primitive); !ok {
+			return fmt.Errorf("increase %s: value is not a primitive: %w",
+				elem.CreatedAt().Key(), ErrInvalidElementTicket)
+		}
+		return nil
 	default:
 		return nil
 	}

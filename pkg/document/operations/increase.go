@@ -69,9 +69,12 @@ func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 	// Comma-ok, and a no-op rather than an error off the local path: the
 	// value arrives straight off the wire (converter.fromIncrease passes
 	// whatever element the pack carries), so a raw client can push an
-	// Increase whose value is a Text, an Object or another Counter. The
-	// server stores a pushed change before executing it (packs.PushPull), so
-	// a panic here takes the RPC goroutine down and an error here makes
+	// Increase whose value is a Text, an Object or another Counter. The push
+	// boundary rejects such a payload (see converter.ValidatePushedOperations),
+	// but the operation must not depend on being reached only through it: a
+	// change stored before that check is decoded by the lenient reader, and
+	// the server stores a pushed change before executing it (packs.PushPull),
+	// so a panic here takes the RPC goroutine down and an error here makes
 	// every later replay of that document fail forever. Dropping the delta
 	// is deterministic on every replica, so they still converge.
 	value, ok := o.value.(*crdt.Primitive)

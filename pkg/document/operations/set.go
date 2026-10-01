@@ -94,42 +94,23 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	if err != nil {
 		return ExecutionResult{}, err
 	}
-	// A createdAt is an identity for the whole document, not just for one
-	// object: Root.elementMap is keyed by it, and index() hands the slot to
-	// whatever was registered last. ElementRHT refuses a loser whose createdAt
-	// a live node of the same object already answers to, but it can only see
-	// the members of that one object -- a value carrying the createdAt of a
-	// live element in any other container passes that guard, and
-	// RegisterElement below then re-points elementMap at it. The live copy is
-	// stranded from there on: every operation addressed at that createdAt, and
-	// every collection and snapshot that resolves one, finds this value
-	// instead.
+	// A value carrying the createdAt of a live element anywhere else in the
+	// document would take that element's Root.elementMap slot through the
+	// RegisterElement below, stranding it. See hijacksLiveElement, which Add
+	// and ArraySet consult for the same reason before their own registration.
 	//
-	// A value that arrives already removed is the reachable shape of that. It
-	// skips the tombstoning in ElementRHT's losing branch entirely, so it is
-	// indexed without the Remove that would otherwise have to accept its
-	// tickets, and it can hijack the slot without ever winning the key. No
-	// replica emits one: the reverse of a Remove copies its target before the
-	// deletion, and the reverse of a Set copies only a live value, so every
-	// Set payload leaves its sender with removedAt unset. Only crafted or
-	// duplicated bytes reach here, and for them refusing is a no-op that
-	// leaves the document exactly as it was -- on every replica and in the
-	// server's snapshot replay, which decide from the same state.
+	// The check is not conditional on the value arriving already removed. A
+	// pre-removed value is only the easiest shape of the hijack -- it skips
+	// the tombstoning in ElementRHT's losing branch entirely, so it is indexed
+	// without the Remove that would otherwise have to accept its tickets -- but
+	// a live value that wins its key re-points the same slot on the winning
+	// branch, with nothing between it and elementMap at all.
 	//
-	// Only a live occupant is protected, as in ElementRHT's losing branch. A
-	// tombstone leaves elementMap when it is purged, and each replica and the
-	// server collect on their own schedule, so a guard that also fired on a
-	// tombstone would skip this Set on a replica still holding it and apply it
-	// on one that had collected it. A live element is never purged, so every
-	// replica that has it decides the same way.
-	//
-	// Checked before the mutation below, because the object cannot be put back
-	// afterwards. The ordinary path pays one map read.
-	if value.RemovedAt() != nil {
-		occupant := root.FindByCreatedAt(value.CreatedAt())
-		if occupant != nil && occupant != value && occupant.RemovedAt() == nil {
-			return ExecutionResult{}, nil
-		}
+	// Refusing is a no-op that leaves the document exactly as it was, which is
+	// also the correct idempotent outcome for a re-applied Set: its value's
+	// createdAt already names the live copy registered by the first apply.
+	if hijacksLiveElement(root, value) {
+		return ExecutionResult{}, nil
 	}
 
 	// SetWithExecutedAt uses o.executedAt (rather than value's own createdAt)

@@ -59,7 +59,24 @@ outcomes:
 - Changing the LWW resolution logic in `ElementRHT`
 - Modifying the `ElementRHT.Set` return type or signature
 
+> **Superseded in part.** Both Non-Goals above were given up later, for a
+> hazard this document does not cover: a loser the hashtable cannot tombstone
+> at all, or whose `createdAt` a live node already answers to. `ElementRHT.Set`
+> and `SetWithExecutedAt` now return `(removed Element, indexed bool)` and
+> refuse such a value, and `Set.Execute` skips all of the bookkeeping below
+> when `indexed` is false. See
+> [pushed-change-validation](pushed-change-validation.md). The registration
+> this document adds is unchanged otherwise: a loser that *was* indexed is
+> still booked for collection, by `RegisterElement` rather than by the
+> post-check sketched below.
+
 ## Design
+
+> The sketch below is the original fix, kept for the reasoning. The shipped
+> code differs: `obj.SetWithExecutedAt` reports whether the value was indexed,
+> `RegisterElement` takes the parent container and books an already-removed
+> value into GC itself, and the post-check on `value.RemovedAt()` is gone with
+> it. See [pushed-change-validation](pushed-change-validation.md).
 
 Add a post-check in `Set.Execute` (`operations/set.go`) after `obj.Set()`. If
 the newly added value has been immediately marked as removed (i.e., it lost the

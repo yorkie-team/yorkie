@@ -106,6 +106,15 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		return ExecutionResult{}, err
 	}
 
+	// Refused for the same reason Add.Execute refuses, and before the insert
+	// and the deletion below for the same reason: neither can be put back. An
+	// ArraySet that carried the createdAt of a live element elsewhere in the
+	// document would take its Root.elementMap slot through RegisterElement.
+	// See hijacksLiveElement.
+	if hijacksLiveElement(root, value) {
+		return ExecutionResult{}, nil
+	}
+
 	if err := obj.InsertAfter(o.createdAt, value, o.executedAt); err != nil {
 		return ExecutionResult{}, err
 	}
