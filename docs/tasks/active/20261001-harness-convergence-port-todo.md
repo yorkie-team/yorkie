@@ -47,13 +47,15 @@ None of the SDK source changes in those PRs.
 - [x] Record the convergence design in `docs/design/agent-command-verbs.md` §6.
 - [x] Verify: `scripts/agent` suite, `scripts/test` suite, actionlint, doc
   gates, and a diff of every workflow against js-sdk's.
+- [x] Address the independent review (see "Review fixes" below), each Red
+  then Green.
 
 ## Review
 
 ### What was verified
 
 - `cd scripts/agent && npm test`: 994 tests, 994 pass, 0 fail (925 before the
-  port). This includes the structural workflow tests (`checks.test.mjs`,
+  port; 1001 after the review fixes below). This includes the structural workflow tests (`checks.test.mjs`,
   `carry-wiring`, `infra-wiring`, `evidence-wiring`) and `fingerprint.test.mjs`,
   which runs the workflow's exact `patch-id --verbatim` line on real
   repositories.
@@ -83,7 +85,7 @@ None of the SDK source changes in those PRs.
 ### Adaptations and differences from js-sdk
 
 - **`test-removals.mjs` reads Go.** `countCases(patch, { file, status })` picks
-  the rules by extension. For `.go`:
+  the rules by extension. For `.go` (as first ported; "Review fixes" widens it):
   - cases are top-level `func TestXxx(t *testing.T)` / `func FuzzXxx(f
     *testing.F)` (the `go test` naming rule; `TestMain` and helpers excluded by
     the parameter type) and `x.Run(…, func(t *testing.T)` subtests;
@@ -123,6 +125,48 @@ None of the SDK source changes in those PRs.
 - **Issue numbers in ported comments** (`#1426`, `#1406`, `#876`) are
   yorkie-js-sdk's and were left as they are, as earlier ports did, so the shared
   modules stay byte-identical for the next sync. The design doc says so.
+
+### Review fixes
+
+An independent review found nothing blocking. Each fix below got a test that
+failed first, then passed.
+
+- **Shared Go suite bodies (major).** `server/backend/database/testcases/` and
+  `server/rpc/testcases/testcases.go` hold the bodies of the database and RPC
+  suites in non-`_test.go` files, so a `t.Skip` or a deleted `t.Run` there
+  recorded nothing. A `.go` file under a `testcases/` directory is now a test
+  file, and in it a top-level `func RunXxx(` counts as a case: gofmt puts its
+  `t *testing.T` on the next line. The rule reads the PATH, not the patch:
+  whether a signature shows in a hunk's context depends on the diff's context
+  width, and the record must not change with it.
+- **Switch-offs net across the round.** The per-commit clamp reported a skip
+  added in one commit and removed in a later one, and D2 now tells the fixer to
+  write skips. The tally is kept signed per commit (`offNet`, plus the
+  build-constraint expression sets), summed or unioned per file across the
+  round, and clamped once. Cases are still summed, so a test committed then
+  deleted inside one round is still flagged. This applies to JS
+  `describe.skip` too.
+- **Go false negatives.**
+  - A `_test.go` renamed into `testdata/`, to a `_`/`.`-prefixed path
+    element, or to a `_GOOS`/`_GOARCH` suffix other than CI's linux/amd64 is a
+    deletion. As in go/build, the first name element is never a constraint.
+  - A new file born with `//go:build ignore` or `// +build ignore` counts as
+    switched off. An ordinary constraint on a new file is still exempt.
+  - Any receiver's `.Skip(`/`.Skipf(`/`.SkipNow(` counts (`b`, `tb`, `s.T()`).
+- **Infra page needs both heads read.** "Read the branch head after the fix"
+  swallows a failed `gh api` read (`|| echo ''`) and still succeeds with
+  `advanced=false`, so `steps.after.outcome == 'success'` did not prove
+  "nothing was pushed". The infra page now also requires a non-empty
+  `steps.after.outputs.sha` and `needs.fix.outputs.before`, and
+  `infra-wiring.test.mjs` pins it. **yorkie-js-sdk has the same bug, inherited
+  from #1428, and needs the same fix.**
+- **Documented limit, not changed.** The D2 skip record is never shown beside
+  its own `--skipped` claim: skipped claims are upheld without an adjudication
+  session. It reaches the adjudicator only through the same round's `--fixed`
+  claims and disputes, and a maintainer reads it on the PR. Recorded in §6.
+- After the fixes: `scripts/agent` 1001 of 1001 pass, `scripts/test` 179 of 179
+  pass. Over the last 400 commits, 26 now report something (24 before), the
+  difference coming from the `testcases/` files.
 
 ### Not verified
 

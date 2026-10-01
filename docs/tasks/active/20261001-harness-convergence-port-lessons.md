@@ -23,3 +23,12 @@
   both of which are worth reporting, and no crashes on renames or deletions.
 - Keep shared modules byte-identical, even their comments' issue numbers. The
   next sync is a `cmp`, and every local edit to a shared file makes it a merge.
+- Look for a repository's test bodies outside its test-file naming before
+  porting a detector keyed on that naming. yorkie keeps whole suites in
+  `testcases/testcases.go`, which no `_test.go` rule sees.
+- A clamp applied per unit and then summed is not the clamp of the sum. A
+  signed tally summed across a round and clamped once is the only order that
+  lets "added, then removed" net out.
+- An inherited `|| echo ''` turns "could not read" into "read nothing", and a
+  step outcome downstream then proves nothing. Gate on the value having been
+  read, not on the step having succeeded.
