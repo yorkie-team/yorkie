@@ -146,39 +146,71 @@ export function reviewingLensIds(manifest, changedFiles) {
  * Did a maintainer ask for a FRESH review after the verdicts on record?
  *
  * `@claude rerun review` is the opt-out from `reuse`: a rerun on the same head
- * otherwise re-stamps its verdicts rather than drawing a new sample. Only the
- * LATEST rerun speaks, and only when it is newer than `after` — the newest lens
- * run's START. A verdict from a round already in flight when the request was
- * made finishes after it but did not answer it.
+ * otherwise re-stamps its verdicts rather than drawing a new sample. Only reruns
+ * newer than `after` — the newest lens run's START — are read. A verdict from a
+ * round already in flight when the request was made finishes after it but did
+ * not answer it.
  *
- * FAILS TOWARD REVIEWING, in both places a fact can be missing:
+ * Among those, the LATEST TRUSTED rerun speaks: a maintainer's plain `@claude
+ * rerun` after their own `rerun review` withdraws the request. Trust is resolved
+ * newest first and the walk stops at the first rerun that decides, so a PR with
+ * a long comment history costs one permission lookup per distinct newer
+ * commenter at most, not one per rerun ever posted.
+ *
+ * FAILS TOWARD REVIEWING, and ONLY toward reviewing, where a fact is missing:
  *   - `comments === null` is "could not read them", and an unread request may
  *     have been exactly this one;
- *   - a commenter whose permission lookup FAILED (`trusts` → null) is not a
- *     "no" — the request stands. Only a definite "no" (`false`) or a bot is
- *     ignored, so nobody untrusted can force anything but a review, and a
- *     review costs only tokens.
+ *   - a commenter whose permission lookup FAILED (`trusts` → null) may FORCE a
+ *     review with `rerun review`, but their plain `rerun` is skipped: it cannot
+ *     cancel an earlier trusted request. Nobody unresolved can cause anything
+ *     but a review, and a review costs only tokens.
+ *   - a definite "no" (`false`: no write access, or not a collaborator at all;
+ *     see `notFoundIsNoAccess`) and a bot are ignored outright.
  */
 export function reviewRequested(comments, { trusts, after } = {}) {
   if (comments === null) return true;
-  const believed = (c) => {
-    if (c?.user?.type === "Bot") return false;
-    if (typeof trusts === "function") {
-      if (parseCommand(String(c?.body ?? ""), { surface: "pr" }).command !== "rerun") return false;
-      return trusts(String(c?.user?.login ?? "")) !== false;
-    }
-    return isRerunCommand(c, { trusts });
-  };
-  const reruns = (Array.isArray(comments) ? comments : [])
-    .filter(believed)
-    .map((c) => ({ c, at: Date.parse(String(c.created_at ?? "")) }))
-    .filter((x) => Number.isFinite(x.at))
-    .sort((a, b) => a.at - b.at);
-  const last = reruns.at(-1);
-  if (!last) return false;
   const a = Date.parse(String(after ?? ""));
-  if (Number.isFinite(a) && last.at <= a) return false;
-  return /^review\b/i.test(parseCommand(String(last.c.body ?? ""), { surface: "pr" }).rest);
+  // Everything that needs no API call first: bots, non-commands, and reruns the
+  // recorded round already answered.
+  const reruns = (Array.isArray(comments) ? comments : [])
+    .filter((c) => c?.user?.type !== "Bot")
+    .map((c) => ({ c, cmd: parseCommand(String(c?.body ?? ""), { surface: "pr" }) }))
+    .filter((x) => x.cmd.command === "rerun")
+    .map((x) => ({ ...x, at: Date.parse(String(x.c?.created_at ?? "")) }))
+    .filter((x) => Number.isFinite(x.at) && (!Number.isFinite(a) || x.at > a))
+    .sort((x, y) => y.at - x.at);
+  for (const { c, cmd } of reruns) {
+    const wantsReview = /^review\b/i.test(cmd.rest);
+    // The resolver, when there is one, is the only authority; the pure,
+    // resolver-less form falls back to `isRerunCommand`'s association test.
+    const t = typeof trusts === "function" ? trusts(String(c?.user?.login ?? "")) : isRerunCommand(c);
+    if (t === true) return wantsReview;
+    if (t === null && wantsReview) return true;
+  }
+  return false;
+}
+
+/**
+ * Wrap a `gh api` caller so a 404 from the collaborator-permission endpoint reads
+ * as "no access", for `permissionResolver`.
+ *
+ * GitHub answers 404 for a login that is not a user or cannot be a collaborator,
+ * and 200 with `read`/`none` for an outside account on a public repository.
+ * Either is a definite "no". Only a failure to ASK (403, 5xx, a network error)
+ * should stay unknown (`null`), because `reviewRequested` lets an unknown push
+ * toward a review. The resolver itself cannot tell a 404 apart from those, since
+ * it sees only that `gh` failed, so the distinction is drawn here, from the
+ * status `gh` prints.
+ */
+export function notFoundIsNoAccess(api) {
+  return (args) => {
+    try {
+      return api(args);
+    } catch (err) {
+      if (/\(HTTP 404\)/.test(`${err?.stderr ?? ""}\n${err?.message ?? ""}`)) return { permission: "none", role_name: "" };
+      throw err;
+    }
+  };
 }
 
 /**
@@ -304,7 +336,7 @@ async function main() {
       pr: args._[0],
       fingerprint: typeof args.fingerprint === "string" ? args.fingerprint.trim() : "",
       comments: Array.isArray(comments) ? comments : null,
-      trusts: permissionResolver({ api: gh }),
+      trusts: permissionResolver({ api: notFoundIsNoAccess(gh) }),
       head: typeof args.head === "string" ? args.head.trim() : "",
       manifest,
       changedFiles: readLines(args["changed-files"]),

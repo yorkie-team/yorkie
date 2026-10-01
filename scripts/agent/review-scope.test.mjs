@@ -342,3 +342,62 @@ test("reviewRequested: answered only by a round that STARTED after the request; 
   // A definite "no" is still ignored.
   assert.equal(reviewRequested([ask], { trusts: () => false }), false);
 });
+
+test("reviewRequested: an unresolved author may force a review but never cancel a trusted `rerun review`", async () => {
+  const { reviewRequested } = await import("./review-scope.mjs");
+  const ask = human("@claude rerun review", "2026-07-21T00:00:00Z");
+  const plain = human("@claude rerun", "2026-07-22T00:00:00Z", "unresolved");
+  const trusts = (login) => (login === "maintainer" ? true : null);
+  // A plain rerun from someone whose permission could not be looked up is not
+  // the maintainer's own later word, so the maintainer's request stands.
+  assert.equal(reviewRequested([ask, plain], { trusts, after: "2026-07-20T00:00:00Z" }), true);
+  // A read-only commenter (a definite "no") cannot cancel it either.
+  const noAccess = (login) => login === "maintainer";
+  assert.equal(reviewRequested([ask, { ...plain, user: { login: "reader", type: "User" } }], { trusts: noAccess }), true);
+  // The maintainer's own later plain rerun still does.
+  assert.equal(reviewRequested([ask, human("@claude rerun", "2026-07-22T00:00:00Z")], { trusts }), false);
+  // An unresolved `rerun review` newer than a trusted plain rerun still forces.
+  const older = human("@claude rerun", "2026-07-21T00:00:00Z");
+  const unknownAsk = human("@claude rerun review", "2026-07-22T00:00:00Z", "unresolved");
+  assert.equal(reviewRequested([older, unknownAsk], { trusts }), true);
+});
+
+test("reviewRequested: resolves trust only for reruns newer than `after`, newest first, until one decides", async () => {
+  const { reviewRequested } = await import("./review-scope.mjs");
+  const asked = [];
+  const trusts = (login) => {
+    asked.push(login);
+    return login.startsWith("m") ? true : login.startsWith("u") ? null : false;
+  };
+  const comments = [
+    human("@claude rerun review", "2026-07-01T00:00:00Z", "old-1"),
+    human("@claude rerun", "2026-07-02T00:00:00Z", "old-2"),
+    human("@claude rerun", "2026-07-21T00:00:00Z", "m-older"),
+    human("@claude rerun review", "2026-07-22T00:00:00Z", "m-newer"),
+    human("@claude rerun", "2026-07-23T00:00:00Z", "reader"),
+    human("not a command", "2026-07-24T00:00:00Z", "chatter"),
+  ];
+  assert.equal(reviewRequested(comments, { trusts, after: "2026-07-20T00:00:00Z" }), true);
+  // Never the comments the last round already answered, never a non-command,
+  // and nothing older than the first trusted rerun.
+  assert.deepEqual(asked, ["reader", "m-newer"]);
+});
+
+test("notFoundIsNoAccess: a 404 permission lookup is a definite no; any other failure stays unknown", async () => {
+  const { notFoundIsNoAccess } = await import("./review-scope.mjs");
+  const { permissionResolver } = await import("./gh-checks.mjs");
+  const failing = (stderr) => () => {
+    const e = new Error(`Command failed: gh api x\n${stderr}\n`);
+    e.stderr = `${stderr}\n`;
+    throw e;
+  };
+  const notFound = permissionResolver({ api: notFoundIsNoAccess(failing("gh: ghost is not a user (HTTP 404)")), log: quiet });
+  assert.equal(notFound("ghost"), false);
+  for (const stderr of ["gh: Forbidden (HTTP 403)", "gh: Server Error (HTTP 502)", "error connecting to api.github.com"]) {
+    const broken = permissionResolver({ api: notFoundIsNoAccess(failing(stderr)), log: quiet });
+    assert.equal(broken("someone"), null, stderr);
+  }
+  // A successful lookup passes through untouched.
+  const ok = permissionResolver({ api: notFoundIsNoAccess(() => ({ permission: "write" })), log: quiet });
+  assert.equal(ok("maintainer"), true);
+});
