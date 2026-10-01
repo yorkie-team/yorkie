@@ -184,7 +184,14 @@ test("the fix job picks a credential BEFORE recording the round, and gates on it
   // BOTH gates are `!= 'false'`, never `== 'true'`: an unset output has to proceed,
   // or a skipped/older picker would silently stop every fixer in the pipeline.
   const gate = /if: steps\.guard\.outputs\.proceed == 'true' && steps\.cred\.outputs\.available != 'false'/g;
-  assert.equal((wf.match(gate) ?? []).length, 2, "the dispatch record and the fixer must both carry the gate");
+  // At least those two: the setup steps between the probe and its page may carry
+  // it too, so a drained pool mints no token and checks out no branch.
+  assert.ok((wf.match(gate) ?? []).length >= 2, "the dispatch record and the fixer must both carry the gate");
+  for (const name of ["Record the fix-round dispatch", "Address panel findings"]) {
+    const at = wf.indexOf(`name: ${name}`);
+    const body = wf.slice(at, wf.indexOf("\n      - ", at));
+    assert.match(body, new RegExp(gate.source), `${name} must carry the gate`);
+  }
   assert.doesNotMatch(wf, /steps\.cred\.outputs\.available == 'true'/, "a positive gate would fail closed");
 
   // The fixer is handed the picked slot, resolved through `secrets` so the token

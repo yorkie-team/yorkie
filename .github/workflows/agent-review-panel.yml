@@ -2067,6 +2067,14 @@ jobs:
           node "$RUNNER_TEMP/agent-tools/pick-fix-credential.mjs" --state /tmp/review-panel-execution --probe --model claude-opus-5
 
 
+      # A DRAINED POOL STOPS HERE. Every step from here to the no-credential
+      # page is setup for a fixer that will not start, so each one is skipped
+      # when the probe said `available=false`: no write token is minted and no
+      # branch code reaches the disk for a round that was never dispatched. The
+      # page needs only what came before (the staged scripts, GITHUB_TOKEN and
+      # GH_REPO). `!= 'false'`, as at the dispatch record: an unset output
+      # proceeds as before.
+      #
       # THE ONLY APP TOKEN THIS JOB MINTS. The fix push goes through the App so
       # it re-triggers CI (and a fresh panel). `contents: write` +
       # `pull-requests: write` in one token is the exact pair that submits an
@@ -2082,7 +2090,7 @@ jobs:
       # posts its report is minted in the `fix-report` job, on a runner it never
       # had a shell on.
       - name: Generate the agent's narrow token
-        if: steps.guard.outputs.proceed == 'true'
+        if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         id: agent-token
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
@@ -2091,7 +2099,7 @@ jobs:
           permission-contents: write # commit and push, and nothing else
 
       - uses: actions/checkout@v4
-        if: steps.guard.outputs.proceed == 'true'
+        if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
@@ -2111,7 +2119,7 @@ jobs:
       #
       # Keep in sync with the Makefile's `tools` target.
       - uses: actions/setup-go@v6
-        if: steps.guard.outputs.proceed == 'true'
+        if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         with:
           go-version: "1.26"
           # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
@@ -2120,14 +2128,14 @@ jobs:
           # Docker publish restore by the same key on `main`.
           cache: false
       - name: Install the linter (pinned here, not read from the branch)
-        if: steps.guard.outputs.proceed == 'true'
+        if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
 
       # Single-value state: a fix round is in flight → agent:fixing. Uses the
       # branch's own checkout (this job is author-side and already runs branch
       # code). Best-effort; advisory only.
       - name: Set state → fixing
-        if: steps.guard.outputs.proceed == 'true'
+        if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -2141,7 +2149,7 @@ jobs:
       # commit, or a push denial) must still count as no progress.
       - name: Record branch head before fix
         id: before-fix
-        if: steps.guard.outputs.proceed == 'true'
+        if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}

@@ -63,3 +63,27 @@ test("an infra failure is paged by fix-report with its cause, and `stalled` stan
   assert.match(stalled, /\(needs\.fix\.result == 'failure' && needs\.fix-report\.outputs\.infra_paged != 'true'\)/);
   assert.match(stalled, /needs\.fix-report\.result == 'failure'/);
 });
+
+// /code-review: after the probe found no live credential, the App token, the
+// branch checkout, the toolchain and "Set state → fixing" still ran, minting a
+// write token and putting branch code on disk for a round that was never going
+// to start. A drained pool now goes straight to its page.
+test("a drained pool skips every setup step between the probe and its page", () => {
+  const fix = job("fix");
+  const probe = step(fix, "Pick a live fixer credential");
+  const page = step(fix, "Page — no live credential for the fixer");
+  // Each `- ` item between the probe and the page, named or not.
+  const between = fix.slice(probe.at + probe.text.length, page.at).split(/\n(?= {6}- )/).filter((s) => /^ {6}- /.test(s));
+  assert.ok(between.length >= 6, `expected the setup steps between probe and page, got ${between.length}`);
+  for (const s of between) {
+    assert.match(s, /\n {8}if: steps\.guard\.outputs\.proceed == 'true' && steps\.cred\.outputs\.available != 'false'\n/,
+      `must be skipped on a drained pool:\n${s.split("\n").slice(0, 3).join("\n")}`);
+  }
+  // The page itself needs only the trusted scripts staged before the probe, the
+  // ambient token and GH_REPO, none of which those steps provide.
+  assert.ok(step(fix, "Stage the trusted agent scripts").at < probe.at);
+  assert.match(page.text, /GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+  assert.match(page.text, /node "\$RUNNER_TEMP\/agent-tools\/set-state\.mjs" "\$PR" blocked/);
+  assert.doesNotMatch(page.text, /steps\.(agent-token|before-fix)\./);
+  assert.match(SRC, /\n {2}GH_REPO: \$\{\{ github\.repository \}\}\n/, "`gh pr comment` resolves the repo without a checkout");
+});
