@@ -134,7 +134,7 @@ jobs:
       # permission on THIS repo). author_association would be the cheap filter,
       # but it is not authoritative and nothing else here re-checks.
       - name: Verify commenter has write access
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -187,7 +187,7 @@ jobs:
 
       - name: Say so, and stop
         if: steps.app.outputs.configured != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -253,7 +253,7 @@ jobs:
       - name: Post running placeholder
         if: steps.app.outputs.configured == 'true'
         id: placeholder
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           github-token: ${{ steps.app-token.outputs.token }}
@@ -330,7 +330,7 @@ jobs:
       - name: Refuse while the CI-fix arm may own this branch
         if: steps.eligible.outputs.eligible == 'true'
         id: ci-clear
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           HEAD: ${{ steps.eligible.outputs.head }}
         with:
@@ -403,7 +403,7 @@ jobs:
           always() && steps.app.outputs.configured == 'true' &&
           (steps.eligible.outputs.eligible != 'true' ||
            steps.ci-clear.outputs.clear != 'true')
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           COMMENT_ID: ${{ steps.placeholder.outputs.id }}
           REASON: ${{ steps.eligible.outputs.reason }}
@@ -478,7 +478,7 @@ jobs:
       - name: Resolve the PR branch
         id: pr
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -907,7 +907,7 @@ jobs:
       # failure here a dead fixer would report success.
       - name: Report the outcome
         if: always() && steps.app-token.outcome == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           COMMENT_ID: ${{ needs.fix.outputs.placeholder }}
           BEFORE: ${{ needs.fix.outputs.before }}

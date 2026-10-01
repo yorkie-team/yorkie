@@ -178,7 +178,7 @@ jobs:
     steps:
       - name: Resolve managed state
         id: gate
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -285,7 +285,7 @@ jobs:
     steps:
       - name: Wait for the triggering CI run
         id: wait
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -430,7 +430,7 @@ jobs:
 
       - name: Resolve PR number
         id: pr
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -494,7 +494,7 @@ jobs:
 
       - name: Fetch originating issue spec (for design-fit)
         if: steps.pr.outputs.number != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -768,7 +768,7 @@ jobs:
         id: inprogress
         if: steps.pr.outputs.number != ''
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -940,7 +940,7 @@ jobs:
         id: panel
         if: >-
           !cancelled() && steps.pr.outputs.number != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           # Suffixed onto the check-run title on narrowed rounds ONLY, so a human
           # reading a verdict knows it saw a delta rather than the whole PR. Empty
@@ -1139,7 +1139,7 @@ jobs:
         if: >-
           !cancelled() && steps.pr.outputs.number != ''
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           retries: 3
           script: |
@@ -2645,7 +2645,7 @@ jobs:
       - name: Close stuck in-progress lens checks
         if: always()
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PANEL_RESULT: ${{ needs.review-panel.result }}
           # `cancelled` alone does not mean superseded. A job killed by its own
@@ -2779,7 +2779,7 @@ jobs:
     steps:
       - name: Page a human
         id: page
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           # So the message names the stage that actually failed, instead of
           # always blaming the review panel (it now also fires on promote/fix).
