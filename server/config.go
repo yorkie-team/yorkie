@@ -56,7 +56,7 @@ const (
 	DefaultMongoPingTimeout                  = 5 * time.Second
 	DefaultMongoYorkieDatabase               = "yorkie-meta"
 	DefaultMongoMonitoringSlowQueryThreshold = 100 * time.Millisecond
-	DefaultMongoCacheStatsInterval           = 30 * time.Second
+	DefaultMongoCacheStatsInterval           = mongo.DefaultCacheStatsInterval
 	DefaultMongoClientCacheSize              = 10000
 	DefaultMongoDocCacheSize                 = 10000
 	DefaultMongoChangeCacheSize              = 10000
@@ -265,7 +265,10 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend == nil {
 		// An explicit but empty `Backend:` section unmarshals to nil and wipes
 		// the values newConfig pre-seeded, so re-seed the booleans here: unlike
-		// the fields below, false is indistinguishable from unset.
+		// the fields below, false is indistinguishable from unset. This is
+		// auth-affecting — UseDefaultProject gates keyless requests at
+		// rpc/interceptors — so the behavior change for a bare section is
+		// called out as an upgrade note in CHANGELOG.md.
 		c.Backend = &backend.Config{UseDefaultProject: DefaultUseDefaultProject}
 	}
 	if c.Backend.AdminUser == "" {

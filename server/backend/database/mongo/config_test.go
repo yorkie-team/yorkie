@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 )
 
@@ -57,16 +58,43 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, config.Validate())
 	})
 
-	t.Run("default project cache for a config built in code", func(t *testing.T) {
-		// A Config built in code may leave the project cache fields empty, and
-		// an unset TTL must resolve to the default instead of exiting.
+	t.Run("reject negative project cache size", func(t *testing.T) {
+		config := &mongo.Config{
+			ConnectionTimeout: "5s",
+			PingTimeout:       "5s",
+			ProjectCacheSize:  -1,
+		}
+		assert.ErrorContains(t, config.Validate(), "--mongo-project-cache-size")
+
+		// A non-positive size must never reach the LRU, which reads it as
+		// "unbounded" instead of rejecting it.
+		assert.Equal(t, mongo.DefaultProjectCacheSize, config.ParseProjectCacheSize())
+	})
+
+	t.Run("default caches for a config built in code", func(t *testing.T) {
+		// A Config built in code may leave the cache fields empty, and an unset
+		// value must resolve to the default instead of exiting.
 		config := &mongo.Config{
 			ConnectionTimeout: "5s",
 			PingTimeout:       "5s",
 		}
 		assert.NoError(t, config.Validate())
-		assert.Equal(t, mongo.DefaultProjectCacheTTL, config.ParseProjectCacheTTL())
+
+		ttl, err := config.ParseProjectCacheTTL()
+		assert.NoError(t, err)
+		assert.Equal(t, mongo.DefaultProjectCacheTTL, ttl)
 		assert.Equal(t, mongo.DefaultProjectCacheSize, config.ParseProjectCacheSize())
+		assert.Equal(t, mongo.DefaultCacheStatsInterval, config.ParseCacheStatsInterval())
+	})
+
+	t.Run("report an invalid project cache TTL without exiting", func(t *testing.T) {
+		config := &mongo.Config{
+			ConnectionTimeout: "5s",
+			PingTimeout:       "5s",
+			ProjectCacheTTL:   "1ms",
+		}
+		_, err := config.ParseProjectCacheTTL()
+		assert.ErrorIs(t, err, cache.ErrInvalidTTL)
 	})
 
 	t.Run("parse monitoring test", func(t *testing.T) {
