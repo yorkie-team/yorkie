@@ -42,8 +42,8 @@ it:
 AdminService.RevalidateAccess({keys})          (project secret key)
   └─ Backend.BroadcastRevalidateAccess          every cluster node
        └─ ClusterService.RevalidateAccess({project_id, keys})
-            1. auth.DropCachedDecisions(project)
-            2. watchRegistry.revalidate(project, keys, VerifyAccessAs)
+            1. auth.DropCachedDecisions(project, keys)
+            2. watchRegistry.revalidate(project, keys, RecheckAccess)
 ```
 
 ### Stream registry
@@ -52,37 +52,46 @@ Each node keeps a `watchRegistry` of the Watch streams it serves: project,
 token, the `AccessInfo` the stream was admitted with, and a
 `context.CancelCauseFunc`. `admitWatch` registers a stream and then verifies
 it, and the handler streams under the registered context. The stream loops
-(`streamMergedEvents`, `streamEvents`) return `context.Cause(ctx)`, so a stream
-closed by a revalidation ends with the reason the registry gave.
+(`streamMergedEvents`, `streamEvents`) end with the revalidation's denial when
+it closed the stream, and with `context.Canceled` otherwise, as before. They
+check the context again right before each send: `select` picks among ready
+cases at random, so a queued event could otherwise still reach a client after
+its denial.
 
 Registering before verifying narrows the race with a concurrent
 revalidation: one that runs after registration finds the stream; one that ran
 before it already dropped the cached decisions this admission reads. One
 window remains: a webhook answer that was in flight when the cache was
-dropped can still be cached afterwards, and a stream admitted from it is not
-re-checked until the next revalidation. A per-project cache generation would
-close it; see Risks.
+dropped can still be cached afterwards, and a stream admitted from it after
+the revalidation finished is not re-checked until the next one. A stream
+already registered is safe, because a recheck never reads the cache. A
+per-project cache generation would close the rest; see Risks.
 
 ### Revalidation
 
-1. Drop every cached webhook decision of the project on this node, so unary
-   RPCs ask the webhook again too.
+1. Drop the project's cached webhook decisions about the keys (all of them
+   when `keys` is empty) on this node, so unary RPCs ask the webhook again
+   too. Denials are cached as well, so a grant needs the same call to take
+   effect before the cache TTL.
 2. Select the project's streams that watch any of `keys` (all of them when
    `keys` is empty), and group them by (token, method, attributes): each group
-   costs one webhook call, at most 16 at a time. Keys match exactly: a channel
-   key does not cover its sub-paths. A call takes at most 1000 keys.
-3. Allowed: the stream continues untouched.
+   costs one webhook call, by a pool of 16 workers. Keys match exactly: a
+   channel key does not cover its sub-paths. A call takes at most 1000 keys.
+   Each check is a recheck (`auth.RecheckAccess`): it skips the cache, which
+   may predate the change, and asks once without the project's retries, since
+   the caller retries the whole revalidation. With the default retry policy a
+   single failing check would otherwise outlast the cluster RPC timeout.
+3. Only a definite answer changes a stream. Allowed: it continues untouched.
    - `ErrPermissionDenied`: close with it; the SDK does not retry.
    - `ErrUnauthenticated`: close with it; the SDK asks `authTokenInjector` for
      a new token and reconnects through admission. A stream still holding an
      expired short-lived token therefore reconnects once with a fresh one.
-   - Webhook failure: close with `ErrRevalidationUnavailable` (Unavailable).
-     The SDK reconnects and the new stream goes through admission, so the
-     server needs no policy of its own for an uncertain answer.
-   - The revalidation's own context ending (caller gone, cluster RPC timeout):
-     close nothing, since it says nothing about access, and fail the node RPC
-     so the caller retries. Closing here would disconnect users who kept
-     access and send them all to an already slow webhook at once.
+   - Anything else (the webhook failing, the revalidation's own context
+     ending): leave the stream as it is and fail with
+     `ErrRevalidationIncomplete` (Unavailable) so the caller retries. An
+     uncertain answer says nothing about access; closing on it would
+     disconnect users who kept access and send them all to a failing webhook
+     at once.
 
 ### Cluster
 
@@ -103,6 +112,8 @@ Retrying is safe.
 | An in-flight webhook allow is cached after the drop | Next revalidation catches it; follow-up: per-project cache generation |
 | A node fails to load the project | It neither drops its cache nor re-checks; the call fails and is retried |
 | Project-wide revalidation outlasts the cluster RPC timeout | Unreached streams stay open and the call fails; callers should pass keys |
+| Webhook down while revoking | Revoked streams stay open and the call keeps failing until the webhook answers; admission is equally blocked meanwhile |
+| A node whose membership lease lapsed still serves streams | It is skipped like in `BroadcastCacheInvalidation`; it rejoins on its next heartbeat |
 
 ### Design Decisions
 
@@ -110,8 +121,9 @@ Retrying is safe.
 |----------|--------|
 | Push from the customer instead of polling the webhook | Polling trades cutoff latency against webhook load and tolerance of a slow webhook; #2075 could not settle all three |
 | Revalidate instead of closing every matching stream | Closing everyone forces reconnects and watched/unwatched churn for users who kept access |
-| Unavailable on webhook failure | Lets admission, which already handles this case, decide on reconnect |
-| Drop the project's cached decisions | One call fixes both the stream gap and the unary cache gap for the revoked access |
+| Act only on definite answers | An outage must not turn into a mass disconnect; the caller learns the revocation is incomplete and retries |
+| Recheck without cache and retries | The cache may predate the change; retries belong to the caller, inside one RPC deadline they only time out |
+| Drop the cached decisions about the keys | Fixes the unary cache gap for the revoked access without sending the whole project back to the webhook |
 
 ## Alternatives Considered
 

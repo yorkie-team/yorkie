@@ -17,3 +17,12 @@
 - Before reading a stream loop's ctx error as a cause, keep the old result
   for the old cases: returning context.Cause would have turned a client's
   own deadline into DeadlineExceeded, which logs at Error.
+- Cross-check a replacement against the review history of what it
+  replaces. #2075's findings were about polling, yet two of them (events
+  delivered after a cut, a slow webhook against a fixed budget) survived in a
+  new shape here.
+- A `select` over a done channel and a data channel is not a priority
+  order. Measure it: a 1000-run probe showed about one leaked event per
+  closed stream.
+- Only a definite answer should change state. "Could not verify" and "denied"
+  are different outcomes even when both are errors.

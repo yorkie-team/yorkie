@@ -81,3 +81,25 @@ rebalance stays on its old node (sharded-cluster-mode.md, split brain).
 - Kept as known limitations (design doc, Risks): an in-flight allow cached
   after the drop; a node that cannot load the project skips its cache drop;
   Unauthenticated on an expired admission token makes the SDK reconnect once.
+
+### Code review round 2 (`/code-review high` + #2075 cross-check)
+
+Cross-checked the 48 distinct blocking findings of #2075's five panel
+rounds. Polling, lease and write-deadline findings do not apply; enabling or
+disabling the webhook mid-stream behaves correctly (now a regression test).
+Fixed what did apply or was new:
+
+- [x] A queued event could still be sent after a denial (`select` picks at
+      random): measured 1002 sends over 1000 runs; now checked before each
+      send. Red/green verified.
+- [x] A recheck could read an allow re-cached after the drop: rechecks skip
+      the cache.
+- [x] With default retries one failing check outlasts the 10s cluster RPC
+      timeout: rechecks ask once.
+- [x] Webhook failure closed every covered stream: now only a definite answer
+      changes a stream; anything else fails the call with
+      `ErrRevalidationIncomplete`.
+- [x] Cache drop scoped to the keys; worker pool; streams closed before
+      admission not counted.
+- Kept: exact key match, expired admission token reconnects once,
+  lapsed-membership node skipped (design doc, Risks).
