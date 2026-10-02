@@ -70,7 +70,7 @@ func TestRemoveStopsWatchPipeline(t *testing.T) {
 
 	cli, err := Dial(httpServer.URL)
 	require.NoError(t, err)
-	cli.status = statusActivated
+	cli.storeStatus(statusActivated)
 
 	doc := document.New(key.Key("remove-watch-pipeline"))
 	doc.SetStatus(document.StatusAttached)

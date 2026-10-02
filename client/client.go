@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	gotime "time"
 
 	"connectrpc.com/connect"
@@ -59,11 +60,12 @@ const (
 
 	// statusDeactivating is the state of a client that has begun deactivating
 	// but has not finished: its watch pipelines are being, or have been, torn
-	// down, so nothing that needs one may start, yet the deactivation itself
-	// may still have to be retried. Every guard spelled `!= statusActivated`
-	// -- Attach, Detach, Remove, pushPullChanges -- therefore rejects it,
-	// while Deactivate, which only short-circuits on statusDeactivated, runs
-	// to completion again.
+	// down, so nothing that needs one may start. Every guard spelled
+	// `!= statusActivated` -- Attach, Detach, Remove, pushPullChanges --
+	// therefore rejects it, and Activate refuses to lay a new session over the
+	// one being ended. The state is a window, not a resting place: Deactivate
+	// restores the previous status when its RPC fails, so a client is never
+	// left here once the call returns.
 	statusDeactivating
 )
 
@@ -71,6 +73,11 @@ var (
 	// ErrNotActivated occurs when an inactive client executes a function
 	// that can only be executed when activated.
 	ErrNotActivated = errors.FailedPrecond("client is not activated")
+
+	// ErrDeactivating occurs when a client that has begun deactivating is
+	// asked to activate again. The deactivation has already retired the watch
+	// pipelines, so the activation has to wait for it to resolve.
+	ErrDeactivating = errors.FailedPrecond("client is deactivating")
 
 	// ErrNotAttached occurs when the given resource is not attached to this client.
 	ErrNotAttached = errors.FailedPrecond("resource is not attached")
@@ -109,9 +116,17 @@ type Client struct {
 	logger      *zap.Logger
 	interceptor *AuthInterceptor
 
-	id          time.ActorID
-	key         string
-	status      status
+	id  time.ActorID
+	key string
+
+	// status is written by Activate and Deactivate on the caller's goroutine
+	// and read by every guard that rejects an inactive client, including the
+	// sync loop's and a user goroutine's pushPullChanges. The deactivating
+	// window only keeps a concurrent sync out if that write is visible to it,
+	// so the field is accessed atomically rather than plainly. Its zero value
+	// is statusDeactivated.
+	status atomic.Int32
+
 	attachments *cmap.Map[key.Key, *Attachment]
 
 	// attaching holds the keys of documents with an attach in flight.
@@ -205,7 +220,6 @@ func New(opts ...Option) (*Client, error) {
 		interceptor:   interceptor,
 
 		key:         k,
-		status:      statusDeactivated,
 		attachments: cmap.New[key.Key, *Attachment](),
 		attaching:   make(map[key.Key]struct{}),
 	}, nil
@@ -256,12 +270,34 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// loadStatus returns the current status of this client.
+func (c *Client) loadStatus() status {
+	return status(c.status.Load())
+}
+
+// storeStatus sets the status of this client.
+func (c *Client) storeStatus(s status) {
+	c.status.Store(int32(s))
+}
+
 // Activate activates this client. That is, it registers itself to the server
 // and receives a unique ID from the server. The given ID is used to distinguish
 // different clients.
+//
+// It returns ErrDeactivating while a deactivation of this client is in flight:
+// that deactivation has already retired the watch pipelines and is ending the
+// server-side session, so activating over it would hand the client a new ID
+// while the ended session's attachments are still in c.attachments, leaving the
+// sync loop to push resources the new ID never attached, over pipelines that no
+// longer deliver. Deactivate restores the previous status when its RPC fails,
+// so the rejection lasts only as long as the call.
 func (c *Client) Activate(ctx context.Context) error {
-	if c.status == statusActivated {
+	switch c.loadStatus() {
+	case statusActivated:
 		return nil
+	case statusDeactivating:
+		return ErrDeactivating
+	case statusDeactivated:
 	}
 
 	response, err := c.client.ActivateClient(
@@ -278,8 +314,8 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
-	c.status = statusActivated
 	c.id = clientID
+	c.storeStatus(statusActivated)
 
 	c.runSyncLoop(ctx)
 
@@ -288,7 +324,8 @@ func (c *Client) Activate(ctx context.Context) error {
 
 // Deactivate deactivates this client.
 func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error {
-	if c.status == statusDeactivated {
+	prevStatus := c.loadStatus()
+	if prevStatus == statusDeactivated {
 		return nil
 	}
 
@@ -312,7 +349,7 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 	// Retiring the pump under a running sync would leave the next event it
 	// publishes blocked forever on the document's capacity-one channel, with
 	// the document's event mutex held.
-	c.status = statusDeactivating
+	c.storeStatus(statusDeactivating)
 	for _, attachment := range c.attachments.Values() {
 		attachment.syncMu.Lock()
 		stopWatchPipeline(attachment)
@@ -326,6 +363,16 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 			Synchronous: !deactiveOpts.Asynchronous,
 		}), c.options.APIKey, c.key))
 	if err != nil {
+		// The server-side session outlived the call, so this client is not
+		// deactivated. Leaving it marked deactivating would wedge it there for
+		// good: every guard spelled `!= statusActivated` -- Attach, Detach,
+		// Remove, pushPullChanges, broadcast -- would reject it, IsActive would
+		// report a session that still exists as gone, and Activate would refuse
+		// to open a new one. Restore the status it came in with, which is where
+		// a failed deactivation has always left it; the watch pipelines retired
+		// above do not come back, so the caller's next move is to retry
+		// Deactivate.
+		c.storeStatus(prevStatus)
 		return err
 	}
 
@@ -348,7 +395,7 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		c.attachments.Delete(attachment.resource.Key())
 	}
 
-	c.status = statusDeactivated
+	c.storeStatus(statusDeactivated)
 
 	return nil
 }
@@ -443,7 +490,7 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 // AttachResource attaches the given resource to this client.
 // This is a generalized version of Attach that works with any Attachable resource.
 func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...any) error {
-	if c.status != statusActivated {
+	if c.loadStatus() != statusActivated {
 		return ErrNotActivated
 	}
 	if r.Status() != attachable.StatusDetached {
@@ -498,7 +545,7 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 // Detach detaches the given resource from this client.
 // This is a generalized version of Detach that works with any Attachable resource.
 func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...any) error {
-	if c.status != statusActivated {
+	if c.loadStatus() != statusActivated {
 		return ErrNotActivated
 	}
 	// The attachment is looked up by key, so it must also be held by r
@@ -902,7 +949,7 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 		return nil, nil, ErrNotAttached
 	}
 
-	if c.status != statusActivated {
+	if c.loadStatus() != statusActivated {
 		return nil, nil, ErrNotActivated
 	}
 
@@ -1374,12 +1421,12 @@ func (c *Client) Key() string {
 
 // IsActive returns whether this client is active or not.
 func (c *Client) IsActive() bool {
-	return c.status == statusActivated
+	return c.loadStatus() == statusActivated
 }
 
 // pushPullChanges pushes the changes of the document to the server and pulls the changes from the server.
 func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
-	if c.status != statusActivated {
+	if c.loadStatus() != statusActivated {
 		return ErrNotActivated
 	}
 	attachment, ok := c.attachments.Get(opt.key)
@@ -1440,7 +1487,7 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 
 // Remove removes the given document.
 func (c *Client) Remove(ctx context.Context, d *document.Document) error {
-	if c.status != statusActivated {
+	if c.loadStatus() != statusActivated {
 		return ErrNotActivated
 	}
 
@@ -1503,7 +1550,7 @@ func (c *Client) broadcast(
 	topic string,
 	payload []byte,
 ) error {
-	if c.status != statusActivated {
+	if c.loadStatus() != statusActivated {
 		return ErrNotActivated
 	}
 

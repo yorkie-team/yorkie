@@ -161,3 +161,12 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
   under `syncMu` — plus a `statusDeactivating` state so a sync that has yet
   to reach `pushPullChanges`' guard is rejected instead of racing it. A
   guard checked once at entry does not hold for the rest of the call.
+- A new intermediate state is a new set of edges, not one. `statusDeactivating`
+  was added for the guards that read `!= statusActivated` and left every other
+  reader of the field untouched: `Activate` would lay a new ID over the ended
+  session's attachments, and a failed `DeactivateClient` never rolled the state
+  back, so a server session that still existed read as gone and every guard
+  rejected the client for good. A transient state needs an exit on the error
+  path and an answer for every entry point that observes it — and because it is
+  observed by goroutines that never wrote it, the field itself has to be atomic
+  for the window to mean anything.

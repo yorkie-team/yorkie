@@ -18,6 +18,7 @@ package client_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -226,4 +227,142 @@ func TestDetachEndsWatchStreamQuietly(t *testing.T) {
 			assert.Zero(t, logs.FilterMessageSnippet("re-establish watch stream").Len())
 		})
 	}
+}
+
+// failingDeactivateServer fails the first DeactivateClient and serves every
+// later one, so a test can watch what a failed deactivation leaves behind.
+type failingDeactivateServer struct {
+	*watchInitServer
+	deactivates atomic.Int32
+}
+
+func (s *failingDeactivateServer) DeactivateClient(
+	_ context.Context,
+	_ *connect.Request[api.DeactivateClientRequest],
+) (*connect.Response[api.DeactivateClientResponse], error) {
+	if s.deactivates.Add(1) == 1 {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("deactivate rejected"))
+	}
+	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+}
+
+// TestDeactivateRestoresStatusOnFailure pins that a failed DeactivateClient
+// does not wedge the client in the deactivating state. The server-side session
+// outlived the call, so IsActive has to keep reporting it, the guards spelled
+// `!= statusActivated` have to keep letting the client through, and a retry
+// has to be able to finish the deactivation.
+func TestDeactivateRestoresStatusOnFailure(t *testing.T) {
+	srv := &failingDeactivateServer{watchInitServer: &watchInitServer{
+		firstResponse: &api.WatchResponse{
+			Body: &api.WatchResponse_Initialization{
+				Initialization: &api.WatchInitialization{},
+			},
+		},
+		release: make(chan struct{}),
+	}}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+
+	ctx := context.Background()
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	assert.Error(t, cli.Deactivate(ctx))
+	assert.True(t, cli.IsActive())
+
+	// Every entry point guarded on the activated status stays open.
+	doc := document.New(key.Key("deactivate-failure-retry"))
+	assert.NoError(t, cli.Attach(ctx, doc))
+	assert.NoError(t, cli.Detach(ctx, doc))
+
+	assert.NoError(t, cli.Deactivate(ctx))
+	assert.False(t, cli.IsActive())
+}
+
+// blockingDeactivateServer holds DeactivateClient open until the test releases
+// it, so a deactivation can be parked mid-flight while another call runs.
+type blockingDeactivateServer struct {
+	*watchInitServer
+
+	entered chan struct{}
+	finish  chan struct{}
+}
+
+func (s *blockingDeactivateServer) DeactivateClient(
+	_ context.Context,
+	_ *connect.Request[api.DeactivateClientRequest],
+) (*connect.Response[api.DeactivateClientResponse], error) {
+	select {
+	case s.entered <- struct{}{}:
+	default:
+	}
+	<-s.finish
+
+	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+}
+
+// TestActivateRejectedWhileDeactivating pins that Activate refuses to lay a
+// new session over one being ended. The deactivation has already retired the
+// watch pipelines and is about to drop the attachments, so activating here
+// would hand the client a new ID while the ended session's attachments are
+// still registered, leaving the sync loop to push resources the new ID never
+// attached over pipelines that no longer deliver.
+func TestActivateRejectedWhileDeactivating(t *testing.T) {
+	srv := &blockingDeactivateServer{
+		watchInitServer: &watchInitServer{
+			firstResponse: &api.WatchResponse{
+				Body: &api.WatchResponse_Initialization{
+					Initialization: &api.WatchInitialization{},
+				},
+			},
+			release: make(chan struct{}),
+		},
+		entered: make(chan struct{}, 1),
+		finish:  make(chan struct{}),
+	}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+	releaseDeactivate := sync.OnceFunc(func() { close(srv.finish) })
+	t.Cleanup(releaseDeactivate)
+
+	ctx := context.Background()
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	doc := document.New(key.Key("activate-while-deactivating"))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+	firstID := cli.ID()
+
+	deactivateDone := make(chan error, 1)
+	go func() { deactivateDone <- cli.Deactivate(ctx) }()
+
+	select {
+	case <-srv.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("deactivate did not reach the server")
+	}
+
+	assert.ErrorIs(t, cli.Activate(ctx), client.ErrDeactivating)
+	assert.Equal(t, firstID, cli.ID())
+
+	releaseDeactivate()
+	select {
+	case err := <-deactivateDone:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("deactivate did not finish")
+	}
+	assert.False(t, cli.IsActive())
 }

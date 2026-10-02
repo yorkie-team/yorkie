@@ -75,7 +75,7 @@ func TestPushOnlySyncKeepsPullSignal(t *testing.T) {
 
 	cli, err := Dial(httpServer.URL)
 	require.NoError(t, err)
-	cli.status = statusActivated
+	cli.storeStatus(statusActivated)
 
 	attach := func(t *testing.T, mode SyncMode) (*document.Document, *Attachment) {
 		doc := document.New(key.Key("pushonly-pull-signal-" + string(mode)))

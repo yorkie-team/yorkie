@@ -76,7 +76,7 @@ func TestDetachClosesWatchAfterApplyingChangePack(t *testing.T) {
 
 	cli, err := Dial(httpServer.URL)
 	require.NoError(t, err)
-	cli.status = statusActivated
+	cli.storeStatus(statusActivated)
 
 	doc := document.New(key.Key("detach-watch-order"))
 	doc.SetStatus(document.StatusAttached)
