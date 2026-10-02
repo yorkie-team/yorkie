@@ -43,6 +43,9 @@ var (
 // decision, which may predate the change being checked, and the project's
 // retries, since a failed recheck is retried as a whole by its caller. Its
 // answer is still cached, as the freshest decision there is.
+//
+// With Config.AuthWebhookCacheDisabled, it neither reads nor writes the
+// cache, so every call asks the webhook.
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
@@ -62,10 +65,14 @@ func verifyAccess(
 		return fmt.Errorf("verify access: %w", err)
 	}
 
-	cacheKey := generateCacheKey(prj.PublicKey, body)
-	if !recheck {
-		if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
-			return handleWebhookResponse(entry.First, entry.Second)
+	cacheDisabled := be.Config.AuthWebhookCacheDisabled
+	var cacheKey string
+	if !cacheDisabled {
+		cacheKey = generateCacheKey(prj.PublicKey, body)
+		if !recheck {
+			if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
+				return handleWebhookResponse(entry.First, entry.Second)
+			}
 		}
 	}
 
@@ -79,7 +86,10 @@ func verifyAccess(
 
 	// Read before asking, so an answer that crosses a DropCachedDecisions is
 	// seen as predating it and is not written back over the drop.
-	gen := currentCacheGen()
+	var gen uint64
+	if !cacheDisabled {
+		gen = currentCacheGen()
+	}
 
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
@@ -93,7 +103,7 @@ func verifyAccess(
 	}
 
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
-	if status != http.StatusUnauthorized {
+	if !cacheDisabled && status != http.StatusUnauthorized {
 		cacheDecision(
 			be,
 			cacheKey,

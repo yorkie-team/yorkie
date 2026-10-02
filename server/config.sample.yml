@@ -104,14 +104,13 @@ Backend:
   # AuthWebhookCacheSize is the cache size of the authorization webhook.
   AuthWebhookCacheSize: 5000
 
+  # AuthWebhookCacheDisabled disables the authorization webhook response cache
+  # server-wide. When true, every protected RPC calls the webhook.
+  AuthWebhookCacheDisabled: false
+
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
+  # It must be at least 100ms; use AuthWebhookCacheDisabled to turn caching off.
   AuthWebhookCacheTTL: "10s"
-
-  # ProjectCacheSize is the size of the project metadata cache.
-  ProjectCacheSize: 256
-
-  # ProjectCacheTTL is the TTL value to set when caching the project metadata.
-  ProjectCacheTTL: "10m0s"
 
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
@@ -161,6 +160,13 @@ Mongo:
 
   # VectorCacheSize is the size of the version vector cache.
   VectorCacheSize: 10000
+
+  # ProjectCacheSize is the size of the project metadata cache.
+  ProjectCacheSize: 256
+
+  # ProjectCacheTTL is the TTL value to set when caching the project metadata.
+  # It must be at least 100ms.
+  ProjectCacheTTL: "10m0s"
 
 # Kafka is the yorkie analytics message broker configuration (Optional).
 Kafka:

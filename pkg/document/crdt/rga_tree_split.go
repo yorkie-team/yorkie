@@ -506,20 +506,25 @@ func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RG
 // absolute offset measured from the head (0:0) of the physical chain, so the
 // position keeps meaning the same place regardless of how the chain is split
 // later.
+//
+// JS sums the length of every node on the prev chain. Go reads the same sum
+// from treeByIndex instead: every node on the chain is in it, in chain order,
+// weighted by its live length (a tombstone stays in with weight zero; only
+// Purge takes a node out, and Purge unlinks it from the chain too). A local
+// edit normalizes its position to build its reverse operation, so a linear
+// walk here makes typing a document quadratic.
 func (s *RGATreeSplit[V]) normalizePos(pos *RGATreeSplitNodePos) (*RGATreeSplitNodePos, error) {
 	node := s.findFloorNode(pos.id)
 	if node == nil {
 		return nil, fmt.Errorf("the node of the given id should be found: %s", pos.ToTestString())
 	}
 
-	total := pos.relativeOffset
-	curr := node
-	for prev := node.prev; prev != nil; prev = prev.prev {
-		total += prev.Len()
-		curr = prev
+	index := s.treeByIndex.IndexOf(node.indexNode)
+	if index < 0 {
+		return nil, fmt.Errorf("the node of the given id should be indexed: %s", pos.ToTestString())
 	}
 
-	return NewRGATreeSplitNodePos(curr.id, total), nil
+	return NewRGATreeSplitNodePos(s.initialHead.id, index+pos.relativeOffset), nil
 }
 
 // refinePos remaps the given position onto the current split chain.

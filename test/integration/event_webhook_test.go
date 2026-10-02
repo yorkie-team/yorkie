@@ -83,7 +83,7 @@ func newActivatedClient(t *testing.T, ctx context.Context, addr, publicKey strin
 
 func TestRegisterEventWebhook(t *testing.T) {
 	const (
-		projectCacheTTL     = 1 * time.Millisecond
+		projectCacheTTL     = 100 * time.Millisecond
 		waitWebhookReceived = 10 * time.Millisecond
 	)
 

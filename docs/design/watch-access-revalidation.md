@@ -18,7 +18,10 @@ revocation keeps delivering for as long as it stays open (#2073):
 Document contents are not part of it: `PushPull` asks the webhook on every
 call, behind the auth webhook cache (`AuthWebhookCacheTTL`, 10s by default).
 That cache is a second, smaller gap: a cached allow outlives a revocation for
-up to one TTL on every RPC (#2068).
+up to one TTL on every RPC (#2068). A server that cannot accept that gap sets
+`AuthWebhookCacheDisabled` (`--auth-webhook-cache-disabled`): it neither reads
+nor writes the cache, so every protected RPC asks the webhook, and a
+revalidation has no cached decisions to drop.
 
 ### Goals
 
@@ -75,7 +78,8 @@ reads the cache.
 1. Drop the project's cached webhook decisions about the keys (all of them
    when `keys` is empty) on this node, so unary RPCs ask the webhook again
    too. Denials are cached as well, so a grant needs the same call to take
-   effect before the cache TTL.
+   effect before the cache TTL. With `AuthWebhookCacheDisabled` this step
+   does nothing.
 2. Select the project's streams that watch any of `keys` (all of them when
    `keys` is empty), and group them by (token, method, attributes): each group
    costs one webhook call, by a pool of 16 workers. Keys match exactly: a

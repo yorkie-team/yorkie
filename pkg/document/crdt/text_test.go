@@ -18,6 +18,7 @@ package crdt_test
 
 import (
 	"testing"
+	"unicode/utf16"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,6 +146,25 @@ func TestText(t *testing.T) {
 		assert.Error(t, err)
 		assert.Positive(t, diff.Meta, "the diff from splitting `to` must still be returned on the `from` error path")
 	})
+}
+
+func TestTextValueLen(t *testing.T) {
+	// Len counts UTF-16 code units without encoding; it must agree with
+	// encoding on astral runes and on bytes that are not valid UTF-8, which
+	// utf16.Encode writes as one U+FFFD each.
+	for _, value := range []string{
+		"",
+		"abc",
+		"가나다",
+		"😀",
+		"a😀b👍🏽c",
+		"\xff\xfe",
+		"\xed\xa0\x80",
+		"a\xf0\x9f\x98",
+	} {
+		expected := len(utf16.Encode([]rune(value)))
+		assert.Equal(t, expected, crdt.NewTextValue(value, crdt.NewRHT()).Len(), "%q", value)
+	}
 }
 
 func TestTextEditReturnsRemoved(t *testing.T) {

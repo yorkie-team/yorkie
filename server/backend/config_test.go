@@ -43,6 +43,30 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 	})
 
+	t.Run("reject cache TTLs below cache.MinTTL", func(t *testing.T) {
+		for _, tc := range []struct {
+			flag string
+			set  func(conf *backend.Config, ttl string)
+		}{
+			{"--auth-webhook-cache-auth-ttl", func(c *backend.Config, ttl string) {
+				c.AuthWebhookCacheTTL = ttl
+			}},
+			{"--channel-session-count-cache-ttl", func(c *backend.Config, ttl string) {
+				c.ChannelSessionCountCacheTTL = ttl
+			}},
+		} {
+			for _, ttl := range []string{"0", "0s", "-1s", "1ns", "1ms", "99ms"} {
+				conf := newValidBackendConf()
+				tc.set(&conf, ttl)
+				assert.ErrorContains(t, conf.Validate(), tc.flag, ttl)
+			}
+
+			conf := newValidBackendConf()
+			tc.set(&conf, "100ms")
+			assert.NoError(t, conf.Validate())
+		}
+	})
+
 	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {
 		conf := newValidBackendConf()
 		conf.MaxConcurrentClusterRPCs = 0

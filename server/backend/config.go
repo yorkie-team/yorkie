@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -48,7 +50,12 @@ type Config struct {
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
-	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
+	// AuthWebhookCacheDisabled disables the authorization webhook response
+	// cache server-wide. When true, every protected RPC calls the webhook.
+	AuthWebhookCacheDisabled bool `yaml:"AuthWebhookCacheDisabled"`
+
+	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized
+	// result. It must be at least cache.MinTTL.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
 	// SnapshotCacheSize is the cache size of the snapshot.
@@ -66,7 +73,8 @@ type Config struct {
 	// ChannelSessionCountCacheSize is the cache size of the session count.
 	ChannelSessionCountCacheSize int `yaml:"ChannelSessionCountCacheSize"`
 
-	// ChannelSessionCountCacheTTL is the TTL value for session count cache.
+	// ChannelSessionCountCacheTTL is the TTL value for session count cache. It
+	// must be at least cache.MinTTL.
 	ChannelSessionCountCacheTTL string `yaml:"ChannelSessionCountCacheTTL"`
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
@@ -110,22 +118,30 @@ type Config struct {
 	ClusterSecret string `yaml:"ClusterSecret"`
 }
 
+// validateCacheTTL checks that the given TTL parses and is at least
+// cache.MinTTL, so that a bad value fails with the flag name at startup
+// rather than inside cache construction.
+func validateCacheTTL(flag, value string) error {
+	if _, err := cache.ParseTTL(value); err != nil {
+		return fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, value, flag, err)
+	}
+	return nil
+}
+
 // Validate validates this config.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.AuthWebhookCacheTTL); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
-			c.AuthWebhookCacheTTL,
-			err,
-		)
+	if err := validateCacheTTL(
+		"--auth-webhook-cache-auth-ttl",
+		c.AuthWebhookCacheTTL,
+	); err != nil {
+		return err
 	}
 	if c.ChannelSessionCountCacheTTL != "" {
-		if _, err := time.ParseDuration(c.ChannelSessionCountCacheTTL); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--channel-session-count-cache-ttl" flag: %w`,
-				c.ChannelSessionCountCacheTTL,
-				err,
-			)
+		if err := validateCacheTTL(
+			"--channel-session-count-cache-ttl",
+			c.ChannelSessionCountCacheTTL,
+		); err != nil {
+			return err
 		}
 	}
 	if c.ChannelSessionTTL != "" {
