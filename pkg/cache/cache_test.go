@@ -171,7 +171,22 @@ func TestLRUWithExpires(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			_, ok := c.Get("key")
 			return !ok
-		}, time.Second, cache.MinTTL)
+		}, time.Second, cache.MinTTL/10)
+	})
+
+	t.Run("parse TTL against MinTTL", func(t *testing.T) {
+		for _, value := range []string{"0", "0s", "-1s", "1ns", "1ms", "99ms"} {
+			_, err := cache.ParseTTL(value)
+			assert.ErrorIs(t, err, cache.ErrInvalidTTL, value)
+		}
+
+		_, err := cache.ParseTTL("ten seconds")
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, cache.ErrInvalidTTL)
+
+		ttl, err := cache.ParseTTL("100ms")
+		assert.NoError(t, err)
+		assert.Equal(t, cache.MinTTL, ttl)
 	})
 }
 

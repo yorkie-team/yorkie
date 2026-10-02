@@ -122,17 +122,8 @@ type Config struct {
 // cache.MinTTL, so that a bad value fails with the flag name at startup
 // rather than inside cache construction.
 func validateCacheTTL(flag, value string) error {
-	ttl, err := time.ParseDuration(value)
-	if err != nil {
+	if _, err := cache.ParseTTL(value); err != nil {
 		return fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, value, flag, err)
-	}
-	if ttl < cache.MinTTL {
-		return fmt.Errorf(
-			`invalid argument "%s" for "%s" flag: must be at least %s`,
-			value,
-			flag,
-			cache.MinTTL,
-		)
 	}
 	return nil
 }

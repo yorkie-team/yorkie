@@ -109,7 +109,7 @@ Backend:
   AuthWebhookCacheDisabled: false
 
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
-  # It must be at least 1ms; use AuthWebhookCacheDisabled to turn caching off.
+  # It must be at least 100ms; use AuthWebhookCacheDisabled to turn caching off.
   AuthWebhookCacheTTL: "10s"
 
   # ProjectCacheSize is the size of the project metadata cache.

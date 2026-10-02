@@ -48,12 +48,12 @@ func TestConfig(t *testing.T) {
 			ConnectionTimeout: "5s",
 			PingTimeout:       "5s",
 		}
-		for _, ttl := range []string{"0s", "-1s", "1ns", "999us"} {
+		for _, ttl := range []string{"0s", "-1s", "1ns", "1ms", "99ms"} {
 			config.ProjectCacheTTL = ttl
 			assert.ErrorContains(t, config.Validate(), "--mongo-project-cache-ttl", ttl)
 		}
 
-		config.ProjectCacheTTL = "1ms"
+		config.ProjectCacheTTL = "100ms"
 		assert.NoError(t, config.Validate())
 	})
 

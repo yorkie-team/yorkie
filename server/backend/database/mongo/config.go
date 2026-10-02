@@ -92,19 +92,11 @@ func (c *Config) Validate() error {
 	}
 
 	if c.ProjectCacheTTL != "" {
-		ttl, err := time.ParseDuration(c.ProjectCacheTTL)
-		if err != nil {
+		if _, err := cache.ParseTTL(c.ProjectCacheTTL); err != nil {
 			return fmt.Errorf(
 				`invalid argument "%s" for "--mongo-project-cache-ttl" flag: %w`,
 				c.ProjectCacheTTL,
 				err,
-			)
-		}
-		if ttl < cache.MinTTL {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--mongo-project-cache-ttl" flag: must be at least %s`,
-				c.ProjectCacheTTL,
-				cache.MinTTL,
 			)
 		}
 	}

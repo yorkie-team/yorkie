@@ -55,14 +55,14 @@ func TestConfig(t *testing.T) {
 				c.ChannelSessionCountCacheTTL = ttl
 			}},
 		} {
-			for _, ttl := range []string{"0", "0s", "-1s", "1ns", "999us"} {
+			for _, ttl := range []string{"0", "0s", "-1s", "1ns", "1ms", "99ms"} {
 				conf := newValidBackendConf()
 				tc.set(&conf, ttl)
 				assert.ErrorContains(t, conf.Validate(), tc.flag, ttl)
 			}
 
 			conf := newValidBackendConf()
-			tc.set(&conf, "1ms")
+			tc.set(&conf, "100ms")
 			assert.NoError(t, conf.Validate())
 		}
 	})
