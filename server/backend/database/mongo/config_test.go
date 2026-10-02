@@ -57,6 +57,18 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, config.Validate())
 	})
 
+	t.Run("default project cache for a config built in code", func(t *testing.T) {
+		// A Config built in code may leave the project cache fields empty, and
+		// an unset TTL must resolve to the default instead of exiting.
+		config := &mongo.Config{
+			ConnectionTimeout: "5s",
+			PingTimeout:       "5s",
+		}
+		assert.NoError(t, config.Validate())
+		assert.Equal(t, mongo.DefaultProjectCacheTTL, config.ParseProjectCacheTTL())
+		assert.Equal(t, mongo.DefaultProjectCacheSize, config.ParseProjectCacheSize())
+	})
+
 	t.Run("parse monitoring test", func(t *testing.T) {
 		config := &mongo.Config{
 			MonitoringEnabled:            true,

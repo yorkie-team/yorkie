@@ -104,7 +104,7 @@ func Dial(conf *Config) (*Client, error) {
 
 	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
 
-	projectCache, err := NewProjectCache(conf.ProjectCacheSize, conf.ParseProjectCacheTTL())
+	projectCache, err := NewProjectCache(conf.ParseProjectCacheSize(), conf.ParseProjectCacheTTL())
 	if err != nil {
 		return nil, fmt.Errorf("initialize project cache: %w", err)
 	}

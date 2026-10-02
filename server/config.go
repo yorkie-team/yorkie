@@ -96,8 +96,11 @@ const (
 	DefaultAuthWebhookCacheSize = 5000
 	DefaultAuthWebhookCacheTTL  = 10 * time.Second
 
-	DefaultProjectCacheSize = 256
-	DefaultProjectCacheTTL  = 10 * time.Minute
+	// The project cache defaults live in the mongo package, so that a
+	// mongo.Config built in code resolves to the same values as one filled
+	// in by ensureMongoDefaultValue.
+	DefaultProjectCacheSize = mongo.DefaultProjectCacheSize
+	DefaultProjectCacheTTL  = mongo.DefaultProjectCacheTTL
 
 	DefaultHostname       = ""
 	DefaultGatewayAddr    = "localhost:8080"
@@ -260,7 +263,10 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 // ensureBackendDefaultValue set the default backend.Config value
 func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend == nil {
-		c.Backend = &backend.Config{}
+		// An explicit but empty `Backend:` section unmarshals to nil and wipes
+		// the values newConfig pre-seeded, so re-seed the booleans here: unlike
+		// the fields below, false is indistinguishable from unset.
+		c.Backend = &backend.Config{UseDefaultProject: DefaultUseDefaultProject}
 	}
 	if c.Backend.AdminUser == "" {
 		c.Backend.AdminUser = DefaultAdminUser

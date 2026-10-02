@@ -24,6 +24,17 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
+// Below are the default values of the project metadata cache. They are
+// applied when the fields are left empty, so that a Config built in code
+// (not only one read from a config file) resolves to a usable value.
+const (
+	// DefaultProjectCacheSize is the default size of the project metadata cache.
+	DefaultProjectCacheSize = 256
+
+	// DefaultProjectCacheTTL is the default TTL of the project metadata cache.
+	DefaultProjectCacheTTL = 10 * time.Minute
+)
+
 // Config is the configuration for creating a Client instance.
 type Config struct {
 	ConnectionTimeout string `yaml:"ConnectionTimeout"`
@@ -91,6 +102,8 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// An empty value is not an error here, because ParseProjectCacheTTL falls
+	// back to DefaultProjectCacheTTL instead of failing.
 	if c.ProjectCacheTTL != "" {
 		if _, err := cache.ParseTTL(c.ProjectCacheTTL); err != nil {
 			return fmt.Errorf(
@@ -137,9 +150,25 @@ func (c *Config) ParseCacheStatsInterval() time.Duration {
 	return result
 }
 
-// ParseProjectCacheTTL returns the TTL duration for the project cache.
+// ParseProjectCacheSize returns the size of the project cache, falling back to
+// DefaultProjectCacheSize when the value is unset.
+func (c *Config) ParseProjectCacheSize() int {
+	if c.ProjectCacheSize == 0 {
+		return DefaultProjectCacheSize
+	}
+
+	return c.ProjectCacheSize
+}
+
+// ParseProjectCacheTTL returns the TTL duration for the project cache, falling
+// back to DefaultProjectCacheTTL when the value is unset. Configs built in code
+// may leave it empty, and an unset value must not terminate the process.
 func (c *Config) ParseProjectCacheTTL() time.Duration {
-	result, err := time.ParseDuration(c.ProjectCacheTTL)
+	if c.ProjectCacheTTL == "" {
+		return DefaultProjectCacheTTL
+	}
+
+	result, err := cache.ParseTTL(c.ProjectCacheTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse project cache TTL: %v\n", err)
 		os.Exit(1)

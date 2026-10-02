@@ -137,6 +137,7 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, server.DefaultSecretKey, conf.Backend.SecretKey)
 		assert.Equal(t, server.DefaultAdminUser, conf.Backend.AdminUser)
 		assert.Equal(t, server.DefaultAdminPassword, conf.Backend.AdminPassword)
+		assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
 		assert.False(t, conf.Backend.AuthWebhookCacheDisabled)
 		assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
 		assert.NoError(t, conf.Validate())
