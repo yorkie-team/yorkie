@@ -362,6 +362,54 @@ func (b *Backend) BroadcastCacheInvalidation(
 	return nil
 }
 
+// BroadcastRevalidateAccess asks every cluster node to verify again the
+// project's Watch streams for the given keys. It goes to every node rather
+// than to the shard owner, because a stream opened before a rebalance stays
+// on the node it was opened on. It returns how many streams were closed.
+//
+// Nodes are called concurrently. Any node failing fails the call, since the
+// revocation may not have reached it; the closed count of the nodes that did
+// answer is then dropped, and retrying is safe.
+func (b *Backend) BroadcastRevalidateAccess(
+	ctx context.Context,
+	projectID types.ID,
+	keys []string,
+) (int, error) {
+	nodes, err := b.prepareClusterClients(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("broadcast revalidate access: %w", err)
+	}
+
+	tasks := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		tasks[node.RPCAddr] = struct{}{}
+	}
+	counts, err := FanOut(ctx, b, tasks, func(
+		ctx context.Context,
+		addr string,
+		_ struct{},
+	) ([]int, error) {
+		cli, err := b.ClusterClientPool.Get(addr)
+		if err != nil {
+			return nil, fmt.Errorf("get client for %s: %w", addr, err)
+		}
+		n, err := cli.RevalidateAccess(ctx, projectID, keys)
+		if err != nil {
+			return nil, fmt.Errorf("revalidate on %s: %w", addr, err)
+		}
+		return []int{n}, nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("broadcast revalidate access: %w", err)
+	}
+
+	closed := 0
+	for _, n := range counts {
+		closed += n
+	}
+	return closed, nil
+}
+
 // BroadcastChannelList broadcasts channel list request to all cluster nodes and aggregates results.
 // If query is not empty, it filters channels by the query prefix.
 //

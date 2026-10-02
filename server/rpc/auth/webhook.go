@@ -38,12 +38,21 @@ var (
 )
 
 // verifyAccess verifies the given user is allowed to access the given method.
+//
+// A recheck asks the webhook directly and only once: it skips the cached
+// decision, which may predate the change being checked, and the project's
+// retries, since a failed recheck is retried as a whole by its caller. Its
+// answer is still cached, as the freshest decision there is.
+//
+// With Backend.AuthWebhookCacheDisabled, it neither reads nor writes the
+// cache, so every call asks the webhook.
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
 	prj *types.Project,
 	token string,
 	accessInfo *types.AccessInfo,
+	recheck bool,
 ) error {
 	req := types.AuthWebhookRequest{
 		Token:      token,
@@ -57,9 +66,8 @@ func verifyAccess(
 	}
 
 	cacheDisabled := be.Config.AuthWebhookCacheDisabled
-	var cacheKey string
-	if !cacheDisabled {
-		cacheKey = generateCacheKey(prj.PublicKey, body)
+	cacheKey := generateCacheKey(prj.PublicKey, body)
+	if !recheck && !cacheDisabled {
 		if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
 			return handleWebhookResponse(entry.First, entry.Second)
 		}
@@ -69,6 +77,13 @@ func verifyAccess(
 	if err != nil {
 		return fmt.Errorf("verify access: %w", err)
 	}
+	if recheck {
+		options.MaxRetries = 0
+	}
+
+	// Read before asking, so an answer that crosses a DropCachedDecisions is
+	// seen as predating it and is not written back over the drop.
+	gen := currentCacheGen()
 
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
@@ -83,8 +98,10 @@ func verifyAccess(
 
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
 	if !cacheDisabled && status != http.StatusUnauthorized {
-		be.Cache.AuthWebhook.Add(
+		cacheDecision(
+			be,
 			cacheKey,
+			gen,
 			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},
 		)
 	}
@@ -94,7 +111,13 @@ func verifyAccess(
 
 // generateCacheKey creates a unique key for caching webhook responses.
 func generateCacheKey(publicKey string, body []byte) string {
-	return fmt.Sprintf("%s:auth:%s", publicKey, body)
+	return cacheKeyPrefix(publicKey) + string(body)
+}
+
+// cacheKeyPrefix returns the prefix shared by every cached webhook response
+// of the project with the given public key.
+func cacheKeyPrefix(publicKey string) string {
+	return publicKey + ":auth:"
 }
 
 // handleWebhookResponse processes the webhook response and returns an error if necessary.

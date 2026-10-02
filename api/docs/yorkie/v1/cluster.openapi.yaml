@@ -118,6 +118,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/RevalidateAccess:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.RevalidateAccess.yorkie.v1.ClusterServiceRevalidateAccessRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.RevalidateAccess.yorkie.v1.ClusterServiceRevalidateAccessResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
 components:
   requestBodies:
     yorkie.v1.ClusterService.Broadcast.yorkie.v1.ClusterServiceBroadcastRequest:
@@ -200,6 +212,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
+      required: true
+    yorkie.v1.ClusterService.RevalidateAccess.yorkie.v1.ClusterServiceRevalidateAccessRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceRevalidateAccessRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceRevalidateAccessRequest'
       required: true
   responses:
     connect.error:
@@ -291,6 +312,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.RevalidateAccess.yorkie.v1.ClusterServiceRevalidateAccessResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceRevalidateAccessResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceRevalidateAccessResponse'
       description: ""
   schemas:
     connect.error:
@@ -703,6 +733,35 @@ components:
       additionalProperties: false
       description: ""
       title: ClusterServicePurgeDocumentResponse
+      type: object
+    yorkie.v1.ClusterServiceRevalidateAccessRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        keys:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: keys
+          type: array
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServiceRevalidateAccessRequest
+      type: object
+    yorkie.v1.ClusterServiceRevalidateAccessResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        closedStreams:
+          additionalProperties: false
+          description: ""
+          title: closed_streams
+          type: integer
+      title: ClusterServiceRevalidateAccessResponse
       type: object
     yorkie.v1.DataSize:
       additionalProperties: false
