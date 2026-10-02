@@ -489,21 +489,37 @@ func TestTreeSplitAfterTypingAtSpanEnd(t *testing.T) {
 // product has to move both the same way, or a style lands on a different node
 // than the split it is ordered against.
 func TestTreeSameBoundaryStyleAfterPeerTypedIn(t *testing.T) {
+	// The range covers the left half and every product before the one holding
+	// "de", so only "de" keeps the span's original attributes.
 	cases := []struct {
-		name  string
-		style func(tree *json.Tree)
+		name   string
+		seeded bool
+		style  func(tree *json.Tree)
+		want   string
 	}{
-		{"style", func(tree *json.Tree) {
+		{"style", false, func(tree *json.Tree) {
 			tree.StyleByPath([]int{0, 0}, []int{0, 1}, map[string]string{"bold": "true"})
-		}},
-		{"remove style", func(tree *json.Tree) {
+		}, `<doc><p><span bold="true">abc</span><span bold="true"></span>` +
+			`<span bold="true">Z</span><span>de</span></p></doc>`},
+		{"remove style", true, func(tree *json.Tree) {
 			tree.RemoveStyleByPath([]int{0, 0}, []int{0, 1}, []string{"bold"})
-		}},
+		}, `<doc><p><span>abc</span><span></span>` +
+			`<span>Z</span><span bold="true">de</span></p></doc>`},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			docs := splitReplicas(t, 3)
+
+			// Bold the span first, so removing it has something to remove.
+			if tc.seeded {
+				require.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetTree("t").StyleByPath([]int{0, 0}, []int{0, 1}, map[string]string{"bold": "true"})
+					return nil
+				}))
+				exchangeInOrder(t, docs, [][]int{{}, {0}, {0}})
+				require.Equal(t, `<doc><p><span bold="true">abcde</span></p></doc>`, treeXML(t, docs[2]))
+			}
 
 			// Every replica splits the span at one boundary, so each holds two
 			// same-boundary products it did not create.
@@ -538,7 +554,7 @@ func TestTreeSameBoundaryStyleAfterPeerTypedIn(t *testing.T) {
 			assert.Equal(t, shape, treeShape(t, docs[2]))
 			assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
 			assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[2]))
-			assert.Contains(t, treeXML(t, docs[0]), "Z")
+			assert.Equal(t, tc.want, treeXML(t, docs[0]))
 		})
 	}
 }
