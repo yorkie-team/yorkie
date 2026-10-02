@@ -115,6 +115,32 @@ doc.subscribe((event) => {
 
 For more details: [Subscribing to Document events](https://yorkie.dev/docs/js-sdk#subscribing-to-document-events)
 
+### Local Index Validity: Surrogate Pairs
+
+Indexes into `Text` and `Tree` count **UTF-16 code units**, which is what the
+JS SDK's strings are measured in. A non-BMP character therefore occupies two
+indexes, and the index between them does not name a character boundary.
+
+Editing or styling at such an index would split a node between the two halves
+of a surrogate pair. Both SDKs measure the same lengths and mint the same node
+IDs for that split, so the document *structure* still converges — but the
+*text* does not. Go holds strings as UTF-8, so a lone half cannot survive
+`utf16.Decode` and becomes U+FFFD; the JS SDK keeps the raw code unit. The two
+replicas then hold different content for the same operation.
+
+The local APIs reject such an index (`json.ErrMidSurrogatePair`) rather than
+mint an operation whose result depends on which SDK applies it:
+`Tree.Edit`/`EditBulk`/`Style`/`RemoveStyle` and their `…ByPath` twins, and
+`Text.Edit`/`Style`. A local index that is not mid-pair maps to a node offset
+that is not mid-pair on every replica, because node contents are identical
+everywhere — so no *new* operation can carry a mid-pair offset.
+
+This is deliberately a local-API rule, not a convergence rule. Nothing on the
+remote or undo path changes: operations minted by older clients, or by SDKs
+that have not adopted the check, still apply exactly as before. Aligning the
+split forward to the end of the pair instead would change node IDs for the
+same operation, making it a wire-level rule that needs a server-first rollout.
+
 ### Risks and Mitigation
 
 Proxy can vary by language or environment. For example, in JS SDK, the Proxy is implemented as [JavaScript Proxy](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy), but in the Go SDK, it is just a struct.
