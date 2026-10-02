@@ -35,6 +35,7 @@ service ClusterService {
   rpc Broadcast (ClusterServiceBroadcastRequest) returns (ClusterServiceBroadcastResponse) {}
   rpc GetChannelCount (ClusterServiceGetChannelCountRequest) returns (ClusterServiceGetChannelCountResponse) {}
   rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
+  rpc RevalidateAccess (ClusterServiceRevalidateAccessRequest) returns (ClusterServiceRevalidateAccessResponse) {}
 }
 
 message ClusterServiceDetachDocumentRequest {
@@ -127,4 +128,13 @@ message InvalidateCacheRequest {
 
 message InvalidateCacheResponse {
   bool success = 1;
+}
+
+message ClusterServiceRevalidateAccessRequest {
+  string project_id = 1;
+  repeated string keys = 2;
+}
+
+message ClusterServiceRevalidateAccessResponse {
+  int32 closed_streams = 1;
 }

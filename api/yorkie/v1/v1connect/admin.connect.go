@@ -148,6 +148,9 @@ const (
 	// AdminServiceBroadcastByAdminProcedure is the fully-qualified name of the AdminService's
 	// BroadcastByAdmin RPC.
 	AdminServiceBroadcastByAdminProcedure = "/yorkie.v1.AdminService/BroadcastByAdmin"
+	// AdminServiceRevalidateAccessProcedure is the fully-qualified name of the AdminService's
+	// RevalidateAccess RPC.
+	AdminServiceRevalidateAccessProcedure = "/yorkie.v1.AdminService/RevalidateAccess"
 	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
 	// GetServerVersion RPC.
 	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
@@ -193,6 +196,7 @@ type AdminServiceClient interface {
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
 	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error)
+	RevalidateAccess(context.Context, *connect.Request[v1.RevalidateAccessRequest]) (*connect.Response[v1.RevalidateAccessResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 	CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error)
 }
@@ -418,6 +422,12 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("BroadcastByAdmin")),
 			connect.WithClientOptions(opts...),
 		),
+		revalidateAccess: connect.NewClient[v1.RevalidateAccessRequest, v1.RevalidateAccessResponse](
+			httpClient,
+			baseURL+AdminServiceRevalidateAccessProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("RevalidateAccess")),
+			connect.WithClientOptions(opts...),
+		),
 		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
 			httpClient,
 			baseURL+AdminServiceGetServerVersionProcedure,
@@ -470,6 +480,7 @@ type adminServiceClient struct {
 	listChannels           *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
 	getChannels            *connect.Client[v1.GetChannelsRequest, v1.GetChannelsResponse]
 	broadcastByAdmin       *connect.Client[v1.BroadcastByAdminRequest, v1.BroadcastByAdminResponse]
+	revalidateAccess       *connect.Client[v1.RevalidateAccessRequest, v1.RevalidateAccessResponse]
 	getServerVersion       *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 	compactDocumentByAdmin *connect.Client[v1.CompactDocumentByAdminRequest, v1.CompactDocumentByAdminResponse]
 }
@@ -649,6 +660,11 @@ func (c *adminServiceClient) BroadcastByAdmin(ctx context.Context, req *connect.
 	return c.broadcastByAdmin.CallUnary(ctx, req)
 }
 
+// RevalidateAccess calls yorkie.v1.AdminService.RevalidateAccess.
+func (c *adminServiceClient) RevalidateAccess(ctx context.Context, req *connect.Request[v1.RevalidateAccessRequest]) (*connect.Response[v1.RevalidateAccessResponse], error) {
+	return c.revalidateAccess.CallUnary(ctx, req)
+}
+
 // GetServerVersion calls yorkie.v1.AdminService.GetServerVersion.
 func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return c.getServerVersion.CallUnary(ctx, req)
@@ -696,6 +712,7 @@ type AdminServiceHandler interface {
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
 	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error)
+	RevalidateAccess(context.Context, *connect.Request[v1.RevalidateAccessRequest]) (*connect.Response[v1.RevalidateAccessResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 	CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error)
 }
@@ -917,6 +934,12 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("BroadcastByAdmin")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceRevalidateAccessHandler := connect.NewUnaryHandler(
+		AdminServiceRevalidateAccessProcedure,
+		svc.RevalidateAccess,
+		connect.WithSchema(adminServiceMethods.ByName("RevalidateAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
 	adminServiceGetServerVersionHandler := connect.NewUnaryHandler(
 		AdminServiceGetServerVersionProcedure,
 		svc.GetServerVersion,
@@ -1001,6 +1024,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceBroadcastByAdminProcedure:
 			adminServiceBroadcastByAdminHandler.ServeHTTP(w, r)
+		case AdminServiceRevalidateAccessProcedure:
+			adminServiceRevalidateAccessHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
 		case AdminServiceCompactDocumentByAdminProcedure:
@@ -1152,6 +1177,10 @@ func (UnimplementedAdminServiceHandler) GetChannels(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.BroadcastByAdmin is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) RevalidateAccess(context.Context, *connect.Request[v1.RevalidateAccessRequest]) (*connect.Response[v1.RevalidateAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.RevalidateAccess is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {

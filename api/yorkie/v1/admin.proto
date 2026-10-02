@@ -69,6 +69,7 @@ service AdminService {
   rpc ListChannels (ListChannelsRequest) returns (ListChannelsResponse) {}
   rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
   rpc BroadcastByAdmin (BroadcastByAdminRequest) returns (BroadcastByAdminResponse) {}
+  rpc RevalidateAccess (RevalidateAccessRequest) returns (RevalidateAccessResponse) {}
   
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 
@@ -434,3 +435,15 @@ message BroadcastByAdminRequest {
 }
 
 message BroadcastByAdminResponse {}
+
+// RevalidateAccessRequest asks every node to re-check the authorization of
+// the project's open Watch streams. When keys is empty, every stream of the
+// project is re-checked; otherwise only the streams watching any of them.
+message RevalidateAccessRequest {
+  repeated string keys = 1;
+}
+
+message RevalidateAccessResponse {
+  // closed_streams is the number of streams closed across the cluster.
+  int32 closed_streams = 1;
+}

@@ -393,8 +393,11 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 		// Cleared before the push, not after it: the stream reader sets the
 		// flag without taking syncMu, so clearing afterwards would swallow a
 		// change event that landed while the push was in flight. Restored on
-		// failure so a pending remote change still forces the next sync.
-		pending := attachment.changeEventReceived.Swap(false)
+		// failure so a pending remote change still forces the next sync. A
+		// push-only sync pulls nothing, so it leaves a remote change it was
+		// told about waiting for the next pull.
+		pending := options.mode != types.SyncModePushOnly &&
+			attachment.changeEventReceived.Swap(false)
 		if err := c.pushPullChanges(ctx, options); err != nil {
 			if pending {
 				attachment.changeEventReceived.Store(true)
@@ -1373,7 +1376,14 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := d.ApplyChangePack(pack); err != nil {
+
+	// NOTE(chacha912): The reply to a push-only request is a push ack only and
+	// must not reach GC; see "Push-only response" in
+	// docs/design/garbage-collection.md. Judged by the mode the request was
+	// sent in: it is the request that decided nothing was pulled.
+	if opt.mode == types.SyncModePushOnly {
+		d.AcknowledgePushedChanges(pack)
+	} else if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
 	if d.Status() == document.StatusRemoved {
