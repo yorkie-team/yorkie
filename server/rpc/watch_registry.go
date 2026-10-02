@@ -22,9 +22,11 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
@@ -32,6 +34,13 @@ import (
 // revalidateConcurrency bounds how many webhook calls one revalidation makes
 // at the same time.
 const revalidateConcurrency = 16
+
+// revalidateReplyMargin is the part of the caller's deadline a revalidation
+// keeps to answer with. A node serving many distinct accesses can have more
+// webhook calls to make than the deadline allows; stopping early reports what
+// was verified as an error the caller can retry, instead of letting the
+// deadline kill the call with no answer at all.
+const revalidateReplyMargin = 500 * gotime.Millisecond
 
 // ErrRevalidationIncomplete is returned when a revalidation could not get a
 // definite answer for some streams. Those streams are left as they were, and
@@ -139,12 +148,13 @@ func (r *watchRegistry) len() int {
 // question share one verification. It returns the number of closed streams.
 //
 // Only a definite answer changes a stream: an allow keeps it, a denial
-// closes it with the denial. Anything else (the webhook failing, the
-// revalidation's own context ending) says nothing about the access, so the
-// stream is left as it was and the revalidation reports
-// ErrRevalidationIncomplete for the caller to retry. Closing on an uncertain
-// answer would disconnect users who kept access and send them all to a
-// failing webhook at once.
+// closes it with the denial. A denial is whatever admission would reject on,
+// including an answer that does not conform (see isDenial). Not having an
+// answer at all (the webhook unreachable or timing out, the revalidation's
+// own context ending) says nothing about the access, so the stream is left as
+// it was and the revalidation reports ErrRevalidationIncomplete for the
+// caller to retry. Closing on a missing answer would disconnect users who
+// kept access and send them all to a failing webhook at once.
 func (r *watchRegistry) revalidate(
 	ctx context.Context,
 	projectID types.ID,
@@ -157,6 +167,14 @@ func (r *watchRegistry) revalidate(
 		for _, k := range keys {
 			keySet[k] = struct{}{}
 		}
+	}
+
+	// Webhook calls stop before the caller's deadline, so the groups that did
+	// get an answer are reported rather than lost with the connection.
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline.Add(-revalidateReplyMargin))
+		defer cancel()
 	}
 
 	groups := make(map[string][]*watchStream)
@@ -246,6 +264,18 @@ func revalidateGroup(ctx context.Context, streams []*watchStream, verify watchVe
 
 // isDenial reports whether the error is the webhook refusing the access, as
 // opposed to failing to answer.
+//
+// An answer that does not conform — 200 with allowed=false, an unexpected
+// status, a body that does not parse — is a refusal here, because it is one
+// at admission: a Watch that gets such an answer is rejected. Were
+// revalidation to call it uncertain, a webhook could keep a revoked stream
+// open forever by answering in a shape neither side accepts, however often
+// the revocation is retried. Closing on it is also the recoverable side of
+// the choice: the client reconnects, and admission then asks again under the
+// project's full retry policy.
 func isDenial(err error) bool {
-	return goerrors.Is(err, auth.ErrPermissionDenied) || goerrors.Is(err, auth.ErrUnauthenticated)
+	return goerrors.Is(err, auth.ErrPermissionDenied) ||
+		goerrors.Is(err, auth.ErrUnauthenticated) ||
+		goerrors.Is(err, webhook.ErrInvalidJSONResponse) ||
+		goerrors.Is(err, webhook.ErrUnexpectedStatusCode)
 }

@@ -26,3 +26,21 @@
   closed stream.
 - Only a definite answer should change state. "Could not verify" and "denied"
   are different outcomes even when both are errors.
+
+## Review panel round (2026-10-02)
+
+- "Definite answer" is not the same line as "denial". The first rule closed
+  streams only on ErrPermissionDenied/ErrUnauthenticated, so a webhook that
+  denied in any other shape — 200 with allowed=false, 404, 500, a body that
+  does not parse — kept a revoked stream open forever, while admission
+  rejected the very same answer. Match revalidation's verdict to admission's:
+  the only thing that leaves a stream alone is having no answer at all.
+- Dropping a cache is not enough when answers can arrive late. A webhook call
+  already in flight re-cached the decision the drop had just removed, and a
+  stream admitted from it registered after the revalidation's snapshot. A
+  generation read before the call and compared under the drop's lock makes a
+  late answer unwritable.
+- A fan-out RPC whose work scales with what the node holds does not belong on
+  the generic per-RPC timeout. Give it its own, cap it by the HTTP client's
+  hard limit, and have the node stop short of its deadline so it can answer
+  with what it verified instead of dying on the connection.

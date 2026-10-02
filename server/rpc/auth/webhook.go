@@ -77,6 +77,10 @@ func verifyAccess(
 		options.MaxRetries = 0
 	}
 
+	// Read before asking, so an answer that crosses a DropCachedDecisions is
+	// seen as predating it and is not written back over the drop.
+	gen := currentCacheGen()
+
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
@@ -90,8 +94,10 @@ func verifyAccess(
 
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
 	if status != http.StatusUnauthorized {
-		be.Cache.AuthWebhook.Add(
+		cacheDecision(
+			be,
 			cacheKey,
+			gen,
 			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},
 		)
 	}

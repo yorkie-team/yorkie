@@ -36,13 +36,23 @@ import (
 )
 
 // webhookStub answers every request with the given status and counts calls.
+// started and block, when set before the first request, let a test hold an
+// answer in flight.
 type webhookStub struct {
-	status atomic.Int32
-	calls  atomic.Int32
+	status  atomic.Int32
+	calls   atomic.Int32
+	started chan struct{}
+	block   chan struct{}
 }
 
 func (s *webhookStub) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	s.calls.Add(1)
+	if s.started != nil {
+		s.started <- struct{}{}
+	}
+	if s.block != nil {
+		<-s.block
+	}
 	status := int(s.status.Load())
 	w.WriteHeader(status)
 	_, _ = (&types.AuthWebhookResponse{Allowed: status == http.StatusOK}).Write(w)
@@ -83,6 +93,50 @@ func watchOf(keys ...string) *types.AccessInfo {
 		attrs[i] = types.AccessAttribute{Key: k, Verb: types.Read}
 	}
 	return &types.AccessInfo{Method: types.Watch, Attributes: attrs}
+}
+
+// webhookCacheKey returns the key verifyAccess caches the given access under.
+func webhookCacheKey(t *testing.T, prj *types.Project, token string, access *types.AccessInfo) string {
+	body, err := json.Marshal(types.AuthWebhookRequest{
+		Token: token, Method: access.Method, Attributes: access.Attributes,
+	})
+	require.NoError(t, err)
+	return generateCacheKey(prj.PublicKey, body)
+}
+
+func TestVerifyAccessCacheDrop(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("an answer a drop overtook is not cached", func(t *testing.T) {
+		be, project, stub := newWebhookTest(t)
+		stub.started, stub.block = make(chan struct{}), make(chan struct{})
+		access := watchOf("doc-1")
+
+		done := make(chan error, 1)
+		go func() { done <- verifyAccess(ctx, be, project, "alice", access, false) }()
+
+		// The revocation lands while the webhook is still answering under the
+		// policy it is revoking.
+		<-stub.started
+		DropCachedDecisions(be, project, nil)
+		close(stub.block)
+		require.NoError(t, <-done)
+
+		assert.False(t, be.Cache.AuthWebhook.Contains(webhookCacheKey(t, project, "alice", access)),
+			"caching it would hand the dropped decision to the next access")
+	})
+
+	t.Run("an answer the webhook gave after a drop is cached", func(t *testing.T) {
+		be, project, stub := newWebhookTest(t)
+		access := watchOf("doc-1")
+
+		DropCachedDecisions(be, project, nil)
+		require.NoError(t, verifyAccess(ctx, be, project, "alice", access, false))
+
+		assert.True(t, be.Cache.AuthWebhook.Contains(webhookCacheKey(t, project, "alice", access)))
+		require.NoError(t, verifyAccess(ctx, be, project, "alice", access, false))
+		assert.Equal(t, int32(1), stub.calls.Load())
+	})
 }
 
 func TestRecheckAccess(t *testing.T) {

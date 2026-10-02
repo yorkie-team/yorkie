@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
@@ -147,6 +148,52 @@ func TestWatchRegistry(t *testing.T) {
 		assert.Equal(t, 1, closed)
 		assert.NoError(t, failing.Err())
 		assert.ErrorIs(t, context.Cause(denied), auth.ErrPermissionDenied)
+	})
+
+	t.Run("a non-conforming answer closes the stream", func(t *testing.T) {
+		for name, answer := range map[string]error{
+			"allowed=false with status 200": fmt.Errorf("status=200, allowed=false: %w", webhook.ErrInvalidJSONResponse),
+			"a body that does not parse":    fmt.Errorf("verify access: %w", webhook.ErrInvalidJSONResponse),
+			"an unexpected status":          fmt.Errorf("verify access: 500: %w", webhook.ErrUnexpectedStatusCode),
+		} {
+			t.Run(name, func(t *testing.T) {
+				r := newWatchRegistry()
+				s := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+
+				closed, err := r.revalidate(ctx, projectA, nil, func(
+					context.Context, string, *types.AccessInfo,
+				) error {
+					return answer
+				})
+
+				// Admission rejects such an answer, so revalidation does too.
+				assert.NoError(t, err)
+				assert.Equal(t, 1, closed)
+				assert.ErrorIs(t, context.Cause(s), answer)
+			})
+		}
+	})
+
+	t.Run("stops asking in time to answer the caller", func(t *testing.T) {
+		r := newWatchRegistry()
+		s := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+
+		// A deadline shorter than the reply margin leaves no time to ask.
+		deadlineCtx, cancel := context.WithTimeout(ctx, revalidateReplyMargin/2)
+		defer cancel()
+		var calls atomic.Int32
+		closed, err := r.revalidate(deadlineCtx, projectA, nil, func(
+			context.Context, string, *types.AccessInfo,
+		) error {
+			calls.Add(1)
+			return auth.ErrPermissionDenied
+		})
+
+		assert.ErrorIs(t, err, ErrRevalidationIncomplete)
+		assert.Equal(t, int32(0), calls.Load())
+		assert.Equal(t, 0, closed)
+		assert.NoError(t, deadlineCtx.Err(), "it returns with time left to reply")
+		assert.NoError(t, s.Err())
 	})
 
 	t.Run("an ended revalidation closes nothing it did not verify", func(t *testing.T) {

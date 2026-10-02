@@ -376,6 +376,13 @@ func (s *clusterServer) InvalidateCache(
 // RevalidateAccess drops the project's cached auth webhook decisions on this
 // node and verifies again the Watch streams it serves for the given keys,
 // closing the ones that no longer pass.
+//
+// Dropping first and snapshotting after covers every stream: one registered
+// before the snapshot is verified here, and one registered after it reads no
+// cached decision, so its admission asks the webhook itself. A verification
+// that was already in flight when the drop ran cannot put its answer back in
+// the cache either, since the answer predates the drop (see
+// auth.DropCachedDecisions).
 func (s *clusterServer) RevalidateAccess(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceRevalidateAccessRequest],
