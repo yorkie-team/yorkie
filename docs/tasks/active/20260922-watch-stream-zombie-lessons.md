@@ -142,50 +142,14 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
     ever survived a disconnect.
   - Pushed back on nothing. Two findings turned on facts the branch's own
     notes had already recorded as limitations, which is not a defence.
-- **Round 3 (the review panel on #2084, three lenses).** Joining the pump on
-  stop closed the event-stealing race but kept the pipeline owned by a single
-  `runWatchLoop` invocation, and every remaining finding fell out of that
-  ownership: nothing drains `Document.Events` between a dead loop and its
-  successor, the successor rewrites `attachment.watchStream` from the reader
-  goroutine while `WatchStream()` readers read it unlocked, and consumers
-  holding the old channel never see the replacement. Making the buffer, the
-  pump and the sender belong to the *attachment* — alive from Attach until the
-  watch context is cancelled — removes all three at once and makes the join
-  unnecessary on the reconnect path: there is only ever one pump. The lesson
-  is that a lifetime mismatch is rarely fixed by synchronising the handoff;
-  the object with the longer life has to own the resource.
-- Two smaller findings on the same diff were straightforward: `stream.Receive()
-  == false` carries the RPC's real error on `stream.Err()`, so returning
-  `ErrInitNotReceived` unconditionally hid permission-denied behind a generic
-  code; and an Attach whose watch loop fails has to roll the attachment back
-  (unregister, cancel, join the pump, reset the status) instead of leaving it
-  registered with no stream behind it.
-- The reconnect test that "passed" proved nothing: it published its events
-  after a full HTTP round trip had already established the successor, so the
-  window it was meant to cover was long closed. Holding the successor's
-  handshake open *on the server* puts the window inside the assertions — the
-  rewritten test fails on the pre-fix code within 10ms.
-- **Round 4 (review panel on #2084, blast-radius lens).** Giving the pipeline
-  to the attachment made the pump outlive each `runWatchLoop`, but teardown
-  still keyed off `watchCtx`, and cancelling a context does not stop a
-  producer — it only asks. The stream reader keeps running
-  `handleWatchResponse`, which reconciles presence through
-  `Document.publish`: an unconditional send on a capacity-one channel made
-  under the document's event mutex, with no cancellation path. So a teardown
-  that cancelled and joined the pump could retire the only consumer while a
-  reader was mid-publish, wedging that reader and, through the event mutex,
-  every other publisher. The fix is an ordering, not a lock: stop the
-  producers first, the pump last. The pump now stops on its own
-  `watchPumpStop`, and `stopWatchPipeline` cancels, waits on a
-  `watchReaders` WaitGroup, and only then retires the pump.
-- Waiting for a goroutine means inheriting every lock that goroutine takes.
-  The stream reader took `attachment.syncMu` just to set
-  `changeEventReceived`, so the moment teardown waits for readers, any caller
-  holding `syncMu` — `Detach`, and `pushPullChanges` under `syncInternal` —
-  deadlocks against it. Making the flag an `atomic.Bool` severs the edge. The
-  reset then had to move *before* the push and be restored on failure:
-  without `syncMu` serialising them, clearing after the push swallows an event
-  that landed while it was in flight.
-- The lesson underneath both: "cancel and join" reads like a complete
-  shutdown, but it is only complete when the thing you join is the *last*
-  producer. Enumerate the producers before choosing what to wait on.
+- **#2084.** A lifetime mismatch is rarely fixed by synchronising the
+  handoff: the object with the longer life (the attachment) has to own the
+  resource (the event pump).
+- "Cancel and join" is a complete shutdown only if the thing joined is the
+  last producer. Stop the producers first, the consumer last; and waiting on
+  a goroutine inherits every lock it takes.
+- A reconnect test must hold the window open on the server; publishing after
+  a full round trip tests nothing.
+- Never roll back local state for something the server already committed. A
+  failed initial Watch that dropped the attachment left the server attached
+  and the caller unable to Detach or re-Attach.
