@@ -150,7 +150,19 @@ type Document struct {
 	// dereference and panic. With the flag, cloneRoot is nil only before the
 	// first build and is replaced by another live pointer afterwards, so the
 	// worst an unlocked reader can see is a clone one rebuild out of date.
-	cloneStale bool
+	//
+	// It is atomic because one writer runs outside d.mu: the OnMutate hook
+	// root registers on the view it hands out fires on whichever goroutine
+	// writes through that view, which holds no lock (see Document.root). A
+	// plain bool there would race the locked writers in ensureClone and
+	// Update, and -- having no happens-before edge to them -- could leave the
+	// store invisible to every later locked reader, so the dirtied clone
+	// would keep being served rather than merely be rebuilt one access late.
+	// The only store of false is the one ensureClone makes right after
+	// rebuilding from the root, so a concurrent store of true it overwrites
+	// loses nothing: the clone that replaced the dirtied one is clean by
+	// construction.
+	cloneStale atomic.Bool
 
 	// history stores the undo/redo stacks of this document.
 	history *History
@@ -1136,11 +1148,14 @@ func (d *Document) Root() *json.Object {
 // A view that is only read -- which is what Root is for, and what every
 // caller but the one above does -- never fires it and costs nothing.
 //
-// The callback runs on the caller's goroutine, outside d.mu, which is the
-// hazard this path already carries: the d.updating escape lets ensureClone
-// above write d.cloneRoot unlocked too. It only ever stores true into a flag
-// that is cleared under the lock, so the worst a lost store can cost is one
-// rebuild deferred to the next invalidation.
+// The callback runs on the caller's goroutine, outside d.mu, so it stores
+// into d.cloneStale -- an atomic.Bool for exactly this writer -- rather than
+// a plain field the locked writers in Update and ensureClone would race.
+// It only ever stores true, and the sole store of false is the one
+// ensureClone makes immediately after rebuilding the clone from the root, so
+// a true this callback stores can be overwritten only by a clone that is
+// clean by construction: the dirtied one is already discarded. See
+// Document.cloneStale.
 func (d *Document) root() *json.Object {
 	if err := d.ensureClone(); err != nil {
 		panic(err)
@@ -1188,7 +1203,7 @@ func (d *Document) garbageCollect(vector time.VersionVector) int {
 	// next access -- and unsafe, since it may not satisfy GarbageCollect's
 	// invariants. A nil cloneRoot, not yet built, is skipped by the same
 	// check.
-	if d.cloneRoot != nil && !d.cloneStale {
+	if d.cloneRoot != nil && !d.cloneStale.Load() {
 		if _, err := d.cloneRoot.GarbageCollect(vector); err != nil {
 			panic(err)
 		}
@@ -1208,28 +1223,30 @@ func (d *Document) GarbageLen() int {
 }
 
 // invalidateClone marks the clone as diverged from the root so the next
-// ensureClone rebuilds it. It must be called with d.mu held for writing,
-// with the one exception root registers as its view's OnMutate -- see there
-// for why an unlocked store of true is tolerable where an unlocked clear
-// would not be.
+// ensureClone rebuilds it. Callers inside the document hold d.mu for
+// writing; the one that does not is the OnMutate hook root registers on the
+// view it hands out, which fires on the writing caller's goroutine. The flag
+// is atomic so that store neither races the locked writers nor goes
+// unpublished to them -- see Document.cloneStale for why it is sound for an
+// unlocked caller to set it but not to clear it.
 //
 // It deliberately leaves d.cloneRoot pointing at the stale copy instead of
 // storing nil: Root and GarbageCollect run unlocked while this goroutine is
 // inside an updater, and a nil stored here could be observed by one of them
 // between its ensureClone and its dereference. See Document.cloneStale.
 func (d *Document) invalidateClone() {
-	d.cloneStale = true
+	d.cloneStale.Store(true)
 }
 
 func (d *Document) ensureClone() error {
-	if d.cloneRoot == nil || d.cloneStale {
+	if d.cloneRoot == nil || d.cloneStale.Load() {
 		copiedDoc, err := d.doc.root.DeepCopy()
 		if err != nil {
 			return err
 		}
 		d.cloneRoot = copiedDoc
 		d.clonePresences = d.doc.presences.DeepCopy()
-		d.cloneStale = false
+		d.cloneStale.Store(false)
 
 		return nil
 	}

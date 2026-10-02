@@ -66,3 +66,36 @@ Not run: this branch was produced by the autonomous issue-to-PR agent, which
 is granted no tool that can dispatch the reviewer subagent. The round is
 skipped, not clean — CI, `@claude review` and a human reviewer are the
 review for this change.
+
+## Review round 3 (panel, correctness + blast radius)
+
+Blocking finding (correctness): `invalidateClone` is reachable from the
+`OnMutate` callback with no lock — the view's writer runs on its own
+goroutine — while `ensureClone` and `Update` write the same `cloneStale`
+under `d.mu`. A plain `bool` there is a write/write race, and the harm is
+not the "one rebuild deferred" the comment claimed: with no happens-before
+edge to the locked readers, the store can stay invisible to all of them, so
+the dirtied clone keeps being served. `cloneStale` is now an `atomic.Bool`.
+
+Worth recording why an overwritten store is still harmless once the race is
+gone: the only store of `false` is the one `ensureClone` makes right after
+`DeepCopy`ing the root, so whatever clone replaces the dirtied one is clean
+by construction. That is what makes "an unlocked caller may set, only a
+locked one may clear" a sound rule rather than a hopeful one.
+
+No test was added. A concurrency test would have to mutate the clone through
+a `Root` view while an updater mutates the same clone, which is a genuine
+race in the CRDT structures themselves and would trip `-race` whatever this
+flag's type is. The fix is a type change the compiler enforces;
+`go test -race ./pkg/document/...` stays green.
+
+Non-blocking, left open (blast radius): the `OnMutate` hook covers the json
+proxy methods, but every proxy embeds its CRDT node as an exported field
+(`json.Text`'s `*crdt.Text`, and the same in `tree.go`, `object.go`,
+`array.go`, `counter.go`), so a caller that reaches through the embedded
+value mutates the clone without issuing a ticket. That escape predates this
+branch — `Document.root` handed out the identical proxies over the identical
+clone before the hook existed, and `Update` hands them out still — and
+closing it means unexporting those fields, a breaking change to the public
+`json` API far wider than this branch. Recorded as a known limitation; a
+rebuttal was filed rather than a fix.
