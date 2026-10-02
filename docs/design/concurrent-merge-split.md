@@ -488,22 +488,34 @@ ticket while a text split keeps `createdAt`: at a multi-level split the
 outer right-half product holds one unknown `<span>` and the known text
 sits below it.
 
-A child a concurrent merge moved in does not count. §6.1/§6.3 relocate
-the right node's children into the left one keeping their original
-`createdAt`, so a merge can give an otherwise-empty same-boundary
-product children the editor knew long after the split that produced it,
-and the marker would stop the walk at a node that never held the right
-half. `holdsKnownChild` therefore skips a child whose `MergedAt` the
-editor's version vector does not cover — a merge it knew is part of the
-state it edited against, a concurrent one is simply absent on the
-replica that applies this split first.
+Known limitation: a child a concurrent merge moved in is counted like
+any other. §6.1/§6.3 relocate the right node's children into the left
+one keeping their original `createdAt`, so a merge can give an
+otherwise-empty same-boundary product children the editor knew long
+after the split that produced it, and the marker then stops the walk at
+a node that never held the right half. Skipping such a child needs a
+ticket saying when it arrived there, and `MergedAt` is not one:
+`mergeNodes` stamps it on a node's *first* merge-move only, so it is
+stale after a second; `TreeNode.Split`, `SplitElement` and `DeepCopy`
+copy it onto products no merge relocated; and it reaches this reader
+client-supplied, since `fromTreeNode` decodes `merged_from`/`merged_at`
+for every node and the element-payload path preserves both. This is
+also a replicated ordering rule, so it moves in Go and
+yorkie-js-sdk together, against a reproducer — a merge racing two
+same-boundary splits across three replicas — that neither repo has yet.
 
 Counting tombstones keeps the answer independent of whether a replica
 has applied a concurrent removal yet, but it also makes the answer
 depend on a node GC could unlink; `Tree.PurgeBarrierAt` therefore
 reports, alongside the sibling-walk barrier, the `createdAt` of every
 chain ancestor of the tombstone — every ancestor carrying an
-`InsPrevID` or an `InsNextID`. The §7.5 advance reads a raw
+`InsPrevID` or an `InsNextID` — and, when the tombstone itself sits in
+a chain, its own `createdAt` together with its `InsNext`'s. That last
+pair is for a different hazard: §7.8 breaks at a chain node that is
+removed, so purging one lets the walk run on to its `InsNext` on the
+collecting replica while it still stops there on the other; the two
+agree again once the walk breaks at the successor as well. The §7.5
+advance reads a raw
 `Children(true)` count on the same chain nodes, so it is covered by the
 same barrier. Either walk answers the same way for a chain node it
 already knows, whatever that node holds, so once that node is causally
@@ -519,14 +531,21 @@ classifies. `InsPrevID` is instead precisely the set of nodes a chain
 walk can reach, since both walks only ever count the children of a node
 they arrived at as some other node's `InsNext`.
 
-The `InsNextID` half carries §7.4 empty-sibling re-parenting, which
-gates its `MoveChildBefore` on the fresh product being empty — a count
-over children with tombstones included — and which only runs for a node
-that was already split. It does not carry §7.4 all the way: a node in no
-chain at purge time can still be split twice afterwards, and the second
-split then counts children one replica may have purged in between. §7.4
-is deliberately version-vector-independent, so no ticket retires it;
-this is a pre-existing exposure, recorded here rather than papered over.
+The `InsNextID` half is where `emptyRunReachesActor` starts. That walk's
+first node is found among document siblings rather than along the chain,
+so it need not carry an `InsPrevID`; its `Children(true)` count decides
+the answer, but only when it has an `InsNextID` to walk on to, since the
+nil case returns false whatever it holds. The node's own `createdAt`
+retires this leg as it does the other: the walk returns false for a node
+the editor already knows, before the count is reached.
+
+Neither leg stands for §7.4 empty-sibling re-parenting, which gates its
+`MoveChildBefore` on a `Children(true)` count as well. §7.4 is
+deliberately version-vector-independent, so no ticket retires it: a node
+in no chain at purge time can still be split twice afterwards, and the
+second split then counts children one replica may have purged in
+between. This is a pre-existing exposure, recorded here rather than
+papered over.
 
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s

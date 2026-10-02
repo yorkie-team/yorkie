@@ -30,7 +30,32 @@
   delays a purge, it never changes where a split lands.
 - **`createdAt` does not say where a node has always lived.** A merge moves
   children keeping their original ticket, so "holds a child the editor knew"
-  can become true for an empty same-boundary product after the fact.
-  `holdsKnownChild` now skips a child whose `MergedAt` the version vector
-  does not cover. No dedicated reproducer yet — the scenario needs a merge
-  racing two same-boundary splits across three replicas.
+  can become true for an empty same-boundary product after the fact. A
+  `MergedAt` skip in `holdsKnownChild` was tried and taken back out: the
+  field is stamped on a node's *first* merge-move only, `Split`/
+  `SplitElement`/`DeepCopy` copy it onto products no merge relocated, and it
+  arrives client-supplied with no `findMergeNode` resolution at that call
+  site. It is also a replicated ordering rule with no reproducer, which is
+  the rule from the round above. Recorded as a known limitation in
+  `holdsKnownChild` and in `docs/design/concurrent-merge-split.md` instead.
+
+## Review round: what the barrier actually stands for
+
+- **A barrier leg needs a ticket that retires it.** The `InsNextID` leg was
+  first justified by §7.4 empty-sibling re-parenting — but §7.4 is
+  deliberately VV-independent, so no ticket retires it and the leg would
+  have been claiming cover it could not give. The leg stands instead for
+  `emptyRunReachesActor`'s *start* node, which is found among document
+  siblings and so may carry no `InsPrevID`, and whose count the node's own
+  `createdAt` does retire. §7.4 is written down as an uncovered pre-existing
+  exposure rather than attributed to a leg.
+- **Purge relinks the chain, so the tombstone's own membership matters too.**
+  Barriering the ancestors left the case where the tombstone *is* the chain
+  node: §7.8 breaks at a removed chain node, and purging it lets the walk
+  run on to its `InsNext`. `splitChainBarriersAt` now reports the node's own
+  `createdAt` and its `InsNext`'s — the pair that has to be covered before
+  both replicas break at the same place.
+- **Gate predicates deserve a unit test, not only an end-to-end one.** The
+  end-to-end shape a local split produces only ever exercises the
+  `InsPrevID` leg. `crdt.TestTreePurgeBarrierSplitChain` links each chain
+  by hand and asserts the reported tickets, so every leg has a test.

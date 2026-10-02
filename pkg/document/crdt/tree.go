@@ -1101,8 +1101,9 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 	return barriers
 }
 
-// splitChainBarriersAt reports what an ancestor's split chain needs covered
-// before this tombstone may be unlinked.
+// splitChainBarriersAt reports what a split chain needs covered before this
+// tombstone may be unlinked -- the chain the tombstone itself sits in, and the
+// chains of its ancestors.
 //
 // Both same-boundary walks classify a chain node by the children it still
 // holds, tombstones included -- the §7.8 retarget through holdsKnownChild, the
@@ -1133,26 +1134,46 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 //     links that way: on the fresh product, and on the old InsNext it displaces,
 //     which already had one.
 //
-//   - InsNextID != nil carries §7.4 empty-sibling re-parenting, which gates
-//     MoveChildBefore on the fresh product being empty -- a count over
-//     Children(true), so a tombstone the split moved into the product decides
-//     it. That branch sits under `if n.InsNextID != nil`, so it runs only for a
-//     node that was already split when the next split arrived.
+//   - InsNextID != nil is where emptyRunReachesActor starts. Its first node is
+//     reached by walking document siblings rather than the chain, so it may
+//     carry no InsPrevID; its Children(true) count decides the answer, but only
+//     when it has an InsNextID to walk on to (the nil case returns false
+//     whatever it holds). The same createdAt retires it: the walk returns false
+//     for a node the editor knows, before the count can matter.
 //
 // Neither leg is monotone in the raw sense -- Purge relinks the chain across
 // the node it unlinks (tree.go:1178-1194) -- but each is cleared only together
 // with the reachability it stands for. A node loses InsPrevID only when its
 // InsPrev was the chain head, which leaves nothing pointing at it by InsNextID
 // and so nothing that can classify it; a node loses InsNextID only when the
-// last product after it is gone, which is also when §7.4 stops firing for it.
+// last product after it is gone, which is also when the empty-run walk starting
+// at it stops short.
 //
-// Residual, and pre-existing: a node with neither id set can still be split
-// twice later, and the second split then runs §7.4 over children one replica
-// may have purged in the meantime. No ticket retires that -- §7.4 is
-// deliberately VV-independent, so nothing about causal stability stops it from
-// reading a count. See docs/design/concurrent-merge-split.md.
+// The tombstone's own membership is reported the same way, and for a different
+// hazard: Purge relinks the chain across the node it unlinks, so a walk that
+// stops at this node on one replica runs on to its InsNext on the one that
+// collected -- §7.8 through its `next.IsRemoved()` break, the empty-run walk
+// through the node simply no longer being in the chain. Both tickets go in --
+// the node's own createdAt, and its InsNext's -- because the two replicas
+// answer alike again only once the walk also stops at the successor.
+//
+// Residual, and pre-existing: §7.4 empty-sibling re-parenting also gates its
+// MoveChildBefore on a Children(true) count, and no ticket retires that one.
+// §7.4 is deliberately VV-independent, so causal stability never stops it from
+// reading the count; a node in no chain at purge time can be split twice
+// afterwards and read children one replica purged in between. Neither leg here
+// stands for §7.4. See docs/design/concurrent-merge-split.md.
 func (t *Tree) splitChainBarriersAt(node *TreeNode) []*time.Ticket {
 	var barriers []*time.Ticket
+	if node.InsPrevID != nil || node.InsNextID != nil {
+		barriers = append(barriers, node.id.CreatedAt)
+		if node.InsNextID != nil {
+			if next := t.findFloorNode(node.InsNextID); next != nil {
+				barriers = append(barriers, next.id.CreatedAt)
+			}
+		}
+	}
+
 	for current := node.Index.Parent; current != nil; current = current.Parent {
 		if current.Value.InsPrevID != nil || current.Value.InsNextID != nil {
 			barriers = append(barriers, current.Value.id.CreatedAt)
@@ -3285,22 +3306,21 @@ func (t *Tree) orderSameBoundarySplit(
 // anywhere below it is an empty same-boundary product, or one a peer has
 // typed into since.
 //
-// A child a concurrent merge moved in does not count. §6.1/§6.3 relocate the
-// right node's children into the left one keeping their original createdAt, so
-// a merge can hand an otherwise-empty same-boundary product children the editor
-// knew, long after the split that produced it -- and the marker would then stop
-// the walk at a node that never held the right half. The merge ticket is the
-// one that says whether the editor saw the child here: a merge it knew is part
-// of the state it edited against, while a concurrent one is simply absent on
-// the replica that applies this split first, so skipping it is what keeps the
-// two replicas answering alike.
+// Known limitation: a child a concurrent merge moved in is counted like any
+// other. §6.1/§6.3 relocate the right node's children into the left one keeping
+// their original createdAt, so a merge can hand an otherwise-empty
+// same-boundary product children the editor knew, long after the split that
+// produced it, and the marker then stops the walk at a node that never held the
+// right half. Skipping such a child needs a ticket saying when it arrived here,
+// and MergedAt is not one: mergeNodes stamps it only on a node's FIRST
+// merge-move (tree.go:2752), it rides along onto split products through
+// TreeNode.Split/SplitElement/DeepCopy, and it is client-supplied on the wire
+// (api/converter/from_pb.go fromTreeNode) with no findMergeNode validation at
+// this call site. This is also a replicated ordering rule, so it may only move
+// together with yorkie-js-sdk, against a reproducer neither repo has yet. See
+// docs/design/concurrent-merge-split.md.
 func (t *Tree) holdsKnownChild(node *TreeNode, versionVector time.VersionVector) bool {
 	for _, child := range node.Children(true) {
-		if child.MergedFrom != nil && child.MergedAt != nil &&
-			!time.TicketKnown(versionVector, child.MergedAt) {
-			continue
-		}
-
 		if time.TicketKnown(versionVector, child.id.CreatedAt) {
 			return true
 		}
