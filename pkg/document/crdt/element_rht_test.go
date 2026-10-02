@@ -273,6 +273,29 @@ func TestElementRHTSetLoser(t *testing.T) {
 		assert.Empty(t, rht.Elements())
 	})
 
+	t.Run("re-applying the same set keeps the index on the live copy", func(t *testing.T) {
+		// The same Set applied twice: the second copy carries the createdAt
+		// of the first and ties its positionedAt, so it loses. The index must
+		// keep naming the copy the key answers with, not the duplicate.
+		rht := crdt.NewElementRHT()
+		executedAt := time.NewTicket(4, 0, actorA)
+
+		first, err := crdt.NewPrimitive("v", executedAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", first, executedAt)
+
+		duplicate, err := crdt.NewPrimitive("v", executedAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", duplicate, executedAt)
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "a duplicate of a live member was taken in")
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Equal(t, first, rht.Nodes()[0].Element())
+		assert.Equal(t, first, rht.Get("k"))
+		assert.Nil(t, first.RemovedAt())
+	})
+
 	t.Run("keeps the removedAt of a loser that arrives removed", func(t *testing.T) {
 		// Replays a decoded object whose members are not in positionedAt
 		// order: the tombstone of an older value arrives after the live

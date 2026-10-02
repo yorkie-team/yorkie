@@ -100,7 +100,19 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// this is behavior-preserving there; for undo/redo restoring an older
 	// value under its original createdAt, it is required for the restore to
 	// win the LWW comparison at all.
-	removed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
+	removed, indexed := obj.SetWithExecutedAt(o.key, value, o.executedAt)
+
+	// A value the object refused is in neither of its member maps, so nothing
+	// below may run for it. RegisterElement would point elementMap at it,
+	// taking the slot of the live copy that already answers to that createdAt,
+	// and UnregisterRemovedElementPair would retire the collection entry of a
+	// tombstone that is still indexed. The object is unchanged, so the
+	// operation is a no-op: no reverse and not observable. Every replica and
+	// the server's snapshot replay reach the same decision from the same
+	// state.
+	if !indexed {
+		return ExecutionResult{}, nil
+	}
 
 	// NOTE(hackerwins): A Set can restore an element under a createdAt that a
 	// tombstone already answers to (set_operation.ts:98-104) -- undoing a
@@ -128,9 +140,16 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// OpSourceUndoRedo spared only the replica that performed the undo and
 	// lost the member everywhere else.
 	//
+	// The entry has to belong to this object for that to hold. Only the
+	// tombstone this Set just displaced from obj's nodeMapByCreatedAt has been
+	// re-pointed at live data; an entry another container registered under
+	// the same createdAt still resolves to its own tombstone, so
+	// Root.UnregisterRemovedElementPair takes obj and leaves such an entry
+	// alone.
+	//
 	// An ordinary Set carries a freshly issued createdAt, so the lookup
 	// normally misses and costs one map read.
-	root.UnregisterRemovedElementPair(value.CreatedAt())
+	root.UnregisterRemovedElementPair(obj, value.CreatedAt())
 	root.RegisterElement(value, obj)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)

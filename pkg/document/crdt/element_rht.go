@@ -100,8 +100,9 @@ func (rht *ElementRHT) Has(key string) bool {
 	return false
 }
 
-// Set sets the value of the given key. If there is an existing value, it is removed.
-func (rht *ElementRHT) Set(k string, v Element) Element {
+// Set sets the value of the given key. If there is an existing value, it is
+// removed. It reports the same pair as SetWithExecutedAt.
+func (rht *ElementRHT) Set(k string, v Element) (Element, bool) {
 	return rht.SetWithExecutedAt(k, v, v.CreatedAt())
 }
 
@@ -130,31 +131,56 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // not disagree. A separate reach of the same precondition -- a remote redo
 // deleting a restored key on a peer via GC -- is filed in
 // docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
-func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
+//
+// It returns the element evicted from the key, if any, and whether v was
+// taken into this hashtable at all. The second value is false only when v
+// loses the key and a live node already answers to v's createdAt; the
+// hashtable is then left exactly as it was, and a caller that books v into
+// Root must treat it as "nothing happened". See operations.Set.Execute.
+func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
-	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 
-	var removed Element
 	if !ok || executedAt.After(PositionedAt(node.elem)) {
+		var removed Element
 		if ok && !node.isRemoved() && node.Remove(executedAt) {
 			removed = node.elem
 		}
+		rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
-	} else if v.RemovedAt() == nil {
-		// The new node loses the LWW conflict. Mark it removed by its own
-		// state, not the occupant's: a live loser whose occupant is already
-		// a tombstone would otherwise stay live in nodeMapByCreatedAt --
-		// emitted by Nodes(), never booked as garbage, still charged to Live
-		// -- on the replica that saw the tombstone first and on no other. A
-		// loser that arrives removed is left alone, because Remove accepts a
-		// later ticket and would move its removedAt off the removal that
-		// actually happened.
-		v.Remove(PositionedAt(node.elem))
+		return removed, true
 	}
 
-	return removed
+	// The new node loses the LWW conflict. It is indexed by createdAt only so
+	// that GC can still reach it, which means it must not take that slot from
+	// a live node already holding it. Two replicas undoing concurrent
+	// overwrites of the same key both restore a copy of the original value
+	// under its createdAt; where one restore holds the key and the other
+	// loses, re-pointing the slot at the losing copy strands the live one:
+	// collecting the loser then unlinks the slot, and the document can no
+	// longer be rebuilt from its own content.
+	//
+	// A tombstone in the slot is not protected. A losing restore has to take
+	// it over, tombstoned at the winner's ticket, because that is the state a
+	// replica reaches when the restore wins first and the newer Set evicts it.
+	if existing, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]; ok && existing.elem != v && !existing.isRemoved() {
+		return nil, false
+	}
+
+	// Mark the loser removed by its own state, not the occupant's: a live
+	// loser whose occupant is already a tombstone would otherwise stay live in
+	// nodeMapByCreatedAt -- emitted by Nodes(), never booked as garbage, still
+	// charged to Live -- on the replica that saw the tombstone first and on no
+	// other. A loser that arrives removed is left alone, because Remove accepts
+	// a later ticket and would move its removedAt off the removal that
+	// actually happened.
+	if v.RemovedAt() == nil {
+		v.Remove(PositionedAt(node.elem))
+	}
+	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
+
+	return nil, true
 }
 
 // PositionedAt returns elem's last-moved ticket, or its creation ticket if
