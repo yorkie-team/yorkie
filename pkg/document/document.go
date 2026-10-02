@@ -705,13 +705,7 @@ func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err er
 	}
 
 	// 02. Remove local changes applied to server.
-	for d.doc.HasLocalChanges() {
-		c := d.doc.localChanges[0]
-		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
-			break
-		}
-		d.doc.localChanges = d.doc.localChanges[1:]
-	}
+	d.doc.removePushedLocalChanges(pack.Checkpoint.ClientSeq)
 
 	if len(pack.Snapshot) > 0 {
 		applied, err := d.applyChanges(d.doc.localChanges)
@@ -775,16 +769,8 @@ func (d *Document) AcknowledgePushedChanges(pack *change.Pack) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	clientSeq := pack.Checkpoint.ClientSeq
-	for d.doc.HasLocalChanges() {
-		if d.doc.localChanges[0].ClientSeq() > clientSeq {
-			break
-		}
-		d.doc.localChanges = d.doc.localChanges[1:]
-	}
-	d.doc.checkpoint = d.doc.checkpoint.Forward(
-		change.NewCheckpoint(d.doc.checkpoint.ServerSeq, clientSeq),
-	)
+	d.doc.removePushedLocalChanges(pack.Checkpoint.ClientSeq)
+	d.doc.checkpoint = d.doc.checkpoint.SyncClientSeq(pack.Checkpoint.ClientSeq)
 
 	if pack.IsRemoved {
 		d.doc.SetStatus(StatusRemoved)

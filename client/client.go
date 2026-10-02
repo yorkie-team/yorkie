@@ -393,7 +393,11 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 			return err
 		}
 
-		attachment.changeEventReceived = false
+		// A push-only sync pulled nothing, so a remote change it was told
+		// about is still waiting for the next pull.
+		if options.mode != types.SyncModePushOnly {
+			attachment.changeEventReceived = false
+		}
 		return nil
 	}
 

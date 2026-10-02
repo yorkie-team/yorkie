@@ -99,8 +99,11 @@ func TestPushOnlyGarbageCollection(t *testing.T) {
 			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "z"}, 0)
 			return nil
 		}))
+		garbage := d2.GarbageLen()
+		require.Positive(t, garbage)
 		require.NoError(t, c2.Sync(ctx, pushOnly))
 		assert.False(t, d2.HasLocalChanges())
+		assert.Equal(t, garbage, d2.GarbageLen(), "the push-only reply must not collect")
 
 		// The composition ends: c2 pulls the deferred insert.
 		require.NoError(t, c2.Sync(ctx))
