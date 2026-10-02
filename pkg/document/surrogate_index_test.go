@@ -213,3 +213,172 @@ func TestRejectMidSurrogatePairIndexes(t *testing.T) {
 		}
 	})
 }
+
+// surrogateText is one non-BMP character followed by a BMP one: 2 runes, 3
+// UTF-16 code units. Text offset 1 (Tree index 2) is the only position that
+// cuts the emoji in half.
+const surrogateText = "\U0001F600x"
+
+// newSurrogateDoc returns a document holding the Tree <r><p>😀x</p></r> under
+// "tree" and the Text "😀x" under "text".
+func newSurrogateDoc(t *testing.T) *document.Document {
+	t.Helper()
+
+	doc := document.New(helper.TestKey(t))
+	populateSurrogateDoc(t, doc)
+
+	return doc
+}
+
+// populateSurrogateDoc writes the content newSurrogateDoc describes.
+func populateSurrogateDoc(t *testing.T, doc *document.Document) {
+	t.Helper()
+
+	updateSurrogateDoc(t, doc, func(root *json.Object) {
+		root.SetNewTree("tree", json.TreeNode{Type: "r", Children: []json.TreeNode{{
+			Type:     "p",
+			Children: []json.TreeNode{{Type: "text", Value: surrogateText}},
+		}}})
+		root.SetNewText("text").Edit(0, 0, surrogateText)
+	})
+}
+
+// updateSurrogateDoc applies fn to the document in its own change.
+func updateSurrogateDoc(t *testing.T, doc *document.Document, fn func(root *json.Object)) {
+	t.Helper()
+
+	require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		fn(root)
+		return nil
+	}))
+}
+
+// assertRejectsMidSurrogate asserts that fn is refused with
+// ErrInvalidUTF16Index and leaves the document unchanged.
+func assertRejectsMidSurrogate(t *testing.T, doc *document.Document, fn func(root *json.Object)) {
+	t.Helper()
+
+	before := doc.Marshal()
+	assert.PanicsWithError(t, crdt.ErrInvalidUTF16Index.Error(), func() {
+		_ = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			fn(root)
+			return nil
+		})
+	})
+	assert.Equal(t, before, doc.Marshal(), "the refused edit left no trace")
+}
+
+// TestRejectMidSurrogatePairIndexesAtEveryEntryPoint covers the Tree entry
+// points that resolve indexes or paths through Tree.FindPos, and the Text
+// ones that resolve offsets through Text.CreateRange, beyond Edit and Style.
+func TestRejectMidSurrogatePairIndexesAtEveryEntryPoint(t *testing.T) {
+	y := &json.TreeNode{Type: "text", Value: "y"}
+
+	tests := []struct {
+		name string
+		fn   func(root *json.Object)
+	}{
+		{"Tree.EditBulk", func(root *json.Object) {
+			root.GetTree("tree").EditBulk(2, 2, []*json.TreeNode{y}, 0)
+		}},
+		{"Tree.EditByPath", func(root *json.Object) {
+			// The last component of a path into a text node is a UTF-16
+			// offset, so [0, 1] is offset 1 of the text under the first <p>.
+			root.GetTree("tree").EditByPath([]int{0, 1}, []int{0, 1}, y, 0)
+		}},
+		{"Tree.EditBulkByPath", func(root *json.Object) {
+			root.GetTree("tree").EditBulkByPath([]int{0, 1}, []int{0, 1}, []*json.TreeNode{y}, 0)
+		}},
+		{"Tree.RemoveStyle", func(root *json.Object) {
+			root.GetTree("tree").RemoveStyle(1, 2, []string{"bold"})
+		}},
+		{"Tree.StyleByPath", func(root *json.Object) {
+			root.GetTree("tree").StyleByPath([]int{0, 0}, []int{0, 1}, map[string]string{"bold": "true"})
+		}},
+		{"Tree.RemoveStyleByPath", func(root *json.Object) {
+			root.GetTree("tree").RemoveStyleByPath([]int{0, 0}, []int{0, 1}, []string{"bold"})
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assertRejectsMidSurrogate(t, newSurrogateDoc(t), tc.fn)
+		})
+	}
+
+	t.Run("valid Tree boundaries remain editable", func(t *testing.T) {
+		for idx, expected := range map[int]string{
+			1: "<r><p>y\U0001F600x</p></r>",
+			3: "<r><p>\U0001F600yx</p></r>",
+			4: "<r><p>\U0001F600xy</p></r>",
+		} {
+			doc := newSurrogateDoc(t)
+			updateSurrogateDoc(t, doc, func(root *json.Object) {
+				root.GetTree("tree").Edit(idx, idx, y, 0)
+			})
+			assert.Equal(t, expected, doc.Root().GetTree("tree").ToXML(), "index %d", idx)
+		}
+	})
+
+	t.Run("Tree.Edit after a split", func(t *testing.T) {
+		// An earlier edit splits <p>'s text node, so the emoji's node is no
+		// longer alone and every offset has to be resolved relative to the
+		// node that holds it.
+		splitDoc := func(t *testing.T) *document.Document {
+			doc := newSurrogateDoc(t)
+			updateSurrogateDoc(t, doc, func(root *json.Object) {
+				root.GetTree("tree").Edit(3, 3, &json.TreeNode{Type: "text", Value: "yz"}, 0)
+			})
+			return doc
+		}
+
+		w := &json.TreeNode{Type: "text", Value: "w"}
+		assertRejectsMidSurrogate(t, splitDoc(t), func(root *json.Object) {
+			root.GetTree("tree").Edit(2, 2, w, 0)
+		})
+
+		// The seam the split created (3) and the offsets inside the inserted
+		// node (4, 5) are whole-character boundaries.
+		for idx, expected := range map[int]string{
+			3: "<r><p>\U0001F600wyzx</p></r>",
+			4: "<r><p>\U0001F600ywzx</p></r>",
+			5: "<r><p>\U0001F600yzwx</p></r>",
+		} {
+			doc := splitDoc(t)
+			updateSurrogateDoc(t, doc, func(root *json.Object) {
+				root.GetTree("tree").Edit(idx, idx, w, 0)
+			})
+			assert.Equal(t, expected, doc.Root().GetTree("tree").ToXML(), "index %d", idx)
+		}
+	})
+
+	t.Run("Text.Edit in a later node", func(t *testing.T) {
+		// Appending a second emoji leaves "😀x😀y" across two nodes, so the
+		// rejected offset lives in a node that is not the first one.
+		twoNodeDoc := func(t *testing.T) *document.Document {
+			doc := newSurrogateDoc(t)
+			updateSurrogateDoc(t, doc, func(root *json.Object) {
+				root.GetText("text").Edit(3, 3, "\U0001F600y")
+			})
+			return doc
+		}
+
+		assertRejectsMidSurrogate(t, twoNodeDoc(t), func(root *json.Object) {
+			root.GetText("text").Edit(4, 4, "w")
+		})
+
+		// The node seam (3) and the offsets after the second emoji (5, 6)
+		// stay editable.
+		for idx, expected := range map[int]string{
+			3: "\U0001F600xw\U0001F600y",
+			5: "\U0001F600x\U0001F600wy",
+			6: "\U0001F600x\U0001F600yw",
+		} {
+			doc := twoNodeDoc(t)
+			updateSurrogateDoc(t, doc, func(root *json.Object) {
+				root.GetText("text").Edit(idx, idx, "w")
+			})
+			assert.Equal(t, expected, doc.Root().GetText("text").String(), "index %d", idx)
+		}
+	})
+}
