@@ -17,15 +17,19 @@
 package document_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -381,4 +385,146 @@ func TestRejectMidSurrogatePairIndexesAtEveryEntryPoint(t *testing.T) {
 			assert.Equal(t, expected, doc.Root().GetText("text").String(), "index %d", idx)
 		}
 	})
+}
+
+// TestRemoteMidSurrogateOperationStillApplies pins the invariant that makes
+// it safe to reject mid-pair indexes in Tree.FindPos and Text.CreateRange:
+// remote operations never go through them. An operation minted by an older
+// client already carries CRDT positions, so a mid-pair offset in it must
+// still apply on a replica that has the check, and must not break that
+// replica's own undo/redo afterwards.
+func TestRemoteMidSurrogateOperationStillApplies(t *testing.T) {
+	newReplica := func(t *testing.T, hexActor string) *document.Document {
+		doc := document.New(helper.TestKey(t))
+		actor, err := time.ActorIDFromHex(hexActor)
+		require.NoError(t, err)
+		doc.SetActor(actor)
+		return doc
+	}
+
+	// sync applies the given changes of sender to receiver.
+	sync := func(t *testing.T, sender, receiver *document.Document, changes ...*change.Change) {
+		pack := sender.CreateChangePack()
+		if len(changes) > 0 {
+			pack.Changes = changes
+		}
+		pack.VersionVector.Set(
+			receiver.ActorID(),
+			receiver.VersionVector().VersionOf(receiver.ActorID()),
+		)
+		require.NoError(t, receiver.ApplyChangePack(pack))
+	}
+
+	sender := newReplica(t, "000000000000000000000001")
+	populateSurrogateDoc(t, sender)
+	receiver := newReplica(t, "000000000000000000000002")
+	sync(t, sender, receiver)
+
+	// The receiver makes a local edit it will later undo and redo.
+	updateSurrogateDoc(t, receiver, func(root *json.Object) {
+		root.GetTree("tree").Edit(4, 4, &json.TreeNode{Type: "text", Value: "z"}, 0)
+		root.GetText("text").Edit(3, 3, "z")
+	})
+
+	// The sender inserts right after the emoji, which is a valid index, and
+	// the operations are then moved one code unit to the left, into the
+	// middle of the pair. That is what an older client, which did not reject
+	// the index, would have sent.
+	updateSurrogateDoc(t, sender, func(root *json.Object) {
+		root.GetTree("tree").Edit(3, 3, &json.TreeNode{Type: "text", Value: "y"}, 0)
+		root.GetText("text").Edit(2, 2, "y")
+	})
+	pack := sender.CreateChangePack()
+	valid := pack.Changes[len(pack.Changes)-1]
+
+	var ops []operations.Operation
+	for _, op := range valid.Operations() {
+		switch op := op.(type) {
+		case *operations.TreeEdit:
+			from := op.FromPos()
+			pos := crdt.NewTreePos(from.ParentID, crdt.NewTreeNodeID(
+				from.LeftSiblingID.CreatedAt,
+				from.LeftSiblingID.Offset-1,
+			))
+			ops = append(ops, operations.NewTreeEdit(
+				op.ParentCreatedAt(), pos, pos, op.Contents(), op.SplitLevel(), op.ExecutedAt(),
+			))
+		case *operations.Edit:
+			from := op.From()
+			pos := crdt.NewRGATreeSplitNodePos(from.ID(), from.RelativeOffset()-1)
+			ops = append(ops, operations.NewEdit(
+				op.ParentCreatedAt(), pos, pos, op.Content(), op.Attributes(), op.ExecutedAt(),
+			))
+		default:
+			t.Fatalf("unexpected operation %T", op)
+		}
+	}
+	require.Len(t, ops, 2)
+	sync(t, sender, receiver, change.New(valid.ID(), valid.Message(), ops, valid.PresenceChange()))
+
+	tree := func() string { return receiver.Root().GetTree("tree").ToXML() }
+	text := func() string { return receiver.Root().GetText("text").String() }
+	// The edit landed inside the pair, so the emoji no longer survives. What
+	// the lone halves become is the divergence #2065 describes and is not
+	// pinned here.
+	applied := []string{tree(), text()}
+	assert.NotContains(t, applied[0], "\U0001F600", "the remote edit split the pair")
+	assert.NotContains(t, applied[1], "\U0001F600", "the remote edit split the pair")
+
+	// Undo and redo of the receiver's earlier edit still work. Tree undo/redo
+	// re-resolves its stored indexes through FindPos, shifted by the remote
+	// insert, and none of them lands inside a pair: the split already turned
+	// both halves into U+FFFD.
+	require.NoError(t, receiver.Undo())
+	assert.Equal(t, strings.Replace(applied[0], "z", "", 1), tree())
+	assert.Equal(t, strings.Replace(applied[1], "z", "", 1), text())
+
+	require.NoError(t, receiver.Redo())
+	assert.Equal(t, applied, []string{tree(), text()})
+}
+
+// TestUndoRedoAroundSurrogatePair covers the local undo/redo path, which for
+// Tree re-resolves stored indexes through FindPos and so passes through the
+// check. Indexes derived from an edit next to or over an intact pair are
+// whole-character boundaries, so undo and redo must never be rejected there.
+func TestUndoRedoAroundSurrogatePair(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func(root *json.Object)
+	}{
+		{"insert after the pair", func(root *json.Object) {
+			root.GetTree("tree").Edit(3, 3, &json.TreeNode{Type: "text", Value: "y"}, 0)
+			root.GetText("text").Edit(2, 2, "y")
+		}},
+		{"delete the pair", func(root *json.Object) {
+			root.GetTree("tree").Edit(1, 3, nil, 0)
+			root.GetText("text").Edit(0, 2, "")
+		}},
+		{"replace the pair", func(root *json.Object) {
+			root.GetTree("tree").Edit(1, 3, &json.TreeNode{Type: "text", Value: "y"}, 0)
+			root.GetText("text").Edit(0, 2, "y")
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := newSurrogateDoc(t)
+			state := func() []string {
+				return []string{
+					doc.Root().GetTree("tree").ToXML(),
+					doc.Root().GetText("text").String(),
+				}
+			}
+			original := state()
+
+			updateSurrogateDoc(t, doc, tc.fn)
+			edited := state()
+
+			require.NoError(t, doc.Undo())
+			assert.Equal(t, original, state())
+
+			require.NoError(t, doc.Redo())
+			assert.Equal(t, edited, state())
+		})
+	}
 }
