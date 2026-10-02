@@ -38,12 +38,18 @@ var (
 )
 
 // verifyAccess verifies the given user is allowed to access the given method.
+//
+// A recheck asks the webhook directly and only once: it skips the cached
+// decision, which may predate the change being checked, and the project's
+// retries, since a failed recheck is retried as a whole by its caller. Its
+// answer is still cached, as the freshest decision there is.
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
 	prj *types.Project,
 	token string,
 	accessInfo *types.AccessInfo,
+	recheck bool,
 ) error {
 	req := types.AuthWebhookRequest{
 		Token:      token,
@@ -57,13 +63,18 @@ func verifyAccess(
 	}
 
 	cacheKey := generateCacheKey(prj.PublicKey, body)
-	if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
-		return handleWebhookResponse(entry.First, entry.Second)
+	if !recheck {
+		if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
+			return handleWebhookResponse(entry.First, entry.Second)
+		}
 	}
 
 	options, err := prj.GetAuthWebhookOptions()
 	if err != nil {
 		return fmt.Errorf("verify access: %w", err)
+	}
+	if recheck {
+		options.MaxRetries = 0
 	}
 
 	res, status, err := be.AuthWebhookClient.Send(

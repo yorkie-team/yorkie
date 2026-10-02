@@ -19,8 +19,10 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -37,24 +39,35 @@ func watchAccess(method types.Method, keys ...string) types.AccessInfo {
 	return types.AccessInfo{Method: method, Attributes: attrs}
 }
 
+// admit registers an admitted stream and releases it when the test ends.
+func admit(
+	t *testing.T,
+	r *watchRegistry,
+	projectID types.ID,
+	token string,
+	access types.AccessInfo,
+) context.Context {
+	ctx, stream := r.register(
+		logging.With(context.Background(), logging.DefaultLogger()), projectID, token, access,
+	)
+	stream.admitted.Store(true)
+	t.Cleanup(func() { r.release(stream) })
+	return ctx
+}
+
+func deny(context.Context, string, *types.AccessInfo) error { return auth.ErrPermissionDenied }
+
 func TestWatchRegistry(t *testing.T) {
 	ctx := logging.With(context.Background(), logging.DefaultLogger())
 	const projectA, projectB = types.ID("project-a"), types.ID("project-b")
 
 	t.Run("closes only covered streams of the project", func(t *testing.T) {
 		r := newWatchRegistry()
-		covered, release1 := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1", "room-1"))
-		defer release1()
-		otherKey, release2 := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-2"))
-		defer release2()
-		otherProject, release3 := r.register(ctx, projectB, "alice", watchAccess(types.Watch, "room-1"))
-		defer release3()
+		covered := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1", "room-1"))
+		otherKey := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-2"))
+		otherProject := admit(t, r, projectB, "alice", watchAccess(types.Watch, "room-1"))
 
-		closed, err := r.revalidate(ctx, projectA, []string{"room-1"}, func(
-			context.Context, string, *types.AccessInfo,
-		) error {
-			return auth.ErrPermissionDenied
-		})
+		closed, err := r.revalidate(ctx, projectA, []string{"room-1"}, deny)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 1, closed)
@@ -63,12 +76,21 @@ func TestWatchRegistry(t *testing.T) {
 		assert.NoError(t, otherProject.Err())
 	})
 
+	t.Run("keys match exactly", func(t *testing.T) {
+		r := newWatchRegistry()
+		sub := admit(t, r, projectA, "alice", watchAccess(types.WatchChannel, "room-1.sub"))
+
+		closed, err := r.revalidate(ctx, projectA, []string{"room-1"}, deny)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 0, closed)
+		assert.NoError(t, sub.Err())
+	})
+
 	t.Run("empty keys cover every stream of the project", func(t *testing.T) {
 		r := newWatchRegistry()
-		s1, release1 := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
-		defer release1()
-		s2, release2 := r.register(ctx, projectA, "bob", watchAccess(types.WatchChannel, "room-1"))
-		defer release2()
+		s1 := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+		s2 := admit(t, r, projectA, "bob", watchAccess(types.WatchChannel, "room-1"))
 
 		closed, err := r.revalidate(ctx, projectA, nil, func(
 			context.Context, string, *types.AccessInfo,
@@ -84,12 +106,9 @@ func TestWatchRegistry(t *testing.T) {
 
 	t.Run("streams asking the same question share one verification", func(t *testing.T) {
 		r := newWatchRegistry()
-		s1, release1 := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
-		defer release1()
-		s2, release2 := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
-		defer release2()
-		s3, release3 := r.register(ctx, projectA, "bob", watchAccess(types.Watch, "doc-1"))
-		defer release3()
+		s1 := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+		s2 := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+		s3 := admit(t, r, projectA, "bob", watchAccess(types.Watch, "doc-1"))
 
 		var calls atomic.Int32
 		closed, err := r.revalidate(ctx, projectA, nil, func(
@@ -110,73 +129,101 @@ func TestWatchRegistry(t *testing.T) {
 		assert.NoError(t, s3.Err())
 	})
 
-	t.Run("a failure to verify closes as retryable, not as a denial", func(t *testing.T) {
+	t.Run("an uncertain answer leaves streams open and reports it", func(t *testing.T) {
 		r := newWatchRegistry()
-		s, release := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
-		defer release()
+		failing := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+		denied := admit(t, r, projectA, "bob", watchAccess(types.Watch, "doc-1"))
 
 		closed, err := r.revalidate(ctx, projectA, nil, func(
-			context.Context, string, *types.AccessInfo,
+			_ context.Context, token string, _ *types.AccessInfo,
 		) error {
-			return errors.New("webhook timed out")
-		})
-
-		assert.NoError(t, err)
-		assert.Equal(t, 1, closed)
-		assert.ErrorIs(t, context.Cause(s), ErrRevalidationUnavailable)
-	})
-
-	t.Run("release removes the stream", func(t *testing.T) {
-		r := newWatchRegistry()
-		s, release := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
-		assert.Equal(t, 1, r.len())
-
-		release()
-
-		assert.Equal(t, 0, r.len())
-		assert.ErrorIs(t, context.Cause(s), context.Canceled)
-		closed, err := r.revalidate(ctx, projectA, nil, func(
-			context.Context, string, *types.AccessInfo,
-		) error {
+			if token == "alice" {
+				return errors.New("webhook returned 503")
+			}
 			return auth.ErrPermissionDenied
 		})
-		assert.NoError(t, err)
-		assert.Equal(t, 0, closed)
+
+		assert.ErrorIs(t, err, ErrRevalidationIncomplete)
+		assert.Equal(t, 1, closed)
+		assert.NoError(t, failing.Err())
+		assert.ErrorIs(t, context.Cause(denied), auth.ErrPermissionDenied)
 	})
 
 	t.Run("an ended revalidation closes nothing it did not verify", func(t *testing.T) {
 		r := newWatchRegistry()
-		s, release := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
-		defer release()
+		streams := make([]context.Context, 0, 3*revalidateConcurrency)
+		for i := range cap(streams) {
+			streams = append(streams, admit(t, r, projectA, fmt.Sprintf("user-%d", i),
+				watchAccess(types.Watch, "doc-1")))
+		}
 
 		revalidateCtx, cancel := context.WithCancel(ctx)
 		closed, err := r.revalidate(revalidateCtx, projectA, nil, func(
 			ctx context.Context, _ string, _ *types.AccessInfo,
 		) error {
-			// The webhook call is still in flight when the caller gives up.
+			// Webhook calls are still in flight when the caller gives up.
 			cancel()
 			<-ctx.Done()
 			return ctx.Err()
 		})
 
-		assert.ErrorIs(t, err, context.Canceled)
+		assert.ErrorIs(t, err, ErrRevalidationIncomplete)
+		assert.Contains(t, err.Error(), fmt.Sprintf("%d streams", len(streams)))
 		assert.Equal(t, 0, closed)
-		assert.NoError(t, s.Err())
+		for _, s := range streams {
+			assert.NoError(t, s.Err())
+		}
 	})
 
-	t.Run("keys match exactly", func(t *testing.T) {
+	t.Run("at most revalidateConcurrency verifications run at once", func(t *testing.T) {
 		r := newWatchRegistry()
-		sub, release := r.register(ctx, projectA, "alice", watchAccess(types.WatchChannel, "room-1.sub"))
-		defer release()
+		for i := range 4 * revalidateConcurrency {
+			admit(t, r, projectA, fmt.Sprintf("user-%d", i), watchAccess(types.Watch, "doc-1"))
+		}
 
-		closed, err := r.revalidate(ctx, projectA, []string{"room-1"}, func(
+		var running, peak atomic.Int32
+		_, err := r.revalidate(ctx, projectA, nil, func(
 			context.Context, string, *types.AccessInfo,
 		) error {
-			return auth.ErrPermissionDenied
+			n := running.Add(1)
+			for {
+				p := peak.Load()
+				if n <= p || peak.CompareAndSwap(p, n) {
+					break
+				}
+			}
+			gotime.Sleep(gotime.Millisecond)
+			running.Add(-1)
+			return nil
 		})
 
 		assert.NoError(t, err)
+		assert.LessOrEqual(t, peak.Load(), int32(revalidateConcurrency))
+	})
+
+	t.Run("a stream closed before admission is not counted", func(t *testing.T) {
+		r := newWatchRegistry()
+		pending, stream := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+		defer r.release(stream)
+
+		closed, err := r.revalidate(ctx, projectA, nil, deny)
+
+		assert.NoError(t, err)
 		assert.Equal(t, 0, closed)
-		assert.NoError(t, sub.Err())
+		assert.ErrorIs(t, context.Cause(pending), auth.ErrPermissionDenied)
+	})
+
+	t.Run("release removes the stream", func(t *testing.T) {
+		r := newWatchRegistry()
+		s, stream := r.register(ctx, projectA, "alice", watchAccess(types.Watch, "doc-1"))
+		assert.Equal(t, 1, r.len())
+
+		r.release(stream)
+
+		assert.Equal(t, 0, r.len())
+		assert.ErrorIs(t, context.Cause(s), context.Canceled)
+		closed, err := r.revalidate(ctx, projectA, nil, deny)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, closed)
 	})
 }

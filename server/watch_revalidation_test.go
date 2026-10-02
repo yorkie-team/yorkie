@@ -149,11 +149,10 @@ func TestWatchAccessRevalidation(t *testing.T) {
 		string(types.ActivateClient), string(types.Broadcast),
 		string(types.Watch), string(types.WatchDocument), string(types.WatchChannel),
 	}
-	var noRetries uint64
+	// Default retries on purpose: a revalidation asks once regardless.
 	_, err = admin.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-		AuthWebhookURL:        &authServer.URL,
-		AuthWebhookMethods:    &methods,
-		AuthWebhookMaxRetries: &noRetries,
+		AuthWebhookURL:     &authServer.URL,
+		AuthWebhookMethods: &methods,
 	})
 	require.NoError(t, err)
 
@@ -260,14 +259,93 @@ func TestWatchAccessRevalidation(t *testing.T) {
 		bobWatch.requireReceived(t, "still-delivered")
 	})
 
-	t.Run("an unanswered check closes the stream as retryable", func(t *testing.T) {
+	t.Run("an unanswered check leaves the stream open and fails the call", func(t *testing.T) {
 		policy.set("bob", false, true)
+
+		_, err := admin.RevalidateAccess(ctx, project.Name, nil)
+		require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "got %v", err)
+
+		// Denials are still applied; only the uncertain stream is kept.
+		carolWatch.requireEndedWith(t, connect.CodePermissionDenied)
+		bobWatch.requireOpen(t)
+
+		// Once the webhook answers again, retrying settles it.
+		policy.set("bob", false, false)
+		closed, err := admin.RevalidateAccess(ctx, project.Name, nil)
+		require.NoError(t, err)
+		require.Equal(t, 0, closed)
+		bobWatch.requireOpen(t)
+	})
+}
+
+// TestWatchAccessRevalidationFollowsProjectSettings verifies a revalidation
+// judges a stream by the project's current settings, not the ones it was
+// admitted under: enabling the webhook mid-stream reaches a stream admitted
+// without one, and disabling it keeps a stream the webhook would now deny.
+func TestWatchAccessRevalidationFollowsProjectSettings(t *testing.T) {
+	policy := &webhookPolicy{denied: map[string]bool{}, failing: map[string]bool{}}
+	authServer := httptest.NewServer(policy)
+	defer authServer.Close()
+
+	conf := helper.TestConfig()
+	conf.Mongo = nil
+	svr, err := server.New(conf)
+	require.NoError(t, err)
+	require.NoError(t, svr.Start())
+	defer func() { require.NoError(t, svr.Shutdown(true)) }()
+
+	ctx := context.Background()
+	admin := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer admin.Close()
+	project, err := admin.CreateProject(ctx, "watch-revalidation-settings")
+	require.NoError(t, err)
+
+	cli := v1connect.NewYorkieServiceClient(http.DefaultClient, "http://"+svr.RPCAddr(),
+		connect.WithInterceptors(client.NewAuthInterceptor(project.PublicKey, "alice")))
+	activated, err := cli.ActivateClient(ctx, connect.NewRequest(&api.ActivateClientRequest{ClientKey: "alice"}))
+	require.NoError(t, err)
+	watch := func() *openStream {
+		stream, err := cli.Watch(ctx, connect.NewRequest(&api.WatchRequest{
+			ClientId: activated.Msg.ClientId,
+			Resources: []*api.ResourceDescriptor{{Resource: &api.ResourceDescriptor_Channel{
+				Channel: &api.ChannelDescriptor{ChannelKey: "room-1"},
+			}}},
+		}))
+		require.NoError(t, err)
+		require.True(t, stream.Receive(), "Watch did not initialize: %v", stream.Err())
+		return drain(stream, func(*api.WatchResponse) []byte { return nil })
+	}
+	setMethods := func(methods ...string) {
+		_, err := admin.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			AuthWebhookURL: &authServer.URL, AuthWebhookMethods: &methods,
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run("enabling the webhook reaches a stream admitted without it", func(t *testing.T) {
+		stream := watch()
+		setMethods(string(types.Watch))
+		policy.set("alice", true, false)
 
 		closed, err := admin.RevalidateAccess(ctx, project.Name, nil)
 		require.NoError(t, err)
-		require.Equal(t, 2, closed)
+		require.Equal(t, 1, closed)
+		stream.requireEndedWith(t, connect.CodePermissionDenied)
+	})
 
-		bobWatch.requireEndedWith(t, connect.CodeUnavailable)
-		carolWatch.requireEndedWith(t, connect.CodePermissionDenied)
+	t.Run("disabling the webhook keeps a stream it would deny", func(t *testing.T) {
+		// Denials are cached too, so a grant is revalidated like a revocation.
+		policy.set("alice", false, false)
+		_, err := admin.RevalidateAccess(ctx, project.Name, nil)
+		require.NoError(t, err)
+		stream := watch()
+
+		setMethods()
+		policy.set("alice", true, false)
+
+		closed, err := admin.RevalidateAccess(ctx, project.Name, nil)
+		require.NoError(t, err)
+		require.Equal(t, 0, closed)
+		stream.requireOpen(t)
 	})
 }

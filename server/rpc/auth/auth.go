@@ -19,6 +19,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -58,13 +59,15 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.Ac
 		prj,
 		md.Authorization,
 		accessInfo,
+		false,
 	)
 }
 
-// VerifyAccessAs verifies the given access on behalf of the given project and
-// token. Unlike VerifyAccess it does not read them from the request context,
-// so an open stream can be verified again after the RPC that admitted it.
-func VerifyAccessAs(
+// RecheckAccess verifies again an access that was granted earlier, on behalf
+// of the given project and token rather than the request context's, so an
+// open stream can be checked after the RPC that admitted it. It asks the
+// webhook directly and once (see verifyAccess).
+func RecheckAccess(
 	ctx context.Context,
 	be *backend.Backend,
 	prj *types.Project,
@@ -75,14 +78,38 @@ func VerifyAccessAs(
 		return nil
 	}
 
-	return verifyAccess(ctx, be, prj, token, accessInfo)
+	return verifyAccess(ctx, be, prj, token, accessInfo, true)
 }
 
-// DropCachedDecisions drops every cached auth webhook decision of the given
-// project, so the next verification of any access asks the webhook again.
-func DropCachedDecisions(be *backend.Backend, prj *types.Project) int {
+// DropCachedDecisions drops the cached auth webhook decisions of the given
+// project that concern any of the keys (all of them when keys is empty), so
+// the next verification of those accesses asks the webhook again.
+func DropCachedDecisions(be *backend.Backend, prj *types.Project, keys []string) int {
 	prefix := cacheKeyPrefix(prj.PublicKey)
-	return be.Cache.AuthWebhook.RemoveIf(func(key string) bool {
-		return strings.HasPrefix(key, prefix)
+
+	// A cache key embeds the request body, whose attributes carry each key as
+	// `"key":"<key>"`; marshaling quotes it the same way the body did.
+	needles := make([]string, 0, len(keys))
+	for _, k := range keys {
+		quoted, err := json.Marshal(k)
+		if err != nil {
+			continue
+		}
+		needles = append(needles, `"key":`+string(quoted))
+	}
+
+	return be.Cache.AuthWebhook.RemoveIf(func(cacheKey string) bool {
+		if !strings.HasPrefix(cacheKey, prefix) {
+			return false
+		}
+		if len(keys) == 0 {
+			return true
+		}
+		for _, needle := range needles {
+			if strings.Contains(cacheKey, needle) {
+				return true
+			}
+		}
+		return false
 	})
 }

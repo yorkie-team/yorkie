@@ -21,6 +21,7 @@ import (
 	goerrors "errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -32,12 +33,12 @@ import (
 // at the same time.
 const revalidateConcurrency = 16
 
-// ErrRevalidationUnavailable closes a stream whose authorization could not be
-// confirmed during a revalidation. It is retryable: the client reconnects and
-// the new stream goes through admission again.
-var ErrRevalidationUnavailable = errors.Unavailable(
-	"authorization could not be revalidated",
-).WithCode("ErrRevalidationUnavailable")
+// ErrRevalidationIncomplete is returned when a revalidation could not get a
+// definite answer for some streams. Those streams are left as they were, and
+// the whole revalidation can be retried.
+var ErrRevalidationIncomplete = errors.Unavailable(
+	"some streams could not be revalidated",
+).WithCode("ErrRevalidationIncomplete")
 
 // watchVerifier verifies one access of an open stream.
 type watchVerifier func(ctx context.Context, token string, access *types.AccessInfo) error
@@ -50,6 +51,11 @@ type watchStream struct {
 	access    types.AccessInfo
 	ctx       context.Context
 	close     context.CancelCauseFunc
+
+	// admitted is set once the stream passed admission. A stream a
+	// revalidation closes before that is closed all the same, but is not
+	// counted: it was never served.
+	admitted atomic.Bool
 }
 
 // covers reports whether the stream watches any of the given keys. Keys match
@@ -87,15 +93,16 @@ func newWatchRegistry() *watchRegistry {
 	return &watchRegistry{streams: make(map[*watchStream]struct{})}
 }
 
-// register adds a stream and returns the context it must stream under. The
-// context ends with the revalidation error when a revalidation closes the
-// stream. release removes the stream and must be called when it ends.
+// register adds a stream and returns the context it must stream under,
+// which ends with the denial when a revalidation closes the stream. The
+// caller marks the stream admitted once admission passed, and releases it
+// when it ends.
 func (r *watchRegistry) register(
 	ctx context.Context,
 	projectID types.ID,
 	token string,
 	access types.AccessInfo,
-) (context.Context, func()) {
+) (context.Context, *watchStream) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	stream := &watchStream{
 		projectID: projectID,
@@ -109,12 +116,15 @@ func (r *watchRegistry) register(
 	r.streams[stream] = struct{}{}
 	r.mu.Unlock()
 
-	return ctx, func() {
-		r.mu.Lock()
-		delete(r.streams, stream)
-		r.mu.Unlock()
-		cancel(nil)
-	}
+	return ctx, stream
+}
+
+// release removes the stream and ends its context.
+func (r *watchRegistry) release(stream *watchStream) {
+	r.mu.Lock()
+	delete(r.streams, stream)
+	r.mu.Unlock()
+	stream.close(nil)
 }
 
 // len returns the number of registered streams.
@@ -125,16 +135,16 @@ func (r *watchRegistry) len() int {
 }
 
 // revalidate verifies again every stream of the project that covers any of
-// the keys, and closes the ones that no longer pass. Streams asking the same
+// the keys, and closes the ones that are denied. Streams asking the same
 // question share one verification. It returns the number of closed streams.
 //
-// A denial closes the stream with the denial itself. A failure of the webhook
-// closes it with ErrRevalidationUnavailable: the server cannot tell whether
-// access is still granted, and a reconnect resolves that through admission
-// rather than by a policy of its own. A failure of the revalidation itself
-// (its context ending) closes nothing, since it says nothing about the
-// access; the streams it did not reach are reported as an error so the
-// caller retries.
+// Only a definite answer changes a stream: an allow keeps it, a denial
+// closes it with the denial. Anything else (the webhook failing, the
+// revalidation's own context ending) says nothing about the access, so the
+// stream is left as it was and the revalidation reports
+// ErrRevalidationIncomplete for the caller to retry. Closing on an uncertain
+// answer would disconnect users who kept access and send them all to a
+// failing webhook at once.
 func (r *watchRegistry) revalidate(
 	ctx context.Context,
 	projectID types.ID,
@@ -159,60 +169,77 @@ func (r *watchRegistry) revalidate(
 	}
 	r.mu.Unlock()
 
+	// Once the context ends, revalidateGroup returns at once, so the rest of
+	// the queue drains as unverified instead of being dropped uncounted.
+	queue := make(chan []*watchStream)
+	go func() {
+		defer close(queue)
+		for _, streams := range groups {
+			queue <- streams
+		}
+	}()
+
 	var (
 		wg         sync.WaitGroup
 		mu         sync.Mutex
 		closed     int
 		unverified int
-		sem        = make(chan struct{}, revalidateConcurrency)
+		firstErr   error
 	)
-	for _, streams := range groups {
+	for range min(revalidateConcurrency, len(groups)) {
 		wg.Go(func() {
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-			}
+			for streams := range queue {
+				n, err := revalidateGroup(ctx, streams, verify)
 
-			err := ctx.Err()
-			if err == nil {
-				err = verify(ctx, streams[0].token, &streams[0].access)
-			}
-			if err == nil {
-				return
-			}
-			if ctx.Err() != nil {
 				mu.Lock()
-				unverified += len(streams)
-				mu.Unlock()
-				return
-			}
-			if !isDenial(err) {
-				// The cause stays in the log: it can name the webhook, which
-				// is not the client's to see.
-				logging.From(ctx).Warnf("revalidate watch access: %v", err)
-				err = ErrRevalidationUnavailable
-			}
-			n := 0
-			for _, stream := range streams {
-				// A stream that already ended is not one this call closed.
-				if stream.ctx.Err() == nil {
-					n++
+				closed += n
+				if err != nil {
+					unverified += len(streams)
+					if firstErr == nil {
+						firstErr = err
+					}
 				}
-				stream.close(err)
+				mu.Unlock()
 			}
-
-			mu.Lock()
-			closed += n
-			mu.Unlock()
 		})
 	}
 	wg.Wait()
 
 	if unverified > 0 {
-		return closed, fmt.Errorf(
-			"revalidate watch access: %d streams left unverified: %w", unverified, ctx.Err(),
+		// The cause stays in the log: it can name the webhook.
+		logging.From(ctx).Warnf(
+			"revalidate watch access: %d streams left unverified, first error: %v",
+			unverified, firstErr,
 		)
+		return closed, fmt.Errorf("%d streams left unverified: %w", unverified, ErrRevalidationIncomplete)
+	}
+	return closed, nil
+}
+
+// revalidateGroup verifies once for streams asking the same question and
+// closes them on a denial. It returns how many admitted streams it closed,
+// or the error when the answer was not definite.
+func revalidateGroup(ctx context.Context, streams []*watchStream, verify watchVerifier) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+
+	err := verify(ctx, streams[0].token, &streams[0].access)
+	if err == nil {
+		return 0, nil
+	}
+	if !isDenial(err) {
+		return 0, err
+	}
+
+	closed := 0
+	for _, stream := range streams {
+		// A stream that already ended, or was never served, is not one this
+		// call closed.
+		if stream.ctx.Err() == nil && stream.admitted.Load() {
+			closed++
+		}
+		stream.close(err)
 	}
 	return closed, nil
 }

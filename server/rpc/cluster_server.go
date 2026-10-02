@@ -387,13 +387,13 @@ func (s *clusterServer) RevalidateAccess(
 	}
 	project := info.ToProject()
 
-	auth.DropCachedDecisions(s.backend, project)
+	auth.DropCachedDecisions(s.backend, project, req.Msg.Keys)
 	closed, err := s.watches.revalidate(ctx, projectID, req.Msg.Keys, func(
 		ctx context.Context,
 		token string,
 		access *types.AccessInfo,
 	) error {
-		return auth.VerifyAccessAs(ctx, s.backend, project, token, access)
+		return auth.RecheckAccess(ctx, s.backend, project, token, access)
 	})
 	if err != nil {
 		return nil, err

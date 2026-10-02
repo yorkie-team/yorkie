@@ -731,16 +731,18 @@ func (s *yorkieServer) admitWatch(
 	ctx context.Context,
 	access *types.AccessInfo,
 ) (context.Context, func(), error) {
-	streamCtx, release := s.watches.register(
+	streamCtx, stream := s.watches.register(
 		ctx,
 		projects.From(ctx).ID,
 		metadata.From(ctx).Authorization,
 		*access,
 	)
+	release := func() { s.watches.release(stream) }
 	if err := auth.VerifyAccess(ctx, s.backend, access); err != nil {
 		release()
 		return nil, nil, err
 	}
+	stream.admitted.Store(true)
 
 	return streamCtx, release, nil
 }
@@ -1057,6 +1059,11 @@ func (s *yorkieServer) streamMergedEvents(
 				)
 			}
 
+			// select picks among ready cases at random, so an event can win
+			// over a closed context: check again before delivering it.
+			if ctx.Err() != nil {
+				return streamEndCause(ctx)
+			}
 			if err := send(resp); err != nil {
 				return err
 			}

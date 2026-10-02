@@ -65,6 +65,11 @@ func streamEvents[E any, Resp any](
 				continue
 			}
 
+			// select picks among ready cases at random, so an event can win
+			// over a closed context: check again before delivering it.
+			if ctx.Err() != nil {
+				return streamEndCause(ctx)
+			}
 			if err := send(resp); err != nil {
 				return err
 			}
