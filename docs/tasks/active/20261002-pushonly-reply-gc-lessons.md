@@ -47,3 +47,33 @@ lens panel).
     `CreateChangePack` are exported for the same cross-package reason and
     are equally misusable. The doc comment names the push-only reply as its
     only use.
+- Round 2 (design fit/blast radius): 9 findings. Fixed 3: client unit test
+  `TestPushOnlySyncKeepsPullSignal` pins the round-1 `changeEventReceived`
+  rule (fails when the guard is removed); the client NOTE now points at the
+  design doc instead of restating it; the unit test says why its server seq
+  is ahead. Deferred 1 to the PR body: this client patch alone does not
+  protect older clients or other SDKs (same as the round-1 server deferral).
+  Disputed 5:
+  - "removePushedLocalChanges … keeps acked changes reachable; nil the
+    dropped slots" (`internal_document.go:159`). Tried and reverted:
+    `InternalDocument.DeepCopy` (`internal_document.go:556`) shares the
+    `localChanges` slice with the copy, so clearing slots would hand the copy
+    nil changes. The re-slice is the pre-existing behavior, moved.
+  - "AcknowledgePushedChanges is a second copy of applyChangePack's steps;
+    use applyChangePack(pack, pulled bool)" (`document.go:768`). The two
+    differ in more than GC: the ack applies no changes or snapshot and must
+    not forward the server seq. A flag would gate three of five steps. The
+    shared step (trim) is already one helper, and JS keeps the same split
+    (`acknowledgePushedChanges` beside `applyChangePack`).
+  - "AcknowledgePushedChanges drops pack.Changes/Snapshot without logging"
+    (`document.go:772`). The server builds the push-only reply with nil
+    changes and snapshot (`server/packs/pushpull.go:446`), and dropping is
+    safe since the unmoved server seq re-pulls them. `pkg/document` has no
+    logger to report through.
+  - "Fold the integration test into gc_test.go" (`pushonly_gc_test.go:41`).
+    Kept beside its JS twin's name (`pushonly_gc_test.ts`) so the two SDKs'
+    regressions can be found by name; gc_test.go's push-only case pins
+    vector bookkeeping, not this convergence.
+  - "Commit 98c087fa mixes refactor and fix under one subject". The repo
+    squash-merges PRs (`git log` subjects end in `(#N)`), so per-commit
+    bisect granularity does not survive into `main`.

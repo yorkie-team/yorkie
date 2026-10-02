@@ -48,7 +48,9 @@ func TestAcknowledgePushedChanges(t *testing.T) {
 	}
 
 	// ackPack is a reply that acknowledges up to clientSeq and carries a
-	// version vector under which every tombstone of d is collectable.
+	// version vector under which every tombstone of d is collectable. Its
+	// server seq is ahead of d's on purpose: a real push-only reply repeats
+	// the request's, but the ack must not move it even if one did not.
 	ackPack := func(d *document.Document, clientSeq uint32) *change.Pack {
 		return &change.Pack{
 			DocumentKey:   d.Key(),
