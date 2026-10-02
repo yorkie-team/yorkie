@@ -829,15 +829,12 @@ func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, er
 		// With both stacks empty there is no stacked entry to move, so every
 		// Reconcile* call below iterates nothing and the positions computed
 		// for it are discarded -- History.IsEmpty is exactly the condition
-		// under which that holds. Skipping is what makes the difference,
-		// because computing them is not free: Text.NormalizePos sums the live
-		// length of every physical predecessor, so the loop costs a walk of
-		// the whole split chain per executed Edit and the pack as a whole
-		// goes quadratic. That is paid on every client that never calls Undo
-		// and on every freshly attached document.
+		// under which that holds. Skipping saves that work, which is not
+		// free: each executed Edit costs a Text.NormalizePos (an index-tree
+		// lookup) and a tree lookup per position, paid on every client that
+		// never calls Undo and on every freshly attached document.
 		//
-		// JS runs the same loop unguarded (document.ts:1552-1566) over the
-		// same linear normalizePos (rga_tree_split.ts:1201-1221), so this is
+		// JS runs the same loop unguarded (document.ts:1552-1566), so this is
 		// a cost-only divergence, not a behavioral one: with anything on
 		// either stack the guard is false and every reconcile that JS
 		// performs still happens here.
