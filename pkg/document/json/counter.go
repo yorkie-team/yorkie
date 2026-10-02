@@ -68,18 +68,30 @@ func (p *Counter) Increase(v any) *Counter {
 
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
+	// A fractional delta is sent as an integer of the counter's width,
+	// truncated toward zero and wrapped as the JS SDK does. Servers before
+	// this fix cannot build the reverse of a Double delta, and convert it
+	// with a CPU-dependent int32(f), so an integer is what they apply safely.
 	switch p.ValueType() {
 	case crdt.LongCnt:
+		delta := int64(0)
 		if isInt {
-			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
+			delta = int64(value.(int))
 		} else {
-			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
+			delta, err = crdt.TruncFloatToInt64(value.(float64))
+		}
+		if err == nil {
+			primitive, err = crdt.NewPrimitive(delta, ticket)
 		}
 	case crdt.IntegerCnt, crdt.IntegerDedupCnt:
+		delta := int32(0)
 		if isInt {
-			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
+			delta = int32(value.(int))
 		} else {
-			primitive, err = crdt.NewPrimitive(int32(value.(float64)), ticket)
+			delta, err = crdt.TruncFloatToInt32(value.(float64))
+		}
+		if err == nil {
+			primitive, err = crdt.NewPrimitive(delta, ticket)
 		}
 	default:
 		panic("unsupported type")

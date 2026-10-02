@@ -378,7 +378,13 @@ jobs:
               ciNote +
               " The review→fix round budget restarts from here; the CI-fix arm's own" +
               " attempt bound (counted from prior failed CI runs) is NOT reset, and a human" +
-              " approval is still required to merge.");
+              " approval is still required to merge." +
+              // review-scope.mjs: a rerun on a head whose verdicts are already on
+              // record REUSES them instead of drawing a fresh sample, so say which
+              // one to type for the other. (#1426's second rerun re-reviewed an
+              // identical head for ~$10.)
+              " If this commit already has a verdict, it is reused rather than reviewed again —" +
+              " comment `@claude rerun review` to ask for a fresh review.");
 
       # Edit the placeholder into the final result. always() so a failure in the
       # clear step still replaces the "working on it" note instead of stranding it.
