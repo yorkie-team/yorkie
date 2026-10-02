@@ -1125,6 +1125,22 @@ func (d *Document) Root() *json.Object {
 // own updater. The clone pointer is read once into a local so that the
 // context and the object it wraps cannot end up referring to two different
 // clones if that unlocked path races a rebuild.
+//
+// The view wraps the clone itself and its proxies are the mutating ones, so
+// a caller can edit through it -- test/integration/document_test.go:828 does,
+// and panics. Its context is a throwaway that nothing executes, so such an
+// edit lands in the clone and the root never takes it: the same divergence
+// Update's recover guards against, reached without an updater. OnMutate
+// discards the clone the moment the view is used to write, whether the write
+// then completes or panics, so the next access rebuilds it from the root.
+// A view that is only read -- which is what Root is for, and what every
+// caller but the one above does -- never fires it and costs nothing.
+//
+// The callback runs on the caller's goroutine, outside d.mu, which is the
+// hazard this path already carries: the d.updating escape lets ensureClone
+// above write d.cloneRoot unlocked too. It only ever stores true into a flag
+// that is cleared under the lock, so the worst a lost store can cost is one
+// rebuild deferred to the next invalidation.
 func (d *Document) root() *json.Object {
 	if err := d.ensureClone(); err != nil {
 		panic(err)
@@ -1132,6 +1148,7 @@ func (d *Document) root() *json.Object {
 
 	clone := d.cloneRoot
 	ctx := change.NewContext(d.doc.changeID.Next(), "", clone)
+	ctx.OnMutate(d.invalidateClone)
 	return json.NewObject(ctx, clone.Object())
 }
 
@@ -1191,7 +1208,10 @@ func (d *Document) GarbageLen() int {
 }
 
 // invalidateClone marks the clone as diverged from the root so the next
-// ensureClone rebuilds it. It must be called with d.mu held for writing.
+// ensureClone rebuilds it. It must be called with d.mu held for writing,
+// with the one exception root registers as its view's OnMutate -- see there
+// for why an unlocked store of true is tolerable where an unlocked clear
+// would not be.
 //
 // It deliberately leaves d.cloneRoot pointing at the stale copy instead of
 // storing nil: Root and GarbageCollect run unlocked while this goroutine is

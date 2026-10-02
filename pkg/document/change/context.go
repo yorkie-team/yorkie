@@ -71,6 +71,13 @@ type Context struct {
 	// WithHistory is removed, so only the last Set call for a given key
 	// decides whether it is undoable.
 	reversePresenceKeys map[string]struct{}
+
+	// onMutate, when set, is called the first time a proxy holding this
+	// context does something only a mutation does. It exists for contexts
+	// whose operations are never executed -- the view Document.Root hands
+	// out -- so the document can learn that the root it wraps has been
+	// written to. See Context.OnMutate.
+	onMutate func()
 }
 
 // NewContext creates a new instance of Context. The baseline ReversePresence
@@ -123,14 +130,40 @@ func (c *Context) HasChange() bool {
 	return len(c.operations) > 0 || c.presenceChange != nil
 }
 
+// OnMutate registers a callback fired the first time -- and every time
+// after -- this context is used to mutate the root it wraps. The two hooks
+// below cover that: every CRDT mutation the json proxies make needs a time
+// ticket to stamp the new node with, and issuing one is the last thing they
+// do before touching the root, so the callback runs even when the mutation
+// then panics half-applied. Push is hooked beside it for the operation
+// record itself.
+//
+// Only Document.root sets it, for the view it builds over the clone outside
+// an updater: that context is never executed, so an edit made through it
+// reaches the clone and nothing else, and the document has to discard the
+// clone rather than keep serving a state the root never took.
+func (c *Context) OnMutate(fn func()) {
+	c.onMutate = fn
+}
+
+func (c *Context) notifyMutate() {
+	if c.onMutate != nil {
+		c.onMutate()
+	}
+}
+
 // IssueTimeTicket creates a time ticket to be used to create a new operation.
 func (c *Context) IssueTimeTicket() *time.Ticket {
+	c.notifyMutate()
+
 	c.delimiter++
 	return c.nextID.NewTimeTicket(c.delimiter)
 }
 
 // Push pushes a new operations into context queue.
 func (c *Context) Push(op operations.Operation) {
+	c.notifyMutate()
+
 	c.operations = append(c.operations, op)
 }
 

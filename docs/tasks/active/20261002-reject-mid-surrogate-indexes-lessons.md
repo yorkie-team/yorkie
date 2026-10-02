@@ -37,6 +37,29 @@ without `invalidateClone`. Fixed in `pkg/document/document.go`; the
 multi-node and dirty-clone gaps are covered by three new tests in
 `pkg/document/mid_surrogate_index_test.go`.
 
+## Review round 2 (panel, blast radius)
+
+Blocking finding: the "a mutation the root never took must not survive in the
+clone" contract was enforced only inside `Update`. `Document.Root` hands out
+the *same* mutating proxies over the same clone with a throwaway context, so
+an edit made through them outside an updater diverges the clone with nothing
+to notice — complete or panicking, both.
+
+Two fixes were considered and rejected before the one that landed:
+
+- Invalidate eagerly in `root()`. Correct, but it charges a full
+  `root.DeepCopy()` to every read-then-write cycle, which for a client that
+  renders after each edit is a per-keystroke copy of the whole document.
+- Record the handed-out contexts and check them in `ensureClone`. Misses a
+  mutation that panics before it pushes its operation, and the slice grows
+  without bound until the clone is rebuilt.
+
+What landed instead: `change.Context.OnMutate`, fired from `IssueTimeTicket`
+and `Push`, with `root()` registering `invalidateClone`. Every CRDT mutation
+needs a ticket and issues it immediately before touching the root, so the
+callback covers the half-applied panic too, while a view that is only read —
+which is all `Root` is for — never fires it and pays nothing.
+
 ## Self review
 
 Not run: this branch was produced by the autonomous issue-to-PR agent, which

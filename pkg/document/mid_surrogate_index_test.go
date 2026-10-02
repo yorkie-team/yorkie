@@ -252,6 +252,46 @@ func TestRejectedEditDiscardsClone(t *testing.T) {
 		"the clone the panic left behind was discarded")
 }
 
+// TestRootViewMutationDiscardsClone is the same contract one entry point
+// over: Root hands out the mutating proxies bound to the clone, so an edit
+// made through them outside an updater reaches the clone while the root --
+// whose change that throwaway context never produces -- stays where it was.
+// Whether the edit completes or panics on a rejected index, the clone must
+// be discarded rather than serve a state no replica holds.
+func TestRootViewMutationDiscardsClone(t *testing.T) {
+	t.Run("edit that completes", func(t *testing.T) {
+		doc := midSurrogateDoc(t)
+		before := doc.Marshal()
+
+		doc.Root().GetText("s").Edit(3, 3, "dirty")
+		assert.Equal(t, before, doc.Marshal(), "the root never took the edit")
+		assert.Equal(t, emojiText, doc.Root().GetText("s").String(),
+			"the clone the view dirtied was discarded")
+
+		// The next updater has to resolve its indexes against the root's
+		// state, not the one the discarded clone held.
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("s").Edit(3, 3, "y")
+			return nil
+		}))
+		assert.Equal(t, emojiText+"y", doc.Root().GetText("s").String())
+	})
+
+	t.Run("edit that panics", func(t *testing.T) {
+		doc := midSurrogateDoc(t)
+		before := doc.Marshal()
+
+		assert.Equal(t, json.ErrMidSurrogatePair, recovered(func() {
+			tree := doc.Root().GetTree("t")
+			tree.Edit(4, 4, &json.TreeNode{Type: "text", Value: "dirty"}, 0)
+			tree.Edit(2, 2, &json.TreeNode{Type: "text", Value: "w"}, 0)
+		}))
+		assert.Equal(t, before, doc.Marshal(), "the root never took the edit")
+		assert.Equal(t, "<r><p>"+emojiText+"</p></r>", doc.Root().GetTree("t").ToXML(),
+			"the clone the panic left behind was discarded")
+	})
+}
+
 // TestBMPTextUnaffected pins the common case: a document with no surrogate
 // pair has no rejected index at all.
 func TestBMPTextUnaffected(t *testing.T) {
