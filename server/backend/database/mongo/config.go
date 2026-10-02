@@ -20,6 +20,22 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/cache"
+)
+
+// Below are the default values applied when the matching fields are left
+// empty, so that a Config built in code (not only one read from a config
+// file) resolves to a usable value.
+const (
+	// DefaultProjectCacheSize is the default size of the project metadata cache.
+	DefaultProjectCacheSize = 256
+
+	// DefaultProjectCacheTTL is the default TTL of the project metadata cache.
+	DefaultProjectCacheTTL = 10 * time.Minute
+
+	// DefaultCacheStatsInterval is the default interval for logging cache statistics.
+	DefaultCacheStatsInterval = 30 * time.Second
 )
 
 // Config is the configuration for creating a Client instance.
@@ -89,10 +105,19 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.ProjectCacheSize < 0 {
+		return fmt.Errorf(
+			`invalid argument "%d" for "--mongo-project-cache-size" flag: size must not be negative`,
+			c.ProjectCacheSize,
+		)
+	}
+
+	// An empty value is not an error here, because ParseProjectCacheTTL falls
+	// back to DefaultProjectCacheTTL instead of failing.
 	if c.ProjectCacheTTL != "" {
-		if _, err := time.ParseDuration(c.ProjectCacheTTL); err != nil {
+		if _, err := cache.ParseTTL(c.ProjectCacheTTL); err != nil {
 			return fmt.Errorf(
-				`invalid argument "%s" for project cache TTL: %w`,
+				`invalid argument "%s" for "--mongo-project-cache-ttl" flag: %w`,
 				c.ProjectCacheTTL,
 				err,
 			)
@@ -124,8 +149,14 @@ func (c *Config) ParsePingTimeout() time.Duration {
 	return result
 }
 
-// ParseCacheStatsInterval returns cache stats interval duration.
+// ParseCacheStatsInterval returns cache stats interval duration, falling back
+// to DefaultCacheStatsInterval when the value is unset. A Config built in code
+// may leave it empty, and an unset value must not terminate the process.
 func (c *Config) ParseCacheStatsInterval() time.Duration {
+	if c.CacheStatsInterval == "" {
+		return DefaultCacheStatsInterval
+	}
+
 	result, err := time.ParseDuration(c.CacheStatsInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse cache stats interval: %v\n", err)
@@ -135,15 +166,33 @@ func (c *Config) ParseCacheStatsInterval() time.Duration {
 	return result
 }
 
-// ParseProjectCacheTTL returns the TTL duration for the project cache.
-func (c *Config) ParseProjectCacheTTL() time.Duration {
-	result, err := time.ParseDuration(c.ProjectCacheTTL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse project cache TTL: %v\n", err)
-		os.Exit(1)
+// ParseProjectCacheSize returns the size of the project cache, falling back to
+// DefaultProjectCacheSize when the value is unset. A non-positive size is also
+// defaulted, because the underlying LRU reads it as "unbounded" rather than as
+// the misconfiguration it is; Validate rejects a negative value outright.
+func (c *Config) ParseProjectCacheSize() int {
+	if c.ProjectCacheSize <= 0 {
+		return DefaultProjectCacheSize
 	}
 
-	return result
+	return c.ProjectCacheSize
+}
+
+// ParseProjectCacheTTL returns the TTL duration for the project cache, falling
+// back to DefaultProjectCacheTTL when the value is unset. Configs built in code
+// may leave it empty, and neither an unset nor an invalid value terminates the
+// process: an invalid one is returned as an error for the caller to surface.
+func (c *Config) ParseProjectCacheTTL() (time.Duration, error) {
+	if c.ProjectCacheTTL == "" {
+		return DefaultProjectCacheTTL, nil
+	}
+
+	result, err := cache.ParseTTL(c.ProjectCacheTTL)
+	if err != nil {
+		return 0, fmt.Errorf("parse project cache TTL: %w", err)
+	}
+
+	return result, nil
 }
 
 // ParseMonitoringConfig returns the monitoring configuration for MongoDB query monitoring.

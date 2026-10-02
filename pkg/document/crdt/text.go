@@ -56,9 +56,16 @@ func (t *TextValue) Value() string {
 
 // Len returns the length of this value.
 // It is calculated in UTF-16 code units.
+//
+// It counts rather than encodes: the splay tree reads it on every weight
+// update, so an allocation here is paid on every edit.
 func (t *TextValue) Len() int {
-	encoded := utf16.Encode([]rune(t.value))
-	return len(encoded)
+	length := 0
+	for _, r := range t.value {
+		// utf16.Encode writes an unencodable rune as one U+FFFD.
+		length += max(utf16.RuneLen(r), 1)
+	}
+	return length
 }
 
 // String returns the string representation of this value.

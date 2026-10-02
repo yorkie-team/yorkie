@@ -56,7 +56,7 @@ const (
 	DefaultMongoPingTimeout                  = 5 * time.Second
 	DefaultMongoYorkieDatabase               = "yorkie-meta"
 	DefaultMongoMonitoringSlowQueryThreshold = 100 * time.Millisecond
-	DefaultMongoCacheStatsInterval           = 30 * time.Second
+	DefaultMongoCacheStatsInterval           = mongo.DefaultCacheStatsInterval
 	DefaultMongoClientCacheSize              = 10000
 	DefaultMongoDocCacheSize                 = 10000
 	DefaultMongoChangeCacheSize              = 10000
@@ -96,8 +96,11 @@ const (
 	DefaultAuthWebhookCacheSize = 5000
 	DefaultAuthWebhookCacheTTL  = 10 * time.Second
 
-	DefaultProjectCacheSize = 256
-	DefaultProjectCacheTTL  = 10 * time.Minute
+	// The project cache defaults live in the mongo package, so that a
+	// mongo.Config built in code resolves to the same values as one filled
+	// in by ensureMongoDefaultValue.
+	DefaultProjectCacheSize = mongo.DefaultProjectCacheSize
+	DefaultProjectCacheTTL  = mongo.DefaultProjectCacheTTL
 
 	DefaultHostname       = ""
 	DefaultGatewayAddr    = "localhost:8080"
@@ -260,6 +263,14 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 // ensureBackendDefaultValue set the default backend.Config value
 func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend == nil {
+		// A bare (key-only, valueless) `Backend:` section unmarshals to nil and
+		// wipes what newConfig pre-seeded, so the booleans below fall back to
+		// false rather than to their defaults. Leave that as it is:
+		// UseDefaultProject gates keyless requests at rpc/interceptors
+		// (yorkie.go) and provisions the admin account at backend.go, so
+		// re-seeding it here would silently turn 401s into served requests for
+		// existing deployments. A section that spells out any key is a mapping,
+		// not null, and keeps the pre-seeded defaults for the keys it omits.
 		c.Backend = &backend.Config{}
 	}
 	if c.Backend.AdminUser == "" {
@@ -351,6 +362,12 @@ func (c *Config) ensureMongoDefaultValue() {
 	}
 	if c.Mongo.VectorCacheSize == 0 {
 		c.Mongo.VectorCacheSize = DefaultMongoVectorCacheSize
+	}
+	if c.Mongo.ProjectCacheSize == 0 {
+		c.Mongo.ProjectCacheSize = DefaultProjectCacheSize
+	}
+	if c.Mongo.ProjectCacheTTL == "" {
+		c.Mongo.ProjectCacheTTL = DefaultProjectCacheTTL.String()
 	}
 }
 

@@ -59,6 +59,13 @@ func (s *webhookStub) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newWebhookTest(t *testing.T) (*backend.Backend, *types.Project, *webhookStub) {
+	return newWebhookTestWithConfig(t, &backend.Config{})
+}
+
+func newWebhookTestWithConfig(
+	t *testing.T,
+	conf *backend.Config,
+) (*backend.Backend, *types.Project, *webhookStub) {
 	stub := &webhookStub{}
 	stub.status.Store(http.StatusOK)
 	srv := httptest.NewServer(stub)
@@ -84,7 +91,7 @@ func newWebhookTest(t *testing.T) (*backend.Backend, *types.Project, *webhookStu
 		AuthWebhookMaxWaitInterval: "1ms",
 		AuthWebhookRequestTimeout:  "1s",
 	}
-	return &backend.Backend{Cache: caches, AuthWebhookClient: client}, project, stub
+	return &backend.Backend{Config: conf, Cache: caches, AuthWebhookClient: client}, project, stub
 }
 
 func watchOf(keys ...string) *types.AccessInfo {
@@ -217,5 +224,64 @@ func TestDropCachedDecisions(t *testing.T) {
 		fill()
 		assert.Equal(t, 3, DropCachedDecisions(be, project, nil))
 		assert.True(t, be.Cache.AuthWebhook.Contains(cacheKey(&other, "alice", "doc-1")))
+	})
+}
+
+func TestAuthWebhookCacheDisabledAfterRevocation(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name       string
+		disabled   bool
+		wantCalls  int32
+		wantDenied bool
+	}{
+		{name: "explicitly disabled", disabled: true, wantCalls: 2, wantDenied: true},
+		{name: "enabled cache serves the cached decision", wantCalls: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			be, project, stub := newWebhookTestWithConfig(
+				t,
+				&backend.Config{AuthWebhookCacheDisabled: tc.disabled},
+			)
+			access := watchOf("doc-1")
+
+			require.NoError(t, verifyAccess(ctx, be, project, "alice", access, false))
+			assert.Equal(t, !tc.disabled,
+				be.Cache.AuthWebhook.Contains(webhookCacheKey(t, project, "alice", access)))
+
+			stub.status.Store(http.StatusForbidden)
+			err := verifyAccess(ctx, be, project, "alice", access, false)
+			if tc.wantDenied {
+				require.ErrorIs(t, err, ErrPermissionDenied)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.wantCalls, stub.calls.Load())
+		})
+	}
+
+	t.Run("a recheck still asks the webhook and caches nothing", func(t *testing.T) {
+		be, project, stub := newWebhookTestWithConfig(
+			t,
+			&backend.Config{AuthWebhookCacheDisabled: true},
+		)
+		access := watchOf("doc-1")
+		stub.status.Store(http.StatusForbidden)
+
+		assert.ErrorIs(t, RecheckAccess(ctx, be, project, "alice", access), ErrPermissionDenied)
+		assert.Equal(t, int32(1), stub.calls.Load())
+		assert.False(t, be.Cache.AuthWebhook.Contains(webhookCacheKey(t, project, "alice", access)))
+	})
+
+	t.Run("a drop has nothing to drop", func(t *testing.T) {
+		be, project, _ := newWebhookTestWithConfig(
+			t,
+			&backend.Config{AuthWebhookCacheDisabled: true},
+		)
+		gen := currentCacheGen()
+
+		assert.Equal(t, 0, DropCachedDecisions(be, project, nil))
+		assert.Equal(t, gen, currentCacheGen())
 	})
 }
