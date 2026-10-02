@@ -214,7 +214,10 @@ test("incremental review is inert without a scope note: identical rendered prefi
 // instruction has to stay LAST, with nothing after it (see the source guard far
 // below, and the injection-framing test that follows).
 test("the lens user prompt is identity + rubric + coverage note + closing, and carries no shared diff", () => {
-  const p = buildLensPrompt(LENS, { rubric: PROMPT_IN.rubric });
+  // `needsIssueSpec: false`, as the real correctness lens has it: a spec-reading
+  // lens with no spec is told so (NO_SPEC_NOTE, tested below), which is not the
+  // base shape this pins.
+  const p = buildLensPrompt({ ...LENS, needsIssueSpec: false }, { rubric: PROMPT_IN.rubric });
   assert.equal(p, [
     "You are the Correctness reviewer. Stay strictly in your lane; defer other lenses' concerns.",
     "",
@@ -896,6 +899,14 @@ test("resolveReviewScope: stamps a pointer only when --head-sha is given", () =>
   // with no signal.
   assert.throws(() => resolveReviewScope({ "head-sha": "nope" }, []), /'reviewed' must be a 40-hex sha/);
   assert.throws(() => resolveReviewScope({ "head-sha": HEAD, "base-sha": "nope" }, []), /'base'/);
+
+  // The PR-diff fingerprint rides along, so a later head with the same diff can
+  // carry this round's approval instead of re-sampling it (#1426). Absent or
+  // empty stamps the old shape exactly; junk fails before a token is spent.
+  const FP = "f".repeat(40);
+  assert.equal(JSON.parse(resolveReviewScope({ "head-sha": HEAD, "base-sha": BASE, "diff-fingerprint": FP }, []).stateExternalId).fp, FP);
+  assert.equal(JSON.parse(resolveReviewScope({ "head-sha": HEAD, "diff-fingerprint": "" }, []).stateExternalId).fp, undefined);
+  assert.throws(() => resolveReviewScope({ "head-sha": HEAD, "diff-fingerprint": "nope" }, []), /'fp'/);
 });
 
 // The scope note reaches the model only if main() threads it through runLens, and
@@ -3879,4 +3890,31 @@ test("applySkipClaims: the verdict string comes from the code, not the claim", a
   const out = applySkipClaims([{ lens: "s", file: "a.ts", summary: W }], forged)[0];
   assert.equal(out.adjudication.verdict, "skipped-by-author");
   assert.equal(out.adjudication.upheld, 1);
+});
+
+// D4: design-fit used to run with NO SPEC silently — the issue block was just
+// absent — while its rubric still told it to judge "unrequested scope creep"
+// against a spec it did not have. On #1426 (no `agent:candidate` issue) that
+// made scope arguments blocking. The lens is now TOLD there is no spec, and the
+// rubric caps what it can say about scope then.
+test("buildLensPrompt: a spec-reading lens with no spec is told so; with one, it is not", () => {
+  const lens = { title: "Design-fit", needsIssueSpec: true };
+  const none = buildLensPrompt(lens, { rubric: "# r", issue: "" });
+  assert.match(none, /## No originating issue spec/);
+  assert.match(none, /scope.*`minor`/is);
+  const withSpec = buildLensPrompt(lens, { rubric: "# r", issue: "the spec" });
+  assert.doesNotMatch(withSpec, /## No originating issue spec/);
+  // A lens that never reads a spec is not told about its absence.
+  assert.doesNotMatch(buildLensPrompt({ title: "Docs", needsIssueSpec: false }, { rubric: "# r", issue: "" }), /No originating issue spec/);
+  // The closing instruction is still last.
+  assert.ok(none.trimEnd().endsWith(LENS_CLOSING_INSTRUCTION.trimEnd()));
+});
+
+// review: the workflow's issue fetch swallows API errors and writes an empty
+// spec. An UNREAD spec is not "no spec": telling design-fit there is none would
+// cap a real out-of-spec finding at minor because GitHub returned a 5xx.
+test("buildLensPrompt: an unreadable spec is NOT reported as no spec", () => {
+  const lens = { title: "Design-fit", needsIssueSpec: true };
+  assert.doesNotMatch(buildLensPrompt(lens, { rubric: "# r", issue: "", issueUnreadable: true }), /No originating issue spec/);
+  assert.match(buildLensPrompt(lens, { rubric: "# r", issue: "" }), /No originating issue spec/);
 });

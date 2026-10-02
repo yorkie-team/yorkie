@@ -98,9 +98,10 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 
 	mux := http.NewServeMux()
-	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
+	watches := newWatchRegistry()
+	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be, watches), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager, yorkieInterceptor), opts...))
-	mux.Handle(v1connect.NewClusterServiceHandler(newClusterServer(be), opts...))
+	mux.Handle(v1connect.NewClusterServiceHandler(newClusterServer(be, watches), opts...))
 	mux.Handle(auth.NewAuthHandler(be, tokenManager, conf.Auth))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))

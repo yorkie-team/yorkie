@@ -17,7 +17,7 @@ const C = "c".repeat(40);
 
 test("serializeReviewState/parseReviewState round-trip, with a stable key order", () => {
   const s = serializeReviewState({ reviewed: A, base: B, since: C, mode: "incremental" });
-  assert.deepEqual(parseReviewState(s), { v: REVIEW_STATE_VERSION, reviewed: A, base: B, since: C, mode: "incremental" });
+  assert.deepEqual(parseReviewState(s), { v: REVIEW_STATE_VERSION, reviewed: A, base: B, since: C, mode: "incremental", fp: "", carry: 0 });
   // Key order is fixed so the value is stable across rounds and eyeball-diffable.
   assert.equal(s, `{"v":1,"reviewed":"${A}","base":"${B}","since":"${C}","mode":"incremental"}`);
   // Round 1 has no `since`, and `base` is only diagnostic.
@@ -230,6 +230,114 @@ test("resolveReviewMode: boundary values", () => {
   assert.equal(resolveReviewMode({ ...happy, roundIndex: 0 }).reason, "periodic-rebaseline");
   assert.equal(resolveReviewMode({ ...happy, roundIndex: 2 }).mode, "incremental");
   assert.equal(resolveReviewMode({ ...happy, roundIndex: 4, fullEvery: 4 }).reason, "periodic-rebaseline");
+});
+
+// --- carry and reuse: not paying again for code already judged ---------------
+//
+// #1426: the panel approved b9a3ecc, a maintainer's `update-branch` made
+// d593a98 (a merge of main that left the PR's own diff unchanged), the panel
+// re-reviewed it from scratch as `merge-in-range`, a fresh sample turned two
+// demoted findings blocking, and with the fix budget spent the PR went from
+// agent:ready to agent:blocked on code nobody had touched. Both heads have the
+// same `git patch-id --verbatim` fingerprint.
+
+const FP = "f".repeat(40);
+const FP2 = "e".repeat(40);
+const stamped = (s, extra = {}) => serializeReviewState({ reviewed: s, base: C, mode: "full", fp: FP, ...extra });
+const allStamped = (s, extra) => Object.fromEntries(IDS.map((id) => [id, stamped(s, extra)]));
+const verdicts = (c) => Object.fromEntries(IDS.map((id) => [id, c]));
+// The d593a98 shape: a merge in range, every lens approved the previous head,
+// and the PR diff fingerprints the same.
+const mergedMain = {
+  ...happy, states: allStamped(A), hasMergeInRange: true,
+  fingerprint: FP, priorConclusions: verdicts("success"),
+};
+
+test("serializeReviewState: fp and carry are optional and omitted when empty, so old values stay byte-identical", () => {
+  // Absent fp/carry must serialize exactly as before — the 183-char width test
+  // above pins the old shape, and every state already on a check run was written
+  // without them.
+  assert.equal(
+    serializeReviewState({ reviewed: A, base: B, since: C, mode: "incremental", fp: "", carry: 0 }),
+    `{"v":1,"reviewed":"${A}","base":"${B}","since":"${C}","mode":"incremental"}`,
+  );
+  const s = serializeReviewState({ reviewed: A, base: B, since: C, mode: "carry", fp: FP, carry: 2 });
+  assert.deepEqual(parseReviewState(s), { v: 1, reviewed: A, base: B, since: C, mode: "carry", fp: FP, carry: 2 });
+  // Widest new shape still fits GitHub's 255-char external_id slot.
+  assert.ok(serializeReviewState({ reviewed: A, base: B, since: C, mode: "incremental", fp: FP, carry: 9 }).length <= 255);
+  assert.throws(() => serializeReviewState({ reviewed: A, mode: "full", fp: "nope" }), /'fp'/);
+  assert.throws(() => serializeReviewState({ reviewed: A, mode: "full", carry: -1 }), /'carry'/);
+  assert.throws(() => serializeReviewState({ reviewed: A, mode: "full", carry: 1.5 }), /'carry'/);
+  // A malformed fp/carry on the wire refuses the whole record, like base/since.
+  assert.equal(parseReviewState(JSON.stringify({ v: 1, reviewed: A, mode: "full", fp: "nope" })), null);
+  assert.equal(parseReviewState(JSON.stringify({ v: 1, reviewed: A, mode: "full", carry: "2" })), null);
+  // An old record (no fp) parses with fp "" and carry 0.
+  assert.deepEqual(parseReviewState(stateAt(A)), { v: 1, reviewed: A, base: "", since: "", mode: "full", fp: "", carry: 0 });
+});
+
+test("resolveReviewMode: a diff-neutral merge of main CARRIES an approval instead of re-reviewing (#1426)", () => {
+  assert.deepEqual(resolveReviewMode(mergedMain), {
+    mode: "carry", sinceSha: "", sourceSha: A, carry: 1, reason: "pr-diff-unchanged",
+  });
+  // A rebase onto main is a rewrite, but an identical PR diff is the same artifact.
+  assert.equal(resolveReviewMode({ ...mergedMain, isAncestor: false }).mode, "carry");
+  // Git facts are not needed to carry: the fingerprint is the whole question.
+  assert.equal(resolveReviewMode({ ...mergedMain, isAncestor: undefined, deltaLines: undefined }).mode, "carry");
+  // A skipped (inapplicable) lens carries as skipped; the round still approved.
+  assert.equal(resolveReviewMode({ ...mergedMain, priorConclusions: { correctness: "success", security: "neutral" } }).mode, "carry");
+});
+
+test("resolveReviewMode: carry never fires on anything short of an unchanged diff and an approval", () => {
+  const cases = [
+    // The merge resolved a conflict or moved context: the diff changed (#1426's 6915bc6).
+    ["merge-in-range", { fingerprint: FP2 }],
+    // No fingerprint now, or none recorded then (every state written before this).
+    ["merge-in-range", { fingerprint: "" }],
+    ["merge-in-range", { fingerprint: undefined }],
+    ["merge-in-range", { states: allAt(A) }],
+    // Only an APPROVAL carries. A blocking verdict is re-reviewed as today.
+    ["merge-in-range", { priorConclusions: { correctness: "success", security: "failure" } }],
+    // An unknown or missing conclusion is not an approval.
+    ["merge-in-range", { priorConclusions: { correctness: "success" } }],
+    ["merge-in-range", { priorConclusions: undefined }],
+    ["merge-in-range", { priorConclusions: { correctness: "success", security: "cancelled" } }],
+  ];
+  for (const [reason, over] of cases) {
+    const got = resolveReviewMode({ ...mergedMain, ...over });
+    assert.equal(got.mode, "full", `must not carry on ${JSON.stringify(over)}`);
+    assert.equal(got.reason, reason, `wrong reason for ${JSON.stringify(over)}`);
+  }
+  // The same lenses that cannot narrow cannot carry either: a gap is a lens that
+  // never judged this diff.
+  assert.equal(resolveReviewMode({ ...mergedMain, states: { correctness: stamped(A) } }).reason, "lens-state-gap");
+});
+
+test("resolveReviewMode: carries are capped, then a full rebaseline runs", () => {
+  // The fingerprint says the diff is the same; it cannot say main did not change
+  // what the diff MEANS. CI on the merged head covers most of that, and the cap
+  // bounds the rest.
+  assert.deepEqual(resolveReviewMode({ ...mergedMain, states: allStamped(A, { carry: 1, mode: "carry" }) }).carry, 2);
+  const capped = resolveReviewMode({ ...mergedMain, states: allStamped(A, { carry: 2, mode: "carry" }) });
+  assert.equal(capped.mode, "full");
+  assert.equal(capped.reason, "carry-cap");
+  assert.equal(resolveReviewMode({ ...mergedMain, maxCarry: 0 }).reason, "carry-cap");
+});
+
+test("resolveReviewMode: a rerun on the same head REUSES its verdicts unless a review is asked for", () => {
+  // #1426 round 8: `@claude rerun` on e6900da re-reviewed the identical head for
+  // ~$10 to re-derive findings already on record.
+  const sameHead = { ...happy, states: allStamped(A), headSha: A, priorConclusions: verdicts("failure") };
+  assert.deepEqual(resolveReviewMode(sameHead), { mode: "reuse", sinceSha: "", sourceSha: A, reason: "same-head-verdict" });
+  assert.equal(resolveReviewMode({ ...sameHead, priorConclusions: verdicts("success") }).mode, "reuse");
+  // `@claude rerun review` is how a human asks for a fresh sample.
+  assert.deepEqual(resolveReviewMode({ ...sameHead, forceReview: true }), { mode: "full", sinceSha: "", reason: "review-requested" });
+  // A conclusion we cannot read is not a verdict to reuse.
+  assert.equal(resolveReviewMode({ ...sameHead, priorConclusions: undefined }).reason, "no-new-commits");
+  assert.equal(resolveReviewMode({ ...sameHead, priorConclusions: { correctness: "failure" } }).reason, "no-new-commits");
+  // An old state (no fp) still reuses: the head is literally the same commit.
+  assert.equal(resolveReviewMode({ ...sameHead, states: allAt(A) }).mode, "reuse");
+  // forceReview also overrides a carry.
+  assert.equal(resolveReviewMode({ ...mergedMain, forceReview: true }).reason, "review-requested");
 });
 
 // --- renderScopeNote --------------------------------------------------------

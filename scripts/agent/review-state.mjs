@@ -22,7 +22,11 @@
 export const REVIEW_STATE_VERSION = 1;
 
 const SHA = /^[0-9a-fA-F]{40}$/;
-const MODES = new Set(["full", "incremental"]);
+// `carry` is a round that judged nothing itself: it re-stamped the previous
+// head's approval because the PR diff was unchanged (see `resolveReviewMode`).
+const MODES = new Set(["full", "incremental", "carry"]);
+/** The most consecutive carries a state can record. Bounds the field's width. */
+const MAX_CARRY_FIELD = 9;
 
 /** A 40-hex SHA, lowercased. Anything else → null (never throws). */
 function sha(v) {
@@ -50,16 +54,29 @@ export function serializeReviewState(opts) {
   // `(null)` raise this module's own descriptive error instead of an opaque
   // TypeError from the destructuring itself. It still throws — that is the
   // contract — just legibly.
-  const { reviewed, base, since, mode } = opts && typeof opts === "object" ? opts : {};
+  const { reviewed, base, since, mode, fp, carry } = opts && typeof opts === "object" ? opts : {};
   const r = sha(reviewed);
   if (!r) throw new Error(`review state: 'reviewed' must be a 40-hex sha (got ${JSON.stringify(reviewed)})`);
-  if (!MODES.has(mode)) throw new Error(`review state: 'mode' must be full|incremental (got ${JSON.stringify(mode)})`);
+  if (!MODES.has(mode)) throw new Error(`review state: 'mode' must be full|incremental|carry (got ${JSON.stringify(mode)})`);
   // base/since are optional — round 1 has no `since`, and `base` is diagnostic.
   const b = base === "" || base == null ? "" : sha(base);
   if (b === null) throw new Error(`review state: 'base' must be a 40-hex sha or empty (got ${JSON.stringify(base)})`);
   const s = since === "" || since == null ? "" : sha(since);
   if (s === null) throw new Error(`review state: 'since' must be a 40-hex sha or empty (got ${JSON.stringify(since)})`);
-  const out = JSON.stringify({ v: REVIEW_STATE_VERSION, reviewed: r, base: b, since: s, mode });
+  // `fp` (the PR-diff fingerprint) and `carry` (consecutive carries) are OMITTED
+  // when empty, not written as "" / 0: every state already on a check run was
+  // written without them, and the old shape stays byte-identical.
+  const f = fp === "" || fp == null ? "" : sha(fp);
+  if (f === null) throw new Error(`review state: 'fp' must be a 40-hex fingerprint or empty (got ${JSON.stringify(fp)})`);
+  const c = carry == null ? 0 : carry;
+  if (!Number.isInteger(c) || c < 0 || c > MAX_CARRY_FIELD) {
+    throw new Error(`review state: 'carry' must be an integer 0..${MAX_CARRY_FIELD} (got ${JSON.stringify(carry)})`);
+  }
+  const out = JSON.stringify({
+    v: REVIEW_STATE_VERSION, reviewed: r, base: b, since: s, mode,
+    ...(f ? { fp: f } : {}),
+    ...(c ? { carry: c } : {}),
+  });
   if (out.length > 255) throw new Error(`review state: ${out.length} chars exceeds the external_id limit of 255`);
   return out;
 }
@@ -99,7 +116,12 @@ function normalizeState(d) {
   // A present-but-malformed base/since means the writer disagrees with us about
   // the shape. Refuse the whole record rather than half-trust it.
   if (base === null || since === null) return null;
-  return { v: d.v, reviewed, base, since, mode: d.mode };
+  // Same rule for the two optional fields: absent is fine, malformed is not.
+  const fp = d.fp === "" || d.fp == null ? "" : sha(d.fp);
+  if (fp === null) return null;
+  const carry = d.carry == null ? 0 : d.carry;
+  if (!Number.isInteger(carry) || carry < 0 || carry > MAX_CARRY_FIELD) return null;
+  return { v: d.v, reviewed, base, since, mode: d.mode, fp, carry };
 }
 
 /**
@@ -189,25 +211,30 @@ export function latestLensRuns(runs, lensCheckNames) {
  * Never throws. Reasons are the state-only subset: `invalid-input`,
  * `no-prior-state`, `lens-state-gap`, `lens-state-divergence`, or `ok`.
  */
+/**
+ * One lens's entry in `bag`, keyed by lens id (`correctness`) OR by check name
+ * (`agent-review-correctness`) — `latestLensRuns` returns the latter and
+ * `lensIds` are the former. `Object.hasOwn` rather than a bare index: a lens id
+ * of `constructor` would otherwise pick up `Object.prototype.constructor`.
+ */
+function lensEntry(bag, id) {
+  const pick = (k) => {
+    if (bag instanceof Map) return bag.get(k);
+    return bag && typeof bag === "object" && Object.hasOwn(bag, k) ? bag[k] : undefined;
+  };
+  return pick(id) ?? pick(`agent-review-${id}`);
+}
+
 export function agreedReviewedSha(lensIds, states) {
-  const none = (reason) => ({ sha: "", reason });
+  const none = (reason) => ({ sha: "", reason, state: null });
   const ids = (Array.isArray(lensIds) ? lensIds : []).filter((id) => typeof id === "string" && id !== "");
   if (ids.length === 0) return none("invalid-input");
 
-  // Keyed by lens id (`correctness`) OR by check name (`agent-review-correctness`),
-  // because `latestLensRuns` returns the latter and `lensIds` are the former.
-  // Accepting both removes a silent trap: the natural composition of the two would
-  // otherwise find no state for any lens, report `no-prior-state` forever, and
-  // never narrow anything with nothing to indicate a mistake.
-  //
-  // `Object.hasOwn` rather than a bare index: a lens id of `constructor` would
-  // otherwise pick up `Object.prototype.constructor` as if it were state.
-  const pick = (k) => {
-    if (states instanceof Map) return states.get(k);
-    return states && typeof states === "object" && Object.hasOwn(states, k) ? states[k] : undefined;
-  };
+  // Both key spaces are accepted (see `lensEntry`): the natural composition of
+  // `latestLensRuns` and `lensIds` would otherwise find no state for any lens,
+  // report `no-prior-state` forever, and never narrow anything.
   const get = (id) => {
-    const v = pick(id) ?? pick(`agent-review-${id}`);
+    const v = lensEntry(states, id);
     // Either a raw external_id string or an already-parsed record — both go
     // through the same validation, so pre-parsing cannot skip it.
     return typeof v === "string" ? parseReviewState(v) : normalizeState(v);
@@ -241,7 +268,9 @@ export function agreedReviewedSha(lensIds, states) {
   // a gap — and picking the newest would skip commits the laggard never saw,
   // while picking the oldest re-reviews for everyone anyway. So: full.
   if (reviewedSet.size !== 1) return none("lens-state-divergence");
-  return { sha: [...reviewedSet][0], reason: "ok" };
+  // `state` is the first lens's record. Lenses stamped in one panel run carry
+  // the same value, so its `fp` and `carry` speak for the round.
+  return { sha: [...reviewedSet][0], reason: "ok", state: found[0] };
 }
 
 export function resolveReviewMode(opts) {
@@ -259,6 +288,10 @@ export function resolveReviewMode(opts) {
     roundIndex,
     fullEvery = 3,
     maxDeltaLines = 400,
+    fingerprint,
+    priorConclusions,
+    forceReview = false,
+    maxCarry = 2,
   } = opts && typeof opts === "object" ? opts : {};
   const full = (reason) => ({ mode: "full", sinceSha: "", reason });
 
@@ -267,17 +300,51 @@ export function resolveReviewMode(opts) {
   const okEvery = Number.isInteger(fullEvery) && fullEvery > 0;
   const okRound = Number.isInteger(roundIndex) && roundIndex >= 0;
   const okMax = Number.isFinite(maxDeltaLines) && maxDeltaLines >= 0;
-  if (!head || !okEvery || !okRound || !okMax) return full("invalid-input");
+  const okCarry = Number.isInteger(maxCarry) && maxCarry >= 0;
+  if (!head || !okEvery || !okRound || !okMax || !okCarry) return full("invalid-input");
 
   // --- per-lens state: EVERY lens must have usable, agreeing state ------------
   const agreed = agreedReviewedSha(lensIds, states);
   if (!agreed.sha) return full(agreed.reason);
   const since = agreed.sha;
 
-  // Re-run on an already-reviewed SHA. The delta is empty, and review-panel.mjs
-  // refuses an empty diff (fails closed), so narrowing here would turn a
-  // harmless re-run into a hard panel failure.
-  if (since === head) return full("no-new-commits");
+  // A human asked for a fresh sample (`@claude rerun review`). Nothing below may
+  // stand in for it — not a reuse, not a carry.
+  if (forceReview === true) return full("review-requested");
+
+  // Every lens's verdict on the head it last reviewed, or null when any one is
+  // missing or is not a verdict. `neutral` is a lens that did not apply.
+  const verdictOf = (id) => {
+    const c = lensEntry(priorConclusions, id);
+    return c === "success" || c === "failure" || c === "neutral" ? c : null;
+  };
+  const prior = lensIds.map(verdictOf);
+  const known = prior.every((c) => c !== null);
+
+  // Re-run on an already-reviewed SHA. The commit is literally the one every
+  // lens judged, so its verdicts stand: reviewing it again draws a fresh sample
+  // of the same question, and on #1426 that cost ~$10 to re-derive findings
+  // already on record. Without readable verdicts it is a full round, as before —
+  // the delta is empty, and review-panel.mjs refuses an empty diff, so narrowing
+  // here would turn a harmless re-run into a hard panel failure.
+  if (since === head) return known ? { mode: "reuse", sinceSha: "", sourceSha: since, reason: "same-head-verdict" } : full("no-new-commits");
+
+  // The PR's own diff is unchanged since the head every lens APPROVED: a merge of
+  // main that touched none of its hunks or their context, or a clean rebase. The
+  // approval is carried rather than re-sampled — on #1426 the re-sample flipped
+  // it to blocking on code nobody had touched.
+  //
+  // Checked before the git facts on purpose: the fingerprint is the whole
+  // question, and a rewrite or a merge in range is exactly the case it answers.
+  // Only an approval carries; a blocking verdict on a merged head is re-reviewed
+  // as before. The cap bounds what the fingerprint cannot see — main changing
+  // what the diff MEANS — beyond the CI run the promote gate already requires.
+  const fp = sha(fingerprint);
+  const approved = known && prior.every((c) => c !== "failure");
+  if (fp && agreed.state && agreed.state.fp === fp && approved) {
+    if (agreed.state.carry >= maxCarry) return full("carry-cap");
+    return { mode: "carry", sinceSha: "", sourceSha: since, carry: agreed.state.carry + 1, reason: "pr-diff-unchanged" };
+  }
 
   // --- git facts: absent or unusable means we cannot reason about the range ---
   if (typeof isAncestor !== "boolean" || typeof hasMergeInRange !== "boolean" || !Number.isFinite(deltaLines) || deltaLines < 0) {

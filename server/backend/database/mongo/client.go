@@ -104,7 +104,12 @@ func Dial(conf *Config) (*Client, error) {
 
 	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
 
-	projectCache, err := NewProjectCache(conf.ProjectCacheSize, conf.ParseProjectCacheTTL())
+	projectCacheTTL, err := conf.ParseProjectCacheTTL()
+	if err != nil {
+		return nil, fmt.Errorf("initialize project cache: %w", err)
+	}
+
+	projectCache, err := NewProjectCache(conf.ParseProjectCacheSize(), projectCacheTTL)
 	if err != nil {
 		return nil, fmt.Errorf("initialize project cache: %w", err)
 	}
@@ -1131,7 +1136,8 @@ func (c *Client) TryAttaching(
 	info := &database.ClientInfo{}
 	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("try attaching %s to %s: %w", docID, refKey.ClientID, database.ErrClientNotFound)
+			missErr := c.tryAttachingMissError(ctx, refKey, docID)
+			return nil, fmt.Errorf("try attaching %s to %s: %w", docID, refKey.ClientID, missErr)
 		}
 
 		return nil, fmt.Errorf("try attaching %s to %s : %w", docID, refKey.ClientID, err)
@@ -1140,6 +1146,32 @@ func (c *Client) TryAttaching(
 	c.clientCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
+}
+
+// tryAttachingMissError tells why TryAttaching matched no client: the
+// document is already attached to an activated client, or the client is
+// missing or deactivated. It runs only after a miss, so the success path
+// keeps its single round trip. The read is not atomic with the update, so a
+// concurrent change can make it name the wrong reason; only the error differs.
+func (c *Client) tryAttachingMissError(
+	ctx context.Context,
+	refKey types.ClientRefKey,
+	docID types.ID,
+) error {
+	err := c.collection(ColClients).FindOne(ctx, bson.M{
+		"project_id":                       refKey.ProjectID,
+		"_id":                              refKey.ClientID,
+		"status":                           database.ClientActivated,
+		clientDocInfoKey(docID, StatusKey): database.DocumentAttached,
+	}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if err == nil {
+		return database.ErrDocumentAlreadyAttached
+	}
+	if err != mongo.ErrNoDocuments {
+		return fmt.Errorf("find attached document: %w", err)
+	}
+
+	return database.ErrClientNotFound
 }
 
 // DeactivateClient deactivates the client of the given refKey.

@@ -1207,7 +1207,7 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 		assert.NoError(t, err)
 		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
 
 		// 06. failure case: client is deactivated
 		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
@@ -1215,7 +1215,7 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
 		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, database.ErrClientNotFound)
 	})
 
 	t.Run("DeactivateClient test", func(t *testing.T) {

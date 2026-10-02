@@ -150,6 +150,46 @@ func TestLRUConcurrency(t *testing.T) {
 	})
 }
 
+func TestLRUWithExpires(t *testing.T) {
+	t.Run("reject TTL below MinTTL", func(t *testing.T) {
+		for _, ttl := range []time.Duration{
+			0,
+			-time.Second,
+			time.Nanosecond,
+			cache.MinTTL - time.Nanosecond,
+		} {
+			c, err := cache.NewLRUWithExpires[string, int](10, ttl, "test")
+			assert.ErrorIs(t, err, cache.ErrInvalidTTL, ttl)
+			assert.Nil(t, c)
+		}
+	})
+
+	t.Run("accept MinTTL and expire entries", func(t *testing.T) {
+		c, err := cache.NewLRUWithExpires[string, int](10, cache.MinTTL, "test")
+		assert.NoError(t, err)
+		c.Add("key", 1)
+		assert.Eventually(t, func() bool {
+			_, ok := c.Get("key")
+			return !ok
+		}, time.Second, cache.MinTTL/10)
+	})
+
+	t.Run("parse TTL against MinTTL", func(t *testing.T) {
+		for _, value := range []string{"0", "0s", "-1s", "1ns", "1ms", "99ms"} {
+			_, err := cache.ParseTTL(value)
+			assert.ErrorIs(t, err, cache.ErrInvalidTTL, value)
+		}
+
+		_, err := cache.ParseTTL("ten seconds")
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, cache.ErrInvalidTTL)
+
+		ttl, err := cache.ParseTTL("100ms")
+		assert.NoError(t, err)
+		assert.Equal(t, cache.MinTTL, ttl)
+	})
+}
+
 func TestCacheManager(t *testing.T) {
 	t.Run("register and log stats", func(t *testing.T) {
 		manager := cache.NewManager(time.Second)
@@ -174,4 +214,19 @@ func TestCacheManager(t *testing.T) {
 		// This should log the stats
 		manager.LogCacheStats()
 	})
+}
+
+func TestLRUWithExpiresRemoveIf(t *testing.T) {
+	c, err := cache.NewLRUWithExpires[string, int](10, time.Minute, "expires")
+	assert.NoError(t, err)
+	c.Add("a:1", 1)
+	c.Add("a:2", 2)
+	c.Add("b:1", 3)
+
+	removed := c.RemoveIf(func(key string) bool { return key[0] == 'a' })
+
+	assert.Equal(t, 2, removed)
+	assert.False(t, c.Contains("a:1"))
+	assert.False(t, c.Contains("a:2"))
+	assert.True(t, c.Contains("b:1"))
 }

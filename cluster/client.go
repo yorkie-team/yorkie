@@ -95,12 +95,20 @@ const clusterSecretHeader = "x-cluster-secret"
 
 // Client is a client for admin service.
 type Client struct {
-	conn        *http.Client
-	client      v1connect.ClusterServiceClient
-	connectOpts []connect.ClientOption
-	isSecure    bool
-	rpcTimeout  gotime.Duration
+	conn          *http.Client
+	client        v1connect.ClusterServiceClient
+	connectOpts   []connect.ClientOption
+	isSecure      bool
+	rpcTimeout    gotime.Duration
+	clientTimeout gotime.Duration
 }
+
+// revalidateRPCTimeout is the timeout of a RevalidateAccess call, which is
+// given more time than other cluster RPCs: the node it reaches asks the auth
+// webhook once per distinct access it serves, so its work grows with the
+// streams it holds rather than being the single lookup the generic timeout is
+// sized for. The HTTP client's own hard limit still caps it.
+const revalidateRPCTimeout = 30 * gotime.Second
 
 // New creates an instance of Client.
 func New(opts ...Option) (*Client, error) {
@@ -142,10 +150,11 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		conn:        conn,
-		connectOpts: connectOpts,
-		isSecure:    options.IsSecure,
-		rpcTimeout:  options.RPCTimeout,
+		conn:          conn,
+		connectOpts:   connectOpts,
+		isSecure:      options.IsSecure,
+		rpcTimeout:    options.RPCTimeout,
+		clientTimeout: options.ClientTimeout,
 	}, nil
 }
 
@@ -427,6 +436,38 @@ func (c *Client) InvalidateCache(
 	}
 
 	return nil
+}
+
+// RevalidateAccess asks the node to verify again the project's Watch streams
+// for the given keys and returns how many streams it closed.
+func (c *Client) RevalidateAccess(
+	ctx context.Context,
+	projectID types.ID,
+	keys []string,
+) (int, error) {
+	timeout := max(c.rpcTimeout, revalidateRPCTimeout)
+	if c.clientTimeout > 0 {
+		// The HTTP client ends the request at its hard limit whatever the
+		// context says; asking for more would only hide where the cut came
+		// from and lose the node's answer with the connection.
+		timeout = min(timeout, c.clientTimeout)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	res, err := c.client.RevalidateAccess(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceRevalidateAccessRequest{
+			ProjectId: projectID.String(),
+			Keys:      keys,
+		}),
+	)
+	if err != nil {
+		return 0, fromConnectError(err)
+	}
+
+	return int(res.Msg.ClosedStreams), nil
 }
 
 // clusterAuthInterceptor is a connect client interceptor that attaches
