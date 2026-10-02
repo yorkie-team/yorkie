@@ -488,6 +488,46 @@ ticket while a text split keeps `createdAt`: at a multi-level split the
 outer right-half product holds one unknown `<span>` and the known text
 sits below it.
 
+A child a concurrent merge moved in does not count. §6.1/§6.3 relocate
+the right node's children into the left one keeping their original
+`createdAt`, so a merge can give an otherwise-empty same-boundary
+product children the editor knew long after the split that produced it,
+and the marker would stop the walk at a node that never held the right
+half. `holdsKnownChild` therefore skips a child whose `MergedAt` the
+editor's version vector does not cover — a merge it knew is part of the
+state it edited against, a concurrent one is simply absent on the
+replica that applies this split first.
+
+Counting tombstones keeps the answer independent of whether a replica
+has applied a concurrent removal yet, but it also makes the answer
+depend on a node GC could unlink; `Tree.PurgeBarrierAt` therefore
+reports, alongside the sibling-walk barrier, the `createdAt` of every
+chain ancestor of the tombstone — every ancestor carrying an
+`InsPrevID` or an `InsNextID`. The §7.5 advance reads a raw
+`Children(true)` count on the same chain nodes, so it is covered by the
+same barrier. Either walk answers the same way for a chain node it
+already knows, whatever that node holds, so once that node is causally
+stable the purge can no longer change where a split lands, and the
+barrier retires: a vector covering every actor drains tree garbage as
+before.
+
+`InsPrevID` is the load-bearing half. A right-half product carries no
+`InsNextID` until it is itself split, so reading `InsNextID` alone left
+a tombstone inside a product purgeable right up to the moment a later
+split gave its parent a chain — exactly the node the walk then
+classifies. `InsPrevID` is instead precisely the set of nodes a chain
+walk can reach, since both walks only ever count the children of a node
+they arrived at as some other node's `InsNext`.
+
+The `InsNextID` half carries §7.4 empty-sibling re-parenting, which
+gates its `MoveChildBefore` on the fresh product being empty — a count
+over children with tombstones included — and which only runs for a node
+that was already split. It does not carry §7.4 all the way: a node in no
+chain at purge time can still be split twice afterwards, and the second
+split then counts children one replica may have purged in between. §7.4
+is deliberately version-vector-independent, so no ticket retires it;
+this is a pre-existing exposure, recorded here rather than papered over.
+
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s
 Phase 3 range narrowing, `collectBetween`'s cascade delete, and the
