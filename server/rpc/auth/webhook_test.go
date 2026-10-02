@@ -273,4 +273,15 @@ func TestAuthWebhookCacheDisabledAfterRevocation(t *testing.T) {
 		assert.Equal(t, int32(1), stub.calls.Load())
 		assert.False(t, be.Cache.AuthWebhook.Contains(webhookCacheKey(t, project, "alice", access)))
 	})
+
+	t.Run("a drop has nothing to drop", func(t *testing.T) {
+		be, project, _ := newWebhookTestWithConfig(
+			t,
+			&backend.Config{AuthWebhookCacheDisabled: true},
+		)
+		gen := currentCacheGen()
+
+		assert.Equal(t, 0, DropCachedDecisions(be, project, nil))
+		assert.Equal(t, gen, currentCacheGen())
+	})
 }
