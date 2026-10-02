@@ -15,7 +15,7 @@ it.
 A push-only client pushes without pulling, so the vector can cover a removal
 whose concurrent remote changes the client has not pulled yet. Collecting the
 tombstone they anchor on leaves the first full pull after the pause unable to
-apply them (`cannot find node`), and the server redelivers the same pack on
+apply them (`node not found`; JS reports `cannot find node`), and the server redelivers the same pack on
 every later sync.
 
 ## Approach
@@ -27,6 +27,9 @@ every later sync.
 - [x] `Client.pushPullChanges`: when the request was sent push-only, call
       `AcknowledgePushedChanges` instead of `ApplyChangePack`. Judged by the
       mode the request was sent in (`opt.mode`), as JS does.
+- [x] `syncInternal`: keep `changeEventReceived` set after a push-only sync,
+      which pulled nothing, so the next sync still pulls (self-review round
+      1).
 - [x] Integration test mirroring `pushonly_gc_test.ts`: a tombstone a deferred
       remote change anchors on survives the push-only reply, and both
       replicas converge after the full pull.

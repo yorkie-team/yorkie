@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,15 +36,19 @@ import (
 )
 
 // pushPullEchoServer answers PushPullChanges with the request's checkpoint and
-// version vector, as a reply that pulled nothing.
+// version vector, as a reply that pulled nothing, and records whether the
+// last request was sent push-only.
 type pushPullEchoServer struct {
 	v1connect.UnimplementedYorkieServiceHandler
+
+	lastPushOnly atomic.Bool
 }
 
 func (s *pushPullEchoServer) PushPullChanges(
 	_ context.Context,
 	req *connect.Request[api.PushPullChangesRequest],
 ) (*connect.Response[api.PushPullChangesResponse], error) {
+	s.lastPushOnly.Store(req.Msg.PushOnly)
 	pack := req.Msg.ChangePack
 	return connect.NewResponse(&api.PushPullChangesResponse{
 		ChangePack: &api.ChangePack{
@@ -55,13 +60,16 @@ func (s *pushPullEchoServer) PushPullChanges(
 }
 
 // TestPushOnlySyncKeepsPullSignal pins that a push-only sync, which pulls
-// nothing, leaves a pending remote-change signal for the next pull.
+// nothing, leaves a pending remote-change signal for the next pull: both an
+// explicit WithPushOnly sync and a sync-loop tick of a RealtimePushOnly
+// attachment, whose mode comes from the attachment.
 func TestPushOnlySyncKeepsPullSignal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	server := &pushPullEchoServer{}
 	mux := http.NewServeMux()
-	mux.Handle(v1connect.NewYorkieServiceHandler(&pushPullEchoServer{}))
+	mux.Handle(v1connect.NewYorkieServiceHandler(server))
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
 
@@ -69,21 +77,38 @@ func TestPushOnlySyncKeepsPullSignal(t *testing.T) {
 	require.NoError(t, err)
 	cli.status = statusActivated
 
-	doc := document.New(key.Key("pushonly-pull-signal"))
-	doc.SetStatus(document.StatusAttached)
-	attachment := &Attachment{
-		resourceID:          types.ID("000000000000000000000000"),
-		resource:            doc,
-		syncMode:            SyncModeRealtime,
-		changeEventReceived: true,
+	attach := func(t *testing.T, mode SyncMode) (*document.Document, *Attachment) {
+		doc := document.New(key.Key("pushonly-pull-signal-" + string(mode)))
+		doc.SetStatus(document.StatusAttached)
+		attachment := &Attachment{
+			resourceID:          types.ID("000000000000000000000000"),
+			resource:            doc,
+			syncMode:            mode,
+			changeEventReceived: true,
+		}
+		cli.attachments.Set(doc.Key(), attachment)
+		return doc, attachment
 	}
-	cli.attachments.Set(doc.Key(), attachment)
 
-	require.NoError(t, cli.Sync(ctx, WithKey(doc.Key()).WithPushOnly()))
-	assert.True(t, attachment.changeEventReceived)
-	assert.True(t, attachment.needSync(0))
+	t.Run("explicit push-only sync", func(t *testing.T) {
+		doc, attachment := attach(t, SyncModeRealtime)
 
-	require.NoError(t, cli.Sync(ctx, WithKey(doc.Key())))
-	assert.False(t, attachment.changeEventReceived)
-	assert.False(t, attachment.needSync(0))
+		require.NoError(t, cli.Sync(ctx, WithKey(doc.Key()).WithPushOnly()))
+		assert.True(t, server.lastPushOnly.Load())
+		assert.True(t, attachment.changeEventReceived)
+		assert.True(t, attachment.needSync(0))
+
+		require.NoError(t, cli.Sync(ctx, WithKey(doc.Key())))
+		assert.False(t, server.lastPushOnly.Load())
+		assert.False(t, attachment.changeEventReceived)
+		assert.False(t, attachment.needSync(0))
+	})
+
+	t.Run("sync loop on a push-only attachment", func(t *testing.T) {
+		_, attachment := attach(t, SyncModeRealtimePushOnly)
+
+		require.NoError(t, cli.syncInternal(ctx, attachment, nil))
+		assert.True(t, server.lastPushOnly.Load())
+		assert.True(t, attachment.changeEventReceived)
+	})
 }

@@ -77,3 +77,16 @@ lens panel).
   - "Commit 98c087fa mixes refactor and fix under one subject". The repo
     squash-merges PRs (`git log` subjects end in `(#N)`), so per-commit
     bisect granularity does not survive into `main`.
+- Round 3 (security/docs): no correctness or security findings; 6
+  low-severity, so the loop ends here. Fixed 6: the todo lists the
+  `changeEventReceived` change; `garbage-collection.md` qualifies "safe to
+  GC" with "after pulling up to the server head", notes that disable-GC
+  attachments get no vector, and names the full-pull reply's minVV; the
+  AcknowledgePushedChanges comment no longer claims a later pull never
+  carries the removal flag (`ServerPack.ApplyDocInfo` sets it on every
+  reply); the todo uses the Go error text; the client test now also covers
+  a sync-loop tick of a `RealtimePushOnly` attachment (`opts == nil`).
+  Partly disputed: "the test never calls cli.Close()". `Close` calls
+  `Deactivate`, an RPC the fake server does not implement; the other
+  in-package fake-server tests (`detach_test.go`) do not close either, and
+  `httpServer.Close` is deferred.

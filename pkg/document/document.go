@@ -763,8 +763,8 @@ func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err er
 // those changes anchor on, and the first full pull after the pause fails to
 // apply them.
 //
-// The removal flag describes the document, not the skipped content, and no
-// later pull would carry it again, so it is taken here.
+// The removal flag is taken: it describes the document, not the skipped
+// content.
 func (d *Document) AcknowledgePushedChanges(pack *change.Pack) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

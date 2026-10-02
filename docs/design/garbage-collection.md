@@ -37,13 +37,13 @@ As you can see from the image above, `min_synced_seq` doesn't guarantee every cl
 
 Garbage collection checks that deleted nodes are no longer referenced remotely and purges them completely.
 
-Server records the version vector of the last change pulled by the client whenever the client requests PushPull. And Server returns the min version vector, `minVersionVector` of all clients in response PushPull to the client. `minVersionVector` is used to check whether deleted nodes are no longer to be referenced remotely or not.
+Server records the version vector of the last change pulled by the client whenever the client requests PushPull. And Server returns the min version vector, `minVersionVector` of all clients in response PushPull to the client. `minVersionVector` is used to check whether deleted nodes are no longer to be referenced remotely or not. A client may collect with it only after applying every change the server held when the vector was taken, which is why a push-only reply is not collected with (see below).
 
 ## What is `minVersionVector`
 
 Min version vector is the vector which consists of minimum value of every version vector stored in version vector table in database.
 
-Conceptually, min version vector is version vector that is uniformly applied to all users. It ensures that all users have at least this version applied. Which means that it is safe to perform GC.
+Conceptually, min version vector is version vector that is uniformly applied to all users. It ensures that all users have at least this version applied. Which means that it is safe to perform GC, for a replica that has itself pulled every change up to the server's head.
 
 ```
 // GC algorithm
@@ -73,7 +73,7 @@ GC responsibility is split between server and client depending on the response t
 
 - **Snapshot response**: The server runs GC with `minVersionVector` before serializing the snapshot. The client receives a clean state and skips GC (`!pack.hasSnapshot()` guard in the SDK).
 - **Changes response**: The server sends `minVersionVector` in the response pack. The client runs GC locally using this vector after applying the changes.
-- **Push-only response**: The server still sends `minVersionVector`, but the client takes the reply as a push ack only (confirmed local changes, client seq, removal flag) and skips GC. The vector can already cover a removal whose concurrent remote changes this client has not pulled; collecting the tombstone they anchor on would leave the next full pull unable to apply them (`node not found`). The next full pull applies those changes first and then collects with its own vector.
+- **Push-only response**: The server still sends `minVersionVector` (except to a disable-GC attachment, which gets none), but the client takes the reply as a push ack only (confirmed local changes, client seq, removal flag) and skips GC. The vector can already cover a removal whose concurrent remote changes this client has not pulled; collecting the tombstone they anchor on would leave the next full pull unable to apply them (`node not found`). The next full pull applies those changes first and then collects with that pull reply's `minVersionVector`.
 
 This means the server must always GC the document before building a snapshot response. Without this, tombstones from applied changes would leak into the snapshot and persist on the client, since the client does not run GC for snapshot responses by design.
 
