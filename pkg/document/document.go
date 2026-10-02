@@ -255,6 +255,22 @@ func (d *Document) Update(
 		d.cloneRoot,
 	)
 
+	// NOTE(hackerwins): The json proxies report a caller mistake -- an index
+	// that cuts a surrogate pair in half, a reversed range -- by panicking out
+	// of the updater rather than returning an error. Whatever the same updater
+	// already wrote lives in the clone and the root never takes it, so the
+	// panic has to discard the clone on the way out exactly as the error
+	// return below does; otherwise a caller that recovers reads a
+	// half-applied state and the next Update builds its change on top of it.
+	// Deferred after d.mu's unlock so it still runs under the lock, and the
+	// panic is re-raised unchanged for the caller to recover.
+	defer func() {
+		if r := recover(); r != nil {
+			d.invalidateClone()
+			panic(r)
+		}
+	}()
+
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
 		presence.New(ctx, presenceData),

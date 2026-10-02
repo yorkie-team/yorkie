@@ -163,6 +163,95 @@ func TestTextStyleRejectsMidSurrogateIndex(t *testing.T) {
 	}))
 }
 
+// TestTreeEditRejectsMidSurrogateIndexAfterSplit is the multi-node case: an
+// earlier edit splits the text node, so the rejected index no longer lives in
+// the first node and its offset has to be resolved relative to the node that
+// holds it. The seam the split created is a whole-character boundary and must
+// stay editable.
+func TestTreeEditRejectsMidSurrogateIndexAfterSplit(t *testing.T) {
+	doc := midSurrogateDoc(t)
+
+	// Insert between the emoji and the "x", splitting <p>'s single text node.
+	require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "text", Value: "yz"}, 0)
+		return nil
+	}))
+	before := doc.Marshal()
+
+	// Index 2 still cuts the emoji, now in a node that is no longer alone.
+	assert.Equal(t, json.ErrMidSurrogatePair, updatePanic(t, doc, func(r *json.Object) {
+		r.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "w"}, 0)
+	}))
+	assert.Equal(t, before, doc.Marshal(), "the refused edit left no trace")
+
+	// The seam (3) and the offsets inside the inserted node (4, 5) are not.
+	for _, idx := range []int{3, 4, 5} {
+		doc := midSurrogateDoc(t)
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "text", Value: "yz"}, 0)
+			return nil
+		}))
+		assert.Nil(t, updatePanic(t, doc, func(r *json.Object) {
+			r.GetTree("t").Edit(idx, idx, &json.TreeNode{Type: "text", Value: "w"}, 0)
+		}), "index %d is a whole-character boundary", idx)
+	}
+}
+
+// TestTextEditRejectsMidSurrogateIndexInLaterNode is the Text twin: the
+// rejected index lives in the second node, so a validation that only ever
+// looked at the first node's offsets would miss it.
+func TestTextEditRejectsMidSurrogateIndexInLaterNode(t *testing.T) {
+	doc := midSurrogateDoc(t)
+
+	// Append a second emoji; "s" is now "😀x😀y" across two nodes.
+	require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.GetText("s").Edit(3, 3, "\U0001F600y")
+		return nil
+	}))
+	before := doc.Marshal()
+
+	// Index 4 is the second emoji's seam, one code unit into the second node.
+	assert.Equal(t, json.ErrMidSurrogatePair, updatePanic(t, doc, func(r *json.Object) {
+		r.GetText("s").Edit(4, 4, "w")
+	}))
+	assert.Equal(t, before, doc.Marshal(), "the refused edit left no trace")
+
+	// The node seam itself (3) and the end (5, 6) stay editable.
+	for _, idx := range []int{3, 5, 6} {
+		doc := midSurrogateDoc(t)
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("s").Edit(3, 3, "\U0001F600y")
+			return nil
+		}))
+		assert.Nil(t, updatePanic(t, doc, func(r *json.Object) {
+			r.GetText("s").Edit(idx, idx, "w")
+		}), "index %d is a whole-character boundary", idx)
+	}
+}
+
+// TestRejectedEditDiscardsClone covers what the panic leaves behind. The
+// updater mutates the clone and only then hits the rejected index: the root
+// never takes those mutations, so unless Update discards the clone on its way
+// out, Root -- which serves the clone -- hands back a state that exists on no
+// replica, and the next Update resolves its indexes against it.
+func TestRejectedEditDiscardsClone(t *testing.T) {
+	doc := midSurrogateDoc(t)
+	before := doc.Marshal()
+
+	assert.Equal(t, json.ErrMidSurrogatePair, updatePanic(t, doc, func(r *json.Object) {
+		r.GetTree("t").Edit(4, 4, &json.TreeNode{Type: "text", Value: "dirty"}, 0)
+		r.GetText("s").Edit(3, 3, "dirty")
+		r.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "w"}, 0)
+	}))
+	assert.Equal(t, before, doc.Marshal(), "the refused edit left no trace")
+
+	root := doc.Root()
+	assert.Equal(t, "<r><p>"+emojiText+"</p></r>", root.GetTree("t").ToXML(),
+		"the clone the panic left behind was discarded")
+	assert.Equal(t, emojiText, root.GetText("s").String(),
+		"the clone the panic left behind was discarded")
+}
+
 // TestBMPTextUnaffected pins the common case: a document with no surrogate
 // pair has no rejected index at all.
 func TestBMPTextUnaffected(t *testing.T) {

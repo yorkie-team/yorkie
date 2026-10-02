@@ -18,6 +18,25 @@
   validation had to go in the `json` layer rather than in those, or undo of a
   pre-existing mid-pair edit would start panicking.
 
+- The `json` layer reports caller mistakes by panicking, and `Document.Update`
+  only discarded the clone on the *error* return. A guard that panics out of
+  the updater therefore left every mutation the same updater had already made
+  in `d.cloneRoot`, where `Document.Root` serves it — the root never took them,
+  so `Root` handed back a state that exists on no replica. `Update` now
+  recovers, invalidates the clone and re-panics; the defer is registered after
+  `d.mu`'s unlock so it still runs under the lock.
+- Validation must be exercised on a *split* text node, not just a freshly
+  created one: both wrappers resolve the index to a per-node offset, so a
+  single-node fixture cannot tell a correct offset resolution from one that
+  only ever looks at the first node.
+
+## Review round (panel)
+
+Blocking finding across all three lenses: the new panic escaped `Update`
+without `invalidateClone`. Fixed in `pkg/document/document.go`; the
+multi-node and dirty-clone gaps are covered by three new tests in
+`pkg/document/mid_surrogate_index_test.go`.
+
 ## Self review
 
 Not run: this branch was produced by the autonomous issue-to-PR agent, which
