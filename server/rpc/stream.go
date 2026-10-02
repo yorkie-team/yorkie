@@ -24,7 +24,8 @@ import (
 
 // streamEvents reads events from a subscription and sends converted responses
 // over a stream. It blocks until the context is done, the serviceCtx is done
-// (if non-nil), or the subscription channel is closed.
+// (if non-nil), or the subscription channel is closed. A done context ends the
+// stream with streamEndCause.
 //
 // A closed subscription channel means the subscription pruned itself (see
 // pubsub.Subscription.Publish), so the stream ends with ErrSubscriptionsClosed
@@ -48,7 +49,7 @@ func streamEvents[E any, Resp any](
 		case <-serviceCtx.Done():
 			return context.Canceled
 		case <-ctx.Done():
-			return context.Canceled
+			return streamEndCause(ctx)
 		case event, ok := <-sub.Events():
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -73,4 +74,14 @@ func streamEvents[E any, Resp any](
 			}
 		}
 	}
+}
+
+// streamEndCause is the error a stream ends with once its context is done.
+// A stream a revalidation closed reports why; any other end, including the
+// client's own deadline, stays context.Canceled as it always was.
+func streamEndCause(ctx context.Context) error {
+	if cause := context.Cause(ctx); cause != ctx.Err() {
+		return cause
+	}
+	return context.Canceled
 }

@@ -429,6 +429,30 @@ func (c *Client) InvalidateCache(
 	return nil
 }
 
+// RevalidateAccess asks the node to verify again the project's Watch streams
+// for the given keys and returns how many streams it closed.
+func (c *Client) RevalidateAccess(
+	ctx context.Context,
+	projectID types.ID,
+	keys []string,
+) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
+	res, err := c.client.RevalidateAccess(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceRevalidateAccessRequest{
+			ProjectId: projectID.String(),
+			Keys:      keys,
+		}),
+	)
+	if err != nil {
+		return 0, fromConnectError(err)
+	}
+
+	return int(res.Msg.ClosedStreams), nil
+}
+
 // clusterAuthInterceptor is a connect client interceptor that attaches
 // the cluster secret header to every outgoing request.
 type clusterAuthInterceptor struct {

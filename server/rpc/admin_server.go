@@ -921,6 +921,48 @@ func (s *adminServer) BroadcastByAdmin(
 	return connect.NewResponse(&api.BroadcastByAdminResponse{}), nil
 }
 
+// maxRevalidateKeys bounds the keys of one RevalidateAccess call. Each node
+// matches every open stream of the project against them.
+const maxRevalidateKeys = 1000
+
+// ErrTooManyRevalidateKeys is returned when RevalidateAccess names more keys
+// than maxRevalidateKeys.
+var ErrTooManyRevalidateKeys = errors.InvalidArgument(
+	fmt.Sprintf("too many keys to revalidate: at most %d", maxRevalidateKeys),
+).WithCode("ErrTooManyRevalidateKeys")
+
+// RevalidateAccess verifies again, on every node, the authorization of the
+// project's open Watch streams that watch any of the given keys (every stream
+// of the project when no key is given), and closes the ones that no longer
+// pass. Call it after changing what the auth webhook answers: admission alone
+// authorizes a stream for as long as it stays open.
+//
+// It fails when any node could not be reached, since the caller has then no
+// guarantee that the revocation took effect there; retrying is safe.
+func (s *adminServer) RevalidateAccess(
+	ctx context.Context,
+	req *connect.Request[api.RevalidateAccessRequest],
+) (*connect.Response[api.RevalidateAccessResponse], error) {
+	if len(req.Msg.Keys) > maxRevalidateKeys {
+		return nil, ErrTooManyRevalidateKeys
+	}
+	for _, k := range req.Msg.Keys {
+		if err := key.Key(k).Validate(); err != nil {
+			return nil, err
+		}
+	}
+
+	project := projects.From(ctx)
+	closed, err := s.backend.BroadcastRevalidateAccess(ctx, project.ID, req.Msg.Keys)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RevalidateAccessResponse{
+		ClosedStreams: int32(closed),
+	}), nil
+}
+
 // makeChannelSessionCountCacheKey creates a cache key for session count.
 func makeChannelSessionCountCacheKey(projectID types.ID, channelKey key.Key, includeSubPath bool) string {
 	return fmt.Sprintf("%s:%s:%t", projectID, channelKey, includeSubPath)

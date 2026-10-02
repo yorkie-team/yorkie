@@ -84,6 +84,18 @@ func (c *LRUWithExpires[K, V]) Remove(key K) bool {
 	return c.cache.Remove(key)
 }
 
+// RemoveIf removes every entry whose key satisfies the predicate and returns
+// the number of entries removed.
+func (c *LRUWithExpires[K, V]) RemoveIf(pred func(K) bool) int {
+	removed := 0
+	for _, key := range c.cache.Keys() {
+		if pred(key) && c.cache.Remove(key) {
+			removed++
+		}
+	}
+	return removed
+}
+
 // Purge clears all entries from the cache.
 func (c *LRUWithExpires[K, V]) Purge() {
 	c.cache.Purge()

@@ -382,6 +382,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/RevalidateAccess:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.RevalidateAccess.yorkie.v1.RevalidateAccessRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.RevalidateAccess.yorkie.v1.RevalidateAccessResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/RotateProjectKeys:
     post:
       description: ""
@@ -735,6 +747,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionByAdminRequest'
       required: true
+    yorkie.v1.AdminService.RevalidateAccess.yorkie.v1.RevalidateAccessRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RevalidateAccessRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RevalidateAccessRequest'
+      required: true
     yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysRequest:
       content:
         application/json:
@@ -1077,6 +1098,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionByAdminResponse'
+      description: ""
+    yorkie.v1.AdminService.RevalidateAccess.yorkie.v1.RevalidateAccessResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RevalidateAccessResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RevalidateAccessResponse'
       description: ""
     yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse:
       content:
@@ -3558,6 +3588,33 @@ components:
           title: value
           type: string
       title: AttributesEntry
+      type: object
+    yorkie.v1.RevalidateAccessRequest:
+      additionalProperties: false
+      description: |-
+        RevalidateAccessRequest asks every node to re-check the authorization of
+         the project's open Watch streams. When keys is empty, every stream of the
+         project is re-checked; otherwise only the streams watching any of them.
+      properties:
+        keys:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: keys
+          type: array
+      title: RevalidateAccessRequest
+      type: object
+    yorkie.v1.RevalidateAccessResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        closedStreams:
+          additionalProperties: false
+          description: closed_streams is the number of streams closed across the cluster.
+          title: closed_streams
+          type: integer
+      title: RevalidateAccessResponse
       type: object
     yorkie.v1.RevisionSummary:
       additionalProperties: false

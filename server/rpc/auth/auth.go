@@ -19,6 +19,7 @@ package auth
 
 import (
 	"context"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -58,4 +59,30 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.Ac
 		md.Authorization,
 		accessInfo,
 	)
+}
+
+// VerifyAccessAs verifies the given access on behalf of the given project and
+// token. Unlike VerifyAccess it does not read them from the request context,
+// so an open stream can be verified again after the RPC that admitted it.
+func VerifyAccessAs(
+	ctx context.Context,
+	be *backend.Backend,
+	prj *types.Project,
+	token string,
+	accessInfo *types.AccessInfo,
+) error {
+	if !prj.RequireAuth(accessInfo.Method) {
+		return nil
+	}
+
+	return verifyAccess(ctx, be, prj, token, accessInfo)
+}
+
+// DropCachedDecisions drops every cached auth webhook decision of the given
+// project, so the next verification of any access asks the webhook again.
+func DropCachedDecisions(be *backend.Backend, prj *types.Project) int {
+	prefix := cacheKeyPrefix(prj.PublicKey)
+	return be.Cache.AuthWebhook.RemoveIf(func(key string) bool {
+		return strings.HasPrefix(key, prefix)
+	})
 }

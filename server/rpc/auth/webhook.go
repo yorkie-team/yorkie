@@ -90,7 +90,13 @@ func verifyAccess(
 
 // generateCacheKey creates a unique key for caching webhook responses.
 func generateCacheKey(publicKey string, body []byte) string {
-	return fmt.Sprintf("%s:auth:%s", publicKey, body)
+	return cacheKeyPrefix(publicKey) + string(body)
+}
+
+// cacheKeyPrefix returns the prefix shared by every cached webhook response
+// of the project with the given public key.
+func cacheKeyPrefix(publicKey string) string {
+	return publicKey + ":auth:"
 }
 
 // handleWebhookResponse processes the webhook response and returns an error if necessary.

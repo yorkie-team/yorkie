@@ -43,6 +43,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/revisions"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 	"github.com/yorkie-team/yorkie/server/schemas"
 )
 
@@ -93,12 +94,18 @@ var (
 type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
+	watches    *watchRegistry
 }
 
 // newYorkieServer creates a new instance of yorkieServer
-func newYorkieServer(serviceCtx context.Context, be *backend.Backend) *yorkieServer {
+func newYorkieServer(
+	serviceCtx context.Context,
+	be *backend.Backend,
+	watches *watchRegistry,
+) *yorkieServer {
 	return &yorkieServer{
 		backend:    be,
+		watches:    watches,
 		serviceCtx: serviceCtx,
 	}
 }
@@ -668,12 +675,14 @@ func (s *yorkieServer) Watch(
 	for i, target := range targets {
 		keys[i] = target.key()
 	}
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+	streamCtx, release, err := s.admitWatch(ctx, &types.AccessInfo{
 		Method:     types.Watch,
 		Attributes: types.NewAccessAttributes(keys, types.Read),
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+	defer release()
 
 	docSubs, channelSubs, resourceInits, err := s.subscribeResources(ctx, targets, presenceID, project)
 	if err != nil {
@@ -693,6 +702,9 @@ func (s *yorkieServer) Watch(
 		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
+	if err := context.Cause(streamCtx); err != nil {
+		return err
+	}
 	if err := stream.Send(&api.WatchResponse{
 		Body: &api.WatchResponse_Initialization{
 			Initialization: &api.WatchInitialization{
@@ -703,7 +715,34 @@ func (s *yorkieServer) Watch(
 		return err
 	}
 
-	return s.streamMergedEvents(ctx, stream.Send, project, docSubs, channelSubs)
+	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs)
+}
+
+// admitWatch admits a Watch stream: it registers the stream for later
+// revalidation, then verifies the access as any other RPC does. The stream
+// must be served under the returned context, which ends with the
+// revalidation error if a later RevalidateAccess closes it, and release must
+// be called when the stream ends.
+//
+// Registering before verifying closes a gap: a revalidation that runs after
+// registration finds the stream, and one that ran before it dropped the
+// cached decisions this admission now reads.
+func (s *yorkieServer) admitWatch(
+	ctx context.Context,
+	access *types.AccessInfo,
+) (context.Context, func(), error) {
+	streamCtx, release := s.watches.register(
+		ctx,
+		projects.From(ctx).ID,
+		metadata.From(ctx).Authorization,
+		*access,
+	)
+	if err := auth.VerifyAccess(ctx, s.backend, access); err != nil {
+		release()
+		return nil, nil, err
+	}
+
+	return streamCtx, release, nil
 }
 
 // watchTarget is a Watch resource descriptor resolved to what the rest of the
@@ -994,7 +1033,7 @@ func (s *yorkieServer) streamMergedEvents(
 		case <-s.serviceCtx.Done():
 			return context.Canceled
 		case <-ctx.Done():
-			return context.Canceled
+			return streamEndCause(ctx)
 		case te, ok := <-merged:
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -1134,12 +1173,14 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+	streamCtx, release, err := s.admitWatch(ctx, &types.AccessInfo{
 		Method:     types.WatchDocument,
 		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+	defer release()
 
 	ds, ri, err := s.subscribeDocument(ctx, target, clientID, project)
 	if err != nil {
@@ -1154,6 +1195,9 @@ func (s *yorkieServer) WatchDocument(
 		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
+	if err := context.Cause(streamCtx); err != nil {
+		return err
+	}
 	docInit := ri.GetDocumentInit()
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
@@ -1166,7 +1210,7 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	return streamEvents(
-		ctx,
+		streamCtx,
 		s.serviceCtx,
 		ds.sub,
 		stream.Send,
@@ -1229,12 +1273,14 @@ func (s *yorkieServer) WatchChannel(
 		return err
 	}
 
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+	streamCtx, release, err := s.admitWatch(ctx, &types.AccessInfo{
 		Method:     types.WatchChannel,
 		Attributes: types.NewAccessAttributes([]key.Key{target.key()}, types.Read),
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+	defer release()
 
 	cs, ri, err := s.subscribeChannel(ctx, target.channelKey, clientID, project)
 	if err != nil {
@@ -1245,6 +1291,9 @@ func (s *yorkieServer) WatchChannel(
 		s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
 	}()
 
+	if err := context.Cause(streamCtx); err != nil {
+		return err
+	}
 	chInit := ri.GetChannelInit()
 	if err := stream.Send(&api.WatchChannelResponse{
 		Body: &api.WatchChannelResponse_Initialized{
@@ -1258,7 +1307,7 @@ func (s *yorkieServer) WatchChannel(
 	}
 
 	return streamEvents(
-		ctx,
+		streamCtx,
 		s.serviceCtx,
 		cs.sub,
 		stream.Send,
