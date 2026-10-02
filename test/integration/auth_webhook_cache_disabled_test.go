@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -42,8 +43,13 @@ func TestAuthWebhookCacheDisabledOnServer(t *testing.T) {
 	var pushPullCalls atomic.Int64
 	var activateCalls atomic.Int64
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The handler runs off the test goroutine, where require's FailNow
+		// is not allowed; report with assert and fail the request instead.
 		req, err := types.NewAuthWebhookRequest(r.Body)
-		require.NoError(t, err)
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		switch req.Method {
 		case types.PushPull:
 			pushPullCalls.Add(1)
@@ -54,7 +60,7 @@ func TestAuthWebhookCacheDisabledOnServer(t *testing.T) {
 			w.WriteHeader(http.StatusForbidden)
 		}
 		_, err = (&types.AuthWebhookResponse{Allowed: allowed.Load()}).Write(w)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer authServer.Close()
 
