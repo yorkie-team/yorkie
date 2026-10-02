@@ -155,6 +155,22 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.NoError(t, conf.Validate())
 	})
 
+	t.Run("default Mongo project cache test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Mongo:\n  YorkieDatabase: yorkie-meta\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		// A Mongo section without the project cache keys must get the
+		// defaults, or the client fails to parse an empty TTL at startup.
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, server.DefaultProjectCacheSize, conf.Mongo.ProjectCacheSize)
+		assertDurationEqual(t, server.DefaultProjectCacheTTL, conf.Mongo.ProjectCacheTTL)
+		assert.NoError(t, conf.Validate())
+	})
+
 	t.Run("reject auth webhook cache TTL below cache.MinTTL test", func(t *testing.T) {
 		for _, ttl := range []string{"0s", "1ns"} {
 			conf, err := server.NewConfigFromFile("config.sample.yml")

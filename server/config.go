@@ -352,6 +352,12 @@ func (c *Config) ensureMongoDefaultValue() {
 	if c.Mongo.VectorCacheSize == 0 {
 		c.Mongo.VectorCacheSize = DefaultMongoVectorCacheSize
 	}
+	if c.Mongo.ProjectCacheSize == 0 {
+		c.Mongo.ProjectCacheSize = DefaultProjectCacheSize
+	}
+	if c.Mongo.ProjectCacheTTL == "" {
+		c.Mongo.ProjectCacheTTL = DefaultProjectCacheTTL.String()
+	}
 }
 
 // ensureKafkaDefaultValue set the default messagebroker.Config value
