@@ -21,6 +21,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Task | Todo | Lessons |
 |---|---|---|
 | Revalidate open Watch streams on demand (2026-10-02) | [20261002-revalidate-watch-access-todo.md](./active/20261002-revalidate-watch-access-todo.md) | [20261002-revalidate-watch-access-lessons.md](./active/20261002-revalidate-watch-access-lessons.md) |
+| Take the reply to a push-only request as a push ack only (2026-10-02) | [20261002-pushonly-reply-gc-todo.md](./active/20261002-pushonly-reply-gc-todo.md) | [20261002-pushonly-reply-gc-lessons.md](./active/20261002-pushonly-reply-gc-lessons.md) |
 | Port the agent-loop convergence work from yorkie-js-sdk (2026-10-01) | [20261001-harness-convergence-port-todo.md](./active/20261001-harness-convergence-port-todo.md) | [20261001-harness-convergence-port-lessons.md](./active/20261001-harness-convergence-port-lessons.md) |
 | Harden Set against payloads no replica can produce (2026-09-29) | [20260929-element-set-payload-hardening-todo.md](./active/20260929-element-set-payload-hardening-todo.md) | [20260929-element-set-payload-hardening-lessons.md](./active/20260929-element-set-payload-hardening-lessons.md) |
 | A level-2 split before a style range styles the paragraph it split (2026-09-27) | [20260927-style-end-token-split-family-todo.md](./active/20260927-style-end-token-split-family-todo.md) | [20260927-style-end-token-split-family-lessons.md](./active/20260927-style-end-token-split-family-lessons.md) |
