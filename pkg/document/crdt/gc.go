@@ -82,12 +82,41 @@ type GCChild interface {
 // ticket is what PurgeBarrierAt reports, and Root.GarbageCollect holds the
 // purge back until the version vector covers it as well as removedAt.
 //
+// A container may have more than one rule reading its linked nodes -- Tree has
+// both the sibling walk above and the same-boundary split ordering of §7.8 --
+// so PurgeBarrierAt reports one ticket per rule and the purge waits for all of
+// them.
+//
 // The type parameter is only there because the two purge paths name their child
 // differently: Root.GarbageCollect walks removed elements as Element and
 // removed nodes as GCChild, and both end in the same physical unlink.
 type GCBarrier[C any] interface {
-	// PurgeBarrierAt returns the additional ticket that must be covered before
-	// the given child may be unlinked, or nil when the child has no successor
-	// and unlinking it cannot move anything.
-	PurgeBarrierAt(child C) *time.Ticket
+	// PurgeBarrierAt returns the additional tickets that must be covered before
+	// the given child may be unlinked, or nil when nothing is deciding against
+	// the child's place and unlinking it cannot move anything.
+	PurgeBarrierAt(child C) []*time.Ticket
+}
+
+// barrierTicketsOf lifts a single barrier ticket into the slice PurgeBarrierAt
+// reports, dropping a nil ticket, which is the absence of a constraint.
+func barrierTicketsOf(at *time.Ticket) []*time.Ticket {
+	if at == nil {
+		return nil
+	}
+
+	return []*time.Ticket{at}
+}
+
+// barriersCovered reports whether the given version vector covers every barrier
+// ticket. All of them have to be covered: each stands for a rule that reads the
+// tombstone's place, and one uncovered rule is enough to make the unlink change
+// an answer that is still in flight.
+func barriersCovered(vector time.VersionVector, barriers []*time.Ticket) bool {
+	for _, at := range barriers {
+		if at != nil && !vector.EqualToOrAfter(at) {
+			return false
+		}
+	}
+
+	return true
 }

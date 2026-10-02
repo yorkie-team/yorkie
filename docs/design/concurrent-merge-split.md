@@ -488,6 +488,17 @@ ticket while a text split keeps `createdAt`: at a multi-level split the
 outer right-half product holds one unknown `<span>` and the known text
 sits below it.
 
+The §7.5 advance ends its run of empty same-boundary products on the
+same test, so the two walks cannot disagree about where one run ends.
+Counting tombstones keeps the answer independent of whether a replica
+has applied a concurrent removal yet, but it also makes the answer
+depend on a node GC could unlink; `Tree.PurgeBarrierAt` therefore
+reports, alongside the sibling-walk barrier, the `createdAt` of every
+chain ancestor of the tombstone that still has an `InsNextID`. Both
+walks consult the classification only for a chain node they do not
+know, so once that node is causally stable the purge can no longer
+change where a split lands.
+
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s
 Phase 3 range narrowing, `collectBetween`'s cascade delete, and the

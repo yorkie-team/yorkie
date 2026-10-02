@@ -621,7 +621,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		// its parent that other replicas may still be deciding against.
 		// removedAt covers the value; GCBarrier covers the place.
 		if parent, ok := pair.parent.(GCBarrier[Element]); ok {
-			if at := parent.PurgeBarrierAt(pair.elem); at != nil && !vector.EqualToOrAfter(at) {
+			if !barriersCovered(vector, parent.PurgeBarrierAt(pair.elem)) {
 				deferred++
 				continue
 			}
@@ -646,7 +646,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		if parent, ok := pair.Parent.(GCBarrier[GCChild]); ok {
-			if at := parent.PurgeBarrierAt(pair.Child); at != nil && !vector.EqualToOrAfter(at) {
+			if !barriersCovered(vector, parent.PurgeBarrierAt(pair.Child)) {
 				deferred++
 				continue
 			}
