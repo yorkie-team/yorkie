@@ -431,6 +431,12 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkText(1000, b)
 	})
 
+	// Ten times "text 1000": a local edit must stay sublinear in the text's
+	// length, so this should cost about ten times as much, not a hundred.
+	b.Run("text 10000", func(b *testing.B) {
+		benchmarkText(10000, b)
+	})
+
 	b.Run("array 1000", func(b *testing.B) {
 		benchmarkArray(1000, b)
 	})

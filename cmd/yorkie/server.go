@@ -432,7 +432,7 @@ func init() {
 		&mongoProjectCacheTTL,
 		"mongo-project-cache-ttl",
 		5*time.Minute,
-		"TTL for MongoDB project cache (e.g. '5m', '60s')",
+		"TTL for MongoDB project cache (e.g. '5m', '60s'). Must be at least 100ms.",
 	)
 	cmd.Flags().IntVar(
 		&mongoClientCacheSize,
@@ -514,11 +514,18 @@ func init() {
 		server.DefaultAuthWebhookCacheSize,
 		"The cache size of the authorization webhook.",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Backend.AuthWebhookCacheDisabled,
+		"auth-webhook-cache-disabled",
+		false,
+		"Disable the authorization webhook response cache server-wide. "+
+			"Every protected RPC then calls the webhook.",
+	)
 	cmd.Flags().DurationVar(
 		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
-		"TTL value to set when caching authorization webhook response.",
+		"TTL value to set when caching authorization webhook response. Must be at least 100ms.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.Hostname,
@@ -609,7 +616,7 @@ func init() {
 		&channelSessionCountCacheTTL,
 		"channel-session-count-cache-ttl",
 		server.DefaultChannelSessionCountCacheTTL,
-		"The TTL value for channel session count cache.",
+		"The TTL value for channel session count cache. Must be at least 100ms.",
 	)
 	cmd.Flags().IntVar(
 		&channelSessionCountCacheSize,
