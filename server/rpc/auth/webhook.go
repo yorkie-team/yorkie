@@ -44,7 +44,7 @@ var (
 // retries, since a failed recheck is retried as a whole by its caller. Its
 // answer is still cached, as the freshest decision there is.
 //
-// With Backend.AuthWebhookCacheDisabled, it neither reads nor writes the
+// With Config.AuthWebhookCacheDisabled, it neither reads nor writes the
 // cache, so every call asks the webhook.
 func verifyAccess(
 	ctx context.Context,
@@ -66,10 +66,13 @@ func verifyAccess(
 	}
 
 	cacheDisabled := be.Config.AuthWebhookCacheDisabled
-	cacheKey := generateCacheKey(prj.PublicKey, body)
-	if !recheck && !cacheDisabled {
-		if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
-			return handleWebhookResponse(entry.First, entry.Second)
+	var cacheKey string
+	if !cacheDisabled {
+		cacheKey = generateCacheKey(prj.PublicKey, body)
+		if !recheck {
+			if entry, ok := be.Cache.AuthWebhook.Get(cacheKey); ok {
+				return handleWebhookResponse(entry.First, entry.Second)
+			}
 		}
 	}
 
@@ -83,7 +86,10 @@ func verifyAccess(
 
 	// Read before asking, so an answer that crosses a DropCachedDecisions is
 	// seen as predating it and is not written back over the drop.
-	gen := currentCacheGen()
+	var gen uint64
+	if !cacheDisabled {
+		gen = currentCacheGen()
+	}
 
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
