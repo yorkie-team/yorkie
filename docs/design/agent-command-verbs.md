@@ -699,6 +699,81 @@ runs `node --test` over `scripts/test/`. The package's only dependencies are
 the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 `make build`.
 
+### 6. The review loop converges on what it already judged
+
+Ported from yorkie-js-sdk (#1428 and #1432 there), where the incident that
+motivated it happened. Issue numbers below and in the ported modules' comments
+are yorkie-js-sdk's.
+
+The panel is a sample, not an oracle. On yorkie-js-sdk#1426 it approved a
+head, then re-reviewed a merge of main that left the PR's own diff unchanged
+and turned blocking, and with the fix budget spent the PR went from
+`agent:ready` to `agent:blocked` on code nobody had touched. So the loop
+refuses to pay twice for the same question, and it keeps what it learns about
+failures.
+
+- **Carry.** Every review stamps a PR-diff fingerprint (`git patch-id
+  --verbatim` of the unfiltered diff) into each lens's check-run state. A new
+  head that fingerprints the same as a head every lens approved has that
+  approval re-stamped on it, and no lens runs. Carries are capped at 2 in a
+  row, and promote still needs green CI on the new head. A merge that touched
+  the PR's hunks or their context changes the fingerprint and is reviewed. A
+  rebase rewrites every commit, so the approved head is no longer in the PR's
+  commit list: it is found through the PR's force-push events (GraphQL
+  `beforeCommit`; the REST event names only the new head), whose check runs
+  stay readable. A replaced head is used only when it holds the newest
+  verdicts, and only to carry; anything else reads the branch's own state.
+- **Reuse.** A rerun on a commit that already has verdicts re-stamps them, so a
+  blocking verdict goes straight to the fixer. `@claude rerun review` asks for a
+  fresh sample. The latest rerun from someone with write access decides. A
+  rerun whose author's permission lookup failed may force a review but never
+  withdraw one; a read-only account or a login that does not exist is ignored.
+- **Probe before dispatch.** The fixer's credential is proven with a one-word
+  query before the round is recorded. Only a closed usage window or a rejected
+  credential counts as a refusal; a transient overload proceeds. The probe holds
+  the pool secrets, so it runs before the App token and the branch checkout. A
+  refusal skips those and every other setup step and goes straight to its page.
+- **Honest infra pages.** A fixer that fails on an API error with nothing
+  pushed is paged with its cause and the next step, not as "the fixer failed".
+- **Evidence beside claims.** When a fix round's own commits delete, disable
+  or rename tests out of the runner's reach, the trusted report job records it.
+  "Own commits" means the round's commits that are in the PR's commit list and
+  are not merges, so main's changes are not blamed on the fixer, and the round
+  ends at the App's last push from the starting head, by GitHub's record of who
+  pushed, so a human's later commit is not blamed either. Every record for a
+  head counts, unioned per file. The next
+  round's adjudicator sees the record, ahead of the author's text, for every
+  claim and dispute it adjudicates. It only sees COMMITTED tests: a test written
+  and deleted in the working tree never reaches a compare, and the fixer
+  prompt's rule is the guard for that case.
+- **Go tests, not JS ones.** Upstream counts `it(`/`test(` cases. Here the
+  fixer edits Go, so `test-removals.mjs` also reads `_test.go` files: top-level
+  `func TestXxx(t *testing.T)` and `func FuzzXxx(f *testing.F)` cases, `t.Run`
+  subtests, any receiver's `Skip`/`Skipf`/`SkipNow` as a case switched off, and
+  a new or changed `//go:build` line in an existing test file (or a new file
+  born `ignore`) as a file switched off. The shared suite bodies under
+  `testcases/` (`func RunXxx(` and their `t.Run` subtests) count as tests, and
+  a rename into `testdata/`, to a `_`/`.` prefix or to another platform's
+  `_GOOS`/`_GOARCH` suffix counts as a deletion. Switch-offs are netted across
+  the round's commits before they are clamped, so a skip added and removed
+  inside one round is not reported. The JS rules stay, for
+  `scripts/agent/*.test.mjs`. Rows of a table-driven test are not seen.
+- **No `it.fails` in Go.** Upstream's prompt says to keep a reproducing test as
+  `it.fails`, which still runs and is not counted. Go has no equivalent, so the
+  fixer keeps the test, makes `t.Skip("still reproduces: <finding>")` its first
+  statement with a comment naming the finding, and reports the item
+  `--skipped`. The skip IS recorded: beside a `--fixed` claim it is the
+  contradiction the adjudicator is shown it to catch. It is never shown beside
+  its own `--skipped` claim, because a skipped claim is upheld without an
+  adjudication session; the record reaches the adjudicator only through the
+  same round's `--fixed` claims and disputes, and a maintainer reads it on the
+  PR.
+- **No spec, no scope verdict.** Without a human-filed `agent:candidate` issue,
+  design-fit is told it has no spec, and scope findings are `minor` at most. An
+  issue that failed to load is not reported as no spec.
+- **Both directions are observed.** The metrics count clean→blocking flips
+  (escalations) as well as blocking→clean ones.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -709,6 +784,9 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | Fix rounds multiply CI cost (MongoDB + `-race` per round) | Rounds are bounded and the PR latches for a human when exhausted. Phase 3 lands last, after the cost of a round is known from Phase 2 |
 | A workflow misfires on an unrelated comment | `AGENT_PIPELINE_ENABLED` is unset by default and turns the surface off without a revert |
 | Two verb tables disagree | One table, in `CONTRIBUTING.md`, generated from nothing else. Upstream carries two and records the disagreement as a known risk |
+| Main changes what an unchanged diff MEANS, and a carry hides it | CI must pass on the carried head before promote, and the third carry in a row is a full review |
+| A fixer forges an execution log to look like an infra failure | The worst it can choose is which page a human reads; the PR is latched either way |
+| A fixer's skipped reproducer reads as a removal | It is meant to: the record is evidence for the round's `--fixed` claims and disputes, and a skip that pairs with a `--skipped` item is consistent with it. A conditional skip copied into a new test is reported too |
 
 ### Design Decisions
 
@@ -720,6 +798,12 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | Advisory before gating | Check runs interact with branch protection and with the merge queue. Landing the reviewer first separates "is it any good?" from "does it block merges?" |
 | Keep the upstream kill-switch variable | Lets a workflow be merged inert, so review of the workflow and the decision to enable it are separate events |
 | Land issue → PR (Phase I) after deferring it, withdrawing it once, and restoring it | It originates work, where every phase here reviews work a human already decided to do — and when it was first tried, the corrections review demanded could not be pushed, because no agent credential may write `.github/workflows/**`. It is installed behind a gate a repository setting must satisfy (`require_last_push_approval` on `main`), and its workflow changes are a human's to push |
+| The carry key is `patch-id --verbatim`, not `--stable` | `--stable` discards whitespace, so an indentation-only change that alters behaviour would carry an approval |
+| Only an approval carries | Carrying a blocking verdict to a new head would dispatch a fixer on findings read against another commit |
+| Credentials are probed before the round, not retried after | Nothing may run after the agent in its own job, and a probe spends no round at all |
+| Test removals are evidence for the adjudicator, not a gate | Removing a test can be legitimate; the adjudicator already re-reads the code |
+| A fix round ends at the App's last push, found by pusher, not by commit identity | The fixer's shell sets a commit's author and committer, so filtering on them would let it hide its own commits; it cannot choose who GitHub records as the pusher |
+| A Go reproducer is kept behind `t.Skip`, not left failing | A red test hands the PR to the CI-fix arm, whose job is to make CI pass, which deleting the test also does; a recorded skip keeps the reproducer committed and visible |
 
 ## Alternatives Considered
 
@@ -730,6 +814,10 @@ the Claude Agent SDK and `zod`. Nothing Go touches it, and it never enters
 | Gate on the panel from Phase 1 | Makes the first phase a branch-protection change, which is the part that needs the most evidence and has the least at that point |
 | Write our own lens rubrics | The upstream six are repository-agnostic and already measured. The repository-specific parts are §4's three, and those have to be written regardless |
 | Drop CodeRabbit when the panel lands | Reverses the burden of proof. Phase 1 measures whether the panel adds anything; that question is unanswerable with only one reviewer running |
+| Refuse to carry when main changed a file the PR touches | yorkie-js-sdk#1426's own merge touched two of the PR's files, so the rule blocked the carry it was built for; CI covers the same risk |
+| Refund fix rounds lost to infra failures | The infra page latches the PR and only a rerun lifts it, which restarts the budget anyway; the refund could never change a decision |
+| Keep earlier demotions across rounds (by finding identity) | On yorkie-js-sdk#1426 the finding that flipped blocking was raised against different files from the one demoted; identity matching would not have held it, and wider matching drops real findings off the gate. Carry removes the re-review that caused the flip |
+| Retry the fixer on another credential after it fails | Nothing may run after the agent in its own job |
 
 ## Tasks
 

@@ -19,13 +19,16 @@ package document_test
 import (
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -423,6 +426,62 @@ func TestDocument(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
+	})
+
+	// The expected values match the JS SDK, which truncates a fractional
+	// delta toward zero and wraps it to the counter's width. Go leaves an
+	// out-of-range float-to-int conversion implementation-defined.
+	t.Run("counter out-of-range float delta test", func(t *testing.T) {
+		doc := document.New("d1")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("int", 10).
+				Increase(4294967296.5).
+				Increase(-3000000000.5)
+			root.SetNewCounter("long", int64(10)).Increase(1e20)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"int":1294967306,"long":7766279631452241930}`, doc.Marshal())
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			assert.PanicsWithError(t, crdt.ErrNonFiniteNumber.Error(), func() {
+				root.GetCounter("int").Increase(math.NaN())
+			})
+			assert.PanicsWithError(t, crdt.ErrNonFiniteNumber.Error(), func() {
+				root.GetCounter("long").Increase(math.Inf(-1))
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"int":1294967306,"long":7766279631452241930}`, doc.Marshal())
+	})
+
+	// A fractional delta must cross the wire as an Integer or a Long, never
+	// as a Double: a server without this fix cannot build the reverse of a
+	// Double delta and converts it with a CPU-dependent int32(f).
+	t.Run("counter fractional delta pushed as an integer test", func(t *testing.T) {
+		doc := document.New("d1")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("int", 10).Increase(1.5)
+			root.SetNewCounter("long", int64(10)).Increase(-2.5)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"int":11,"long":8}`, doc.Marshal())
+
+		var types []crdt.ValueType
+		for _, c := range doc.CreateChangePack().Changes {
+			for _, op := range c.Operations() {
+				inc, ok := op.(*operations.Increase)
+				if !ok {
+					continue
+				}
+				prim, ok := inc.Value().(*crdt.Primitive)
+				assert.True(t, ok)
+				types = append(types, prim.ValueType())
+			}
+		}
+		assert.Equal(t, []crdt.ValueType{crdt.Integer, crdt.Long}, types)
 	})
 
 	t.Run("rollback test", func(t *testing.T) {

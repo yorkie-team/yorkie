@@ -59,20 +59,47 @@ func NewIncreaseWithActor(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
+func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
-	value := o.value.(*crdt.Primitive)
+	// Comma-ok, and a no-op rather than an error off the local path: the
+	// value arrives straight off the wire (converter.fromIncrease passes
+	// whatever element the pack carries), so a raw client can push an
+	// Increase whose value is a Text, an Object or another Counter. The
+	// server stores a pushed change before executing it (packs.PushPull), so
+	// a panic here takes the RPC goroutine down and an error here makes
+	// every later replay of that document fail forever. Dropping the delta
+	// is deterministic on every replica, so they still converge.
+	value, ok := o.value.(*crdt.Primitive)
+	if !ok {
+		return skipUnlessLocal(source, ErrNotApplicableDataType)
+	}
 
 	// Compute the reverse before mutating the counter, mirroring the JS SDK
 	// (increase_operation.ts:95-130). A dedup counter (o.actor != "")
 	// produces no reverse: HyperLogLog cannot remove an actor once added.
+	// Skipped when the source discards the reverse (see OpSource.NeedsReverse):
+	// a remote apply or a server replay must not fail on a reverse it throws
+	// away, as every Double delta did before negatePrimitive handled it.
+	//
+	// The one exception is a Double delta on an Integer counter. It is added
+	// in float64 and the sum is wrapped to 32 bits, so a large delta can
+	// round the old value away (10 + 2^60 gives 0), and its negation cannot
+	// undo that. Its reverse is the change the counter actually made, taken
+	// after the apply, which int32 arithmetic always undoes.
+	needsReverse := o.actor == "" && source.NeedsReverse()
+	reverseFromChange := needsReverse &&
+		value.ValueType() == crdt.Double && cnt.ValueType() == crdt.IntegerCnt
+
 	var reverseOp Operation
-	if o.actor == "" {
+	var before int32
+	if reverseFromChange {
+		before = cnt.Value().(int32)
+	} else if needsReverse {
 		negated, err := negatePrimitive(value)
 		if err != nil {
 			return ExecutionResult{}, err
@@ -80,20 +107,47 @@ func (o *Increase) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (E
 		reverseOp = NewIncrease(o.parentCreatedAt, negated, o.executedAt)
 	}
 
+	// Every failure below is a property of the delta the change carries -- a
+	// dedup counter increased without an actor, a non-numeric primitive --
+	// so it is fatal only for a change this replica is producing. For one
+	// another replica or the server already stored, it is dropped for the
+	// reason above: a stored change that cannot be applied is unrecoverable.
 	if cnt.IsDedup() {
 		if o.actor == "" {
-			return ExecutionResult{}, ErrNotApplicableDataType
+			return skipUnlessLocal(source, ErrNotApplicableDataType)
 		}
 		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
-			return ExecutionResult{}, err
+			return skipUnlessLocal(source, err)
 		}
 	} else {
 		if _, err := cnt.Increase(value); err != nil {
-			return ExecutionResult{}, err
+			return skipUnlessLocal(source, err)
 		}
 	}
 
+	if reverseFromChange {
+		change, err := crdt.NewPrimitive(before-cnt.Value().(int32), value.CreatedAt())
+		if err != nil {
+			return ExecutionResult{}, err
+		}
+		reverseOp = NewIncrease(o.parentCreatedAt, change, o.executedAt)
+	}
+
 	return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
+}
+
+// skipUnlessLocal returns err for an operation this replica is producing, and
+// a no-op result for one that arrived from another replica or from the
+// server's replay of a change it has already stored. Such a change cannot be
+// rejected any more -- pushpull.PushPull persists a pushed change before it is
+// ever executed -- so an error would make every later BuildInternalDocForServerSeq
+// and every snapshot of that document fail forever.
+func skipUnlessLocal(source OpSource, err error) (ExecutionResult, error) {
+	if source == OpSourceLocal || source == OpSourceUndoRedo {
+		return ExecutionResult{}, err
+	}
+
+	return ExecutionResult{Observable: false}, nil
 }
 
 // negatePrimitive returns a deep copy of the given primitive with its
@@ -117,6 +171,14 @@ func negatePrimitive(value *crdt.Primitive) (*crdt.Primitive, error) {
 		return crdt.NewPrimitive(-v, value.CreatedAt())
 	case crdt.Integer:
 		v, ok := value.Value().(int32)
+		if !ok {
+			return nil, ErrNotApplicableDataType
+		}
+		return crdt.NewPrimitive(-v, value.CreatedAt())
+	case crdt.Double:
+		// A JS client sends a fractional delta as a Double; JS negates it
+		// as a Double too.
+		v, ok := value.Value().(float64)
 		if !ok {
 			return nil, ErrNotApplicableDataType
 		}

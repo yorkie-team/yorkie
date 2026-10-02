@@ -16,6 +16,18 @@ the *right change*, not whether the code is line-by-line correct.
   in `docs/design/README.md` — NOT a parallel/duplicate doc (the repo files docs
   by validity; fold into the canonical subsystem doc). See `CONTRIBUTING.md`.
 
+## When there is no spec
+The prompt says so under "No originating issue spec" when no human-filed
+`agent:candidate` issue exists. Then there is nothing to measure scope against:
+- Scope findings (does more or less than it should, bundles unrelated work) are
+  **`minor` at most**, and the finding says it was graded without a spec. A
+  scope argument without a spec is a scheduling call for a human, not a defect
+  that should stop the merge.
+- Do NOT treat the PR body as the spec. For an agent-authored PR, it was written
+  by the author you are reviewing.
+- Duplication/reuse, wrong layer, and conflicts with a design doc's stated
+  **Non-Goals** need no issue spec, and you grade them as usual.
+
 ## NOT your lane (defer — do not report)
 Line-level logic bugs (correctness lens), security specifics (security lens),
 test quality (test-adequacy lens), style, import-boundary/lint.

@@ -347,7 +347,12 @@ jobs:
                 const labelled = (issue.labels || []).some((l) => (l.name || l) === 'agent:candidate');
                 const human = issue.user && issue.user.type !== 'Bot';
                 if (labelled && human) text = `# ${issue.title}\n\n${issue.body || ''}`;
-              } catch {}
+              } catch (e) {
+                // Recorded, not swallowed: an UNREAD spec must not be reported
+                // to design-fit as "no spec" (review-panel.mjs NO_SPEC_NOTE).
+                core.warning(`could not read issue #${m[1]} (${e.message}); design-fit is not told it has no spec.`);
+                fs.writeFileSync('/tmp/issue.state', 'unreadable');
+              }
             }
             fs.writeFileSync('/tmp/issue.txt', text);
 
@@ -483,6 +488,7 @@ jobs:
           node .trusted/scripts/agent/review-panel.mjs
           --diff-file /tmp/pr.diff
           --issue-file /tmp/issue.txt
+          --issue-state /tmp/issue.state
           --changed-files /tmp/changed.txt
           --prior-findings /tmp/prior-findings.json
           --rebuttals /tmp/rebuttals.json

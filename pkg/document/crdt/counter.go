@@ -20,6 +20,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -35,6 +37,10 @@ var ErrDedupRequiresActor = errors.New("dedup counter requires actor")
 // ErrDedupIncrementMustBeOne is returned when a dedup counter receives
 // an increment value other than 1.
 var ErrDedupIncrementMustBeOne = errors.New("dedup counter only supports increment by 1")
+
+// ErrNonFiniteNumber is returned when a counter receives NaN or an infinity,
+// which has no integer value to truncate to.
+var ErrNonFiniteNumber = errors.New("non-finite number is not supported")
 
 // CounterType represents any type that can be used as a counter.
 type CounterType int
@@ -240,8 +246,28 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 	if !p.IsNumericType() || !v.IsNumericType() {
 		return nil, ErrUnsupportedType
 	}
+
+	// A NaN or an infinity has no integer value to add. This apply path also
+	// runs for remote changes and for the server's replay of changes it has
+	// already stored, where an error would leave the document unbuildable
+	// forever, so such a delta is a no-op here and every replica still
+	// converges. A local increase is rejected earlier, in json.Counter.
+	if isNonFinite(v.value) {
+		return p, nil
+	}
+
 	switch p.valueType {
 	case IntegerCnt:
+		// A Double delta is added in float64 before wrapping, as the JS SDK
+		// does, so a replica applying a JS client's change gets its value.
+		if delta, ok := v.value.(float64); ok {
+			sum, err := TruncFloatToInt32(float64(p.value.(int32)) + math.Trunc(delta))
+			if err != nil {
+				return nil, err
+			}
+			p.value = sum
+			break
+		}
 		intValue, err := castToInt(v.value)
 		if err != nil {
 			return nil, err
@@ -340,6 +366,18 @@ func (p *Counter) recomputeValue() {
 	}
 }
 
+// isNonFinite reports whether the given value is a NaN or an infinity.
+func isNonFinite(value any) bool {
+	switch val := value.(type) {
+	case float64:
+		return math.IsNaN(val) || math.IsInf(val, 0)
+	case float32:
+		return math.IsNaN(float64(val)) || math.IsInf(float64(val), 0)
+	default:
+		return false
+	}
+}
+
 // castToInt casts numeric type to int32.
 func castToInt(value any) (int32, error) {
 	switch val := value.(type) {
@@ -350,9 +388,9 @@ func castToInt(value any) (int32, error) {
 	case int:
 		return int32(val), nil
 	case float32:
-		return int32(val), nil
+		return TruncFloatToInt32(float64(val))
 	case float64:
-		return int32(val), nil
+		return TruncFloatToInt32(val)
 	default:
 		return 0, ErrUnsupportedType
 	}
@@ -368,10 +406,47 @@ func castToLong(value any) (int64, error) {
 	case int:
 		return int64(val), nil
 	case float32:
-		return int64(val), nil
+		return TruncFloatToInt64(float64(val))
 	case float64:
-		return int64(val), nil
+		return TruncFloatToInt64(val)
 	default:
 		return 0, ErrUnsupportedType
 	}
+}
+
+// two64 is 2^64, the modulus of a 64-bit two's complement integer.
+var two64 = new(big.Int).Lsh(big.NewInt(1), 64)
+
+// TruncFloatToInt64 truncates f toward zero and wraps the result to 64 bits
+// in two's complement, like `BigInt.asIntN(64, BigInt(Math.trunc(f)))` in
+// the JS SDK. A plain int64(f) is implementation-defined in Go when f is out
+// of range (arm64 saturates, amd64 does not), which would let replicas on
+// different CPUs disagree. NaN and infinities have no integer value and
+// return ErrNonFiniteNumber, as `BigInt()` throws for them in JS.
+func TruncFloatToInt64(f float64) (int64, error) {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, ErrNonFiniteNumber
+	}
+
+	f = math.Trunc(f)
+	if f >= -0x1p63 && f < 0x1p63 {
+		return int64(f), nil
+	}
+
+	// Out of range, f is an exact integer, so reduce it modulo 2^64.
+	i, _ := new(big.Float).SetFloat64(f).Int(nil)
+	return int64(i.Mod(i, two64).Uint64()), nil
+}
+
+// TruncFloatToInt32 truncates f toward zero and wraps the result to 32 bits
+// in two's complement, like `BigInt.asIntN(32, BigInt(removeDecimal(f)))` in
+// the JS SDK. See TruncFloatToInt64.
+func TruncFloatToInt32(f float64) (int32, error) {
+	v, err := TruncFloatToInt64(f)
+	if err != nil {
+		return 0, err
+	}
+
+	// Wrapping to 64 bits first keeps the low 32 bits of the exact integer.
+	return int32(v), nil
 }

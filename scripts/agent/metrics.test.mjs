@@ -229,6 +229,29 @@ test("detectFlips: stays-blocking or stays-clean is not a flip; clean→blocking
   assert.deepEqual(detectFlips(escalate).flips, []); // only blocking→clean counts
 });
 
+// #1426: a lens approved round 4 and blocked round 5 on a diff nobody had
+// changed. The metric looked only for blocking→clean, so the flip that cost the
+// PR its ready label was counted nowhere. It is now reported in its own list —
+// `flips` keeps its meaning for every existing reader.
+test("detectFlips: clean→blocking is reported as an ESCALATION, separately from flips", () => {
+  const records = [
+    reviewRound([{ id: "blast-radius", blocking: true }, { id: "security", blocking: false }]),
+    reviewRound([{ id: "blast-radius", blocking: false }, { id: "security", blocking: false }]),
+    reviewRound([{ id: "blast-radius", blocking: true }, { id: "security", blocking: false }]),
+  ];
+  const got = detectFlips(records);
+  assert.deepEqual(got.flips, [{ lens: "blast-radius", fromRound: 0, toRound: 1 }]);
+  assert.deepEqual(got.escalations, [{ lens: "blast-radius", fromRound: 1, toRound: 2 }]);
+  // An infra round between two valid ones is skipped here too.
+  const infra = [
+    reviewRound([{ id: "sec", blocking: false }]),
+    reviewRound([{ id: "sec", blocking: true, infraError: "429" }]),
+    reviewRound([{ id: "sec", blocking: false }]),
+  ];
+  assert.deepEqual(detectFlips(infra).escalations, []);
+  assert.deepEqual(detectFlips([]).escalations, []);
+});
+
 test("detectFlips: an infra/quota round between valid rounds is skipped, not a flip", () => {
   // blocking → (infra error) → blocking: the infra round is dropped, leaving
   // blocking→blocking on the valid subsequence, so NO flip.
@@ -455,6 +478,9 @@ test("renderSummary: with review-panel data, renders a separate section + combin
   assert.match(md, /- Weighted survived-to-gate: 13/);
   // advisory cross-round flip line, with the offending lens + round transition
   assert.match(md, /- ⚠️ Cross-round flips \(blocking→clean; advisory, review manually\): 1 — correctness r0→r1/);
+  // No escalations given: the line still renders, at zero, so a reader can tell
+  // "none happened" from "not measured".
+  assert.match(md, /- ⚠️ Cross-round escalations \(clean→blocking; advisory, review manually\): 0/);
   // per-section cost + weighted/raw tokens carry the split
   assert.match(md, /### Review panel\n\n- Cost: \$0\.80\n- Tokens: ~40K weighted \(~300K raw\)/);
   // combined totals: cost $3.30 + $0.80 = $4.10; weighted 300K + 40K = 340K; raw 1.1M + 300K = 1.4M

@@ -1,5 +1,5 @@
 ---
-updated: 2026-09-29
+updated: 2026-10-01
 ---
 
 # Tasks Index
@@ -20,9 +20,11 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Port the agent-loop convergence work from yorkie-js-sdk (2026-10-01) | [20261001-harness-convergence-port-todo.md](./active/20261001-harness-convergence-port-todo.md) | [20261001-harness-convergence-port-lessons.md](./active/20261001-harness-convergence-port-lessons.md) |
 | A level-2 split before a style range styles the paragraph it split (2026-09-27) | [20260927-style-end-token-split-family-todo.md](./active/20260927-style-end-token-split-family-todo.md) | [20260927-style-end-token-split-family-lessons.md](./active/20260927-style-end-token-split-family-lessons.md) |
 | Lint every build tag, and turn staticcheck and unused back on (2026-09-27) | [20260927-lint-all-tags-todo.md](./active/20260927-lint-all-tags-todo.md) | [20260927-lint-all-tags-lessons.md](./active/20260927-lint-all-tags-lessons.md) |
 | Mark LWW losers removed and stop leaking GC size records (2026-09-27) | [20260927-element-rht-loser-and-gc-record-todo.md](./active/20260927-element-rht-loser-and-gc-record-todo.md) | [20260927-element-rht-loser-and-gc-record-lessons.md](./active/20260927-element-rht-loser-and-gc-record-lessons.md) |
+| Counter float deltas and duplicate attach (Go/JS parity) (2026-09-27) | [20260927-counter-float-cast-and-dup-attach-todo.md](./active/20260927-counter-float-cast-and-dup-attach-todo.md) | [20260927-counter-float-cast-and-dup-attach-lessons.md](./active/20260927-counter-float-cast-and-dup-attach-lessons.md) |
 | Guard empty-text anchors and reset the clone on failed applies (2026-09-26) | [20260926-tree-anchor-and-clone-reset-todo.md](./active/20260926-tree-anchor-and-clone-reset-todo.md) | [20260926-tree-anchor-and-clone-reset-lessons.md](./active/20260926-tree-anchor-and-clone-reset-lessons.md) |
 | Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
 | Catch the codebase up to Go 1.26 and keep it there (2026-09-26) | [20260926-go126-catch-up-todo.md](./active/20260926-go126-catch-up-todo.md) | [20260926-go126-catch-up-lessons.md](./active/20260926-go126-catch-up-lessons.md) |

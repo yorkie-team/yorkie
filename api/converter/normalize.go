@@ -17,7 +17,9 @@
 package converter
 
 import (
+	"encoding/binary"
 	goerrors "errors"
+	"math"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -113,13 +115,18 @@ func withoutUndatedOperations(pbOps []*api.Operation) []*api.Operation {
 // rather than known-empty. Normalizing costs nothing if it is empty and
 // avoids an unrecoverable read failure if it is not.
 //
-// Only TreeEdit is touched because every repairable check lives on it. Each
-// repair restores what the field meant before the check, except where that
-// meaning was itself a crash; see the individual comments. Rejections no repair
-// exists for are handled by dropping the operation in FromStoredOperations,
-// which is what stored decoding should call rather than this directly.
+// Each repair restores what the field meant before the check, except where
+// that meaning was itself a crash; see the individual comments. Rejections no
+// repair exists for are handled by dropping the operation in
+// FromStoredOperations, which is what stored decoding should call rather than
+// this directly.
 func NormalizeStoredOperations(pbOps []*api.Operation) {
 	for _, pbOp := range pbOps {
+		if pbInc := pbOp.GetIncrease(); pbInc != nil {
+			zeroNonFiniteDelta(pbInc)
+			continue
+		}
+
 		pbTreeEdit := pbOp.GetTreeEdit()
 		if pbTreeEdit == nil {
 			continue
@@ -140,6 +147,36 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 		dropUndatedAttrs(pbTreeEdit.RestoreSpans)
 		dropUndatedAttrs(pbTreeEdit.RetombstoneSpans)
 	}
+}
+
+// zeroNonFiniteDelta replaces a NaN or an infinite Double delta on a stored
+// Increase with zero, which is what such a delta already did to every replica
+// that applied it.
+//
+// The wire boundary rejects a non-finite delta (ErrNonFiniteCounterDelta in
+// fromIncrease) so it is never stored or broadcast again, but a change written
+// before that check carries it, and rejecting a stored change is exactly the
+// poison pill the check exists to avoid. Zero is the faithful repair rather
+// than a convenient one: crdt.Counter.Increase drops a non-finite delta and
+// returns the counter unchanged, and adding zero leaves the same value on
+// every counter type (an Integer counter truncates 0 away, a Long adds 0, a
+// dedup counter rejects a Double delta whatever it holds). The operation stays
+// in the change, so the checkpoints and sequence numbers around it are
+// undisturbed, and what crosses the wire to a pulling client is a delta its
+// strict decoder accepts.
+func zeroNonFiniteDelta(pbInc *api.Operation_Increase) {
+	pbValue := pbInc.GetValue()
+	if pbValue == nil || pbValue.Type != api.ValueType_VALUE_TYPE_DOUBLE || len(pbValue.Value) < 8 {
+		return
+	}
+
+	delta := math.Float64frombits(binary.LittleEndian.Uint64(pbValue.Value))
+	if !math.IsNaN(delta) && !math.IsInf(delta, 0) {
+		return
+	}
+
+	// float64(0) is eight zero bytes in either byte order.
+	pbValue.Value = make([]byte, 8)
 }
 
 // splitTicketsUnlessUndated returns the carried split tickets, or none at all
