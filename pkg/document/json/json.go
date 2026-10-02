@@ -19,7 +19,17 @@ package json
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
+
+// ErrMidSurrogatePair is returned when an index falls between the two UTF-16
+// code units of a surrogate pair. Splitting a node there leaves a lone half on
+// each side, and the two SDKs disagree on what a lone half is: Go's strings
+// are UTF-8, so utf16.Decode has to substitute U+FFFD, while JS keeps the raw
+// code unit. The structure converges either way, but the text does not, so the
+// local APIs refuse the index instead of minting an operation whose result
+// depends on which SDK applies it. See docs/design/document-editing.md.
+var ErrMidSurrogatePair = errors.InvalidArgument("index should not fall in the middle of a surrogate pair")
 
 func toOriginal(elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {

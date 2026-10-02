@@ -113,11 +113,43 @@ func validateTreeNodes(treeNodes []*TreeNode) error {
 	return nil
 }
 
+// validateIndexes panics if either index falls between the two UTF-16 code
+// units of a surrogate pair. Done here rather than in crdt.Tree.FindPos
+// because FindPos also serves the remote and undo paths, which still have to
+// resolve mid-pair offsets minted by older clients.
+func (t *Tree) validateIndexes(fromIdx, toIdx int) {
+	for _, idx := range []int{fromIdx, toIdx} {
+		midSurrogate, err := t.Tree.IsMidSurrogate(idx)
+		if err != nil {
+			panic(err)
+		}
+		if midSurrogate {
+			panic(ErrMidSurrogatePair)
+		}
+	}
+}
+
+// validatePaths is validateIndexes for path-addressed positions: the last
+// component of a path into a text node is a UTF-16 offset, so it reaches the
+// same split.
+func (t *Tree) validatePaths(fromPath, toPath []int) {
+	for _, path := range [][]int{fromPath, toPath} {
+		midSurrogate, err := t.Tree.IsMidSurrogateAtPath(path)
+		if err != nil {
+			panic(err)
+		}
+		if midSurrogate {
+			panic(ErrMidSurrogatePair)
+		}
+	}
+}
+
 // Edit edits this tree with the given node.
 func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode, splitLevel int) bool {
 	if fromIdx > toIdx {
 		panic(ErrIndexBoundary)
 	}
+	t.validateIndexes(fromIdx, toIdx)
 
 	fromPos, err := t.Tree.FindPos(fromIdx)
 	if err != nil {
@@ -136,6 +168,7 @@ func (t *Tree) EditBulk(fromIdx, toIdx int, contents []*TreeNode, splitLevel int
 	if fromIdx > toIdx {
 		panic(ErrIndexBoundary)
 	}
+	t.validateIndexes(fromIdx, toIdx)
 
 	fromPos, err := t.Tree.FindPos(fromIdx)
 	if err != nil {
@@ -158,6 +191,7 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode, split
 	if len(fromPath) == 0 || len(toPath) == 0 {
 		panic(ErrEmptyPath)
 	}
+	t.validatePaths(fromPath, toPath)
 
 	fromPos, err := t.Tree.PathToPos(fromPath)
 	if err != nil {
@@ -180,6 +214,7 @@ func (t *Tree) EditBulkByPath(fromPath []int, toPath []int, contents []*TreeNode
 	if len(fromPath) == 0 || len(toPath) == 0 {
 		panic(ErrEmptyPath)
 	}
+	t.validatePaths(fromPath, toPath)
 
 	fromPos, err := t.Tree.PathToPos(fromPath)
 	if err != nil {
@@ -202,6 +237,7 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	if len(attributes) == 0 {
 		return true
 	}
+	t.validateIndexes(fromIdx, toIdx)
 
 	fromPos, err := t.Tree.FindPos(fromIdx)
 	if err != nil {
@@ -245,6 +281,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	if len(attributesToRemove) == 0 {
 		return true
 	}
+	t.validateIndexes(fromIdx, toIdx)
 
 	fromPos, err := t.Tree.FindPos(fromIdx)
 	if err != nil {
@@ -303,6 +340,7 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 	if len(attributes) == 0 {
 		return true
 	}
+	t.validatePaths(fromPath, toPath)
 
 	fromPos, err := t.Tree.PathToPos(fromPath)
 	if err != nil {
@@ -356,6 +394,7 @@ func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemov
 	if len(attributesToRemove) == 0 {
 		return true
 	}
+	t.validatePaths(fromPath, toPath)
 
 	fromPos, err := t.Tree.PathToPos(fromPath)
 	if err != nil {

@@ -360,6 +360,26 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
+// IsMidSurrogate reports whether the given index falls between the two UTF-16
+// code units of a surrogate pair inside one node, which is where TextValue
+// .Split would corrupt the character and diverge from the JS SDK.
+//
+// The index resolves the same way createRange resolves it, so the offset
+// tested here is the offset the split would use. The seam between two adjacent
+// nodes resolves to the end of the left one and so is never mid-pair, which is
+// correct: editing there splits nothing.
+func (t *Text) IsMidSurrogate(idx int) (bool, error) {
+	splayNode, offset, err := t.rgaTreeSplit.treeByIndex.FindForText(idx)
+	if err != nil {
+		return false, err
+	}
+	if splayNode == nil {
+		return false, nil
+	}
+
+	return IsMidSurrogate(splayNode.Value().String(), offset), nil
+}
+
 // Edit edits the given range with the given content and attributes. Besides
 // the caret position, GC pairs, and size diff, it reports the content the
 // edit removed: removedValues holds each removed node's text (parallel to

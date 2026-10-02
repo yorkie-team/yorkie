@@ -1713,6 +1713,40 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	}, nil
 }
 
+// IsMidSurrogate reports whether the given local index falls between the two
+// UTF-16 code units of a surrogate pair inside a text node, which is where a
+// split would corrupt the character and diverge from the JS SDK.
+//
+// This resolves the index the same way FindPos does, so the offset tested here
+// is the very offset SplitText would slice at. A position that lands on an
+// element, or on either end of a text node, is never mid-pair -- including the
+// seam between two text nodes that an older operation already split mid-pair,
+// where editing splits nothing new.
+func (t *Tree) IsMidSurrogate(idx int) (bool, error) {
+	treePos, err := t.IndexTree.FindTreePos(idx)
+	if err != nil {
+		return false, err
+	}
+
+	if !treePos.Node.IsText() {
+		return false, nil
+	}
+
+	return IsMidSurrogate(treePos.Node.Value.Value, treePos.Offset), nil
+}
+
+// IsMidSurrogateAtPath reports the same as IsMidSurrogate for a path-addressed
+// position. The last component of a path into a text node is an offset in
+// UTF-16 code units, so it reaches the same split.
+func (t *Tree) IsMidSurrogateAtPath(path []int) (bool, error) {
+	idx, err := t.IndexTree.PathToIndex(path)
+	if err != nil {
+		return false, err
+	}
+
+	return t.IsMidSurrogate(idx)
+}
+
 // TreeEditReverseInfo is everything Edit reports for building the operation
 // that reverses it. It is returned by value; the slices and the map inside are
 // still owned by the tree — see the field comments.

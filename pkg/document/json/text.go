@@ -53,6 +53,22 @@ func (p *Text) CreateRange(from, to int) (*crdt.RGATreeSplitNodePos, *crdt.RGATr
 	return fromPos, toPos
 }
 
+// validateIndexes panics if either index falls between the two UTF-16 code
+// units of a surrogate pair. Done here rather than in crdt.Text.CreateRange
+// because that also serves the remote and undo paths, which still have to
+// resolve mid-pair offsets minted by older clients.
+func (p *Text) validateIndexes(from, to int) {
+	for _, idx := range []int{from, to} {
+		midSurrogate, err := p.Text.IsMidSurrogate(idx)
+		if err != nil {
+			panic(err)
+		}
+		if midSurrogate {
+			panic(ErrMidSurrogatePair)
+		}
+	}
+}
+
 // Edit edits the given range with the given content and attributes.
 func (p *Text) Edit(
 	from,
@@ -63,6 +79,8 @@ func (p *Text) Edit(
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
+	p.validateIndexes(from, to)
+
 	fromPos, toPos, err := p.Text.CreateRange(from, to)
 	if err != nil {
 		panic(err)
@@ -125,6 +143,8 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
+	p.validateIndexes(from, to)
+
 	fromPos, toPos, err := p.Text.CreateRange(from, to)
 	if err != nil {
 		panic(err)
