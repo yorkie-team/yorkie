@@ -29,28 +29,29 @@ var ErrInvalidUTF16Index = errors.New(
 
 const hex = "0123456789abcdef"
 
-// isUTF16Boundary reports whether offset is a valid boundary in value.
+// isUTF16Boundary reports whether offset, counted in UTF-16 code units, is a
+// valid boundary in value, i.e. it does not fall between the two units of a
+// surrogate pair. It walks the runes instead of encoding the whole value, so
+// it allocates nothing and stops as soon as it reaches offset.
 func isUTF16Boundary(value string, offset int) bool {
-	units := utf16.Encode([]rune(value))
-
-	if offset <= 0 || offset >= len(units) {
+	if offset <= 0 {
 		return true
 	}
 
-	const (
-		highSurrogateStart = 0xD800
-		highSurrogateEnd   = 0xDBFF
-		lowSurrogateStart  = 0xDC00
-		lowSurrogateEnd    = 0xDFFF
-	)
+	units := 0
+	for _, r := range value {
+		width := utf16.RuneLen(r)
+		if width == 2 && units+1 == offset {
+			return false
+		}
 
-	left := units[offset-1]
-	right := units[offset]
+		units += width
+		if units >= offset {
+			return true
+		}
+	}
 
-	isHighSurrogate := left >= highSurrogateStart && left <= highSurrogateEnd
-	isLowSurrogate := right >= lowSurrogateStart && right <= lowSurrogateEnd
-
-	return !isHighSurrogate || !isLowSurrogate
+	return true
 }
 
 // EscapeString returns a string that is safe to embed in a JSON document.
