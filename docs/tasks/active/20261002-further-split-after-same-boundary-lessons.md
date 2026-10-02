@@ -8,3 +8,9 @@
   empty product makes it non-empty too. The marker is a child the editor's
   version vector knows, and it has to be looked for at depth because element
   split products carry fresh tickets.
+- **Two walks over the same chain can ask different questions.** A review
+  round asked §7.5's empty-run test to use `holdsKnownChild` too, for
+  symmetry with §7.8. It diverged a span-end typing raced by an Enter
+  (`TestTreeSplitAfterTypingAtSpanEnd`), JS #1435 never made the change, and
+  the GC barrier added with it was untested. Both were reverted. A replicated
+  rule changes in Go and JS together, with a failing script, or not at all.

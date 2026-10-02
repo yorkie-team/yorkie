@@ -34,6 +34,11 @@ follow-up by position, after its own product.
 - [x] End the walk at the first sibling holding a child the editor's version
       vector knows (`holdsKnownChild`, descending into elements).
 - [x] §7.8 in `docs/design/concurrent-merge-split.md`.
+- [x] Revert the review round that changed §7.5's empty-run test and added
+      a split-chain GC barrier (c86c81e3, aaaaadb1): Go-only, and §7.5's
+      change diverged `TestTreeSplitAfterTypingAtSpanEnd`.
+- [x] Pin the issue script's document, compare the third replica's two
+      arrival orders, and keep the Style/RemoveStyle convergence test.
 
 ## Verification
 
@@ -46,3 +51,7 @@ follow-up by position, after its own product.
 - yorkie-js-sdk#1436: text inserted at the position of a concurrent split
   lands on different sides. Different mechanism; left open by #2030.
 - #2077 (the `KNOWN` skips in the same test file) and yorkie-js-sdk#1408.
+- `holdsKnownChild` counts tombstones, so a GC purge between two replicas'
+  applications of one change could in principle change its answer; §7.4's
+  re-parenting has the same sensitivity. Needs a GC test on both SDKs and a
+  barrier designed for both, not a Go-only one.
