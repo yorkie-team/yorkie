@@ -757,6 +757,40 @@ func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err er
 	return events, nil
 }
 
+// AcknowledgePushedChanges takes the given pack as a push ack only: it drops
+// the local changes the server confirmed and forwards the client seq of the
+// checkpoint, leaving the server seq where it was so a later pull fetches
+// whatever this pack did not carry. It is for the reply to a push-only
+// request.
+//
+// That reply still carries the server's minimum version vector, and it must
+// not reach garbage collection: the client has not pulled the remote changes
+// the vector already accounts for, so collecting with it purges tombstones
+// those changes anchor on, and the first full pull after the pause fails to
+// apply them.
+//
+// The removal flag describes the document, not the skipped content, and no
+// later pull would carry it again, so it is taken here.
+func (d *Document) AcknowledgePushedChanges(pack *change.Pack) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	clientSeq := pack.Checkpoint.ClientSeq
+	for d.doc.HasLocalChanges() {
+		if d.doc.localChanges[0].ClientSeq() > clientSeq {
+			break
+		}
+		d.doc.localChanges = d.doc.localChanges[1:]
+	}
+	d.doc.checkpoint = d.doc.checkpoint.Forward(
+		change.NewCheckpoint(d.doc.checkpoint.ServerSeq, clientSeq),
+	)
+
+	if pack.IsRemoved {
+		d.doc.SetStatus(StatusRemoved)
+	}
+}
+
 // publish delivers the given events to the document's event channel. It must
 // be called with d.mu released and d.eventsMu held: the channel has capacity
 // one, so each send blocks until the application drains the previous event.

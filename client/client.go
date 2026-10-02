@@ -1303,7 +1303,15 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := d.ApplyChangePack(pack); err != nil {
+
+	// NOTE(chacha912): The reply to a push-only request is a push ack only.
+	// The server still attaches the minimum version vector to it, and
+	// garbage-collecting with that vector would purge tombstones the remote
+	// changes this client has not pulled yet anchor on. Judged by the mode the
+	// request was sent in: it is the request that decided nothing was pulled.
+	if opt.mode == types.SyncModePushOnly {
+		d.AcknowledgePushedChanges(pack)
+	} else if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
 	if d.Status() == document.StatusRemoved {
