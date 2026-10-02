@@ -56,6 +56,15 @@ type status int
 const (
 	statusDeactivated status = iota
 	statusActivated
+
+	// statusDeactivating is the state of a client that has begun deactivating
+	// but has not finished: its watch pipelines are being, or have been, torn
+	// down, so nothing that needs one may start, yet the deactivation itself
+	// may still have to be retried. Every guard spelled `!= statusActivated`
+	// -- Attach, Detach, Remove, pushPullChanges -- therefore rejects it,
+	// while Deactivate, which only short-circuits on statusDeactivated, runs
+	// to completion again.
+	statusDeactivating
 )
 
 var (
@@ -294,11 +303,20 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		c.syncLoopWg.Wait()
 	}
 
-	// The sync loop is already stopped above, so the pipelines have no
-	// ApplyChangePack left to serve; the teardown still has to drain the
-	// stream readers before retiring each pump.
+	// Stopping the sync loop is not enough: Client.Sync is callable straight
+	// from a user goroutine, so an ApplyChangePack can still be in flight, and
+	// another can still start. Marking the client deactivating first makes
+	// pushPullChanges reject every sync that has yet to pass its guard, and
+	// taking each attachment's syncMu -- as Detach, Remove and pushPullChanges
+	// do -- lets the one already past it finish before its pump is retired.
+	// Retiring the pump under a running sync would leave the next event it
+	// publishes blocked forever on the document's capacity-one channel, with
+	// the document's event mutex held.
+	c.status = statusDeactivating
 	for _, attachment := range c.attachments.Values() {
+		attachment.syncMu.Lock()
 		stopWatchPipeline(attachment)
+		attachment.syncMu.Unlock()
 	}
 
 	_, err := c.client.DeactivateClient(

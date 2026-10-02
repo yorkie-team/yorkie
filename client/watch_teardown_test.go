@@ -20,8 +20,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -56,6 +58,119 @@ func (s *countingWatchServer) DeactivateClient(
 	_ *connect.Request[api.DeactivateClientRequest],
 ) (*connect.Response[api.DeactivateClientResponse], error) {
 	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+}
+
+// inFlightSyncServer holds PushPullChanges open until the test releases it, so
+// a user-initiated Sync can be parked mid-flight -- past pushPullChanges'
+// status guard and holding the attachment's syncMu -- while Deactivate runs.
+type inFlightSyncServer struct {
+	*watchInitServer
+
+	entered chan struct{}
+	finish  chan struct{}
+}
+
+func (s *inFlightSyncServer) PushPullChanges(
+	_ context.Context,
+	req *connect.Request[api.PushPullChangesRequest],
+) (*connect.Response[api.PushPullChangesResponse], error) {
+	select {
+	case s.entered <- struct{}{}:
+	default:
+	}
+	<-s.finish
+
+	pack := req.Msg.ChangePack
+	return connect.NewResponse(&api.PushPullChangesResponse{
+		ChangePack: &api.ChangePack{
+			DocumentKey:   pack.DocumentKey,
+			Checkpoint:    pack.Checkpoint,
+			VersionVector: pack.VersionVector,
+		},
+	}), nil
+}
+
+func (s *inFlightSyncServer) DeactivateClient(
+	_ context.Context,
+	_ *connect.Request[api.DeactivateClientRequest],
+) (*connect.Response[api.DeactivateClientResponse], error) {
+	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+}
+
+// TestDeactivateWaitsForInFlightSync pins that Deactivate retires an
+// attachment's event pump only under that attachment's syncMu. Stopping the
+// sync loop is not enough: Client.Sync is callable straight from a user
+// goroutine, and a pump retired under one would leave its ApplyChangePack
+// blocked forever on the document's capacity-one event channel, holding the
+// document's event mutex and taking every other publisher down with it.
+//
+// The sync loop is given a duration longer than the test so its own
+// needSync -- which takes syncMu for reading -- cannot be what blocks
+// Deactivate here.
+func TestDeactivateWaitsForInFlightSync(t *testing.T) {
+	srv := &inFlightSyncServer{
+		watchInitServer: &watchInitServer{
+			firstResponse: &api.WatchResponse{
+				Body: &api.WatchResponse_Initialization{
+					Initialization: &api.WatchInitialization{},
+				},
+			},
+			release: make(chan struct{}),
+		},
+		entered: make(chan struct{}, 1),
+		finish:  make(chan struct{}),
+	}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+	// Registered after the server cleanup, so it runs before it: a failure
+	// below must not leave the blocked handler holding the server shutdown.
+	releaseSync := sync.OnceFunc(func() { close(srv.finish) })
+	t.Cleanup(releaseSync)
+
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(context.Background()))
+
+	doc := document.New(key.Key("deactivate-inflight-sync"))
+	assert.NoError(t, cli.Attach(context.Background(), doc, client.WithRealtimeSync()))
+
+	syncDone := make(chan error, 1)
+	go func() { syncDone <- cli.Sync(context.Background()) }()
+
+	select {
+	case <-srv.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("sync did not reach the server")
+	}
+
+	deactivateDone := make(chan error, 1)
+	go func() { deactivateDone <- cli.Deactivate(context.Background()) }()
+
+	select {
+	case <-deactivateDone:
+		t.Fatal("Deactivate retired the pipeline under an in-flight Sync")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	releaseSync()
+
+	select {
+	case err := <-syncDone:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("in-flight sync did not finish")
+	}
+	select {
+	case err := <-deactivateDone:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("deactivate did not finish")
+	}
 }
 
 // TestDetachEndsWatchStreamQuietly pins that the client's own teardown is not

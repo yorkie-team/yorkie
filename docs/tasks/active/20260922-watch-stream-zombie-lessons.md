@@ -153,3 +153,11 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
 - Never roll back local state for something the server already committed. A
   failed initial Watch that dropped the attachment left the server attached
   and the caller unable to Detach or re-Attach.
+- Stopping the sync loop is not the same as stopping synchronisation.
+  `Deactivate` tore every pipeline down arguing only that the loop was
+  joined, but `Client.Sync` is public: a user goroutine could be inside
+  `ApplyChangePack` with the attachment's `syncMu` held. The fix is the one
+  `Detach`, `Remove` and `pushPullChanges` already use — retire the pump
+  under `syncMu` — plus a `statusDeactivating` state so a sync that has yet
+  to reach `pushPullChanges`' guard is rejected instead of racing it. A
+  guard checked once at entry does not hold for the rest of the call.
