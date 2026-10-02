@@ -1,3 +1,5 @@
+//go:build integration
+
 /*
  * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
@@ -14,7 +16,7 @@
  * limitations under the License.
  */
 
-package server_test
+package integration
 
 import (
 	"context"
