@@ -677,9 +677,20 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		// the meantime holds the event mutex against every other publisher.
 		startWatchPipeline(watchCtx, attachment, d)
 	}
+	if opts.IsRealtime {
+		// Count the first handshake as a stream reader, and do it before the
+		// attachment is published, so no Detach or Deactivate can be waiting
+		// on watchReaders yet. A teardown that starts during the handshake
+		// then waits for it: otherwise its Wait could return at zero, retire
+		// the pump, and leave the reader the handshake registers afterwards
+		// publishing into a channel nobody drains.
+		attachment.watchReaders.Add(1)
+	}
 	c.attachments.Set(d.Key(), attachment)
 	if opts.IsRealtime {
-		if err = c.runWatchLoop(watchCtx, d); err != nil {
+		err = c.runWatchLoop(watchCtx, attachment, d)
+		attachment.watchReaders.Done()
+		if err != nil {
 			// AttachDocument has already succeeded, so the server holds the
 			// attachment and rejects a second attach of it. Keep the local
 			// attachment registered so the caller can Detach -- which tells
@@ -687,8 +698,9 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 			// again. Only the stream is ended, as a terminal stream error
 			// does: closing the buffer lets the sender close watchStream,
 			// while the pump keeps draining Document.Events until Detach or
-			// Deactivate cancels watchCtx, so a sync applying a pack in the
-			// meantime never wedges on a channel without a consumer.
+			// Deactivate tears the pipeline down in stopWatchPipeline, so a
+			// sync applying a pack in the meantime never wedges on a channel
+			// without a consumer.
 			attachment.watchBuf.close()
 			return err
 		}
@@ -1167,14 +1179,16 @@ func stopWatchPipeline(attachment *Attachment) {
 // runWatchLoop subscribes to events on a given document using the unified Watch RPC.
 // If an error occurs before stream initialization, the error is returned and the
 // attachment's delivery pipeline is left untouched: it is owned by the attachment
-// and keeps draining the document until the watch context is cancelled. If the
+// and keeps draining the document until stopWatchPipeline tears it down. If the
 // context "watchCtx" is canceled or timed out, the response channel is closed, and
 // "WatchResponse" from this closed channel has zero events and nil "Err()".
-func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
-	attachment, ok := c.attachments.Get(d.Key())
-	if !ok {
-		return ErrNotAttached
-	}
+//
+// The caller passes the attachment that owns the pipeline rather than letting
+// runWatchLoop look it up by key: a reconnect must keep feeding the attachment
+// it started with, never one a later Attach registered under the same key.
+// The caller must also hold a watchReaders slot for the duration of the call,
+// so the readers registered here never start after a teardown's Wait.
+func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *document.Document) error {
 	buf := attachment.watchBuf
 	if buf == nil {
 		return ErrNotAttached
@@ -1231,8 +1245,8 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			if err != nil {
 				// Terminal: no reconnect follows, so the buffer is closed and
 				// the consumer sees the error and then end of stream. The pump
-				// keeps draining the document until the watch context is
-				// cancelled, so publishers never wedge on a dead stream.
+				// keeps draining the document until stopWatchPipeline tears
+				// it down, so publishers never wedge on a dead stream.
 				buf.push(WatchDocResponse{Err: err})
 				buf.close()
 				return
@@ -1245,12 +1259,18 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			// Without syncMu: this goroutine is what a teardown holding
 			// syncMu waits for, so taking the lock here would deadlock.
 			if resp.Type == DocumentChanged {
-				if attachment, ok := c.attachments.Get(d.Key()); ok {
-					attachment.changeEventReceived.Store(true)
-				}
+				attachment.changeEventReceived.Store(true)
 			}
 
 			buf.push(*resp)
+		}
+
+		// The stream ended because Detach, Remove or Deactivate cancelled the
+		// watch context. That is the client's own teardown, not a lost
+		// stream: end without reporting it or trying to reconnect.
+		if ctx.Err() != nil {
+			buf.close()
+			return
 		}
 
 		if err := stream.Err(); err != nil {
@@ -1262,7 +1282,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			// has a consumer for the whole reconnect and the consumer keeps
 			// the same response channel. Only a reconnect that fails ends the
 			// stream for the consumer.
-			if err := c.runWatchLoop(ctx, d); err != nil {
+			if err := c.runWatchLoop(ctx, attachment, d); err != nil {
 				c.logger.Warn(fmt.Sprintf("re-establish watch stream: %v", err))
 				buf.close()
 			}
