@@ -82,49 +82,12 @@ type GCChild interface {
 // ticket is what PurgeBarrierAt reports, and Root.GarbageCollect holds the
 // purge back until the version vector covers it as well as removedAt.
 //
-// A container may have more than one rule reading its linked nodes -- Tree has
-// the sibling walk above, the same-boundary split ordering of §7.8, and the
-// §7.5 empty-run advance that shares §7.8's classifier -- so PurgeBarrierAt
-// reports a ticket per rule whose precondition the child still sits under, and
-// the purge waits for all of them.
-//
-// The set is not a closed enumeration, and a reported ticket is only as good as
-// the rule it stands for: a rule that reads a tombstone's place without
-// consulting a version vector has no ticket that retires it, so it cannot be
-// represented here at all. Tree's §7.4 empty-sibling re-parenting is one such
-// rule; see Tree.splitChainBarriersAt for how far the tickets reach and what is
-// left over.
-//
 // The type parameter is only there because the two purge paths name their child
 // differently: Root.GarbageCollect walks removed elements as Element and
 // removed nodes as GCChild, and both end in the same physical unlink.
 type GCBarrier[C any] interface {
-	// PurgeBarrierAt returns the additional tickets that must be covered before
-	// the given child may be unlinked, or nil when nothing is deciding against
-	// the child's place and unlinking it cannot move anything.
-	PurgeBarrierAt(child C) []*time.Ticket
-}
-
-// barrierTicketsOf lifts a single barrier ticket into the slice PurgeBarrierAt
-// reports, dropping a nil ticket, which is the absence of a constraint.
-func barrierTicketsOf(at *time.Ticket) []*time.Ticket {
-	if at == nil {
-		return nil
-	}
-
-	return []*time.Ticket{at}
-}
-
-// barriersCovered reports whether the given version vector covers every barrier
-// ticket. All of them have to be covered: each stands for a rule that reads the
-// tombstone's place, and one uncovered rule is enough to make the unlink change
-// an answer that is still in flight.
-func barriersCovered(vector time.VersionVector, barriers []*time.Ticket) bool {
-	for _, at := range barriers {
-		if at != nil && !vector.EqualToOrAfter(at) {
-			return false
-		}
-	}
-
-	return true
+	// PurgeBarrierAt returns the additional ticket that must be covered before
+	// the given child may be unlinked, or nil when the child has no successor
+	// and unlinking it cannot move anything.
+	PurgeBarrierAt(child C) *time.Ticket
 }

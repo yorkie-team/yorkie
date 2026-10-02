@@ -1087,78 +1087,17 @@ func (t *Tree) Marshal() string {
 // was created after the incoming edit; a tombstoned sibling with an older
 // ticket ends that walk. Purging detaches it from the parent, so the next
 // sibling inherits the decision and must be causally stable first.
-func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
+func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil || node.Index.Parent == nil {
 		return nil
 	}
 
-	barriers := t.splitChainBarriersAt(node)
-	if next := node.Index.Parent.NextSiblingOf(node.Index); next != nil {
-		barriers = append(barriers, next.Value.id.CreatedAt)
+	next := node.Index.Parent.NextSiblingOf(node.Index)
+	if next == nil {
+		return nil
 	}
-
-	return barriers
-}
-
-// splitChainBarriersAt reports what an ancestor's split chain needs covered
-// before this tombstone may be unlinked.
-//
-// holdsKnownChild classifies a chain node by the children it still holds,
-// tombstones included, and both same-boundary walks -- the §7.5 advance and the
-// §7.8 retarget -- decide where a concurrent split lands from that answer.
-// Purging a counted tombstone changes the answer, so a replica that has
-// collected would retarget a still-in-flight split differently from one that
-// has not, exactly the divergence GCBarrier exists to prevent.
-//
-// Both walks reach the classification only for a chain node the editor does not
-// know, so the ticket that makes the answer stop mattering is that node's own
-// createdAt: once it is causally stable every future walk breaks at it before
-// asking what it holds, and the barrier retires. Every such ancestor is
-// reported, because holdsKnownChild descends and a node this deep is counted by
-// each of them.
-//
-// The gate is "is in a split chain", read off InsPrevID/InsNextID rather than
-// off InsNextID alone. Reading InsNextID alone was unsound: a right-half
-// product carries no InsNextID until it is itself split, so a tombstone under
-// one was purgeable right up to the moment SplitElement (tree.go:358) gave its
-// parent a chain -- the barrier was lost retroactively, for exactly the node
-// the §7.8 walk then classifies. Each leg stands for a rule, and each is the
-// rule's own precondition, read at purge time:
-//
-//   - InsPrevID != nil is exactly the set of nodes a chain walk can classify.
-//     Both walks only ever call holdsKnownChild on a node they reached as some
-//     other node's InsNext, and SplitElement sets InsPrevID on every node it
-//     links that way: on the fresh product, and on the old InsNext it displaces,
-//     which already had one.
-//
-//   - InsNextID != nil carries §7.4 empty-sibling re-parenting, which gates
-//     MoveChildBefore on the fresh product being empty -- a count over
-//     Children(true), so a tombstone the split moved into the product decides
-//     it. That branch sits under `if n.InsNextID != nil`, so it runs only for a
-//     node that was already split when the next split arrived.
-//
-// Neither leg is monotone in the raw sense -- Purge relinks the chain across
-// the node it unlinks (tree.go:1178-1194) -- but each is cleared only together
-// with the reachability it stands for. A node loses InsPrevID only when its
-// InsPrev was the chain head, which leaves nothing pointing at it by InsNextID
-// and so nothing that can classify it; a node loses InsNextID only when the
-// last product after it is gone, which is also when §7.4 stops firing for it.
-//
-// Residual, and pre-existing: a node with neither id set can still be split
-// twice later, and the second split then runs §7.4 over children one replica
-// may have purged in the meantime. No ticket retires that -- §7.4 is
-// deliberately VV-independent, so nothing about causal stability stops it from
-// reading a count. See docs/design/concurrent-merge-split.md.
-func (t *Tree) splitChainBarriersAt(node *TreeNode) []*time.Ticket {
-	var barriers []*time.Ticket
-	for current := node.Index.Parent; current != nil; current = current.Parent {
-		if current.Value.InsPrevID != nil || current.Value.InsNextID != nil {
-			barriers = append(barriers, current.Value.id.CreatedAt)
-		}
-	}
-
-	return barriers
+	return next.Value.id.CreatedAt
 }
 
 func (t *Tree) Purge(child GCChild) error {
@@ -3137,13 +3076,6 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 // emptyRunReachesActor reports whether the InsNextID chain starting at node
 // runs through empty, unknown element split siblings only and then reaches a
 // node created by actorID.
-//
-// "Empty" is the same test §7.8 ends its walk on (holdsKnownChild): a sibling
-// holding a child the editor knew is the one the right half moved into, so the
-// run of same-boundary products ends there. Counting direct children instead
-// would end the run at a product a peer has typed into since, which is still an
-// empty same-boundary product to this editor -- and would let the two walks
-// disagree about where one run ends.
 func (t *Tree) emptyRunReachesActor(
 	node *TreeNode,
 	actorID time.ActorID,
@@ -3155,10 +3087,10 @@ func (t *Tree) emptyRunReachesActor(
 		if createdAt.ActorID() == actorID {
 			return current != node
 		}
-		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+		if len(current.Index.Children(true)) > 0 {
 			return false
 		}
-		if t.holdsKnownChild(current, versionVector) {
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
 			return false
 		}
 		if current.InsNextID == nil {
@@ -3257,13 +3189,8 @@ func (t *Tree) orderSameBoundarySplit(
 		// next holds the right half: whatever follows it in the chain was
 		// split off at a boundary to the right of ours. Tombstones count --
 		// SplitElement partitions Children(true), so a child removed in the
-		// meantime still marks where that later boundary was, and counting it
-		// keeps the answer the same whether this replica has applied that
-		// removal yet or not -- and so do deeper descendants, which is where a
-		// multi-level split puts it. GC cannot pull a counted tombstone out
-		// from under this: next is some node's InsNext, so it carries an
-		// InsPrevID, and splitChainBarriersAt holds the purge back until next
-		// itself is causally stable, after which this walk breaks above.
+		// meantime still marks where that later boundary was -- and so do
+		// deeper descendants, which is where a multi-level split puts it.
 		if t.holdsKnownChild(next, versionVector) {
 			break
 		}
@@ -3278,11 +3205,6 @@ func (t *Tree) orderSameBoundarySplit(
 // holdsKnownChild reports whether any descendant of node, tombstones
 // included, was created within versionVector -- content the editor had seen,
 // as opposed to content a peer inserted concurrently.
-//
-// Both same-boundary walks ask it, so they agree on where one run of
-// same-boundary products ends; and because it reads tombstones,
-// splitChainBarriersAt keeps GC from purging one while a split that would ask
-// about it is still in flight.
 //
 // It descends because a multi-level split hides the marker one level down. A
 // text split keeps the original createdAt, so at a flat <p>text</p> the right

@@ -488,36 +488,6 @@ ticket while a text split keeps `createdAt`: at a multi-level split the
 outer right-half product holds one unknown `<span>` and the known text
 sits below it.
 
-The §7.5 advance ends its run of empty same-boundary products on the
-same test, so the two walks cannot disagree about where one run ends.
-Counting tombstones keeps the answer independent of whether a replica
-has applied a concurrent removal yet, but it also makes the answer
-depend on a node GC could unlink; `Tree.PurgeBarrierAt` therefore
-reports, alongside the sibling-walk barrier, the `createdAt` of every
-chain ancestor of the tombstone — every ancestor carrying an
-`InsPrevID` or an `InsNextID`. Both walks consult the classification
-only for a chain node they do not know, so once that node is causally
-stable the purge can no longer change where a split lands, and the
-barrier retires: a vector covering every actor drains tree garbage as
-before.
-
-`InsPrevID` is the load-bearing half. A right-half product carries no
-`InsNextID` until it is itself split, so reading `InsNextID` alone left
-a tombstone inside a product purgeable right up to the moment a later
-split gave its parent a chain — exactly the node the walk then
-classifies. `InsPrevID` is instead precisely the set of nodes a chain
-walk can reach, since both walks only ever classify a node they arrived
-at as some other node's `InsNext`.
-
-The `InsNextID` half carries §7.4 empty-sibling re-parenting, which
-gates its `MoveChildBefore` on the fresh product being empty — a count
-over children with tombstones included — and which only runs for a node
-that was already split. It does not carry §7.4 all the way: a node in no
-chain at purge time can still be split twice afterwards, and the second
-split then counts children one replica may have purged in between. §7.4
-is deliberately version-vector-independent, so no ticket retires it;
-this is a pre-existing exposure, recorded here rather than papered over.
-
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s
 Phase 3 range narrowing, `collectBetween`'s cascade delete, and the
