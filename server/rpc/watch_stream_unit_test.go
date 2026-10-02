@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	gotime "time"
 
@@ -274,4 +275,61 @@ func TestStreamMergedEventsEndsWithoutSubscriptions(t *testing.T) {
 	errCh := runStreamMergedEvents(nil, nil)
 
 	assertEndedBySelfPrune(t, errCh)
+}
+
+// TestStreamsDeliverNothingAfterRevalidationClose verifies that a stream whose
+// context a revalidation closed delivers none of the events already queued
+// for it. select picks among ready cases at random, so without a check before
+// each send a queued event would win over the closed context about half of
+// the time, and a revoked client would receive it.
+func TestStreamsDeliverNothingAfterRevalidationClose(t *testing.T) {
+	revoked := errors.New("revoked")
+	const runs, queued = 200, 16
+
+	t.Run("streamEvents", func(t *testing.T) {
+		for range runs {
+			sub := pubsub.NewSubscription[int](time.InitialActorID, queued)
+			for i := range queued {
+				sub.Events() <- i
+			}
+			ctx, cancel := context.WithCancelCause(context.Background())
+			cancel(revoked)
+
+			err := streamEvents(ctx, context.Background(), sub,
+				func(int) error {
+					t.Fatal("an event was sent after the stream was closed")
+					return nil
+				},
+				func(e int) (int, error) { return e, nil },
+				nil,
+			)
+			assert.ErrorIs(t, err, revoked)
+		}
+	})
+
+	t.Run("streamMergedEvents", func(t *testing.T) {
+		s := &yorkieServer{serviceCtx: context.Background()}
+		for range runs {
+			cs := newChannelSub("revoked")
+			for i := range 4 {
+				cs.sub.Events() <- events.ChannelEvent{
+					Type:         events.ChannelPresenceChanged,
+					Publisher:    time.InitialActorID,
+					SessionCount: 1,
+					Seq:          int64(i + 1),
+				}
+			}
+			ctx, cancel := context.WithCancelCause(context.Background())
+			cancel(revoked)
+
+			err := s.streamMergedEvents(ctx,
+				func(*api.WatchResponse) error {
+					t.Fatal("an event was sent after the stream was closed")
+					return nil
+				},
+				nil, nil, []channelSub{cs},
+			)
+			assert.ErrorIs(t, err, revoked)
+		}
+	})
 }

@@ -444,7 +444,8 @@ export function aggregatePanelStats(entries) {
  * Shape-safe: records without `lensStats` (pre-instrumentation) or a `kept`
  * missing a severity key are tolerated and contribute nothing.
  *
- * @returns {{ flips: {lens: string, fromRound: number, toRound: number}[], byLens: Record<string, number> }}
+ * @returns {{ flips: {lens: string, fromRound: number, toRound: number}[], byLens: Record<string, number>, escalations: {lens: string, fromRound: number, toRound: number}[] }}
+ *   `escalations` is the clean→blocking direction, kept apart so `flips` keeps its meaning.
  */
 export function detectFlips(reviewRecords) {
   const list = Array.isArray(reviewRecords) ? reviewRecords : [];
@@ -467,16 +468,24 @@ export function detectFlips(reviewRecords) {
   });
   const flips = [];
   const byLens = {};
+  // The OTHER direction, kept apart so `flips` keeps its meaning for every
+  // existing reader. A lens that approved and then blocked is either a real new
+  // defect or a re-sample of the same code disagreeing with itself — and on
+  // #1426 it was the second: a diff nobody had changed went from approved to
+  // blocking and cost the PR its ready label, while this metric counted nothing.
+  const escalations = [];
   for (const [lens, seq] of byLensStates) {
     for (let i = 1; i < seq.length; i++) {
       // A flip = an adjacent pair of valid rounds going blocking → clean.
       if (seq[i - 1].blocking && !seq[i].blocking) {
         flips.push({ lens, fromRound: seq[i - 1].round, toRound: seq[i].round });
         byLens[lens] = (byLens[lens] || 0) + 1;
+      } else if (!seq[i - 1].blocking && seq[i].blocking) {
+        escalations.push({ lens, fromRound: seq[i - 1].round, toRound: seq[i].round });
       }
     }
   }
-  return { flips, byLens };
+  return { flips, byLens, escalations };
 }
 
 /**
@@ -794,10 +803,13 @@ export function renderSummary({ agg, panelAgg, panelStats, panelAttribution, fli
     // rounds — the PR #521 pattern. Can't distinguish a genuine fix from judge
     // inconsistency here (see detectFlips), so the wording says "review manually".
     const flipList = flips?.flips || [];
-    lines.push(
-      `- ⚠️ Cross-round flips (blocking→clean; advisory, review manually): ${flipList.length}` +
-        (flipList.length ? ` — ${flipList.map((f) => `${f.lens} r${f.fromRound}→r${f.toRound}`).join(", ")}` : ""),
-    );
+    const fmt = (list) => (list.length ? ` — ${list.map((f) => `${f.lens} r${f.fromRound}→r${f.toRound}`).join(", ")}` : "");
+    lines.push(`- ⚠️ Cross-round flips (blocking→clean; advisory, review manually): ${flipList.length}${fmt(flipList)}`);
+    // Rendered at zero too, so "none happened" reads differently from "not
+    // measured". A carried round (no lens ran) records no lens stats and so can
+    // never appear here — an escalation is always two rounds that both reviewed.
+    const escList = flips?.escalations || [];
+    lines.push(`- ⚠️ Cross-round escalations (clean→blocking; advisory, review manually): ${escList.length}${fmt(escList)}`);
     // Per-lens / detection-vs-verifier token split (empty until rounds carry
     // attribution, so pre-instrumentation PRs render exactly as before).
     lines.push(...renderAttribution(panelAttribution));

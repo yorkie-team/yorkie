@@ -69,6 +69,11 @@ var (
 	// ErrNotDetached occurs when the given resource is not detached.
 	ErrNotDetached = errors.FailedPrecond("resource is not detached")
 
+	// ErrAlreadyAttached occurs when a resource with the same key is already
+	// attached to, or being attached by, this client.
+	ErrAlreadyAttached = errors.FailedPrecond("resource with the key is already attached").
+				WithCode("ErrAlreadyAttached")
+
 	// ErrInvalidResource occurs when the given resource is invalid.
 	ErrInvalidResource = errors.InvalidArgument("invalid resource")
 
@@ -99,6 +104,12 @@ type Client struct {
 	key         string
 	status      status
 	attachments *cmap.Map[key.Key, *Attachment]
+
+	// attaching holds the keys of documents with an attach in flight.
+	// attachments is only set once the attach round trip resolves, so this
+	// is what rejects a concurrent attach of the same key.
+	attachingMu sync.Mutex
+	attaching   map[key.Key]struct{}
 
 	syncCtx    context.Context
 	syncCancel context.CancelFunc
@@ -187,6 +198,7 @@ func New(opts ...Option) (*Client, error) {
 		key:         k,
 		status:      statusDeactivated,
 		attachments: cmap.New[key.Key, *Attachment](),
+		attaching:   make(map[key.Key]struct{}),
 	}, nil
 }
 
@@ -298,6 +310,25 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		return err
 	}
 
+	// The server detached every resource of this client, so mark them
+	// detached here too, as the JS SDK does, and drop their attachments. The
+	// attachment holds the resource ID of the session the server just ended,
+	// so keeping it would let the sync loop -- which reads c.attachments and
+	// ignores resource status -- push it again the moment this client is
+	// activated anew, and would let Detach, Remove or WatchStream address a
+	// server-side attachment this client no longer holds. Dropping it leaves
+	// the resource exactly where a plain Detach leaves it: detached, with no
+	// attachment, free to be attached again.
+	for _, attachment := range c.attachments.Values() {
+		if attachment.resource.Status() != attachable.StatusRemoved {
+			attachment.resource.SetStatus(attachable.StatusDetached)
+		}
+		if ch, ok := attachment.resource.(*channel.Channel); ok {
+			ch.UpdateSessionCount(0, 0)
+		}
+		c.attachments.Delete(attachment.resource.Key())
+	}
+
 	c.status = statusDeactivated
 
 	return nil
@@ -362,7 +393,11 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 			return err
 		}
 
-		attachment.changeEventReceived = false
+		// A push-only sync pulled nothing, so a remote change it was told
+		// about is still waiting for the next pull.
+		if options.mode != types.SyncModePushOnly {
+			attachment.changeEventReceived = false
+		}
 		return nil
 	}
 
@@ -389,6 +424,17 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	if r.Status() != attachable.StatusDetached {
 		return ErrNotDetached
 	}
+
+	// Reject a second resource with the same key before any RPC or any change
+	// to it, as the JS SDK does. attachments is keyed by key.Key alone and
+	// shared by every resource type, so a second attach would otherwise
+	// replace the first entry and orphan the resource behind it, whatever the
+	// two types are. The server cannot tell a concurrent attach of the same
+	// key apart while the first is in flight.
+	if err := c.beginAttach(r.Key()); err != nil {
+		return err
+	}
+	defer c.endAttach(r.Key())
 
 	r.SetActor(c.id)
 
@@ -430,8 +476,12 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...an
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
+	// The attachment is looked up by key, so it must also be held by r
+	// itself. Another resource with the same key, one rejected by the attach
+	// guard or a stale one from before a deactivation, would otherwise send
+	// the attached resource's ID and detach it on the server.
 	attachment, ok := c.attachments.Get(r.Key())
-	if !ok {
+	if !ok || attachment.resource != r {
 		return ErrNotAttached
 	}
 
@@ -473,6 +523,38 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...an
 	}
 
 	return nil
+}
+
+// beginAttach marks the key k as being attached. It fails with
+// ErrAlreadyAttached when a resource with k is already attached to, or being
+// attached by, this client.
+func (c *Client) beginAttach(k key.Key) error {
+	c.attachingMu.Lock()
+	defer c.attachingMu.Unlock()
+
+	if _, ok := c.attaching[k]; ok {
+		return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
+	}
+	if attachment, ok := c.attachments.Get(k); ok {
+		// An attachment whose resource is no longer attached -- one left by a
+		// path that detached or removed the resource without clearing the
+		// entry -- is stale, so drop it and let the key be used again.
+		if attachment.resource.Status() == attachable.StatusAttached {
+			return fmt.Errorf("attach %s: %w", k, ErrAlreadyAttached)
+		}
+		c.attachments.Delete(k)
+	}
+
+	c.attaching[k] = struct{}{}
+	return nil
+}
+
+// endAttach clears the in-flight mark that beginAttach set for k.
+func (c *Client) endAttach(k key.Key) {
+	c.attachingMu.Lock()
+	defer c.attachingMu.Unlock()
+
+	delete(c.attaching, k)
 }
 
 // attachDocument attaches the given document to this client. It tells the server that
@@ -946,8 +1028,11 @@ func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 func (c *Client) WatchStream(
 	r attachable.Attachable,
 ) (<-chan WatchDocResponse, context.CancelFunc, error) {
+	// Held by r itself, not merely keyed by r.Key(): a resource rejected by
+	// the attach guard, or a stale one from before a deactivation, would
+	// otherwise observe another resource's stream.
 	attachment, ok := c.attachments.Get(r.Key())
-	if !ok {
+	if !ok || attachment.resource != r {
 		return nil, nil, ErrNotAttached
 	}
 
@@ -997,6 +1082,17 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	// in flight always has a live consumer.
 	buf := newWatchBuffer()
 	pumpStop := make(chan struct{})
+	pumpDone := make(chan struct{})
+
+	// stopPump stops the pump and waits for it to exit. Closing pumpStop alone
+	// is not enough: while an event is also pending, the pump's select picks
+	// either case at random, so it could take one more event after the stop.
+	// Waiting makes "stopped" mean no longer consuming, which a failed
+	// initialization and a re-established stream both rely on.
+	stopPump := func() {
+		close(pumpStop)
+		<-pumpDone
+	}
 
 	// pump: document events -> buf. Started before the stream's first
 	// response rather than after it. The document's event channel has
@@ -1006,6 +1102,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	// loop's pump has already stopped, so starting this one first gives an
 	// in-flight publish a consumer while Receive blocks on the server.
 	go func() {
+		defer close(pumpDone)
 		for {
 			select {
 			case e := <-d.Events():
@@ -1032,15 +1129,15 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	// watch that never came up has always done -- the alternative is the
 	// publisher blocking on a channel this loop is no longer going to drain.
 	if !stream.Receive() {
-		close(pumpStop)
+		stopPump()
 		return ErrInitNotReceived
 	}
 	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
-		close(pumpStop)
+		stopPump()
 		return err
 	}
 	if err = stream.Err(); err != nil {
-		close(pumpStop)
+		stopPump()
 		return err
 	}
 
@@ -1069,7 +1166,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
-				close(pumpStop)
+				stopPump()
 				buf.push(WatchDocResponse{Err: err})
 				buf.close()
 				return
@@ -1091,7 +1188,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 			buf.push(*resp)
 		}
 
-		close(pumpStop)
+		stopPump()
 		if err := stream.Err(); err != nil {
 			buf.push(WatchDocResponse{Err: err})
 			buf.close()
@@ -1210,7 +1307,14 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := d.ApplyChangePack(pack); err != nil {
+
+	// NOTE(chacha912): The reply to a push-only request is a push ack only and
+	// must not reach GC; see "Push-only response" in
+	// docs/design/garbage-collection.md. Judged by the mode the request was
+	// sent in: it is the request that decided nothing was pulled.
+	if opt.mode == types.SyncModePushOnly {
+		d.AcknowledgePushedChanges(pack)
+	} else if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
 	if d.Status() == document.StatusRemoved {
@@ -1226,8 +1330,12 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 		return ErrNotActivated
 	}
 
+	// As in Detach, the attachment is looked up by key, so it must also be
+	// held by d itself. Another document with the same key, one rejected by
+	// the attach guard or a stale one from before a deactivation, would
+	// otherwise send the attached document's ID and remove it on the server.
 	attachment, ok := c.attachments.Get(d.Key())
-	if !ok {
+	if !ok || attachment.resource != d {
 		return ErrNotAttached
 	}
 
@@ -1273,8 +1381,10 @@ func (c *Client) broadcast(
 		return ErrNotActivated
 	}
 
-	_, ok := c.attachments.Get(ch.Key())
-	if !ok {
+	// Held by ch itself, not merely keyed by ch.Key(), so a rejected or stale
+	// channel cannot publish through another channel's attachment.
+	attachment, ok := c.attachments.Get(ch.Key())
+	if !ok || attachment.resource != ch {
 		return ErrNotAttached
 	}
 

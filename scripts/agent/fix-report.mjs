@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { fromRebuttalAuthor, readRebuttals } from "./rebuttal.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
+import { collectTestRemovals } from "./test-removals.mjs";
 
 // `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
 // blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
@@ -197,7 +198,12 @@ export function flattenClaims(reports) {
         // exactly `agent-review-` reduces to empty and is just as unmatchable.
         const item = normalizeItem(i);
         if (item.lens === "" || item.file === "") continue;
-        out.push({ ...item, status, head: str(r.head), createdAt: str(r.createdAt) });
+        out.push({
+          ...item, status, head: str(r.head), createdAt: str(r.createdAt),
+          // The pipeline's record of tests the round removed, when there is one.
+          // It belongs to the ROUND, so every claim from the report carries it.
+          ...(Array.isArray(r.testRemovals) && r.testRemovals.length ? { testRemovals: r.testRemovals } : {}),
+        });
       }
     }
   }
@@ -302,7 +308,7 @@ export function latestReport(reports) {
  */
 export function authorClaims(reports, rebuttals = []) {
   const report = latestReport(reports);
-  if (!report) return { adjudicate: [], skipped: [], deferred: [] };
+  if (!report) return { adjudicate: [], skipped: [], deferred: [], testRemovals: [] };
   const claims = flattenClaims([report]);
   const disputed = Array.isArray(rebuttals) ? rebuttals : [];
   const covered = (c) => disputed.some((r) =>
@@ -318,7 +324,21 @@ export function authorClaims(reports, rebuttals = []) {
     adjudicate: toRebuttalRecords(fixed.slice(0, MAX_FIX_ADJUDICATIONS)),
     skipped,
     deferred: fixed.slice(MAX_FIX_ADJUDICATIONS),
+    // The round's removal record, for the caller to attach to the GENUINE
+    // rebuttals too (`withRoundEvidence`): a finding the fixer disputes instead
+    // of claiming fixed is adjudicated from a rebuttal, which carries none.
+    testRemovals: Array.isArray(report.testRemovals) ? report.testRemovals : [],
   };
+}
+
+/**
+ * Every record the round adjudicates, carrying the round's removal record.
+ * A record that already has its own (a converted `fixed` claim) keeps it.
+ */
+export function withRoundEvidence(records, testRemovals) {
+  const list = Array.isArray(records) ? records : [];
+  if (!Array.isArray(testRemovals) || testRemovals.length === 0) return list;
+  return list.map((r) => (Array.isArray(r?.testRemovals) ? r : { ...r, testRemovals: testRemovals.slice(0, 20) }));
 }
 
 /**
@@ -371,6 +391,15 @@ export function toRebuttalRecords(claims) {
       file: c.file,
       summary: c.summary,
       claim: `${preamble}\n\nThe author's note:\n${c.note || "(none given)"}`,
+      // The pipeline's record of tests the fix round removed, as a FIELD and
+      // never in `claim`: `buildAdjudicatorPrompt` renders `claim` inside the
+      // untrusted <author-rebuttal> fence, where a note could imitate it word for
+      // word. This one is rendered before the fence opens. Only `fixed` claims
+      // carry it — a skipped claim is upheld without a session. No author channel
+      // can set it: both parsers whitelist their fields.
+      ...(c.status === "fixed" && Array.isArray(c.testRemovals) && c.testRemovals.length
+        ? { testRemovals: c.testRemovals.slice(0, 20) }
+        : {}),
       evidence: locationsIn(c.note),
       // Provenance, for the tally and for anyone reading the JSON. Nothing
       // downstream branches on it — a report is adjudicated exactly like a
@@ -505,6 +534,41 @@ function gh(args) {
 }
 
 /**
+ * The removals of several records for one head, as one list: one entry per
+ * file, each count the largest any record gave, and `deleted` / `unreadable` set
+ * if any record set them.
+ *
+ * Not last-wins. A second record for the same head (a re-run report job, or one
+ * that read more of the round) must not be able to drop a file an earlier one
+ * recorded, and an empty record (history rewritten) adds nothing and hides
+ * nothing. Over-stating is the safe side: this is evidence the adjudicator
+ * weighs against a claim while re-reading the code, never a gate.
+ */
+function unionRemovals(records) {
+  const byFile = new Map();
+  for (const rec of Array.isArray(records) ? records : []) {
+    for (const r of Array.isArray(rec?.removals) ? rec.removals : []) {
+      const file = str(r?.file);
+      const cur = byFile.get(file);
+      const n = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
+      if (!cur) {
+        byFile.set(file, { ...r, file });
+        continue;
+      }
+      byFile.set(file, {
+        ...cur,
+        deleted: cur.deleted === true || r?.deleted === true,
+        removed: Math.max(n(cur.removed), n(r?.removed)),
+        added: Math.max(n(cur.added), n(r?.added)),
+        suitesOff: Math.max(n(cur.suitesOff), n(r?.suitesOff)),
+        ...(cur.unreadable === true || r?.unreadable === true ? { unreadable: true } : {}),
+      });
+    }
+  }
+  return [...byFile.values()];
+}
+
+/**
  * Every fix report on a PR. Degrades to `[]`.
  *
  * `issues/{pr}/comments` is a BARE-ARRAY endpoint, so plain `--paginate` is
@@ -514,7 +578,16 @@ function gh(args) {
  */
 export function readFixReports(pr, { api = gh, log = console.error } = {}) {
   try {
-    return collectFixReports(api(["api", "--paginate", `repos/{owner}/{repo}/issues/${pr}/comments?per_page=100`]));
+    const comments = api(["api", "--paginate", `repos/{owner}/{repo}/issues/${pr}/comments?per_page=100`]);
+    // Join each report to the pipeline's removal records for the same head (the
+    // commit the fix round started from). Prefix-matched: either side may carry
+    // a short sha. EVERY record for the head counts (see `unionRemovals`).
+    const removals = collectTestRemovals(comments);
+    const same = (a, b) => a.length >= 7 && b.length >= 7 && (a.startsWith(b) || b.startsWith(a));
+    return collectFixReports(comments).map((r) => {
+      const merged = unionRemovals(removals.filter((x) => same(str(x.head), str(r.head))));
+      return merged.length ? { ...r, testRemovals: merged } : r;
+    });
   } catch (err) {
     // Degrades to "no reports", which is exactly the pre-existing behaviour: every
     // finding is re-verified with no author context. The panel must never fail

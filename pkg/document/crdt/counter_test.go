@@ -224,3 +224,127 @@ func TestCounterDedup(t *testing.T) {
 		assert.Equal(t, "2", restored.Marshal())
 	})
 }
+
+// TestCounterDoubleDelta pins how a Double delta, which a JS client sends
+// as is, is applied. The expected values were computed with the JS SDK's
+// formulas (counter.ts `increase`):
+//
+//	Int:  Number(BigInt.asIntN(32, BigInt(value + removeDecimal(delta))))
+//	Long: BigInt.asIntN(64, value + BigInt(Math.trunc(delta)))
+//
+// Go leaves an out-of-range float-to-int conversion implementation-defined,
+// so these must not depend on the CPU the replica runs on.
+func TestCounterDoubleDelta(t *testing.T) {
+	t.Run("int counter", func(t *testing.T) {
+		tests := []struct {
+			value int32
+			delta float64
+			want  int32
+		}{
+			{10, 0.5, 10},
+			{10, -0.5, 10},
+			{10, 1.5, 11},
+			{10, -1.5, 9},
+			{10, -10.9, 0},
+			// The delta is truncated before the add, not the sum after it.
+			{-1, 0.5, -1},
+			{1, -0.5, 1},
+			{math.MaxInt32, 0.9, math.MaxInt32},
+			{math.MaxInt32, 1.5, math.MinInt32},
+			{math.MinInt32, -1.5, math.MaxInt32},
+			{10, 2147483647.5, -2147483639},
+			{10, 2147483648.5, -2147483638},
+			{10, -2147483648.5, -2147483638},
+			{10, -2147483649.5, -2147483639},
+			{10, 4294967295.9, 9},
+			{10, 4294967296.5, 10},
+			{10, -4294967296.5, 10},
+			{10, -3000000000.5, 1294967306},
+			{10, 0x1p53, 10},
+			// JS adds in float64 before truncating, so 10 is rounded away.
+			{10, 0x1p60, 0},
+			{10, -0x1p60, 0},
+			{10, 0x1p63, 0},
+			{10, -0x1p63, 0},
+			{10, 0x1p64, 0},
+			{10, 1e20, 1661992960},
+			{-7, -1e20, -1661992960},
+			{10, math.MaxFloat64, 0},
+			{10, -math.MaxFloat64, 0},
+			{10, math.SmallestNonzeroFloat64, 10},
+		}
+		for _, tc := range tests {
+			counter, err := crdt.NewCounter(crdt.IntegerCnt, tc.value, time.InitialTicket)
+			assert.NoError(t, err)
+			delta, err := crdt.NewPrimitive(tc.delta, time.InitialTicket)
+			assert.NoError(t, err)
+			_, err = counter.Increase(delta)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, counter.Value(), "%d + %v", tc.value, tc.delta)
+		}
+	})
+
+	t.Run("long counter", func(t *testing.T) {
+		tests := []struct {
+			value int64
+			delta float64
+			want  int64
+		}{
+			{10, 0.5, 10},
+			{10, -0.5, 10},
+			{10, -10.9, 0},
+			{math.MaxInt64, 1.5, math.MinInt64},
+			{math.MinInt64, -1.5, math.MaxInt64},
+			{10, 2147483648.5, 2147483658},
+			{10, 4294967296.5, 4294967306},
+			{10, 0x1p53, 9007199254741002},
+			{10, 0x1p63, -9223372036854775798},
+			{10, -0x1p63, -9223372036854775798},
+			{10, 0x1p64, 10},
+			{10, -0x1p64, 10},
+			{10, 1e20, 7766279631452241930},
+			{-7, -1e20, -7766279631452241927},
+			{10, math.MaxFloat64, 10},
+			{10, -math.MaxFloat64, 10},
+		}
+		for _, tc := range tests {
+			counter, err := crdt.NewCounter(crdt.LongCnt, tc.value, time.InitialTicket)
+			assert.NoError(t, err)
+			delta, err := crdt.NewPrimitive(tc.delta, time.InitialTicket)
+			assert.NoError(t, err)
+			_, err = counter.Increase(delta)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, counter.Value(), "%d + %v", tc.value, tc.delta)
+		}
+	})
+
+	t.Run("non-finite delta is a no-op", func(t *testing.T) {
+		for _, cntType := range []crdt.CounterType{crdt.IntegerCnt, crdt.LongCnt} {
+			for _, d := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+				counter, err := crdt.NewCounter(cntType, 10, time.InitialTicket)
+				assert.NoError(t, err)
+				delta, err := crdt.NewPrimitive(d, time.InitialTicket)
+				assert.NoError(t, err)
+				// Increase also applies remote changes and replays changes
+				// the server has already stored, neither of which can be
+				// skipped, so it must not fail on a delta it cannot use.
+				_, err = counter.Increase(delta)
+				assert.NoError(t, err)
+				assert.Equal(t, "10", counter.Marshal())
+
+				_, err = crdt.NewCounter(cntType, d, time.InitialTicket)
+				assert.ErrorIs(t, err, crdt.ErrNonFiniteNumber)
+			}
+		}
+	})
+
+	t.Run("initial value is truncated and wrapped", func(t *testing.T) {
+		intCnt, err := crdt.NewCounter(crdt.IntegerCnt, -3000000000.0, time.InitialTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, int32(1294967296), intCnt.Value())
+
+		longCnt, err := crdt.NewCounter(crdt.LongCnt, 1e20, time.InitialTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(7766279631452241920), longCnt.Value())
+	})
+}

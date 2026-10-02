@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -162,4 +162,32 @@ test("readHeadSha works in a linked worktree — the reason GIT_DIR is deleted, 
     }
     rmSync(main, { recursive: true, force: true });
   }
+});
+
+// A fixture repo built with an inherited environment writes to the REAL repo
+// under a git hook. fingerprint.test.mjs, ported from yorkie-js-sdk
+// without the helper, did exactly that: it set `core.bare` and a `t@t`
+// identity in the shared config and committed over a working branch.
+test("every test that creates a git fixture builds its env from git-env.mjs", () => {
+  const scriptsDir = path.join(import.meta.dirname, "..");
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules") continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".test.mjs")) files.push(p);
+    }
+  };
+  walk(scriptsDir);
+  const spawnsGit = /\b(?:execFileSync|spawnSync|spawn|execFile)\(\s*["']git["']/;
+  const initsRepo = /["']init["']/;
+  const offenders = files
+    .filter((f) => {
+      const src = readFileSync(f, "utf8");
+      return spawnsGit.test(src) && initsRepo.test(src) && !src.includes("git-env.mjs");
+    })
+    .map((f) => path.relative(scriptsDir, f));
+  assert.ok(files.some((f) => f.endsWith(path.join("agent", "git-env.test.mjs"))), "the walk found the test files");
+  assert.deepEqual(offenders, [], "use fixtureGitEnv(dir) for every git call on a fixture");
 });

@@ -705,13 +705,7 @@ func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err er
 	}
 
 	// 02. Remove local changes applied to server.
-	for d.doc.HasLocalChanges() {
-		c := d.doc.localChanges[0]
-		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
-			break
-		}
-		d.doc.localChanges = d.doc.localChanges[1:]
-	}
+	d.doc.removePushedLocalChanges(pack.Checkpoint.ClientSeq)
 
 	if len(pack.Snapshot) > 0 {
 		applied, err := d.applyChanges(d.doc.localChanges)
@@ -755,6 +749,32 @@ func (d *Document) applyChangePack(pack *change.Pack) (events []DocEvent, err er
 	}
 
 	return events, nil
+}
+
+// AcknowledgePushedChanges takes the given pack as a push ack only: it drops
+// the local changes the server confirmed and forwards the client seq of the
+// checkpoint, leaving the server seq where it was so a later pull fetches
+// whatever this pack did not carry. It is for the reply to a push-only
+// request.
+//
+// That reply still carries the server's minimum version vector, and it must
+// not reach garbage collection: the client has not pulled the remote changes
+// the vector already accounts for, so collecting with it purges tombstones
+// those changes anchor on, and the first full pull after the pause fails to
+// apply them.
+//
+// The removal flag is taken: it describes the document, not the skipped
+// content.
+func (d *Document) AcknowledgePushedChanges(pack *change.Pack) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.doc.removePushedLocalChanges(pack.Checkpoint.ClientSeq)
+	d.doc.checkpoint = d.doc.checkpoint.SyncClientSeq(pack.Checkpoint.ClientSeq)
+
+	if pack.IsRemoved {
+		d.doc.SetStatus(StatusRemoved)
+	}
 }
 
 // publish delivers the given events to the document's event channel. It must
@@ -809,15 +829,12 @@ func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, er
 		// With both stacks empty there is no stacked entry to move, so every
 		// Reconcile* call below iterates nothing and the positions computed
 		// for it are discarded -- History.IsEmpty is exactly the condition
-		// under which that holds. Skipping is what makes the difference,
-		// because computing them is not free: Text.NormalizePos sums the live
-		// length of every physical predecessor, so the loop costs a walk of
-		// the whole split chain per executed Edit and the pack as a whole
-		// goes quadratic. That is paid on every client that never calls Undo
-		// and on every freshly attached document.
+		// under which that holds. Skipping saves that work, which is not
+		// free: each executed Edit costs a Text.NormalizePos (an index-tree
+		// lookup) and a tree lookup per position, paid on every client that
+		// never calls Undo and on every freshly attached document.
 		//
-		// JS runs the same loop unguarded (document.ts:1552-1566) over the
-		// same linear normalizePos (rga_tree_split.ts:1201-1221), so this is
+		// JS runs the same loop unguarded (document.ts:1552-1566), so this is
 		// a cost-only divergence, not a behavioral one: with anything on
 		// either stack the guard is false and every reconcile that JS
 		// performs still happens here.
