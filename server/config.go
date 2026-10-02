@@ -263,13 +263,15 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 // ensureBackendDefaultValue set the default backend.Config value
 func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend == nil {
-		// An explicit but empty `Backend:` section unmarshals to nil and wipes
-		// the values newConfig pre-seeded, so re-seed the booleans here: unlike
-		// the fields below, false is indistinguishable from unset. This is
-		// auth-affecting — UseDefaultProject gates keyless requests at
-		// rpc/interceptors — so the behavior change for a bare section is
-		// called out as an upgrade note in CHANGELOG.md.
-		c.Backend = &backend.Config{UseDefaultProject: DefaultUseDefaultProject}
+		// A bare (key-only, valueless) `Backend:` section unmarshals to nil and
+		// wipes what newConfig pre-seeded, so the booleans below fall back to
+		// false rather than to their defaults. Leave that as it is:
+		// UseDefaultProject gates keyless requests at rpc/interceptors
+		// (yorkie.go) and provisions the admin account at backend.go, so
+		// re-seeding it here would silently turn 401s into served requests for
+		// existing deployments. A section that spells out any key is a mapping,
+		// not null, and keeps the pre-seeded defaults for the keys it omits.
+		c.Backend = &backend.Config{}
 	}
 	if c.Backend.AdminUser == "" {
 		c.Backend.AdminUser = DefaultAdminUser

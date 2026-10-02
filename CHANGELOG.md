@@ -7,18 +7,6 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-### Changed
-
-- A bare (key-only, valueless) `Backend:` section in the config file now
-  resolves to the same defaults as an omitted one. Previously such a section
-  unmarshalled to nil and left the boolean `UseDefaultProject` at `false`,
-  which is not its documented default (`true`). **Upgrade note:** if your
-  config file has a bare `Backend:` section, requests without an API key
-  change from being rejected with `401` to being served against the default
-  project, and the default project with its `admin`/`admin` account is
-  provisioned at startup. Set `Backend:\n  UseDefaultProject: false`
-  explicitly to keep the previous behavior.
-
 ## [v0.7.23] - 2026-09-22
 
 ### Changed

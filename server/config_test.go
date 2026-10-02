@@ -137,9 +137,43 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, server.DefaultSecretKey, conf.Backend.SecretKey)
 		assert.Equal(t, server.DefaultAdminUser, conf.Backend.AdminUser)
 		assert.Equal(t, server.DefaultAdminPassword, conf.Backend.AdminPassword)
-		assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
+		// The booleans are NOT re-seeded: UseDefaultProject gates keyless
+		// requests, so a bare section stays fail-closed rather than silently
+		// turning 401s into requests served against the default project.
+		assert.False(t, conf.Backend.UseDefaultProject)
 		assert.False(t, conf.Backend.AuthWebhookCacheDisabled)
 		assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("populated Backend section keeps omitted defaults test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n  AdminUser: someone\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		// A section that spells out any key is a mapping, so YAML decodes into
+		// the struct newConfig pre-seeded and the keys it omits keep their
+		// defaults — including the auth-affecting UseDefaultProject.
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, "someone", conf.Backend.AdminUser)
+		assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
+		assert.True(t, conf.Backend.UseDefaultProject)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("explicit UseDefaultProject false is preserved test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n  UseDefaultProject: false\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.False(t, conf.Backend.UseDefaultProject)
 		assert.NoError(t, conf.Validate())
 	})
 
@@ -153,6 +187,8 @@ func TestNewConfigFromFile(t *testing.T) {
 		conf, err := server.NewConfigFromFile(file.Name())
 		assert.NoError(t, err)
 		assert.True(t, conf.Backend.AuthWebhookCacheDisabled)
+		// The cache switch must not drag the other booleans along with it.
+		assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
 		assert.NoError(t, conf.Validate())
 	})
 
