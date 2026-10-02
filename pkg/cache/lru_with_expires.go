@@ -18,6 +18,8 @@
 package cache
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -38,17 +40,24 @@ type LRUWithExpires[K comparable, V any] struct {
 // sub-millisecond TTL either ticks excessively or truncates to zero and
 // panics. A non-positive TTL is not a safe alternative either: it is
 // reinterpreted as "never expire" (~10 years), which turns the cache into a
-// store entries never leave. Callers validating operator-supplied durations
-// should reject anything below this.
+// store entries never leave.
 const MinTTL = time.Millisecond
 
+// ErrInvalidTTL is returned when an expirable LRU is given a TTL below MinTTL.
+var ErrInvalidTTL = errors.New("cache TTL is below the minimum")
+
 // NewLRUWithExpires creates a new expirable LRU with the given size and ttl.
+// It returns ErrInvalidTTL if ttl is less than MinTTL.
 func NewLRUWithExpires[K comparable, V any](
 	size int,
 	ttl time.Duration,
 	name string,
 	onEvict ...func(key K, value V),
 ) (*LRUWithExpires[K, V], error) {
+	if ttl < MinTTL {
+		return nil, fmt.Errorf("%s cache TTL %s: %w %s", name, ttl, ErrInvalidTTL, MinTTL)
+	}
+
 	var callback func(key K, value V)
 	if len(onEvict) > 0 {
 		callback = onEvict[0]

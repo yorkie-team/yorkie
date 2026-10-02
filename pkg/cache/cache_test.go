@@ -150,6 +150,31 @@ func TestLRUConcurrency(t *testing.T) {
 	})
 }
 
+func TestLRUWithExpires(t *testing.T) {
+	t.Run("reject TTL below MinTTL", func(t *testing.T) {
+		for _, ttl := range []time.Duration{
+			0,
+			-time.Second,
+			time.Nanosecond,
+			cache.MinTTL - time.Nanosecond,
+		} {
+			c, err := cache.NewLRUWithExpires[string, int](10, ttl, "test")
+			assert.ErrorIs(t, err, cache.ErrInvalidTTL, ttl)
+			assert.Nil(t, c)
+		}
+	})
+
+	t.Run("accept MinTTL and expire entries", func(t *testing.T) {
+		c, err := cache.NewLRUWithExpires[string, int](10, cache.MinTTL, "test")
+		assert.NoError(t, err)
+		c.Add("key", 1)
+		assert.Eventually(t, func() bool {
+			_, ok := c.Get("key")
+			return !ok
+		}, time.Second, cache.MinTTL)
+	})
+}
+
 func TestCacheManager(t *testing.T) {
 	t.Run("register and log stats", func(t *testing.T) {
 		manager := cache.NewManager(time.Second)

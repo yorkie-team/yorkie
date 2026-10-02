@@ -91,27 +91,22 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// An empty TTL is not an "unset" reading here: ParseProjectCacheTTL cannot
-	// parse it and exits the process, so it is rejected up front like the
-	// timeouts above. server.ensureMongoDefaultValue fills the default before
-	// this runs, so an omitted config key never reaches this check.
-	ttl, err := time.ParseDuration(c.ProjectCacheTTL)
-	if err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--mongo-project-cache-ttl" flag: %w`,
-			c.ProjectCacheTTL,
-			err,
-		)
-	}
-	// The project cache is the same expirable LRU as the backend caches:
-	// a sub-millisecond TTL panics its expiry ticker and a non-positive
-	// one means "never expire". See cache.MinTTL.
-	if ttl < cache.MinTTL {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--mongo-project-cache-ttl" flag: must be at least %s`,
-			c.ProjectCacheTTL,
-			cache.MinTTL,
-		)
+	if c.ProjectCacheTTL != "" {
+		ttl, err := time.ParseDuration(c.ProjectCacheTTL)
+		if err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--mongo-project-cache-ttl" flag: %w`,
+				c.ProjectCacheTTL,
+				err,
+			)
+		}
+		if ttl < cache.MinTTL {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--mongo-project-cache-ttl" flag: must be at least %s`,
+				c.ProjectCacheTTL,
+				cache.MinTTL,
+			)
+		}
 	}
 
 	return nil

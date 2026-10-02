@@ -36,12 +36,11 @@ func TestAuthWebhookCacheDisabledAfterRevocation(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		disabled   bool
-		ttl        time.Duration
 		wantCalls  int64
 		wantDenied bool
 	}{
-		{name: "explicitly disabled", disabled: true, ttl: time.Minute, wantCalls: 2, wantDenied: true},
-		{name: "zero TTL retains existing cache behavior", ttl: 0, wantCalls: 1},
+		{name: "explicitly disabled", disabled: true, wantCalls: 2, wantDenied: true},
+		{name: "enabled cache serves the cached decision", wantCalls: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var allowed atomic.Bool
@@ -62,7 +61,7 @@ func TestAuthWebhookCacheDisabledAfterRevocation(t *testing.T) {
 
 			caches, err := backendcache.New(backendcache.Options{
 				AuthWebhookCacheSize:         8,
-				AuthWebhookCacheTTL:          tc.ttl,
+				AuthWebhookCacheTTL:          time.Minute,
 				SnapshotCacheSize:            8,
 				ChannelSessionCountCacheSize: 8,
 				ChannelSessionCountCacheTTL:  time.Minute,

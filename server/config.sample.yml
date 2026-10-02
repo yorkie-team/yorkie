@@ -85,10 +85,7 @@ Backend:
   AdminPassword: "admin"
 
   # SecretKey is the secret key for signing authentication tokens.
-  # Replace this development value before exposing the server: it signs and
-  # accepts admin tokens. An empty value is rejected at startup rather than
-  # falling back to this default. (default: yorkie-secret).
-  SecretKey: "yorkie-secret"
+  SecretKey: ""
 
   # AdminTokenDuration is the duration of the admin token. (default: 168h0m0s).
   AdminTokenDuration: "168h0m0s"
@@ -107,17 +104,12 @@ Backend:
   # AuthWebhookCacheSize is the cache size of the authorization webhook.
   AuthWebhookCacheSize: 5000
 
-  # AuthWebhookCacheDisabled bypasses the response cache for every authorization request.
-  # It reaches only requests that call the webhook: a watch stream is authorized
-  # once, when it opens, so an already-open stream keeps its initial
-  # authorization until the client reconnects. Project metadata (including the
-  # webhook URL and methods) is cached separately for ProjectCacheTTL.
+  # AuthWebhookCacheDisabled disables the authorization webhook response cache
+  # server-wide. When true, every protected RPC calls the webhook.
   AuthWebhookCacheDisabled: false
 
-  # AuthWebhookCacheTTL is the TTL of cached authorization responses.
-  # It must be at least 1ms; zero and negative values are rejected because the
-  # cache reads them as "never expire". Use AuthWebhookCacheDisabled to bypass
-  # caching.
+  # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
+  # It must be at least 1ms; use AuthWebhookCacheDisabled to turn caching off.
   AuthWebhookCacheTTL: "10s"
 
   # ProjectCacheSize is the size of the project metadata cache.

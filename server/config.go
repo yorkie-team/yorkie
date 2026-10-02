@@ -119,9 +119,7 @@ type Config struct {
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	conf := newConfig(DefaultRPCPort, DefaultProfilingPort)
-	conf.ensureDefaultValue()
-	return conf
+	return newConfig(DefaultRPCPort, DefaultProfilingPort)
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.
@@ -264,12 +262,15 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend == nil {
 		c.Backend = &backend.Config{}
 	}
-	// Credentials intentionally have no ensure-coercion here. newConfig()
-	// pre-seeds the defaults before YAML unmarshal, so a key omitted from the
-	// file already resolves to the default; an explicitly empty one is left for
-	// Backend.Validate() to reject. Backfilling here instead would turn
-	// `SecretKey: ""` into the well-known "yorkie-secret", which signs and
-	// accepts admin tokens, and would make that guard dead code.
+	if c.Backend.AdminUser == "" {
+		c.Backend.AdminUser = DefaultAdminUser
+	}
+	if c.Backend.AdminPassword == "" {
+		c.Backend.AdminPassword = DefaultAdminPassword
+	}
+	if c.Backend.SecretKey == "" {
+		c.Backend.SecretKey = DefaultSecretKey
+	}
 	if c.Backend.AdminTokenDuration == "" {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
@@ -351,15 +352,6 @@ func (c *Config) ensureMongoDefaultValue() {
 	if c.Mongo.VectorCacheSize == 0 {
 		c.Mongo.VectorCacheSize = DefaultMongoVectorCacheSize
 	}
-	if c.Mongo.ProjectCacheSize == 0 {
-		c.Mongo.ProjectCacheSize = DefaultProjectCacheSize
-	}
-	// The project cache TTL has no "unset" reading: an empty value cannot be
-	// parsed into a duration, and Mongo.Validate() rejects it rather than
-	// letting client initialization fail later.
-	if c.Mongo.ProjectCacheTTL == "" {
-		c.Mongo.ProjectCacheTTL = DefaultProjectCacheTTL.String()
-	}
 }
 
 // ensureKafkaDefaultValue set the default messagebroker.Config value
@@ -422,9 +414,6 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Backend: &backend.Config{
 			UseDefaultProject: DefaultUseDefaultProject,
-			AdminUser:         DefaultAdminUser,
-			AdminPassword:     DefaultAdminPassword,
-			SecretKey:         DefaultSecretKey,
 		},
 	}
 }

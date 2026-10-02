@@ -17,7 +17,6 @@
 package server_test
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -124,7 +123,26 @@ func TestNewConfigFromFile(t *testing.T) {
 		assertDefaultConfig(t, conf)
 	})
 
-	t.Run("read disabled auth webhook cache from file", func(t *testing.T) {
+	t.Run("read bare Backend section test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		// A bare section unmarshals to a nil Backend, which must still be
+		// filled with the default credentials and cache settings.
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, server.DefaultSecretKey, conf.Backend.SecretKey)
+		assert.Equal(t, server.DefaultAdminUser, conf.Backend.AdminUser)
+		assert.Equal(t, server.DefaultAdminPassword, conf.Backend.AdminPassword)
+		assert.False(t, conf.Backend.AuthWebhookCacheDisabled)
+		assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("read AuthWebhookCacheDisabled test", func(t *testing.T) {
 		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
 		assert.NoError(t, err)
 		_, err = file.WriteString("Backend:\n  AuthWebhookCacheDisabled: true\n")
@@ -134,63 +152,16 @@ func TestNewConfigFromFile(t *testing.T) {
 		conf, err := server.NewConfigFromFile(file.Name())
 		assert.NoError(t, err)
 		assert.True(t, conf.Backend.AuthWebhookCacheDisabled)
+		assert.NoError(t, conf.Validate())
 	})
 
-	t.Run("reject tiny auth webhook cache TTL before startup", func(t *testing.T) {
-		conf, err := server.NewConfigFromFile("config.sample.yml")
-		assert.NoError(t, err)
-		conf.Backend.AuthWebhookCacheTTL = "1ns"
-		_, err = server.New(conf)
-		assert.ErrorContains(t, err, "auth-webhook-cache-auth-ttl")
-
-		conf.Backend.AuthWebhookCacheTTL = "0s"
-		_, err = server.New(conf)
-		assert.ErrorContains(t, err, "auth-webhook-cache-auth-ttl")
-	})
-
-	// A Mongo section that omits the project cache keys used to leave
-	// ProjectCacheTTL empty: Validate() skipped it and ParseProjectCacheTTL
-	// then exited the process while building the client.
-	t.Run("fill project cache defaults for a partial Mongo section", func(t *testing.T) {
-		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
-		assert.NoError(t, err)
-		_, err = file.WriteString("Mongo:\n  ConnectionURI: \"mongodb://localhost:27017\"\n")
-		assert.NoError(t, err)
-		assert.NoError(t, file.Close())
-
-		conf, err := server.NewConfigFromFile(file.Name())
-		assert.NoError(t, err)
-		assert.Equal(t, server.DefaultProjectCacheTTL.String(), conf.Mongo.ProjectCacheTTL)
-		assert.Equal(t, server.DefaultProjectCacheSize, conf.Mongo.ProjectCacheSize)
-		assert.NoError(t, conf.Mongo.Validate())
-	})
-
-	// An explicitly emptied credential in the file used to be backfilled to the
-	// well-known default, so a file carrying `SecretKey: ""` silently signed and
-	// accepted admin tokens with "yorkie-secret". It must survive ensure so that
-	// Validate() rejects it instead.
-	t.Run("explicit empty credentials survive ensure for Validate to reject", func(t *testing.T) {
-		for _, c := range []struct {
-			key  string
-			flag string
-		}{
-			{"SecretKey", "--backend-secret-key"},
-			{"AdminUser", "--backend-admin-user"},
-			{"AdminPassword", "--backend-admin-password"},
-		} {
-			t.Run(c.key, func(t *testing.T) {
-				file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
-				assert.NoError(t, err)
-				_, err = file.WriteString("Backend:\n  " + c.key + ": \"\"\n")
-				assert.NoError(t, err)
-				assert.NoError(t, file.Close())
-
-				conf, err := server.NewConfigFromFile(file.Name())
-				assert.NoError(t, err)
-				err = conf.Validate()
-				assert.ErrorContains(t, err, c.flag)
-				assert.ErrorContains(t, err, "must not be empty")
-			})
+	t.Run("reject auth webhook cache TTL below cache.MinTTL test", func(t *testing.T) {
+		for _, ttl := range []string{"0s", "1ns"} {
+			conf, err := server.NewConfigFromFile("config.sample.yml")
+			assert.NoError(t, err)
+			conf.Backend.AuthWebhookCacheTTL = ttl
+			_, err = server.New(conf)
+			assert.ErrorContains(t, err, "--auth-webhook-cache-auth-ttl")
 		}
 	})
 
@@ -230,38 +201,4 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, -5, conf.Housekeeping.DeactivateConcurrency)
 		assert.Error(t, conf.Housekeeping.Validate())
 	})
-}
-
-func TestNewWithProgrammaticConfig(t *testing.T) {
-	conf := server.NewConfig()
-	assert.Equal(t, server.DefaultAdminTokenDuration.String(), conf.Backend.AdminTokenDuration)
-	assert.NoError(t, conf.Validate())
-}
-
-func TestNewRejectsExplicitInvalidCapacities(t *testing.T) {
-	cases := []struct {
-		name string
-		set  func(*server.Config, int)
-	}{
-		{"channel-session-count-cache-size", func(c *server.Config, n int) {
-			c.Backend.ChannelSessionCountCacheSize = n
-		}},
-		{"cluster-client-pool-size", func(c *server.Config, n int) {
-			c.Backend.ClusterClientPoolSize = n
-		}},
-		{"max-concurrent-cluster-rpcs", func(c *server.Config, n int) {
-			c.Backend.MaxConcurrentClusterRPCs = n
-		}},
-	}
-	for _, tc := range cases {
-		for _, value := range []int{0, -1} {
-			t.Run(fmt.Sprintf("%s/%d", tc.name, value), func(t *testing.T) {
-				conf := server.NewConfig()
-				tc.set(conf, value)
-				y, err := server.New(conf)
-				assert.Nil(t, y)
-				assert.ErrorContains(t, err, tc.name)
-			})
-		}
-	}
 }

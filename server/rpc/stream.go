@@ -18,27 +18,9 @@ package rpc
 
 import (
 	"context"
-	"reflect"
 
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 )
-
-// isSkipped reports whether convert asked for the event to be skipped by
-// returning a nil response.
-//
-// Resp is instantiated with a pointer type (*api.WatchChannelResponse and
-// friends), so a nil response is a typed nil pointer: converting it to an
-// interface yields a non-nil interface value, and comparing `any(resp)` to
-// nil would never match. The nil has to be read off the value itself.
-func isSkipped[Resp any](resp Resp) bool {
-	v := reflect.ValueOf(&resp).Elem()
-	switch v.Kind() {
-	case reflect.Pointer, reflect.Interface:
-		return v.IsNil()
-	default:
-		return false
-	}
-}
 
 // streamEvents reads events from a subscription and sends converted responses
 // over a stream. It blocks until the context is done, the serviceCtx is done
@@ -53,14 +35,6 @@ func isSkipped[Resp any](resp Resp) bool {
 // The convert function transforms an event into a response. If it returns
 // (nil, nil), the event is skipped. The optional afterSend callback is called
 // after each successful send.
-//
-// Authorization is not re-evaluated here. The caller verifies access once,
-// before subscribing, and this loop runs until the client or the server ends
-// it, so a client whose authorization is revoked mid-stream keeps receiving
-// events until it reconnects. Disabling the auth webhook response cache does
-// not close that window — it only applies to requests that reach the webhook,
-// and an open stream makes none. Bounding it needs a re-authorization tick in
-// this loop, which is deliberately out of scope for this change.
 func streamEvents[E any, Resp any](
 	ctx context.Context,
 	serviceCtx context.Context,
@@ -85,8 +59,8 @@ func streamEvents[E any, Resp any](
 				return err
 			}
 
-			// A nil response means skip this event.
-			if isSkipped(resp) {
+			// A nil interface value means skip this event.
+			if any(resp) == nil {
 				continue
 			}
 

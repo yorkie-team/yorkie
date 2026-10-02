@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -84,8 +83,7 @@ var (
 
 	pprofEnabled bool
 
-	authWebhookCacheTTL      time.Duration
-	authWebhookCacheDisabled bool
+	authWebhookCacheTTL time.Duration
 
 	kafkaAddresses           string
 	kafkaUserEventsTopic     string
@@ -174,12 +172,12 @@ func newServerCmd() *cobra.Command {
 			}
 
 			// If config file is given, command-line arguments will be overwritten.
-			// Explicit credentials and the security switches that only tighten
-			// still apply on top; server.New validates the result.
-			var err error
-			conf, err = resolveServerConfig(conf, flagConfPath, cmd.Flags(), authWebhookCacheDisabled)
-			if err != nil {
-				return err
+			if flagConfPath != "" {
+				parsed, err := server.NewConfigFromFile(flagConfPath)
+				if err != nil {
+					return err
+				}
+				conf = parsed
 			}
 
 			if err := logging.SetLogLevel(flagLogLevel); err != nil {
@@ -202,86 +200,6 @@ func newServerCmd() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-// credentialFlags are the flags whose value is a credential. A config file
-// replaces the whole flag-built config, so without this list an operator who
-// passes both --config and --backend-secret-key would silently run on the
-// well-known default "yorkie-secret" - which signs and accepts admin tokens -
-// whenever the file omits the key, and an operator who passes --cluster-secret
-// would leave ClusterService authentication disabled entirely.
-var credentialFlags = map[string]func(*server.Config) *string{
-	"backend-secret-key":     func(c *server.Config) *string { return &c.Backend.SecretKey },
-	"backend-admin-user":     func(c *server.Config) *string { return &c.Backend.AdminUser },
-	"backend-admin-password": func(c *server.Config) *string { return &c.Backend.AdminPassword },
-	"cluster-secret":         func(c *server.Config) *string { return &c.Backend.ClusterSecret },
-}
-
-// resolveServerConfig applies the config file on top of the flag-built config.
-// The file keeps its long-standing precedence for ordinary settings: when
-// --config is given it replaces the whole flag-built config. Two kinds of value
-// survive it, and both only ever tighten the result:
-//
-//   - an explicitly given, non-empty credential, so injecting a secret from a
-//     store next to --config cannot silently fall back to a default. An empty
-//     value never overrides, so it cannot wipe a credential the file sets.
-//   - the --backend-enable-webhook-validation and --auth-webhook-cache-disabled
-//     switches when true, so neither guard can be swallowed by a file that
-//     predates it, while an explicit false cannot relax a file that enables it.
-//   - an explicit --backend-use-default-project=false, so the API key
-//     requirement an operator turned on cannot be dropped by a file that omits
-//     the key (UseDefaultProject defaults to true, so omission means "keyless
-//     requests allowed"). An explicit true never overrides, so it cannot relax
-//     a file that disables the default project.
-func resolveServerConfig(
-	base *server.Config,
-	path string,
-	flags *pflag.FlagSet,
-	disableAuthWebhookCache bool,
-) (*server.Config, error) {
-	if flags != nil {
-		for name, field := range credentialFlags {
-			// ClusterSecret is optional, including an explicit empty value; the
-			// rest are not, so an explicitly emptied one is refused rather than
-			// quietly ignored in favor of a default or a file value.
-			if name != "cluster-secret" && flags.Changed(name) && *field(base) == "" {
-				return nil, fmt.Errorf(`invalid argument "" for "--%s" flag: must not be empty`, name)
-			}
-		}
-	}
-
-	enableWebhookValidation := base.Backend.EnableWebhookValidation
-	disableDefaultProject := flags != nil &&
-		flags.Changed("backend-use-default-project") &&
-		!base.Backend.UseDefaultProject
-
-	if path != "" {
-		parsed, err := server.NewConfigFromFile(path)
-		if err != nil {
-			return nil, err
-		}
-
-		if flags != nil {
-			for name, field := range credentialFlags {
-				if flags.Changed(name) && *field(base) != "" {
-					*field(parsed) = *field(base)
-				}
-			}
-		}
-
-		base = parsed
-	}
-
-	if enableWebhookValidation {
-		base.Backend.EnableWebhookValidation = true
-	}
-	if disableAuthWebhookCache {
-		base.Backend.AuthWebhookCacheDisabled = true
-	}
-	if disableDefaultProject {
-		base.Backend.UseDefaultProject = false
-	}
-	return base, nil
 }
 
 func handleSignal(r *server.Yorkie) int {
@@ -514,7 +432,7 @@ func init() {
 		&mongoProjectCacheTTL,
 		"mongo-project-cache-ttl",
 		5*time.Minute,
-		"TTL for MongoDB project cache (e.g. '5m', '60s')",
+		"TTL for MongoDB project cache (e.g. '5m', '60s'). Must be at least 1ms.",
 	)
 	cmd.Flags().IntVar(
 		&mongoClientCacheSize,
@@ -550,22 +468,19 @@ func init() {
 		&conf.Backend.AdminUser,
 		"backend-admin-user",
 		server.DefaultAdminUser,
-		"The name of the default admin user, who has full permissions. Must not be explicitly empty. "+
-			"An explicit value overrides the config file.",
+		"The name of the default admin user, who has full permissions.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminPassword,
 		"backend-admin-password",
 		server.DefaultAdminPassword,
-		"The password of the default admin. Must not be explicitly empty. "+
-			"An explicit value overrides the config file.",
+		"The password of the default admin.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.SecretKey,
 		"backend-secret-key",
 		server.DefaultSecretKey,
-		"The secret key for signing authentication tokens for admin users. Must not be explicitly empty. "+
-			"An explicit value overrides the config file.",
+		"The secret key for signing authentication tokens for admin users.",
 	)
 
 	cmd.Flags().BoolVar(
@@ -573,7 +488,7 @@ func init() {
 		"backend-use-default-project",
 		server.DefaultUseDefaultProject,
 		"Whether to use the default project. Even if public key is not provided from the client, "+
-			"the default project will be used for the request. An explicit false overrides the config file.",
+			"the default project will be used for the request.",
 	)
 	cmd.Flags().BoolVar(
 		&conf.Backend.SnapshotDisableGC,
@@ -591,8 +506,7 @@ func init() {
 		&conf.Backend.EnableWebhookValidation,
 		"backend-enable-webhook-validation",
 		false,
-		"Whether to enable webhook URL validation to prevent SSRF attacks. "+
-			"An explicit true overrides the config file.",
+		"Whether to enable webhook URL validation to prevent SSRF attacks.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
@@ -601,18 +515,17 @@ func init() {
 		"The cache size of the authorization webhook.",
 	)
 	cmd.Flags().BoolVar(
-		&authWebhookCacheDisabled,
+		&conf.Backend.AuthWebhookCacheDisabled,
 		"auth-webhook-cache-disabled",
 		false,
-		"Send every authorization request to the webhook without using the response cache. "+
-			"Existing watch streams retain their initial authorization until reconnect.",
+		"Disable the authorization webhook response cache server-wide. "+
+			"Every protected RPC then calls the webhook.",
 	)
 	cmd.Flags().DurationVar(
 		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
-		"TTL for cached authorization responses; must be at least 1ms. "+
-			"Use --auth-webhook-cache-disabled to bypass caching.",
+		"TTL value to set when caching authorization webhook response. Must be at least 1ms.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.Hostname,
@@ -703,7 +616,7 @@ func init() {
 		&channelSessionCountCacheTTL,
 		"channel-session-count-cache-ttl",
 		server.DefaultChannelSessionCountCacheTTL,
-		"The TTL value for channel session count cache.",
+		"The TTL value for channel session count cache. Must be at least 1ms.",
 	)
 	cmd.Flags().IntVar(
 		&channelSessionCountCacheSize,
@@ -739,8 +652,7 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed. "+
-			"An explicit non-empty value overrides the config file.",
+		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed.",
 	)
 	rootCmd.AddCommand(cmd)
 }

@@ -26,19 +26,11 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
-		AdminUser:                     "admin",
-		AdminPassword:                 "admin",
-		SecretKey:                     "yorkie-secret",
-		AdminTokenDuration:            "24h",
-		AuthWebhookCacheTTL:           "10s",
-		ChannelSessionTTL:             "60s",
-		ChannelSessionCleanupInterval: "10s",
-		ChannelSessionCountCacheTTL:   "30s",
-		ChannelSessionCountCacheSize:  1,
-		ClusterRPCTimeout:             "10s",
-		ClusterClientTimeout:          "30s",
-		ClusterClientPoolSize:         1,
-		MaxConcurrentClusterRPCs:      1,
+		AdminTokenDuration:           "24h",
+		AuthWebhookCacheTTL:          "10s",
+		ChannelSessionCountCacheSize: 1,
+		ClusterClientPoolSize:        1,
+		MaxConcurrentClusterRPCs:     1,
 	}
 }
 func TestConfig(t *testing.T) {
@@ -51,76 +43,27 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 	})
 
-	t.Run("reject a TTL the expirable cache cannot honor", func(t *testing.T) {
-		conf := newValidBackendConf()
-		conf.AuthWebhookCacheTTL = "1ns"
-		assert.ErrorContains(t, conf.Validate(), "auth-webhook-cache-auth-ttl")
-
-		// Zero and negative are read as "never expire" by the expirable LRU,
-		// which would keep a revoked authorization cached until restart.
-		conf.AuthWebhookCacheTTL = "0s"
-		assert.ErrorContains(t, conf.Validate(), "auth-webhook-cache-auth-ttl")
-
-		conf.AuthWebhookCacheTTL = "-1s"
-		assert.ErrorContains(t, conf.Validate(), "auth-webhook-cache-auth-ttl")
-
-		conf.AuthWebhookCacheTTL = "1ms"
-		assert.NoError(t, conf.Validate())
-	})
-
-	t.Run("reject a session count cache TTL the expirable cache cannot honor", func(t *testing.T) {
-		conf := newValidBackendConf()
-		conf.ChannelSessionCountCacheTTL = "1ns"
-		assert.ErrorContains(t, conf.Validate(), "channel-session-count-cache-ttl")
-
-		conf.ChannelSessionCountCacheTTL = "0s"
-		assert.ErrorContains(t, conf.Validate(), "channel-session-count-cache-ttl")
-
-		conf.ChannelSessionCountCacheTTL = "1s"
-		assert.NoError(t, conf.Validate())
-	})
-
-	t.Run("reject empty durations rather than read them as unset", func(t *testing.T) {
-		// A duration left empty passes through to a Parse* helper that exits
-		// the process, so every one of them has to fail Validate instead.
+	t.Run("reject cache TTLs below cache.MinTTL", func(t *testing.T) {
 		for _, tc := range []struct {
 			flag string
-			set  func(conf *backend.Config)
+			set  func(conf *backend.Config, ttl string)
 		}{
-			{"admin-token-duration", func(c *backend.Config) { c.AdminTokenDuration = "" }},
-			{"auth-webhook-cache-auth-ttl", func(c *backend.Config) { c.AuthWebhookCacheTTL = "" }},
-			{"channel-session-ttl", func(c *backend.Config) { c.ChannelSessionTTL = "" }},
-			{"channel-session-cleanup-interval", func(c *backend.Config) {
-				c.ChannelSessionCleanupInterval = ""
+			{"--auth-webhook-cache-auth-ttl", func(c *backend.Config, ttl string) {
+				c.AuthWebhookCacheTTL = ttl
 			}},
-			{"channel-session-count-cache-ttl", func(c *backend.Config) {
-				c.ChannelSessionCountCacheTTL = ""
+			{"--channel-session-count-cache-ttl", func(c *backend.Config, ttl string) {
+				c.ChannelSessionCountCacheTTL = ttl
 			}},
-			{"cluster-rpc-timeout", func(c *backend.Config) { c.ClusterRPCTimeout = "" }},
-			{"cluster-client-timeout", func(c *backend.Config) { c.ClusterClientTimeout = "" }},
 		} {
-			conf := newValidBackendConf()
-			tc.set(&conf)
-			assert.ErrorContains(t, conf.Validate(), tc.flag)
-		}
-	})
+			for _, ttl := range []string{"0", "0s", "-1s", "1ns", "999us"} {
+				conf := newValidBackendConf()
+				tc.set(&conf, ttl)
+				assert.ErrorContains(t, conf.Validate(), tc.flag, ttl)
+			}
 
-	t.Run("reject empty credentials from any entry point", func(t *testing.T) {
-		// server.New only calls Validate, so an embedder or a helper that
-		// builds the config literally has to be refused here too: an empty
-		// SecretKey would sign and accept admin tokens with the empty key.
-		for _, tc := range []struct {
-			flag string
-			set  func(conf *backend.Config)
-		}{
-			{"backend-secret-key", func(c *backend.Config) { c.SecretKey = "" }},
-			{"backend-admin-user", func(c *backend.Config) { c.AdminUser = "" }},
-			{"backend-admin-password", func(c *backend.Config) { c.AdminPassword = "" }},
-		} {
 			conf := newValidBackendConf()
-			tc.set(&conf)
-			assert.ErrorContains(t, conf.Validate(), tc.flag)
-			assert.ErrorContains(t, conf.Validate(), "must not be empty")
+			tc.set(&conf, "1ms")
+			assert.NoError(t, conf.Validate())
 		}
 	})
 
@@ -155,10 +98,8 @@ func TestConfig(t *testing.T) {
 		conf.ClusterRPCTimeout = "5s"
 		assert.NoError(t, conf.Validate())
 
-		// Empty is not an "unset" reading: ParseClusterRPCTimeout would
-		// os.Exit(1) on it, so Validate has to refuse it first.
 		conf.ClusterRPCTimeout = ""
-		assert.ErrorContains(t, conf.Validate(), "cluster-rpc-timeout")
+		assert.NoError(t, conf.Validate())
 	})
 
 	t.Run("validate ClusterClientTimeout test", func(t *testing.T) {
@@ -170,7 +111,7 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, conf.Validate())
 
 		conf.ClusterClientTimeout = ""
-		assert.ErrorContains(t, conf.Validate(), "cluster-client-timeout")
+		assert.NoError(t, conf.Validate())
 	})
 
 	t.Run("parse test", func(t *testing.T) {

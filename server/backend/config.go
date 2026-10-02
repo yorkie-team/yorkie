@@ -50,15 +50,12 @@ type Config struct {
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
-	// AuthWebhookCacheDisabled sends every authorization request to the
-	// webhook. It only covers requests that reach the webhook: a watch stream
-	// is authorized once, when it opens, so a client whose authorization is
-	// revoked afterwards keeps its already-open stream until it reconnects.
+	// AuthWebhookCacheDisabled disables the authorization webhook response
+	// cache server-wide. When true, every protected RPC calls the webhook.
 	AuthWebhookCacheDisabled bool `yaml:"AuthWebhookCacheDisabled"`
 
-	// AuthWebhookCacheTTL is the TTL for cached authorization responses. It
-	// must be at least cache.MinTTL; use AuthWebhookCacheDisabled to bypass
-	// caching instead of asking for a TTL that never expires.
+	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized
+	// result. It must be at least cache.MinTTL.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
 	// SnapshotCacheSize is the cache size of the snapshot.
@@ -76,7 +73,8 @@ type Config struct {
 	// ChannelSessionCountCacheSize is the cache size of the session count.
 	ChannelSessionCountCacheSize int `yaml:"ChannelSessionCountCacheSize"`
 
-	// ChannelSessionCountCacheTTL is the TTL value for session count cache.
+	// ChannelSessionCountCacheTTL is the TTL value for session count cache. It
+	// must be at least cache.MinTTL.
 	ChannelSessionCountCacheTTL string `yaml:"ChannelSessionCountCacheTTL"`
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
@@ -120,17 +118,18 @@ type Config struct {
 	ClusterSecret string `yaml:"ClusterSecret"`
 }
 
-// validateCacheTTL returns an error if the given TTL cannot be handed to an
-// expirable cache. Both sub-millisecond and non-positive durations are
-// rejected: the first panics the expiry ticker, and the second is read as
-// "never expire", which for the auth webhook cache would pin an
-// authorization decision for the life of the process so that a revocation
-// never takes effect. See cache.MinTTL.
-func validateCacheTTL(flag string, raw string, ttl time.Duration) error {
+// validateCacheTTL checks that the given TTL parses and is at least
+// cache.MinTTL, so that a bad value fails with the flag name at startup
+// rather than inside cache construction.
+func validateCacheTTL(flag, value string) error {
+	ttl, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, value, flag, err)
+	}
 	if ttl < cache.MinTTL {
 		return fmt.Errorf(
-			`invalid argument "%s" for "%s" flag: cache TTL must be at least %s`,
-			raw,
+			`invalid argument "%s" for "%s" flag: must be at least %s`,
+			value,
 			flag,
 			cache.MinTTL,
 		)
@@ -138,79 +137,58 @@ func validateCacheTTL(flag string, raw string, ttl time.Duration) error {
 	return nil
 }
 
-// parseDuration parses an operator-settable duration. An empty value is an
-// error rather than an "unset" reading: every duration below is filled in by
-// server.Config.ensureDefaultValue or by the flag defaults, so an empty one
-// reaching Validate is a config that would otherwise pass and then take the
-// process down with os.Exit(1) in the matching Parse* helper.
-func parseDuration(flag string, raw string) (time.Duration, error) {
-	parsed, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, fmt.Errorf(`invalid argument "%s" for "%s" flag: %w`, raw, flag, err)
-	}
-	return parsed, nil
-}
-
 // Validate validates this config.
 func (c *Config) Validate() error {
-	// Credentials are filled in by server.Config.ensureDefaultValue, so an
-	// empty one here means it was explicitly cleared. An empty SecretKey would
-	// sign and accept admin tokens with the empty key, and empty admin
-	// credentials would create an admin that cannot be logged in as. Every
-	// entry point reaches this check, not only the `yorkie server` command.
-	for _, cred := range []struct {
-		flag  string
-		value string
-	}{
-		{"--backend-secret-key", c.SecretKey},
-		{"--backend-admin-user", c.AdminUser},
-		{"--backend-admin-password", c.AdminPassword},
-	} {
-		if cred.value == "" {
-			return fmt.Errorf(`invalid argument "" for "%s" flag: must not be empty`, cred.flag)
+	if err := validateCacheTTL(
+		"--auth-webhook-cache-auth-ttl",
+		c.AuthWebhookCacheTTL,
+	); err != nil {
+		return err
+	}
+	if c.ChannelSessionCountCacheTTL != "" {
+		if err := validateCacheTTL(
+			"--channel-session-count-cache-ttl",
+			c.ChannelSessionCountCacheTTL,
+		); err != nil {
+			return err
 		}
 	}
-
-	if _, err := parseDuration("--backend-admin-token-duration", c.AdminTokenDuration); err != nil {
-		return err
+	if c.ChannelSessionTTL != "" {
+		if _, err := time.ParseDuration(c.ChannelSessionTTL); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--channel-session-ttl" flag: %w`,
+				c.ChannelSessionTTL,
+				err,
+			)
+		}
 	}
-
-	ttl, err := parseDuration("--auth-webhook-cache-auth-ttl", c.AuthWebhookCacheTTL)
-	if err != nil {
-		return err
+	if c.ChannelSessionCleanupInterval != "" {
+		if _, err := time.ParseDuration(c.ChannelSessionCleanupInterval); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--channel-session-cleanup-interval" flag: %w`,
+				c.ChannelSessionCleanupInterval,
+				err,
+			)
+		}
 	}
-	if err := validateCacheTTL("--auth-webhook-cache-auth-ttl", c.AuthWebhookCacheTTL, ttl); err != nil {
-		return err
+	if c.ClusterRPCTimeout != "" {
+		if _, err := time.ParseDuration(c.ClusterRPCTimeout); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--cluster-rpc-timeout" flag: %w`,
+				c.ClusterRPCTimeout,
+				err,
+			)
+		}
 	}
-
-	countTTL, err := parseDuration("--channel-session-count-cache-ttl", c.ChannelSessionCountCacheTTL)
-	if err != nil {
-		return err
+	if c.ClusterClientTimeout != "" {
+		if _, err := time.ParseDuration(c.ClusterClientTimeout); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--cluster-client-timeout" flag: %w`,
+				c.ClusterClientTimeout,
+				err,
+			)
+		}
 	}
-	if err := validateCacheTTL(
-		"--channel-session-count-cache-ttl",
-		c.ChannelSessionCountCacheTTL,
-		countTTL,
-	); err != nil {
-		return err
-	}
-
-	if _, err := parseDuration("--channel-session-ttl", c.ChannelSessionTTL); err != nil {
-		return err
-	}
-	if _, err := parseDuration(
-		"--channel-session-cleanup-interval",
-		c.ChannelSessionCleanupInterval,
-	); err != nil {
-		return err
-	}
-	if _, err := parseDuration("--cluster-rpc-timeout", c.ClusterRPCTimeout); err != nil {
-		return err
-	}
-	if _, err := parseDuration("--cluster-client-timeout", c.ClusterClientTimeout); err != nil {
-		return err
-	}
-
 	if c.ChannelSessionCountCacheSize <= 0 {
 		return fmt.Errorf(
 			`invalid argument "%d" for "--channel-session-count-cache-size"`,
