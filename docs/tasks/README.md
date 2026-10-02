@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Revalidate open Watch streams on demand (2026-10-02) | [20261002-revalidate-watch-access-todo.md](./active/20261002-revalidate-watch-access-todo.md) | [20261002-revalidate-watch-access-lessons.md](./active/20261002-revalidate-watch-access-lessons.md) |
 | Port the agent-loop convergence work from yorkie-js-sdk (2026-10-01) | [20261001-harness-convergence-port-todo.md](./active/20261001-harness-convergence-port-todo.md) | [20261001-harness-convergence-port-lessons.md](./active/20261001-harness-convergence-port-lessons.md) |
 | A level-2 split before a style range styles the paragraph it split (2026-09-27) | [20260927-style-end-token-split-family-todo.md](./active/20260927-style-end-token-split-family-todo.md) | [20260927-style-end-token-split-family-lessons.md](./active/20260927-style-end-token-split-family-lessons.md) |
 | Lint every build tag, and turn staticcheck and unused back on (2026-09-27) | [20260927-lint-all-tags-todo.md](./active/20260927-lint-all-tags-todo.md) | [20260927-lint-all-tags-lessons.md](./active/20260927-lint-all-tags-lessons.md) |

@@ -175,3 +175,18 @@ func TestCacheManager(t *testing.T) {
 		manager.LogCacheStats()
 	})
 }
+
+func TestLRUWithExpiresRemoveIf(t *testing.T) {
+	c, err := cache.NewLRUWithExpires[string, int](10, time.Minute, "expires")
+	assert.NoError(t, err)
+	c.Add("a:1", 1)
+	c.Add("a:2", 2)
+	c.Add("b:1", 3)
+
+	removed := c.RemoveIf(func(key string) bool { return key[0] == 'a' })
+
+	assert.Equal(t, 2, removed)
+	assert.False(t, c.Contains("a:1"))
+	assert.False(t, c.Contains("a:2"))
+	assert.True(t, c.Contains("b:1"))
+}

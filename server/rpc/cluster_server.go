@@ -36,18 +36,21 @@ import (
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
 // clusterServer is a server that provides the internal Yorkie cluster service.
 // This service is used for communication between nodes in the Yorkie cluster.
 type clusterServer struct {
 	backend *backend.Backend
+	watches *watchRegistry
 }
 
 // newClusterServer creates a new instance of clusterServer.
-func newClusterServer(backend *backend.Backend) *clusterServer {
+func newClusterServer(backend *backend.Backend, watches *watchRegistry) *clusterServer {
 	return &clusterServer{
 		backend: backend,
+		watches: watches,
 	}
 }
 
@@ -367,5 +370,43 @@ func (s *clusterServer) InvalidateCache(
 
 	return connect.NewResponse(&api.InvalidateCacheResponse{
 		Success: true,
+	}), nil
+}
+
+// RevalidateAccess drops the project's cached auth webhook decisions on this
+// node and verifies again the Watch streams it serves for the given keys,
+// closing the ones that no longer pass.
+//
+// Dropping first and snapshotting after covers every stream: one registered
+// before the snapshot is verified here, and one registered after it reads no
+// cached decision, so its admission asks the webhook itself. A verification
+// that was already in flight when the drop ran cannot put its answer back in
+// the cache either, since the answer predates the drop (see
+// auth.DropCachedDecisions).
+func (s *clusterServer) RevalidateAccess(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceRevalidateAccessRequest],
+) (*connect.Response[api.ClusterServiceRevalidateAccessResponse], error) {
+	projectID := types.ID(req.Msg.ProjectId)
+	info, err := s.backend.DB.FindProjectInfoByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	project := info.ToProject()
+
+	auth.DropCachedDecisions(s.backend, project, req.Msg.Keys)
+	closed, err := s.watches.revalidate(ctx, projectID, req.Msg.Keys, func(
+		ctx context.Context,
+		token string,
+		access *types.AccessInfo,
+	) error {
+		return auth.RecheckAccess(ctx, s.backend, project, token, access)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ClusterServiceRevalidateAccessResponse{
+		ClosedStreams: int32(closed),
 	}), nil
 }

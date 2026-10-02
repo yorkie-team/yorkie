@@ -75,6 +75,9 @@ const (
 	// ClusterServiceInvalidateCacheProcedure is the fully-qualified name of the ClusterService's
 	// InvalidateCache RPC.
 	ClusterServiceInvalidateCacheProcedure = "/yorkie.v1.ClusterService/InvalidateCache"
+	// ClusterServiceRevalidateAccessProcedure is the fully-qualified name of the ClusterService's
+	// RevalidateAccess RPC.
+	ClusterServiceRevalidateAccessProcedure = "/yorkie.v1.ClusterService/RevalidateAccess"
 )
 
 // ClusterServiceClient is a client for the yorkie.v1.ClusterService service.
@@ -88,6 +91,7 @@ type ClusterServiceClient interface {
 	Broadcast(context.Context, *connect.Request[v1.ClusterServiceBroadcastRequest]) (*connect.Response[v1.ClusterServiceBroadcastResponse], error)
 	GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
+	RevalidateAccess(context.Context, *connect.Request[v1.ClusterServiceRevalidateAccessRequest]) (*connect.Response[v1.ClusterServiceRevalidateAccessResponse], error)
 }
 
 // NewClusterServiceClient constructs a client for the yorkie.v1.ClusterService service. By default,
@@ -155,20 +159,27 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(clusterServiceMethods.ByName("InvalidateCache")),
 			connect.WithClientOptions(opts...),
 		),
+		revalidateAccess: connect.NewClient[v1.ClusterServiceRevalidateAccessRequest, v1.ClusterServiceRevalidateAccessResponse](
+			httpClient,
+			baseURL+ClusterServiceRevalidateAccessProcedure,
+			connect.WithSchema(clusterServiceMethods.ByName("RevalidateAccess")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // clusterServiceClient implements ClusterServiceClient.
 type clusterServiceClient struct {
-	detachDocument  *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
-	compactDocument *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
-	purgeDocument   *connect.Client[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse]
-	getDocument     *connect.Client[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse]
-	listChannels    *connect.Client[v1.ClusterServiceListChannelsRequest, v1.ClusterServiceListChannelsResponse]
-	getChannels     *connect.Client[v1.ClusterServiceGetChannelsRequest, v1.ClusterServiceGetChannelsResponse]
-	broadcast       *connect.Client[v1.ClusterServiceBroadcastRequest, v1.ClusterServiceBroadcastResponse]
-	getChannelCount *connect.Client[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse]
-	invalidateCache *connect.Client[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse]
+	detachDocument   *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
+	compactDocument  *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
+	purgeDocument    *connect.Client[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse]
+	getDocument      *connect.Client[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse]
+	listChannels     *connect.Client[v1.ClusterServiceListChannelsRequest, v1.ClusterServiceListChannelsResponse]
+	getChannels      *connect.Client[v1.ClusterServiceGetChannelsRequest, v1.ClusterServiceGetChannelsResponse]
+	broadcast        *connect.Client[v1.ClusterServiceBroadcastRequest, v1.ClusterServiceBroadcastResponse]
+	getChannelCount  *connect.Client[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse]
+	invalidateCache  *connect.Client[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse]
+	revalidateAccess *connect.Client[v1.ClusterServiceRevalidateAccessRequest, v1.ClusterServiceRevalidateAccessResponse]
 }
 
 // DetachDocument calls yorkie.v1.ClusterService.DetachDocument.
@@ -216,6 +227,11 @@ func (c *clusterServiceClient) InvalidateCache(ctx context.Context, req *connect
 	return c.invalidateCache.CallUnary(ctx, req)
 }
 
+// RevalidateAccess calls yorkie.v1.ClusterService.RevalidateAccess.
+func (c *clusterServiceClient) RevalidateAccess(ctx context.Context, req *connect.Request[v1.ClusterServiceRevalidateAccessRequest]) (*connect.Response[v1.ClusterServiceRevalidateAccessResponse], error) {
+	return c.revalidateAccess.CallUnary(ctx, req)
+}
+
 // ClusterServiceHandler is an implementation of the yorkie.v1.ClusterService service.
 type ClusterServiceHandler interface {
 	DetachDocument(context.Context, *connect.Request[v1.ClusterServiceDetachDocumentRequest]) (*connect.Response[v1.ClusterServiceDetachDocumentResponse], error)
@@ -227,6 +243,7 @@ type ClusterServiceHandler interface {
 	Broadcast(context.Context, *connect.Request[v1.ClusterServiceBroadcastRequest]) (*connect.Response[v1.ClusterServiceBroadcastResponse], error)
 	GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
+	RevalidateAccess(context.Context, *connect.Request[v1.ClusterServiceRevalidateAccessRequest]) (*connect.Response[v1.ClusterServiceRevalidateAccessResponse], error)
 }
 
 // NewClusterServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -290,6 +307,12 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		connect.WithSchema(clusterServiceMethods.ByName("InvalidateCache")),
 		connect.WithHandlerOptions(opts...),
 	)
+	clusterServiceRevalidateAccessHandler := connect.NewUnaryHandler(
+		ClusterServiceRevalidateAccessProcedure,
+		svc.RevalidateAccess,
+		connect.WithSchema(clusterServiceMethods.ByName("RevalidateAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/yorkie.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ClusterServiceDetachDocumentProcedure:
@@ -310,6 +333,8 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 			clusterServiceGetChannelCountHandler.ServeHTTP(w, r)
 		case ClusterServiceInvalidateCacheProcedure:
 			clusterServiceInvalidateCacheHandler.ServeHTTP(w, r)
+		case ClusterServiceRevalidateAccessProcedure:
+			clusterServiceRevalidateAccessHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -353,4 +378,8 @@ func (UnimplementedClusterServiceHandler) GetChannelCount(context.Context, *conn
 
 func (UnimplementedClusterServiceHandler) InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.InvalidateCache is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) RevalidateAccess(context.Context, *connect.Request[v1.ClusterServiceRevalidateAccessRequest]) (*connect.Response[v1.ClusterServiceRevalidateAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.RevalidateAccess is not implemented"))
 }

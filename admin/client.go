@@ -530,6 +530,35 @@ func (c *Client) ListChangeSummaries(
 	return summaries, nil
 }
 
+// RevalidateAccess asks the server to verify again the authorization of the
+// project's open Watch streams that watch any of the given keys (every stream
+// of the project when no key is given). It returns how many streams the
+// cluster closed.
+func (c *Client) RevalidateAccess(
+	ctx context.Context,
+	projectName string,
+	keys []key.Key,
+) (int, error) {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return 0, err
+	}
+	ctx = projects.With(ctx, project)
+
+	strKeys := make([]string, len(keys))
+	for i, k := range keys {
+		strKeys[i] = k.String()
+	}
+	resp, err := c.client.RevalidateAccess(ctx, connect.NewRequest(&api.RevalidateAccessRequest{
+		Keys: strKeys,
+	}))
+	if err != nil {
+		return 0, err
+	}
+
+	return int(resp.Msg.ClosedStreams), nil
+}
+
 // GetServerVersion gets the server version.
 func (c *Client) GetServerVersion(ctx context.Context) (*types.VersionDetail, error) {
 	response, err := c.client.GetServerVersion(ctx, connect.NewRequest(&api.GetServerVersionRequest{}))
