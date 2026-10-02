@@ -280,3 +280,161 @@ func TestTreeSameBoundarySplitAfterOlderSplit(t *testing.T) {
 		}
 	}
 }
+
+// paragraphReplicas returns n replicas seeded with <doc><p>{text}</p></doc>,
+// for scripts written in index positions.
+func paragraphReplicas(t *testing.T, n int, text string) []*document.Document {
+	t.Helper()
+
+	docs := make([]*document.Document, n)
+	for i := range docs {
+		actor, err := time.ActorIDFromHex(fmt.Sprintf("%024d", i+1))
+		require.NoError(t, err)
+		docs[i] = document.New("test-doc")
+		docs[i].SetActor(actor)
+	}
+
+	require.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{
+			Type: "doc",
+			Children: []json.TreeNode{{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "text", Value: text}},
+			}},
+		})
+		return nil
+	}))
+	exchangeInOrder(t, docs, [][]int{{}, {0}, {0}}[:n])
+
+	return docs
+}
+
+// splitStep is one edit by one replica: a split at index (content == "" and
+// to == 0), an insert of content there, or a delete of the range index..to.
+type splitStep struct {
+	replica int
+	index   int
+	content string
+	to      int
+}
+
+func applySplitSteps(t *testing.T, docs []*document.Document, steps []splitStep) {
+	t.Helper()
+	for _, s := range steps {
+		require.NoError(t, docs[s.replica].Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			switch {
+			case s.to > 0:
+				tree.Edit(s.index, s.to, nil, 0)
+			case s.content != "":
+				tree.Edit(s.index, s.index, &json.TreeNode{Type: "text", Value: s.content}, 0)
+			default:
+				tree.Edit(s.index, s.index, nil, 1)
+			}
+			return nil
+		}))
+	}
+}
+
+// A split that follows the concurrent same-boundary splits above, made by one
+// of the two actors before it has seen the other's split (yorkie-js-sdk#1433).
+//
+// The §7.8 ordering walks the InsNextID chain to find the node that holds the
+// right half. The follow-up split is in that chain too, but it cut the right
+// half at a *later* boundary, so the walk must stop at the node that holds the
+// content rather than go on to the follow-up's empty product.
+func TestTreeFurtherSplitAfterSameBoundarySplits(t *testing.T) {
+	split := func(replica, index int) splitStep { return splitStep{replica: replica, index: index} }
+	insert := func(replica, index int, s string) splitStep {
+		return splitStep{replica: replica, index: index, content: s}
+	}
+	del := func(replica, from, to int) splitStep { return splitStep{replica: replica, index: from, to: to} }
+
+	cases := []struct {
+		name  string
+		text  string
+		steps []splitStep
+	}{
+		// The three-operation minimum from the issue: both split "a|b", then
+		// the newer actor splits again at the end of its right piece.
+		{`the newer actor splits again at the end of "b"`, "ab", []splitStep{split(0, 2), split(1, 2), split(1, 5)}},
+		// Converged before the fix; pinned so the asymmetry does not come back.
+		{`the older actor splits again at the end of "b"`, "ab", []splitStep{split(0, 2), split(1, 2), split(0, 5)}},
+		{"with an insert ahead of the newer actor's splits", "ab",
+			[]splitStep{split(0, 2), insert(1, 1, "ㅂ"), split(1, 3), split(1, 6)}},
+		// The follow-up split at offset 0 of the right piece is a same-boundary
+		// split as well, so the walk has to pass its empty product.
+		{`the newer actor splits again at the start of "b"`, "ab", []splitStep{split(0, 2), split(1, 2), split(1, 4)}},
+		// Text typed into the empty right piece is not the right half: a split
+		// after it is still a same-boundary split, and the walk has to go on.
+		{"the newer actor types into its empty right piece, then splits", "ab",
+			[]splitStep{split(0, 2), split(1, 2), insert(1, 4, "x"), split(1, 5)}},
+		{"the same with an empty right half", "a",
+			[]splitStep{split(0, 2), split(1, 2), insert(1, 4, "x"), split(1, 5)}},
+		{"typed text and the right half on either side of the follow-up split", "ab",
+			[]splitStep{split(0, 2), split(1, 2), insert(1, 4, "x"), split(1, 5), insert(1, 7, "y")}},
+		// The right half deleted before the follow-up split, so the stopping
+		// node's only known child is a tombstone.
+		{`the newer actor deletes "b", then splits at the end of the piece`, "ab",
+			[]splitStep{split(0, 2), split(1, 2), del(1, 4, 5), split(1, 4)}},
+		{`the same, deleting "b" before its own same-boundary split`, "abc",
+			[]splitStep{split(0, 2), split(1, 2), del(1, 4, 5), split(1, 5)}},
+		// Delta-debugged minima of a split-only fuzz over <p>abcdef</p>.
+		{"two follow-up splits", "abcdef", []splitStep{split(1, 3), split(0, 3), split(1, 3), split(1, 10)}},
+		{"a follow-up split in the left piece", "abcdef", []splitStep{split(1, 5), split(0, 3), split(1, 3)}},
+		{"a follow-up split at the start, then in the right piece", "abcdef",
+			[]splitStep{split(1, 1), split(1, 4), split(0, 1)}},
+		{"a follow-up split in the middle of the right piece", "abcdef",
+			[]splitStep{split(0, 4), split(1, 4), split(1, 7)}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name+": two replicas", func(t *testing.T) {
+			docs := paragraphReplicas(t, 2, tc.text)
+			applySplitSteps(t, docs, tc.steps)
+			exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+			assert.Equal(t, docs[0].Root().GetTree("t").ToXML(), docs[1].Root().GetTree("t").ToXML())
+			assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
+		})
+	}
+
+	// The flat cases cannot reach the multi-level shape: a text split keeps
+	// the original createdAt, so the right half's text child is known by
+	// itself. Split <p><span>abcde</span></p> at both levels and the outer
+	// right-half product holds a freshly ticketed <span> instead, with the
+	// known text one level further down -- which is why holdsKnownChild
+	// descends.
+	t.Run("the same shape nested one level deeper", func(t *testing.T) {
+		docs := splitReplicas(t, 2)
+		for _, doc := range docs {
+			require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 2)
+				return nil
+			}))
+		}
+		require.NoError(t, docs[1].Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(11, 11, nil, 2)
+			return nil
+		}))
+		exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+		assert.Equal(t, docs[0].Root().GetTree("t").ToXML(), docs[1].Root().GetTree("t").ToXML())
+		assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
+		assert.Contains(t, docs[0].Root().GetTree("t").ToXML(), "abc")
+		assert.Contains(t, docs[0].Root().GetTree("t").ToXML(), "de")
+	})
+
+	t.Run("a third replica agrees in both arrival orders", func(t *testing.T) {
+		steps := []splitStep{split(0, 2), split(1, 2), split(1, 5)}
+		for _, order := range [][]int{{0, 1}, {1, 0}} {
+			docs := paragraphReplicas(t, 3, "ab")
+			applySplitSteps(t, docs, steps)
+			exchangeInOrder(t, docs, [][]int{{1}, {0}, order})
+
+			shape := treeShape(t, docs[0])
+			assert.Equal(t, shape, treeShape(t, docs[1]))
+			assert.Equal(t, shape, treeShape(t, docs[2]))
+		}
+	})
+}

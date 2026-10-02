@@ -468,6 +468,26 @@ product born tombstoned here but live on a replica that applied this
 split first. VV-dependent, like §7.5; without a version vector nothing
 is unknown and the split is placed as before.
 
+The walk ends at the first sibling holding a child the editor knew
+(`holdsKnownChild`, descending into element children). The chain is the
+whole split lineage of one node, not one boundary: when the other actor
+split its right piece *again* before seeing this split, that follow-up
+product is in the chain too, past the node holding the right half. The
+same-boundary products form a run of empty nodes ending at the one with
+the right half (the rule above puts every newer product in front of it),
+so anything after that node was split off *it* at a later boundary,
+which the replica applying this split first resolves by position, after
+the right half. Walking on would place the product after that later
+boundary here and before it there (yorkie-js-sdk#1433). The marker is a
+child within the editor's version vector, tombstones included: a known
+child was in the node when the concurrent split moved it; an unknown one
+may have been typed into an empty product since, and a split after that
+text is still a same-boundary split to this editor, so the walk goes on.
+It descends because an element split product is minted with a fresh
+ticket while a text split keeps `createdAt`: at a multi-level split the
+outer right-half product holds one unknown `<span>` and the known text
+sits below it.
+
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s
 Phase 3 range narrowing, `collectBetween`'s cascade delete, and the

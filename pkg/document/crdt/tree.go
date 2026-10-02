@@ -3117,6 +3117,18 @@ func (t *Tree) emptyRunReachesActor(
 // ticket and split the last of them at its start. The right half lives in
 // that sibling on this replica, so it moves into our product exactly as it
 // would have moved out of parent on a replica that applied us first.
+//
+// The walk ends at the first sibling that holds a child the editor knew. The
+// same-boundary products sit in the chain as a run of empty nodes that ends
+// at the one holding the right half (yorkie#2030 orders every newer product
+// in front of it), so a sibling further down the chain was split off *that*
+// node at an offset past its children -- a different, later boundary that
+// the replica applying us first resolves by position, after the right half.
+// Walking on to it would put our product after that later boundary here and
+// before it there (yorkie-js-sdk#1433). A child the editor knew was in parent
+// when the concurrent split moved it, so it marks the right half; a child it
+// did not know may have been typed into an empty product afterwards, and a
+// split after that text is still a same-boundary split to us.
 func (t *Tree) orderSameBoundarySplit(
 	parent *TreeNode,
 	offset int,
@@ -3173,12 +3185,46 @@ func (t *Tree) orderSameBoundarySplit(
 		}
 
 		target = next
+
+		// next holds the right half: whatever follows it in the chain was
+		// split off at a boundary to the right of ours. Tombstones count --
+		// SplitElement partitions Children(true), so a child removed in the
+		// meantime still marks where that later boundary was -- and so do
+		// deeper descendants, which is where a multi-level split puts it.
+		if t.holdsKnownChild(next, versionVector) {
+			break
+		}
 	}
 
 	if target == parent {
 		return parent, offset
 	}
 	return target, 0
+}
+
+// holdsKnownChild reports whether any descendant of node, tombstones
+// included, was created within versionVector -- content the editor had seen,
+// as opposed to content a peer inserted concurrently.
+//
+// It descends because a multi-level split hides the marker one level down. A
+// text split keeps the original createdAt, so at a flat <p>text</p> the right
+// half's text child is known by itself; but an element split product is
+// minted with a fresh ticket, so the outer right-half product of a
+// <p><span>..</span></p> split has a single unknown <span> child, and only
+// below it sits the text the editor knew. A node with no known content
+// anywhere below it is an empty same-boundary product, or one a peer has
+// typed into since.
+func (t *Tree) holdsKnownChild(node *TreeNode, versionVector time.VersionVector) bool {
+	for _, child := range node.Children(true) {
+		createdAt := child.id.CreatedAt
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			return true
+		}
+		if !child.IsText() && t.holdsKnownChild(child, versionVector) {
+			return true
+		}
+	}
+	return false
 }
 
 // sharesSplitFamilyParent reports whether next sits under node's parent, or
