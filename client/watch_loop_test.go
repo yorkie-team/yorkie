@@ -77,6 +77,20 @@ func (s *watchInitServer) AttachDocument(
 	}), nil
 }
 
+func (s *watchInitServer) DetachDocument(
+	_ context.Context,
+	req *connect.Request[api.DetachDocumentRequest],
+) (*connect.Response[api.DetachDocumentResponse], error) {
+	pack := req.Msg.ChangePack
+	return connect.NewResponse(&api.DetachDocumentResponse{
+		ChangePack: &api.ChangePack{
+			DocumentKey:   pack.DocumentKey,
+			Checkpoint:    pack.Checkpoint,
+			VersionVector: pack.VersionVector,
+		},
+	}), nil
+}
+
 func (s *watchInitServer) Watch(
 	_ context.Context,
 	_ *connect.Request[api.WatchRequest],
@@ -150,12 +164,14 @@ func TestWatchLoopPumpDrainsWhileStreamIsIdle(t *testing.T) {
 	})
 }
 
-// TestWatchLoopInitFailureStopsPump pins the other half of the same ordering:
-// the pipeline now starts before the stream's first response is read, so an
-// Attach that cannot bring the stream up has to roll the attachment back --
-// unregister it, cancel its watch context and wait for the pump -- instead of
-// leaving a registered attachment with no stream behind it.
-func TestWatchLoopInitFailureStopsPump(t *testing.T) {
+// TestWatchLoopInitFailureKeepsAttachment pins what an Attach whose watch
+// stream cannot come up leaves behind. AttachDocument has already succeeded by
+// then, so the server holds the attachment and rejects attaching it again; the
+// client keeps it registered for the caller to Detach. Until then the stream
+// is ended but the pump keeps draining the document, because the pipeline now
+// starts before the stream's first response is read and a publisher must never
+// be left without a consumer.
+func TestWatchLoopInitFailureKeepsAttachment(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		response *api.WatchResponse
@@ -177,44 +193,40 @@ func TestWatchLoopInitFailureStopsPump(t *testing.T) {
 				assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err),
 					"the rejected RPC's error must reach the caller")
 			}
-			// The rollback unregistered the attachment and put the document
-			// back to detached, so it can be attached anew.
-			assert.Equal(t, attachable.StatusDetached, doc.Status())
-			_, _, watchErr := cli.WatchStream(doc)
-			assert.Error(t, watchErr, "a rolled-back attachment must not stay registered")
 
-			// The pump is gone with the rolled-back attachment: the channel
-			// takes the single
-			// event its capacity holds and the next publish has no consumer.
+			// The attachment stays registered, as the server's does, and its
+			// stream has ended.
+			assert.Equal(t, attachable.StatusAttached, doc.Status())
+			rch, _, watchErr := cli.WatchStream(doc)
+			assert.NoError(t, watchErr, "the attachment must stay registered for Detach")
+			select {
+			case _, ok := <-rch:
+				assert.False(t, ok, "a stream that never came up must deliver nothing")
+			case <-gotime.After(5 * gotime.Second):
+				t.Fatal("the stream of a failed watch initialization was not closed")
+			}
+
+			// The pump still consumes the document: more events than the
+			// channel's capacity of one are published without blocking.
 			peerID := peer.ActorID().String()
-			doc.AddOnlineClientAndReconcile(peerID)
-			assert.NoError(t, doc.ApplyChangePack(presencePackFor(peer, doc)))
-
-			blocked := make(chan struct{})
+			published := make(chan struct{})
 			go func() {
+				doc.AddOnlineClientAndReconcile(peerID)
+				assert.NoError(t, doc.ApplyChangePack(presencePackFor(peer, doc)))
 				doc.RemoveOnlineClientAndReconcile(peerID)
-				close(blocked)
+				close(published)
 			}()
 			select {
-			case <-blocked:
-				t.Fatal("the event pump outlived the failed watch initialization")
-			case <-gotime.After(300 * gotime.Millisecond):
+			case <-published:
+			case <-gotime.After(5 * gotime.Second):
+				t.Fatal("a publisher wedged after the failed watch initialization")
 			}
 
-			// Drain so the blocked publisher finishes and releases Document.eventsMu.
-			drainDeadline := gotime.After(5 * gotime.Second)
-			for range 2 {
-				select {
-				case <-doc.Events():
-				case <-drainDeadline:
-					t.Fatal("document event drain did not finish")
-				}
-			}
-			select {
-			case <-blocked:
-			case <-gotime.After(5 * gotime.Second):
-				t.Fatal("publisher stayed blocked after the channel was drained")
-			}
+			// The caller recovers by detaching, which tears the pipeline down.
+			assert.NoError(t, cli.Detach(context.Background(), doc))
+			assert.Equal(t, attachable.StatusDetached, doc.Status())
+			_, _, watchErr = cli.WatchStream(doc)
+			assert.ErrorIs(t, watchErr, client.ErrNotAttached)
 		})
 	}
 }

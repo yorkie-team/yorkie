@@ -677,15 +677,16 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	c.attachments.Set(d.Key(), attachment)
 	if opts.IsRealtime {
 		if err = c.runWatchLoop(watchCtx, d); err != nil {
-			// Roll the half-established attachment back. Leaving it registered
-			// keeps a realtime attachment that has no watch stream and whose
-			// watchCtx is never cancelled, so its pipeline would outlive the
-			// failed Attach with nothing to feed it. The server may still hold
-			// the attachment; the document goes back to detached so the caller
-			// can retry Attach rather than being stuck with an unusable one.
-			c.attachments.Delete(d.Key())
-			stopWatchPipeline(attachment)
-			d.SetStatus(attachable.StatusDetached)
+			// AttachDocument has already succeeded, so the server holds the
+			// attachment and rejects a second attach of it. Keep the local
+			// attachment registered so the caller can Detach -- which tells
+			// the server and tears the pipeline down -- and then attach
+			// again. Only the stream is ended, as a terminal stream error
+			// does: closing the buffer lets the sender close watchStream,
+			// while the pump keeps draining Document.Events until Detach or
+			// Deactivate cancels watchCtx, so a sync applying a pack in the
+			// meantime never wedges on a channel without a consumer.
+			attachment.watchBuf.close()
 			return err
 		}
 	}

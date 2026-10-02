@@ -75,8 +75,8 @@ type Attachment struct {
 	watchReaders sync.WaitGroup
 
 	// watchStopOnce guards the teardown so a second caller -- Deactivate
-	// walking an attachment a failed Attach already rolled back, say -- waits
-	// for the first teardown instead of closing watchPumpStop twice.
+	// walking an attachment that a concurrent Detach is tearing down, say --
+	// waits for the first teardown instead of closing watchPumpStop twice.
 	watchStopOnce sync.Once
 
 	syncMu       sync.RWMutex

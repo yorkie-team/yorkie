@@ -752,3 +752,80 @@ func TestAuthWebhookWatchAttributes(t *testing.T) {
 		Verb: types.Read,
 	}}, watchAttrs)
 }
+
+func TestAuthWebhookInitialWatchDenied(t *testing.T) {
+	ctx := context.Background()
+
+	// The webhook rejects only the first Watch, and with 401 rather than 403
+	// so the server does not cache the denial for the retry below.
+	var mu sync.Mutex
+	watchCalls := 0
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, err := types.NewAuthWebhookRequest(r.Body)
+		assert.NoError(t, err)
+
+		var res types.AuthWebhookResponse
+		res.Allowed = true
+		if req.Method == types.Watch {
+			mu.Lock()
+			watchCalls++
+			first := watchCalls == 1
+			mu.Unlock()
+			if first {
+				w.WriteHeader(http.StatusUnauthorized)
+				res.Allowed = false
+				res.Reason = "first watch denied"
+			}
+		}
+		_, err = res.Write(w)
+		assert.NoError(t, err)
+	}))
+	defer authServer.Close()
+
+	svr, err := server.New(helper.TestConfig())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer func() { adminCli.Close() }()
+	project, err := adminCli.CreateProject(ctx, "initial-watch-denied")
+	assert.NoError(t, err)
+	project.AuthWebhookURL = authServer.URL
+	_, err = adminCli.UpdateProject(
+		ctx,
+		project.ID.String(),
+		&types.UpdatableProjectFields{
+			AuthWebhookURL:     &project.AuthWebhookURL,
+			AuthWebhookMethods: allWebhookMethods,
+		},
+	)
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(
+		svr.RPCAddr(),
+		client.WithToken("token"),
+		client.WithAPIKey(project.PublicKey),
+	)
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, cli.Close()) }()
+	assert.NoError(t, cli.Activate(ctx))
+	defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
+
+	// 01. AttachDocument succeeds on the server, then the initial Watch is
+	// denied, so Attach reports the failure.
+	doc := document.New(helper.TestKey(t))
+	err = cli.Attach(ctx, doc, client.WithRealtimeSync())
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+
+	// 02. The server still holds the attachment, so the client keeps it too:
+	// the caller recovers by detaching and attaching again.
+	assert.NoError(t, cli.Detach(ctx, doc))
+	assert.Equal(t, document.StatusDetached, doc.Status())
+
+	doc2 := document.New(helper.TestKey(t))
+	assert.NoError(t, cli.Attach(ctx, doc2, client.WithRealtimeSync()))
+	_, _, err = cli.WatchStream(doc2)
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Detach(ctx, doc2))
+}
