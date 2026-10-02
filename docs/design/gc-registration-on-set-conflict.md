@@ -59,6 +59,11 @@ outcomes:
 - Changing the LWW resolution logic in `ElementRHT`
 - Modifying the `ElementRHT.Set` return type or signature
 
+> **Superseded (2026-10-02).** Both non-goals above were later taken on
+> deliberately, and the "Design Decisions" and "Alternatives Considered"
+> tables below are kept as the record of what was decided at the time, not as
+> current guidance. See [Slot refusal in `ElementRHT`](#slot-refusal-in-elementrht).
+
 ## Design
 
 Add a post-check in `Set.Execute` (`operations/set.go`) after `obj.Set()`. If
@@ -128,6 +133,53 @@ because:
 |-------------|---------|
 | Change `ElementRHT.Set` to return `(removed, loser)` tuple | Breaks API for all callers, larger change for same result |
 | Register inside `ElementRHT.Set` directly | `ElementRHT` has no access to `Root` or `gcElementPairMap` |
+
+## Slot refusal in `ElementRHT`
+
+The post-check above books a losing value into GC, which requires the losing
+value to be indexed under its `createdAt` in `nodeMapByCreatedAt`. That index
+is keyed by a creation ticket, not by an element, and undo/redo made two
+different elements able to claim one ticket: a restore re-inserts a *copy* of
+a removed element under its original `createdAt`. Indexing the second claimant
+drops the first, and `nodeMapByCreatedAt` is the only way GC, `purge` and
+`DeepCopy` address a node — so the dropped one is uncollectable and absent
+from every snapshot built afterwards.
+
+`ElementRHT.SetWithExecutedAt` therefore refuses a value outright when
+indexing it would strand the node currently holding the slot, and reports the
+refusal as a second return value (`Element, bool`) that every caller must
+honour. `ElementRHT.Set` and `Object.Set`/`Object.SetWithExecutedAt` forward
+it. The exact rule, and the two displacements that stay legitimate, live in
+`strandsSlotHolder`'s doc comment in `pkg/document/crdt/element_rht.go`.
+
+Callers:
+
+| Caller | On refusal |
+|--------|-----------|
+| `operations.Set.Execute` | `ErrOperationSkipped` — the object is unchanged, so the operation did not apply and contributes no reverse |
+| `json.Object.setInternal` | panics — a local Set mints a fresh ticket and always wins, so a refusal is a broken invariant, and the caller would otherwise be handed a detached proxy |
+| `api/converter.fromJSONObject` | `ErrDuplicateCreatedAt` — rejects the payload whole, the last point that still can |
+| `crdt.NewObject` | not affected — empty RHT, no conflict possible |
+
+`Set.Execute` additionally refuses any value whose `createdAt` already names a
+**live** element anywhere in the document (`Root.FindByCreatedAt`). The
+`ElementRHT` rule only sees one object, while the ticket on a pushed `Set`
+arrives straight from the wire (`fromSet`) and can name an element in any
+container; `Root.RegisterElement` would re-point `elementMap` at it and make
+the victim unaddressable for every replica and for the server's replay.
+Restoring a *tombstone* under its original `createdAt` stays legal — that is
+undo/redo.
+
+### Divergence from yorkie-js-sdk
+
+`ElementRHT` is otherwise a port of `element_rht.ts`, and this refusal has no
+JS counterpart yet (tracked alongside `yorkie-team/yorkie-js-sdk#1398`). Until
+the matching change lands, a Go replica refuses a value a JS replica takes in.
+Refusing is the strictly safer half: the JS replica loses the ability to
+address the stranded element, while neither replica loses a live member from
+`get()`. The shapes that reach it — two concurrent undos of overwrites of one
+key, or a forged `createdAt` — are rare enough to hold the server to the safe
+reading in the meantime.
 
 ## Tasks
 

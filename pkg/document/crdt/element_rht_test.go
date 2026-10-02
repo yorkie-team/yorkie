@@ -315,4 +315,54 @@ func TestElementRHTSetLoser(t *testing.T) {
 			"the tombstone's removedAt was bumped to the occupant's ticket")
 		assert.Nil(t, live.RemovedAt())
 	})
+
+	t.Run("refuses a loser whose slot a tombstone still answering the key holds", func(t *testing.T) {
+		// A restore wins k, a Delete of k tombstones it in place -- it stays
+		// the key's occupant -- and a concurrent older restore of the same
+		// createdAt arrives late and loses. Taking the slot would orphan the
+		// occupant from nodeMapByCreatedAt, which is the only way GC, purge
+		// and DeepCopy reach it.
+		rht := crdt.NewElementRHT()
+		createdAt := time.NewTicket(2, 0, actorA)
+
+		occupant, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", occupant, time.NewTicket(9, 0, actorA))
+		assert.NotNil(t, rht.Delete("k", time.NewTicket(10, 0, actorA)))
+
+		loser, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", loser, time.NewTicket(5, 0, actorB))
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "the loser took the tombstone's slot")
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Equal(t, occupant, rht.Nodes()[0].Element())
+		clone, err := rht.DeepCopy()
+		assert.NoError(t, err)
+		assert.Len(t, clone.Nodes(), 1)
+	})
+
+	t.Run("refuses a winner that would take a live member's slot at another key", func(t *testing.T) {
+		// The winning branch re-points nodeMapByCreatedAt unconditionally, so
+		// a value carrying a createdAt another live member already answers to
+		// -- only reachable with a ticket the Set did not mint, i.e. forged --
+		// used to leave that member indexed by key but named by nothing.
+		rht := crdt.NewElementRHT()
+		victim, err := crdt.NewPrimitive("victim", time.NewTicket(3, 0, actorA))
+		assert.NoError(t, err)
+		rht.Set("victim", victim)
+
+		forged, err := crdt.NewPrimitive("forged", victim.CreatedAt())
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("other", forged, time.NewTicket(20, 0, actorB))
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "a forged createdAt took a live member's slot")
+
+		assert.Equal(t, victim, rht.Get("victim"))
+		assert.Nil(t, rht.Get("other"))
+		key, ok := rht.SubPathOf(victim.CreatedAt())
+		assert.True(t, ok)
+		assert.Equal(t, "victim", key)
+	})
 }

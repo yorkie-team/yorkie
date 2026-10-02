@@ -67,6 +67,40 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 		return ExecutionResult{}, ErrOperationSkipped
 	}
 
+	// Nothing may take the createdAt of an element that is still live
+	// somewhere in this document. An element's createdAt is its identity:
+	// Root.index points elementMap at whatever is registered under it last,
+	// and every later operation resolves its target through that map. A Set
+	// whose value carries a createdAt already naming a live element therefore
+	// re-points that identity at the attacker's value -- the victim becomes
+	// unaddressable and the change log stops replaying to the same document,
+	// permanently, since the server rebuilds snapshots from it.
+	//
+	// ElementRHT.SetWithExecutedAt refuses this within one object, but only
+	// there; the forged createdAt can name an element in any container, and
+	// on the winning branch Root.RegisterElement below is the only thing
+	// standing between the wire and elementMap. The value's createdAt arrives
+	// straight from the wire (fromSet in api/converter/from_pb.go) and no
+	// layer in between checks it, so it is checked here -- for the elements
+	// this object does not already carry, which is exactly where ElementRHT
+	// cannot see the collision. A createdAt obj already carries is left to
+	// ElementRHT, which weighs it against the node actually holding the slot:
+	// two replicas undoing concurrent overwrites of one key legitimately
+	// restore the same createdAt twice, and the second restore has to be able
+	// to beat the first.
+	//
+	// Restoring a removed element under its original createdAt stays legal,
+	// which is the whole of undo/redo: that element is a tombstone, not live.
+	// An ordinary Set carries a freshly minted createdAt and misses the map.
+	// The decision is a function of the root state alone, so every replica and
+	// the server's replay reach it identically.
+	if _, mine := obj.SubPathOf(o.value.CreatedAt()); !mine {
+		if existing := root.FindByCreatedAt(o.value.CreatedAt()); existing != nil &&
+			existing.RemovedAt() == nil && existing != o.value {
+			return ExecutionResult{}, ErrOperationSkipped
+		}
+	}
+
 	// The reverse must be built from the value at this key before it is
 	// overwritten below (set_operation.ts:91-92): it restores the previous
 	// value, or removes the key entirely when there was none.
@@ -104,14 +138,22 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 
 	// A value the object refused is in neither of its member maps, so nothing
 	// below may run for it. RegisterElement would point elementMap at it,
-	// taking the slot of the live copy that already answers to that createdAt,
-	// and UnregisterRemovedElementPair would retire the collection entry of a
+	// taking the slot of the copy that already answers to that createdAt, and
+	// UnregisterRemovedElementPair would retire the collection entry of a
 	// tombstone that is still indexed. The object is unchanged, so the
-	// operation is a no-op: no reverse and not observable. Every replica and
-	// the server's snapshot replay reach the same decision from the same
-	// state.
+	// operation did not apply. Every replica and the server's snapshot replay
+	// reach the same decision from the same state.
+	//
+	// It reports that the way the Operation contract requires a decline to be
+	// reported -- ErrOperationSkipped, as the concurrently-removed-target path
+	// above does -- not a nil error. Change.Execute then keeps the operation
+	// out of both the executed list and the reverse operations, which is what
+	// stops a refused Set from contributing a half-built reverse: a nil error
+	// with an empty ExecutionResult reads as "applied, nothing to undo", and
+	// an undo whose Set is refused would push a redo entry describing work
+	// that never happened (Document.executeUndoRedo).
 	if !indexed {
-		return ExecutionResult{}, nil
+		return ExecutionResult{}, ErrOperationSkipped
 	}
 
 	// NOTE(hackerwins): A Set can restore an element under a createdAt that a

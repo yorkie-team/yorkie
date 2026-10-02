@@ -133,15 +133,34 @@ func (rht *ElementRHT) Set(k string, v Element) (Element, bool) {
 // docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
 //
 // It returns the element evicted from the key, if any, and whether v was
-// taken into this hashtable at all. The second value is false only when v
-// loses the key and a live node already answers to v's createdAt; the
-// hashtable is then left exactly as it was, and a caller that books v into
-// Root must treat it as "nothing happened". See operations.Set.Execute.
+// taken into this hashtable at all. The second value is false only when
+// taking v in would strand the node that currently answers to v's createdAt
+// (see strandsSlotHolder); the hashtable is then left exactly as it was, and
+// a caller that books v into Root must treat it as "nothing happened". See
+// operations.Set.Execute.
+//
+// NOTE(hackerwins): the refusal has no counterpart in yorkie-js-sdk yet. The
+// rest of this file is a port of element_rht.ts, so the two SDKs disagree on
+// this one shape until the matching JS change lands -- a Go replica refuses
+// the value and a JS replica takes it in, stranding the slot holder there.
+// Refusing is the strictly safer half: the JS replica loses the ability to
+// address the stranded element, while neither replica loses a live member
+// from get()/Elements(). The shapes that reach it (two concurrent undos of
+// overwrites of one key, or a forged createdAt) are rare enough that holding
+// the server to the safe reading is worth the window. Tracked alongside
+// yorkie-team/yorkie-js-sdk#1398 in
+// docs/design/gc-registration-on-set-conflict.md.
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
 	node, ok := rht.nodeMapByKey[k]
+	wins := !ok || executedAt.After(PositionedAt(node.elem))
+
+	if rht.strandsSlotHolder(k, v, wins) {
+		return nil, false
+	}
+
 	newNode := newElementRHTNode(k, v)
 
-	if !ok || executedAt.After(PositionedAt(node.elem)) {
+	if wins {
 		var removed Element
 		if ok && !node.isRemoved() && node.Remove(executedAt) {
 			removed = node.elem
@@ -150,22 +169,6 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
 		return removed, true
-	}
-
-	// The new node loses the LWW conflict. It is indexed by createdAt only so
-	// that GC can still reach it, which means it must not take that slot from
-	// a live node already holding it. Two replicas undoing concurrent
-	// overwrites of the same key both restore a copy of the original value
-	// under its createdAt; where one restore holds the key and the other
-	// loses, re-pointing the slot at the losing copy strands the live one:
-	// collecting the loser then unlinks the slot, and the document can no
-	// longer be rebuilt from its own content.
-	//
-	// A tombstone in the slot is not protected. A losing restore has to take
-	// it over, tombstoned at the winner's ticket, because that is the state a
-	// replica reaches when the restore wins first and the newer Set evicts it.
-	if existing, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]; ok && existing.elem != v && !existing.isRemoved() {
-		return nil, false
 	}
 
 	// Mark the loser removed by its own state, not the occupant's: a live
@@ -181,6 +184,57 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 
 	return nil, true
+}
+
+// strandsSlotHolder reports whether indexing v under its createdAt would
+// leave the node currently holding that slot unreachable. nodeMapByCreatedAt
+// is the only way GC, purge and DeepCopy address a node, so a node dropped
+// from it with no other way in is both uncollectable and absent from every
+// snapshot built afterwards -- the document can no longer be rebuilt from its
+// own content.
+//
+// wins says whether v is about to take key k as well, which is what makes
+// one displacement legitimate:
+//
+//   - v wins and the slot holder sits at k. v replaces it at k anyway, so it
+//     is on its way out whatever happens here. This is the restore of a
+//     removed member under its original createdAt (set_operation.ts:98-104),
+//     the shape SetWithExecutedAt exists for; operations.Set.Execute retires
+//     the holder's collection entry right after.
+//   - the slot holder is a tombstone already displaced from its key. Nothing
+//     reaches it by key either, and the Set that displaced it left its
+//     collection entry behind for Set.Execute to retire. A losing restore has
+//     to take that slot over, because that is the state a replica reaches
+//     when the restore wins first and a newer Set evicts it.
+//
+// Everything else strands the holder:
+//
+//   - a live holder. Two replicas undoing concurrent overwrites of the same
+//     key both restore a copy of the original value under its createdAt;
+//     where one restore holds the key and the other loses, re-pointing the
+//     slot at the losing copy strands the live one, and collecting the loser
+//     then unlinks the slot.
+//   - a tombstone that is still its key's occupant, which is what a Delete of
+//     a restored key leaves behind. It is still reachable -- Elements() skips
+//     it but DeepCopy re-points the key through this very slot -- and a
+//     concurrent older restore losing the LWW race would otherwise take the
+//     slot from it, orphaning it from nodeMapByCreatedAt for good.
+//
+// The last two are checked on the winning branch as well. A winning Set only
+// reaches them with a createdAt it did not mint -- an undo/redo restore, or a
+// value forged by a client -- and taking a live element's slot there is the
+// same theft, one key over.
+func (rht *ElementRHT) strandsSlotHolder(k string, v Element, wins bool) bool {
+	holder, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]
+	if !ok || holder.elem == v {
+		return false
+	}
+
+	if wins && holder.key == k {
+		return false
+	}
+
+	return !holder.isRemoved() || rht.nodeMapByKey[holder.key] == holder
 }
 
 // PositionedAt returns elem's last-moved ticket, or its creation ticket if

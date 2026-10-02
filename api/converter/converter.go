@@ -65,4 +65,12 @@ var (
 	// stored-decode path (FromStoredOperations) can tell an operation that can
 	// never be applied apart from a decode failure it must surface.
 	ErrMissingTicket = errors.InvalidArgument("missing time ticket").WithCode("ErrMissingTicket")
+
+	// ErrDuplicateCreatedAt is returned when two members of one decoded object
+	// claim the same creation ticket. A creation ticket is an element's
+	// identity across the whole document, so a duplicate leaves one of the two
+	// unaddressable; decoding is the last point that can still reject the
+	// payload whole.
+	ErrDuplicateCreatedAt = errors.InvalidArgument("duplicate created_at").
+				WithCode("ErrDuplicateCreatedAt")
 )

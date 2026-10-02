@@ -433,16 +433,24 @@ func (p *Object) setInternal(
 	// the Root bookkeeping below may run for it -- the same guard
 	// operations.Set.Execute applies to the remote and replay paths.
 	// RegisterElement would charge docSize.Live for an element hanging off no
-	// container and point elementMap at it, over whatever live copy already
-	// answers to that createdAt. A local Set issues a fresh ticket that
-	// follows every ticket this client has seen, so it always wins the LWW
-	// comparison and the refusal is unreachable from here; honoring it is
-	// what keeps that an invariant of this call site rather than of every
-	// future caller. Nothing changed, so there is no operation to broadcast
-	// either: a peer replaying it would refuse it too.
+	// container and point elementMap at it, over whatever copy already answers
+	// to that createdAt.
+	//
+	// Here it cannot happen: a local Set mints a fresh ticket that follows
+	// every ticket this client has seen, so it wins the LWW comparison and
+	// nothing else can already answer to that brand-new createdAt. Returning
+	// elem would be worse than failing -- every caller treats the return as a
+	// live child (SetNewObject immediately calls SetYSONElement on it,
+	// SetNewArray AddYSON, SetNewText EditFromYSON), and those nested
+	// operations would name a parentCreatedAt that is in no element map on
+	// any replica, so each one fails the moment it is replayed. Panicking
+	// matches how this function already reports a value it cannot build.
 	removed, indexed := p.Set(k, value)
 	if !indexed {
-		return elem
+		panic(fmt.Errorf(
+			"set %q: object refused %s, which is already taken",
+			k, value.CreatedAt().Key(),
+		))
 	}
 
 	p.context.RegisterElement(value, p.Object)

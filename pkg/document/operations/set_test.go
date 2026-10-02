@@ -68,4 +68,64 @@ func TestSet(t *testing.T) {
 		assert.Equal(t, 2, root.GarbageLen())
 		assert.Equal(t, `{"key":2}`, root.Object().Marshal())
 	})
+
+	t.Run("a Set may not take the createdAt of a live element elsewhere", func(t *testing.T) {
+		// The value of a pushed Set carries its createdAt straight from the
+		// wire (fromSet). A createdAt naming a live element in another
+		// container would re-point Root.elementMap at the pushed value, so
+		// every later operation addressed at the victim resolves to the
+		// attacker's element instead -- permanently, since the server rebuilds
+		// its snapshots by replaying the same change log.
+		actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+
+		nested := crdt.NewObject(crdt.NewElementRHT(), time.NewTicket(1, 0, actor))
+		setNested := operations.NewSet(time.InitialTicket, "nested", nested, nested.CreatedAt())
+		_, err := setNested.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		victim, err := crdt.NewPrimitive("victim", time.NewTicket(2, 0, actor))
+		assert.NoError(t, err)
+		setVictim := operations.NewSet(nested.CreatedAt(), "victim", victim, victim.CreatedAt())
+		_, err = setVictim.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		// A Set on the root object whose value reuses the nested member's
+		// createdAt, with a newer executedAt so it wins every LWW comparison.
+		forged, err := crdt.NewPrimitive("forged", victim.CreatedAt())
+		assert.NoError(t, err)
+		setForged := operations.NewSet(time.InitialTicket, "stolen", forged, time.NewTicket(9, 0, actor))
+		_, err = setForged.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.ErrorIs(t, err, operations.ErrOperationSkipped)
+
+		// Set.Execute registers a deep copy, so identity is checked by value.
+		assert.Equal(t, `"victim"`, root.FindByCreatedAt(victim.CreatedAt()).Marshal(),
+			"the forged value took the victim's identity")
+		assert.Equal(t, `{"nested":{"victim":"victim"}}`, root.Object().Marshal())
+	})
+
+	t.Run("a Set may still restore a tombstone under its own createdAt", func(t *testing.T) {
+		// The guard above must not reach undo of a Remove, which re-inserts
+		// the removed element under its original createdAt.
+		actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+
+		value, err := crdt.NewPrimitive("v", time.NewTicket(1, 0, actor))
+		assert.NoError(t, err)
+		set := operations.NewSet(time.InitialTicket, "key", value, value.CreatedAt())
+		_, err = set.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+
+		remove := operations.NewRemove(time.InitialTicket, value.CreatedAt(), time.NewTicket(2, 0, actor))
+		_, err = remove.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+		assert.Equal(t, `{}`, root.Object().Marshal())
+
+		restored, err := crdt.NewPrimitive("v", value.CreatedAt())
+		assert.NoError(t, err)
+		restore := operations.NewSet(time.InitialTicket, "key", restored, time.NewTicket(3, 0, actor))
+		_, err = restore.Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.NoError(t, err)
+		assert.Equal(t, `{"key":"v"}`, root.Object().Marshal())
+	})
 }
