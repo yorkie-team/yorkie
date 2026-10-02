@@ -61,6 +61,7 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultSnapshotCacheSize, conf.Backend.SnapshotCacheSize)
 
 	assert.Equal(t, server.DefaultAuthWebhookCacheSize, conf.Backend.AuthWebhookCacheSize)
+	assert.False(t, conf.Backend.AuthWebhookCacheDisabled)
 	assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
 
 	assert.Equal(t, server.DefaultHostname, conf.Backend.Hostname)
@@ -120,6 +121,101 @@ func TestNewConfigFromFile(t *testing.T) {
 		conf, err := server.NewConfigFromFile(filePath)
 		assert.NoError(t, err)
 		assertDefaultConfig(t, conf)
+	})
+
+	t.Run("read bare Backend section test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		// A bare section unmarshals to a nil Backend, which must still be
+		// filled with the default credentials and cache settings.
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, server.DefaultSecretKey, conf.Backend.SecretKey)
+		assert.Equal(t, server.DefaultAdminUser, conf.Backend.AdminUser)
+		assert.Equal(t, server.DefaultAdminPassword, conf.Backend.AdminPassword)
+		// The booleans are NOT re-seeded: UseDefaultProject gates keyless
+		// requests, so a bare section stays fail-closed rather than silently
+		// turning 401s into requests served against the default project.
+		assert.False(t, conf.Backend.UseDefaultProject)
+		assert.False(t, conf.Backend.AuthWebhookCacheDisabled)
+		assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("populated Backend section keeps omitted defaults test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n  AdminUser: someone\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		// A section that spells out any key is a mapping, so YAML decodes into
+		// the struct newConfig pre-seeded and the keys it omits keep their
+		// defaults — including the auth-affecting UseDefaultProject.
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, "someone", conf.Backend.AdminUser)
+		assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
+		assert.True(t, conf.Backend.UseDefaultProject)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("explicit UseDefaultProject false is preserved test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n  UseDefaultProject: false\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.False(t, conf.Backend.UseDefaultProject)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("read AuthWebhookCacheDisabled test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Backend:\n  AuthWebhookCacheDisabled: true\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.True(t, conf.Backend.AuthWebhookCacheDisabled)
+		// The cache switch must not drag the other booleans along with it.
+		assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("default Mongo project cache test", func(t *testing.T) {
+		file, err := os.CreateTemp(t.TempDir(), "config-*.yml")
+		assert.NoError(t, err)
+		_, err = file.WriteString("Mongo:\n  YorkieDatabase: yorkie-meta\n")
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+
+		// A Mongo section without the project cache keys must get the
+		// defaults, or the client fails to parse an empty TTL at startup.
+		conf, err := server.NewConfigFromFile(file.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, server.DefaultProjectCacheSize, conf.Mongo.ProjectCacheSize)
+		assertDurationEqual(t, server.DefaultProjectCacheTTL, conf.Mongo.ProjectCacheTTL)
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("reject auth webhook cache TTL below cache.MinTTL test", func(t *testing.T) {
+		for _, ttl := range []string{"0s", "1ns"} {
+			conf, err := server.NewConfigFromFile("config.sample.yml")
+			assert.NoError(t, err)
+			conf.Backend.AuthWebhookCacheTTL = ttl
+			_, err = server.New(conf)
+			assert.ErrorContains(t, err, "--auth-webhook-cache-auth-ttl")
+		}
 	})
 
 	t.Run("explicit zero DeactivateConcurrency preserved (sequential opt-in)", func(t *testing.T) {
