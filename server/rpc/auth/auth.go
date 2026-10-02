@@ -128,8 +128,13 @@ func cacheDecision(
 // project that concern any of the keys (all of them when keys is empty), so
 // the next verification of those accesses asks the webhook again. Answers
 // that were already in flight are dropped too: they predate this call, so
-// they are not written back (see cacheGen).
+// they are not written back (see cacheGen). With the cache disabled nothing is
+// ever cached, so there is nothing to drop.
 func DropCachedDecisions(be *backend.Backend, prj *types.Project, keys []string) int {
+	if be.Config.AuthWebhookCacheDisabled {
+		return 0
+	}
+
 	cacheGenMu.Lock()
 	defer cacheGenMu.Unlock()
 	cacheGen++
