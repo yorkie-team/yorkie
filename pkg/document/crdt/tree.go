@@ -1112,15 +1112,48 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 // has not, exactly the divergence GCBarrier exists to prevent.
 //
 // Both walks reach the classification only for a chain node the editor does not
-// know and that still has an InsNextID to follow, so the ticket that makes the
-// answer stop mattering is that node's own createdAt: once it is causally
-// stable every future split breaks at it before asking what it holds. Every
-// such ancestor is reported, because holdsKnownChild descends and a node this
-// deep is counted by each of them.
+// know, so the ticket that makes the answer stop mattering is that node's own
+// createdAt: once it is causally stable every future walk breaks at it before
+// asking what it holds, and the barrier retires. Every such ancestor is
+// reported, because holdsKnownChild descends and a node this deep is counted by
+// each of them.
+//
+// The gate is "is in a split chain", read off InsPrevID/InsNextID rather than
+// off InsNextID alone. Reading InsNextID alone was unsound: a right-half
+// product carries no InsNextID until it is itself split, so a tombstone under
+// one was purgeable right up to the moment SplitElement (tree.go:358) gave its
+// parent a chain -- the barrier was lost retroactively, for exactly the node
+// the §7.8 walk then classifies. Each leg stands for a rule, and each is the
+// rule's own precondition, read at purge time:
+//
+//   - InsPrevID != nil is exactly the set of nodes a chain walk can classify.
+//     Both walks only ever call holdsKnownChild on a node they reached as some
+//     other node's InsNext, and SplitElement sets InsPrevID on every node it
+//     links that way: on the fresh product, and on the old InsNext it displaces,
+//     which already had one.
+//
+//   - InsNextID != nil carries §7.4 empty-sibling re-parenting, which gates
+//     MoveChildBefore on the fresh product being empty -- a count over
+//     Children(true), so a tombstone the split moved into the product decides
+//     it. That branch sits under `if n.InsNextID != nil`, so it runs only for a
+//     node that was already split when the next split arrived.
+//
+// Neither leg is monotone in the raw sense -- Purge relinks the chain across
+// the node it unlinks (tree.go:1178-1194) -- but each is cleared only together
+// with the reachability it stands for. A node loses InsPrevID only when its
+// InsPrev was the chain head, which leaves nothing pointing at it by InsNextID
+// and so nothing that can classify it; a node loses InsNextID only when the
+// last product after it is gone, which is also when §7.4 stops firing for it.
+//
+// Residual, and pre-existing: a node with neither id set can still be split
+// twice later, and the second split then runs §7.4 over children one replica
+// may have purged in the meantime. No ticket retires that -- §7.4 is
+// deliberately VV-independent, so nothing about causal stability stops it from
+// reading a count. See docs/design/concurrent-merge-split.md.
 func (t *Tree) splitChainBarriersAt(node *TreeNode) []*time.Ticket {
 	var barriers []*time.Ticket
 	for current := node.Index.Parent; current != nil; current = current.Parent {
-		if current.Value.InsNextID != nil {
+		if current.Value.InsPrevID != nil || current.Value.InsNextID != nil {
 			barriers = append(barriers, current.Value.id.CreatedAt)
 		}
 	}
@@ -3228,8 +3261,9 @@ func (t *Tree) orderSameBoundarySplit(
 		// keeps the answer the same whether this replica has applied that
 		// removal yet or not -- and so do deeper descendants, which is where a
 		// multi-level split puts it. GC cannot pull a counted tombstone out
-		// from under this: splitChainBarriersAt holds its purge back until
-		// next itself is causally stable, after which this walk breaks above.
+		// from under this: next is some node's InsNext, so it carries an
+		// InsPrevID, and splitChainBarriersAt holds the purge back until next
+		// itself is causally stable, after which this walk breaks above.
 		if t.holdsKnownChild(next, versionVector) {
 			break
 		}

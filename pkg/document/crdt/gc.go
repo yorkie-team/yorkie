@@ -83,9 +83,17 @@ type GCChild interface {
 // purge back until the version vector covers it as well as removedAt.
 //
 // A container may have more than one rule reading its linked nodes -- Tree has
-// both the sibling walk above and the same-boundary split ordering of §7.8 --
-// so PurgeBarrierAt reports one ticket per rule and the purge waits for all of
-// them.
+// the sibling walk above, the same-boundary split ordering of §7.8, and the
+// §7.5 empty-run advance that shares §7.8's classifier -- so PurgeBarrierAt
+// reports a ticket per rule whose precondition the child still sits under, and
+// the purge waits for all of them.
+//
+// The set is not a closed enumeration, and a reported ticket is only as good as
+// the rule it stands for: a rule that reads a tombstone's place without
+// consulting a version vector has no ticket that retires it, so it cannot be
+// represented here at all. Tree's §7.4 empty-sibling re-parenting is one such
+// rule; see Tree.splitChainBarriersAt for how far the tickets reach and what is
+// left over.
 //
 // The type parameter is only there because the two purge paths name their child
 // differently: Root.GarbageCollect walks removed elements as Element and

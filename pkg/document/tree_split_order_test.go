@@ -438,3 +438,71 @@ func TestTreeFurtherSplitAfterSameBoundarySplits(t *testing.T) {
 		}
 	})
 }
+
+// TestTreeSameBoundaryStyleAfterPeerTypedIn covers the two consumers of the
+// §7.5 advance that are not the split loop: Style and RemoveStyle resolve
+// their range through the same emptyRunReachesActor walk (styleTargets), and
+// that walk now classifies a same-boundary product by holdsKnownChild rather
+// than by its raw child count.
+//
+// The difference only shows once a peer has typed into one of those products:
+// under the old count the product stopped the advance, under the new rule it
+// is still an empty same-boundary product to an editor that never saw the
+// typing, so the advance passes it. The split loop and the style range have to
+// make that call the same way or a style lands on a different node than the
+// split it is ordered against.
+func TestTreeSameBoundaryStyleAfterPeerTypedIn(t *testing.T) {
+	cases := []struct {
+		name  string
+		style func(tree *json.Tree)
+	}{
+		{"style", func(tree *json.Tree) {
+			tree.StyleByPath([]int{0, 0}, []int{0, 1}, map[string]string{"bold": "true"})
+		}},
+		{"remove style", func(tree *json.Tree) {
+			tree.RemoveStyleByPath([]int{0, 0}, []int{0, 1}, []string{"bold"})
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			docs := splitReplicas(t, 3)
+
+			// Every replica splits the span at one boundary, so each holds two
+			// same-boundary products it did not create.
+			for _, doc := range docs {
+				require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetTree("t").EditByPath([]int{0, 0, 3}, []int{0, 0, 3}, nil, 1)
+					return nil
+				}))
+			}
+
+			// Replica 1 types into its own product. To replicas 0 and 2 that
+			// content is concurrent and unknown, so the product stays "empty"
+			// for the purposes of both same-boundary walks.
+			require.NoError(t, docs[1].Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditByPath(
+					[]int{0, 1, 0}, []int{0, 1, 0},
+					&json.TreeNode{Type: "text", Value: "Z"}, 0,
+				)
+				return nil
+			}))
+
+			// Replica 0 styles across the same boundary, with its range left
+			// edge sitting in the run of products.
+			require.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+				tc.style(root.GetTree("t"))
+				return nil
+			}))
+
+			exchangeInOrder(t, docs, [][]int{{2, 1}, {0, 2}, {1, 0}})
+
+			shape := treeShape(t, docs[0])
+			assert.Equal(t, shape, treeShape(t, docs[1]))
+			assert.Equal(t, shape, treeShape(t, docs[2]))
+			assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
+			assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[2]))
+			assert.Contains(t, treeXML(t, docs[0]), "Z")
+		})
+	}
+}
