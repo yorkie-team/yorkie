@@ -140,43 +140,6 @@ func isRemovedOrOrphaned(root *crdt.Root, elem crdt.Element) bool {
 	return false
 }
 
-// hijacksLiveElement reports whether registering the given value into Root
-// would hand the elementMap slot of its createdAt to a different element than
-// the live one that already answers to it.
-//
-// A createdAt is an identity for the whole document, not just for one
-// container: Root.elementMap is keyed by it, and index() hands the slot to
-// whatever was registered last. ElementRHT refuses a loser whose createdAt a
-// live node of the *same object* already answers to, but it can only see the
-// members of that one object -- a value carrying the createdAt of a live
-// element in any other container passes that guard, and RegisterElement then
-// re-points elementMap at it. The live copy is stranded from there on: every
-// operation addressed at that createdAt, and every collection and snapshot
-// that resolves one, finds the pushed value instead.
-//
-// No replica emits such a value: a causal change log issues a fresh createdAt
-// per value, and the one route that reuses an older identity -- undo -- either
-// re-identifies the copy with a freshly issued ticket (the Add and ArraySet
-// reverses, see Document.executeUndoRedo) or restores it over its own
-// tombstone (the Set reverse). Only crafted or duplicated bytes reach here,
-// and for them refusing is a no-op that leaves the document exactly as it was.
-//
-// Only a live occupant is protected, as in ElementRHT's losing branch. A
-// tombstone leaves elementMap when it is purged, and each replica and the
-// server collect on their own schedule, so a guard that also fired on a
-// tombstone would skip the operation on a replica still holding it and apply
-// it on one that had collected it. A live element is never purged, so every
-// replica that has it decides the same way -- including the server replaying
-// the change log to rebuild a snapshot.
-//
-// Callers must check this before mutating their container, because the
-// mutation cannot be put back afterwards. The ordinary path, where the value
-// carries a freshly issued createdAt, pays one map read.
-func hijacksLiveElement(root *crdt.Root, value crdt.Element) bool {
-	occupant := root.FindByCreatedAt(value.CreatedAt())
-	return occupant != nil && occupant != value && occupant.RemovedAt() == nil
-}
-
 // ExecutionResult is what an operation reports after executing. It is the
 // port of the JS SDK's ExecutionResult (operation.ts:190-193), minus the
 // OpInfo list Go does not materialize.

@@ -65,16 +65,6 @@ func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (Execut
 		return ExecutionResult{}, err
 	}
 
-	// An array has no LWW guard of its own: InsertAfter takes whatever
-	// createdAt the value carries, and RegisterElement below then re-points
-	// Root.elementMap at it. A value carrying the createdAt of a live element
-	// elsewhere in the document would strand that element, so refuse it here,
-	// before the insert, exactly as Set.Execute does. See hijacksLiveElement
-	// for why only a live occupant is protected and why refusing converges.
-	if hijacksLiveElement(root, value) {
-		return ExecutionResult{}, nil
-	}
-
 	if err = obj.InsertAfter(o.prevCreatedAt, value, o.executedAt); err != nil {
 		return ExecutionResult{}, err
 	}
