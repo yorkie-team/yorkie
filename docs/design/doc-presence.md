@@ -545,7 +545,7 @@ match state transition order.
 ### Problem
 
 Reconciled events reach the user-facing watch response channel (`rch`
-in `client.runWatchLoop`) via two independent paths:
+in `client.runWatchLoop` at the time) via two independent paths:
 
 1. **Stream path**: server `DocWatched`/`DocUnwatched` →
    `handleWatchResponse` → `AddOnlineClientAndReconcile`/
@@ -579,8 +579,9 @@ under `d.mu`, release `d.mu`, then send while still holding
 `DocWatched`/`DocUnwatched`; it only updates state via the reconcile
 methods.
 
-**Delivery** — `runWatchLoop` runs a three-goroutine pipeline with a
-single direction of backpressure:
+**Delivery** — each realtime attachment owns a three-goroutine
+pipeline (`startWatchPipeline`) with a single direction of
+backpressure:
 
 ```
 stream reader ─┐
@@ -591,11 +592,25 @@ pump ──────────┘
 - The *pump* is the sole consumer of `d.Events()` and only appends to
   the unbounded `watchBuffer` — it never blocks on the application.
 - The *sender* is the sole writer and closer of `rch`.
-- The *stream reader* pushes `DocumentChanged` and error responses
-  into the same buffer and drives the lifecycle: on exit it stops the
-  pump, closes the buffer, and (on stream error) re-establishes the
-  loop — the old pump is stopped before the new one starts, so
-  `d.Events()` always has exactly one consumer.
+- The *stream reader*, started by each `runWatchLoop` invocation,
+  pushes `DocumentChanged` and error responses into the same buffer.
+  On a stream error it pushes the error and re-establishes the loop
+  while the pump and sender keep running, so `d.Events()` keeps its
+  single consumer across the reconnect and `rch` stays the same
+  channel. The error is therefore followed by further events on `rch`
+  rather than by its closure. Only a terminal error, a reconnect that
+  fails, or an initial stream that never comes up closes the buffer,
+  which ends `rch`; the pump still drains `d.Events()` after that.
+- The pipeline belongs to the attachment, not to a loop invocation.
+  `stopWatchPipeline` tears it down from Detach, Remove, a sync that
+  observes removal, and Deactivate: it cancels the watch context, waits
+  for every stream reader to return, and only then stops the pump,
+  because a reader may still be publishing a reconciliation into
+  `d.Events()` when the context is cancelled.
+- An Attach whose initial Watch fails keeps the attachment registered,
+  since the server already holds it and rejects a second attach. The
+  caller recovers with Detach, which also tears the pipeline down, and
+  then attaches again.
 
 **Ordering guarantee**: every transition-and-send sequence runs under
 `d.eventsMu`, so lock acquisition order = state transition order =
@@ -623,8 +638,8 @@ which is why the unbounded buffer sits between them.
 
 **Buffer growth**: the buffer is bounded in practice by peer presence
 churn between application reads; entries are small (event type plus a
-presence map reference). The buffer lives per watch-loop invocation
-and is dropped on stream teardown.
+presence map reference). The buffer lives as long as the attachment
+and is dropped by `stopWatchPipeline`.
 
 ### Non-Goals
 
