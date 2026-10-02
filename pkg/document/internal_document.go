@@ -154,6 +154,17 @@ func (d *InternalDocument) HasLocalChanges() bool {
 	return len(d.localChanges) > 0
 }
 
+// removePushedLocalChanges removes the local changes the server has applied,
+// those whose client seq is at most the given one.
+func (d *InternalDocument) removePushedLocalChanges(clientSeq uint32) {
+	for d.HasLocalChanges() {
+		if d.localChanges[0].ClientSeq() > clientSeq {
+			break
+		}
+		d.localChanges = d.localChanges[1:]
+	}
+}
+
 // SetDisableGC records whether this document participates in GC. The client
 // calls this on Attach so subsequent ApplyChanges runs use the lamport-only
 // sync path described in docs/design/disable-gc-on-attach.md.
@@ -196,13 +207,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 	}
 
 	// 02. Remove local changes applied to server.
-	for d.HasLocalChanges() {
-		c := d.localChanges[0]
-		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
-			break
-		}
-		d.localChanges = d.localChanges[1:]
-	}
+	d.removePushedLocalChanges(pack.Checkpoint.ClientSeq)
 
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)

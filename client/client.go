@@ -393,7 +393,11 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 			return err
 		}
 
-		attachment.changeEventReceived = false
+		// A push-only sync pulled nothing, so a remote change it was told
+		// about is still waiting for the next pull.
+		if options.mode != types.SyncModePushOnly {
+			attachment.changeEventReceived = false
+		}
 		return nil
 	}
 
@@ -1303,7 +1307,14 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := d.ApplyChangePack(pack); err != nil {
+
+	// NOTE(chacha912): The reply to a push-only request is a push ack only and
+	// must not reach GC; see "Push-only response" in
+	// docs/design/garbage-collection.md. Judged by the mode the request was
+	// sent in: it is the request that decided nothing was pulled.
+	if opt.mode == types.SyncModePushOnly {
+		d.AcknowledgePushedChanges(pack)
+	} else if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
 	if d.Status() == document.StatusRemoved {
