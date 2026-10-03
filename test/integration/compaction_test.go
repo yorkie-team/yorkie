@@ -229,25 +229,21 @@ func TestDocumentCompaction(t *testing.T) {
 		}
 		assert.NoError(t, c1.Detach(ctx, d1))
 
-		// The changes compaction would replace. The second read may be answered
-		// from the change cache; it reaches the database here because the only
-		// path that deletes these rows, the purge, drops that cache with them.
-		be := defaultServer.Backend()
+		// Count the stored changes in the database itself: the server keeps
+		// answering from its caches after a purge, which would hide the loss.
 		project, err := defaultServer.DefaultProject(ctx)
 		assert.NoError(t, err)
-		storedChanges := func() int {
-			info, err := be.DB.FindDocInfoByKey(ctx, project.ID, d1.Key())
-			assert.NoError(t, err)
-			infos, err := be.DB.FindChangeInfosBetweenServerSeqs(ctx, info.RefKey(), 1, info.ServerSeq)
-			assert.NoError(t, err)
-			return len(infos)
-		}
-		before := storedChanges()
+		docInfo, err := defaultServer.Backend().DB.FindDocInfoByKey(ctx, project.ID, d1.Key())
+		assert.NoError(t, err)
+		before, err := helper.CountChangesWithDocID(helper.TestDBName(), docInfo.ID)
+		assert.NoError(t, err)
 		assert.Positive(t, before)
 
 		err = defaultServer.CompactDocument(ctx, d1.Key(), false)
 		assert.ErrorIs(t, err, database.ErrChangeTooLarge)
-		assert.Equal(t, before, storedChanges())
+		after, err := helper.CountChangesWithDocID(helper.TestDBName(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, before, after)
 
 		d2 := document.New(d1.Key())
 		assert.NoError(t, c2.Attach(ctx, d2))
