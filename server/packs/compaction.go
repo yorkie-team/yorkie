@@ -115,9 +115,12 @@ func Compact(
 		docInfo.ServerSeq,
 		newDoc.CreateChangePack().Changes,
 	); err != nil {
+		// The root's size, not the root: a document too large to compact is
+		// exactly the one whose content would turn this into a multi-megabyte
+		// log line.
 		logging.DefaultLogger().Errorf(
-			"[CD] Document %s failed to compact: %v\n Root: %s\n",
-			docInfo.ID, err, prevMarshalled,
+			"[CD] Document %s failed to compact: %v (root: %d bytes)",
+			docInfo.ID, err, len(prevMarshalled),
 		)
 		return err
 	}
