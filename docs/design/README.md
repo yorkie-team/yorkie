@@ -23,7 +23,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Disable GC on Attach](disable-gc-on-attach.md): Per-attachment opt-out from VV exchange and `minVV` tracking for GC-free workloads
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
-- [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
+- [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict, and refuse a losing restore that would strand a reachable createdAt slot
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Identity of Inserted Tree Content](tree-content-identity.md): One ticket per inserted node, and what still lets two nodes share an ID
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations

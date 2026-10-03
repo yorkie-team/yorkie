@@ -100,8 +100,9 @@ func (rht *ElementRHT) Has(key string) bool {
 	return false
 }
 
-// Set sets the value of the given key. If there is an existing value, it is removed.
-func (rht *ElementRHT) Set(k string, v Element) Element {
+// Set sets the value of the given key. If there is an existing value, it is
+// removed. It reports the same pair as SetWithExecutedAt.
+func (rht *ElementRHT) Set(k string, v Element) (Element, bool) {
 	return rht.SetWithExecutedAt(k, v, v.CreatedAt())
 }
 
@@ -130,31 +131,103 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // not disagree. A separate reach of the same precondition -- a remote redo
 // deleting a restored key on a peer via GC -- is filed in
 // docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
-func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) Element {
+//
+// It returns the element evicted from the key, if any, and whether v was
+// taken into this hashtable at all. The second value is false only when v
+// loses the key and taking it in would strand the node that currently
+// answers to v's createdAt (see refusesLoser); the hashtable is then left
+// exactly as it was, and a caller that books v into Root must treat it as
+// "nothing happened". See operations.Set.Execute.
+//
+// A winner always takes the createdAt slot, as in the JS SDK. In a history
+// the SDKs can produce, a createdAt only ever sits at one key of one object
+// -- a restore re-inserts an element under the key it was removed from -- so
+// the node a winner displaces from the slot is either the occupant it has
+// just evicted from k, or a tombstone that used to sit at k. When the evicted
+// occupant is itself a copy under v's createdAt (two concurrent undos
+// restoring the same value), it leaves both maps here, and the caller has to
+// release it rather than book it as garbage: see operations.Set.Execute.
+//
+// NOTE(hackerwins): the loser refusal is ported to the JS SDK in
+// yorkie-team/yorkie-js-sdk#1440 (element_rht.ts, ElementRHT.set). Until that
+// lands, a JS replica takes in a loser that a Go replica refuses, and the
+// server's snapshot replay runs this code. The refusal only fires in the
+// concurrent-restore shapes it exists for, where the JS behavior is the bug
+// -- it strands the live copy and the document stops rebuilding after GC.
+// Validating crafted payloads (a createdAt that names an element elsewhere)
+// is a separate concern, tracked at the push boundary in
+// yorkie-team/yorkie#2081, and is deliberately not done here.
+func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
-	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 
-	var removed Element
 	if !ok || executedAt.After(PositionedAt(node.elem)) {
+		var removed Element
 		if ok && !node.isRemoved() && node.Remove(executedAt) {
 			removed = node.elem
 		}
+		rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
-	} else if v.RemovedAt() == nil {
-		// The new node loses the LWW conflict. Mark it removed by its own
-		// state, not the occupant's: a live loser whose occupant is already
-		// a tombstone would otherwise stay live in nodeMapByCreatedAt --
-		// emitted by Nodes(), never booked as garbage, still charged to Live
-		// -- on the replica that saw the tombstone first and on no other. A
-		// loser that arrives removed is left alone, because Remove accepts a
-		// later ticket and would move its removedAt off the removal that
-		// actually happened.
-		v.Remove(PositionedAt(node.elem))
+		return removed, true
 	}
 
-	return removed
+	if rht.refusesLoser(v) {
+		return nil, false
+	}
+
+	// Mark the loser removed by its own state, not the occupant's: a live
+	// loser whose occupant is already a tombstone would otherwise stay live in
+	// nodeMapByCreatedAt -- emitted by Nodes(), never booked as garbage, still
+	// charged to Live -- on the replica that saw the tombstone first and on no
+	// other. A loser that arrives removed is left alone, because Remove accepts
+	// a later ticket and would move its removedAt off the removal that
+	// actually happened.
+	if v.RemovedAt() == nil {
+		v.Remove(PositionedAt(node.elem))
+	}
+	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
+
+	return nil, true
+}
+
+// refusesLoser reports whether a value that has lost its key must stay out of
+// nodeMapByCreatedAt. A loser is indexed only so that GC can reach it, and
+// that index is keyed by a creation ticket, not by an element: undo/redo
+// restores a *copy* of a removed element under its original createdAt, so
+// two concurrent undos of overwrites of one key put two copies under one
+// ticket. Taking the slot from a node that is still reachable through its key
+// orphans that node -- nodeMapByCreatedAt is the only way GC, purge and
+// DeepCopy address it -- and the document can no longer be rebuilt from its
+// own content once GC runs.
+//
+// The holder is still reachable through its key, and the loser is refused,
+// when it is:
+//
+//   - live. Where one restore holds the key and the other loses, re-pointing
+//     the slot at the losing copy strands the live one, and collecting the
+//     loser then unlinks the slot (TestConcurrentUndoRestoresSameValue).
+//   - a tombstone that is still its key's occupant, which is what a Delete
+//     of a restored key leaves behind. Elements() skips it, but DeepCopy
+//     re-points the key through this very slot.
+//
+// A tombstone already displaced from its key is taken over. Nothing reaches
+// it by key, the Set that displaced it left its collection entry for
+// operations.Set.Execute to retire, and a losing restore has to end where a
+// restore that won first and was then evicted ends
+// (TestLosingUndoRestoreConverges).
+//
+// The decision reads only replicated state. Collection can drop a tombstone
+// holder, but only once every replica has seen its removal; that is the same
+// causal-stability assumption the LWW comparison above already rests on when
+// collection drops an occupant from nodeMapByKey.
+func (rht *ElementRHT) refusesLoser(v Element) bool {
+	holder, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]
+	if !ok || holder.elem == v {
+		return false
+	}
+
+	return !holder.isRemoved() || rht.nodeMapByKey[holder.key] == holder
 }
 
 // PositionedAt returns elem's last-moved ticket, or its creation ticket if

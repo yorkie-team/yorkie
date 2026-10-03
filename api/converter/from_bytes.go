@@ -155,6 +155,13 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 		// silently dropped from the decoded object. Mirrors fromObject in
 		// the JS SDK (fromObject in converter.ts), which passes
 		// value.getPositionedAt() to rht.set.
+		//
+		// The refusal SetWithExecutedAt can report is not reachable from
+		// encoder output: Nodes() emits one node per createdAt (it reads
+		// nodeMapByCreatedAt, here and in the JS SDK), and a value is only
+		// refused when another node already holds its createdAt. Two members
+		// sharing one createdAt can only come from crafted bytes; rejecting
+		// those at the push boundary is tracked in yorkie-team/yorkie#2081.
 		members.SetWithExecutedAt(pbNode.Key, elem, crdt.PositionedAt(elem))
 	}
 
