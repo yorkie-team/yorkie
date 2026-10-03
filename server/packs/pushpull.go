@@ -75,6 +75,15 @@ type PushPullOptions struct {
 	// the write and read paths so the response carries an empty presence
 	// map regardless of what any client sends.
 	DisablePresence bool
+
+	// SizeChecked marks a push whose caller has already measured the
+	// resulting document against the project's MaxSizePerDocument with
+	// packs.CheckLiveSize. The server-side repair paths (admin document
+	// update, revision restore) rebuild the whole root, so they know the
+	// exact result; the snapshot-based push gate only knows the document is
+	// over quota and would refuse them, leaving an over-quota document with
+	// no way back under the limit. Never set from a client request.
+	SizeChecked bool
 }
 
 var (
@@ -121,8 +130,12 @@ func PushPull(
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
 	statusChange := opts.Status == document.StatusDetached || opts.Status == document.StatusRemoved
+	maxSize := project.MaxSizePerDocument
+	if opts.SizeChecked {
+		maxSize = 0
+	}
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(
-		ctx, be, clientInfo, docKey, reqPack, project.MaxSizePerDocument, statusChange,
+		ctx, be, clientInfo, docKey, reqPack, maxSize, statusChange,
 	)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)

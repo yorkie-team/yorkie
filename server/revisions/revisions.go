@@ -179,6 +179,18 @@ func Restore(
 		return err
 	}
 
+	// The restored root is known in full here, so measure it against the
+	// project quota directly. The snapshot-based push gate only knows the
+	// document is over quota and would refuse the restore, including one that
+	// brings the document back under the limit.
+	if err := packs.CheckLiveSize(
+		docInfo.Key,
+		doc.DocSize(),
+		project.MaxSizePerDocument,
+	); err != nil {
+		return err
+	}
+
 	// Apply the change through the normal push/pull flow using temporary client info
 	if _, err := packs.PushPull(
 		ctx,
@@ -191,6 +203,7 @@ func Restore(
 			Mode:            types.SyncModePushOnly,
 			Status:          document.StatusAttached,
 			DisablePresence: docInfo.DisablePresence,
+			SizeChecked:     true,
 		},
 	); err != nil {
 		return fmt.Errorf("push pull: %w", err)

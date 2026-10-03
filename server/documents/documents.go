@@ -112,6 +112,17 @@ func CreateDocument(
 		return nil, err
 	}
 
+	// This path writes the initial root straight through CompactChangeInfos, so
+	// it never meets the push gate in pushPack. Measure the root the caller
+	// supplied against the project quota here instead.
+	if err = packs.CheckLiveSize(
+		docInfo.Key,
+		newDoc.DocSize(),
+		project.MaxSizePerDocument,
+	); err != nil {
+		return nil, err
+	}
+
 	if err = be.DB.CompactChangeInfos(
 		ctx,
 		docInfo,
@@ -467,8 +478,18 @@ func UpdateDocument(
 		}
 	}
 
-	// 3. Push changes to the server
+	// 3. Push changes to the server. The push gate only knows the document is
+	// over quota and would refuse this write, including one that shrinks the
+	// document back under the limit, so measure the rebuilt root instead.
 	if updateMode == UpdateModeRootOnly || updateMode == UpdateModeBoth {
+		if err = packs.CheckLiveSize(
+			docInfo.Key,
+			doc.DocSize(),
+			project.MaxSizePerDocument,
+		); err != nil {
+			return nil, err
+		}
+
 		if _, err = packs.PushPull(
 			ctx,
 			be,
@@ -480,6 +501,7 @@ func UpdateDocument(
 				Mode:            types.SyncModePushOnly,
 				Status:          document.StatusAttached,
 				DisablePresence: docInfo.DisablePresence,
+				SizeChecked:     true,
 			}); err != nil {
 			return nil, err
 		}

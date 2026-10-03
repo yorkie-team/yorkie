@@ -133,6 +133,26 @@ currently retries the same pack. Handling the refusal in the SDKs (stop
 retrying, surface a terminal over-quota state, let the user detach) is a
 follow-up tracked in the task.
 
+### The server-side write paths
+
+Three writes do not come from a client and do not fit the lagging gate,
+because each one builds the whole root on the server and therefore knows the
+result exactly:
+
+- `documents.CreateDocument` (admin/MCP) writes the initial root straight
+  through `DB.CompactChangeInfos` and never reaches `pushPack` at all.
+- `documents.UpdateDocument` (admin) and `revisions.RestoreRevision` rebuild
+  the document and push it with `Status: attached`. Their packs are
+  `SetYSON`-shaped, so `canGrow` says they grow, and the lagging gate would
+  refuse them on exactly the over-quota documents they exist to repair —
+  including a restore that brings the document back under the limit.
+
+All three call `packs.CheckLiveSize` on the document they hold, which measures
+`DocSize().Live` against `MaxSizePerDocument` and raises the same
+`ErrDocumentSizeExceedsLimit`. The two push paths then set
+`PushPullOptions.SizeChecked`, which skips the lagging gate for that push
+only. `SizeChecked` is never set from a client request.
+
 ### Contract: the overshoot
 
 The recorded size is the one the last snapshot measured, so the gate lags the

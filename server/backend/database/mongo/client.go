@@ -2086,6 +2086,12 @@ func (c *Client) CompactChangeInfos(
 	// 3. Store the compacted change over the record at newServerSeq in one
 	// write, so the document reads as the compacted change the moment this
 	// returns rather than after a delete and an insert.
+	//
+	// Failing here would otherwise leave the claim standing over the
+	// pre-compaction record at newServerSeq: the document would silently read
+	// as its own first historical change, and with server_seq already at
+	// newServerSeq no later compaction could reach it. The steps cannot share
+	// a transaction, so undo the claim instead before reporting the error.
 	c.changeCache.Remove(refKey)
 	if compacted != nil {
 		if _, err := c.collection(ColChanges).ReplaceOne(ctx, bson.M{
@@ -2093,7 +2099,10 @@ func (c *Client) CompactChangeInfos(
 			"doc_id":     docInfo.ID,
 			"server_seq": newServerSeq,
 		}, compacted, options.Replace().SetUpsert(true)); err != nil {
-			return fmt.Errorf("compact document of %s: %w", refKey, err)
+			return c.undoCompactionClaim(
+				ctx, docInfo, lastServerSeq, newServerSeq,
+				fmt.Errorf("compact document of %s: %w", refKey, err),
+			)
 		}
 	}
 
@@ -2104,6 +2113,47 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	return nil
+}
+
+// undoCompactionClaim restores the document row CompactChangeInfos claimed in
+// step 2 after the write that follows it failed, and returns the cause.
+//
+// The restore is conditional on the claim still standing untouched, so it
+// cannot clobber a document something else has moved on; in that case, and if
+// the restore itself fails, the cause is returned with the failure to undo
+// joined to it, since the document is then left mid-compaction and needs an
+// operator. The epoch is left incremented either way: clients that already saw
+// it must re-attach, which is harmless, while lowering it back could hand two
+// different document states the same epoch.
+func (c *Client) undoCompactionClaim(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+	lastServerSeq, claimedServerSeq int64,
+	cause error,
+) error {
+	refKey := docInfo.RefKey()
+	c.docCache.Remove(refKey)
+
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": docInfo.ProjectID,
+		"_id":        docInfo.ID,
+		"server_seq": claimedServerSeq,
+	}, bson.M{
+		"$set": bson.M{
+			"server_seq":   lastServerSeq,
+			"compacted_at": docInfo.CompactedAt,
+		},
+	})
+	if err != nil {
+		return errors.Join(cause, fmt.Errorf("undo compaction claim of %s: %w", refKey, err))
+	}
+	if res.MatchedCount == 0 {
+		return errors.Join(cause, fmt.Errorf(
+			"undo compaction claim of %s: %w", refKey, database.ErrConflictOnUpdate,
+		))
+	}
+
+	return cause
 }
 
 // compactionClaimError tells a document that is gone from one that moved past

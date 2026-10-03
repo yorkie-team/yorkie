@@ -85,3 +85,35 @@ that task. The finding stays open against it, not against this branch. The
 design doc's references into `yorkie_server.go`, `client.go` and `document.go`
 had drifted by a few dozen lines, which made the write-up read as stale; they
 are corrected.
+
+## Review round: panel (blast radius, correctness)
+
+Two lenses, three blocking findings, all fixed in one pass.
+
+**Compaction had no rollback.** `CompactChangeInfos` claims the document row
+first (server_seq 1, epoch + 1) and writes the compacted change second, and
+the two cannot share a transaction because the deployment is not guaranteed to
+be a replica set. A failure between them left the document pointing at
+server_seq 1 while the record there was still the pre-compaction first change:
+wrong content, served silently, and out of reach of any later compaction,
+since server_seq was already 1. `undoCompactionClaim` now restores `server_seq`
+and `compacted_at` conditionally on the claim still standing, and joins its own
+failure to the cause when it cannot. The epoch stays incremented on purpose —
+lowering it could hand two different document states the same epoch, while a
+spurious re-attach costs a round trip.
+
+**The gate refused the repairs.** The lagging snapshot gate only knows a
+document is over quota, so it refused `documents.UpdateDocument` and
+`revisions.RestoreRevision` — both push `SetYSON` packs that `canGrow` calls
+growing — on exactly the documents they exist to shrink. Both now measure the
+root they already hold with `packs.CheckLiveSize` and set
+`PushPullOptions.SizeChecked`, which skips the lagging gate for that push. An
+exact check is available to them for free precisely because they build the
+whole document; the push path's whole premise is that it does not.
+
+**And it missed one write entirely.** `documents.CreateDocument` writes a
+caller-supplied initial root through `DB.CompactChangeInfos` and never reaches
+`pushPack`, so no quota applied to it at all. It calls `CheckLiveSize` too.
+`docs/design/document-size-limit.md` now has a section naming all three paths,
+so the next reader does not have to rediscover that the gate has a server-side
+door.

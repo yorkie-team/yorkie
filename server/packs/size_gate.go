@@ -25,6 +25,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 )
 
@@ -90,5 +92,26 @@ func checkDocumentSize(
 	return fmt.Errorf(
 		"push to %s: live size %d bytes at server seq %d exceeds %d: %w",
 		docKey, info.LiveSize, info.ServerSeq, maxSize, document.ErrDocumentSizeExceedsLimit,
+	)
+}
+
+// CheckLiveSize enforces the project's MaxSizePerDocument against a document
+// the caller already holds in full.
+//
+// The server-side write paths that build the whole root themselves — the admin
+// document create and update RPCs and the revision restore — measure the
+// result exactly, so they use this instead of the snapshot-based push gate.
+// That gate refuses every growing change on an over-quota document, which
+// would refuse the very writes meant to bring such a document back under the
+// limit; measuring the result admits a shrink and still refuses an overrun.
+func CheckLiveSize(docKey key.Key, size resource.DocSize, maxSize int) error {
+	liveSize := size.Live.Total()
+	if maxSize <= 0 || liveSize <= maxSize {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"update %s: live size %d bytes exceeds %d: %w",
+		docKey, liveSize, maxSize, document.ErrDocumentSizeExceedsLimit,
 	)
 }
