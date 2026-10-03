@@ -20,6 +20,7 @@ package packs
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -51,7 +52,19 @@ func Compact(
 	docInfo *database.DocInfo,
 	force bool,
 ) error {
-	// 1. Check if the document is attached.
+	// 1. Skip a document already found too large to compact at this server
+	// seq. Rebuilding it would only fail the same way, and doing so every
+	// housekeeping cycle turns one oversized document into a recurring
+	// full rebuild. A forced compaction tries again.
+	refKey := docInfo.RefKey()
+	if seq, ok := be.Cache.OversizedCompaction.Get(refKey); ok && seq == docInfo.ServerSeq && !force {
+		return fmt.Errorf(
+			"compact document %s: skipped at server seq %d: %w",
+			docInfo.ID, seq, database.ErrChangeTooLarge,
+		)
+	}
+
+	// 2. Check if the document is attached.
 	if !force {
 		isAttached, err := be.DB.IsDocumentAttachedOrAttaching(ctx, types.DocRefKey{
 			ProjectID: projectID,
@@ -67,7 +80,7 @@ func Compact(
 		logging.DefaultLogger().Infof("force compacting document %s (skipping attachment check)", docInfo.ID)
 	}
 
-	// 2. Build compacted changes and check if the content is the same.
+	// 3. Build compacted changes and check if the content is the same.
 	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 	if err != nil {
 		logging.DefaultLogger().Errorf("[CD] Document %s failed to apply changes: %v\n", docInfo.ID, err)
@@ -92,7 +105,7 @@ func Compact(
 		return err
 	}
 
-	// 3. Check if the content is the same after rebuilding.
+	// 4. Check if the content is the same after rebuilding.
 	prevMarshalled, err := root.(yson.Object).Marshal()
 	if err != nil {
 		return err
@@ -105,10 +118,10 @@ func Compact(
 		return fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
 
-	// 4. Invalidate snapshot cache.
-	be.Cache.Snapshot.Remove(docInfo.RefKey())
+	// 5. Invalidate snapshot cache.
+	be.Cache.Snapshot.Remove(refKey)
 
-	// 5. Store compacted changes and metadata in the database.
+	// 6. Store compacted changes and metadata in the database.
 	if err = be.DB.CompactChangeInfos(
 		ctx,
 		docInfo,
@@ -123,8 +136,12 @@ func Compact(
 			"[CD] Document %s failed to compact: %v (YSON root: %d bytes)",
 			docInfo.ID, err, len(prevMarshalled),
 		)
+		if stderrors.Is(err, database.ErrChangeTooLarge) {
+			be.Cache.OversizedCompaction.Add(refKey, docInfo.ServerSeq)
+		}
 		return err
 	}
+	be.Cache.OversizedCompaction.Remove(refKey)
 
 	return nil
 }

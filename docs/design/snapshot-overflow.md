@@ -49,7 +49,10 @@ Compaction folds a whole document into one change record, and that record
 hits the same 16MB limit. Unlike a snapshot, it is not compressed or split:
 `CompactChangeInfos` encodes the record first and refuses with
 `ErrChangeTooLarge` before writing anything, so the document keeps its
-changes, snapshots and version vectors and stays uncompacted.
+changes, snapshots and version vectors and stays uncompacted. The node that
+tried remembers the server seq it failed at (`Cache.OversizedCompaction`), and
+`packs.Compact` skips the document before rebuilding it until that seq moves,
+so housekeeping does not rebuild it every cycle to fail the same way.
 
 The write sequence after the size check does not need a transaction to stay
 safe against a concurrent push:

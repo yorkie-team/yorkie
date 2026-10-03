@@ -245,6 +245,12 @@ func TestDocumentCompaction(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, before, after)
 
+		// Housekeeping would retry every cycle; at the same server seq the
+		// second attempt is skipped instead of rebuilding the document.
+		err = defaultServer.CompactDocument(ctx, d1.Key(), false)
+		assert.ErrorIs(t, err, database.ErrChangeTooLarge)
+		assert.ErrorContains(t, err, "skipped")
+
 		d2 := document.New(d1.Key())
 		assert.NoError(t, c2.Attach(ctx, d2))
 		assert.Equal(t, 2*len(chunk), len(d2.Root().GetText("text").String()))

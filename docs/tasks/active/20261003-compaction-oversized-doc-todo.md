@@ -52,10 +52,14 @@ hits the limit.
       document reports `ErrDocumentNotFound` as in memory. Shared tests check
       snapshots and version vectors survive a refused compaction, plus a
       mongo-only two-node test (compaction on one, stale push on the other)
+- [x] Housekeeping backoff: `packs.Compact` remembers the server seq at which
+      a document failed with `ErrChangeTooLarge` (`Cache.OversizedCompaction`)
+      and skips it, before the rebuild, until the seq moves; a forced
+      compaction retries. Asserted in the oversized integration test
 
 ## Out of scope
 
-- Compacting such a document at all. It now fails cleanly every
-  housekeeping cycle and stays uncompacted.
+- Compacting such a document at all. It fails cleanly and stays
+  uncompacted; housekeeping skips it until its server seq moves.
 - The bench reusing one key across `b.Loop` iterations, and the stranded-slot
   bug on main (fixed on the element-RHT branches).
