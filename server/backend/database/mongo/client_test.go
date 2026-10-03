@@ -166,6 +166,10 @@ func TestClient(t *testing.T) {
 		testcases.RunCreateChangeInfosTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("CompactChangeInfos test", func(t *testing.T) {
+		testcases.RunCompactChangeInfosTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
 		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
 	})

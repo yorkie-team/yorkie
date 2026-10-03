@@ -2018,7 +2018,8 @@ func (c *Client) CompactChangeInfos(
 	// document's changes still exist: past the purge, a failed insert leaves
 	// the document with no changes and no snapshot to be rebuilt from.
 	var compacted bson.Raw
-	for _, cn := range changes {
+	if len(changes) == 1 {
+		cn := changes[0]
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
 			return err
@@ -2048,19 +2049,34 @@ func (c *Client) CompactChangeInfos(
 		}
 	}
 
-	// 2. Purge the resources of the document.
+	// 2. Refuse a document that has moved past lastServerSeq. The update in
+	// step 5 checks the same condition, but only after the purge has dropped
+	// the changes compaction did not see. This narrows that window to the
+	// purge itself; closing it needs a transaction.
+	if err := c.collection(ColDocuments).FindOne(ctx, bson.M{
+		"project_id": docInfo.ProjectID,
+		"_id":        docInfo.ID,
+		"server_seq": lastServerSeq,
+	}).Err(); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
+		}
+		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+	}
+
+	// 3. Purge the resources of the document.
 	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
 		return err
 	}
 
-	// 3. Store the compacted change, exactly the bytes checked above.
+	// 4. Store the compacted change, exactly the bytes checked above.
 	if compacted != nil {
 		if _, err := c.collection(ColChanges).InsertOne(ctx, compacted); err != nil {
 			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 		}
 	}
 
-	// 4. Update document
+	// 5. Update document
 	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,

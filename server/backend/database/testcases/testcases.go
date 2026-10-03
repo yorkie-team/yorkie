@@ -2770,3 +2770,48 @@ func RunVersionVectorStableActorTest(t *testing.T, db database.Database, project
 		assert.False(t, ok, "detach must drop the stored stable-actor VV entry")
 	})
 }
+
+// RunCompactChangeInfosTest runs the CompactChangeInfos tests for the given db.
+func RunCompactChangeInfosTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("stale server seq keeps the changes test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		docInfo, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
+		refKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(docKey)
+		doc.SetActor(actorID)
+		for idx := range 3 {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetInteger("k", idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		_, _, err := db.CreateChangeInfos(ctx, refKey, pack.Checkpoint, toChangeInfos(t, refKey, pack.Changes), false)
+		assert.NoError(t, err)
+		docInfo, err = db.FindDocInfoByRefKey(ctx, refKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), docInfo.ServerSeq)
+
+		// Compact against a server seq the document has already moved past, as
+		// a compaction that read the document before a concurrent push would.
+		compacted := document.New(docKey)
+		assert.NoError(t, compacted.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("k", 2)
+			return nil
+		}))
+		err = db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq-1, compacted.CreateChangePack().Changes)
+		assert.ErrorIs(t, err, database.ErrConflictOnUpdate)
+
+		infos, err := db.FindChangeInfosBetweenServerSeqs(ctx, refKey, 1, docInfo.ServerSeq)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 3)
+	})
+}
