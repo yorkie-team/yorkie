@@ -774,6 +774,9 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 	if err != nil {
 		return nil, err
 	}
+	if err := validateTreeEditContentIDs(nodes, executedAt); err != nil {
+		return nil, err
+	}
 
 	restoreSpans, err := fromTreeRestoreSpans(pbTreeEdit.RestoreSpans)
 	if err != nil {
@@ -1043,6 +1046,45 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	}
 
 	return treeNodes, nil
+}
+
+// validateTreeEditContentIDs rejects edit content whose node ids claim a
+// lamport the change carrying them never reached.
+//
+// A content node id arrives verbatim from the wire and is trusted from then
+// on: it keys NodeMapByID, and Tree's GC barrier answers from it — a tombstone
+// stays linked while an ancestor's createdAt is outside the collecting vector
+// (crdt.Tree.PurgeHeldBack). That hold lifts because lamports are max-merged
+// on apply, so every attached client's entry climbs past any lamport a real
+// change reached. A ticket whose lamport no change ever reached is never
+// covered and never will be, so a single crafted edit would pin the tombstones
+// below it — and the storage behind them — for the life of the document.
+//
+// Every node in an edit's content is freshly created by that edit (see
+// FromTreeNodesWhenEdit), so its lamport cannot legitimately run ahead of the
+// edit's own. Nothing here constrains the actor: a ticket bounded by a real
+// change's lamport is one every client's clock passes, whatever actor it
+// names.
+func validateTreeEditContentIDs(nodes []*crdt.TreeNode, executedAt *time.Ticket) error {
+	for _, node := range nodes {
+		stack := []*crdt.TreeNode{node}
+		for len(stack) > 0 {
+			current := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			createdAt := current.ID().CreatedAt
+			if createdAt != nil && createdAt.Lamport() > executedAt.Lamport() {
+				return fmt.Errorf(
+					"tree_edit.contents: created_at lamport %d is ahead of executed_at %d: %w",
+					createdAt.Lamport(), executedAt.Lamport(), ErrInvalidContentTicket,
+				)
+			}
+
+			stack = append(stack, current.Children(true)...)
+		}
+	}
+
+	return nil
 }
 
 func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {

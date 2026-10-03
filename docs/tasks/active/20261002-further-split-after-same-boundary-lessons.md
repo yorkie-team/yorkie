@@ -144,3 +144,33 @@ stubbed out, which is the check that the narrowing kept what the barrier was for
 Lesson: a barrier derived from "which inputs could this rule read" is both
 sounder and far cheaper than one derived from "which inputs could possibly
 matter". The second shape is easy to write and impossible to bound.
+
+## Round 5 — the hold needed a floor, not an exemption
+
+Round 4's narrowing kept one shortcut that was wrong: "an actor the collecting
+vector does not name is settled". That inverts `EqualToOrAfter` and disagrees
+with §7.8 itself, which reads an unnamed actor as *unknown* and walks on — so a
+chain sibling whose creator had detached could have its tombstones collected
+while a lagging editor could still land on it.
+
+What the shortcut was really buying was termination: an uncovered ticket whose
+actor is never named again (a detached client's node, or a forged one) pins a
+subtree forever. A lamport floor buys that properly. §7.8 advances onto a
+sibling only when the sibling's ticket is `After` the incoming split's, and a
+split still in flight carries a lamport above the collecting vector's entry for
+its own editor, so a ticket at or below the vector's smallest lamport can never
+be landed on. Lamports are max-merged on apply, so the floor climbs past any
+lamport a real change reached — which is why the wire boundary now rejects edit
+content whose lamport runs ahead of its own change
+(`converter.ErrInvalidContentTicket`, with the usual stored-path repair in
+`NormalizeStoredOperations`). With the floor doing the termination work, the
+climb's fixed depth cap could go: it was asymmetric with `holdsKnownChild`'s
+unbounded descent, so a deep tombstone was collected with no barrier at all.
+
+The same round found the barrier was missing a shape: a tombstone that is
+itself a chain member. `Tree.Purge` splices it out, handing §7.8 the successor
+it used to stop at — `holdsBackChainSplice` now covers that.
+
+Lesson: when a rule needs an escape hatch to terminate, the hatch is usually
+hiding a missing bound. Name the bound (here: the vector's lamport floor) and
+the hatch — and the soundness hole it opened — goes away with it.

@@ -325,15 +325,49 @@ func TestTreePurgeHeldBack(t *testing.T) {
 		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
 	})
 
-	// The collecting vector naming no entry for the actor means the actor is
-	// not one this collection is synced against: either it detached (and
-	// pushed before its entry went) or the ticket was forged. Reading it as
-	// uncovered pinned the subtree for the life of the document.
-	t.Run("does not wait on an actor the vector does not name", func(t *testing.T) {
+	// What releases a hold is coverage or the vector's lamport floor, never
+	// the absence of an entry on its own: §7.8 reads an actor its editor's
+	// vector does not name as unknown and walks on, so a detached creator's
+	// chain sibling is still one a lagging editor can land on. Here every
+	// named entry sits at MaxLamport, so the floor is above the product's
+	// ticket and the hold lifts for that reason.
+	t.Run("lets a tombstone go once the vector's floor passes the product", func(t *testing.T) {
 		f, _, child := splitProduct(t)
 
 		assert.False(t, f.tree.PurgeHeldBack(child, f.vv),
-			"f.vv names the editor only; the peer's entry is gone, not pending")
+			"f.vv names the editor at MaxLamport, so nothing older can still be in flight")
+	})
+
+	// The other half of the same rule: an unnamed actor below the floor is
+	// held, where the earlier "unnamed means settled" shortcut released it.
+	t.Run("waits on an uncovered product whose actor the vector does not name", func(t *testing.T) {
+		f, _, child := splitProduct(t)
+
+		editorOnly := time.VersionVector{}
+		for actor := range f.vv {
+			editorOnly.Set(actor, 1)
+		}
+
+		assert.True(t, f.tree.PurgeHeldBack(child, editorOnly),
+			"the peer detached, but a lagging editor can still land on its product")
+	})
+
+	// Purging a tombstone that is itself a chain member splices the chain
+	// (Tree.Purge), handing §7.8's walk the successor the tombstone used to
+	// stop it at. PurgeBarrierAt names only the index sibling, so this is the
+	// barrier that covers it.
+	t.Run("waits on the chain successor of a tombstoned chain member", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+
+		removed := f.appendElement(t, f.p, f.editorTicket())
+		successor := f.appendElement(t, f.p, f.peerTicket())
+		linkAsSplitProduct(f.p, removed)
+		linkAsSplitProduct(removed, successor)
+		f.tree.NodeMapByID.Put(successor.id, successor)
+		removed.remove(f.editorTicket())
+
+		assert.True(t, f.tree.PurgeHeldBack(removed, f.namesPeer()),
+			"splicing removed out would let the walk advance onto the uncovered successor")
 	})
 
 	// time.InitialTicket carries an actor no vector names; reading it as
@@ -347,22 +381,40 @@ func TestTreePurgeHeldBack(t *testing.T) {
 		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
 	})
 
-	// The climb is bounded, so a GC pass stays O(tombstones) over parent
-	// pointers a peer controls however deep -- or however cyclic -- they are.
-	t.Run("gives up past the climb bound instead of walking on", func(t *testing.T) {
+	// The climb used to give up past a fixed depth, which was asymmetric with
+	// holdsKnownChild's unbounded descent: a tombstone nested deeper than the
+	// bound below an uncovered chain sibling was collected with no barrier at
+	// all, which is the divergence this barrier exists to prevent.
+	t.Run("waits on an uncovered product however deep the tombstone sits", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 
-		// The uncovered split product sits above the bound, out of reach.
 		marker := f.appendElement(t, f.p, f.peerTicket())
 		linkAsSplitProduct(f.p, marker)
 
 		deepest := marker
-		for range maxHeldBackClimb + 2 {
+		for range 66 {
 			deepest = f.appendElement(t, deepest, f.editorTicket())
 		}
 
 		child := f.appendText(t, deepest, f.editorTicket())
 		child.remove(f.editorTicket())
+
+		assert.True(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
+	})
+
+	// Parent pointers are physical and index.MoveChild relocates them without
+	// an ancestor check, so the climb carries the same node set guard the
+	// descent does rather than a depth cap.
+	t.Run("terminates on a cyclic parent chain", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+
+		span := f.appendElement(t, f.p, f.editorTicket())
+		child := f.appendText(t, span, f.editorTicket())
+		child.remove(f.editorTicket())
+
+		// Close the loop by hand: MoveChild hangs on its own length update
+		// before it would ever build one.
+		f.p.Index.Parent = span.Index
 
 		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
 	})

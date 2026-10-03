@@ -1100,19 +1100,6 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
-// maxHeldBackClimb bounds PurgeHeldBack's ancestor climb. The climb runs once
-// per covered tombstone on every GC pass, under the document lock, over parent
-// pointers a peer controls — index.MoveChild relocates them without an
-// ancestor check, so the chain can be made cyclic as well as deep. A fixed
-// bound keeps a pass O(tombstones) with no per-tombstone allocation, and
-// doubles as the cycle guard the climb used to need a node set for.
-//
-// Past the bound the climb gives up and allows the purge. Of the two failure
-// directions that is the safe one: the barrier only sharpens an already-rare
-// §7.8 case on trees nested past this depth, while a hold that never lifts
-// grows the document forever.
-const maxHeldBackClimb = 64
-
 // PurgeHeldBack implements GCVectorBarrier. It keeps a tombstone linked while
 // an ancestor §7.8 could still descend from is outside vector.
 //
@@ -1129,21 +1116,71 @@ const maxHeldBackClimb = 64
 // tree garbage, since a min vector carries 0 for any actor some attached
 // client's vector lacks (time.MinVersionVector) and names no actor that has
 // detached.
+//
+// Two shapes hold a tombstone: an ancestor the walk could descend from, and
+// the tombstone's own place in a chain the walk reads (holdsBackChainSplice).
 func (t *Tree) PurgeHeldBack(child GCChild, vector time.VersionVector) bool {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil {
 		return false
 	}
 
-	parent := node.Index.Parent
-	for depth := 0; parent != nil && depth < maxHeldBackClimb; depth++ {
+	// The tombstone may itself be a link in a chain the walk reads, which the
+	// ancestor climb below cannot see.
+	if t.holdsBackChainSplice(node, vector) {
+		return true
+	}
+
+	// The climb follows parent pointers a peer controls — index.MoveChild
+	// relocates them without an ancestor check, so the chain can be made
+	// cyclic as well as deep. A node set bounds it by the number of distinct
+	// nodes it can reach, the same guard holdsKnownChild's descent uses. A
+	// fixed depth bound was tried first and dropped: it was asymmetric with
+	// that unbounded descent, so a tombstone nested deeper than the bound
+	// below an uncovered chain sibling was collected with no barrier at all,
+	// which is the divergence this barrier exists to prevent. What keeps a
+	// hold from lasting forever is the lamport floor in holdsBackPurge, not a
+	// depth cap.
+	var climbed nodeSet
+	for parent := node.Index.Parent; parent != nil && climbed.visit(parent.Value); parent = parent.Parent {
 		if holdsBackPurge(parent.Value, vector) {
 			return true
 		}
-		parent = parent.Parent
 	}
 
 	return false
+}
+
+// holdsBackChainSplice reports whether unlinking node would move §7.8's own
+// stopping point.
+//
+// orderSameBoundarySplit ends its walk at a removed chain member (tree.go's
+// `next.IsRemoved()` break), leaving the target at that member's predecessor.
+// Tree.Purge splices a purged node out of the chain — the predecessor's
+// InsNextID becomes the purged node's successor — so once the tombstone goes,
+// the same walk reads the successor instead and may advance one step further
+// than it does on a replica that has not collected yet. PurgeBarrierAt names
+// only the index sibling, never the chain successor, so nothing else covers
+// this.
+//
+// Hold the tombstone while that successor is a node the walk could land on and
+// is still outside the vector — the same question holdsBackPurge answers for
+// an ancestor. Once the successor is settled, every walk that can still arrive
+// breaks on it anyway, so splicing the tombstone out changes nothing.
+func (t *Tree) holdsBackChainSplice(node *TreeNode, vector time.VersionVector) bool {
+	// Purge only rewrites a predecessor's InsNextID when the node has both
+	// links; with either end missing the walk's stopping point cannot move.
+	if node.InsPrevID == nil || node.InsNextID == nil {
+		return false
+	}
+
+	// findFloorNode, matching how the walk itself resolves InsNextID.
+	next := t.findFloorNode(node.InsNextID)
+	if next == nil {
+		return false
+	}
+
+	return holdsBackPurge(next, vector)
 }
 
 // holdsBackPurge reports whether ancestor is a node orderSameBoundarySplit
@@ -1155,6 +1192,14 @@ func (t *Tree) PurgeHeldBack(child GCChild, vector time.VersionVector) bool {
 // knew. A node failing any of those is not a sibling that walk can land on, so
 // a tombstone below it is free to go.
 func holdsBackPurge(ancestor *TreeNode, vector time.VersionVector) bool {
+	// Nothing is collected against an empty vector (Root.collect's
+	// EqualToOrAfter on removedAt returns false first), and the floor below
+	// would read it as lamport 0. Answer "nothing held" rather than pin the
+	// whole document if a caller ever gets here with one.
+	if len(vector) == 0 {
+		return false
+	}
+
 	// Only SplitElement links a node into a chain, so a node outside every
 	// chain is never reached as `next` in orderSameBoundarySplit's walk.
 	if ancestor.InsPrevID == nil && ancestor.InsNextID == nil {
@@ -1174,19 +1219,54 @@ func holdsBackPurge(ancestor *TreeNode, vector time.VersionVector) bool {
 		return false
 	}
 
-	// An actor the collecting vector does not name at all is not one this
-	// collection is synced against: the server drops a client's entry only
-	// after it has detached, and a detaching client pushes before its entry
-	// goes (packs.PushPull), so nothing it made is still in flight. Reading
-	// an unnamed actor as uncovered — which is what VersionVector.
-	// EqualToOrAfter does — would instead pin every tombstone below such a
-	// node for the life of the document, and would let a forged node ID, whose
-	// actor no vector can ever name, pin one deliberately.
-	if _, named := vector.Get(createdAt.ActorID()); !named {
+	// A ticket at or below the smallest lamport the collecting vector carries
+	// is settled, whether or not the vector names its actor. §7.8 advances
+	// onto a sibling only when that sibling's ticket is After the incoming
+	// split's (orderSameBoundarySplit), and a split that can still arrive
+	// carries a lamport above this vector's entry for its own editor: the
+	// server records a client's vector only after storing what that client
+	// pushed, and a replica applies a reply's changes before collecting with
+	// its min vector (docs/design/garbage-collection.md). So the editor's
+	// entry — and with it the vector's minimum — is below any split still in
+	// flight, and no such split lands on a node this old.
+	//
+	// This floor, not the actor lookup it replaced, is what keeps a hold from
+	// lasting forever. An uncovered ancestor whose actor the vector never
+	// names again — a node created by a client that has since detached, or a
+	// node id forged on the wire — would otherwise pin every tombstone below
+	// it for the life of the document. Lamports are max-merged on apply, so
+	// every attached client's entry climbs past a given lamport once it syncs,
+	// and edit content is rejected on the way in when its lamport runs ahead
+	// of its own change (converter.fromTreeEdit), so no ticket can name a
+	// lamport the document will never reach.
+	//
+	// Treating an unnamed actor as settled outright was tried first and is
+	// wrong: it inverts EqualToOrAfter and disagrees with the §7.8 walk, which
+	// reads an actor its editor's vector does not name as unknown and walks
+	// on. A lagging editor can still be unaware of a chain sibling whose
+	// creator has detached.
+	if createdAt.Lamport() <= minLamport(vector) {
 		return false
 	}
 
 	return !vector.EqualToOrAfter(createdAt)
+}
+
+// minLamport returns the smallest lamport the vector carries, or 0 when it is
+// empty. A min version vector carries 0 for an actor some attached client's
+// vector lacks (time.MinVersionVector), so this is 0 whenever any attached
+// client is behind on an actor — the floor only lifts a hold once every
+// attached client has synced past the ticket in question.
+func minLamport(vector time.VersionVector) int64 {
+	var lowest int64
+	first := true
+	for _, lamport := range vector {
+		if first || lamport < lowest {
+			lowest, first = lamport, false
+		}
+	}
+
+	return lowest
 }
 
 func (t *Tree) Purge(child GCChild) error {
