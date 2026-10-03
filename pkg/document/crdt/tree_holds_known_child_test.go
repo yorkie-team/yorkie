@@ -30,9 +30,9 @@ import (
 // same-boundary split lands. These pin that answer directly: the end-to-end
 // suites reach it only through a split that happens to produce one shape.
 //
-// The merge-moved case is pinned as the known limitation it is -- a child a
-// concurrent merge relocated is counted like any other. See holdsKnownChild's
-// comment for why MergedAt is not a ticket this reader can trust, and
+// A child a merge relocated here is not evidence and is skipped with its
+// subtree; a cyclic parent/child graph is walked once per node rather than
+// forever. See holdsKnownChild's comment, and
 // docs/design/concurrent-merge-split.md for the shared rule.
 
 // knownChildFixture builds <r><p></p></r> and hands out tickets for the editor
@@ -102,24 +102,29 @@ func (f *knownChildFixture) appendElement(t *testing.T, parent *TreeNode, create
 	return child
 }
 
+// holds asks the §7.8 marker about node, with a descent set of its own.
+func (f *knownChildFixture) holds(node *TreeNode) bool {
+	return f.tree.holdsKnownChild(node, f.vv, &nodeSet{})
+}
+
 func TestTreeHoldsKnownChild(t *testing.T) {
 	t.Run("reports nothing for a childless node", func(t *testing.T) {
 		f := newKnownChildFixture(t)
-		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.False(t, f.holds(f.p))
 	})
 
 	t.Run("counts a child the editor knew", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 		f.appendText(t, f.p, f.editorTicket())
 
-		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.True(t, f.holds(f.p))
 	})
 
 	t.Run("ignores a child a peer inserted concurrently", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 		f.appendText(t, f.p, f.peerTicket())
 
-		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.False(t, f.holds(f.p))
 	})
 
 	// A multi-level split hides the marker one level down: the outer product
@@ -129,7 +134,7 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		span := f.appendElement(t, f.p, f.peerTicket())
 		f.appendText(t, span, f.editorTicket())
 
-		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.True(t, f.holds(f.p))
 	})
 
 	// The descent terminates on a node with nothing known anywhere below it,
@@ -141,7 +146,7 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		inner := f.appendElement(t, span, f.peerTicket())
 		f.appendText(t, inner, f.peerTicket())
 
-		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.False(t, f.holds(f.p))
 	})
 
 	// Counting tombstones is what keeps the answer the same whether or not
@@ -152,18 +157,14 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		child.remove(f.peerTicket())
 		require.True(t, child.IsRemoved())
 
-		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.True(t, f.holds(f.p))
 	})
 
-	// KNOWN LIMITATION, pinned rather than fixed: §6.1/§6.3 relocate children
-	// keeping their original createdAt, so a concurrent merge can hand an
-	// otherwise-empty same-boundary product a child the editor knew long after
-	// the split that produced it -- and the walk then stops at a node that
-	// never held the right half. MergedAt is not a ticket that can tell the
-	// two apart here (see holdsKnownChild), and the rule is replicated, so the
-	// answer stays "counted" until Go and yorkie-js-sdk move together against
-	// a reproducer.
-	t.Run("counts a child a concurrent merge moved in", func(t *testing.T) {
+	// §6.1/§6.3 relocate children keeping their original createdAt, so a
+	// concurrent merge can hand an otherwise-empty same-boundary product a
+	// child the editor knew long after the split that produced it. Whether it
+	// has arrived yet differs per replica, so it is not a marker.
+	t.Run("ignores a child a concurrent merge moved in", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 		child := f.appendText(t, f.p, f.editorTicket())
 		mergedAt := f.peerTicket()
@@ -172,18 +173,60 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		require.False(t, time.TicketKnown(f.vv, mergedAt),
 			"the merge has to be one the editor did not know, or there is nothing to skip")
 
-		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv),
-			"a merge-moved child counts like any other; see the comment above")
+		assert.False(t, f.holds(f.p),
+			"a merge put this child here; it never marked the right half")
 	})
 
-	// The same child, moved by a merge the editor did know. Both readings
-	// agree here, so this one pins the half of the rule that is not in doubt.
-	t.Run("counts a child a merge the editor knew moved in", func(t *testing.T) {
+	// MergedFrom is read as presence, with no ticket comparison: a merge the
+	// editor did know moves the child just the same, and skipping it only
+	// falls the walk back to the one that ran before this check existed.
+	t.Run("ignores a child a merge the editor knew moved in", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 		child := f.appendText(t, f.p, f.editorTicket())
 		child.MergedFrom = NewTreeNodeID(f.editorTicket(), 0)
 		child.MergedAt = f.editorTicket()
 
-		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv))
+		assert.False(t, f.holds(f.p))
+	})
+
+	// The skip covers what rode in under the moved child too: those arrived
+	// with the merge as well, and carry no MergedFrom of their own.
+	t.Run("ignores what a merge-moved child brought with it", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		span := f.appendElement(t, f.p, f.peerTicket())
+		span.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
+		f.appendText(t, span, f.editorTicket())
+
+		assert.False(t, f.holds(f.p))
+	})
+
+	// An empty vector reads as "knows everything" in time.TicketKnown, which
+	// would make every child a marker. §7.8 returns before it can get here,
+	// but the helper answers for itself.
+	t.Run("reports nothing for an empty version vector", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		f.appendText(t, f.p, f.editorTicket())
+
+		assert.False(t, f.tree.holdsKnownChild(f.p, time.VersionVector{}, &nodeSet{}))
+	})
+
+	// A parent/child cycle has no test here because it cannot be built:
+	// index.MoveChild has no ancestor check, but closing the loop through it
+	// hangs inside MoveChild's own ancestor length update, before this reader
+	// ever runs. The node set is insurance for a graph that arrives some other
+	// way -- the descent is over physical pointers, which this file elsewhere
+	// treats as peer-shaped (see insNextWalker).
+	//
+	// The descent budget is shared across one §7.8 chain walk, so a subtree
+	// already proven to hold nothing known is not walked a second time.
+	t.Run("does not descend the same subtree twice", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		span := f.appendElement(t, f.p, f.peerTicket())
+		f.appendText(t, span, f.peerTicket())
+
+		descended := &nodeSet{}
+		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
+		assert.Len(t, descended.seen, 2, "p and span; text children are not descended")
+		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
 	})
 }

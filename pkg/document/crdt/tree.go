@@ -2983,13 +2983,19 @@ type advanceOpts struct {
 // and — until DropSplitLinks strips it — operation contents), so a chain that
 // loops back on itself would spin the applying goroutine forever while it
 // holds the document lock. Every chain walk runs through one of these.
-type insNextWalker struct {
+type insNextWalker = nodeSet
+
+// nodeSet records the nodes a walk has already passed through, so a walk over
+// pointers a peer controls stays bounded by the number of distinct nodes it
+// can reach. Both the InsNextID chain walks (see insNextWalker) and the
+// parent/child descent in holdsKnownChild use one.
+type nodeSet struct {
 	seen map[*TreeNode]struct{}
 }
 
 // visit records node and reports whether this walk had not already passed
-// through it. A false result means the chain is cyclic; stop following it.
-func (w *insNextWalker) visit(node *TreeNode) bool {
+// through it. A false result means the walk has looped; stop following it.
+func (w *nodeSet) visit(node *TreeNode) bool {
 	if w.seen == nil {
 		w.seen = make(map[*TreeNode]struct{}, 4)
 	}
@@ -3144,6 +3150,12 @@ func (t *Tree) orderSameBoundarySplit(
 	target := parent
 	var walker insNextWalker
 	walker.visit(target)
+	// One descent budget for the whole chain walk, not one per step: a node
+	// already descended into held nothing known (a hit returns immediately and
+	// ends the walk), so re-descending it can only repeat work. Sharing it
+	// bounds the walk at one visit per reachable node instead of one subtree
+	// per chain step. See holdsKnownChild.
+	var descended nodeSet
 	for target.InsNextID != nil {
 		next := t.findFloorNode(target.InsNextID)
 		if next == nil || next.IsText() || next.Index.Parent == nil {
@@ -3194,7 +3206,7 @@ func (t *Tree) orderSameBoundarySplit(
 		// removal yet or not -- and so do deeper descendants, which is where a
 		// multi-level split puts it. See holdsKnownChild for what GC does to
 		// that answer.
-		if t.holdsKnownChild(next, versionVector) {
+		if t.holdsKnownChild(next, versionVector, &descended) {
 			break
 		}
 	}
@@ -3234,27 +3246,52 @@ func (t *Tree) orderSameBoundarySplit(
 // §7.5 advance, the §7.8 entry gate) predate this one; see
 // docs/design/concurrent-merge-split.md.
 //
-// Known limitation: a child a concurrent merge moved in is counted like any
-// other. §6.1/§6.3 relocate the right node's children into the left one keeping
-// their original createdAt, so a merge can hand an otherwise-empty
-// same-boundary product children the editor knew, long after the split that
-// produced it, and the marker then stops the walk at a node that never held the
-// right half. Skipping such a child needs a ticket saying when it arrived here,
-// and MergedAt is not one: mergeNodes stamps it only on a node's first
-// merge-move, it rides along onto split products through
-// TreeNode.Split/SplitElement/DeepCopy, and it is client-supplied on the wire
-// (fromTreeNode in api/converter/from_pb.go) with no findMergeNode validation
-// at this call site. This is also a replicated ordering rule, so it may only
-// move together with yorkie-js-sdk, against a reproducer neither repo has yet.
+// A child a merge moved here is not evidence either, and is skipped along with
+// everything below it. §6.1/§6.3 relocate the right node's children into the
+// left one keeping their original createdAt, so a merge can hand an
+// otherwise-empty same-boundary product children the editor knew long after the
+// split that produced it -- and whether it has done so yet differs per replica
+// while the merge is in flight, which is exactly the disagreement this rule
+// exists to remove. MergedFrom is the presence test, not MergedAt: it is
+// stamped on the moved child (mergeNodes), where Split/SplitElement/DeepCopy
+// copy only the *product's* own MergedFrom, and it needs no ticket comparison,
+// so a client-supplied or first-move-only value cannot be read as a later merge
+// than it was. The reading it does get wrong -- a child that carries MergedFrom
+// for another reason, e.g. content inserted into a merged-away parent
+// (intendedMergeParent) -- only clears the marker, which is the direction the
+// paragraph above shows is safe: the walk falls back to the one every replica
+// ran before this check existed.
 //
-// The descent keeps its own stack instead of recursing.
-func (t *Tree) holdsKnownChild(node *TreeNode, versionVector time.VersionVector) bool {
+// The descent keeps its own stack instead of recursing, and takes the caller's
+// node set so one chain walk visits each node at most once (see
+// orderSameBoundarySplit) however the parent/child pointers are shaped.
+func (t *Tree) holdsKnownChild(
+	node *TreeNode,
+	versionVector time.VersionVector,
+	descended *nodeSet,
+) bool {
+	// An empty vector reads as "knows everything" (time.TicketKnown), which
+	// would make every child a marker. The §7.8 entry gate returns before that
+	// can reach here; keep the helper honest on its own terms anyway.
+	if len(versionVector) == 0 {
+		return false
+	}
+
 	stack := []*TreeNode{node}
 	for len(stack) > 0 {
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
+		// Children are physical pointers index.MoveChild will relocate without
+		// an ancestor check, so the descent cannot assume it is acyclic.
+		if !descended.visit(current) {
+			continue
+		}
+
 		for _, child := range current.Children(true) {
+			if child.MergedFrom != nil {
+				continue
+			}
 			if time.TicketKnown(versionVector, child.id.CreatedAt) {
 				return true
 			}

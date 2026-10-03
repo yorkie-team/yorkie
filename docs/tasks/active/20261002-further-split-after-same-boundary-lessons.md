@@ -48,6 +48,20 @@
   split/insert/delete fuzz went from 1164 to 1174 diverging seeds of 3000,
   twelve of them new. A removal the editor knew still marks where the right
   half was.
+- **Presence beats a ticket when the ticket cannot be trusted.** The
+  `MergedAt` skip failed because it compared a ticket that is stamped on a
+  first move only, copied onto products, and client-supplied. Reading
+  `MergedFrom` as mere *presence* needs none of that: it is stamped on the
+  moved child (not the product), and every way it is wrong clears the marker,
+  which drops the walk back to the one `main` runs. A rule whose errors all
+  point at the previous behaviour is safe to change without a reproducer; one
+  that can invent a new stop point is not.
+- **One budget for a walk, not one per step.** `holdsKnownChild` ran a fresh
+  subtree descent per chain node. Sharing a single visited set across the
+  chain walk closed three findings at once: the per-step amplification, the
+  missing cycle guard, and the repeated work — and is sound only because a
+  positive answer ends the walk, so the set can only ever cache "nothing
+  known here".
 - **Measure against `main` before arguing.** A GC-differential fuzz (three
   editing replicas without GC; two observers fed the same change log in
   order, one collecting with the min version vector after each sync)

@@ -486,23 +486,28 @@ text is still a same-boundary split to this editor, so the walk goes on.
 It descends because an element split product is minted with a fresh
 ticket while a text split keeps `createdAt`: at a multi-level split the
 outer right-half product holds one unknown `<span>` and the known text
-sits below it.
+sits below it. The descent is iterative and shares one visited set with
+the whole chain walk: a subtree already shown to hold nothing known is
+never re-entered (a hit ends the walk), so the walk costs one visit per
+reachable node rather than one subtree per chain step, and a cyclic
+parent/child graph terminates it the way `insNextWalker` terminates a
+cyclic chain.
 
-Known limitation: a child a concurrent merge moved in is counted like
-any other. §6.1/§6.3 relocate the right node's children into the left
-one keeping their original `createdAt`, so a merge can give an
+A child a merge moved in is not a marker, and is skipped with its
+subtree. §6.1/§6.3 relocate the right node's children into the left one
+keeping their original `createdAt`, so a merge can give an
 otherwise-empty same-boundary product children the editor knew long
-after the split that produced it, and the marker then stops the walk at
-a node that never held the right half. Skipping such a child needs a
-ticket saying when it arrived there, and `MergedAt` is not one:
-`mergeNodes` stamps it on a node's *first* merge-move only, so it is
-stale after a second; `TreeNode.Split`, `SplitElement` and `DeepCopy`
-copy it onto products no merge relocated; and it reaches this reader
-client-supplied, since `fromTreeNode` decodes `merged_from`/`merged_at`
-for every node and the element-payload path preserves both. This is
-also a replicated ordering rule, so it moves in Go and
-yorkie-js-sdk together, against a reproducer — a merge racing two
-same-boundary splits across three replicas — that neither repo has yet.
+after the split that produced it — and whether it has done so yet
+differs per replica while the merge is in flight, which is the
+disagreement this rule exists to remove. The test is the *presence* of
+`MergedFrom`, not a comparison against `MergedAt`: `mergeNodes` stamps
+`MergedFrom` on the moved child, while `TreeNode.Split`, `SplitElement`
+and `DeepCopy` copy only the product's own, and presence needs no ticket
+to be trustworthy, so a first-move-only or client-supplied value cannot
+be read as a later merge than it was. What it over-skips — a child
+carrying `MergedFrom` for another reason, e.g. content inserted into a
+merged-away parent (`intendedMergeParent`) — only clears the marker, and
+a cleared marker is the direction the paragraph below shows is safe.
 
 Counting tombstones keeps the answer independent of whether a replica
 has applied a concurrent removal yet, but GC can unlink a tombstone the
