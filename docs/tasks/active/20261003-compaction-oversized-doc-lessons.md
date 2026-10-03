@@ -21,3 +21,16 @@
   other failures (network, stepdown, the `server_seq` conflict check after
   the purge); an oversized document is rebuilt and rejected every
   housekeeping cycle.
+- Round 2 (`/code-review high` on #2108, after the PR opened; 8 findings,
+  none blocking). Fixed: `server_seq` checked before the purge, as the memory
+  DB already does (new `RunCompactChangeInfosTest`, Red on mongo: 3 changes
+  became 1); the integration test counts changes straight from MongoDB
+  instead of through `FindChangeInfosBetweenServerSeqs`, which a cache can
+  answer (verified Red against main's `client.go`: 3 → 0); the single-change
+  loop is an `if`; the log names its size as YSON; the todo opens with its
+  `**Created**` line. Deferred, as before: non-atomic purge/insert, the
+  oversized document retried every cycle. Disputed: a size check on the push
+  path (`CreateChangeInfos`). A pushed pack is bounded by `maxRequestBytes`
+  (16 MiB, server/rpc/server.go) and a change's record carries little beyond
+  its operations, so a single pushed change cannot reach the limit the way a
+  whole-document fold does; out of scope here.

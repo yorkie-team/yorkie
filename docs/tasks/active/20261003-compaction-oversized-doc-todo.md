@@ -1,6 +1,6 @@
-# Compacting a document past MongoDB's record limit
-
 **Created**: 2026-10-03
+
+# Compacting a document past MongoDB's record limit
 
 ## Problem
 
@@ -43,6 +43,9 @@ hits the limit.
 - [x] Drop the root from the `[CD]` error log; log its size
 - [x] Bound the CI bench job with `timeout-minutes: 60`
 - [x] `make lint`, `go test ./...`, compaction integration tests
+- [x] Review follow-up: check `server_seq` before the purge (shared
+      `RunCompactChangeInfosTest`, memory and mongo), count stored changes
+      in the integration test straight from MongoDB
 
 ## Out of scope
 
