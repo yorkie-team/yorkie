@@ -61,3 +61,14 @@ document already over quota — the push that would delete content is refused fo
 the reason the push that added it was. The doc exists so that decision is made
 once, in the open; making it unilaterally inside a compaction fix is the
 re-litigation it was written to stop.
+
+A fourth round returned the same finding, and three rebuttals in a row say the
+answer "out of scope here" was incomplete: the gap had no owner, so every review
+of anything near document accounting inherited it. It has one now.
+`docs/tasks/active/20261003-server-side-document-size-gate-todo.md` carries the
+blocking decision — which of the design doc's three refusal semantics — and the
+work that follows from it, and `docs/design/document-size-limit.md` points at
+that task. The finding stays open against it, not against this branch. The
+design doc's references into `yorkie_server.go`, `client.go` and `document.go`
+had drifted by a few dozen lines, which made the write-up read as stale; they
+are corrected.

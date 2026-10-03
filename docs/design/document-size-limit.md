@@ -16,10 +16,10 @@ target-version: 0.7.24
 `MaxSizePerDocument` is a per-project quota on a document's size
 (`server/backend/database/project_info.go:135`, default 10 MiB). It is sent to
 the client in the attach response
-(`server/rpc/yorkie_server.go:353` → `client/client.go:518`) and enforced there,
+(`server/rpc/yorkie_server.go:360` → `client/client.go:603`) and enforced there,
 and only there: `Document.Update` compares the clone's
 `resource.DocSize.Total()` against `MaxSizeLimit` and refuses the local update
-with `ErrDocumentSizeExceedsLimit` (`pkg/document/document.go:258`).
+with `ErrDocumentSizeExceedsLimit` (`pkg/document/document.go:308`).
 
 The server never re-checks it. `pushPack` filters already-pushed changes,
 validates clientSeq continuity, serverSeq ordering and epoch, and hands the
@@ -109,7 +109,7 @@ content is refused for the same reason the push that added it was.
 
 The deadlock is not, however, a semantic the server would be inventing. The
 client's own gate compares the post-update `Total()`
-(`pkg/document/document.go:257-258`), so a stock SDK *already* refuses a
+(`pkg/document/document.go:307-308`), so a stock SDK *already* refuses a
 deletion on an over-quota document with `ErrDocumentSizeExceedsLimit`. An
 honest client is therefore already stuck in exactly the way a blanket
 server-side refusal would get a dishonest one stuck. What the server gate adds
@@ -158,7 +158,13 @@ Any acceptable design therefore has to answer this, e.g.:
 
 ## Tasks
 
-Track execution plans in `docs/tasks/active/` as separate task documents. The
-accounting half — making the running `DocSize` accumulator agree with a rebuild,
+The gate itself is owned by
+`docs/tasks/active/20261003-server-side-document-size-gate-todo.md`: it carries
+the open decision (which refusal semantic) and the work that follows from it.
+Until that task lands, the quota stays advisory against anything but a stock
+SDK, and this document is where the trade-offs are argued — not a review of a
+change that happens to touch document accounting.
+
+The accounting half — making the running `DocSize` accumulator agree with a rebuild,
 so that whatever number a gate reads means the same thing on both sides — is
 tracked separately and is a prerequisite for, not part of, this proposal.
