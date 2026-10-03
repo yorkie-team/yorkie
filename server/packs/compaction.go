@@ -117,9 +117,10 @@ func Compact(
 	); err != nil {
 		// The root's size, not the root: a document too large to compact is
 		// exactly the one whose content would turn this into a multi-megabyte
-		// log line.
+		// log line. This is the YSON text; the stored record's size, when that
+		// is what failed, is in err.
 		logging.DefaultLogger().Errorf(
-			"[CD] Document %s failed to compact: %v (root: %d bytes)",
+			"[CD] Document %s failed to compact: %v (YSON root: %d bytes)",
 			docInfo.ID, err, len(prevMarshalled),
 		)
 		return err
