@@ -28,6 +28,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
@@ -52,6 +53,13 @@ type watchInitServer struct {
 	// release holds the handler open after that message, keeping the stream
 	// established but silent.
 	release chan struct{}
+	// attachChanges is carried by the AttachDocument response, so a test can
+	// drive attach's ApplyChangePack with real remote changes instead of the
+	// empty pack the default handler answers with.
+	attachChanges []*api.Change
+	// attachRemoved marks that response pack removed, which is how the server
+	// tells an attacher the document is already gone.
+	attachRemoved bool
 }
 
 func (s *watchInitServer) ActivateClient(
@@ -73,6 +81,8 @@ func (s *watchInitServer) AttachDocument(
 			DocumentKey:   req.Msg.ChangePack.DocumentKey,
 			Checkpoint:    &api.Checkpoint{ServerSeq: 1, ClientSeq: 1},
 			VersionVector: req.Msg.ChangePack.VersionVector,
+			Changes:       s.attachChanges,
+			IsRemoved:     s.attachRemoved,
 		},
 	}), nil
 }
@@ -113,7 +123,14 @@ func (s *watchInitServer) Watch(
 func dialWatchInitServer(t *testing.T, first *api.WatchResponse) (*client.Client, chan struct{}) {
 	t.Helper()
 
-	srv := &watchInitServer{firstResponse: first, release: make(chan struct{})}
+	return dialAttachPackServer(t, &watchInitServer{firstResponse: first, release: make(chan struct{})})
+}
+
+// dialAttachPackServer starts the given server and returns an activated client
+// pointed at it, so a test can hand AttachDocument a response pack of its own.
+func dialAttachPackServer(t *testing.T, srv *watchInitServer) (*client.Client, chan struct{}) {
+	t.Helper()
+
 	mux := http.NewServeMux()
 	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
 	httpServer := httptest.NewServer(mux)
@@ -414,7 +431,16 @@ func TestWatchLoopReconnectKeepsDrainingAndDelivering(t *testing.T) {
 func newPresentPeer(t *testing.T, docKey string) *document.Document {
 	t.Helper()
 
-	actor, err := time.ActorIDFromHex("000000000000000000000009")
+	return newPresentPeerWithActor(t, docKey, "000000000000000000000009")
+}
+
+// newPresentPeerWithActor is newPresentPeer for a caller that needs several
+// distinct peers on one document, so each presence change in a pack reconciles
+// to an event of its own.
+func newPresentPeerWithActor(t *testing.T, docKey, actorHex string) *document.Document {
+	t.Helper()
+
+	actor, err := time.ActorIDFromHex(actorHex)
 	assert.NoError(t, err)
 
 	peer := document.New(key.Key(docKey))
@@ -436,6 +462,188 @@ func presencePackFor(from, to *document.Document) *change.Pack {
 	return &copied
 }
 
+// wireChangesOf converts a peer's pending changes into the wire form an
+// AttachDocument response carries.
+func wireChangesOf(t *testing.T, peer *document.Document) []*api.Change {
+	t.Helper()
+
+	pack, err := converter.ToChangePack(peer.CreateChangePack())
+	assert.NoError(t, err)
+	return pack.Changes
+}
+
+// orphanChange returns a change whose operation targets an object created by a
+// change the receiver never gets, so applying it fails: it is how a test makes
+// attach's ApplyChangePack return an error after earlier changes in the same
+// pack have already been applied.
+func orphanChange(t *testing.T, docKey string) *api.Change {
+	t.Helper()
+
+	orphan := document.New(key.Key(docKey))
+	actor, err := time.ActorIDFromHex("00000000000000000000000b")
+	assert.NoError(t, err)
+	orphan.SetActor(actor)
+	assert.NoError(t, orphan.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetNewObject("nested")
+		return nil
+	}))
+	assert.NoError(t, orphan.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.GetObject("nested").SetString("k", "v")
+		return nil
+	}))
+
+	changes := wireChangesOf(t, orphan)
+	return changes[len(changes)-1]
+}
+
+// attachPackEvents counts the watched events an attach response pack carrying
+// the given peers' presence produces on a document that already has them
+// online.
+const attachPackEvents = 2
+
+// newAttachPackDoc builds the observer document for an attach whose response
+// pack carries the given peers' presence, with both peers already online so
+// each presence change in that pack reconciles to a watched event.
+func newAttachPackDoc(docKey string, peers ...*document.Document) *document.Document {
+	doc := document.New(key.Key(docKey))
+	for _, peer := range peers {
+		doc.AddOnlineClientAndReconcile(peer.ActorID().String())
+	}
+	return doc
+}
+
+// TestAttachStartsPumpBeforeApplyingPack pins the order inside attachDocument:
+// the delivery pipeline comes up before the attach response's ChangePack is
+// applied. ApplyChangePack publishes one event per applied remote change onto
+// the document's capacity-one event channel, under the document's event mutex,
+// and that send has no cancellation path -- so a pack carrying two or more
+// events applied with no pump draining them wedges the attaching goroutine for
+// good, holding the event mutex against every other publisher.
+func TestAttachStartsPumpBeforeApplyingPack(t *testing.T) {
+	docKey := "attach-remote-pack"
+	first := newPresentPeerWithActor(t, docKey, "000000000000000000000009")
+	second := newPresentPeerWithActor(t, docKey, "00000000000000000000000a")
+
+	cli, _ := dialAttachPackServer(t, &watchInitServer{
+		firstResponse: &api.WatchResponse{
+			Body: &api.WatchResponse_Initialization{
+				Initialization: &api.WatchInitialization{},
+			},
+		},
+		release:       make(chan struct{}),
+		attachChanges: append(wireChangesOf(t, first), wireChangesOf(t, second)...),
+	})
+
+	doc := newAttachPackDoc(docKey, first, second)
+
+	// Off-goroutine so a wedged Attach shows up as this timeout rather than as
+	// a hung test binary.
+	attached := make(chan error, 1)
+	go func() { attached <- cli.Attach(context.Background(), doc, client.WithRealtimeSync()) }()
+	select {
+	case err := <-attached:
+		assert.NoError(t, err)
+	case <-gotime.After(10 * gotime.Second):
+		t.Fatal("Attach wedged applying an attach pack with no event pump draining the document")
+	}
+
+	// Nothing the pack produced is lost on the way: the pump that drained them
+	// is the attachment's, so the events are waiting on the consumer's channel.
+	rch, _, err := cli.WatchStream(doc)
+	assert.NoError(t, err)
+	for i := range attachPackEvents {
+		select {
+		case response, ok := <-rch:
+			assert.True(t, ok, "the stream closed before attach pack event %d", i)
+			assert.NoError(t, response.Err)
+			assert.Equal(t, client.DocumentWatched, response.Type)
+		case <-gotime.After(5 * gotime.Second):
+			t.Fatalf("attach pack event %d never reached the stream", i)
+		}
+	}
+}
+
+// TestAttachStopsPipelineOnFailedPaths pins the two ways attachDocument leaves
+// without ever publishing the attachment: the response pack fails to apply, and
+// the response reports the document already removed. The pipeline is up by then
+// -- it has to be, so the pack has a consumer -- and nothing else holds the
+// attachment, so attachDocument must retire it itself. A pipeline left running
+// would keep a pump draining a document this client no longer owns, and a later
+// attach of the same document would then race two pumps for its events.
+func TestAttachStopsPipelineOnFailedPaths(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		removed bool
+		broken  bool
+		// online says whether the peers are online before the attach, which is
+		// what makes the pack's presence changes reconcile to events.
+		online bool
+	}{
+		{name: "apply-failure", broken: true},
+		{name: "already-removed", removed: true, online: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			docKey := "attach-failed-path-" + tc.name
+			first := newPresentPeerWithActor(t, docKey, "000000000000000000000009")
+			second := newPresentPeerWithActor(t, docKey, "00000000000000000000000a")
+
+			changes := append(wireChangesOf(t, first), wireChangesOf(t, second)...)
+			if tc.broken {
+				changes = append(changes, orphanChange(t, docKey))
+			}
+			cli, _ := dialAttachPackServer(t, &watchInitServer{
+				firstResponse: &api.WatchResponse{
+					Body: &api.WatchResponse_Initialization{
+						Initialization: &api.WatchInitialization{},
+					},
+				},
+				release:       make(chan struct{}),
+				attachChanges: changes,
+				attachRemoved: tc.removed,
+			})
+
+			var doc *document.Document
+			if tc.online {
+				doc = newAttachPackDoc(docKey, first, second)
+			} else {
+				doc = document.New(key.Key(docKey))
+			}
+
+			attached := make(chan error, 1)
+			go func() { attached <- cli.Attach(context.Background(), doc, client.WithRealtimeSync()) }()
+			select {
+			case err := <-attached:
+				if tc.broken {
+					assert.Error(t, err, "a pack that cannot be applied must surface its error")
+				} else {
+					assert.NoError(t, err)
+					assert.Equal(t, attachable.StatusRemoved, doc.Status())
+				}
+			case <-gotime.After(10 * gotime.Second):
+				t.Fatal("Attach wedged on a path that never publishes the attachment")
+			}
+
+			// No attachment was published, so there is nothing to watch.
+			_, _, watchErr := cli.WatchStream(doc)
+			assert.ErrorIs(t, watchErr, client.ErrNotAttached)
+
+			// And the pipeline is gone with it: the document's capacity-one
+			// event channel has no consumer, so the second emission parks.
+			// Both peers carry presence by now -- the pack applied theirs
+			// before it failed -- so each reconcile below is one event.
+			assertNoConsumer(t, "the retired pipeline", func() {
+				if tc.online {
+					doc.RemoveOnlineClientAndReconcile(first.ActorID().String())
+					doc.RemoveOnlineClientAndReconcile(second.ActorID().String())
+					return
+				}
+				doc.AddOnlineClientAndReconcile(first.ActorID().String())
+				doc.AddOnlineClientAndReconcile(second.ActorID().String())
+			})
+		})
+	}
+}
+
 // assertPublishes fails the test if the given emission does not complete
 // promptly, which is what a document event channel with no consumer looks
 // like from the publisher's side.
@@ -451,5 +659,26 @@ func assertPublishes(t *testing.T, name string, emit func()) {
 	case <-done:
 	case <-gotime.After(5 * gotime.Second):
 		t.Fatalf("%s blocked: no consumer on the document event channel", name)
+	}
+}
+
+// assertNoConsumer is the inverse of assertPublishes: it fails the test unless
+// the given emission -- which must produce more events than the document's
+// channel capacity of one -- parks, which is how a retired pipeline looks from
+// the publisher's side. The emitting goroutine stays parked for the rest of the
+// binary, which is harmless because the document it holds is test-local and no
+// other goroutine publishes on it.
+func assertNoConsumer(t *testing.T, name string, emit func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		emit()
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatalf("%s still drains the document event channel", name)
+	case <-gotime.After(500 * gotime.Millisecond):
 	}
 }

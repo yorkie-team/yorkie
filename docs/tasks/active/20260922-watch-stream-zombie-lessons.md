@@ -214,3 +214,32 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
     carrying two or more events would wedge `Attach` on the capacity-one event
     channel. Ordering fixed in one place is not an invariant until every
     publisher in the function is behind it.
+
+## Round 4 — test adequacy
+
+The panel accepted the delta's behavior but found its coverage one-sided: the
+attach reordering, the `stopWatchPipeline` cleanups on `attachDocument`'s two
+early exits, and `finishDeactivation`'s retirement were all argued for in
+comments and exercised by nothing.
+
+- `watchInitServer` now carries the `AttachDocument` response pack
+  (`attachChanges`, `attachRemoved`), so a test can drive `attachDocument`'s
+  `ApplyChangePack` with real remote changes instead of the empty pack the
+  fixtures had answered with since the file was written. Every attach test in
+  the package had been applying nothing, which is exactly why the deadlock the
+  reordering fixes was invisible.
+- `TestAttachStartsPumpBeforeApplyingPack` and
+  `TestAttachStopsPipelineOnFailedPaths` both fail against the pre-fix ordering
+  and against the cleanups removed, so they are reproducers rather than
+  descriptions.
+- *A post-condition test is not a branch test, and saying so is cheaper than
+  pretending otherwise.* `finishDeactivation`'s retirement loop cannot be
+  reached with a live pipeline today — every caller has already been through
+  `Deactivate`'s own loop — so `TestCloseRetiresTheDeliveryPipeline` pins the
+  state it guarantees and the comment says the loop is defensive. Writing the
+  test as if it covered the branch would have left the next reader believing a
+  guard was exercised when it never runs.
+- *Asserting a wedge needs its own helper.* `assertNoConsumer` is the inverse of
+  `assertPublishes`: a retired pipeline is only observable as a publisher that
+  parks on the capacity-one channel, so the test emits two events and requires
+  the second not to complete.

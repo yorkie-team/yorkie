@@ -376,6 +376,179 @@ func TestCloseEscapesPermanentDeactivateFailure(t *testing.T) {
 	assert.NoError(t, cli.Activate(ctx))
 	assert.True(t, cli.IsActive())
 	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+
+	// Three attempts reached the server and none of them succeeded: the two
+	// explicit retries above and Close's own. Close finishes the local half
+	// itself rather than retrying a fourth time.
+	assert.Equal(t, int32(3), srv.deactivates.Load())
+}
+
+// TestCloseRetiresTheDeliveryPipeline pins the post-condition finishDeactivation
+// exists for: once Close has given up on a DeactivateClient that will never
+// succeed, no attachment is left registered and nothing is left draining the
+// document. A pump that outlived the deactivation would keep consuming events
+// for a session that is gone, and would race the pump of the next attach of the
+// same document.
+//
+// The retirement loop inside finishDeactivation is defensive -- every path that
+// reaches it today has already been through Deactivate's own loop, so the
+// stopWatchPipeline calls are idempotent no-ops -- but the state it guarantees
+// is what this asserts.
+func TestCloseRetiresTheDeliveryPipeline(t *testing.T) {
+	docKey := "close-retires-pipeline"
+	first := newPresentPeerWithActor(t, docKey, "000000000000000000000009")
+	second := newPresentPeerWithActor(t, docKey, "00000000000000000000000a")
+
+	srv := &alwaysFailingDeactivateServer{watchInitServer: &watchInitServer{
+		firstResponse: &api.WatchResponse{
+			Body: &api.WatchResponse_Initialization{
+				Initialization: &api.WatchInitialization{},
+			},
+		},
+		release:       make(chan struct{}),
+		attachChanges: append(wireChangesOf(t, first), wireChangesOf(t, second)...),
+	}}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+
+	ctx := context.Background()
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	// Both peers are online before the attach, so the two presence changes the
+	// attach pack carries reconcile to two watched events -- more than the
+	// document's channel capacity of one, which is what gives the emission
+	// below something to park on.
+	doc := newAttachPackDoc(docKey, first, second)
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- cli.Close() }()
+	select {
+	case err := <-closeDone:
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err),
+			"the failing RPC's own error must reach the caller")
+	case <-time.After(10 * time.Second):
+		t.Fatal("close after a permanent deactivate failure did not return")
+	}
+	assert.Equal(t, int32(1), srv.deactivates.Load(),
+		"Close must attempt the server-side deactivation exactly once")
+
+	assert.False(t, cli.IsActive())
+	assert.Equal(t, document.StatusDetached, doc.Status())
+	_, _, watchErr := cli.WatchStream(doc)
+	assert.ErrorIs(t, watchErr, client.ErrNotAttached)
+	assertNoConsumer(t, "the pipeline Close retired", func() {
+		doc.RemoveOnlineClientAndReconcile(first.ActorID().String())
+		doc.RemoveOnlineClientAndReconcile(second.ActorID().String())
+	})
+}
+
+// blockingFailDeactivateServer holds the first DeactivateClient open and then
+// fails it, serving every later one, so a Close whose own deactivation failed
+// can be made to race a Deactivate that succeeds.
+type blockingFailDeactivateServer struct {
+	*watchInitServer
+	deactivates atomic.Int32
+
+	entered chan struct{}
+	finish  chan struct{}
+}
+
+func (s *blockingFailDeactivateServer) DeactivateClient(
+	_ context.Context,
+	_ *connect.Request[api.DeactivateClientRequest],
+) (*connect.Response[api.DeactivateClientResponse], error) {
+	if s.deactivates.Add(1) == 1 {
+		select {
+		case s.entered <- struct{}{}:
+		default:
+		}
+		<-s.finish
+
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("deactivate rejected"))
+	}
+
+	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+}
+
+// TestCloseFinishesDeactivationOnceUnderARace pins that finishDeactivation
+// re-reads the status under the same lock Deactivate uses. Close's own
+// Deactivate fails here, so it goes on to finish the local half -- but a
+// Deactivate parked on that lock behind it may land first and succeed, having
+// already done everything finishDeactivation would do. Whichever order the two
+// take, the client ends deactivated exactly once and is reusable.
+func TestCloseFinishesDeactivationOnceUnderARace(t *testing.T) {
+	srv := &blockingFailDeactivateServer{
+		watchInitServer: &watchInitServer{
+			firstResponse: &api.WatchResponse{
+				Body: &api.WatchResponse_Initialization{
+					Initialization: &api.WatchInitialization{},
+				},
+			},
+			release: make(chan struct{}),
+		},
+		entered: make(chan struct{}, 1),
+		finish:  make(chan struct{}),
+	}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+	releaseDeactivate := sync.OnceFunc(func() { close(srv.finish) })
+	t.Cleanup(releaseDeactivate)
+
+	ctx := context.Background()
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	doc := document.New(key.Key("close-racing-deactivate"))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- cli.Close() }()
+	select {
+	case <-srv.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("close did not reach the server")
+	}
+
+	// Queued behind Close's deactivation, so it takes the lock the moment that
+	// one fails -- the window finishDeactivation guards against.
+	deactivateDone := make(chan error, 1)
+	go func() { deactivateDone <- cli.Deactivate(ctx) }()
+
+	releaseDeactivate()
+	select {
+	case err := <-closeDone:
+		assert.Error(t, err, "Close must still report the failure it saw")
+	case <-time.After(10 * time.Second):
+		t.Fatal("close did not finish")
+	}
+	select {
+	case err := <-deactivateDone:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the racing deactivate did not finish")
+	}
+
+	assert.False(t, cli.IsActive())
+	assert.Equal(t, document.StatusDetached, doc.Status())
+	// Deactivated, not merely deactivating: the latter answers ErrDeactivating
+	// however often Activate is retried.
+	assert.NoError(t, cli.Activate(ctx))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
 }
 
 // TestConcurrentDeactivateDoesNotReopenTheWindow pins that two overlapping
