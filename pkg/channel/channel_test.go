@@ -18,6 +18,7 @@ package channel_test
 
 import (
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -146,5 +147,63 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 		firstKeyPath, err = channel.FirstKeyPath(key.Key("room-1.section-1.user-1"))
 		assert.NoError(t, err)
 		assert.Equal(t, "room-1", firstKeyPath)
+	})
+}
+
+func TestChannelBroadcastServing(t *testing.T) {
+	t.Run("unserviced channel does not block test", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+
+		done := make(chan error, 1)
+		go func() { done <- ch.Broadcast("topic", "payload") }()
+
+		select {
+		case err := <-done:
+			assert.ErrorIs(t, err, channel.ErrBroadcastUnavailable)
+		case <-gotime.After(3 * gotime.Second):
+			t.Fatal("Broadcast blocked with no servicer")
+		}
+	})
+
+	t.Run("retired servicer releases a waiting broadcast test", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+
+		// The servicer takes the request and then retires without answering,
+		// which is what cancelling the attachment's watch context does.
+		ch.StartBroadcastServing()
+		stop := make(chan struct{})
+		go func() {
+			<-ch.BroadcastRequests()
+			<-stop
+			ch.StopBroadcastServing()
+		}()
+
+		done := make(chan error, 1)
+		go func() { done <- ch.Broadcast("topic", "payload") }()
+
+		close(stop)
+		select {
+		case err := <-done:
+			assert.ErrorIs(t, err, channel.ErrBroadcastUnavailable)
+		case <-gotime.After(3 * gotime.Second):
+			t.Fatal("Broadcast blocked after its servicer retired")
+		}
+	})
+
+	t.Run("live servicer answers broadcast test", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+
+		ch.StartBroadcastServing()
+		defer ch.StopBroadcastServing()
+		go func() {
+			r := <-ch.BroadcastRequests()
+			assert.Equal(t, "topic", r.Topic)
+			ch.BroadcastResponses() <- nil
+		}()
+
+		assert.NoError(t, ch.Broadcast("topic", "payload"))
 	})
 }

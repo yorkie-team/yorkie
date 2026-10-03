@@ -133,7 +133,14 @@ type Client struct {
 	logger      *zap.Logger
 	interceptor *AuthInterceptor
 
-	id  time.ActorID
+	// id is the actor ID the server handed back to Activate. Activate writes it
+	// on the caller's goroutine while requests already in flight on other
+	// goroutines read it -- an Attach that straddles a Deactivate and a new
+	// Activate is exactly that, and is the case the generation counter below
+	// guards -- so it is published atomically rather than as a plain field.
+	// loadID reads it; its zero value is the zero ActorID.
+	id atomic.Pointer[time.ActorID]
+
 	key string
 
 	// status is written by Activate and Deactivate on the caller's goroutine
@@ -375,7 +382,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
-	c.id = clientID
+	c.id.Store(&clientID)
 	c.generation.Add(1)
 	c.storeStatus(statusActivated)
 
@@ -410,7 +417,7 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 	_, err := c.client.DeactivateClient(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
-			ClientId:    c.id.String(),
+			ClientId:    c.loadID().String(),
 			Synchronous: !deactiveOpts.Asynchronous,
 		}), c.options.APIKey, c.key))
 	if err != nil {
@@ -703,7 +710,7 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	}
 	defer c.endAttach(r.Key())
 
-	r.SetActor(c.id)
+	r.SetActor(c.loadID())
 
 	if r.Type() == attachable.TypeDocument {
 		d, ok := r.(*document.Document)
@@ -886,7 +893,7 @@ func (c *Client) attachDocument(
 	res, err := c.client.AttachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:        c.id.String(),
+			ClientId:        c.loadID().String(),
 			ChangePack:      pbChangePack,
 			SchemaKey:       opts.Schema,
 			DisableGc:       opts.DisableGC,
@@ -1093,7 +1100,7 @@ func (c *Client) detachDocument(
 	res, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			DocumentId: attachment.resourceID.String(),
 			ChangePack: pbChangePack,
 		}), c.options.APIKey, d.Key().String()))
@@ -1127,7 +1134,7 @@ func (c *Client) attachChannel(
 	res, err := c.client.AttachChannel(
 		ctx,
 		withShardKey(connect.NewRequest(&api.AttachChannelRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			ChannelKey: ch.Key().String(),
 		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
@@ -1179,7 +1186,7 @@ func (c *Client) refreshChannel(ctx context.Context, attachment *Attachment, ch 
 	res, err := c.client.RefreshChannel(
 		ctx,
 		withShardKey(connect.NewRequest(&api.RefreshChannelRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			ChannelKey: ch.Key().String(),
 			SessionId:  attachment.resourceID.String(),
 		}), c.options.APIKey, ch.FirstKeyPath()))
@@ -1200,7 +1207,7 @@ func (c *Client) detachChannel(ctx context.Context, attachment *Attachment, ch *
 	_, err := c.client.DetachChannel(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DetachChannelRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			ChannelKey: ch.Key().String(),
 			SessionId:  attachment.resourceID.String(),
 		}), c.options.APIKey, ch.FirstKeyPath()))
@@ -1292,12 +1299,24 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 		cancel()
 	}
 
-	// Start goroutine to handle broadcast requests
+	// Start goroutine to handle broadcast requests. Channel.Broadcast waits for
+	// this goroutine's answer, and this goroutine ends with watchCtx -- which
+	// Detach and Deactivate cancel -- so the channel has to be told when it is
+	// running and when it is gone; otherwise a Broadcast issued after one of
+	// those teardowns would block forever.
+	ch.StartBroadcastServing()
 	go func() {
+		defer ch.StopBroadcastServing()
+
 		for {
 			select {
 			case r := <-ch.BroadcastRequests():
-				ch.BroadcastResponses() <- c.broadcast(ctx, ch, r.Topic, r.Payload)
+				err := c.broadcast(ctx, ch, r.Topic, r.Payload)
+				select {
+				case ch.BroadcastResponses() <- err:
+				case <-watchCtx.Done():
+					return
+				}
 			case <-watchCtx.Done():
 				return
 			}
@@ -1315,7 +1334,7 @@ func (c *Client) openChannelWatch(
 	return c.client.Watch(
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchRequest{
-			ClientId: c.id.String(),
+			ClientId: c.loadID().String(),
 			Resources: []*api.ResourceDescriptor{{
 				Resource: &api.ResourceDescriptor_Channel{
 					Channel: &api.ChannelDescriptor{
@@ -1563,7 +1582,7 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 	stream, err := c.client.Watch(
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchRequest{
-			ClientId: c.id.String(),
+			ClientId: c.loadID().String(),
 			Resources: []*api.ResourceDescriptor{{
 				Resource: &api.ResourceDescriptor_Document{
 					Document: &api.DocumentDescriptor{
@@ -1720,7 +1739,18 @@ func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*Watc
 
 // ID returns the ID of this client.
 func (c *Client) ID() time.ActorID {
-	return c.id
+	return c.loadID()
+}
+
+// loadID reads the actor ID published by the most recent Activate, or the zero
+// ActorID when the client has never been activated.
+func (c *Client) loadID() time.ActorID {
+	if id := c.id.Load(); id != nil {
+		return *id
+	}
+
+	var zero time.ActorID
+	return zero
 }
 
 // Key returns the key of this client.
@@ -1754,7 +1784,7 @@ func (c *Client) pushPullChanges(
 	res, err := c.client.PushPullChanges(
 		ctx,
 		withShardKey(connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			DocumentId: attachment.resourceID.String(),
 			ChangePack: pbChangePack,
 			PushOnly:   opt.mode == types.SyncModePushOnly,
@@ -1826,7 +1856,7 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 	res, err := c.client.RemoveDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			DocumentId: attachment.resourceID.String(),
 			ChangePack: pbChangePack,
 		}), c.options.APIKey, d.Key().String()))
@@ -1874,7 +1904,7 @@ func (c *Client) broadcast(
 	_, err := c.client.Broadcast(
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
-			ClientId:   c.id.String(),
+			ClientId:   c.loadID().String(),
 			ChannelKey: ch.Key().String(),
 			Topic:      topic,
 			Payload:    payload,

@@ -36,6 +36,13 @@ var (
 
 	// ErrInvalidChannelKey is returned when a channel key is invalid.
 	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
+
+	// ErrBroadcastUnavailable is returned when a broadcast cannot be delivered
+	// because nothing is servicing this channel's broadcast requests: the
+	// channel is not being watched, or its watch has been retired by a detach
+	// or a deactivation.
+	ErrBroadcastUnavailable = errors.FailedPrecond("broadcast is unavailable").
+				WithCode("ErrBroadcastUnavailable")
 )
 
 // Channel represents lightweight channel.
@@ -62,6 +69,17 @@ type Channel struct {
 	// broadcastResponses is the receive-only channel to receive broadcast responses.
 	broadcastResponses chan error
 
+	// broadcastMu guards servingDone, the signal that tells Broadcast whether
+	// anything is servicing broadcastRequests. Broadcast hands its request to
+	// the goroutine Client.WatchChannel starts and then waits for that
+	// goroutine's answer; the goroutine lives on the attachment's watch
+	// context, so a detach or a deactivation retires it, and after that an
+	// unguarded Broadcast would block forever on an answer nobody sends.
+	// servingDone is closed whenever no servicer is running -- including before
+	// the first watch -- so those calls fail fast instead.
+	broadcastMu sync.Mutex
+	servingDone chan struct{}
+
 	// broadcastEventHandlers is a map of registered event handlers for broadcast events.
 	broadcastEventHandlers map[string]func(
 		topic, publisher string,
@@ -86,7 +104,9 @@ func New(k key.Key) (*Channel, error) {
 		broadcastRequests:      make(chan BroadcastRequest, 1),
 		broadcastResponses:     make(chan error, 1),
 		broadcastEventHandlers: make(map[string]func(topic, publisher string, payload []byte) error),
+		servingDone:            make(chan struct{}),
 	}
+	close(ch.servingDone)
 	ch.status.Store(int32(attachable.StatusDetached))
 	return ch, nil
 }
@@ -163,18 +183,82 @@ func (c *Channel) BroadcastResponses() chan error {
 	return c.broadcastResponses
 }
 
-// Broadcast encodes the given payload and sends a Broadcast request.
+// StartBroadcastServing announces that a servicer is about to start answering
+// BroadcastRequests, so Broadcast may wait for it. Client.WatchChannel calls it
+// before launching that goroutine.
+func (c *Channel) StartBroadcastServing() {
+	c.broadcastMu.Lock()
+	defer c.broadcastMu.Unlock()
+
+	select {
+	case <-c.servingDone:
+		c.servingDone = make(chan struct{})
+	default:
+	}
+
+	// A retired servicer can leave behind a request it never answered, or an
+	// answer whose caller has already given up on it. Both belong to a
+	// Broadcast that has returned, so drop them rather than let the new
+	// servicer pair them with the next call.
+	select {
+	case <-c.broadcastRequests:
+	default:
+	}
+	select {
+	case <-c.broadcastResponses:
+	default:
+	}
+}
+
+// StopBroadcastServing announces that the servicer is gone: waiting and
+// subsequent Broadcast calls return ErrBroadcastUnavailable instead of blocking
+// on an answer nobody will send. It is idempotent.
+func (c *Channel) StopBroadcastServing() {
+	c.broadcastMu.Lock()
+	defer c.broadcastMu.Unlock()
+
+	select {
+	case <-c.servingDone:
+	default:
+		close(c.servingDone)
+	}
+}
+
+// Broadcast encodes the given payload and sends a Broadcast request. It returns
+// ErrBroadcastUnavailable when no servicer is running -- the channel is not
+// watched, or its watch was retired while this call was waiting.
 func (c *Channel) Broadcast(topic string, payload any) error {
 	marshaled, err := gojson.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("broadcast payload: %w", err)
 	}
 
-	c.broadcastRequests <- BroadcastRequest{
+	c.broadcastMu.Lock()
+	done := c.servingDone
+	c.broadcastMu.Unlock()
+
+	select {
+	case c.broadcastRequests <- BroadcastRequest{
 		Topic:   topic,
 		Payload: marshaled,
+	}:
+	case <-done:
+		return ErrBroadcastUnavailable
 	}
-	return <-c.broadcastResponses
+
+	select {
+	case err := <-c.broadcastResponses:
+		return err
+	case <-done:
+		// The servicer may have answered just as it retired; prefer its answer
+		// over reporting a broadcast that did go out as unavailable.
+		select {
+		case err := <-c.broadcastResponses:
+			return err
+		default:
+			return ErrBroadcastUnavailable
+		}
+	}
 }
 
 // SubscribeBroadcastEvent subscribes to the given topic and registers
