@@ -107,6 +107,12 @@ var (
 	ErrAlreadyAttached = errors.FailedPrecond("resource with the key is already attached").
 				WithCode("ErrAlreadyAttached")
 
+	// ErrAlreadyWatching occurs when the given resource is already being
+	// watched by this client: a second watch would share the first one's
+	// broadcast requests and retire its servicer.
+	ErrAlreadyWatching = errors.FailedPrecond("resource is already being watched").
+				WithCode("ErrAlreadyWatching")
+
 	// ErrInvalidResource occurs when the given resource is invalid.
 	ErrInvalidResource = errors.InvalidArgument("invalid resource")
 
@@ -1244,6 +1250,18 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 		return nil, nil, fmt.Errorf("channel must be attached before watching")
 	}
 
+	// Claim the channel's broadcast requests before opening anything. Two
+	// watches of the same channel would otherwise read from the same request
+	// queue -- a broadcast answered by whichever won the race -- and the first
+	// to retire would retire the other's servicer with it, leaving a live watch
+	// that reports every Broadcast as unavailable. The claim is released by the
+	// servicer below and by closeFunc, so a watch reopened after a close, a
+	// detach or a deactivation is granted it again.
+	servingToken, ok := ch.StartBroadcastServing()
+	if !ok {
+		return nil, nil, fmt.Errorf("watch %s: %w", ch.Key(), ErrAlreadyWatching)
+	}
+
 	// Create buffered channel for count updates
 	countChan := make(chan int64, 10)
 
@@ -1260,6 +1278,7 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	if err != nil {
 		unlink()
 		cancel()
+		ch.StopBroadcastServing(servingToken)
 		return nil, nil, err
 	}
 
@@ -1295,8 +1314,13 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 		}
 	}()
 
+	// Releasing the claim here rather than only in the goroutine below keeps it
+	// tied to the watch rather than to the goroutine's exit: a watch reopened
+	// right after this returns is granted the claim even while the retiring
+	// servicer is still winding down.
 	closeFunc := func() {
 		cancel()
+		ch.StopBroadcastServing(servingToken)
 	}
 
 	// Start goroutine to handle broadcast requests. Channel.Broadcast waits for
@@ -1304,17 +1328,17 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	// Detach and Deactivate cancel -- so the channel has to be told when it is
 	// running and when it is gone; otherwise a Broadcast issued after one of
 	// those teardowns would block forever.
-	ch.StartBroadcastServing()
 	go func() {
-		defer ch.StopBroadcastServing()
+		defer ch.StopBroadcastServing(servingToken)
 
 		for {
 			select {
 			case r := <-ch.BroadcastRequests():
 				err := c.broadcast(ctx, ch, r.Topic, r.Payload)
-				select {
-				case ch.BroadcastResponses() <- err:
-				case <-watchCtx.Done():
+				// A broadcast that outlived its own watch answers nobody: the
+				// caller has been released already, and the answer must not
+				// reach the next watch's caller.
+				if !ch.SendBroadcastResponse(servingToken, err) {
 					return
 				}
 			case <-watchCtx.Done():

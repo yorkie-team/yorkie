@@ -742,3 +742,35 @@ func TestDeactivateEndsChannelWatch(t *testing.T) {
 		})
 	}
 }
+
+// TestWatchChannelRejectsSecondWatch pins the guard the broadcast-serving claim
+// assumes: two watches of the same channel would read from one request queue,
+// and the first to retire would retire the other's servicer with it, leaving a
+// live watch whose every Broadcast reports ErrBroadcastUnavailable.
+func TestWatchChannelRejectsSecondWatch(t *testing.T) {
+	srv := newLifecycleServer()
+	cli := dialLifecycle(t, srv)
+	t.Cleanup(func() { _ = cli.Deactivate(context.Background()) })
+
+	ch, err := channel.New(key.Key("channel-double-watch"))
+	require.NoError(t, err)
+	require.NoError(t, cli.Attach(context.Background(), ch))
+
+	_, closeWatch, err := cli.WatchChannel(context.Background(), ch)
+	require.NoError(t, err)
+
+	_, _, err = cli.WatchChannel(context.Background(), ch)
+	assert.ErrorIs(t, err, ErrAlreadyWatching)
+
+	// Closing the first watch releases the claim, so the channel is watchable
+	// again without waiting for the retiring servicer to wind down.
+	closeWatch()
+	_, closeSecond, err := cli.WatchChannel(context.Background(), ch)
+	require.NoError(t, err)
+	t.Cleanup(closeSecond)
+
+	// The second watch owns the claim: its broadcasts reach the server -- this
+	// one fails there, since lifecycleServer answers no Broadcast -- rather
+	// than being refused by the first watch's teardown.
+	assert.NotErrorIs(t, ch.Broadcast("topic", "payload"), channel.ErrBroadcastUnavailable)
+}

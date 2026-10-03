@@ -172,12 +172,13 @@ func TestChannelBroadcastServing(t *testing.T) {
 
 		// The servicer takes the request and then retires without answering,
 		// which is what cancelling the attachment's watch context does.
-		ch.StartBroadcastServing()
+		token, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
 		stop := make(chan struct{})
 		go func() {
 			<-ch.BroadcastRequests()
 			<-stop
-			ch.StopBroadcastServing()
+			ch.StopBroadcastServing(token)
 		}()
 
 		done := make(chan error, 1)
@@ -196,14 +197,66 @@ func TestChannelBroadcastServing(t *testing.T) {
 		ch, err := channel.New(key.Key("room-1"))
 		assert.NoError(t, err)
 
-		ch.StartBroadcastServing()
-		defer ch.StopBroadcastServing()
+		token, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+		defer ch.StopBroadcastServing(token)
 		go func() {
 			r := <-ch.BroadcastRequests()
 			assert.Equal(t, "topic", r.Topic)
-			ch.BroadcastResponses() <- nil
+			assert.True(t, ch.SendBroadcastResponse(token, nil))
 		}()
 
 		assert.NoError(t, ch.Broadcast("topic", "payload"))
+	})
+
+	t.Run("second servicer is refused while the first holds the claim test", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+
+		first, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+
+		_, ok = ch.StartBroadcastServing()
+		assert.False(t, ok, "a second servicer took the claim of a live one")
+
+		// The claim is grantable again once its holder retires, which is what
+		// a watch reopened after a close or a detach relies on.
+		ch.StopBroadcastServing(first)
+		second, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+		ch.StopBroadcastServing(second)
+	})
+
+	t.Run("retired servicer does not retire its successor test", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+
+		first, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+		ch.StopBroadcastServing(first)
+
+		second, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+		defer ch.StopBroadcastServing(second)
+
+		// The first servicer winding down late must not take the second one's
+		// claim with it, nor land its answer on the second one's caller.
+		ch.StopBroadcastServing(first)
+		assert.False(t, ch.SendBroadcastResponse(first, assert.AnError))
+
+		go func() {
+			<-ch.BroadcastRequests()
+			assert.True(t, ch.SendBroadcastResponse(second, nil))
+		}()
+
+		done := make(chan error, 1)
+		go func() { done <- ch.Broadcast("topic", "payload") }()
+
+		select {
+		case err := <-done:
+			assert.NoError(t, err, "a live watch reported its broadcast as unavailable")
+		case <-gotime.After(3 * gotime.Second):
+			t.Fatal("Broadcast blocked while its servicer was live")
+		}
 	})
 }
