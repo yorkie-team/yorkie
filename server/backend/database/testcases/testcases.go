@@ -2969,3 +2969,30 @@ func RunCompactChangeInfosAcrossNodesTest(
 		assert.Equal(t, types.ID(changes[0].ID().ActorID().String()), infos[0].ActorID)
 	})
 }
+
+// RunSnapshotLiveSizeTest runs the tests for the live size a snapshot records,
+// which the push path reads to enforce MaxSizePerDocument.
+func RunSnapshotLiveSizeTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("snapshot records the live size test", func(t *testing.T) {
+		ctx := context.Background()
+		docInfo, _ := setupCompaction(t, db, projectID)
+		refKey := docInfo.RefKey()
+
+		// setupCompaction stores a snapshot of {"k": 2} at server seq 3.
+		info, err := db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), info.ServerSeq)
+		assert.Positive(t, info.LiveSize)
+
+		withBody, err := db.FindSnapshotInfo(ctx, refKey, info.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, info.LiveSize, withBody.LiveSize)
+
+		// Compaction purges the snapshots, so the size is unknown again rather
+		// than the pre-compaction one.
+		assert.NoError(t, db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq, compactedChanges(t, docInfo)))
+		info, err = db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), info.LiveSize)
+	})
+}

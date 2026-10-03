@@ -120,7 +120,10 @@ func PushPull(
 	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
+	statusChange := opts.Status == document.StatusDetached || opts.Status == document.StatusRemoved
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(
+		ctx, be, clientInfo, docKey, reqPack, project.MaxSizePerDocument, statusChange,
+	)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
@@ -244,18 +247,23 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 	return nil
 }
 
-// pushPack pushes the given ChangePack to the database.
+// pushPack pushes the given ChangePack to the database. maxSize is the
+// project's MaxSizePerDocument, and statusChange marks a pack that detaches or
+// removes the document, which must always go through.
 func pushPack(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
+	maxSize int,
+	statusChange bool,
 ) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
 	// 01. Filter out changes that are already pushed.
 	var pushables []*database.ChangeInfo
+	var pushableChanges []*change.Change
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
 			logging.From(ctx).Warnf(
@@ -271,6 +279,7 @@ func pushPack(
 		}
 
 		pushables = append(pushables, info)
+		pushableChanges = append(pushableChanges, cn)
 	}
 
 	// 02. Push the changes to the database.
@@ -311,6 +320,23 @@ func pushPack(
 				connect.CodeInvalidArgument,
 				errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
 			)
+		}
+
+		// 04. Enforce MaxSizePerDocument. A detach or remove still goes
+		// through, so a client is never stuck on an over-quota document, but
+		// its changes are discarded when they would grow the document:
+		// otherwise attach, push in the detach pack and re-attach would walk
+		// around the gate.
+		if len(pushables) > 0 {
+			if err := checkDocumentSize(
+				ctx, be, docKey, currentDocInfo.ServerSeq, maxSize, pushableChanges,
+			); err != nil {
+				if !statusChange || !stderrors.Is(err, document.ErrDocumentSizeExceedsLimit) {
+					return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+				}
+				logging.From(ctx).Warnf("discarding %d changes from a detach or remove: %v", len(pushables), err)
+				pushables = nil
+			}
 		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(

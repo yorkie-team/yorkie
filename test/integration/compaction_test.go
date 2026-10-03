@@ -210,8 +210,9 @@ func TestDocumentCompaction(t *testing.T) {
 
 		// Two pushes of 9MB each: every change fits a request, but the single
 		// change compaction would write does not fit a MongoDB document. The
-		// per-document limit is enforced on the client only, and is lifted
-		// here to grow a document past what the compacted change can hold.
+		// client's per-document limit is lifted here to grow a document past
+		// what the compacted change can hold; the server's gate admits both
+		// pushes because no snapshot has measured the document yet.
 		chunk := strings.Repeat("a", 9*1024*1024)
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(

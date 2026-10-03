@@ -170,6 +170,10 @@ func TestClient(t *testing.T) {
 		testcases.RunCompactChangeInfosTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("SnapshotLiveSize test", func(t *testing.T) {
+		testcases.RunSnapshotLiveSizeTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
 		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
 	})

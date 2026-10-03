@@ -2280,6 +2280,7 @@ func (c *Client) CreateSnapshotInfo(
 
 	serverSeq := doc.Checkpoint().ServerSeq
 	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
+	liveSize := doc.DocSize().Live
 
 	docFields := bson.M{
 		"project_id":        docRefKey.ProjectID,
@@ -2288,6 +2289,7 @@ func (c *Client) CreateSnapshotInfo(
 		"lamport":           doc.Lamport(),
 		"version_vector":    vv,
 		"has_external_body": hasExternalBody,
+		"live_size":         int64(liveSize.Total()),
 		"created_at":        gotime.Now(),
 	}
 

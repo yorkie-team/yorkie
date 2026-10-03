@@ -4,52 +4,47 @@
 
 ## Problem
 
-`MaxSizePerDocument` is a per-project quota
-(`server/backend/database/project_info.go:135`, default 10 MiB) that only the
-client enforces. The server sends it in the attach response
-(`server/rpc/yorkie_server.go:360`), the SDK stores it on the document
-(`client/client.go:603`), and `Document.Update` refuses the local update when
-the clone's `DocSize.Total()` exceeds it (`pkg/document/document.go:307-312`).
-
-The push path never re-reads it. `pushPack` filters already-pushed changes and
-validates clientSeq continuity, serverSeq ordering and epoch
-(`server/packs/pushpull.go:283-315`) before handing the remainder to
-`CreateChangeInfos`; no branch there has a document, so none has a size. A
-modified SDK or a direct Connect call can therefore grow a document past the
-quota, bounded only by `maxRequestBytes` per push (`server/rpc/server.go:51`)
-and, much later, MongoDB's 16 MiB record limit.
-
-The gap is written up in `docs/design/document-size-limit.md`, which is a
-proposal: it records the candidate gates and their costs but decides none of
-them. This task owns the decision and the work.
+`MaxSizePerDocument` is a per-project quota (default 10 MiB) that only the
+client enforced. The server sends it in the attach response, the SDK stores it
+on the document, and `Document.Update` refuses the local update when the
+clone's `DocSize.Total()` exceeds it. The push path never re-read it, so a
+modified SDK or a direct Connect call could grow a document past the quota,
+bounded only by `maxRequestBytes` per push and, much later, MongoDB's 16 MiB
+record limit. `docs/design/document-size-limit.md` recorded the candidate
+gates; this task picked one and built it.
 
 ## Plan
 
-- [ ] Decide the refusal semantics — the blocking question. `DocSize.Total()`
-      is `Live + GC` (`pkg/document/resource/resource.go:20-28`), so deleting
-      content moves bytes between the two without shrinking the total: a
-      blanket refusal deadlocks a document that is already over quota, because
-      the push that would delete content is refused for the reason the push
-      that added it was. Pick among the design doc's options 1 (refuse growth
-      only), 2 (refuse everything plus a defined recovery) and 3 (detach out
-      of band), and write the decision back into the design doc.
-- [ ] Decide where the number comes from. The lagging gate in the design doc
-      persists `doc.Root().DocSize()` on `DocInfo` from `storeSnapshot` and
-      reads it in `pushPack`, which already holds `currentDocInfo` under
-      `DocPushKey`. Note the `docCache` hazard recorded in the doc's risk
-      table before picking a source.
-- [ ] Carry the new `DocInfo` field through both backends, `DocInfo.DeepCopy`
-      and the snapshot write; zero means "unknown" and admits.
-- [ ] Reset the field on every path that rebuilds or purges document
-      internals — `CompactChangeInfos` in `mongo` and `memory` — or the gate
-      refuses growth on a document compaction just shrank.
-- [ ] Error code and SDK handling for whatever refusal semantic wins, in both
-      `yorkie` and `yorkie-js-sdk`.
-- [ ] Integration test pushing past the quota over a direct Connect call, not
-      through the SDK's own gate, since the SDK's gate is what is being
-      bypassed.
-- [ ] Document the overshoot the lagging gate admits (up to one
-      `SnapshotInterval` of pushes) as part of the quota's contract.
+- [x] Decide the refusal semantics: refuse growth only. When the recorded live
+      size is strictly above the quota, a pack with any change that can grow
+      the document is refused; removals, content-free `Edit`/`TreeEdit` and
+      presence-only changes are admitted. Detach and remove always go
+      through, with growth changes in them discarded. Written back into
+      `docs/design/document-size-limit.md`.
+- [x] Decide where the number comes from: `live_size` on the snapshot row,
+      written by `CreateSnapshotInfo` in both drivers and read by
+      `checkDocumentSize` (`server/packs/size_gate.go`) with
+      `FindClosestSnapshotInfo(..., false)`. Not on `DocInfo`: the reverted
+      first attempt showed a field on the cached `DocInfo` races the
+      `docCache`.
+- [x] Compaction resets the size by purging snapshots; zero means unknown and
+      admits. Covered by `RunSnapshotLiveSizeTest` (memory and mongo).
+- [x] Error code: reuse `document.ErrDocumentSizeExceedsLimit`, now with code
+      `ErrDocumentSizeExceedsLimit` (`ResourceExhausted`), returned as a
+      bare `StatusError` so `connecthelper` attaches the code.
+- [x] Integration test over raw Connect calls (`TestDocumentSizeGate`): growth
+      past the quota is refused with that code and the server seq does not
+      move; a remove-only pack on the over-quota document is admitted and
+      re-opens growth once a snapshot measures it; a detach carrying refused
+      changes goes through without them.
+- [x] Document the overshoot (up to one `SnapshotInterval` of changes, each
+      push capped by `maxRequestBytes`) as part of the quota's contract.
+- [ ] yorkie-js-sdk follow-up (separate PR in that repo): treat
+      `ErrDocumentSizeExceedsLimit` from `PushPullChanges` as terminal for
+      the document instead of retrying the same pack — surface an over-quota
+      state, stop the sync loop for it, and let the app detach. The code
+      already exists in `Code` (`src/util/error.ts`) for the local check, so
+      only the push-path handling is new. The Go client needs the same.
 
 ## Out of scope
 
@@ -57,4 +52,5 @@ them. This task owns the decision and the work.
   synchronous error at the edit that exceeds the quota.
 - Byte-exact agreement between the server's number and the client's. Making
   the running `DocSize` accumulator agree with a rebuild is tracked by the
-  rebuild-drift task and is a prerequisite, not part of this one.
+  rebuild-drift task.
+- Counting bytes pushed since the last snapshot to tighten the overshoot.
