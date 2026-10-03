@@ -20,6 +20,7 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -49,6 +50,10 @@ const (
 	// (maxBsonObjectSize, 16 MiB on every server version). An insert over it
 	// is rejected by the server, not the driver.
 	maxDocumentSize = 16 * 1024 * 1024
+
+	// objectIDElementSize is the size of the `_id` element MongoDB adds to a
+	// record written without one: type byte, "_id\x00" and a 12-byte ObjectID.
+	objectIDElementSize = 1 + 4 + 12
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -2005,18 +2010,17 @@ func (c *Client) CompactChangeInfos(
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
-	newServerSeq := 1
+	newServerSeq := int64(1)
 	if len(changes) == 0 {
 		newServerSeq = 0
 	} else if len(changes) != 1 {
 		return fmt.Errorf("compact document of %s: invalid change size %d", docInfo.RefKey(), len(changes))
 	}
 
-	// 1. Encode the compacted change before purging anything. Compaction folds
-	// the whole document into one change record, so a large document can
-	// produce a record MongoDB refuses to store. That has to be found while the
-	// document's changes still exist: past the purge, a failed insert leaves
-	// the document with no changes and no snapshot to be rebuilt from.
+	// 1. Encode the compacted change before touching anything. Compaction
+	// folds the whole document into one change record, so a large document
+	// can produce a record MongoDB refuses to store, and that has to be found
+	// while the document is still intact.
 	var compacted bson.Raw
 	if len(changes) == 1 {
 		cn := changes[0]
@@ -2025,8 +2029,9 @@ func (c *Client) CompactChangeInfos(
 			return err
 		}
 
+		// No _id: the record replaces the one at newServerSeq in place, which
+		// keeps that record's _id, or is upserted with a fresh one.
 		compacted, err = c.marshal(bson.D{
-			{Key: "_id", Value: bson.NewObjectID()},
 			{Key: "project_id", Value: docInfo.ProjectID},
 			{Key: "doc_id", Value: docInfo.ID},
 			{Key: "server_seq", Value: newServerSeq},
@@ -2041,43 +2046,23 @@ func (c *Client) CompactChangeInfos(
 		if err != nil {
 			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 		}
-		if len(compacted) > maxDocumentSize {
+		if size := len(compacted) + objectIDElementSize; size > maxDocumentSize {
 			return fmt.Errorf(
 				"compact document of %s: %d bytes: %w",
-				docInfo.RefKey(), len(compacted), database.ErrChangeTooLarge,
+				docInfo.RefKey(), size, database.ErrChangeTooLarge,
 			)
 		}
 	}
 
-	// 2. Refuse a document that has moved past lastServerSeq. The update in
-	// step 5 checks the same condition, but only after the purge has dropped
-	// the changes compaction did not see. This narrows that window to the
-	// purge itself; closing it needs a transaction.
-	if err := c.collection(ColDocuments).FindOne(ctx, bson.M{
-		"project_id": docInfo.ProjectID,
-		"_id":        docInfo.ID,
-		"server_seq": lastServerSeq,
-	}).Err(); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
-		}
-		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
-	}
-
-	// 3. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
-		return err
-	}
-
-	// 4. Store the compacted change, exactly the bytes checked above.
-	if compacted != nil {
-		if _, err := c.collection(ColChanges).InsertOne(ctx, compacted); err != nil {
-			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
-		}
-	}
-
-	// 5. Update document
-	c.docCache.Remove(docInfo.RefKey())
+	// 2. Claim the document before writing to its changes. MongoDB is not
+	// guaranteed to run as a replica set here, so the steps below cannot share
+	// a transaction; this update is the commit point instead. It succeeds only
+	// if no push has landed since lastServerSeq, and once it has, a push that
+	// read the old server_seq fails its own conditional update and a client
+	// on the old epoch has its changes discarded (pushPack). A refused claim
+	// has touched nothing.
+	refKey := docInfo.RefKey()
+	c.docCache.Remove(refKey)
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
@@ -2092,13 +2077,49 @@ func (c *Client) CompactChangeInfos(
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+		return fmt.Errorf("compact document of %s: %w", refKey, err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return c.compactionClaimError(ctx, refKey)
+	}
+
+	// 3. Store the compacted change over the record at newServerSeq in one
+	// write, so the document reads as the compacted change the moment this
+	// returns rather than after a delete and an insert.
+	c.changeCache.Remove(refKey)
+	if compacted != nil {
+		if _, err := c.collection(ColChanges).ReplaceOne(ctx, bson.M{
+			"project_id": docInfo.ProjectID,
+			"doc_id":     docInfo.ID,
+			"server_seq": newServerSeq,
+		}, compacted, options.Replace().SetUpsert(true)); err != nil {
+			return fmt.Errorf("compact document of %s: %w", refKey, err)
+		}
+	}
+
+	// 4. Drop what the compacted change replaces: the changes past it, the
+	// snapshots and the version vectors.
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID, newServerSeq); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+// compactionClaimError tells a document that is gone from one that moved past
+// the server seq compaction read.
+func (c *Client) compactionClaimError(ctx context.Context, refKey types.DocRefKey) error {
+	err := c.collection(ColDocuments).FindOne(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
+	}).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return fmt.Errorf("compact document of %s: %w", refKey, database.ErrDocumentNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("compact document of %s: %w", refKey, err)
+	}
+	return fmt.Errorf("compact document of %s: %w", refKey, database.ErrConflictOnUpdate)
 }
 
 // FindLatestChangeInfoByActor returns the latest change created by given actorID.
@@ -2822,7 +2843,7 @@ func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) (map[string]int64, error) {
-	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID)
+	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -2837,10 +2858,13 @@ func (c *Client) PurgeDocument(
 	return res, nil
 }
 
+// purgeDocumentInternals deletes the document's snapshots, version vectors and
+// the changes past keepServerSeq; 0 deletes every change.
 func (c *Client) purgeDocumentInternals(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	keepServerSeq int64,
 ) (map[string]int64, error) {
 	counts := make(map[string]int64)
 
@@ -2848,10 +2872,14 @@ func (c *Client) purgeDocumentInternals(
 	c.presenceCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 	c.vectorCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 
-	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+	changesFilter := bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,
-	})
+	}
+	if keepServerSeq > 0 {
+		changesFilter["server_seq"] = bson.M{"$gt": keepServerSeq}
+	}
+	res, err := c.collection(ColChanges).DeleteMany(ctx, changesFilter)
 	if err != nil {
 		return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
 	}

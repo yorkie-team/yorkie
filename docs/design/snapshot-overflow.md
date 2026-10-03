@@ -43,6 +43,27 @@ sharding strategy documented in `mongodb-sharding.md`.
 
 - Log snapshot creation failures with document ID and snapshot size
 
+### Compacted Change Records
+
+Compaction folds a whole document into one change record, and that record
+hits the same 16MB limit. Unlike a snapshot, it is not compressed or split:
+`CompactChangeInfos` encodes the record first and refuses with
+`ErrChangeTooLarge` before writing anything, so the document keeps its
+changes, snapshots and version vectors and stays uncompacted.
+
+The write sequence after the size check does not need a transaction to stay
+safe against a concurrent push:
+
+1. Claim the document: a conditional update on `server_seq` resets it and
+   bumps `epoch`. A push that read the old `server_seq` fails its own
+   conditional update, so a refused claim has touched nothing.
+2. Replace the change at the new `server_seq` with the compacted record in one
+   write.
+3. Delete the changes past it, the snapshots and the version vectors.
+
+A failure in step 2 or 3 is still not rolled back; closing that needs a
+transaction, which the deployment is not guaranteed to support.
+
 ## Schema
 
 ### snapshots collection (existing, modified)

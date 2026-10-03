@@ -195,6 +195,19 @@ func TestClient(t *testing.T) {
 	})
 }
 
+func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {
+	// Two clients on one database stand in for two server nodes: each keeps
+	// its own document cache.
+	nodeA := setupTestWithDummyData(t)
+	nodeB := setupTestWithDummyData(t)
+	defer func() {
+		assert.NoError(t, nodeA.Close())
+		assert.NoError(t, nodeB.Close())
+	}()
+
+	testcases.RunCompactChangeInfosAcrossNodesTest(t, nodeA, nodeB, dummyProjectID)
+}
+
 func TestClient_RotateProjectKeys(t *testing.T) {
 	t.Run("success: should rotate project API keys", func(t *testing.T) {
 		// Given
