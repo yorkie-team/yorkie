@@ -43,16 +43,25 @@ follow-up by position, after its own product.
       fix rounds and kept gaining legs). A local barrier cannot cover a
       split applied after the purge; §7.8 now records what a purge can and
       cannot do to the marker, and `TestTreeSameBoundarySplitAfterGC` runs
-      the splits with one replica having collected.
-
-- [x] Scope the merge-moved skip to merges the editor had not seen
-      (`mergeMovedConcurrently`). Bare `MergedFrom` presence is never cleared
-      on live content, so any historical paragraph join blinded the §7.8
-      marker for good and brought js#1433 back; §7.1 scopes the same field
-      off the same immutable `MergedAt`.
+      the splits with one replica having collected. (A narrower barrier came
+      back later, for a reason that barrier never had: see below.)
+- [x] Take the merge-moved skip back out, in both forms it took (bare
+      `MergedFrom` presence, then `MergedAt` scoped to the editor's vector).
+      A GC-free fuzz shows each diverges on more scripts than it fixes, the
+      scoped form read a ticket that is first-move-only, copied onto split
+      products, rebuilt from `removedAt` for older snapshots and unvalidated
+      on element payloads, and js#1435 has no skip. `holdsKnownChild` now
+      matches js#1435 exactly.
 - [x] Scan the chain node's own children even when an earlier chain step
       descended through it. The shared budget bounds the descent; it must not
       answer a chain step out of the cache.
+- [x] Settle whether GC can change `holdsKnownChild`'s answer, against the
+      server's real ordering. A removal the editor had not seen cannot be
+      collected before the split is applied (push before vector record, apply
+      before collect). A removal it had seen can, and that case diverged
+      (`TestTreeSameBoundarySplitUnderServerGC`). `Tree.PurgeHeldBack` keeps a
+      tombstone while any ancestor is outside the min; §7.8 records the one
+      case it cannot cover and the fuzz numbers.
 
 ## Verification
 
@@ -68,17 +77,20 @@ follow-up by position, after its own product.
 - [ ] yorkie-js-sdk#1435's `pnpm sdk test` against a server built from this
       branch. Needs a yorkie-js-sdk checkout and a running server, so CI here
       cannot tick it; a maintainer has to run it (or confirm js#1435 merged
-      with the identical rule, including this round's `MergedAt` scoping and
-      the always-scan-the-entry-node descent, which js#1435 must mirror).
+      with the identical rule: count every descendant the editor's vector
+      covers, tombstones included, no merge skip).
+- [ ] yorkie-js-sdk needs `PurgeHeldBack` too. It is a GC policy, not part of
+      the replicated rule, so a JS client without it still agrees with a Go
+      replica on where a split lands; but a JS client that collects such a
+      tombstone early is exposed to the divergence the barrier closes here.
 
 ## Out of scope
 
 - yorkie-js-sdk#1436: text inserted at the position of a concurrent split
   lands on different sides. Different mechanism; left open by #2030.
 - #2077 (the `KNOWN` skips in the same test file) and yorkie-js-sdk#1408.
-- GC independence of the split rules. `holdsKnownChild` counts tombstones,
-  and so do §7.4's re-parenting, the §7.5 advance and the §7.8 entry gate,
-  which predate it. A purge can only clear the marker, which sends the walk
-  where it went before this change, so it cannot break an edit set that
-  converged without it (§7.8). Making the rules independent of GC needs a
-  marker that does not live in tombstones, in both SDKs.
+- GC independence of the other split rules. §7.4's re-parenting, the §7.5
+  advance and the §7.8 entry gate read tombstones too and predate this
+  change; the server-ordered fuzz shows `main` diverging with GC on 108 of
+  100 000 seeds (62 with `PurgeHeldBack`). Making them independent of GC
+  needs a marker that does not live in tombstones, in both SDKs.

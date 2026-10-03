@@ -89,3 +89,34 @@
   node asks "does this node hold the right half", and the two are not
   the same question about the same node. Scanning the entry node afresh
   and caching only the deeper descent keeps the bound and the answer.
+
+## Review round: GC, against the server's ordering
+
+- **Model the system's GC, not "some min vector".** The finding was upheld
+  twice on an argument about which way a purge moves the answer. Driving the
+  real order instead (push, record the pushed vector, min, pull everything,
+  then collect) split the question in two. A removal the editor had not seen
+  cannot be collected before the split arrives: the editor's vector covers
+  the removal only after the editor has pushed everything it made before.
+  A removal the editor had seen can be, and a four-replica script diverged.
+  The argument had been right about the first kind and wrong about the
+  second.
+- **A barrier is sound when the contract says what it is waiting for.** The
+  earlier barriers tried to name the product a future split would carry a
+  tombstone into, and kept finding the next hole. `PurgeHeldBack` waits on
+  something the contract does pin down: every split that has not arrived
+  carries a vector at least as large as the min, so a tombstone whose
+  ancestors are all inside the min has no unknown ancestor for §7.8 to
+  descend from. The hole the old barriers kept hitting (a split made after
+  the purge) is still there, and it is narrower than it looked: that split
+  and ours both knew the removal, so the editor may itself have collected
+  the tombstone.
+- **Compare the same question, not the same log.** A first decision fuzz
+  flagged diffs that came from the entry gate or from a tree that GC had
+  already reshaped earlier. Keying each answer by split, chain sibling and
+  live tree isolated `holdsKnownChild`'s own sensitivity: 228 seeds without
+  the barrier, 67 with it, 0 for the skip-known-removals rule, which in turn
+  diverges without GC on 21-172 more seeds per 20 000.
+- **Measure a convergence patch against the version without it.** Both merge
+  skips looked like fixes for a real mechanism (a merge in flight moves known
+  children). The fuzz says each adds more divergent seeds than it removes.

@@ -497,58 +497,85 @@ step descended through it, because what that step established —
 "nothing known below this subtree" — is not the question asked of a node
 reached as a chain sibling.
 
-A child **a merge the editor had not seen** moved in is not a marker,
-and is skipped with its subtree (`mergeMovedConcurrently`). §6.1/§6.3
+A child a merge moved in counts like any other child. §6.1/§6.3
 relocate the right node's children into the left one keeping their
-original `createdAt`, so a merge can give an otherwise-empty
-same-boundary product children the editor knew long after the split that
-produced it — and whether it has done so yet differs per replica while
-the merge is in flight, which is the disagreement this rule exists to
-remove.
+original `createdAt`, so a merge the editor had not seen can give an
+otherwise-empty product children the editor knew, and whether it has
+done so yet differs per replica while the merge is in flight. Skipping
+merge-moved children does not fix that. It was tried in two forms: as a
+bare `MergedFrom` presence test, which blinds the marker for good after
+any paragraph join because `MergedFrom` is never cleared on live
+content, and scoped to merges outside the editor's version vector via
+`MergedAt`. The scoped form reads a ticket that is stamped on a child's
+first move only (Fix 20), copied onto split products, rebuilt from a
+mutable `removedAt` for older snapshots, and left unvalidated on element
+payloads. A GC-free two- and three-replica fuzz (below) shows both forms
+diverge on more scripts than they fix (9–62 new divergent seeds per
+20 000 against 1–14 fixed), and yorkie-js-sdk#1435 has no skip. Merges
+in flight therefore remain an open input to the marker, in both SDKs.
 
-A merge the editor *had* seen is counted. A replica applies this split
-only after everything the editor's version vector covers, so by then the
-moved child sits under the same parent everywhere and reading it is
-deterministic. The scope matters because `MergedFrom` is stamped once
-and never cleared on live content (`mergeNodes` stamps on the first move
-only; `DropEngineOnlyLinks`/`ReissueIDs` clear it on operation content,
-not on the tree): a bare presence test, which is what this rule used to
-be, left the right half permanently unmarkable after any paragraph join
-anywhere in the document's history and brought yorkie-js-sdk#1433 back.
-§7.1 scopes the same field the same way, off the same immutable
-`MergedAt`.
+Counting tombstones keeps the answer the same whether or not a replica
+has applied a concurrent removal yet. GC unlinks tombstones, and a
+replica that had collected one would read false where another reads
+true. Two facts keep that from happening, one for each kind of
+tombstone the marker can count.
 
-Where the ticket cannot answer, the skip stands. `MergedAt` is absent on
-snapshots written before it was persisted, and a nil ticket reads as
-"skip"; so does a child carrying `MergedFrom` for another reason, e.g.
-content inserted into a merged-away parent (`intendedMergeParent`),
-whose stamped ticket is the merge it was redirected by. Skipping only
-clears the marker, the direction the paragraph below shows is safe. One
-reading stays open: `MergedAt` records a child's *first* move only
-(Fix 20), so a child moved P→Q within the editor's knowledge and then
-relayed Q→R by a merge it had not seen still reports the P→Q ticket and
-is counted in R. That is the same concurrent-merge class as the rule's
-read of live children — a merge in flight that moves the right half
-*out* of the holder leaves nothing behind either, and the holder is then
-tombstoned, so the walk's `IsRemoved` gate decides it before the marker
-is ever asked. Making the marker independent of in-flight merges needs
-the same follow-up as making it independent of GC, below.
+- *A removal the editor had not seen.* Such a tombstone is never
+  collected on a replica before the split is applied there. A replica
+  collects only with the min version vector of a pull reply, after
+  applying every change in that reply (`InternalDocument.ApplyChangePack`;
+  the server's snapshot path applies before it collects as well). The
+  server records a client's vector only after storing the changes pushed
+  with it (`packs.PushPull` runs `pushPack` before `pullPack`'s
+  `UpdateMinVersionVector`, and a detaching client pushes before its
+  vector is dropped). So once the min covers the removal, the editor's
+  own vector covers it too, which means the editor has already pushed
+  every change it made before seeing the removal, this split included,
+  and every reply carrying that min carries the split. This is the
+  contract in [garbage-collection.md](garbage-collection.md), and every
+  operation anchored on a tombstone already depends on it.
+- *A removal the editor had seen.* Such a tombstone can be collected
+  before the split arrives. The replica that applied the split first
+  still holds it inside its own product, so the marker has to keep
+  counting it. `Tree.PurgeHeldBack` (a `GCVectorBarrier`) closes the
+  gap: a tombstone stays linked while any of its ancestors was created
+  outside the min. A split that has not arrived yet carries a vector at
+  least as large as that min, so every ancestor of a collected tombstone
+  was known to the editor, and a known node is never the unknown chain
+  sibling the marker is asked about. Server snapshots collect through
+  the same `GarbageCollect`, so they are held back the same way.
 
-Counting tombstones keeps the answer independent of whether a replica
-has applied a concurrent removal yet, but GC can unlink a tombstone the
-marker counts. No purge barrier can prevent that: a split applied after
-the purge can carry a tombstone one replica has already collected into
-the very product the walk classifies, and nothing at purge time names
-that product. What bounds the effect is its direction. A purge only
-takes a known child away, so it can only clear the marker, and with the
-marker cleared the walk goes on past the right half — the walk every
-replica ran before this rule. For that to change where a split lands
-there must be a sibling to walk on to, and then the walk without the
-rule took the split past the right half on every replica that applied
-the concurrent split first, while one that applied this split first
-placed it by position (yorkie-js-sdk#1433). So a replica that has
-collected can miss this fix for an edit set that diverged without it;
-it cannot make an edit set diverge that converged without it.
+One case is left. A split made *after* the purge, by an editor that
+already knew about the removal, can carry the tombstone into a new
+product on replicas that still hold it. The incoming split's editor
+knew about the removal too, so it may itself have collected the
+tombstone before it split, and in that case its own placement does not
+depend on the tombstone either. No marker read from content can give
+the same answer on both sides here. Skipping every tombstone whose
+removal the editor knew is purge-invariant, but it diverges without GC
+(the replica that applied the split first counts such a tombstone,
+which sits in its own product), on 21–172 more seeds per 20 000.
+
+Measured with a fuzz that drives the server's ordering in process (three
+editing replicas and an observer; each sync pushes, records the pushed
+vector, takes the min over all recorded vectors, pulls everything, then
+collects), 20 000 seeds in each of five mixes (flat and nested, with and
+without inserts, and a sync-heavy mix), each script replayed with and
+without GC:
+
+| | holdsKnownChild answer changed by GC¹ | diverges only with GC |
+|---|---|---|
+| `main` | — | 108 |
+| `main` with `PurgeHeldBack` | — | 62 |
+| this rule, no barrier | 228 | 150 |
+| this rule with `PurgeHeldBack` | 67 | 74 |
+
+¹ Seeds where a replica asked the same question (same split, same chain
+sibling, same live tree) and got a different answer with GC. With the
+barrier, all 67 are the post-purge case above; one of them also diverges,
+and its minimized script diverges the same way with `holdsKnownChild`
+disabled. The divergences that remain come from the readers listed
+next, which `main` has as well.
 
 The rule is not the only tombstone reader here. §7.4's re-parenting
 gates on a `Children(true)` count, the §7.5 advance stops at a node

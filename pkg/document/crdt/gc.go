@@ -91,3 +91,12 @@ type GCBarrier[C any] interface {
 	// and unlinking it cannot move anything.
 	PurgeBarrierAt(child C) *time.Ticket
 }
+
+// GCVectorBarrier is an optional capability of a GC parent that holds a purge
+// back on more than one ticket, which PurgeBarrierAt cannot name. Tree uses it
+// for the ancestors of a tombstone; see Tree.PurgeHeldBack.
+type GCVectorBarrier interface {
+	// PurgeHeldBack reports whether the given child must stay linked when
+	// collecting with vector, even though vector covers its removal.
+	PurgeHeldBack(child GCChild, vector time.VersionVector) bool
+}

@@ -1100,6 +1100,44 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
+// PurgeHeldBack implements GCVectorBarrier. It keeps a tombstone linked while
+// any of its ancestors was created outside vector.
+//
+// §7.8's holdsKnownChild counts tombstones below an unknown split sibling,
+// and a removal the incoming split's editor had seen can be collected before
+// that split arrives. A split that has not arrived yet carries a version
+// vector at least as large as the min this collection runs with (see
+// holdsKnownChild), so once every ancestor is inside the min, none of them
+// can be the unknown sibling that §7.8 descends from, and unlinking the
+// tombstone cannot change what that descent finds.
+//
+// A node ID is client-supplied, so an ancestor carrying a ticket nobody will
+// ever cover holds its tombstones until the ancestor is itself removed and
+// collected. PurgeBarrierAt has the same property for a node's successor.
+func (t *Tree) PurgeHeldBack(child GCChild, vector time.VersionVector) bool {
+	node, ok := child.(*TreeNode)
+	if !ok || node.Index == nil {
+		return false
+	}
+
+	// Parent pointers are relocated by index.MoveChild without an ancestor
+	// check, so guard the climb the way the chain walks are guarded.
+	var climbed nodeSet
+	for parent := node.Index.Parent; parent != nil && climbed.visit(parent.Value); parent = parent.Parent {
+		// A lamport-0 ticket (time.InitialTicket, as a tree built outside any
+		// change carries) predates every change, so it is never an unknown
+		// sibling; its actor need not appear in the vector at all.
+		createdAt := parent.Value.id.CreatedAt
+		if createdAt.Lamport() == 0 {
+			continue
+		}
+		if !vector.EqualToOrAfter(createdAt) {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
@@ -3230,25 +3268,43 @@ func (t *Tree) orderSameBoundarySplit(
 // anywhere below it is an empty same-boundary product, or one a peer has
 // typed into since.
 //
-// GC can unlink a tombstone this counts, and no purge barrier can prevent it:
-// a split applied after the purge can carry a tombstone one replica already
-// collected into the very product this classifies, and nothing at purge time
-// names that product. What bounds the effect is its direction. A purge only
-// takes a known child away, so it can only turn this answer from true to
-// false, and with it false §7.8 walks on past the right half -- the walk every
-// replica ran before this check existed. For that to change where a split
-// lands there must be a sibling to walk on to, and then the walk without this
-// check took the split past the right half on every replica that applied the
-// concurrent split first, while one that applied ours first placed it by
-// position (yorkie-js-sdk#1433). So a replica that collected can miss this fix
-// for an edit set that diverged without it; it cannot make one diverge that
-// converged without it. The other tombstone-counting split rules (§7.4, the
-// §7.5 advance, the §7.8 entry gate) predate this one; see
-// docs/design/concurrent-merge-split.md.
+// Tombstones count, so GC could change the answer: Purge unlinks a node, and
+// a replica that had collected one would read false where a replica that had
+// not reads true. Two facts rule that out, one per kind of tombstone.
 //
-// A child a merge the editor had not seen moved here is not evidence either,
-// and is skipped along with everything below it; see mergeMovedConcurrently
-// for why the skip stops there.
+//   - A tombstone whose removal the editor had not seen is never collected on
+//     a replica before this split is applied there. A replica collects only
+//     with the min version vector of a pull reply, after applying every change
+//     in that reply (InternalDocument.ApplyChangePack; the server's snapshot
+//     path also applies before it collects). The server records a client's
+//     vector only after storing the changes pushed with it (packs.PushPull
+//     runs pushPack before pullPack's UpdateMinVersionVector, and a detaching
+//     client pushes before its vector is dropped). So by the time the min
+//     covers the removal, the editor's vector covers it as well, which means
+//     the editor already pushed every change made before it saw the removal,
+//     this split included, and any reply carrying that min carries the split.
+//     docs/design/garbage-collection.md states this contract, and every
+//     operation anchored on a tombstone already depends on it.
+//   - A tombstone whose removal the editor had seen can be collected before
+//     the split arrives. The replica that applied the split first still holds
+//     it inside its own product, so this method has to keep counting it.
+//     PurgeHeldBack covers this case: a tombstone stays linked while any of
+//     its ancestors was created outside the min. A split that has not arrived
+//     yet carries a vector at least as large as that min, so every ancestor
+//     of a collected tombstone was known to the editor, and a known node is
+//     never the unknown chain sibling this method is asked about.
+//
+// One case is left: a split made after the purge, by an editor that already
+// knew about the removal, can carry the tombstone into a new product. Our
+// editor knew about the removal too, so it may itself have collected the
+// tombstone before it split, and its own placement then does not depend on
+// the tombstone either. §7.8 in docs/design/concurrent-merge-split.md
+// describes the case and how it was measured.
+//
+// A child relocated by a merge keeps its createdAt and counts like any other.
+// Skipping merge-moved children was tried in both forms (MergedFrom presence,
+// and MergedAt scoped to the editor's vector). Both diverged on more scripts
+// than they fixed, and yorkie-js-sdk#1435 does not skip them either.
 //
 // The descent keeps its own stack instead of recursing, and takes the caller's
 // node set so one chain walk visits each node at most once (see
@@ -3286,9 +3342,6 @@ func (t *Tree) holdsKnownChild(
 		entry = false
 
 		for _, child := range current.Children(true) {
-			if mergeMovedConcurrently(child, versionVector) {
-				continue
-			}
 			if time.TicketKnown(versionVector, child.id.CreatedAt) {
 				return true
 			}
@@ -3299,45 +3352,6 @@ func (t *Tree) holdsKnownChild(
 	}
 
 	return false
-}
-
-// mergeMovedConcurrently reports whether child sits where it does because of a
-// merge the editor had not seen, which is what makes it useless as a §7.8
-// marker. §6.1/§6.3 relocate the right node's children into the left one
-// keeping their original createdAt, so a merge can hand an otherwise-empty
-// same-boundary product children the editor knew long after the split that
-// produced it. While that merge is in flight, whether it has arrived differs
-// per replica -- exactly the disagreement §7.8 exists to remove.
-//
-// A merge the editor *had* seen is a different matter, and is not skipped. A
-// replica only applies this split after everything the editor's version vector
-// covers, so by the time it runs the child sits in the same parent on every
-// replica, and reading it keeps §7.8's marker alive. Skipping it unconditionally
-// -- MergedFrom as bare presence, which is what this used to do -- blinded the
-// marker for good: MergedFrom is stamped once and never cleared on live content
-// (mergeNodes), so any paragraph join anywhere in the document's history left
-// the right half permanently unmarkable and brought yorkie-js-sdk#1433 back.
-// §7.1 scopes the same field the same way, off the same immutable MergedAt.
-//
-// Where the ticket cannot answer, the skip stands: MergedAt is absent on
-// snapshots written before it was persisted, and a nil ticket reads as "skip"
-// here. Skipping only clears the marker, which drops the walk back to the one
-// every replica ran before this check existed.
-//
-// One reading stays open, and is the same concurrent-merge class as §7.8's
-// read of live children: MergedAt is stamped on a child's *first* move only
-// (mergeNodes, Fix 20), so a child moved P->Q within the editor's knowledge
-// and then relayed Q->R by a merge the editor had not seen still reports the
-// P->Q ticket, and is counted in R. See docs/design/concurrent-merge-split.md
-// §7.8.
-func mergeMovedConcurrently(child *TreeNode, versionVector time.VersionVector) bool {
-	if child.MergedFrom == nil {
-		return false
-	}
-	if child.MergedAt == nil {
-		return true
-	}
-	return !time.TicketKnown(versionVector, child.MergedAt)
 }
 
 // sharesSplitFamilyParent reports whether next sits under node's parent, or

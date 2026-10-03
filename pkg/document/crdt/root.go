@@ -651,6 +651,10 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 				continue
 			}
 		}
+		if parent, ok := pair.Parent.(GCVectorBarrier); ok && parent.PurgeHeldBack(pair.Child, vector) {
+			deferred++
+			continue
+		}
 
 		if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err

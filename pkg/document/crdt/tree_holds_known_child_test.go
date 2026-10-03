@@ -30,9 +30,9 @@ import (
 // same-boundary split lands. These pin that answer directly: the end-to-end
 // suites reach it only through a split that happens to produce one shape.
 //
-// A child a merge relocated here is not evidence and is skipped with its
-// subtree; a cyclic parent/child graph is walked once per node rather than
-// forever. See holdsKnownChild's comment, and
+// A child a merge relocated here counts like any other, as it does in
+// yorkie-js-sdk#1435; a cyclic parent/child graph is walked once per node
+// rather than forever. See holdsKnownChild's comment, and
 // docs/design/concurrent-merge-split.md for the shared rule.
 
 // knownChildFixture builds <r><p></p></r> and hands out tickets for the editor
@@ -160,61 +160,26 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		assert.True(t, f.holds(f.p))
 	})
 
-	// §6.1/§6.3 relocate children keeping their original createdAt, so a
-	// concurrent merge can hand an otherwise-empty same-boundary product a
-	// child the editor knew long after the split that produced it. Whether it
-	// has arrived yet differs per replica, so it is not a marker.
-	t.Run("ignores a child a concurrent merge moved in", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		child := f.appendText(t, f.p, f.editorTicket())
-		mergedAt := f.peerTicket()
-		child.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
-		child.MergedAt = mergedAt
-		require.False(t, time.TicketKnown(f.vv, mergedAt),
-			"the merge has to be one the editor did not know, or there is nothing to skip")
+	// §6.1/§6.3 relocate children keeping their original createdAt, and the
+	// marker reads them as it finds them, whether or not the editor knew the
+	// merge. A skip was tried in two forms (MergedFrom presence, and MergedAt
+	// scoped to the editor's vector) and diverged on more scripts than it
+	// fixed; yorkie-js-sdk#1435 has no skip either, and the two SDKs have to
+	// answer alike.
+	t.Run("counts a merge-moved child whoever's merge it was", func(t *testing.T) {
+		for _, known := range []bool{true, false} {
+			f := newKnownChildFixture(t)
+			span := f.appendElement(t, f.p, f.peerTicket())
+			mergedAt := f.peerTicket()
+			if known {
+				mergedAt = f.editorTicket()
+			}
+			span.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
+			span.MergedAt = mergedAt
+			f.appendText(t, span, f.editorTicket())
 
-		assert.False(t, f.holds(f.p),
-			"a merge put this child here; it never marked the right half")
-	})
-
-	// The skip is scoped to merges the editor had not seen. A join the editor
-	// knew sits in the same parent on every replica by the time this split is
-	// applied, so it still marks the right half -- and skipping it would blind
-	// the marker for good, since MergedFrom is never cleared on live content.
-	t.Run("counts a child a merge the editor knew moved in", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		child := f.appendText(t, f.p, f.editorTicket())
-		mergedAt := f.editorTicket()
-		child.MergedFrom = NewTreeNodeID(f.editorTicket(), 0)
-		child.MergedAt = mergedAt
-		require.True(t, time.TicketKnown(f.vv, mergedAt),
-			"the merge has to be one the editor knew, or there is nothing to count")
-
-		assert.True(t, f.holds(f.p),
-			"a join the editor knew is settled everywhere; it still marks the right half")
-	})
-
-	// A snapshot written before MergedAt was persisted carries MergedFrom
-	// alone. With no ticket to scope the skip by, it stands: a cleared marker
-	// only drops the walk back to the one that ran before this check existed.
-	t.Run("ignores a merge-moved child with no merge ticket", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		child := f.appendText(t, f.p, f.editorTicket())
-		child.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
-
-		assert.False(t, f.holds(f.p))
-	})
-
-	// The skip covers what rode in under the moved child too: those arrived
-	// with the merge as well, and carry no MergedFrom of their own.
-	t.Run("ignores what a concurrent merge-moved child brought with it", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		span := f.appendElement(t, f.p, f.peerTicket())
-		span.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
-		span.MergedAt = f.peerTicket()
-		f.appendText(t, span, f.editorTicket())
-
-		assert.False(t, f.holds(f.p))
+			assert.True(t, f.holds(f.p), "merge known to the editor: %v", known)
+		}
 	})
 
 	// An empty vector reads as "knows everything" in time.TicketKnown, which
@@ -244,7 +209,12 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		descended := &nodeSet{}
 		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
 		assert.Len(t, descended.seen, 2, "p and span; text children are not descended")
-		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
+
+		// The tree does not change during one chain walk; this does it anyway,
+		// to show the second ask is answered without going below span again.
+		f.appendText(t, span, f.editorTicket())
+		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended),
+			"span was already descended; re-walking it would have found the known text")
 	})
 
 	// The risky direction of sharing the budget: a node the walk already
@@ -267,5 +237,40 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		f.appendText(t, span, f.editorTicket())
 
 		assert.True(t, f.tree.holdsKnownChild(span, f.vv, descended))
+	})
+}
+
+// PurgeHeldBack is the GC half of holdsKnownChild's argument: a tombstone stays
+// linked while any ancestor was created outside the collecting vector, because
+// a split that has not arrived yet could reach that ancestor as an unknown
+// chain sibling and count the tombstone below it.
+func TestTreePurgeHeldBack(t *testing.T) {
+	t.Run("holds a tombstone below a node the vector does not cover", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		span := f.appendElement(t, f.p, f.peerTicket())
+		child := f.appendText(t, span, f.editorTicket())
+		child.remove(f.editorTicket())
+
+		assert.True(t, f.tree.PurgeHeldBack(child, f.vv), "span is the peer's, outside the editor's vector")
+	})
+
+	t.Run("lets a tombstone go once every ancestor is covered", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		span := f.appendElement(t, f.p, f.editorTicket())
+		child := f.appendText(t, span, f.editorTicket())
+		child.remove(f.editorTicket())
+
+		assert.False(t, f.tree.PurgeHeldBack(child, f.vv))
+	})
+
+	// time.InitialTicket carries an actor no vector names; reading it as
+	// uncovered would hold every tombstone in such a tree forever.
+	t.Run("does not wait on a lamport-0 ancestor", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		root := NewTreeNode(NewTreeNodeID(time.InitialTicket, 0), "r", nil)
+		child := f.appendText(t, root, f.editorTicket())
+		child.remove(f.editorTicket())
+
+		assert.False(t, f.tree.PurgeHeldBack(child, f.vv))
 	})
 }

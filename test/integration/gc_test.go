@@ -21,12 +21,14 @@ package integration
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -1642,4 +1644,102 @@ func TestGarbageCollectionBarrierDrainsWithinOneRound(t *testing.T) {
 	}
 	assert.Equal(t, d1.Marshal(), d2.Marshal())
 	assert.Equal(t, `{"text":[{"val":"a"},{"val":"c"},{"val":"1"}]}`, d1.Marshal())
+}
+
+// TestGarbageCollectionSameBoundarySplit runs §7.8's GC case through the real
+// server: a removal the incoming split's editor had seen is covered by the min
+// version vector before that split reaches a collecting replica. The removed
+// character sits in a concurrent split's product there, so Tree.PurgeHeldBack
+// has to keep it, or that replica would read the right half as gone and place
+// the split differently from the others.
+func TestGarbageCollectionSameBoundarySplit(t *testing.T) {
+	clients := activeClients(t, 4)
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	docs := make([]*document.Document, len(clients))
+	for i, c := range clients {
+		docs[i] = document.New(helper.TestKey(t))
+		assert.NoError(t, c.Attach(ctx, docs[i]))
+	}
+	sync := func(i int) { assert.NoError(t, clients[i].Sync(ctx)) }
+	edit := func(i, from, to, splitLevel int, content *json.TreeNode) {
+		assert.NoError(t, docs[i].Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(from, to, content, splitLevel)
+			return nil
+		}))
+	}
+
+	assert.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{
+			Type:     "doc",
+			Children: []json.TreeNode{{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}}},
+		})
+		return nil
+	}))
+	for i := range clients {
+		sync(0)
+		sync(i)
+	}
+
+	// d1 removes "d".
+	edit(0, 4, 5, 0, nil)
+	sync(0)
+
+	// d2, not having seen the removal, types a few characters (so its splits
+	// carry tickets newer than d1's next one), splits "...abc|d", and splits
+	// again after its "d".
+	const typed = 5
+	for range typed {
+		edit(1, 1, 1, 0, &json.TreeNode{Type: "text", Value: "x"})
+	}
+	edit(1, typed+4, typed+4, 1, nil)
+	edit(1, typed+7, typed+7, 1, nil)
+	sync(1)
+	sync(1)
+	sync(2)
+	sync(3)
+	sync(3)
+
+	// Every client the server tracks has now reported a vector covering the
+	// removal, so d3 pulls a min that covers it. The removed "d" sits in d2's
+	// product, which d1 has not seen, so it must stay.
+	sync(2)
+	assert.Positive(t, docs[2].GarbageLen(), "the tombstone sits in a product outside the min")
+
+	// d1 splits after "c" without having seen d2's splits.
+	edit(0, 4, 4, 1, nil)
+	sync(0)
+	sync(2)
+	sync(3)
+	sync(1)
+	for range 3 {
+		for i := range clients {
+			sync(i)
+		}
+	}
+
+	shape := func(d *document.Document) string {
+		var walk func(n *crdt.TreeNode) string
+		walk = func(n *crdt.TreeNode) string {
+			if n.IsText() {
+				return n.IDString() + n.Value
+			}
+			var out strings.Builder
+			out.WriteString(n.Type() + "#" + n.IDString() + "[")
+			for _, child := range n.Children() {
+				out.WriteString(walk(child) + ",")
+			}
+			return out.String() + "]"
+		}
+		tree, ok := d.RootObject().Get("t").(*crdt.Tree)
+		assert.True(t, ok)
+		return walk(tree.Root())
+	}
+	for i := 1; i < len(docs); i++ {
+		assert.Equal(t, shape(docs[0]), shape(docs[i]), "replica %d", i)
+	}
+	for i, d := range docs {
+		assert.Equal(t, 0, d.GarbageLen(), "replica %d should drain once everyone has caught up", i)
+	}
 }
