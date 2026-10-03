@@ -46,12 +46,13 @@ no file on that path — not `server/rpc/yorkie_server.go`, not
 `client/client.go`, not `pkg/document/document.go`, not
 `server/packs/pushpull.go`.
 
-The lens read the new integration test as demonstrating the bypass. It does not
-open one. `d1.SetMaxSizeLimit(0)` is an in-process setter on the test's own
-client object; a test that never leaves the process cannot show what an
-untrusted client can do over the wire. The line is there to reach a document
-larger than one MongoDB record, so the compaction path under test has an
-oversized input, and the comment above it says so.
+An earlier version of this note said the new integration test does not
+demonstrate the bypass. That was wrong. `d1.SetMaxSizeLimit(0)` only clears
+the client's own gate, but the two `c1.Sync` calls then push 18 MB over the
+real RPC path into a project whose quota is 10 MiB, and the server accepts
+both: exactly what a modified SDK would do. The test does not open the gap; it
+exercises it, because reaching a document larger than one MongoDB record is
+the input the compaction path under test needs.
 
 Rebutted rather than fixed, for the third time, on the grounds the design doc
 states: closing it is a protocol change with an undecided refusal semantic.

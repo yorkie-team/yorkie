@@ -21,8 +21,7 @@ and, much later, MongoDB's 16 MiB record limit.
 
 The gap is written up in `docs/design/document-size-limit.md`, which is a
 proposal: it records the candidate gates and their costs but decides none of
-them. This task owns the decision and the work, so the gap stops being
-re-litigated in reviews of unrelated changes.
+them. This task owns the decision and the work.
 
 ## Plan
 

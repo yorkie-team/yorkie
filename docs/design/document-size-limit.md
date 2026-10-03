@@ -162,8 +162,7 @@ The gate itself is owned by
 `docs/tasks/active/20261003-server-side-document-size-gate-todo.md`: it carries
 the open decision (which refusal semantic) and the work that follows from it.
 Until that task lands, the quota stays advisory against anything but a stock
-SDK, and this document is where the trade-offs are argued — not a review of a
-change that happens to touch document accounting.
+SDK, and this document is where the trade-offs are argued.
 
 The accounting half — making the running `DocSize` accumulator agree with a rebuild,
 so that whatever number a gate reads means the same thing on both sides — is
