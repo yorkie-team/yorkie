@@ -35,6 +35,18 @@
   its operations, so a single pushed change cannot reach the limit the way a
   whole-document fold does; out of scope here.
 
+- Round 3 (CI panel on f1cb2c31). Correctness found that a conflict at the
+  final `UpdateOne` came after the purge and the insert, so a push racing
+  compaction across nodes left one change at seq 1 under a higher
+  `server_seq`. The pre-purge `FindOne` only narrowed that window. Fixed by
+  making the conditional document update the first write: without a
+  transaction (MongoDB is not guaranteed to be a replica set) the only safe
+  commit point is the single-document update every push also conditions on.
+  The compacted change then overwrites seq 1 with one `ReplaceOne`, so the
+  document reads consistently right after, and only cleanup remains. Not
+  rolled back: a failed replace has an unknown outcome on a network error, so
+  restoring the old `server_seq` could pair it with the new record.
+
 ## Panel round: the server-side size gate, re-raised a third time
 
 The CI panel's security lens returned the gap that

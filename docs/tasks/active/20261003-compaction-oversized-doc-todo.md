@@ -46,6 +46,12 @@ hits the limit.
 - [x] Review follow-up: check `server_seq` before the purge (shared
       `RunCompactChangeInfosTest`, memory and mongo), count stored changes
       in the integration test straight from MongoDB
+- [x] Review round 3: claim the document (conditional `server_seq` update)
+      before touching its changes, replace the change at the new seq in one
+      write, then drop the rest; a refused claim touches nothing. Missing
+      document reports `ErrDocumentNotFound` as in memory. Shared tests check
+      snapshots and version vectors survive a refused compaction, plus a
+      mongo-only two-node test (compaction on one, stale push on the other)
 
 ## Out of scope
 
