@@ -34,3 +34,30 @@
   (16 MiB, server/rpc/server.go) and a change's record carries little beyond
   its operations, so a single pushed change cannot reach the limit the way a
   whole-document fold does; out of scope here.
+
+## Panel round: the server-side size gate, re-raised a third time
+
+The CI panel's security lens returned the gap that
+`docs/design/document-size-limit.md` already records: `MaxSizePerDocument` is
+sent to the client (`server/rpc/yorkie_server.go:360`) and enforced only in
+`Document.Update` (`pkg/document/document.go:308`), so the server's push path
+never re-checks it. The gap is real. It is not this branch's: the diff touches
+no file on that path — not `server/rpc/yorkie_server.go`, not
+`client/client.go`, not `pkg/document/document.go`, not
+`server/packs/pushpull.go`.
+
+The lens read the new integration test as demonstrating the bypass. It does not
+open one. `d1.SetMaxSizeLimit(0)` is an in-process setter on the test's own
+client object; a test that never leaves the process cannot show what an
+untrusted client can do over the wire. The line is there to reach a document
+larger than one MongoDB record, so the compaction path under test has an
+oversized input, and the comment above it says so.
+
+Rebutted rather than fixed, for the third time, on the grounds the design doc
+states: closing it is a protocol change with an undecided refusal semantic.
+`DocSize.Total()` is `Live + GC`, and deleting content moves bytes between them
+without shrinking the total, so a blanket server-side refusal deadlocks any
+document already over quota — the push that would delete content is refused for
+the reason the push that added it was. The doc exists so that decision is made
+once, in the open; making it unilaterally inside a compaction fix is the
+re-litigation it was written to stop.
