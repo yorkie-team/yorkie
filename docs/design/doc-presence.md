@@ -607,6 +607,10 @@ pump ──────────┘
   for every stream reader to return, and only then stops the pump,
   because a reader may still be publishing a reconciliation into
   `d.Events()` when the context is cancelled.
+  Every path that applies a pack or tears an attachment down re-checks
+  the client status and the attachment under its `syncMu`, so none of
+  them can apply a pack after the pump is retired. See "Client
+  Deactivating" in [document-client-lifecycle.md](document-client-lifecycle.md).
 - An Attach whose initial Watch fails keeps the attachment registered,
   since the server already holds it and rejects a second attach. The
   caller recovers with Detach, which also tears the pipeline down, and

@@ -185,7 +185,8 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
     admits, so a retry is the way out.
   - *Two `Deactivate`s could interleave their status writes.* A status read at
     the top of a call does not survive an RPC in the middle of it. Serialised
-    on `deactivatingMu` and re-read under the lock.
+    on `deactivatingMu` (now `lifecycleMu`, which `Activate` takes too) and
+    re-read under the lock.
   - *`AuthInterceptor.token` stayed a plain field.* The delta's own stated
     invariant — a field read by goroutines that never wrote it is accessed
     atomically — was applied to `status` and not to the credential beside it,
@@ -243,3 +244,38 @@ comments and exercised by nothing.
   `assertPublishes`: a retired pipeline is only observable as a publisher that
   parks on the capacity-one channel, so the test emits two events and requires
   the second not to complete.
+
+## Round 12 — from call sites to an invariant
+
+The panel blocked on `Detach` and `Remove` checking the client status before
+taking `syncMu`, so a concurrent `Deactivate` could retire the pump between
+the check and the lock. It was the latest in a run of rounds that each found
+one more path into the same hole: `pushPullChanges`, then `refreshChannel`,
+then the attach ordering, then these two. Patching call sites one at a time
+had stopped converging.
+
+- *Name the invariant, then route every path through one helper.* The rule is
+  now written in `lockLiveAttachment`: a pipeline is retired only under its
+  `syncMu`, and only after the attachment has left `c.attachments` or the
+  client has left `statusActivated`. A goroutine that holds `syncMu` and sees
+  both conditions still true therefore has a live pump until it unlocks.
+  `Detach`, `Remove` and `syncInternal` go through the helper. The checks
+  before the lock stay as a fast path only.
+- *The audit found holes the panel had not reported yet.* `pushPullChanges`
+  re-read `c.attachments` by key, so a sync holding a stale attachment's
+  `syncMu` could apply into a replacement attached under the same key.
+  `beginAttach` dropped stale entries without retiring their pipelines. An
+  `Attach` overlapping a `Deactivate` registered an attachment nothing would
+  ever retire. `Attach` now registers under `attachingMu`, which is also the
+  lock `beginDeactivation` holds while it leaves `statusActivated`. It also
+  checks an activation generation, so an `Attach` that overlaps a
+  `Deactivate` followed by a new `Activate` is rejected as well.
+- *One teardown sequence, not two copies.* `Deactivate` and `Close`'s
+  `finishDeactivation` both call `beginDeactivation`. The ordering lives in
+  one place, so a later change cannot fix one copy and miss the other.
+- *Tests target the whole class.* `TestPackPathsRecheckStatusUnderSyncMu`
+  parks each path on `syncMu` (document detach, remove and sync, channel
+  detach and sync) while `Deactivate` leaves `statusActivated`, and requires
+  every path to back out before its RPC. Each new test was checked by
+  disabling the guard it covers and watching it fail.
+
