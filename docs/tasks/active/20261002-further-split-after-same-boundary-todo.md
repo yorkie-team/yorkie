@@ -45,11 +45,31 @@ follow-up by position, after its own product.
       cannot do to the marker, and `TestTreeSameBoundarySplitAfterGC` runs
       the splits with one replica having collected.
 
+- [x] Scope the merge-moved skip to merges the editor had not seen
+      (`mergeMovedConcurrently`). Bare `MergedFrom` presence is never cleared
+      on live content, so any historical paragraph join blinded the §7.8
+      marker for good and brought js#1433 back; §7.1 scopes the same field
+      off the same immutable `MergedAt`.
+- [x] Scan the chain node's own children even when an earlier chain step
+      descended through it. The shared budget bounds the descent; it must not
+      answer a chain step out of the cache.
+
 ## Verification
 
 - [x] `go test ./pkg/document/... ./pkg/index/...`, `go vet`, `gofmt`.
+
+## Merge gate (needs a human)
+
+- [ ] **Do not merge before yorkie-js-sdk#1435.** `orderSameBoundarySplit` is
+      a replicated convergence rule: a server carrying this change and a
+      client without it (or the reverse) disagree on where a same-boundary
+      split lands, and a snapshot built by either flips the other (measured
+      on #2030 / js#1375). The two land together or not at all.
 - [ ] yorkie-js-sdk#1435's `pnpm sdk test` against a server built from this
-      branch.
+      branch. Needs a yorkie-js-sdk checkout and a running server, so CI here
+      cannot tick it; a maintainer has to run it (or confirm js#1435 merged
+      with the identical rule, including this round's `MergedAt` scoping and
+      the always-scan-the-entry-node descent, which js#1435 must mirror).
 
 ## Out of scope
 

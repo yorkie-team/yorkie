@@ -491,23 +491,48 @@ the whole chain walk: a subtree already shown to hold nothing known is
 never re-entered (a hit ends the walk), so the walk costs one visit per
 reachable node rather than one subtree per chain step, and a cyclic
 parent/child graph terminates it the way `insNextWalker` terminates a
-cyclic chain.
+cyclic chain. The shared set bounds the *descent* only. The node the
+chain walk asks about is always scanned afresh, even when an earlier
+step descended through it, because what that step established —
+"nothing known below this subtree" — is not the question asked of a node
+reached as a chain sibling.
 
-A child a merge moved in is not a marker, and is skipped with its
-subtree. §6.1/§6.3 relocate the right node's children into the left one
-keeping their original `createdAt`, so a merge can give an
-otherwise-empty same-boundary product children the editor knew long
-after the split that produced it — and whether it has done so yet
-differs per replica while the merge is in flight, which is the
-disagreement this rule exists to remove. The test is the *presence* of
-`MergedFrom`, not a comparison against `MergedAt`: `mergeNodes` stamps
-`MergedFrom` on the moved child, while `TreeNode.Split`, `SplitElement`
-and `DeepCopy` copy only the product's own, and presence needs no ticket
-to be trustworthy, so a first-move-only or client-supplied value cannot
-be read as a later merge than it was. What it over-skips — a child
-carrying `MergedFrom` for another reason, e.g. content inserted into a
-merged-away parent (`intendedMergeParent`) — only clears the marker, and
-a cleared marker is the direction the paragraph below shows is safe.
+A child **a merge the editor had not seen** moved in is not a marker,
+and is skipped with its subtree (`mergeMovedConcurrently`). §6.1/§6.3
+relocate the right node's children into the left one keeping their
+original `createdAt`, so a merge can give an otherwise-empty
+same-boundary product children the editor knew long after the split that
+produced it — and whether it has done so yet differs per replica while
+the merge is in flight, which is the disagreement this rule exists to
+remove.
+
+A merge the editor *had* seen is counted. A replica applies this split
+only after everything the editor's version vector covers, so by then the
+moved child sits under the same parent everywhere and reading it is
+deterministic. The scope matters because `MergedFrom` is stamped once
+and never cleared on live content (`mergeNodes` stamps on the first move
+only; `DropEngineOnlyLinks`/`ReissueIDs` clear it on operation content,
+not on the tree): a bare presence test, which is what this rule used to
+be, left the right half permanently unmarkable after any paragraph join
+anywhere in the document's history and brought yorkie-js-sdk#1433 back.
+§7.1 scopes the same field the same way, off the same immutable
+`MergedAt`.
+
+Where the ticket cannot answer, the skip stands. `MergedAt` is absent on
+snapshots written before it was persisted, and a nil ticket reads as
+"skip"; so does a child carrying `MergedFrom` for another reason, e.g.
+content inserted into a merged-away parent (`intendedMergeParent`),
+whose stamped ticket is the merge it was redirected by. Skipping only
+clears the marker, the direction the paragraph below shows is safe. One
+reading stays open: `MergedAt` records a child's *first* move only
+(Fix 20), so a child moved P→Q within the editor's knowledge and then
+relayed Q→R by a merge it had not seen still reports the P→Q ticket and
+is counted in R. That is the same concurrent-merge class as the rule's
+read of live children — a merge in flight that moves the right half
+*out* of the holder leaves nothing behind either, and the holder is then
+tombstoned, so the walk's `IsRemoved` gate decides it before the marker
+is ever asked. Making the marker independent of in-flight merges needs
+the same follow-up as making it independent of GC, below.
 
 Counting tombstones keeps the answer independent of whether a replica
 has applied a concurrent removal yet, but GC can unlink a tombstone the

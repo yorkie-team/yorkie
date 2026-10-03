@@ -177,24 +177,41 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 			"a merge put this child here; it never marked the right half")
 	})
 
-	// MergedFrom is read as presence, with no ticket comparison: a merge the
-	// editor did know moves the child just the same, and skipping it only
-	// falls the walk back to the one that ran before this check existed.
-	t.Run("ignores a child a merge the editor knew moved in", func(t *testing.T) {
+	// The skip is scoped to merges the editor had not seen. A join the editor
+	// knew sits in the same parent on every replica by the time this split is
+	// applied, so it still marks the right half -- and skipping it would blind
+	// the marker for good, since MergedFrom is never cleared on live content.
+	t.Run("counts a child a merge the editor knew moved in", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 		child := f.appendText(t, f.p, f.editorTicket())
+		mergedAt := f.editorTicket()
 		child.MergedFrom = NewTreeNodeID(f.editorTicket(), 0)
-		child.MergedAt = f.editorTicket()
+		child.MergedAt = mergedAt
+		require.True(t, time.TicketKnown(f.vv, mergedAt),
+			"the merge has to be one the editor knew, or there is nothing to count")
+
+		assert.True(t, f.holds(f.p),
+			"a join the editor knew is settled everywhere; it still marks the right half")
+	})
+
+	// A snapshot written before MergedAt was persisted carries MergedFrom
+	// alone. With no ticket to scope the skip by, it stands: a cleared marker
+	// only drops the walk back to the one that ran before this check existed.
+	t.Run("ignores a merge-moved child with no merge ticket", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		child := f.appendText(t, f.p, f.editorTicket())
+		child.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
 
 		assert.False(t, f.holds(f.p))
 	})
 
 	// The skip covers what rode in under the moved child too: those arrived
 	// with the merge as well, and carry no MergedFrom of their own.
-	t.Run("ignores what a merge-moved child brought with it", func(t *testing.T) {
+	t.Run("ignores what a concurrent merge-moved child brought with it", func(t *testing.T) {
 		f := newKnownChildFixture(t)
 		span := f.appendElement(t, f.p, f.peerTicket())
 		span.MergedFrom = NewTreeNodeID(f.peerTicket(), 0)
+		span.MergedAt = f.peerTicket()
 		f.appendText(t, span, f.editorTicket())
 
 		assert.False(t, f.holds(f.p))
@@ -228,5 +245,27 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
 		assert.Len(t, descended.seen, 2, "p and span; text children are not descended")
 		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
+	})
+
+	// The risky direction of sharing the budget: a node the walk already
+	// descended *through* can come back as a chain node of its own, and the
+	// cache holds the answer to a different question ("nothing known below
+	// this subtree"), not to the one §7.8 asks of a chain sibling. The entry
+	// node's own children decide, every time.
+	t.Run("re-asks a node an earlier descent passed through", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		span := f.appendElement(t, f.p, f.peerTicket())
+		f.appendText(t, span, f.peerTicket())
+
+		descended := &nodeSet{}
+		require.False(t, f.tree.holdsKnownChild(f.p, f.vv, descended))
+		require.Contains(t, descended.seen, span, "the descent went through span")
+
+		// span now holds a child the editor knew. Asked as a chain node of its
+		// own it is a marker; the cached "nothing known below p" must not
+		// answer for it.
+		f.appendText(t, span, f.editorTicket())
+
+		assert.True(t, f.tree.holdsKnownChild(span, f.vv, descended))
 	})
 }

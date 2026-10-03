@@ -70,3 +70,22 @@
   as `main` (15 flat, 13 nested), bar one seed whose minimised script
   diverges on `main` without GC at all. The barrier lowered the count but
   added seeds `main` handled, so it was not a strict improvement either.
+
+## Review round: the merge skip, scoped
+
+- **"Every way it is wrong clears the marker" is not enough when the
+  marker never comes back.** Reading `MergedFrom` as bare presence was
+  argued safe because a cleared marker falls back to `main`'s walk. It is
+  safe per edit, and wrong per document: the field is stamped once and
+  never cleared on live content, so one paragraph join anywhere in the
+  history blinds §7.8 for good and js#1433 returns. A skip whose errors
+  all point at the old behaviour still has to be scoped to the window
+  where the disagreement exists — here, a merge the editor had not seen.
+  `MergedAt` is usable for exactly that comparison (§7.1 already makes
+  it); what the earlier round proved is that it cannot be trusted to
+  *add* a stop point, and `nil`/first-move-only both read as "skip".
+- **A shared cache must answer the same question it recorded.** The
+  descent budget records "nothing known below this subtree". A chain
+  node asks "does this node hold the right half", and the two are not
+  the same question about the same node. Scanning the entry node afresh
+  and caching only the deeper descent keeps the bound and the answer.

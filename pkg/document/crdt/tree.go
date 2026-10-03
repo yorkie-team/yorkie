@@ -3246,21 +3246,9 @@ func (t *Tree) orderSameBoundarySplit(
 // §7.5 advance, the §7.8 entry gate) predate this one; see
 // docs/design/concurrent-merge-split.md.
 //
-// A child a merge moved here is not evidence either, and is skipped along with
-// everything below it. §6.1/§6.3 relocate the right node's children into the
-// left one keeping their original createdAt, so a merge can hand an
-// otherwise-empty same-boundary product children the editor knew long after the
-// split that produced it -- and whether it has done so yet differs per replica
-// while the merge is in flight, which is exactly the disagreement this rule
-// exists to remove. MergedFrom is the presence test, not MergedAt: it is
-// stamped on the moved child (mergeNodes), where Split/SplitElement/DeepCopy
-// copy only the *product's* own MergedFrom, and it needs no ticket comparison,
-// so a client-supplied or first-move-only value cannot be read as a later merge
-// than it was. The reading it does get wrong -- a child that carries MergedFrom
-// for another reason, e.g. content inserted into a merged-away parent
-// (intendedMergeParent) -- only clears the marker, which is the direction the
-// paragraph above shows is safe: the walk falls back to the one every replica
-// ran before this check existed.
+// A child a merge the editor had not seen moved here is not evidence either,
+// and is skipped along with everything below it; see mergeMovedConcurrently
+// for why the skip stops there.
 //
 // The descent keeps its own stack instead of recursing, and takes the caller's
 // node set so one chain walk visits each node at most once (see
@@ -3278,18 +3266,27 @@ func (t *Tree) holdsKnownChild(
 	}
 
 	stack := []*TreeNode{node}
+	entry := true
 	for len(stack) > 0 {
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
 		// Children are physical pointers index.MoveChild will relocate without
 		// an ancestor check, so the descent cannot assume it is acyclic.
-		if !descended.visit(current) {
+		//
+		// The entry node is scanned even when an earlier chain step already
+		// descended through it. The shared set bounds the descent; it must
+		// never answer a chain step out of the cache, because what that step
+		// proved was "nothing known below this subtree", which is not the
+		// question asked of a node reached as a chain sibling. Only the deeper
+		// descent, which is asking that same question again, is cached.
+		if !descended.visit(current) && !entry {
 			continue
 		}
+		entry = false
 
 		for _, child := range current.Children(true) {
-			if child.MergedFrom != nil {
+			if mergeMovedConcurrently(child, versionVector) {
 				continue
 			}
 			if time.TicketKnown(versionVector, child.id.CreatedAt) {
@@ -3302,6 +3299,45 @@ func (t *Tree) holdsKnownChild(
 	}
 
 	return false
+}
+
+// mergeMovedConcurrently reports whether child sits where it does because of a
+// merge the editor had not seen, which is what makes it useless as a §7.8
+// marker. §6.1/§6.3 relocate the right node's children into the left one
+// keeping their original createdAt, so a merge can hand an otherwise-empty
+// same-boundary product children the editor knew long after the split that
+// produced it. While that merge is in flight, whether it has arrived differs
+// per replica -- exactly the disagreement §7.8 exists to remove.
+//
+// A merge the editor *had* seen is a different matter, and is not skipped. A
+// replica only applies this split after everything the editor's version vector
+// covers, so by the time it runs the child sits in the same parent on every
+// replica, and reading it keeps §7.8's marker alive. Skipping it unconditionally
+// -- MergedFrom as bare presence, which is what this used to do -- blinded the
+// marker for good: MergedFrom is stamped once and never cleared on live content
+// (mergeNodes), so any paragraph join anywhere in the document's history left
+// the right half permanently unmarkable and brought yorkie-js-sdk#1433 back.
+// §7.1 scopes the same field the same way, off the same immutable MergedAt.
+//
+// Where the ticket cannot answer, the skip stands: MergedAt is absent on
+// snapshots written before it was persisted, and a nil ticket reads as "skip"
+// here. Skipping only clears the marker, which drops the walk back to the one
+// every replica ran before this check existed.
+//
+// One reading stays open, and is the same concurrent-merge class as §7.8's
+// read of live children: MergedAt is stamped on a child's *first* move only
+// (mergeNodes, Fix 20), so a child moved P->Q within the editor's knowledge
+// and then relayed Q->R by a merge the editor had not seen still reports the
+// P->Q ticket, and is counted in R. See docs/design/concurrent-merge-split.md
+// §7.8.
+func mergeMovedConcurrently(child *TreeNode, versionVector time.VersionVector) bool {
+	if child.MergedFrom == nil {
+		return false
+	}
+	if child.MergedAt == nil {
+		return true
+	}
+	return !time.TicketKnown(versionVector, child.MergedAt)
 }
 
 // sharesSplitFamilyParent reports whether next sits under node's parent, or
