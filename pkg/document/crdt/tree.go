@@ -1687,6 +1687,12 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	}
 
 	node, offset := treePos.Node, treePos.Offset
+
+	if node.IsText() &&
+		!isUTF16Boundary(node.Value.Value, offset) {
+		return nil, ErrInvalidUTF16Index
+	}
+
 	var leftNode *TreeNode
 
 	if node.IsText() {
