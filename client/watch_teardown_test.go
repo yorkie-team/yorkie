@@ -246,12 +246,16 @@ func (s *failingDeactivateServer) DeactivateClient(
 	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
 }
 
-// TestDeactivateRestoresStatusOnFailure pins that a failed DeactivateClient
-// does not wedge the client in the deactivating state. The server-side session
-// outlived the call, so IsActive has to keep reporting it, the guards spelled
-// `!= statusActivated` have to keep letting the client through, and a retry
-// has to be able to finish the deactivation.
-func TestDeactivateRestoresStatusOnFailure(t *testing.T) {
+// TestFailedDeactivateStaysDeactivating pins that a failed DeactivateClient
+// leaves the client deactivating rather than putting it back to activated.
+// Deactivate retires every attachment's watch pipeline before the RPC and the
+// pipelines do not come back, so a client restored to activated would let the
+// sync loop and Client.Sync apply packs into documents whose pump is gone --
+// and the first event ApplyChangePack publishes would block forever on the
+// document's capacity-one event channel, holding the document's event mutex
+// against every other publisher. The client stays shut until a retried
+// Deactivate succeeds, which is the one call this state still admits.
+func TestFailedDeactivateStaysDeactivating(t *testing.T) {
 	srv := &failingDeactivateServer{watchInitServer: &watchInitServer{
 		firstResponse: &api.WatchResponse{
 			Body: &api.WatchResponse_Initialization{
@@ -273,16 +277,73 @@ func TestDeactivateRestoresStatusOnFailure(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NoError(t, cli.Activate(ctx))
 
-	assert.Error(t, cli.Deactivate(ctx))
-	assert.True(t, cli.IsActive())
-
-	// Every entry point guarded on the activated status stays open.
 	doc := document.New(key.Key("deactivate-failure-retry"))
-	assert.NoError(t, cli.Attach(ctx, doc))
-	assert.NoError(t, cli.Detach(ctx, doc))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
 
+	assert.Error(t, cli.Deactivate(ctx))
+	assert.False(t, cli.IsActive())
+
+	// The attachment is still registered and still StatusAttached, but its
+	// pipeline is retired, so no entry point guarded on the activated status
+	// may reach the document. Run the sync off-goroutine so a wedge shows up as
+	// this timeout rather than as a hung test binary.
+	syncDone := make(chan error, 1)
+	go func() { syncDone <- cli.Sync(ctx) }()
+	select {
+	case err := <-syncDone:
+		assert.ErrorIs(t, err, client.ErrNotActivated)
+	case <-time.After(10 * time.Second):
+		t.Fatal("sync after a failed deactivate did not return")
+	}
+	assert.ErrorIs(t, cli.Detach(ctx, doc), client.ErrNotActivated)
+	assert.ErrorIs(t, cli.Activate(ctx), client.ErrDeactivating)
+
+	// Retrying is the way out: unlike an already-deactivated client, one left
+	// deactivating still runs Deactivate.
 	assert.NoError(t, cli.Deactivate(ctx))
 	assert.False(t, cli.IsActive())
+}
+
+// TestConcurrentDeactivateDoesNotReopenTheWindow pins that two overlapping
+// Deactivate calls cannot leave a client whose session the server already ended
+// back in the deactivating window. The second caller observed its status before
+// the first finished, so Deactivate re-reads it under its own lock.
+func TestConcurrentDeactivateDoesNotReopenTheWindow(t *testing.T) {
+	srv := &failingDeactivateServer{watchInitServer: &watchInitServer{
+		firstResponse: &api.WatchResponse{
+			Body: &api.WatchResponse_Initialization{
+				Initialization: &api.WatchInitialization{},
+			},
+		},
+		release: make(chan struct{}),
+	}}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+
+	ctx := context.Background()
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	// The first call to reach the server fails and the rest succeed, so
+	// whichever order the two run in, the client ends deactivated: the loser
+	// must not write the deactivating status over the winner's.
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() { _ = cli.Deactivate(ctx) })
+	}
+	wg.Wait()
+
+	assert.False(t, cli.IsActive())
+	// Activate is what tells deactivated apart from deactivating: the latter
+	// answers ErrDeactivating however often it is retried.
+	assert.NoError(t, cli.Activate(ctx))
+	assert.NoError(t, cli.Deactivate(ctx))
 }
 
 // blockingDeactivateServer holds DeactivateClient open until the test releases

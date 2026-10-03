@@ -63,9 +63,16 @@ const (
 	// down, so nothing that needs one may start. Every guard spelled
 	// `!= statusActivated` -- Attach, Detach, Remove, pushPullChanges --
 	// therefore rejects it, and Activate refuses to lay a new session over the
-	// one being ended. The state is a window, not a resting place: Deactivate
-	// restores the previous status when its RPC fails, so a client is never
-	// left here once the call returns.
+	// one being ended.
+	//
+	// A client whose DeactivateClient RPC failed stays here rather than going
+	// back to statusActivated. The pipelines retired on the way in do not come
+	// back, so a client returned to statusActivated would let the sync loop and
+	// Client.Sync apply packs into documents whose pump is gone, and the first
+	// event ApplyChangePack publishes would block forever on the document's
+	// capacity-one event channel with the event mutex held, taking every other
+	// publisher with it. The way out is a Deactivate that succeeds, which this
+	// state -- unlike statusDeactivated -- still lets through.
 	statusDeactivating
 )
 
@@ -76,7 +83,9 @@ var (
 
 	// ErrDeactivating occurs when a client that has begun deactivating is
 	// asked to activate again. The deactivation has already retired the watch
-	// pipelines, so the activation has to wait for it to resolve.
+	// pipelines and they do not come back, so the client has to finish
+	// deactivating -- retrying Deactivate until it succeeds -- before a new
+	// session can be opened over it.
 	ErrDeactivating = errors.FailedPrecond("client is deactivating")
 
 	// ErrNotAttached occurs when the given resource is not attached to this client.
@@ -134,6 +143,13 @@ type Client struct {
 	// is what rejects a concurrent attach of the same key.
 	attachingMu sync.Mutex
 	attaching   map[key.Key]struct{}
+
+	// deactivatingMu serializes Deactivate. The status transitions it makes are
+	// a sequence -- activated, deactivating, deactivated -- not a single store,
+	// and two callers interleaving them would let the loser's write land after
+	// the winner has already ended the server-side session, putting a
+	// deactivated client back into the deactivating window.
+	deactivatingMu sync.Mutex
 
 	syncCtx    context.Context
 	syncCancel context.CancelFunc
@@ -284,13 +300,14 @@ func (c *Client) storeStatus(s status) {
 // and receives a unique ID from the server. The given ID is used to distinguish
 // different clients.
 //
-// It returns ErrDeactivating while a deactivation of this client is in flight:
+// It returns ErrDeactivating while a deactivation of this client is unfinished:
 // that deactivation has already retired the watch pipelines and is ending the
 // server-side session, so activating over it would hand the client a new ID
 // while the ended session's attachments are still in c.attachments, leaving the
 // sync loop to push resources the new ID never attached, over pipelines that no
-// longer deliver. Deactivate restores the previous status when its RPC fails,
-// so the rejection lasts only as long as the call.
+// longer deliver. A deactivation whose RPC failed is also unfinished -- the
+// retired pipelines do not come back -- so the caller's next move there is to
+// retry Deactivate, not Activate.
 func (c *Client) Activate(ctx context.Context) error {
 	switch c.loadStatus() {
 	case statusActivated:
@@ -324,8 +341,14 @@ func (c *Client) Activate(ctx context.Context) error {
 
 // Deactivate deactivates this client.
 func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error {
-	prevStatus := c.loadStatus()
-	if prevStatus == statusDeactivated {
+	// Serialized against another Deactivate: the transitions below are a
+	// sequence, and the status a second caller observed before taking the lock
+	// may no longer hold. Re-read it here so a call that arrives after the
+	// session is already ended is the no-op it should be.
+	c.deactivatingMu.Lock()
+	defer c.deactivatingMu.Unlock()
+
+	if c.loadStatus() == statusDeactivated {
 		return nil
 	}
 
@@ -364,15 +387,17 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		}), c.options.APIKey, c.key))
 	if err != nil {
 		// The server-side session outlived the call, so this client is not
-		// deactivated. Leaving it marked deactivating would wedge it there for
-		// good: every guard spelled `!= statusActivated` -- Attach, Detach,
-		// Remove, pushPullChanges, broadcast -- would reject it, IsActive would
-		// report a session that still exists as gone, and Activate would refuse
-		// to open a new one. Restore the status it came in with, which is where
-		// a failed deactivation has always left it; the watch pipelines retired
-		// above do not come back, so the caller's next move is to retry
-		// Deactivate.
-		c.storeStatus(prevStatus)
+		// deactivated -- but it is not usable either, because the watch
+		// pipelines retired above do not come back. Stay deactivating rather
+		// than restoring statusActivated: a client returned to activated would
+		// re-open the sync loop and Client.Sync on attachments that are still
+		// registered and still StatusAttached, and the first event their
+		// ApplyChangePack publishes would block forever on the document's
+		// capacity-one event channel -- with the document's event mutex held,
+		// taking every other publisher with it. Here, every guard spelled
+		// `!= statusActivated` keeps rejecting the client and Activate returns
+		// ErrDeactivating, while Deactivate itself still runs, so the caller
+		// retries it until the session is gone.
 		return err
 	}
 

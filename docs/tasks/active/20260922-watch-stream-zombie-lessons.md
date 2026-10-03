@@ -164,9 +164,31 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
 - A new intermediate state is a new set of edges, not one. `statusDeactivating`
   was added for the guards that read `!= statusActivated` and left every other
   reader of the field untouched: `Activate` would lay a new ID over the ended
-  session's attachments, and a failed `DeactivateClient` never rolled the state
-  back, so a server session that still existed read as gone and every guard
-  rejected the client for good. A transient state needs an exit on the error
-  path and an answer for every entry point that observes it — and because it is
-  observed by goroutines that never wrote it, the field itself has to be atomic
-  for the window to mean anything.
+  session's attachments. A transient state needs an answer for every entry
+  point that observes it — and because it is observed by goroutines that never
+  wrote it, the field itself has to be atomic for the window to mean anything.
+
+## Review rounds (continued)
+
+- **Round 3 (the review panel on #2084, correctness + security).**
+  - *A failed `Deactivate` restored `statusActivated`.* The first attempt at an
+    "exit on the error path" picked the wrong exit. The restore was reasoned
+    about as a status question — a session the server still holds should read
+    as live — when it is a resource question: `Deactivate` retires every
+    pipeline *before* the RPC, and a retired pump does not come back. Restoring
+    `statusActivated` re-opened `Sync` on documents with no consumer for their
+    events, so the next `ApplyChangePack` would wedge on the capacity-one event
+    channel holding the document's event mutex. The exit from a transient state
+    has to leave the invariants the state was entered to establish intact; when
+    the entry destroyed something, there is no way back, only forward. The
+    client now stays deactivating and `Deactivate` is the one call it still
+    admits, so a retry is the way out.
+  - *Two `Deactivate`s could interleave their status writes.* A status read at
+    the top of a call does not survive an RPC in the middle of it. Serialised
+    on `deactivatingMu` and re-read under the lock.
+  - *`AuthInterceptor.token` stayed a plain field.* The delta's own stated
+    invariant — a field read by goroutines that never wrote it is accessed
+    atomically — was applied to `status` and not to the credential beside it,
+    which `SetToken` swaps at runtime while every watch and sync goroutine
+    reads it. An invariant written down for one field is a checklist for the
+    rest of the struct.
