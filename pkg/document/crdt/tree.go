@@ -1100,42 +1100,93 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
+// maxHeldBackClimb bounds PurgeHeldBack's ancestor climb. The climb runs once
+// per covered tombstone on every GC pass, under the document lock, over parent
+// pointers a peer controls — index.MoveChild relocates them without an
+// ancestor check, so the chain can be made cyclic as well as deep. A fixed
+// bound keeps a pass O(tombstones) with no per-tombstone allocation, and
+// doubles as the cycle guard the climb used to need a node set for.
+//
+// Past the bound the climb gives up and allows the purge. Of the two failure
+// directions that is the safe one: the barrier only sharpens an already-rare
+// §7.8 case on trees nested past this depth, while a hold that never lifts
+// grows the document forever.
+const maxHeldBackClimb = 64
+
 // PurgeHeldBack implements GCVectorBarrier. It keeps a tombstone linked while
-// any of its ancestors was created outside vector.
+// an ancestor §7.8 could still descend from is outside vector.
 //
 // §7.8's holdsKnownChild counts tombstones below an unknown split sibling,
 // and a removal the incoming split's editor had seen can be collected before
 // that split arrives. A split that has not arrived yet carries a version
 // vector at least as large as the min this collection runs with (see
-// holdsKnownChild), so once every ancestor is inside the min, none of them
-// can be the unknown sibling that §7.8 descends from, and unlinking the
-// tombstone cannot change what that descent finds.
+// holdsKnownChild), so once that sibling is inside the min, §7.8's chain walk
+// stops before it and unlinking the tombstone cannot change what the descent
+// finds.
 //
-// A node ID is client-supplied, so an ancestor carrying a ticket nobody will
-// ever cover holds its tombstones until the ancestor is itself removed and
-// collected. PurgeBarrierAt has the same property for a node's successor.
+// Only the chain sibling itself matters, which is what holdsBackPurge checks:
+// gating on every ancestor regardless of shape made this a gate on nearly all
+// tree garbage, since a min vector carries 0 for any actor some attached
+// client's vector lacks (time.MinVersionVector) and names no actor that has
+// detached.
 func (t *Tree) PurgeHeldBack(child GCChild, vector time.VersionVector) bool {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil {
 		return false
 	}
 
-	// Parent pointers are relocated by index.MoveChild without an ancestor
-	// check, so guard the climb the way the chain walks are guarded.
-	var climbed nodeSet
-	for parent := node.Index.Parent; parent != nil && climbed.visit(parent.Value); parent = parent.Parent {
-		// A lamport-0 ticket (time.InitialTicket, as a tree built outside any
-		// change carries) predates every change, so it is never an unknown
-		// sibling; its actor need not appear in the vector at all.
-		createdAt := parent.Value.id.CreatedAt
-		if createdAt.Lamport() == 0 {
-			continue
-		}
-		if !vector.EqualToOrAfter(createdAt) {
+	parent := node.Index.Parent
+	for depth := 0; parent != nil && depth < maxHeldBackClimb; depth++ {
+		if holdsBackPurge(parent.Value, vector) {
 			return true
 		}
+		parent = parent.Parent
 	}
+
 	return false
+}
+
+// holdsBackPurge reports whether ancestor is a node orderSameBoundarySplit
+// could still reach as an unknown chain sibling on a replica that has not
+// applied the split yet, and so one whose tombstones have to stay countable.
+//
+// §7.8 only ever descends into a node it reached over an InsNextID chain, and
+// only after it has rejected a text node, a removed one and one the editor
+// knew. A node failing any of those is not a sibling that walk can land on, so
+// a tombstone below it is free to go.
+func holdsBackPurge(ancestor *TreeNode, vector time.VersionVector) bool {
+	// Only SplitElement links a node into a chain, so a node outside every
+	// chain is never reached as `next` in orderSameBoundarySplit's walk.
+	if ancestor.InsPrevID == nil && ancestor.InsNextID == nil {
+		return false
+	}
+
+	// The walk breaks on both before it descends (see orderSameBoundarySplit).
+	if ancestor.IsText() || ancestor.IsRemoved() {
+		return false
+	}
+
+	// A lamport-0 ticket (time.InitialTicket, as a tree built outside any
+	// change carries) predates every change, so it is never an unknown
+	// sibling; its actor need not appear in the vector at all.
+	createdAt := ancestor.id.CreatedAt
+	if createdAt.Lamport() == 0 {
+		return false
+	}
+
+	// An actor the collecting vector does not name at all is not one this
+	// collection is synced against: the server drops a client's entry only
+	// after it has detached, and a detaching client pushes before its entry
+	// goes (packs.PushPull), so nothing it made is still in flight. Reading
+	// an unnamed actor as uncovered — which is what VersionVector.
+	// EqualToOrAfter does — would instead pin every tombstone below such a
+	// node for the life of the document, and would let a forged node ID, whose
+	// actor no vector can ever name, pin one deliberately.
+	if _, named := vector.Get(createdAt.ActorID()); !named {
+		return false
+	}
+
+	return !vector.EqualToOrAfter(createdAt)
 }
 
 func (t *Tree) Purge(child GCChild) error {
@@ -3288,11 +3339,12 @@ func (t *Tree) orderSameBoundarySplit(
 //   - A tombstone whose removal the editor had seen can be collected before
 //     the split arrives. The replica that applied the split first still holds
 //     it inside its own product, so this method has to keep counting it.
-//     PurgeHeldBack covers this case: a tombstone stays linked while any of
-//     its ancestors was created outside the min. A split that has not arrived
-//     yet carries a vector at least as large as that min, so every ancestor
-//     of a collected tombstone was known to the editor, and a known node is
-//     never the unknown chain sibling this method is asked about.
+//     PurgeHeldBack covers this case: a tombstone stays linked while an
+//     ancestor this walk could land on — a live element in an InsNextID chain
+//     — is outside the min. A split that has not arrived yet carries a vector
+//     at least as large as that min, so such an ancestor of a collected
+//     tombstone was known to the editor, and a known node is never the unknown
+//     chain sibling this method is asked about.
 //
 // One case is left: a split made after the purge, by an editor that already
 // knew about the removal, can carry the tombstone into a new product. Our

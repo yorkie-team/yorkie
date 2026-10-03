@@ -120,3 +120,27 @@
 - **Measure a convergence patch against the version without it.** Both merge
   skips looked like fixes for a real mechanism (a merge in flight moves known
   children). The fuzz says each adds more divergent seeds than it removes.
+
+## Round 4 — the barrier was far wider than the rule it protected
+
+`PurgeHeldBack` first waited on *every* ancestor's `createdAt`, read through
+`VersionVector.EqualToOrAfter`. That reads an actor the vector does not name as
+uncovered, and a min version vector names no actor that has detached and carries
+`0` for any actor some attached client's vector lacks (`MinVersionVector`). Every
+tree tombstone has an element ancestor, so the barrier was a gate on nearly all
+tree garbage, with no upper bound on how long it held: a node ID is
+client-supplied, so one forged ticket pinned a whole subtree for the life of the
+document. The climb also allocated a cycle-guard map per tombstone per GC pass,
+under the document lock.
+
+The fix was to ask what §7.8 can actually descend from. `orderSameBoundarySplit`
+only ever lands on a node it reached over an `InsNextID` chain, and only after
+rejecting a text node, a removed one, and one the editor knew — so the barrier
+now waits on exactly that shape (`holdsBackPurge`), treats an actor the vector
+does not name as settled, and bounds the climb at a constant instead of a node
+set. `TestTreeSameBoundarySplitUnderServerGC` still fails with the barrier
+stubbed out, which is the check that the narrowing kept what the barrier was for.
+
+Lesson: a barrier derived from "which inputs could this rule read" is both
+sounder and far cheaper than one derived from "which inputs could possibly
+matter". The second shape is easy to write and impossible to bound.

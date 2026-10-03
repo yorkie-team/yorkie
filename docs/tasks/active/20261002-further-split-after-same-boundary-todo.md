@@ -86,6 +86,11 @@ follow-up by position, after its own product.
       the replicated rule, so a JS client without it still agrees with a Go
       replica on where a split lands; but a JS client that collects such a
       tombstone early is exposed to the divergence the barrier closes here.
+      Review round 4 narrowed the Go barrier to the ancestors §7.8 can
+      actually land on (a live element inside an `InsNextID` chain, created
+      by an actor the collecting vector names), so the exposure a JS replica
+      carries is now that one shape rather than every tombstone in the tree,
+      and `docs/design/garbage-collection.md` records the rule for both SDKs.
 
 ## Out of scope
 

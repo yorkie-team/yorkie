@@ -67,6 +67,33 @@ min([c1:2, c2:3, c3:4], [c1:3, c2:1, c3:5, c4:3])
 
 ```
 
+## Barriers beyond `removedAt`
+
+`removedAt` coverage says the *value* is gone everywhere. It does not say the
+*place* is settled: every container resolves a concurrent insert by walking the
+nodes that are still linked, tombstones included, so unlinking one can change
+where a still-in-flight operation lands. Two optional barriers (`crdt/gc.go`)
+hold a purge back until that is settled as well, and both are Go-side policy
+only — they narrow *when* a replica collects, never what any operation
+computes, so a replica without them still agrees on every position. A replica
+that collects earlier is the one exposed.
+
+- `GCBarrier.PurgeBarrierAt` names one extra ticket: the node that would become
+  the walk's new stopping point. `Tree`, `RGATreeList` and `RGATreeSplit`-backed
+  containers all have one.
+- `GCVectorBarrier.PurgeHeldBack` answers against the whole vector, for cases a
+  single ticket cannot name. `Tree` uses it for §7.8 of
+  `concurrent-merge-split.md`: a tombstone stays linked while an ancestor that
+  rule could still reach as an unknown split sibling — a live element inside an
+  `InsNextID` chain, created outside the collecting vector — is still
+  outstanding. Note the shape of the collecting vector when reasoning about it:
+  `MinVersionVector` carries `0` for an actor some attached client's vector
+  lacks, and carries no entry at all for an actor that has detached. An actor
+  the vector does not name is treated as settled, because a detaching client
+  pushes before its entry is dropped.
+
+`yorkie-js-sdk` does not implement `PurgeHeldBack` yet.
+
 ## GC Responsibility by Response Type
 
 GC responsibility is split between server and client depending on the response type:
