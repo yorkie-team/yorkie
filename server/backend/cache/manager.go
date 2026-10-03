@@ -38,7 +38,17 @@ type Manager struct {
 	// SessionCount is used to cache the session count of channels
 	// to reduce RPC calls between AdminServer and ClusterServer.
 	SessionCount *cache.LRUWithExpires[string, int64]
+
+	// OversizedCompaction remembers, per document, the server seq at which
+	// compaction failed because the compacted change would not fit in one
+	// record. Housekeeping skips the document until its server seq moves,
+	// instead of rebuilding it every cycle to fail the same way.
+	OversizedCompaction *cache.LRU[types.DocRefKey, int64]
 }
+
+// oversizedCompactionCacheSize bounds OversizedCompaction. An entry is a key
+// and an int64; evicting one only costs that document one more rebuild.
+const oversizedCompactionCacheSize = 10000
 
 // Options contains configuration for cache manager.
 type Options struct {
@@ -82,10 +92,19 @@ func New(opts Options) (*Manager, error) {
 		return nil, err
 	}
 
+	oversizedCompactionCache, err := cache.NewLRU[types.DocRefKey, int64](
+		oversizedCompactionCacheSize,
+		"oversized-compaction",
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	m := &Manager{
-		AuthWebhook:  authWebhookCache,
-		Snapshot:     snapshotCache,
-		SessionCount: sessionCountCache,
+		AuthWebhook:         authWebhookCache,
+		Snapshot:            snapshotCache,
+		SessionCount:        sessionCountCache,
+		OversizedCompaction: oversizedCompactionCache,
 	}
 	return m, nil
 }

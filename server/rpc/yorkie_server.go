@@ -1804,8 +1804,12 @@ func (s *yorkieServer) GetRevision(
 		return nil, err
 	}
 
-	// Get the revision with full snapshot
-	revision, err := revisions.Get(ctx, s.backend, revisionID)
+	// Get the revision with full snapshot. The revision ID arrives verbatim
+	// from the request and names a record of its own, so it has to be bound
+	// back to the document this call was authorized against: without that, any
+	// client holding read access to one document could read the snapshot of
+	// any other, in any project.
+	revision, err := revisions.GetForDoc(ctx, s.backend, docKey, revisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1855,7 +1859,9 @@ func (s *yorkieServer) RestoreRevision(
 		return nil, err
 	}
 
-	if err := revisions.Restore(ctx, s.backend, project, revisionID); err != nil {
+	// Restore the document this call was authorized against and holds the lock
+	// on, not whichever document the request's revision ID happens to name.
+	if err := revisions.Restore(ctx, s.backend, project, docKey, revisionID); err != nil {
 		return nil, err
 	}
 
