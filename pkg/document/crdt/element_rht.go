@@ -133,34 +133,35 @@ func (rht *ElementRHT) Set(k string, v Element) (Element, bool) {
 // docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
 //
 // It returns the element evicted from the key, if any, and whether v was
-// taken into this hashtable at all. The second value is false only when
-// taking v in would strand the node that currently answers to v's createdAt
-// (see strandsSlotHolder); the hashtable is then left exactly as it was, and
-// a caller that books v into Root must treat it as "nothing happened". See
-// operations.Set.Execute.
+// taken into this hashtable at all. The second value is false only when v
+// loses the key and taking it in would strand the node that currently
+// answers to v's createdAt (see refusesLoser); the hashtable is then left
+// exactly as it was, and a caller that books v into Root must treat it as
+// "nothing happened". See operations.Set.Execute.
 //
-// NOTE(hackerwins): the refusal has no counterpart in yorkie-js-sdk yet. The
-// rest of this file is a port of element_rht.ts, so the two SDKs disagree on
-// this one shape until the matching JS change lands -- a Go replica refuses
-// the value and a JS replica takes it in, stranding the slot holder there.
-// Refusing is the strictly safer half: the JS replica loses the ability to
-// address the stranded element, while neither replica loses a live member
-// from get()/Elements(). The shapes that reach it (two concurrent undos of
-// overwrites of one key, or a forged createdAt) are rare enough that holding
-// the server to the safe reading is worth the window. Tracked alongside
-// yorkie-team/yorkie-js-sdk#1398 in
-// docs/design/gc-registration-on-set-conflict.md.
+// A winner always takes the createdAt slot, as in the JS SDK. In a history
+// the SDKs can produce, a createdAt only ever sits at one key of one object
+// -- a restore re-inserts an element under the key it was removed from -- so
+// the node a winner displaces from the slot is either the occupant it has
+// just evicted from k, or a tombstone that used to sit at k. When the evicted
+// occupant is itself a copy under v's createdAt (two concurrent undos
+// restoring the same value), it leaves both maps here, and the caller has to
+// release it rather than book it as garbage: see operations.Set.Execute.
+//
+// NOTE(hackerwins): the loser refusal is ported to the JS SDK in
+// yorkie-team/yorkie-js-sdk#1440 (element_rht.ts, ElementRHT.set). Until that
+// lands, a JS replica takes in a loser that a Go replica refuses, and the
+// server's snapshot replay runs this code. The refusal only fires in the
+// concurrent-restore shapes it exists for, where the JS behavior is the bug
+// -- it strands the live copy and the document stops rebuilding after GC.
+// Validating crafted payloads (a createdAt that names an element elsewhere)
+// is a separate concern, tracked at the push boundary in
+// yorkie-team/yorkie#2081, and is deliberately not done here.
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
 	node, ok := rht.nodeMapByKey[k]
-	wins := !ok || executedAt.After(PositionedAt(node.elem))
-
-	if rht.strandsSlotHolder(k, v, wins) {
-		return nil, false
-	}
-
 	newNode := newElementRHTNode(k, v)
 
-	if wins {
+	if !ok || executedAt.After(PositionedAt(node.elem)) {
 		var removed Element
 		if ok && !node.isRemoved() && node.Remove(executedAt) {
 			removed = node.elem
@@ -169,6 +170,10 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(executedAt)
 		return removed, true
+	}
+
+	if rht.refusesLoser(v) {
+		return nil, false
 	}
 
 	// Mark the loser removed by its own state, not the occupant's: a live
@@ -186,51 +191,39 @@ func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.T
 	return nil, true
 }
 
-// strandsSlotHolder reports whether indexing v under its createdAt would
-// leave the node currently holding that slot unreachable. nodeMapByCreatedAt
-// is the only way GC, purge and DeepCopy address a node, so a node dropped
-// from it with no other way in is both uncollectable and absent from every
-// snapshot built afterwards -- the document can no longer be rebuilt from its
-// own content.
+// refusesLoser reports whether a value that has lost its key must stay out of
+// nodeMapByCreatedAt. A loser is indexed only so that GC can reach it, and
+// that index is keyed by a creation ticket, not by an element: undo/redo
+// restores a *copy* of a removed element under its original createdAt, so
+// two concurrent undos of overwrites of one key put two copies under one
+// ticket. Taking the slot from a node that is still reachable through its key
+// orphans that node -- nodeMapByCreatedAt is the only way GC, purge and
+// DeepCopy address it -- and the document can no longer be rebuilt from its
+// own content once GC runs.
 //
-// wins says whether v is about to take key k as well, which is what makes
-// one displacement legitimate:
+// The holder is still reachable through its key, and the loser is refused,
+// when it is:
 //
-//   - v wins and the slot holder sits at k. v replaces it at k anyway, so it
-//     is on its way out whatever happens here. This is the restore of a
-//     removed member under its original createdAt (set_operation.ts:98-104),
-//     the shape SetWithExecutedAt exists for; operations.Set.Execute retires
-//     the holder's collection entry right after.
-//   - the slot holder is a tombstone already displaced from its key. Nothing
-//     reaches it by key either, and the Set that displaced it left its
-//     collection entry behind for Set.Execute to retire. A losing restore has
-//     to take that slot over, because that is the state a replica reaches
-//     when the restore wins first and a newer Set evicts it.
+//   - live. Where one restore holds the key and the other loses, re-pointing
+//     the slot at the losing copy strands the live one, and collecting the
+//     loser then unlinks the slot (TestConcurrentUndoRestoresSameValue).
+//   - a tombstone that is still its key's occupant, which is what a Delete
+//     of a restored key leaves behind. Elements() skips it, but DeepCopy
+//     re-points the key through this very slot.
 //
-// Everything else strands the holder:
+// A tombstone already displaced from its key is taken over. Nothing reaches
+// it by key, the Set that displaced it left its collection entry for
+// operations.Set.Execute to retire, and a losing restore has to end where a
+// restore that won first and was then evicted ends
+// (TestLosingUndoRestoreConverges).
 //
-//   - a live holder. Two replicas undoing concurrent overwrites of the same
-//     key both restore a copy of the original value under its createdAt;
-//     where one restore holds the key and the other loses, re-pointing the
-//     slot at the losing copy strands the live one, and collecting the loser
-//     then unlinks the slot.
-//   - a tombstone that is still its key's occupant, which is what a Delete of
-//     a restored key leaves behind. It is still reachable -- Elements() skips
-//     it but DeepCopy re-points the key through this very slot -- and a
-//     concurrent older restore losing the LWW race would otherwise take the
-//     slot from it, orphaning it from nodeMapByCreatedAt for good.
-//
-// The last two are checked on the winning branch as well. A winning Set only
-// reaches them with a createdAt it did not mint -- an undo/redo restore, or a
-// value forged by a client -- and taking a live element's slot there is the
-// same theft, one key over.
-func (rht *ElementRHT) strandsSlotHolder(k string, v Element, wins bool) bool {
+// The decision reads only replicated state. Collection can drop a tombstone
+// holder, but only once every replica has seen its removal; that is the same
+// causal-stability assumption the LWW comparison above already rests on when
+// collection drops an occupant from nodeMapByKey.
+func (rht *ElementRHT) refusesLoser(v Element) bool {
 	holder, ok := rht.nodeMapByCreatedAt[v.CreatedAt().Key()]
 	if !ok || holder.elem == v {
-		return false
-	}
-
-	if wins && holder.key == k {
 		return false
 	}
 

@@ -449,9 +449,13 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // displaced that tombstone, and retiring its entry would leave a reachable
 // tombstone nothing can collect while releasing a charge the document is
 // still carrying. The other half is that the restore took at all, which
-// SetWithExecutedAt reports when it refuses a loser whose createdAt a live
-// node already answers to; operations.Set.Execute returns before reaching
-// this call on that path.
+// SetWithExecutedAt reports when it refuses a loser (ElementRHT.refusesLoser);
+// operations.Set.Execute returns before reaching this call on that path.
+//
+// Set.Execute also uses it for an occupant the restore evicted that is
+// itself a copy under the same createdAt: SetWithExecutedAt has dropped that
+// copy from both of the object's maps, so it is booked as removed and retired
+// at once rather than left under a key the restored value now answers to.
 //
 // Deliberately narrow. The obvious alternative, deregistering the tombstone
 // and its descendants outright, reaches past the entry that is stale: the

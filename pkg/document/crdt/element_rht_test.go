@@ -291,8 +291,8 @@ func TestElementRHTSetLoser(t *testing.T) {
 		assert.False(t, indexed, "a duplicate of a live member was taken in")
 
 		assert.Len(t, rht.Nodes(), 1)
-		assert.Equal(t, first, rht.Nodes()[0].Element())
-		assert.Equal(t, first, rht.Get("k"))
+		assert.Same(t, first, rht.Nodes()[0].Element())
+		assert.Same(t, first, rht.Get("k"))
 		assert.Nil(t, first.RemovedAt())
 	})
 
@@ -337,32 +337,65 @@ func TestElementRHTSetLoser(t *testing.T) {
 		assert.False(t, indexed, "the loser took the tombstone's slot")
 
 		assert.Len(t, rht.Nodes(), 1)
-		assert.Equal(t, occupant, rht.Nodes()[0].Element())
+		assert.Same(t, occupant, rht.Nodes()[0].Element())
 		clone, err := rht.DeepCopy()
 		assert.NoError(t, err)
 		assert.Len(t, clone.Nodes(), 1)
 	})
 
-	t.Run("refuses a winner that would take a live member's slot at another key", func(t *testing.T) {
-		// The winning branch re-points nodeMapByCreatedAt unconditionally, so
-		// a value carrying a createdAt another live member already answers to
-		// -- only reachable with a ticket the Set did not mint, i.e. forged --
-		// used to leave that member indexed by key but named by nothing.
+	t.Run("takes over the slot of a tombstone displaced from its key", func(t *testing.T) {
+		// A restore wins k and a newer Set evicts it, so the restore is a
+		// tombstone no key answers with. A concurrent older restore of the
+		// same createdAt arrives late and loses: it takes the slot, tombstoned
+		// at the occupant's ticket, which is where a replica that saw it win
+		// first and then evicted ends.
 		rht := crdt.NewElementRHT()
-		victim, err := crdt.NewPrimitive("victim", time.NewTicket(3, 0, actorA))
-		assert.NoError(t, err)
-		rht.Set("victim", victim)
+		createdAt := time.NewTicket(2, 0, actorA)
 
-		forged, err := crdt.NewPrimitive("forged", victim.CreatedAt())
+		newer, err := crdt.NewPrimitive("restored", createdAt)
 		assert.NoError(t, err)
-		removed, indexed := rht.SetWithExecutedAt("other", forged, time.NewTicket(20, 0, actorB))
+		rht.SetWithExecutedAt("k", newer, time.NewTicket(9, 0, actorA))
+		occupant, err := crdt.NewPrimitive("x", time.NewTicket(10, 0, actorB))
+		assert.NoError(t, err)
+		removed, _ := rht.Set("k", occupant)
+		assert.Same(t, newer, removed)
+
+		older, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", older, time.NewTicket(5, 0, actorB))
 		assert.Nil(t, removed)
-		assert.False(t, indexed, "a forged createdAt took a live member's slot")
+		assert.True(t, indexed, "a loser was refused a slot only a displaced tombstone held")
+		assert.Equal(t, occupant.CreatedAt().Key(), older.RemovedAt().Key())
 
-		assert.Equal(t, victim, rht.Get("victim"))
-		assert.Nil(t, rht.Get("other"))
-		key, ok := rht.SubPathOf(victim.CreatedAt())
-		assert.True(t, ok)
-		assert.Equal(t, "victim", key)
+		assert.Len(t, rht.Nodes(), 2)
+		assert.Same(t, occupant, rht.Get("k"))
+		clone, err := rht.DeepCopy()
+		assert.NoError(t, err)
+		assert.Len(t, clone.Nodes(), 2)
+	})
+
+	t.Run("a winning restore evicts an older copy of itself from both maps", func(t *testing.T) {
+		// Two concurrent undos restore the same value under one createdAt,
+		// and the newer one arrives second. It wins k and the createdAt slot,
+		// as in the JS SDK; the older copy it evicts is left in neither map,
+		// and operations.Set.Execute releases it instead of booking it as
+		// garbage under a createdAt the winner now answers to.
+		rht := crdt.NewElementRHT()
+		createdAt := time.NewTicket(2, 0, actorA)
+
+		older, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", older, time.NewTicket(5, 0, actorA))
+
+		newer, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", newer, time.NewTicket(9, 0, actorB))
+		assert.True(t, indexed)
+		assert.Same(t, older, removed)
+		assert.NotNil(t, older.RemovedAt())
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Same(t, newer, rht.Nodes()[0].Element())
+		assert.Same(t, newer, rht.Get("k"))
 	})
 }

@@ -39,6 +39,11 @@ import (
 // Every order has to end with the newest restore holding k, and with one node
 // per createdAt so that the document can still be rebuilt from its own
 // content after collection.
+//
+// The orders here follow from the clock padding below, so this test pins the
+// end-to-end path through Document and undo; TestSetConcurrentRestoresConverge
+// in pkg/document/operations applies the same three operations in every order
+// with explicit tickets.
 func TestConcurrentUndoRestoresSameValue(t *testing.T) {
 	actor1, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -90,6 +95,11 @@ func TestConcurrentUndoRestoresSameValue(t *testing.T) {
 	const converged = `{"k":"C","p1":"3","p3":"f"}`
 	for i, d := range []*document.Document{d1, d2, d3} {
 		assert.Equal(t, converged, d.Marshal(), "d%d before collection", i+1)
+		if i > 0 {
+			assert.Equal(t, d1.GarbageLen(), d.GarbageLen(), "d%d garbage before collection", i+1)
+			assert.Equal(t, d1.DocSize().Live, d.DocSize().Live, "d%d live size before collection", i+1)
+		}
+		assertRebuildsSame(t, d, "before collection")
 	}
 
 	vector := helper.MaxVersionVector(actor1, actor2, actor3)
@@ -97,7 +107,9 @@ func TestConcurrentUndoRestoresSameValue(t *testing.T) {
 		d.GarbageCollect(vector)
 		assert.Equal(t, 0, d.GarbageLen(), "d%d garbage after collection", i+1)
 		assert.Equal(t, converged, d.Marshal(), "d%d after collection", i+1)
-		assert.Equal(t, d1.DocSize(), d.DocSize(), "d%d size after collection", i+1)
+		if i > 0 {
+			assert.Equal(t, d1.DocSize(), d.DocSize(), "d%d size after collection", i+1)
+		}
 		assertRebuildsSame(t, d, "after collection")
 	}
 }

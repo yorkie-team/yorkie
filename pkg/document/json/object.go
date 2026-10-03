@@ -436,9 +436,9 @@ func (p *Object) setInternal(
 	// container and point elementMap at it, over whatever copy already answers
 	// to that createdAt.
 	//
-	// Here it cannot happen: a local Set mints a fresh ticket that follows
-	// every ticket this client has seen, so it wins the LWW comparison and
-	// nothing else can already answer to that brand-new createdAt. Returning
+	// Here it cannot happen: only a value that loses its key is ever refused
+	// (ElementRHT.refusesLoser), and a local Set mints a fresh ticket that
+	// follows every ticket this client has seen, so it always wins. Returning
 	// elem would be worse than failing -- every caller treats the return as a
 	// live child (SetNewObject immediately calls SetYSONElement on it,
 	// SetNewArray AddYSON, SetNewText EditFromYSON), and those nested

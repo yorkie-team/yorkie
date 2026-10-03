@@ -67,40 +67,6 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 		return ExecutionResult{}, ErrOperationSkipped
 	}
 
-	// Nothing may take the createdAt of an element that is still live
-	// somewhere in this document. An element's createdAt is its identity:
-	// Root.index points elementMap at whatever is registered under it last,
-	// and every later operation resolves its target through that map. A Set
-	// whose value carries a createdAt already naming a live element therefore
-	// re-points that identity at the attacker's value -- the victim becomes
-	// unaddressable and the change log stops replaying to the same document,
-	// permanently, since the server rebuilds snapshots from it.
-	//
-	// ElementRHT.SetWithExecutedAt refuses this within one object, but only
-	// there; the forged createdAt can name an element in any container, and
-	// on the winning branch Root.RegisterElement below is the only thing
-	// standing between the wire and elementMap. The value's createdAt arrives
-	// straight from the wire (fromSet in api/converter/from_pb.go) and no
-	// layer in between checks it, so it is checked here -- for the elements
-	// this object does not already carry, which is exactly where ElementRHT
-	// cannot see the collision. A createdAt obj already carries is left to
-	// ElementRHT, which weighs it against the node actually holding the slot:
-	// two replicas undoing concurrent overwrites of one key legitimately
-	// restore the same createdAt twice, and the second restore has to be able
-	// to beat the first.
-	//
-	// Restoring a removed element under its original createdAt stays legal,
-	// which is the whole of undo/redo: that element is a tombstone, not live.
-	// An ordinary Set carries a freshly minted createdAt and misses the map.
-	// The decision is a function of the root state alone, so every replica and
-	// the server's replay reach it identically.
-	if _, mine := obj.SubPathOf(o.value.CreatedAt()); !mine {
-		if existing := root.FindByCreatedAt(o.value.CreatedAt()); existing != nil &&
-			existing.RemovedAt() == nil && existing != o.value {
-			return ExecutionResult{}, ErrOperationSkipped
-		}
-	}
-
 	// The reverse must be built from the value at this key before it is
 	// overwritten below (set_operation.ts:91-92): it restores the previous
 	// value, or removes the key entirely when there was none.
@@ -140,9 +106,10 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// below may run for it. RegisterElement would point elementMap at it,
 	// taking the slot of the copy that already answers to that createdAt, and
 	// UnregisterRemovedElementPair would retire the collection entry of a
-	// tombstone that is still indexed. The object is unchanged, so the
-	// operation did not apply. Every replica and the server's snapshot replay
-	// reach the same decision from the same state.
+	// tombstone that is still indexed. Only a losing value is ever refused
+	// (ElementRHT.refusesLoser), and a losing Set changes nothing visible on
+	// any replica, so the operation did not apply. Every replica and the
+	// server's snapshot replay reach the same decision from the same state.
 	//
 	// It reports that the way the Operation contract requires a decline to be
 	// reported -- ErrOperationSkipped, as the concurrently-removed-target path
@@ -192,6 +159,30 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// An ordinary Set carries a freshly issued createdAt, so the lookup
 	// normally misses and costs one map read.
 	root.UnregisterRemovedElementPair(obj, value.CreatedAt())
+
+	// NOTE(hackerwins): The occupant this Set evicted can be another copy
+	// under value's own createdAt: two replicas undoing concurrent overwrites
+	// of one key both restore the original value, and the newer restore
+	// evicts the older one. SetWithExecutedAt has then dropped the evicted
+	// copy from both of obj's maps, so it is orphaned the moment it is
+	// removed, exactly like the tombstone retired just above.
+	//
+	// Booking it as an ordinary removed pair would file it under a createdAt
+	// key that value now answers to. Nothing can collect it through obj, and
+	// the next removal under that createdAt -- a newer Set evicting value --
+	// overwrites the entry, leaving the copy's GC charge in docSize forever on
+	// the replicas that met the restores in that order and on no other. So it
+	// is booked and retired at once: RegisterRemovedElementPair moves its
+	// size out of Live with the removal-ticket refund, and
+	// UnregisterRemovedElementPair releases it, leaving value as the only copy
+	// accounted for. RegisterElement below then retires the release records,
+	// as value's subtree takes the copy's elementMap slots over.
+	if removed != nil && removed.CreatedAt().Compare(value.CreatedAt()) == 0 {
+		root.RegisterRemovedElementPair(obj, removed)
+		root.UnregisterRemovedElementPair(obj, removed.CreatedAt())
+		removed = nil
+	}
+
 	root.RegisterElement(value, obj)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)

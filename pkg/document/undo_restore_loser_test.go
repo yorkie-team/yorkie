@@ -88,7 +88,7 @@ func TestLosingUndoRestoreConverges(t *testing.T) {
 	// and E evicts it first stamps its removedAt, so the two replicas differ
 	// there by delivery order. That predates the refusal and is not what this
 	// pins.
-	assert.Equal(t, memberRemovedAt(d1.RootObject(), "C"), memberRemovedAt(d2.RootObject(), "C"),
+	assert.Equal(t, memberRemovedAt(t, d1.RootObject(), "C"), memberRemovedAt(t, d2.RootObject(), "C"),
 		"the replicas disagree on the restored value's removedAt")
 	assertRebuildsSame(t, d1, "restore won first")
 	assertRebuildsSame(t, d2, "restore lost on arrival")
@@ -101,17 +101,20 @@ func TestLosingUndoRestoreConverges(t *testing.T) {
 	assert.Equal(t, d1.DocSize(), d2.DocSize())
 }
 
-// memberRemovedAt returns the removedAt of the member of obj whose value is v,
-// tombstones included.
-func memberRemovedAt(obj *crdt.Object, v string) string {
+// memberRemovedAt returns the removedAt of the one member of obj whose value
+// is v, tombstones included. It fails the test unless exactly one node holds
+// v and that node is removed, so a comparison of two replicas cannot pass by
+// both missing the member.
+func memberRemovedAt(t *testing.T, obj *crdt.Object, v string) string {
+	t.Helper()
+
+	var found []crdt.Element
 	for _, node := range obj.RHTNodes() {
-		if node.Element().Marshal() != `"`+v+`"` {
-			continue
+		if node.Element().Marshal() == `"`+v+`"` {
+			found = append(found, node.Element())
 		}
-		if r := node.Element().RemovedAt(); r != nil {
-			return r.Key()
-		}
-		return ""
 	}
-	return "missing"
+	require.Len(t, found, 1, "nodes holding %q", v)
+	require.NotNil(t, found[0].RemovedAt(), "%q is not removed", v)
+	return found[0].RemovedAt().Key()
 }

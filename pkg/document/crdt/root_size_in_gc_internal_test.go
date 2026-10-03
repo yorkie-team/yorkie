@@ -179,3 +179,31 @@ func TestReleasedRecordStaysWhileAddressable(t *testing.T) {
 	assert.Zero(t, f.root.GarbageLen())
 	f.assertRebuildsSame(t, "after collecting inside the orphan")
 }
+
+// TestUnregisterRemovedElementPairOwner pins that the retire only takes an
+// entry the given container registered. The entry names a tombstone removed
+// from its parent; only a restore into that same parent has re-pointed the
+// parent's nodeMapByCreatedAt at live data. Any other container leaves the
+// tombstone reachable, so retiring its entry would release a charge the
+// document still carries and leave garbage nothing can collect.
+func TestUnregisterRemovedElementPairOwner(t *testing.T) {
+	f := newSizeInGCFixture(t)
+	o := f.root.Object().Get("o").(*Object)
+	a := o.Get("a")
+
+	removed, err := o.DeleteByCreatedAt(a.CreatedAt(), f.tick())
+	require.NoError(t, err)
+	f.root.RegisterRemovedElementPair(o, removed)
+	garbage, size := f.root.GarbageLen(), f.root.DocSize()
+
+	assert.False(t, f.root.UnregisterRemovedElementPair(f.root.Object(), a.CreatedAt()),
+		"a container that does not own the entry retired it")
+	assert.Equal(t, garbage, f.root.GarbageLen())
+	assert.Equal(t, size, f.root.DocSize())
+	assert.Same(t, removed, f.root.GCElementPairMap()[a.CreatedAt().Key()].elem)
+	f.assertRebuildsSame(t, "after a foreign retire")
+
+	assert.True(t, f.root.UnregisterRemovedElementPair(o, a.CreatedAt()))
+	assert.NotContains(t, f.root.GCElementPairMap(), a.CreatedAt().Key())
+	assert.Zero(t, f.root.DocSize().GC)
+}

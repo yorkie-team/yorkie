@@ -60,9 +60,10 @@ outcomes:
 - Modifying the `ElementRHT.Set` return type or signature
 
 > **Superseded (2026-10-02).** Both non-goals above were later taken on
-> deliberately, and the "Design Decisions" and "Alternatives Considered"
-> tables below are kept as the record of what was decided at the time, not as
-> current guidance. See [Slot refusal in `ElementRHT`](#slot-refusal-in-elementrht).
+> deliberately for the losing branch only, and the "Design Decisions" and
+> "Alternatives Considered" tables below are kept as the record of what was
+> decided at the time, not as current guidance. See
+> [Slot refusal in `ElementRHT`](#slot-refusal-in-elementrht).
 
 ## Design
 
@@ -140,46 +141,64 @@ The post-check above books a losing value into GC, which requires the losing
 value to be indexed under its `createdAt` in `nodeMapByCreatedAt`. That index
 is keyed by a creation ticket, not by an element, and undo/redo made two
 different elements able to claim one ticket: a restore re-inserts a *copy* of
-a removed element under its original `createdAt`. Indexing the second claimant
-drops the first, and `nodeMapByCreatedAt` is the only way GC, `purge` and
-`DeepCopy` address a node — so the dropped one is uncollectable and absent
-from every snapshot built afterwards.
+a removed element under its original `createdAt`. Two replicas undoing
+concurrent overwrites of one key therefore restore two copies of the same
+value. Indexing the losing copy drops whichever node held the slot, and
+`nodeMapByCreatedAt` is the only way GC, `purge` and `DeepCopy` address a
+node -- so the dropped one is uncollectable, absent from every snapshot built
+afterwards, and the document stops rebuilding once GC runs.
 
-`ElementRHT.SetWithExecutedAt` therefore refuses a value outright when
-indexing it would strand the node currently holding the slot, and reports the
-refusal as a second return value (`Element, bool`) that every caller must
-honour. `ElementRHT.Set` and `Object.Set`/`Object.SetWithExecutedAt` forward
-it. The exact rule, and the two displacements that stay legitimate, live in
-`strandsSlotHolder`'s doc comment in `pkg/document/crdt/element_rht.go`.
+`ElementRHT.SetWithExecutedAt` therefore refuses a **losing** value when the
+node holding its slot is still reachable through its key -- a live node, or a
+tombstone that is still its key's occupant -- and reports the refusal as a
+second return value (`Element, bool`). A tombstone already displaced from its
+key is taken over, so a losing restore ends where a restore that won first
+and was then evicted ends. The rule lives in `refusesLoser`'s doc comment in
+`pkg/document/crdt/element_rht.go`.
+
+A **winning** value always takes the slot, as in the JS SDK. In a history the
+SDKs produce, a `createdAt` sits at one key of one object, so the node a
+winner displaces is the occupant it evicts or a tombstone that used to sit at
+that key. When the evicted occupant is itself a copy under the winner's
+`createdAt` (the newer restore arriving second), it leaves both maps, and
+`Set.Execute` books it as removed and retires it at once
+(`RegisterRemovedElementPair` then `UnregisterRemovedElementPair`). Booking it
+as an ordinary removed pair would file it under a `createdAt` the winner now
+answers to, and the next eviction would overwrite that entry and leave its GC
+charge in `docSize` for good, on the replicas that met the restores in that
+order only (`TestSetConcurrentRestoresConverge`).
 
 Callers:
 
 | Caller | On refusal |
 |--------|-----------|
-| `operations.Set.Execute` | `ErrOperationSkipped` — the object is unchanged, so the operation did not apply and contributes no reverse |
-| `json.Object.setInternal` | panics — a local Set mints a fresh ticket and always wins, so a refusal is a broken invariant, and the caller would otherwise be handed a detached proxy |
-| `api/converter.fromJSONObject` | `ErrDuplicateCreatedAt` — rejects the payload whole, the last point that still can |
-| `crdt.NewObject` | not affected — empty RHT, no conflict possible |
+| `operations.Set.Execute` | `ErrOperationSkipped` -- the object is unchanged, so the operation did not apply and contributes no reverse |
+| `json.Object.setInternal` | panics -- unreachable, since only a loser is refused and a local Set always wins; the caller would otherwise be handed a detached proxy |
+| `api/converter.fromJSONObject` | ignored -- encoder output has one node per `createdAt`, so a refusal needs crafted bytes |
+| `crdt.NewObject` | not affected -- empty RHT, no conflict possible |
 
-`Set.Execute` additionally refuses any value whose `createdAt` already names a
-**live** element anywhere in the document (`Root.FindByCreatedAt`). The
-`ElementRHT` rule only sees one object, while the ticket on a pushed `Set`
-arrives straight from the wire (`fromSet`) and can name an element in any
-container; `Root.RegisterElement` would re-point `elementMap` at it and make
-the victim unaddressable for every replica and for the server's replay.
-Restoring a *tombstone* under its original `createdAt` stays legal — that is
-undo/redo.
+`Root.UnregisterRemovedElementPair` takes the owning container and retires
+only an entry that container registered. The json layer records the CRDT
+container, not its proxy, as the parent so that identity check holds on the
+local path.
 
-### Divergence from yorkie-js-sdk
+### Out of scope: crafted payloads
 
-`ElementRHT` is otherwise a port of `element_rht.ts`, and this refusal has no
-JS counterpart yet (tracked alongside `yorkie-team/yorkie-js-sdk#1398`). Until
-the matching change lands, a Go replica refuses a value a JS replica takes in.
-Refusing is the strictly safer half: the JS replica loses the ability to
-address the stranded element, while neither replica loses a live member from
-`get()`. The shapes that reach it — two concurrent undos of overwrites of one
-key, or a forged `createdAt` — are rare enough to hold the server to the safe
-reading in the meantime.
+These rules are about histories the SDKs can produce. A pushed element whose
+`createdAt` names an element elsewhere in the document is crafted input, and
+`Add`, `ArraySet` and `Set` all register such a value the same way. Rejecting
+it belongs at the push boundary, tracked in yorkie-team/yorkie#2081, not in a
+Go-only guard on the apply path: the server's snapshot replay runs this code
+and the JS SDK does not, so any guard that fires in a legitimate history
+splits the server's snapshot from JS clients.
+
+### JS SDK port
+
+`ElementRHT` is otherwise a port of `element_rht.ts`. The loser refusal, the
+tombstone-occupant case and the release of an evicted copy are ported in
+yorkie-team/yorkie-js-sdk#1440. Until that lands, a JS replica takes in a
+loser that a Go replica refuses. That only happens in the concurrent-restore
+shapes above, where the JS behavior is the bug this section fixes.
 
 ## Tasks
 
