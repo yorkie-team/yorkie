@@ -141,51 +141,11 @@ func NormalizeStoredOperations(pbOps []*api.Operation) {
 			pbTreeEdit.SplitLevel = 0
 		}
 
-		clampContentLamports(pbTreeEdit)
-
 		pbTreeEdit.Contents = withoutEmptyContents(pbTreeEdit.Contents)
 		pbTreeEdit.SplitTickets = splitTicketsUnlessUndated(pbTreeEdit.SplitTickets)
 
 		dropUndatedAttrs(pbTreeEdit.RestoreSpans)
 		dropUndatedAttrs(pbTreeEdit.RetombstoneSpans)
-	}
-}
-
-// clampContentLamports lowers a stored content node id whose lamport runs
-// ahead of the edit that created it down to that edit's own lamport.
-//
-// The wire boundary now rejects such content (validateTreeEditContentIDs):
-// every node in an edit's content is minted by that edit, so a higher lamport
-// cannot come from a well-formed client, and a ticket no client's clock ever
-// reaches is one no version vector ever covers — which would pin the GC
-// barrier reading it (crdt.Tree.PurgeHeldBack) forever. Rejecting a stored
-// change instead would make the document holding it permanently unloadable,
-// the poison pill every repair here exists to avoid.
-//
-// Clamping is not what the prior behavior was — the inflated ticket was kept
-// as the node's identity — and this is the one repair that knowingly differs,
-// because the prior meaning is the defect. The population it can touch is
-// exactly the malformed one: a legitimate edit mints its content with its own
-// ticket, so nothing well-formed is above the clamp.
-func clampContentLamports(pbTreeEdit *api.Operation_TreeEdit) {
-	pbExecutedAt := pbTreeEdit.GetExecutedAt()
-	if pbExecutedAt == nil {
-		return
-	}
-
-	for _, pbNodes := range pbTreeEdit.Contents {
-		if pbNodes == nil {
-			continue
-		}
-
-		for _, pbNode := range pbNodes.Content {
-			pbCreatedAt := pbNode.GetId().GetCreatedAt()
-			if pbCreatedAt == nil || pbCreatedAt.Lamport <= pbExecutedAt.Lamport {
-				continue
-			}
-
-			pbCreatedAt.Lamport = pbExecutedAt.Lamport
-		}
 	}
 }
 

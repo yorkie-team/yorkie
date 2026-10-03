@@ -48,9 +48,6 @@ type knownChildFixture struct {
 	peerTicket func() *time.Ticket
 	// vv knows everything the editor did and nothing the peer did.
 	vv time.VersionVector
-
-	// peer is the actor peerTicket issues for.
-	peer time.ActorID
 }
 
 func newKnownChildFixture(t *testing.T) *knownChildFixture {
@@ -79,28 +76,9 @@ func newKnownChildFixture(t *testing.T) *knownChildFixture {
 		editorTicket: editorTicket,
 		peerTicket:   peerTicket,
 		vv:           time.VersionVector{editor: time.MaxLamport},
-		peer:         peer,
 	}
 
 	return f
-}
-
-// namesPeer returns the fixture's vector extended with an entry for the peer
-// at lamport 0 -- the shape time.MinVersionVector produces for an actor some
-// attached client's vector does not carry. PurgeHeldBack only waits on actors
-// the collecting vector names, so a barrier test has to use this one.
-func (f *knownChildFixture) namesPeer() time.VersionVector {
-	vv := f.vv.DeepCopy()
-	vv.Set(f.peer, 0)
-
-	return vv
-}
-
-// linkAsSplitProduct marks node the way SplitElement does, so PurgeHeldBack
-// sees a node orderSameBoundarySplit's InsNextID walk could land on.
-func linkAsSplitProduct(prev, node *TreeNode) {
-	prev.InsNextID = node.id
-	node.InsPrevID = prev.id
 }
 
 // appendText hangs a text child off p, created by the given actor's ticket.
@@ -259,163 +237,5 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		f.appendText(t, span, f.editorTicket())
 
 		assert.True(t, f.tree.holdsKnownChild(span, f.vv, descended))
-	})
-}
-
-// PurgeHeldBack is the GC half of holdsKnownChild's argument: a tombstone stays
-// linked while an ancestor orderSameBoundarySplit could land on is outside the
-// collecting vector, because a split that has not arrived yet could reach that
-// ancestor as an unknown chain sibling and count the tombstone below it.
-//
-// It waits on that ancestor only, not on every ancestor: a min version vector
-// carries 0 for any actor some attached client's vector lacks and names no
-// actor that has detached, so a barrier keyed on ancestry alone would gate
-// nearly all tree garbage behind tickets that may never be covered.
-func TestTreePurgeHeldBack(t *testing.T) {
-	// splitProductFixture hangs an unknown split product off p and removes a
-	// child of it -- the shape §7.8 descends into.
-	splitProduct := func(t *testing.T) (*knownChildFixture, *TreeNode, *TreeNode) {
-		t.Helper()
-
-		f := newKnownChildFixture(t)
-		span := f.appendElement(t, f.p, f.peerTicket())
-		linkAsSplitProduct(f.p, span)
-		child := f.appendText(t, span, f.editorTicket())
-		child.remove(f.editorTicket())
-
-		return f, span, child
-	}
-
-	t.Run("holds a tombstone below a split product the vector does not cover", func(t *testing.T) {
-		f, _, child := splitProduct(t)
-
-		assert.True(t, f.tree.PurgeHeldBack(child, f.namesPeer()),
-			"the product is the peer's, behind the vector's entry for it")
-	})
-
-	t.Run("lets a tombstone go once the split product is covered", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		span := f.appendElement(t, f.p, f.editorTicket())
-		linkAsSplitProduct(f.p, span)
-		child := f.appendText(t, span, f.editorTicket())
-		child.remove(f.editorTicket())
-
-		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
-	})
-
-	// §7.8 never descends into a node outside an InsNextID chain, so an
-	// ordinary element -- which is what almost every tombstone sits under --
-	// is no reason to wait.
-	t.Run("does not wait on an ancestor outside any split chain", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		span := f.appendElement(t, f.p, f.peerTicket())
-		child := f.appendText(t, span, f.editorTicket())
-		child.remove(f.editorTicket())
-
-		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
-	})
-
-	// §7.8 breaks on a removed chain sibling before it descends, so one cannot
-	// be the node whose answer a purge would change.
-	t.Run("does not wait on a removed split product", func(t *testing.T) {
-		f, span, child := splitProduct(t)
-		span.remove(f.peerTicket())
-		require.True(t, span.IsRemoved())
-
-		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
-	})
-
-	// What releases a hold is coverage or the vector's lamport floor, never
-	// the absence of an entry on its own: §7.8 reads an actor its editor's
-	// vector does not name as unknown and walks on, so a detached creator's
-	// chain sibling is still one a lagging editor can land on. Here every
-	// named entry sits at MaxLamport, so the floor is above the product's
-	// ticket and the hold lifts for that reason.
-	t.Run("lets a tombstone go once the vector's floor passes the product", func(t *testing.T) {
-		f, _, child := splitProduct(t)
-
-		assert.False(t, f.tree.PurgeHeldBack(child, f.vv),
-			"f.vv names the editor at MaxLamport, so nothing older can still be in flight")
-	})
-
-	// The other half of the same rule: an unnamed actor below the floor is
-	// held, where the earlier "unnamed means settled" shortcut released it.
-	t.Run("waits on an uncovered product whose actor the vector does not name", func(t *testing.T) {
-		f, _, child := splitProduct(t)
-
-		editorOnly := time.VersionVector{}
-		for actor := range f.vv {
-			editorOnly.Set(actor, 1)
-		}
-
-		assert.True(t, f.tree.PurgeHeldBack(child, editorOnly),
-			"the peer detached, but a lagging editor can still land on its product")
-	})
-
-	// Purging a tombstone that is itself a chain member splices the chain
-	// (Tree.Purge), handing §7.8's walk the successor the tombstone used to
-	// stop it at. PurgeBarrierAt names only the index sibling, so this is the
-	// barrier that covers it.
-	t.Run("waits on the chain successor of a tombstoned chain member", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-
-		removed := f.appendElement(t, f.p, f.editorTicket())
-		successor := f.appendElement(t, f.p, f.peerTicket())
-		linkAsSplitProduct(f.p, removed)
-		linkAsSplitProduct(removed, successor)
-		f.tree.NodeMapByID.Put(successor.id, successor)
-		removed.remove(f.editorTicket())
-
-		assert.True(t, f.tree.PurgeHeldBack(removed, f.namesPeer()),
-			"splicing removed out would let the walk advance onto the uncovered successor")
-	})
-
-	// time.InitialTicket carries an actor no vector names; reading it as
-	// uncovered would hold every tombstone in such a tree forever.
-	t.Run("does not wait on a lamport-0 ancestor", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-		root := NewTreeNode(NewTreeNodeID(time.InitialTicket, 0), "r", nil)
-		child := f.appendText(t, root, f.editorTicket())
-		child.remove(f.editorTicket())
-
-		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
-	})
-
-	// The climb used to give up past a fixed depth, which was asymmetric with
-	// holdsKnownChild's unbounded descent: a tombstone nested deeper than the
-	// bound below an uncovered chain sibling was collected with no barrier at
-	// all, which is the divergence this barrier exists to prevent.
-	t.Run("waits on an uncovered product however deep the tombstone sits", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-
-		marker := f.appendElement(t, f.p, f.peerTicket())
-		linkAsSplitProduct(f.p, marker)
-
-		deepest := marker
-		for range 66 {
-			deepest = f.appendElement(t, deepest, f.editorTicket())
-		}
-
-		child := f.appendText(t, deepest, f.editorTicket())
-		child.remove(f.editorTicket())
-
-		assert.True(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
-	})
-
-	// Parent pointers are physical and index.MoveChild relocates them without
-	// an ancestor check, so the climb carries the same node set guard the
-	// descent does rather than a depth cap.
-	t.Run("terminates on a cyclic parent chain", func(t *testing.T) {
-		f := newKnownChildFixture(t)
-
-		span := f.appendElement(t, f.p, f.editorTicket())
-		child := f.appendText(t, span, f.editorTicket())
-		child.remove(f.editorTicket())
-
-		// Close the loop by hand: MoveChild hangs on its own length update
-		// before it would ever build one.
-		f.p.Index.Parent = span.Index
-
-		assert.False(t, f.tree.PurgeHeldBack(child, f.namesPeer()))
 	})
 }

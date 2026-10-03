@@ -515,75 +515,56 @@ diverge on more scripts than they fix (9–62 new divergent seeds per
 in flight therefore remain an open input to the marker, in both SDKs.
 
 Counting tombstones keeps the answer the same whether or not a replica
-has applied a concurrent removal yet. GC unlinks tombstones, and a
-replica that had collected one would read false where another reads
-true. Two facts keep that from happening, one for each kind of
-tombstone the marker can count.
+has applied a concurrent removal yet. GC unlinks tombstones, though, and
+a replica that collected one reads false where another reads true. How
+much that matters depends on what the editor knew.
 
-- *A removal the editor had not seen.* Such a tombstone is never
-  collected on a replica before the split is applied there. A replica
+- *A removal the editor had not seen.* Such a tombstone is not
+  collected on any replica before the split is applied there. A replica
   collects only with the min version vector of a pull reply, after
   applying every change in that reply (`InternalDocument.ApplyChangePack`;
-  the server's snapshot path applies before it collects as well). The
+  the server's snapshot path also applies before it collects). The
   server records a client's vector only after storing the changes pushed
   with it (`packs.PushPull` runs `pushPack` before `pullPack`'s
   `UpdateMinVersionVector`, and a detaching client pushes before its
-  vector is dropped). So once the min covers the removal, the editor's
-  own vector covers it too, which means the editor has already pushed
-  every change it made before seeing the removal, this split included,
-  and every reply carrying that min carries the split. This is the
-  contract in [garbage-collection.md](garbage-collection.md), and every
-  operation anchored on a tombstone already depends on it.
-- *A removal the editor had seen.* Such a tombstone can be collected
-  before the split arrives. The replica that applied the split first
-  still holds it inside its own product, so the marker has to keep
-  counting it. `Tree.PurgeHeldBack` (a `GCVectorBarrier`) closes the
-  gap: a tombstone stays linked while any of its ancestors was created
-  outside the min. A split that has not arrived yet carries a vector at
-  least as large as that min, so every ancestor of a collected tombstone
-  was known to the editor, and a known node is never the unknown chain
-  sibling the marker is asked about. Server snapshots collect through
-  the same `GarbageCollect`, so they are held back the same way.
+  vector is dropped). So once the min covers the removal, the editor has
+  already pushed this split, and every reply carrying that min carries
+  the split too. This is the contract in
+  [garbage-collection.md](garbage-collection.md). yorkie#2110 describes
+  a race in how `PushPull` computes the min that can break it; the race
+  affects every tombstone-anchored operation, not only this rule.
+- *A removal the editor had seen.* **Known GC sensitivity.** Such a
+  tombstone can be collected before the split arrives, and the
+  collecting replica may then place the split differently from one that
+  still holds it. `TestTreeSameBoundarySplitUnderServerGC` and
+  `TestGarbageCollectionSameBoundarySplit` (through the real server)
+  pin one such schedule and assert today's outcome.
 
-One case is left. A split made *after* the purge, by an editor that
-already knew about the removal, can carry the tombstone into a new
-product on replicas that still hold it. The incoming split's editor
-knew about the removal too, so it may itself have collected the
-tombstone before it split, and in that case its own placement does not
-depend on the tombstone either. No marker read from content can give
-the same answer on both sides here. Skipping every tombstone whose
-removal the editor knew is purge-invariant, but it diverges without GC
-(the replica that applied the split first counts such a tombstone,
-which sits in its own product), on 21–172 more seeds per 20 000.
+The second case is in the same class as the other tombstone readers in
+the split rules. §7.4's re-parenting gates on a `Children(true)` count,
+the §7.5 advance stops at a node with any child, and this section's own
+entry gate compares the split offset against
+`len(parent.Index.Children(true))`. All three predate this rule and are
+just as exposed: `main` diverges with GC too. A fuzz that drives the
+server's ordering in process (three editing replicas and an observer;
+each sync pushes, records the pushed vector, takes the min over all
+recorded vectors, pulls everything, then collects), with 20 000 seeds
+in each of five mixes and every script replayed with and without GC,
+counts:
 
-Measured with a fuzz that drives the server's ordering in process (three
-editing replicas and an observer; each sync pushes, records the pushed
-vector, takes the min over all recorded vectors, pulls everything, then
-collects), 20 000 seeds in each of five mixes (flat and nested, with and
-without inserts, and a sync-heavy mix), each script replayed with and
-without GC:
-
-| | holdsKnownChild answer changed by GC¹ | diverges only with GC |
+| | holdsKnownChild answer changed by GC | diverges only with GC |
 |---|---|---|
 | `main` | — | 108 |
-| `main` with `PurgeHeldBack` | — | 62 |
-| this rule, no barrier | 228 | 150 |
-| this rule with `PurgeHeldBack` | 67 | 74 |
+| this rule (shipped) | 228 | 150 |
+| this rule, with an ancestor GC barrier (not shipped) | 67 | 74 |
 
-¹ Seeds where a replica asked the same question (same split, same chain
-sibling, same live tree) and got a different answer with GC. With the
-barrier, all 67 are the post-purge case above; one of them also diverges,
-and its minimized script diverges the same way with `holdsKnownChild`
-disabled. The divergences that remain come from the readers listed
-next, which `main` has as well.
-
-The rule is not the only tombstone reader here. §7.4's re-parenting
-gates on a `Children(true)` count, the §7.5 advance stops at a node
-with any child, and this section's own entry gate compares the split
-offset against `len(parent.Index.Children(true))` — all three predate
-this rule and are as exposed to GC. Making the split rules independent
-of GC needs a marker that does not live in tombstones, in Go and
-yorkie-js-sdk together; that is follow-up work, not part of this rule.
+The barrier kept a tombstone while any ancestor's `createdAt` was
+outside the min. It was taken out because node IDs are client-supplied,
+so one client could pin tombstones forever. Skipping tombstones whose
+removal the editor knew is purge-invariant but diverges without GC
+(21–172 more seeds per 20 000). Making the split rules independent of
+GC needs a marker that does not live in tombstones, designed once for
+Go and yorkie-js-sdk. That work is tracked in yorkie#2099.
 
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s

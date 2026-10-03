@@ -58,10 +58,17 @@ follow-up by position, after its own product.
 - [x] Settle whether GC can change `holdsKnownChild`'s answer, against the
       server's real ordering. A removal the editor had not seen cannot be
       collected before the split is applied (push before vector record, apply
-      before collect). A removal it had seen can, and that case diverged
-      (`TestTreeSameBoundarySplitUnderServerGC`). `Tree.PurgeHeldBack` keeps a
-      tombstone while any ancestor is outside the min; §7.8 records the one
-      case it cannot cover and the fuzz numbers.
+      before collect). A removal it had seen can, and that case diverges
+      (`TestTreeSameBoundarySplitUnderServerGC`,
+      `TestGarbageCollectionSameBoundarySplit`, both asserting today's outcome).
+- [x] Take the GC barrier back out (`PurgeHeldBack`, later narrowed and
+      given a lamport floor, plus a converter bound and clamp on content
+      lamports). It trusted client-supplied node tickets, so one client could
+      pin tombstones, and the converter clamp rewrote node identity without
+      rewriting references. The maintainer accepted the GC sensitivity as a
+      known limitation, in the same class as §7.4, the §7.5 advance and the
+      §7.8 entry gate on `main`, tracked across both SDKs as #2099. The
+      min-vector race found on the way is #2110.
 
 ## Verification
 
@@ -82,23 +89,15 @@ follow-up by position, after its own product.
       port 8080 while running on 18080; it is not the split rule. The rule
       itself is now the same in both: count every descendant the editor's
       vector covers, tombstones included, no merge skip.
-- [ ] yorkie-js-sdk needs `PurgeHeldBack` too. It is a GC policy, not part of
-      the replicated rule, so a JS client without it still agrees with a Go
-      replica on where a split lands; but a JS client that collects such a
-      tombstone early is exposed to the divergence the barrier closes here.
-      Review round 4 narrowed the Go barrier to the ancestors §7.8 can
-      actually land on (a live element inside an `InsNextID` chain, created
-      by an actor the collecting vector names), so the exposure a JS replica
-      carries is now that one shape rather than every tombstone in the tree,
-      and `docs/design/garbage-collection.md` records the rule for both SDKs.
-
 ## Out of scope
 
 - yorkie-js-sdk#1436: text inserted at the position of a concurrent split
   lands on different sides. Different mechanism; left open by #2030.
 - #2077 (the `KNOWN` skips in the same test file) and yorkie-js-sdk#1408.
-- GC independence of the other split rules. §7.4's re-parenting, the §7.5
-  advance and the §7.8 entry gate read tombstones too and predate this
-  change; the server-ordered fuzz shows `main` diverging with GC on 108 of
-  100 000 seeds (62 with `PurgeHeldBack`). Making them independent of GC
-  needs a marker that does not live in tombstones, in both SDKs.
+- GC independence of the split rules (#2099). `holdsKnownChild`, §7.4's
+  re-parenting, the §7.5 advance and the §7.8 entry gate read tombstones; the
+  server-ordered fuzz shows `main` diverging with GC on 108 of 100 000 seeds
+  and this rule on 150. Needs a marker that does not live in tombstones, in
+  both SDKs.
+- #2110: `PushPull` can return a min version vector ahead of the changes it
+  carries.

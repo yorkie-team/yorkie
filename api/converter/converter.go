@@ -60,14 +60,6 @@ var (
 	// no meaning below zero.
 	ErrInvalidSplitLevel = errors.InvalidArgument("invalid split level").WithCode("ErrInvalidSplitLevel")
 
-	// ErrInvalidContentTicket is returned when a tree edit carries content whose
-	// node id claims a lamport the change creating it never reached. Such a
-	// ticket is never covered by any version vector, which would pin the GC
-	// barrier that reads it (crdt.Tree.PurgeHeldBack) for the life of the
-	// document.
-	ErrInvalidContentTicket = errors.InvalidArgument("invalid content ticket").
-				WithCode("ErrInvalidContentTicket")
-
 	// ErrMissingTicket is returned when a time ticket a well-formed operation
 	// always carries is absent. Every such rejection wraps this sentinel so the
 	// stored-decode path (FromStoredOperations) can tell an operation that can

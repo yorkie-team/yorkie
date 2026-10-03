@@ -67,52 +67,6 @@ min([c1:2, c2:3, c3:4], [c1:3, c2:1, c3:5, c4:3])
 
 ```
 
-## Barriers beyond `removedAt`
-
-`removedAt` coverage says the *value* is gone everywhere. It does not say the
-*place* is settled: every container resolves a concurrent insert by walking the
-nodes that are still linked, tombstones included, so unlinking one can change
-where a still-in-flight operation lands. Two optional barriers (`crdt/gc.go`)
-hold a purge back until that is settled as well. Both are Go-side policy: they
-narrow *when* a replica collects, never what an operation computes from the
-nodes it finds. What that buys differs between the two, and the difference
-matters for a replica that does not implement them.
-
-- `GCBarrier.PurgeBarrierAt` names one extra ticket: the node that would become
-  the walk's new stopping point. `Tree`, `RGATreeList` and `RGATreeSplit`-backed
-  containers all have one.
-- `GCVectorBarrier.PurgeHeldBack` answers against the whole vector, for cases a
-  single ticket cannot name. `Tree` uses it for §7.8 of
-  `concurrent-merge-split.md`: a tombstone stays linked while a node that rule
-  could still land on — a live element inside an `InsNextID` chain, created
-  outside the collecting vector — is still outstanding, whether that node is an
-  ancestor of the tombstone (the rule counts tombstoned descendants) or the
-  tombstone's own chain successor (purging splices the chain and moves the
-  walk's stopping point). Note the shape of the collecting vector when
-  reasoning about it: `MinVersionVector` carries `0` for an actor some attached
-  client's vector lacks, and carries no entry at all for an actor that has
-  detached. An unnamed actor is therefore *not* read as settled; what releases
-  a hold is coverage, or a ticket at or below the vector's smallest lamport,
-  since §7.8 only walks onto a sibling created after the incoming split and
-  every split still in flight sits above that floor. The floor is also what
-  bounds the hold in time, so the wire boundary rejects edit content whose
-  lamport runs ahead of its own change (`converter.ErrInvalidContentTicket`) —
-  a ticket no clock ever reaches would otherwise pin a tombstone forever.
-
-**Known gap: `yorkie-js-sdk` does not implement `PurgeHeldBack`.** For
-`PurgeBarrierAt` an unbarriered replica only collects earlier and still agrees
-on every position, because the insertion walks it feeds stop on a ticket
-comparison. `PurgeHeldBack` is not placement-neutral in the same way: §7.8
-*counts* tombstoned descendants (`Tree.holdsKnownChild`), so a replica that
-collected one of them can resolve a same-boundary split onto a different node
-than a replica that still holds it. Until the SDK carries the same barrier, a
-JS replica that collects such a tombstone before the split arrives can place
-that split differently from the Go server, and the two do not reconverge. The
-case needs both a §7.8 same-boundary split and a tombstone under the unknown
-sibling whose removal the splitting editor had already seen; it is tracked as
-an open item on the task that added the barrier
-(`docs/tasks/.../further-split-after-same-boundary-todo.md`).
-
 ## GC Responsibility by Response Type
 
 GC responsibility is split between server and client depending on the response type:

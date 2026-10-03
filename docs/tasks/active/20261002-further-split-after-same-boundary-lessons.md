@@ -174,3 +174,17 @@ it used to stop at — `holdsBackChainSplice` now covers that.
 Lesson: when a rule needs an escape hatch to terminate, the hatch is usually
 hiding a missing bound. Name the bound (here: the vector's lamport floor) and
 the hatch — and the soundness hole it opened — goes away with it.
+
+## Round 6: the barrier comes out
+
+The maintainer removed the barrier. Every step that made it sound (a floor,
+a chain-splice leg, a bound on content lamports at the wire) pushed it
+further into trusting or rewriting client-supplied node identity, and the
+converter clamp changed IDs that other operations still referenced. The GC
+sensitivity is now a documented limitation (#2099) with a test that asserts
+today's outcome.
+
+Lesson: a local GC policy that needs to trust client-supplied tickets is a
+security boundary, not a GC detail. Before growing it, ask whether the
+sensitivity is new or only newly visible. Here `main` already diverged with
+GC through three other readers.

@@ -1100,175 +1100,6 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
-// PurgeHeldBack implements GCVectorBarrier. It keeps a tombstone linked while
-// an ancestor §7.8 could still descend from is outside vector.
-//
-// §7.8's holdsKnownChild counts tombstones below an unknown split sibling,
-// and a removal the incoming split's editor had seen can be collected before
-// that split arrives. A split that has not arrived yet carries a version
-// vector at least as large as the min this collection runs with (see
-// holdsKnownChild), so once that sibling is inside the min, §7.8's chain walk
-// stops before it and unlinking the tombstone cannot change what the descent
-// finds.
-//
-// Only the chain sibling itself matters, which is what holdsBackPurge checks:
-// gating on every ancestor regardless of shape made this a gate on nearly all
-// tree garbage, since a min vector carries 0 for any actor some attached
-// client's vector lacks (time.MinVersionVector) and names no actor that has
-// detached.
-//
-// Two shapes hold a tombstone: an ancestor the walk could descend from, and
-// the tombstone's own place in a chain the walk reads (holdsBackChainSplice).
-func (t *Tree) PurgeHeldBack(child GCChild, vector time.VersionVector) bool {
-	node, ok := child.(*TreeNode)
-	if !ok || node.Index == nil {
-		return false
-	}
-
-	// The tombstone may itself be a link in a chain the walk reads, which the
-	// ancestor climb below cannot see.
-	if t.holdsBackChainSplice(node, vector) {
-		return true
-	}
-
-	// The climb follows parent pointers a peer controls — index.MoveChild
-	// relocates them without an ancestor check, so the chain can be made
-	// cyclic as well as deep. A node set bounds it by the number of distinct
-	// nodes it can reach, the same guard holdsKnownChild's descent uses. A
-	// fixed depth bound was tried first and dropped: it was asymmetric with
-	// that unbounded descent, so a tombstone nested deeper than the bound
-	// below an uncovered chain sibling was collected with no barrier at all,
-	// which is the divergence this barrier exists to prevent. What keeps a
-	// hold from lasting forever is the lamport floor in holdsBackPurge, not a
-	// depth cap.
-	var climbed nodeSet
-	for parent := node.Index.Parent; parent != nil && climbed.visit(parent.Value); parent = parent.Parent {
-		if holdsBackPurge(parent.Value, vector) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// holdsBackChainSplice reports whether unlinking node would move §7.8's own
-// stopping point.
-//
-// orderSameBoundarySplit ends its walk at a removed chain member (tree.go's
-// `next.IsRemoved()` break), leaving the target at that member's predecessor.
-// Tree.Purge splices a purged node out of the chain — the predecessor's
-// InsNextID becomes the purged node's successor — so once the tombstone goes,
-// the same walk reads the successor instead and may advance one step further
-// than it does on a replica that has not collected yet. PurgeBarrierAt names
-// only the index sibling, never the chain successor, so nothing else covers
-// this.
-//
-// Hold the tombstone while that successor is a node the walk could land on and
-// is still outside the vector — the same question holdsBackPurge answers for
-// an ancestor. Once the successor is settled, every walk that can still arrive
-// breaks on it anyway, so splicing the tombstone out changes nothing.
-func (t *Tree) holdsBackChainSplice(node *TreeNode, vector time.VersionVector) bool {
-	// Purge only rewrites a predecessor's InsNextID when the node has both
-	// links; with either end missing the walk's stopping point cannot move.
-	if node.InsPrevID == nil || node.InsNextID == nil {
-		return false
-	}
-
-	// findFloorNode, matching how the walk itself resolves InsNextID.
-	next := t.findFloorNode(node.InsNextID)
-	if next == nil {
-		return false
-	}
-
-	return holdsBackPurge(next, vector)
-}
-
-// holdsBackPurge reports whether ancestor is a node orderSameBoundarySplit
-// could still reach as an unknown chain sibling on a replica that has not
-// applied the split yet, and so one whose tombstones have to stay countable.
-//
-// §7.8 only ever descends into a node it reached over an InsNextID chain, and
-// only after it has rejected a text node, a removed one and one the editor
-// knew. A node failing any of those is not a sibling that walk can land on, so
-// a tombstone below it is free to go.
-func holdsBackPurge(ancestor *TreeNode, vector time.VersionVector) bool {
-	// Nothing is collected against an empty vector (Root.collect's
-	// EqualToOrAfter on removedAt returns false first), and the floor below
-	// would read it as lamport 0. Answer "nothing held" rather than pin the
-	// whole document if a caller ever gets here with one.
-	if len(vector) == 0 {
-		return false
-	}
-
-	// Only SplitElement links a node into a chain, so a node outside every
-	// chain is never reached as `next` in orderSameBoundarySplit's walk.
-	if ancestor.InsPrevID == nil && ancestor.InsNextID == nil {
-		return false
-	}
-
-	// The walk breaks on both before it descends (see orderSameBoundarySplit).
-	if ancestor.IsText() || ancestor.IsRemoved() {
-		return false
-	}
-
-	// A lamport-0 ticket (time.InitialTicket, as a tree built outside any
-	// change carries) predates every change, so it is never an unknown
-	// sibling; its actor need not appear in the vector at all.
-	createdAt := ancestor.id.CreatedAt
-	if createdAt.Lamport() == 0 {
-		return false
-	}
-
-	// A ticket at or below the smallest lamport the collecting vector carries
-	// is settled, whether or not the vector names its actor. §7.8 advances
-	// onto a sibling only when that sibling's ticket is After the incoming
-	// split's (orderSameBoundarySplit), and a split that can still arrive
-	// carries a lamport above this vector's entry for its own editor: the
-	// server records a client's vector only after storing what that client
-	// pushed, and a replica applies a reply's changes before collecting with
-	// its min vector (docs/design/garbage-collection.md). So the editor's
-	// entry — and with it the vector's minimum — is below any split still in
-	// flight, and no such split lands on a node this old.
-	//
-	// This floor, not the actor lookup it replaced, is what keeps a hold from
-	// lasting forever. An uncovered ancestor whose actor the vector never
-	// names again — a node created by a client that has since detached, or a
-	// node id forged on the wire — would otherwise pin every tombstone below
-	// it for the life of the document. Lamports are max-merged on apply, so
-	// every attached client's entry climbs past a given lamport once it syncs,
-	// and edit content is rejected on the way in when its lamport runs ahead
-	// of its own change (converter.fromTreeEdit), so no ticket can name a
-	// lamport the document will never reach.
-	//
-	// Treating an unnamed actor as settled outright was tried first and is
-	// wrong: it inverts EqualToOrAfter and disagrees with the §7.8 walk, which
-	// reads an actor its editor's vector does not name as unknown and walks
-	// on. A lagging editor can still be unaware of a chain sibling whose
-	// creator has detached.
-	if createdAt.Lamport() <= minLamport(vector) {
-		return false
-	}
-
-	return !vector.EqualToOrAfter(createdAt)
-}
-
-// minLamport returns the smallest lamport the vector carries, or 0 when it is
-// empty. A min version vector carries 0 for an actor some attached client's
-// vector lacks (time.MinVersionVector), so this is 0 whenever any attached
-// client is behind on an actor — the floor only lifts a hold once every
-// attached client has synced past the ticket in question.
-func minLamport(vector time.VersionVector) int64 {
-	var lowest int64
-	first := true
-	for _, lamport := range vector {
-		if first || lamport < lowest {
-			lowest, first = lamport, false
-		}
-	}
-
-	return lowest
-}
-
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
@@ -3399,39 +3230,20 @@ func (t *Tree) orderSameBoundarySplit(
 // anywhere below it is an empty same-boundary product, or one a peer has
 // typed into since.
 //
-// Tombstones count, so GC could change the answer: Purge unlinks a node, and
-// a replica that had collected one would read false where a replica that had
-// not reads true. Two facts rule that out, one per kind of tombstone.
-//
-//   - A tombstone whose removal the editor had not seen is never collected on
-//     a replica before this split is applied there. A replica collects only
-//     with the min version vector of a pull reply, after applying every change
-//     in that reply (InternalDocument.ApplyChangePack; the server's snapshot
-//     path also applies before it collects). The server records a client's
-//     vector only after storing the changes pushed with it (packs.PushPull
-//     runs pushPack before pullPack's UpdateMinVersionVector, and a detaching
-//     client pushes before its vector is dropped). So by the time the min
-//     covers the removal, the editor's vector covers it as well, which means
-//     the editor already pushed every change made before it saw the removal,
-//     this split included, and any reply carrying that min carries the split.
-//     docs/design/garbage-collection.md states this contract, and every
-//     operation anchored on a tombstone already depends on it.
-//   - A tombstone whose removal the editor had seen can be collected before
-//     the split arrives. The replica that applied the split first still holds
-//     it inside its own product, so this method has to keep counting it.
-//     PurgeHeldBack covers this case: a tombstone stays linked while an
-//     ancestor this walk could land on — a live element in an InsNextID chain
-//     — is outside the min. A split that has not arrived yet carries a vector
-//     at least as large as that min, so such an ancestor of a collected
-//     tombstone was known to the editor, and a known node is never the unknown
-//     chain sibling this method is asked about.
-//
-// One case is left: a split made after the purge, by an editor that already
-// knew about the removal, can carry the tombstone into a new product. Our
-// editor knew about the removal too, so it may itself have collected the
-// tombstone before it split, and its own placement then does not depend on
-// the tombstone either. §7.8 in docs/design/concurrent-merge-split.md
-// describes the case and how it was measured.
+// Tombstones count, so GC can change the answer: Purge unlinks a node, and a
+// replica that collected one reads false where a replica that did not reads
+// true. For a removal the editor had not seen, that cannot happen. A replica
+// collects only with a pull reply's min version vector, after applying the
+// reply (InternalDocument.ApplyChangePack), and the server records a client's
+// vector only after storing the changes pushed with it (packs.PushPull), so a
+// min that covers the removal arrives with this split. (yorkie#2110 is a race
+// in that ordering, and it affects every tombstone-anchored operation, not
+// only this one.) A removal the editor had seen can be collected before the
+// split arrives, and the collecting replica may then place the split
+// differently. That is a known GC sensitivity in the same class as §7.4's
+// re-parenting, the §7.5 advance and the §7.8 entry gate, which read
+// tombstones on main as well. It is tracked across both SDKs as yorkie#2099;
+// see §7.8 in docs/design/concurrent-merge-split.md.
 //
 // A child relocated by a merge keeps its createdAt and counts like any other.
 // Skipping merge-moved children was tried in both forms (MergedFrom presence,
