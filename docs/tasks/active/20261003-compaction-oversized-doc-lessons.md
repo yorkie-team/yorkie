@@ -117,3 +117,35 @@ caller-supplied initial root through `DB.CompactChangeInfos` and never reaches
 `docs/design/document-size-limit.md` now has a section naming all three paths,
 so the next reader does not have to rediscover that the gate has a server-side
 door.
+
+## Review round 4 — panel (blast-radius, correctness, security)
+
+Three blocking findings, all fixed.
+
+**An ambiguous write error is not a failed write.** Round 3 added
+`undoCompactionClaim` on the step-3 `ReplaceOne` error, which the panel caught
+as worse than the hole it closed: a write-concern timeout or a retried command
+errors on a write that is there, so the undo could restore `server_seq` to
+`lastServerSeq` over an applied compacted record and leave the whole-root
+change at seq 1 with changes 2..N still in place — a history every reader that
+rebuilds the root replays on top of itself. `settleCompactionClaim` now reads
+the record back and compares it element-for-element with the bytes that were
+written (`rawEqualIgnoringID`, `_id` excepted because a replace keeps it)
+before anything is undone. Landed means carry on to the purge; demonstrably
+not landed means undo; a read that itself fails undoes nothing and returns
+joined errors, because an unverified rollback is the one outcome that
+corrupts. The repair also runs on `context.WithoutCancel` with its own
+timeout — the failed write's likeliest cause is its context, which would make
+every compensating write a no-op on that same context. The purge after a
+landed-despite-error write runs on the detached context too.
+
+**A revision ID is not a document.** `YorkieService.GetRevision` and
+`RestoreRevision` authorized against `req.DocumentId` but then resolved the
+revision from `req.RevisionId` alone — a cross-document, cross-project read
+for the first and a write IDOR for the second, since `revisions.Restore`
+derived the document to overwrite from the revision. Both now bind the ID to
+the document: `revisions.GetForDoc` reports a revision belonging elsewhere as
+not found, and `Restore` takes the `DocRefKey` to restore as a parameter, so
+the document it writes is the one the caller authorized and locked. The admin
+twins already did this check inline; the signature change makes it structural
+rather than per-call-site.

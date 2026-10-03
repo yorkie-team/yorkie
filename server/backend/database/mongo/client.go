@@ -54,6 +54,12 @@ const (
 	// objectIDElementSize is the size of the `_id` element MongoDB adds to a
 	// record written without one: type byte, "_id\x00" and a 12-byte ObjectID.
 	objectIDElementSize = 1 + 4 + 12
+
+	// compactionUndoTimeout bounds the reads and writes that settle a failed
+	// compaction. They run on a context detached from the one the failed write
+	// used, since a cancelled or expired context is the likeliest reason for
+	// that failure and would make the work that repairs it a no-op.
+	compactionUndoTimeout = 5 * gotime.Second
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -2091,7 +2097,7 @@ func (c *Client) CompactChangeInfos(
 	// pre-compaction record at newServerSeq: the document would silently read
 	// as its own first historical change, and with server_seq already at
 	// newServerSeq no later compaction could reach it. The steps cannot share
-	// a transaction, so undo the claim instead before reporting the error.
+	// a transaction, so settle the claim instead before reporting the error.
 	c.changeCache.Remove(refKey)
 	if compacted != nil {
 		if _, err := c.collection(ColChanges).ReplaceOne(ctx, bson.M{
@@ -2099,10 +2105,20 @@ func (c *Client) CompactChangeInfos(
 			"doc_id":     docInfo.ID,
 			"server_seq": newServerSeq,
 		}, compacted, options.Replace().SetUpsert(true)); err != nil {
-			return c.undoCompactionClaim(
-				ctx, docInfo, lastServerSeq, newServerSeq,
+			landed, settled := c.settleCompactionClaim(
+				ctx, docInfo, lastServerSeq, newServerSeq, compacted,
 				fmt.Errorf("compact document of %s: %w", refKey, err),
 			)
+			if !landed {
+				return settled
+			}
+
+			// The compacted change is stored despite the error, so the claim
+			// stands and the purge below is still due. Run it off a context
+			// the failure may already have cancelled.
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), compactionUndoTimeout)
+			defer cancel()
 		}
 	}
 
@@ -2115,8 +2131,60 @@ func (c *Client) CompactChangeInfos(
 	return nil
 }
 
+// settleCompactionClaim decides what to do with the claim CompactChangeInfos
+// took in step 2 once the write of the compacted change reported an error, and
+// reports whether that change is in fact stored at claimedServerSeq.
+//
+// A MongoDB write error is not proof the write did not apply: a write-concern
+// timeout, a retried command or an error surfaced after the primary accepted
+// the operation all error on a write that is there. Rolling server_seq back
+// over an applied compacted record would leave the whole-root change at
+// claimedServerSeq with the changes it replaces still in place, so every reader
+// that rebuilds the root from the change history would replay the document on
+// top of itself. The ambiguity is therefore settled by reading the record back
+// before anything is undone, and the claim is only rolled back when the stored
+// record is demonstrably not the compacted one.
+//
+// When the write did land, (true, nil) is returned and the caller carries on
+// with the purge the compacted change makes due. When the read itself fails
+// nothing is undone — an unverified rollback is the one outcome that corrupts
+// the history — and the cause is returned with the failure to verify joined to
+// it, since the document is then left mid-compaction and needs an operator.
+func (c *Client) settleCompactionClaim(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+	lastServerSeq, claimedServerSeq int64,
+	compacted bson.Raw,
+	cause error,
+) (bool, error) {
+	refKey := docInfo.RefKey()
+
+	// The failed write most likely failed because its context was cancelled or
+	// expired, which would make every repair below a no-op on that same
+	// context. Detach from it and bound the repair on its own.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), compactionUndoTimeout)
+	defer cancel()
+
+	stored, err := c.collection(ColChanges).FindOne(ctx, bson.M{
+		"project_id": docInfo.ProjectID,
+		"doc_id":     docInfo.ID,
+		"server_seq": claimedServerSeq,
+	}).Raw()
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return false, errors.Join(cause, fmt.Errorf(
+			"verify compacted change of %s: %w", refKey, err,
+		))
+	}
+	if err == nil && rawEqualIgnoringID(stored, compacted) {
+		return true, nil
+	}
+
+	return false, c.undoCompactionClaim(ctx, docInfo, lastServerSeq, claimedServerSeq, cause)
+}
+
 // undoCompactionClaim restores the document row CompactChangeInfos claimed in
-// step 2 after the write that follows it failed, and returns the cause.
+// step 2 after the write that follows it failed without landing, and returns
+// the cause.
 //
 // The restore is conditional on the claim still standing untouched, so it
 // cannot clobber a document something else has moved on; in that case, and if
@@ -2154,6 +2222,42 @@ func (c *Client) undoCompactionClaim(
 	}
 
 	return cause
+}
+
+// rawEqualIgnoringID reports whether stored holds exactly the elements of want,
+// in order, apart from the `_id` MongoDB keeps across a replace. Both sides
+// come from the same marshalling of the same fields in the same order, so an
+// applied replace is byte-identical and anything else — the pre-compaction
+// record, a partial write — is not.
+func rawEqualIgnoringID(stored, want bson.Raw) bool {
+	storedElements, err := stored.Elements()
+	if err != nil {
+		return false
+	}
+	wantElements, err := want.Elements()
+	if err != nil {
+		return false
+	}
+
+	idx := 0
+	for _, element := range storedElements {
+		if element.Key() == "_id" {
+			continue
+		}
+		if idx >= len(wantElements) {
+			return false
+		}
+
+		got, expected := element.Value(), wantElements[idx].Value()
+		if element.Key() != wantElements[idx].Key() ||
+			got.Type != expected.Type ||
+			!bytes.Equal(got.Value, expected.Value) {
+			return false
+		}
+		idx++
+	}
+
+	return idx == len(wantElements)
 }
 
 // compactionClaimError tells a document that is gone from one that moved past

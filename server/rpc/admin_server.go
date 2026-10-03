@@ -1310,7 +1310,8 @@ func (s *adminServer) RestoreRevisionByAdmin(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("revision not found"))
 	}
 
-	if err := revisions.Restore(ctx, s.backend, project, revision.ID); err != nil {
+	docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+	if err := revisions.Restore(ctx, s.backend, project, docRefKey, revision.ID); err != nil {
 		return nil, err
 	}
 
