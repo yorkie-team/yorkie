@@ -1173,12 +1173,12 @@ func (s *RGATreeSplit[V]) ToTestString() string {
 // createdAt precedes the edit stops that walk. Unlinking it hands the next node
 // the stopping decision, which is only the same decision once that node is
 // causally stable.
-func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) []*time.Ticket {
+func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 	node, ok := child.(*RGATreeSplitNode[V])
 	if !ok || node.next == nil {
 		return nil
 	}
-	return barrierTicketsOf(node.next.createdAt())
+	return node.next.createdAt()
 }
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {

@@ -39,6 +39,11 @@ follow-up by position, after its own product.
       change diverged `TestTreeSplitAfterTypingAtSpanEnd`.
 - [x] Pin the issue script's document, compare the third replica's two
       arrival orders, and keep the Style/RemoveStyle convergence test.
+- [x] Take the split-chain GC barrier back out (it had returned in later
+      fix rounds and kept gaining legs). A local barrier cannot cover a
+      split applied after the purge; §7.8 now records what a purge can and
+      cannot do to the marker, and `TestTreeSameBoundarySplitAfterGC` runs
+      the splits with one replica having collected.
 
 ## Verification
 
@@ -51,7 +56,9 @@ follow-up by position, after its own product.
 - yorkie-js-sdk#1436: text inserted at the position of a concurrent split
   lands on different sides. Different mechanism; left open by #2030.
 - #2077 (the `KNOWN` skips in the same test file) and yorkie-js-sdk#1408.
-- `holdsKnownChild` counts tombstones, so a GC purge between two replicas'
-  applications of one change could in principle change its answer; §7.4's
-  re-parenting has the same sensitivity. Needs a GC test on both SDKs and a
-  barrier designed for both, not a Go-only one.
+- GC independence of the split rules. `holdsKnownChild` counts tombstones,
+  and so do §7.4's re-parenting, the §7.5 advance and the §7.8 entry gate,
+  which predate it. A purge can only clear the marker, which sends the walk
+  where it went before this change, so it cannot break an edit set that
+  converged without it (§7.8). Making the rules independent of GC needs a
+  marker that does not live in tombstones, in both SDKs.

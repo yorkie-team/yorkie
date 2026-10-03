@@ -521,12 +521,12 @@ func (a *RGATreeList) Purge(child GCChild) error {
 // PurgeBarrierAt implements GCBarrier[GCChild] for the dead position nodes a
 // move leaves behind: the ticket that must be covered before this slot may be
 // unlinked is the one findNextBeforeExecutedAt would read in its place.
-func (a *RGATreeList) PurgeBarrierAt(child GCChild) []*time.Ticket {
+func (a *RGATreeList) PurgeBarrierAt(child GCChild) *time.Ticket {
 	node, ok := child.(*RGATreeListNode)
 	if !ok {
 		return nil
 	}
-	return barrierTicketsOf(successorBarrierAt(node))
+	return successorBarrierAt(node)
 }
 
 // purgeBarrierAt is the same barrier for a removed element, reached through the

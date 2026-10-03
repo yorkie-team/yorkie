@@ -505,79 +505,28 @@ yorkie-js-sdk together, against a reproducer — a merge racing two
 same-boundary splits across three replicas — that neither repo has yet.
 
 Counting tombstones keeps the answer independent of whether a replica
-has applied a concurrent removal yet, but it also makes the answer
-depend on a node GC could unlink; `Tree.PurgeBarrierAt` therefore
-reports, alongside the sibling-walk barrier, the `createdAt` of every
-chain ancestor of the tombstone — every ancestor carrying an
-`InsPrevID` or an `InsNextID` — and, when the tombstone itself sits in
-a chain, its own `createdAt`. Every chain member reported this way also
-contributes the `createdAt` of the node it points at by `InsNextID`.
+has applied a concurrent removal yet, but GC can unlink a tombstone the
+marker counts. No purge barrier can prevent that: a split applied after
+the purge can carry a tombstone one replica has already collected into
+the very product the walk classifies, and nothing at purge time names
+that product. What bounds the effect is its direction. A purge only
+takes a known child away, so it can only clear the marker, and with the
+marker cleared the walk goes on past the right half — the walk every
+replica ran before this rule. For that to change where a split lands
+there must be a sibling to walk on to, and then the walk without the
+rule took the split past the right half on every replica that applied
+the concurrent split first, while one that applied this split first
+placed it by position (yorkie-js-sdk#1433). So a replica that has
+collected can miss this fix for an edit set that diverged without it;
+it cannot make an edit set diverge that converged without it.
 
-That successor ticket pays for two hazards at once. §7.8 breaks at a
-chain node that is removed, so purging one lets the walk run on to its
-`InsNext` on the collecting replica while it still stops there on the
-other; the two agree again once the walk breaks at the successor as
-well. And §7.8's *entry gate* — `offset != len(parent.Index.Children
-(true))`, against an offset the caller resolves tombstone-inclusively —
-reads the chain member's own child count, which nothing about that
-member retires: purging a trailing tombstone lowers the count without
-moving the offset, so the collecting replica enters the retarget branch
-while the other returns early. What makes them agree is the walk that
-branch runs. It starts at the member's `InsNext` and breaks there as
-soon as the version vector covers that successor's `createdAt`, leaving
-`target == parent` and returning exactly what the early gate would
-have. Once the successor is causally stable both replicas answer
-`(parent, offset)` whichever branch they take, and the count stops
-deciding anything. The §7.5
-advance reads a raw
-`Children(true)` count on the same chain nodes, so it is covered by the
-same barrier. Either walk answers the same way for a chain node it
-already knows, whatever that node holds, so once that node is causally
-stable the purge can no longer change where a split lands through its
-children, and the barrier retires: a vector covering every actor drains
-tree garbage as before. What that argument does *not* cover is written
-down as the two residuals below.
-
-`InsPrevID` is the load-bearing half. A right-half product carries no
-`InsNextID` until it is itself split, so reading `InsNextID` alone left
-a tombstone inside a product purgeable right up to the moment a later
-split gave its parent a chain — exactly the node the walk then
-classifies. `InsPrevID` is instead precisely the set of nodes a chain
-walk can reach, since both walks only ever count the children of a node
-they arrived at as some other node's `InsNext`.
-
-The `InsNextID` half is where `emptyRunReachesActor` starts. That walk's
-first node is found among document siblings rather than along the chain,
-so it need not carry an `InsPrevID`; its `Children(true)` count decides
-the answer, but only when it has an `InsNextID` to walk on to, since the
-nil case returns false whatever it holds. The node's own `createdAt`
-retires this leg as it does the other — though not by being read first.
-The count is tested *before* the version vector, but a node the editor
-knows answers false down either branch: false through the count while
-children remain, false through the version vector once they are gone.
-So a purge under a causally stable chain node cannot flip the answer.
-
-Two residuals are left uncovered, and recorded here rather than papered
-over.
-
-`emptyRunReachesActor` tests an actor-ID match first of all, before the
-count and before the version vector, and no ticket retires that branch —
-an actor always knows its own tickets. When the purged chain node was
-created by the actor whose later split walks the chain, the walk stopped
-at that node and now runs on to its `InsNext`, so the answer still
-differs between a replica that collected and one that did not. The legs
-above bound what the successor answers, not whether it is reached.
-`crdt.TestTreeEmptyRunReachesActorBarrier` pins the flip. Closing it
-means making the walk purge-invariant, which is a replicated rule and so
-moves in Go and yorkie-js-sdk together, against a reproducer neither
-repo has yet.
-
-Neither leg stands for §7.4 empty-sibling re-parenting either, which
-gates its `MoveChildBefore` on a `Children(true)` count as well. §7.4 is
-deliberately version-vector-independent, so no ticket retires it: a node
-in no chain at purge time can still be split twice afterwards, and the
-second split then counts children one replica may have purged in
-between. That one is pre-existing.
+The rule is not the only tombstone reader here. §7.4's re-parenting
+gates on a `Children(true)` count, the §7.5 advance stops at a node
+with any child, and this section's own entry gate compares the split
+offset against `len(parent.Index.Children(true))` — all three predate
+this rule and are as exposed to GC. Making the split rules independent
+of GC needs a marker that does not live in tombstones, in Go and
+yorkie-js-sdk together; that is follow-up work, not part of this rule.
 
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s

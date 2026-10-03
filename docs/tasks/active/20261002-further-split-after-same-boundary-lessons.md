@@ -15,19 +15,8 @@
   the GC barrier added with it was untested. Both were reverted. A replicated
   rule changes in Go and JS together, with a failing script, or not at all.
 
-## Review round: GC barrier and merge stability
+## Review rounds: the GC barrier, and why it came back out
 
-- **Reverting a bundle reverts the part that was right.** The §7.5 change
-  was wrong and the split-chain GC barrier shipped with it was not; both
-  went out together. The barrier is back on its own —
-  `Tree.splitChainBarriersAt`, reported by `PurgeBarrierAt` alongside the
-  sibling-walk ticket — while §7.5 keeps its raw `Children(true)` count, so
-  `TestTreeSplitAfterTypingAtSpanEnd` stays green. The barrier covers §7.5
-  too: both walks answer the same way for a chain node the editor already
-  knows, whatever that node holds.
-- **A GC barrier is local safety, not a replicated rule.** That is why it
-  can land in Go ahead of JS where the §7.5 classifier could not: it only
-  delays a purge, it never changes where a split lands.
 - **`createdAt` does not say where a node has always lived.** A merge moves
   children keeping their original ticket, so "holds a child the editor knew"
   can become true for an empty same-boundary product after the fact. A
@@ -35,83 +24,35 @@
   field is stamped on a node's *first* merge-move only, `Split`/
   `SplitElement`/`DeepCopy` copy it onto products no merge relocated, and it
   arrives client-supplied with no `findMergeNode` resolution at that call
-  site. It is also a replicated ordering rule with no reproducer, which is
-  the rule from the round above. Recorded as a known limitation in
-  `holdsKnownChild` and in `docs/design/concurrent-merge-split.md` instead.
-
-## Review round: what the barrier actually stands for
-
-- **A barrier leg needs a ticket that retires it.** The `InsNextID` leg was
-  first justified by §7.4 empty-sibling re-parenting — but §7.4 is
-  deliberately VV-independent, so no ticket retires it and the leg would
-  have been claiming cover it could not give. The leg stands instead for
-  `emptyRunReachesActor`'s *start* node, which is found among document
-  siblings and so may carry no `InsPrevID`, and whose count the node's own
-  `createdAt` does retire. §7.4 is written down as an uncovered pre-existing
-  exposure rather than attributed to a leg.
-- **Purge relinks the chain, so the tombstone's own membership matters too.**
-  Barriering the ancestors left the case where the tombstone *is* the chain
-  node: §7.8 breaks at a removed chain node, and purging it lets the walk
-  run on to its `InsNext`. `splitChainBarriersAt` now reports the node's own
-  `createdAt` and its `InsNext`'s — the pair that has to be covered before
-  both replicas break at the same place.
-- **Gate predicates deserve a unit test, not only an end-to-end one.** The
-  end-to-end shape a local split produces only ever exercises the
-  `InsPrevID` leg. `crdt.TestTreePurgeBarrierSplitChain` links each chain
-  by hand and asserts the reported tickets, so every leg has a test.
-
-## Review round: what the barrier does not cover
-
-- **Read the branch order, not only the branch.** The claim "the walk
-  returns false for a node the editor knows, *before* the count can matter"
-  was wrong about the order — `emptyRunReachesActor` tests the
-  `Children(true)` count first — and right about the answer, since a known
-  node returns false down either branch. The conclusion survived; the
-  reasoning in the comment had to be rewritten to the one that actually
-  holds.
-- **An actor-ID short-circuit is a VV-independent branch, so no barrier
-  retires it.** `emptyRunReachesActor` returns at the first chain node the
-  walking actor created, before reading the version vector — and an actor
-  always knows its own tickets. Purging such a node relinks the chain past
-  it and flips the answer, however causally stable it was.
-  `crdt.TestTreeEmptyRunReachesActorBarrier` purges one and asserts both
-  answers, so the exposure is a running test rather than a sentence. It
-  cannot be closed from the GC side: there is no ticket to wait on, and
-  making the walk purge-invariant is a replicated rule change.
-- **A pinning test is the honest form of a known limitation.**
-  `crdt.TestTreeHoldsKnownChild` asserts that a merge-moved child *is*
-  counted — the behaviour the `MergedAt` skip was reverted back to — so the
-  next reader finds the chosen answer written down and failing loudly if
-  someone changes it Go-side alone.
-
-## Review round: the reader the barrier forgot
-
-- **Enumerate the entry gate, not only the loop body.** The barrier set was
-  derived from what the two same-boundary *walks* read, and missed §7.8's
-  own entry gate — `offset != len(parent.Index.Children(true))`, resolved
-  against a tombstone-inclusive offset. Purging a *trailing* tombstone of a
-  chained node lowers the count without moving the offset, so the
-  collecting replica enters the retarget branch while the other returns
-  early. A guard that decides whether a rule runs at all is as much a
-  reader of the tombstone's place as the rule's own loop.
-- **When no knowledge of the node retires a reader, look at what the
-  branch it arms would do.** Nothing about a chain member makes its child
-  count stop mattering. But the branch the gate arms starts its walk at the
-  member's `InsNext` and breaks there once the version vector covers that
-  successor — leaving `target == parent` and returning exactly what the
-  early gate would have. So the successor's `createdAt`, which the barrier
-  already reported for the tombstone's own hop, retires the gate for every
-  chain member; `chainBarriersFor` now reports it uniformly.
-- **A reader on the remote-apply path should not recurse on peer-controlled
-  depth.** `holdsKnownChild` descended by recursion over a nesting depth a
-  peer's `TreeEdit` chooses. A blown goroutine stack is a fatal error no
-  `recover` catches, so the descent is an explicit stack now; the cost is
-  one slice.
-- **A fixture ticket can make a subtest vacuous.** The subtest pinning
-  "a known node answers false down either branch" built its start node from
-  `tree.createdAt` — the editor's own ticket — so the walk returned at the
-  actor-ID branch and never reached either branch under test. Both
-  assertions held for the wrong reason. The fix is a third actor the
-  version vector covers, plus a control under a vector that does *not*
-  cover it, so each `false` is a branch deciding rather than a walk with
-  nowhere to go.
+  site. It is also a replicated ordering rule with no reproducer. Recorded
+  as a known limitation in `holdsKnownChild` and in
+  `docs/design/concurrent-merge-split.md` instead.
+- **A local purge barrier cannot make a tombstone-reading rule GC-safe.**
+  Five fix rounds grew a split-chain barrier (ancestors, the tombstone's own
+  chain node, `InsNext` successors) and every review found the next hole:
+  a chain created after the purge, a successor displaced by a later split,
+  `emptyRunReachesActor`'s actor-ID branch. They are one hole. A split
+  applied after the purge can carry a tombstone one replica already
+  collected into a product nothing named at purge time, so no ticket
+  reported then can stand for it. Removing the barrier also removed the
+  `GCBarrier` signature change and the per-pass ancestor walk.
+- **Ask which way the purge moves the answer.** Unlinking a tombstone only
+  takes a known child away, so it can only clear the marker, and a cleared
+  marker sends the walk on past the right half — the walk every replica ran
+  before this change. That only matters when there is a sibling to walk on
+  to, and then the old walk already diverged. So GC can withhold the fix on
+  a collecting replica; it cannot break an edit set that converged before.
+- **Skipping tombstones the editor saw removed is not the fix either.** It
+  makes GC irrelevant — a purge only unlinks a node whose removal every
+  later editor knows — but it broke convergence without GC: a three-replica
+  split/insert/delete fuzz went from 1164 to 1174 diverging seeds of 3000,
+  twelve of them new. A removal the editor knew still marks where the right
+  half was.
+- **Measure against `main` before arguing.** A GC-differential fuzz (three
+  editing replicas without GC; two observers fed the same change log in
+  order, one collecting with the min version vector after each sync)
+  showed post-GC divergence on `main` already. Over 4000 split/delete
+  scripts the branch without a barrier diverged after GC on the same seeds
+  as `main` (15 flat, 13 nested), bar one seed whose minimised script
+  diverges on `main` without GC at all. The barrier lowered the count but
+  added seeds `main` handled, so it was not a strict improvement either.
