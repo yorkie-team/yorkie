@@ -1138,8 +1138,12 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 //     reached by walking document siblings rather than the chain, so it may
 //     carry no InsPrevID; its Children(true) count decides the answer, but only
 //     when it has an InsNextID to walk on to (the nil case returns false
-//     whatever it holds). The same createdAt retires it: the walk returns false
-//     for a node the editor knows, before the count can matter.
+//     whatever it holds). The same createdAt retires it, though not by being
+//     read first: the count is tested before the version vector, and a node
+//     the editor knows answers false down either branch -- false through the
+//     count when children remain, false through the version vector when they
+//     do not. So once that createdAt is causally stable, purging a counted
+//     tombstone under it cannot flip the answer.
 //
 // Neither leg is monotone in the raw sense -- Purge relinks the chain across
 // the node it unlinks (tree.go:1178-1194) -- but each is cleared only together
@@ -1157,12 +1161,26 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 // the node's own createdAt, and its InsNext's -- because the two replicas
 // answer alike again only once the walk also stops at the successor.
 //
-// Residual, and pre-existing: §7.4 empty-sibling re-parenting also gates its
-// MoveChildBefore on a Children(true) count, and no ticket retires that one.
-// §7.4 is deliberately VV-independent, so causal stability never stops it from
-// reading the count; a node in no chain at purge time can be split twice
-// afterwards and read children one replica purged in between. Neither leg here
-// stands for §7.4. See docs/design/concurrent-merge-split.md.
+// Two residuals, both uncovered and recorded rather than papered over:
+//
+//   - emptyRunReachesActor's first test is an actor-ID match, which returns
+//     before the count and before the version vector. No ticket retires it --
+//     an actor always knows its own tickets -- so when the purged chain node
+//     was created by the actor whose later split walks the chain, the relink
+//     still changes the answer: the walk stopped at that node and now runs on
+//     to its InsNext. The legs above bound what the successor answers, not
+//     that it is reached. Pinned by TestTreeEmptyRunReachesActorBarrier.
+//     Closing it means making the walk purge-invariant, which is a replicated
+//     rule and so moves in Go and yorkie-js-sdk together.
+//
+//   - §7.4 empty-sibling re-parenting also gates its MoveChildBefore on a
+//     Children(true) count, and no ticket retires that one either. §7.4 is
+//     deliberately VV-independent, so causal stability never stops it from
+//     reading the count; a node in no chain at purge time can be split twice
+//     afterwards and read children one replica purged in between. Neither leg
+//     here stands for §7.4. This one is pre-existing.
+//
+// See docs/design/concurrent-merge-split.md.
 func (t *Tree) splitChainBarriersAt(node *TreeNode) []*time.Ticket {
 	var barriers []*time.Ticket
 	if node.InsPrevID != nil || node.InsNextID != nil {

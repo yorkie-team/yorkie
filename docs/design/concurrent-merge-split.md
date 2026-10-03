@@ -519,9 +519,10 @@ advance reads a raw
 `Children(true)` count on the same chain nodes, so it is covered by the
 same barrier. Either walk answers the same way for a chain node it
 already knows, whatever that node holds, so once that node is causally
-stable the purge can no longer change where a split lands, and the
-barrier retires: a vector covering every actor drains tree garbage as
-before.
+stable the purge can no longer change where a split lands through its
+children, and the barrier retires: a vector covering every actor drains
+tree garbage as before. What that argument does *not* cover is written
+down as the two residuals below.
 
 `InsPrevID` is the load-bearing half. A right-half product carries no
 `InsNextID` until it is itself split, so reading `InsNextID` alone left
@@ -536,16 +537,33 @@ first node is found among document siblings rather than along the chain,
 so it need not carry an `InsPrevID`; its `Children(true)` count decides
 the answer, but only when it has an `InsNextID` to walk on to, since the
 nil case returns false whatever it holds. The node's own `createdAt`
-retires this leg as it does the other: the walk returns false for a node
-the editor already knows, before the count is reached.
+retires this leg as it does the other — though not by being read first.
+The count is tested *before* the version vector, but a node the editor
+knows answers false down either branch: false through the count while
+children remain, false through the version vector once they are gone.
+So a purge under a causally stable chain node cannot flip the answer.
 
-Neither leg stands for §7.4 empty-sibling re-parenting, which gates its
-`MoveChildBefore` on a `Children(true)` count as well. §7.4 is
+Two residuals are left uncovered, and recorded here rather than papered
+over.
+
+`emptyRunReachesActor` tests an actor-ID match first of all, before the
+count and before the version vector, and no ticket retires that branch —
+an actor always knows its own tickets. When the purged chain node was
+created by the actor whose later split walks the chain, the walk stopped
+at that node and now runs on to its `InsNext`, so the answer still
+differs between a replica that collected and one that did not. The legs
+above bound what the successor answers, not whether it is reached.
+`crdt.TestTreeEmptyRunReachesActorBarrier` pins the flip. Closing it
+means making the walk purge-invariant, which is a replicated rule and so
+moves in Go and yorkie-js-sdk together, against a reproducer neither
+repo has yet.
+
+Neither leg stands for §7.4 empty-sibling re-parenting either, which
+gates its `MoveChildBefore` on a `Children(true)` count as well. §7.4 is
 deliberately version-vector-independent, so no ticket retires it: a node
 in no chain at purge time can still be split twice afterwards, and the
 second split then counts children one replica may have purged in
-between. This is a pre-existing exposure, recorded here rather than
-papered over.
+between. That one is pre-existing.
 
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s

@@ -59,3 +59,27 @@
   end-to-end shape a local split produces only ever exercises the
   `InsPrevID` leg. `crdt.TestTreePurgeBarrierSplitChain` links each chain
   by hand and asserts the reported tickets, so every leg has a test.
+
+## Review round: what the barrier does not cover
+
+- **Read the branch order, not only the branch.** The claim "the walk
+  returns false for a node the editor knows, *before* the count can matter"
+  was wrong about the order — `emptyRunReachesActor` tests the
+  `Children(true)` count first — and right about the answer, since a known
+  node returns false down either branch. The conclusion survived; the
+  reasoning in the comment had to be rewritten to the one that actually
+  holds.
+- **An actor-ID short-circuit is a VV-independent branch, so no barrier
+  retires it.** `emptyRunReachesActor` returns at the first chain node the
+  walking actor created, before reading the version vector — and an actor
+  always knows its own tickets. Purging such a node relinks the chain past
+  it and flips the answer, however causally stable it was.
+  `crdt.TestTreeEmptyRunReachesActorBarrier` purges one and asserts both
+  answers, so the exposure is a running test rather than a sentence. It
+  cannot be closed from the GC side: there is no ticket to wait on, and
+  making the walk purge-invariant is a replicated rule change.
+- **A pinning test is the honest form of a known limitation.**
+  `crdt.TestTreeHoldsKnownChild` asserts that a merge-moved child *is*
+  counted — the behaviour the `MergedAt` skip was reverted back to — so the
+  next reader finds the chosen answer written down and failing loudly if
+  someone changes it Go-side alone.
