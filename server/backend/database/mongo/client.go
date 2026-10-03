@@ -46,7 +46,8 @@ const (
 	StatusKey = "status"
 
 	// maxDocumentSize is the largest BSON document MongoDB stores
-	// (maxBsonObjectSize). An insert over it is rejected by the server.
+	// (maxBsonObjectSize, 16 MiB on every server version). An insert over it
+	// is rejected by the server, not the driver.
 	maxDocumentSize = 16 * 1024 * 1024
 )
 
@@ -2023,18 +2024,18 @@ func (c *Client) CompactChangeInfos(
 			return err
 		}
 
-		compacted, err = c.marshal(bson.M{
-			"_id":             bson.NewObjectID(),
-			"project_id":      docInfo.ProjectID,
-			"doc_id":          docInfo.ID,
-			"server_seq":      newServerSeq,
-			"client_seq":      cn.ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"actor_id":        types.ID(cn.ID().ActorID().String()),
-			"version_vector":  cn.ID().VersionVector(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": cn.PresenceChange(),
+		compacted, err = c.marshal(bson.D{
+			{Key: "_id", Value: bson.NewObjectID()},
+			{Key: "project_id", Value: docInfo.ProjectID},
+			{Key: "doc_id", Value: docInfo.ID},
+			{Key: "server_seq", Value: newServerSeq},
+			{Key: "client_seq", Value: cn.ClientSeq()},
+			{Key: "lamport", Value: cn.ID().Lamport()},
+			{Key: "actor_id", Value: types.ID(cn.ID().ActorID().String())},
+			{Key: "version_vector", Value: cn.ID().VersionVector()},
+			{Key: "message", Value: cn.Message()},
+			{Key: "operations", Value: encodedOperations},
+			{Key: "presence_change", Value: cn.PresenceChange()},
 		})
 		if err != nil {
 			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)

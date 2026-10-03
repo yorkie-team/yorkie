@@ -13,3 +13,11 @@
   because the document it compacted had already lost its content.
 
 ## Self review
+
+- Round 1 (correctness, tests; general-purpose reviewer agent, not the CI
+  panel): no blocking findings, loop ended. Applied: `bson.D` with `_id`
+  first for deterministic bytes, a comment on the cache in the test's second
+  read. Deferred to the PR body: purge and insert are still not atomic for
+  other failures (network, stepdown, the `server_seq` conflict check after
+  the purge); an oversized document is rebuilt and rejected every
+  housekeeping cycle.

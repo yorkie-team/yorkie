@@ -229,7 +229,9 @@ func TestDocumentCompaction(t *testing.T) {
 		}
 		assert.NoError(t, c1.Detach(ctx, d1))
 
-		// The changes compaction would replace, read back from the database.
+		// The changes compaction would replace. The second read may be answered
+		// from the change cache; it reaches the database here because the only
+		// path that deletes these rows, the purge, drops that cache with them.
 		be := defaultServer.Backend()
 		project, err := defaultServer.DefaultProject(ctx)
 		assert.NoError(t, err)
