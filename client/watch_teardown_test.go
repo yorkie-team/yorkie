@@ -304,6 +304,80 @@ func TestFailedDeactivateStaysDeactivating(t *testing.T) {
 	assert.False(t, cli.IsActive())
 }
 
+// alwaysFailingDeactivateServer rejects every DeactivateClient, standing in
+// for a failure that retrying cannot clear: a session the server has already
+// dropped, or credentials it no longer accepts.
+type alwaysFailingDeactivateServer struct {
+	*watchInitServer
+	deactivates atomic.Int32
+}
+
+func (s *alwaysFailingDeactivateServer) DeactivateClient(
+	_ context.Context,
+	_ *connect.Request[api.DeactivateClientRequest],
+) (*connect.Response[api.DeactivateClientResponse], error) {
+	s.deactivates.Add(1)
+	return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("client not found"))
+}
+
+// TestCloseEscapesPermanentDeactivateFailure pins that the deactivating window
+// is not a dead end. Retrying Deactivate is the answer to a transient failure,
+// but a DeactivateClient that fails the same way however often it is called
+// would otherwise leave the client in a state every guard rejects -- and leave
+// Close returning that error before it ever released the connection. Close is
+// the terminal disposal: it gives up on the server-side session, finishes the
+// local deactivation itself, and still reports the error.
+func TestCloseEscapesPermanentDeactivateFailure(t *testing.T) {
+	srv := &alwaysFailingDeactivateServer{watchInitServer: &watchInitServer{
+		firstResponse: &api.WatchResponse{
+			Body: &api.WatchResponse_Initialization{
+				Initialization: &api.WatchInitialization{},
+			},
+		},
+		release: make(chan struct{}),
+	}}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+
+	ctx := context.Background()
+	cli, err := client.Dial(httpServer.URL, client.WithSyncLoopDuration(time.Minute))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	doc := document.New(key.Key("deactivate-failure-close"))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+
+	// Retrying gets nowhere here, which is the whole point of the case.
+	assert.Error(t, cli.Deactivate(ctx))
+	assert.Error(t, cli.Deactivate(ctx))
+	assert.ErrorIs(t, cli.Activate(ctx), client.ErrDeactivating)
+
+	// Close reports the failure rather than swallowing it. Run it
+	// off-goroutine so a teardown that wedges shows up as this timeout rather
+	// than as a hung test binary.
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- cli.Close() }()
+	select {
+	case err := <-closeDone:
+		assert.Error(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("close after a permanent deactivate failure did not return")
+	}
+
+	// What it leaves behind is a clean deactivated client: the document is
+	// detached with its attachment dropped, and a new session can be opened.
+	assert.False(t, cli.IsActive())
+	assert.Equal(t, document.StatusDetached, doc.Status())
+	assert.NoError(t, cli.Activate(ctx))
+	assert.True(t, cli.IsActive())
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
+}
+
 // TestConcurrentDeactivateDoesNotReopenTheWindow pins that two overlapping
 // Deactivate calls cannot leave a client whose session the server already ended
 // back in the deactivating window. The second caller observed its status before

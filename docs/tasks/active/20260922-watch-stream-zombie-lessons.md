@@ -192,3 +192,25 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
     which `SetToken` swaps at runtime while every watch and sync goroutine
     reads it. An invariant written down for one field is a checklist for the
     rest of the struct.
+
+- **Round 4 (the review panel on #2084, blast radius + correctness).**
+  - *The deactivating guard covered one half of `syncInternal`.* The guard was
+    added to `pushPullChanges` because that is where the wedge was reasoned
+    about, and `refreshChannel` — the channel half of the very same
+    `syncInternal` — was left open, so a user-goroutine `Client.Sync` on a
+    channel still reached the server inside the window. A guard belongs to the
+    fan-out point's every branch, not to the branch the bug was found in.
+  - *"Retry until it succeeds" is only an exit for a failure that can stop
+    happening.* Round 3 answered the failed-`Deactivate` problem with a state
+    whose only exit was a successful `Deactivate`; a session the server has
+    already dropped fails identically forever, so the client was bricked and
+    `Close` returned the error before it ever released the connection. `Close`
+    is now the terminal disposal: it gives up on the server-side session and
+    finishes the local half itself. A recovery path has to work for the
+    permanent case, not just the transient one.
+  - *Build the consumer before the producer, everywhere.* The pipeline was
+    started before the watch stream but still after `ApplyChangePack` applied
+    the attach response — the one apply in `attachDocument` — so a pack
+    carrying two or more events would wedge `Attach` on the capacity-one event
+    channel. Ordering fixed in one place is not an invariant until every
+    publisher in the function is behind it.

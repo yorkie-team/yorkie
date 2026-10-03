@@ -71,8 +71,15 @@ const (
 	// Client.Sync apply packs into documents whose pump is gone, and the first
 	// event ApplyChangePack publishes would block forever on the document's
 	// capacity-one event channel with the event mutex held, taking every other
-	// publisher with it. The way out is a Deactivate that succeeds, which this
-	// state -- unlike statusDeactivated -- still lets through.
+	// publisher with it.
+	//
+	// There are two ways out, and the state is not a dead end. A Deactivate
+	// that succeeds -- which this state, unlike statusDeactivated, still lets
+	// through -- ends the server-side session too, and is the right answer to a
+	// transient failure. A failure that will never clear, such as a session the
+	// server has already dropped, leaves Close: it gives up on the session and
+	// finishes the local deactivation itself, so the client ends deactivated
+	// and can be activated again under a new ID.
 	statusDeactivating
 )
 
@@ -84,8 +91,8 @@ var (
 	// ErrDeactivating occurs when a client that has begun deactivating is
 	// asked to activate again. The deactivation has already retired the watch
 	// pipelines and they do not come back, so the client has to finish
-	// deactivating -- retrying Deactivate until it succeeds -- before a new
-	// session can be opened over it.
+	// deactivating -- retrying Deactivate until it succeeds, or Close when the
+	// failure will never clear -- before a new session can be opened over it.
 	ErrDeactivating = errors.FailedPrecond("client is deactivating")
 
 	// ErrNotAttached occurs when the given resource is not attached to this client.
@@ -275,15 +282,24 @@ func (c *Client) SetToken(token string) {
 	c.interceptor.SetToken(token)
 }
 
-// Close closes all resources of this client.
+// Close closes all resources of this client. It is the terminal disposal of a
+// client and always leaves it deactivated locally, whatever the server says:
+// when DeactivateClient fails for good -- the session is already gone, the
+// credentials no longer pass -- retrying Deactivate cannot clear the
+// deactivating window, so Close finishes the local half of the deactivation
+// itself rather than leaving a client no call can use and a connection no call
+// can release. The DeactivateClient error is still returned, so a caller that
+// wants the server-side session provably ended can see that it was not; the
+// server reaps the leftover session through housekeeping.
 func (c *Client) Close() error {
-	if err := c.Deactivate(context.Background()); err != nil {
-		return err
+	err := c.Deactivate(context.Background())
+	if err != nil {
+		c.finishDeactivation()
 	}
 
 	c.conn.CloseIdleConnections()
 
-	return nil
+	return err
 }
 
 // loadStatus returns the current status of this client.
@@ -307,7 +323,7 @@ func (c *Client) storeStatus(s status) {
 // sync loop to push resources the new ID never attached, over pipelines that no
 // longer deliver. A deactivation whose RPC failed is also unfinished -- the
 // retired pipelines do not come back -- so the caller's next move there is to
-// retry Deactivate, not Activate.
+// retry Deactivate, or Close when that failure will never clear, not Activate.
 func (c *Client) Activate(ctx context.Context) error {
 	switch c.loadStatus() {
 	case statusActivated:
@@ -397,19 +413,30 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		// taking every other publisher with it. Here, every guard spelled
 		// `!= statusActivated` keeps rejecting the client and Activate returns
 		// ErrDeactivating, while Deactivate itself still runs, so the caller
-		// retries it until the session is gone.
+		// retries it until the session is gone. A failure that will never clear
+		// -- a session the server already dropped, credentials it no longer
+		// accepts -- is not a dead end either: Close gives up on the session and
+		// finishes the local deactivation, leaving a clean deactivated client.
 		return err
 	}
 
-	// The server detached every resource of this client, so mark them
-	// detached here too, as the JS SDK does, and drop their attachments. The
-	// attachment holds the resource ID of the session the server just ended,
-	// so keeping it would let the sync loop -- which reads c.attachments and
-	// ignores resource status -- push it again the moment this client is
-	// activated anew, and would let Detach, Remove or WatchStream address a
-	// server-side attachment this client no longer holds. Dropping it leaves
-	// the resource exactly where a plain Detach leaves it: detached, with no
-	// attachment, free to be attached again.
+	c.dropAttachments()
+	c.storeStatus(statusDeactivated)
+
+	return nil
+}
+
+// dropAttachments marks every attached resource detached, as the JS SDK does,
+// and drops its attachment. The attachment holds the resource ID of an ended
+// session, so keeping it would let the sync loop -- which reads c.attachments
+// and ignores resource status -- push it again the moment this client is
+// activated anew, and would let Detach, Remove or WatchStream address a
+// server-side attachment this client no longer holds. Dropping it leaves the
+// resource exactly where a plain Detach leaves it: detached, with no
+// attachment, free to be attached again.
+//
+// Callers must have retired every attachment's watch pipeline first.
+func (c *Client) dropAttachments() {
 	for _, attachment := range c.attachments.Values() {
 		if attachment.resource.Status() != attachable.StatusRemoved {
 			attachment.resource.SetStatus(attachable.StatusDetached)
@@ -419,10 +446,49 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 		}
 		c.attachments.Delete(attachment.resource.Key())
 	}
+}
 
+// finishDeactivation completes the local half of a deactivation whose
+// DeactivateClient RPC never succeeded, and is how a client leaves the
+// deactivating window when retrying cannot: a session the server has already
+// dropped, or credentials it no longer accepts, fails the same way however
+// often it is retried, and the client would otherwise stay in a state every
+// guard rejects for the rest of the process.
+//
+// Only Close calls it, because it gives up on ending the server-side session:
+// what it does locally -- retire the pipelines, detach the resources, drop the
+// attachments -- is what Deactivate does after a successful RPC, so the client
+// it leaves behind is a clean deactivated one, safe to activate again under a
+// new ID. The session left on the server is reaped by housekeeping.
+func (c *Client) finishDeactivation() {
+	// Under the same lock Deactivate uses, and re-reading the status under it:
+	// a Deactivate that succeeded while we waited has already done all of this.
+	c.deactivatingMu.Lock()
+	defer c.deactivatingMu.Unlock()
+
+	if c.loadStatus() == statusDeactivated {
+		return
+	}
+
+	// Deactivate normally retires these before its RPC, but a failure earlier
+	// than that -- or a Close on a client that never got past Activate -- can
+	// leave the sync loop running and the pipelines up. Retire them in the
+	// order Deactivate does: status first, so nothing new passes a guard, then
+	// the sync loop, then each pipeline under its attachment's syncMu so an
+	// in-flight ApplyChangePack keeps its pump until it is done.
+	c.storeStatus(statusDeactivating)
+	if c.syncCancel != nil {
+		c.syncCancel()
+		c.syncLoopWg.Wait()
+	}
+	for _, attachment := range c.attachments.Values() {
+		attachment.syncMu.Lock()
+		stopWatchPipeline(attachment)
+		attachment.syncMu.Unlock()
+	}
+
+	c.dropAttachments()
 	c.storeStatus(statusDeactivated)
-
-	return nil
 }
 
 // runSyncLoop runs the sync loop for all attached resources.
@@ -723,26 +789,14 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		d.ResetPresences()
 	}
 
-	if err := d.ApplyChangePack(pack); err != nil {
-		return err
-	}
-	if c.logger.Core().Enabled(zap.DebugLevel) {
-		c.logger.Debug(fmt.Sprintf(
-			"after apply %d changes: %s",
-			len(pack.Changes),
-			// Marshal, not RootObject().Marshal(): the former does the whole
-			// traversal under the document lock, while the latter walks the
-			// live CRDT root after the lock is released.
-			d.Marshal(),
-		))
-	}
-
-	if d.Status() == attachable.StatusRemoved {
-		return nil
-	}
-	d.SetStatus(attachable.StatusAttached)
-
-	// 04. Start watch stream
+	// 04. Build the attachment and bring its delivery pipeline up before the
+	// attach pack is applied. ApplyChangePack publishes one event per applied
+	// remote change onto the document's capacity-one event channel, under the
+	// document's event mutex, and that send has no cancellation path: a pack
+	// carrying two or more events applied with no pump draining them wedges
+	// this goroutine inside Attach for good, holding the event mutex against
+	// every other publisher. The pump is the consumer, so it has to exist
+	// first.
 	watchCtx, cancelFunc := context.WithCancel(ctx)
 
 	// Set sync mode based on IsRealtime option
@@ -761,12 +815,37 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		disablePresence:  res.Msg.DisablePresence,
 	}
 	if opts.IsRealtime {
-		// Start the delivery pipeline before the attachment is published and
-		// before the watch stream is opened: the first Receive blocks on the
-		// server, and a publisher stalled on the document's event channel in
-		// the meantime holds the event mutex against every other publisher.
+		// Also before the attachment is published and before the watch stream
+		// is opened: the first Receive blocks on the server, and a publisher
+		// stalled on the document's event channel in the meantime holds the
+		// event mutex against every other publisher.
 		startWatchPipeline(watchCtx, attachment, d)
 	}
+
+	if err := d.ApplyChangePack(pack); err != nil {
+		// The attachment was never published, so nothing else will ever tear
+		// its pipeline down. stopWatchPipeline also runs cancelFunc, which is
+		// what releases watchCtx on the non-realtime path.
+		stopWatchPipeline(attachment)
+		return err
+	}
+	if c.logger.Core().Enabled(zap.DebugLevel) {
+		c.logger.Debug(fmt.Sprintf(
+			"after apply %d changes: %s",
+			len(pack.Changes),
+			// Marshal, not RootObject().Marshal(): the former does the whole
+			// traversal under the document lock, while the latter walks the
+			// live CRDT root after the lock is released.
+			d.Marshal(),
+		))
+	}
+
+	if d.Status() == attachable.StatusRemoved {
+		stopWatchPipeline(attachment)
+		return nil
+	}
+	d.SetStatus(attachable.StatusAttached)
+
 	if opts.IsRealtime {
 		// Count the first handshake as a stream reader, and do it before the
 		// attachment is published, so no Detach or Deactivate can be waiting
@@ -916,6 +995,16 @@ func (c *Client) attachChannel(ctx context.Context, ch *channel.Channel, opts *A
 
 // refreshChannel refreshes the TTL of the given channel and returns the current session count.
 func (c *Client) refreshChannel(ctx context.Context, ch *channel.Channel) error {
+	// Guarded like pushPullChanges, the document-side half of syncInternal:
+	// Client.Sync is callable straight from a user goroutine, so a channel
+	// sync can still arrive after Deactivate has marked the client
+	// deactivating and started ending the server-side session. Refreshing the
+	// TTL of a session that is being torn down -- or of one this client no
+	// longer holds -- is exactly what the deactivating window exists to reject.
+	if c.loadStatus() != statusActivated {
+		return ErrNotActivated
+	}
+
 	attachment, ok := c.attachments.Get(ch.Key())
 	if !ok {
 		return ErrNotAttached
