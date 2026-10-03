@@ -102,11 +102,35 @@ func TestTreePurgeBarrierSplitChain(t *testing.T) {
 	// the product, so it carries an InsNextID and no InsPrevID. It is where
 	// emptyRunReachesActor starts, and its Children(true) count decides that
 	// walk, so its tombstones have to wait as well.
+	//
+	// Its successor goes in too, and for the ancestor's own sake rather than
+	// the tombstone's: §7.8's entry gate reads the ancestor's tombstone-
+	// inclusive child count, and nothing about the ancestor retires that --
+	// only the walk the gate arms breaking at the successor does.
 	t.Run("reports an ancestor that was split, carrying only an InsNextID", func(t *testing.T) {
 		tree, p, text, q := barrierTree(t)
 		p.InsNextID = q.ID()
 
-		assert.Equal(t, []string{p.ID().CreatedAt.Key()}, barrierKeys(tree, text))
+		assert.ElementsMatch(t, []string{
+			p.ID().CreatedAt.Key(),
+			q.ID().CreatedAt.Key(),
+		}, barrierKeys(tree, text))
+	})
+
+	// The gate reads the count of the node being split, so a tombstone that
+	// is a direct child of a chained ancestor can flip it: purging a trailing
+	// one lowers the count without moving the offset the caller resolved.
+	// Both the ancestor and the successor its §7.8 walk would start at are
+	// held back until then.
+	t.Run("reports the successor of every chained ancestor", func(t *testing.T) {
+		tree, p, text, q := barrierTree(t)
+		p.InsPrevID = q.ID()
+		p.InsNextID = q.ID()
+
+		assert.ElementsMatch(t, []string{
+			p.ID().CreatedAt.Key(),
+			q.ID().CreatedAt.Key(),
+		}, barrierKeys(tree, text))
 	})
 
 	// The tombstone's own membership. §7.8 breaks at a chain node that is

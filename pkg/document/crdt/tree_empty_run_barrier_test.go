@@ -35,12 +35,15 @@ import (
 // resolve it. The editor owns b; a and c belong to a peer the version vector
 // does not cover.
 type emptyRunFixture struct {
-	tree       *Tree
-	a, b, c    *TreeNode
-	editor     time.ActorID
-	peerTicket func() *time.Ticket
+	tree        *Tree
+	a, b, c     *TreeNode
+	editor      time.ActorID
+	peerTicket  func() *time.Ticket
+	otherTicket func() *time.Ticket
 	// vv covers everything the editor did -- including b, the node the walk
-	// short-circuits on -- and nothing the peer did.
+	// short-circuits on -- and everything a third actor did, which is how a
+	// node becomes "one the editor knows" without being one it made. It covers
+	// nothing the peer did.
 	vv time.VersionVector
 }
 
@@ -51,6 +54,8 @@ func newEmptyRunFixture(t *testing.T) *emptyRunFixture {
 	require.NoError(t, err)
 	peer, err := time.ActorIDFromHex("000000000000000000000002")
 	require.NoError(t, err)
+	other, err := time.ActorIDFromHex("000000000000000000000003")
+	require.NoError(t, err)
 
 	lamport := int64(0)
 	ticket := func(actor time.ActorID) *time.Ticket {
@@ -58,6 +63,7 @@ func newEmptyRunFixture(t *testing.T) *emptyRunFixture {
 		return time.NewTicket(lamport, 0, actor)
 	}
 	peerTicket := func() *time.Ticket { return ticket(peer) }
+	otherTicket := func() *time.Ticket { return ticket(other) }
 
 	element := func(createdAt *time.Ticket) *TreeNode {
 		return NewTreeNode(NewTreeNodeID(createdAt, 0), "p", nil)
@@ -75,13 +81,17 @@ func newEmptyRunFixture(t *testing.T) *emptyRunFixture {
 	c.InsPrevID = b.id
 
 	return &emptyRunFixture{
-		tree:       NewTree(root, ticket(editor)),
-		a:          a,
-		b:          b,
-		c:          c,
-		editor:     editor,
-		peerTicket: peerTicket,
-		vv:         time.VersionVector{editor: time.MaxLamport},
+		tree:        NewTree(root, ticket(editor)),
+		a:           a,
+		b:           b,
+		c:           c,
+		editor:      editor,
+		peerTicket:  peerTicket,
+		otherTicket: otherTicket,
+		vv: time.VersionVector{
+			editor: time.MaxLamport,
+			other:  time.MaxLamport,
+		},
 	}
 }
 
@@ -92,20 +102,40 @@ func TestTreeEmptyRunReachesActorBarrier(t *testing.T) {
 	// change where the split lands.
 	t.Run("answers the same for a known node whatever it holds", func(t *testing.T) {
 		f := newEmptyRunFixture(t)
-		// Make the walk's start node one the editor knows, as causal
-		// stability of its createdAt eventually does for every node.
-		known := NewTreeNode(NewTreeNodeID(f.tree.createdAt, 0), "p", nil)
+		// The start node has to be known to the editor WITHOUT being the
+		// editor's own: a node the editor made returns at the actor-ID branch
+		// (tree.go emptyRunReachesActor) before either branch this subtest is
+		// about is reached. A third actor the version vector covers is how
+		// causal stability makes a peer's node "known".
+		known := NewTreeNode(NewTreeNodeID(f.otherTicket(), 0), "p", nil)
 		require.NoError(t, f.tree.IndexTree.Root().Value.Append(known))
 		f.tree.putNode(known)
 		known.InsNextID = f.b.id
+		require.NotEqual(t, f.editor, known.id.CreatedAt.ActorID(),
+			"the actor-ID branch must not short-circuit this walk")
+		require.True(t, time.TicketKnown(f.vv, known.id.CreatedAt))
 
+		// The control: the same walk under a vector that does NOT cover the
+		// start node runs on through the chain and reaches the editor's own
+		// b. Every false below is therefore a branch deciding, not a walk
+		// that had nowhere to go.
+		narrow := time.VersionVector{f.editor: time.MaxLamport}
+		require.Empty(t, known.Index.Children(true))
+		require.True(t, f.tree.emptyRunReachesActor(known, f.editor, narrow),
+			"without coverage of the start node the walk answers true")
+
+		// Empty and known: the version-vector branch decides.
 		empty := f.tree.emptyRunReachesActor(known, f.editor, f.vv)
 
+		// Holding a child: the count branch is reached before the version
+		// vector, and the narrow vector shows it deciding on its own.
 		child := NewTreeNode(NewTreeNodeID(f.peerTicket(), 0), "text", nil, "ab")
 		require.NoError(t, known.Append(child))
 		require.NotEmpty(t, known.Index.Children(true))
 
 		assert.False(t, empty)
+		assert.False(t, f.tree.emptyRunReachesActor(known, f.editor, narrow),
+			"the count branch alone answers false once a child is held")
 		assert.False(t, f.tree.emptyRunReachesActor(known, f.editor, f.vv),
 			"a known node answers false through the count branch and through "+
 				"the version-vector branch alike")

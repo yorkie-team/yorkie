@@ -83,3 +83,35 @@
   counted — the behaviour the `MergedAt` skip was reverted back to — so the
   next reader finds the chosen answer written down and failing loudly if
   someone changes it Go-side alone.
+
+## Review round: the reader the barrier forgot
+
+- **Enumerate the entry gate, not only the loop body.** The barrier set was
+  derived from what the two same-boundary *walks* read, and missed §7.8's
+  own entry gate — `offset != len(parent.Index.Children(true))`, resolved
+  against a tombstone-inclusive offset. Purging a *trailing* tombstone of a
+  chained node lowers the count without moving the offset, so the
+  collecting replica enters the retarget branch while the other returns
+  early. A guard that decides whether a rule runs at all is as much a
+  reader of the tombstone's place as the rule's own loop.
+- **When no knowledge of the node retires a reader, look at what the
+  branch it arms would do.** Nothing about a chain member makes its child
+  count stop mattering. But the branch the gate arms starts its walk at the
+  member's `InsNext` and breaks there once the version vector covers that
+  successor — leaving `target == parent` and returning exactly what the
+  early gate would have. So the successor's `createdAt`, which the barrier
+  already reported for the tombstone's own hop, retires the gate for every
+  chain member; `chainBarriersFor` now reports it uniformly.
+- **A reader on the remote-apply path should not recurse on peer-controlled
+  depth.** `holdsKnownChild` descended by recursion over a nesting depth a
+  peer's `TreeEdit` chooses. A blown goroutine stack is a fatal error no
+  `recover` catches, so the descent is an explicit stack now; the cost is
+  one slice.
+- **A fixture ticket can make a subtest vacuous.** The subtest pinning
+  "a known node answers false down either branch" built its start node from
+  `tree.createdAt` — the editor's own ticket — so the walk returned at the
+  actor-ID branch and never reached either branch under test. Both
+  assertions held for the wrong reason. The fix is a third actor the
+  version vector covers, plus a control under a vector that does *not*
+  cover it, so each `false` is a branch deciding rather than a walk with
+  nowhere to go.

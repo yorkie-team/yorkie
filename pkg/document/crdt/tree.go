@@ -1105,20 +1105,23 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 // tombstone may be unlinked -- the chain the tombstone itself sits in, and the
 // chains of its ancestors.
 //
-// Both same-boundary walks classify a chain node by the children it still
-// holds, tombstones included -- the §7.8 retarget through holdsKnownChild, the
-// §7.5 advance through a raw Children(true) count -- and decide where a
-// concurrent split lands from that answer. Purging a counted tombstone changes
-// the answer, so a replica that has collected would retarget a still-in-flight
-// split differently from one that has not, exactly the divergence GCBarrier
-// exists to prevent.
+// Three rules read a chain node's children, tombstones included, and decide
+// where a concurrent split lands from what they find: the §7.8 retarget
+// through holdsKnownChild, the §7.5 advance through a raw Children(true)
+// count, and §7.8's own entry gate, which only arms the retarget when the
+// split sits at the end of the node's tombstone-inclusive child list. Purging
+// a counted tombstone changes all three answers, so a replica that has
+// collected would retarget a still-in-flight split differently from one that
+// has not, exactly the divergence GCBarrier exists to prevent.
 //
-// Either walk answers the same way for a chain node the editor already knows,
-// whatever that node holds, so the ticket that makes the count stop mattering
-// is the node's own createdAt: once it is causally stable every future walk
-// decides at it without consulting its children, and the barrier retires. Every
-// such ancestor is reported, because holdsKnownChild descends and a node this
-// deep is counted by each of them.
+// The two descending walks answer the same way for a chain node the editor
+// already knows, whatever that node holds, so the ticket that makes their
+// count stop mattering is the node's own createdAt: once it is causally stable
+// every future walk decides at it without consulting its children, and the
+// barrier retires. Every such ancestor is reported, because holdsKnownChild
+// descends and a node this deep is counted by each of them. The entry gate
+// takes a second ticket -- the chain member's InsNext -- which chainBarriersFor
+// adds alongside; see there for why that is the one that retires it.
 //
 // The gate is "is in a split chain", read off InsPrevID/InsNextID rather than
 // off InsNextID alone. Reading InsNextID alone was unsound: a right-half
@@ -1182,19 +1185,46 @@ func (t *Tree) PurgeBarrierAt(child GCChild) []*time.Ticket {
 //
 // See docs/design/concurrent-merge-split.md.
 func (t *Tree) splitChainBarriersAt(node *TreeNode) []*time.Ticket {
-	var barriers []*time.Ticket
-	if node.InsPrevID != nil || node.InsNextID != nil {
-		barriers = append(barriers, node.id.CreatedAt)
-		if node.InsNextID != nil {
-			if next := t.findFloorNode(node.InsNextID); next != nil {
-				barriers = append(barriers, next.id.CreatedAt)
-			}
-		}
-	}
+	barriers := t.chainBarriersFor(node)
 
 	for current := node.Index.Parent; current != nil; current = current.Parent {
-		if current.Value.InsPrevID != nil || current.Value.InsNextID != nil {
-			barriers = append(barriers, current.Value.id.CreatedAt)
+		barriers = append(barriers, t.chainBarriersFor(current.Value)...)
+	}
+
+	return barriers
+}
+
+// chainBarriersFor reports what one member of a split chain contributes: its
+// own createdAt, and the createdAt of the node it points at by InsNextID.
+//
+// The successor ticket is what retires §7.8's entry gate. That gate --
+// `offset != len(parent.Index.Children(true))` (tree.go:3241), against an
+// offset the caller resolves tombstone-inclusively -- reads the chain member's
+// own child count, and no knowledge of the member retires it: purging a
+// trailing tombstone lowers the count without moving the offset, so the
+// collecting replica enters the retarget branch while the other returns early.
+// What makes the two agree again is the walk that branch runs: it starts at
+// this node's InsNext and breaks there as soon as the version vector covers
+// that successor's createdAt, leaving target == parent and returning exactly
+// what the early gate would have. So once the successor is causally stable,
+// both replicas answer (parent, offset) whichever branch they take, and the
+// count stops deciding anything.
+//
+// The same ticket stands for the tombstone's own hop. Purge relinks the chain
+// across the node it unlinks, so a walk that stopped at this node on one
+// replica runs on to its InsNext on the one that collected -- §7.8 through its
+// `next.IsRemoved()` break, the empty-run walk through the node simply no
+// longer being in the chain. The two answer alike again only once the walk
+// also stops at the successor.
+func (t *Tree) chainBarriersFor(node *TreeNode) []*time.Ticket {
+	if node.InsPrevID == nil && node.InsNextID == nil {
+		return nil
+	}
+
+	barriers := []*time.Ticket{node.id.CreatedAt}
+	if node.InsNextID != nil {
+		if next := t.findFloorNode(node.InsNextID); next != nil {
+			barriers = append(barriers, next.id.CreatedAt)
 		}
 	}
 
@@ -3337,15 +3367,27 @@ func (t *Tree) orderSameBoundarySplit(
 // this call site. This is also a replicated ordering rule, so it may only move
 // together with yorkie-js-sdk, against a reproducer neither repo has yet. See
 // docs/design/concurrent-merge-split.md.
+//
+// The descent is an explicit stack rather than recursion: nesting depth is
+// whatever a peer's TreeEdit built, and this runs on the remote-apply path,
+// so a deep document must not be able to overflow the goroutine stack (a
+// fatal error no recover can catch).
 func (t *Tree) holdsKnownChild(node *TreeNode, versionVector time.VersionVector) bool {
-	for _, child := range node.Children(true) {
-		if time.TicketKnown(versionVector, child.id.CreatedAt) {
-			return true
-		}
-		if !child.IsText() && t.holdsKnownChild(child, versionVector) {
-			return true
+	stack := []*TreeNode{node}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		for _, child := range current.Children(true) {
+			if time.TicketKnown(versionVector, child.id.CreatedAt) {
+				return true
+			}
+			if !child.IsText() {
+				stack = append(stack, child)
+			}
 		}
 	}
+
 	return false
 }
 

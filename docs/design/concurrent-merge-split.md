@@ -510,11 +510,25 @@ depend on a node GC could unlink; `Tree.PurgeBarrierAt` therefore
 reports, alongside the sibling-walk barrier, the `createdAt` of every
 chain ancestor of the tombstone — every ancestor carrying an
 `InsPrevID` or an `InsNextID` — and, when the tombstone itself sits in
-a chain, its own `createdAt` together with its `InsNext`'s. That last
-pair is for a different hazard: §7.8 breaks at a chain node that is
-removed, so purging one lets the walk run on to its `InsNext` on the
-collecting replica while it still stops there on the other; the two
-agree again once the walk breaks at the successor as well. The §7.5
+a chain, its own `createdAt`. Every chain member reported this way also
+contributes the `createdAt` of the node it points at by `InsNextID`.
+
+That successor ticket pays for two hazards at once. §7.8 breaks at a
+chain node that is removed, so purging one lets the walk run on to its
+`InsNext` on the collecting replica while it still stops there on the
+other; the two agree again once the walk breaks at the successor as
+well. And §7.8's *entry gate* — `offset != len(parent.Index.Children
+(true))`, against an offset the caller resolves tombstone-inclusively —
+reads the chain member's own child count, which nothing about that
+member retires: purging a trailing tombstone lowers the count without
+moving the offset, so the collecting replica enters the retarget branch
+while the other returns early. What makes them agree is the walk that
+branch runs. It starts at the member's `InsNext` and breaks there as
+soon as the version vector covers that successor's `createdAt`, leaving
+`target == parent` and returning exactly what the early gate would
+have. Once the successor is causally stable both replicas answer
+`(parent, offset)` whichever branch they take, and the count stops
+deciding anything. The §7.5
 advance reads a raw
 `Children(true)` count on the same chain nodes, so it is covered by the
 same barrier. Either walk answers the same way for a chain node it

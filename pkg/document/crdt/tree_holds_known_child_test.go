@@ -132,6 +132,35 @@ func TestTreeHoldsKnownChild(t *testing.T) {
 		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv))
 	})
 
+	// The descent terminates on a node with nothing known anywhere below it,
+	// which is the answer §7.8 walks on from -- the "false" direction of the
+	// case above.
+	t.Run("descends past unknown element children and reports nothing", func(t *testing.T) {
+		f := newKnownChildFixture(t)
+		span := f.appendElement(t, f.p, f.peerTicket())
+		inner := f.appendElement(t, span, f.peerTicket())
+		f.appendText(t, inner, f.peerTicket())
+
+		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv))
+	})
+
+	// Nesting depth is whatever a peer's TreeEdit built, and this runs on the
+	// remote-apply path, so the descent walks an explicit stack rather than
+	// recursing. Both directions at a depth that would be a deep call chain.
+	t.Run("descends a deeply nested chain without recursing", func(t *testing.T) {
+		const depth = 10000
+
+		f := newKnownChildFixture(t)
+		deepest := f.p
+		for range depth {
+			deepest = f.appendElement(t, deepest, f.peerTicket())
+		}
+		assert.False(t, f.tree.holdsKnownChild(f.p, f.vv))
+
+		f.appendText(t, deepest, f.editorTicket())
+		assert.True(t, f.tree.holdsKnownChild(f.p, f.vv))
+	})
+
 	// Counting tombstones is what keeps the answer the same whether or not
 	// this replica has applied a concurrent removal yet.
 	t.Run("counts a child that has since been removed", func(t *testing.T) {
