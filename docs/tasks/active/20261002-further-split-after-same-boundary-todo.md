@@ -74,11 +74,14 @@ follow-up by position, after its own product.
       client without it (or the reverse) disagree on where a same-boundary
       split lands, and a snapshot built by either flips the other (measured
       on #2030 / js#1375). The two land together or not at all.
-- [ ] yorkie-js-sdk#1435's `pnpm sdk test` against a server built from this
-      branch. Needs a yorkie-js-sdk checkout and a running server, so CI here
-      cannot tick it; a maintainer has to run it (or confirm js#1435 merged
-      with the identical rule: count every descendant the editor's vector
-      covers, tombstones included, no merge skip).
+- [x] yorkie-js-sdk#1435's suite against a server built from this branch
+      (js#1435 at 9a75fa42, server from 23c29150 on memdb, Node 22, pnpm 9,
+      `vitest run` without `webhook_test.ts`, whose callbacks need Docker
+      networking): 3372 passed, 1 failed. The failure is "gc targeting nodes
+      made by deactivated client", where the server dialled its own default
+      port 8080 while running on 18080; it is not the split rule. The rule
+      itself is now the same in both: count every descendant the editor's
+      vector covers, tombstones included, no merge skip.
 - [ ] yorkie-js-sdk needs `PurgeHeldBack` too. It is a GC policy, not part of
       the replicated rule, so a JS client without it still agrees with a Go
       replica on where a split lands; but a JS client that collects such a
