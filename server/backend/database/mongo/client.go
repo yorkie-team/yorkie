@@ -44,12 +44,17 @@ import (
 const (
 	// StatusKey is the key of the status field.
 	StatusKey = "status"
+
+	// maxDocumentSize is the largest BSON document MongoDB stores
+	// (maxBsonObjectSize). An insert over it is rejected by the server.
+	maxDocumentSize = 16 * 1024 * 1024
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config *Config
-	client *mongo.Client
+	config   *Config
+	client   *mongo.Client
+	registry *bson.Registry
 
 	cacheManager  *cache.Manager
 	projectCache  *ProjectCache
@@ -65,9 +70,10 @@ func Dial(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
 	defer cancel()
 
+	registry := NewRegistryBuilder()
 	clientOptions := options.Client().
 		ApplyURI(conf.ConnectionURI).
-		SetRegistry(NewRegistryBuilder())
+		SetRegistry(registry)
 
 	if conf.MonitoringEnabled {
 		threshold, err := gotime.ParseDuration(conf.MonitoringSlowQueryThreshold)
@@ -150,8 +156,9 @@ func Dial(conf *Config) (*Client, error) {
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	yorkieClient := &Client{
-		config: conf,
-		client: client,
+		config:   conf,
+		client:   client,
+		registry: registry,
 
 		cacheManager:  cacheManager,
 		projectCache:  projectCache,
@@ -1997,12 +2004,6 @@ func (c *Client) CompactChangeInfos(
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
-	// 1. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
-		return err
-	}
-
-	// 2. Store compacted change and update document
 	newServerSeq := 1
 	if len(changes) == 0 {
 		newServerSeq = 0
@@ -2010,13 +2011,20 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("compact document of %s: invalid change size %d", docInfo.RefKey(), len(changes))
 	}
 
+	// 1. Encode the compacted change before purging anything. Compaction folds
+	// the whole document into one change record, so a large document can
+	// produce a record MongoDB refuses to store. That has to be found while the
+	// document's changes still exist: past the purge, a failed insert leaves
+	// the document with no changes and no snapshot to be rebuilt from.
+	var compacted bson.Raw
 	for _, cn := range changes {
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
 			return err
 		}
 
-		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
+		compacted, err = c.marshal(bson.M{
+			"_id":             bson.NewObjectID(),
 			"project_id":      docInfo.ProjectID,
 			"doc_id":          docInfo.ID,
 			"server_seq":      newServerSeq,
@@ -2027,12 +2035,31 @@ func (c *Client) CompactChangeInfos(
 			"message":         cn.Message(),
 			"operations":      encodedOperations,
 			"presence_change": cn.PresenceChange(),
-		}); err != nil {
+		})
+		if err != nil {
+			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+		}
+		if len(compacted) > maxDocumentSize {
+			return fmt.Errorf(
+				"compact document of %s: %d bytes: %w",
+				docInfo.RefKey(), len(compacted), database.ErrChangeTooLarge,
+			)
+		}
+	}
+
+	// 2. Purge the resources of the document.
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
+		return err
+	}
+
+	// 3. Store the compacted change, exactly the bytes checked above.
+	if compacted != nil {
+		if _, err := c.collection(ColChanges).InsertOne(ctx, compacted); err != nil {
 			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 		}
 	}
 
-	// 3. Update document
+	// 4. Update document
 	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
@@ -2850,6 +2877,18 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+// marshal encodes v with the registry the client writes with, so the bytes
+// match what an insert of v would send.
+func (c *Client) marshal(v any) (bson.Raw, error) {
+	buf := new(bytes.Buffer)
+	enc := bson.NewEncoder(bson.NewDocumentWriter(buf))
+	enc.SetRegistry(c.registry)
+	if err := enc.Encode(v); err != nil {
+		return nil, fmt.Errorf("encode bson: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // CreateInviteInfo creates a new reusable invite link for the project.
