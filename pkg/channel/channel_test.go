@@ -176,7 +176,7 @@ func TestChannelBroadcastServing(t *testing.T) {
 		assert.True(t, ok)
 		stop := make(chan struct{})
 		go func() {
-			<-ch.BroadcastRequests()
+			<-token.Requests()
 			<-stop
 			ch.StopBroadcastServing(token)
 		}()
@@ -201,7 +201,7 @@ func TestChannelBroadcastServing(t *testing.T) {
 		assert.True(t, ok)
 		defer ch.StopBroadcastServing(token)
 		go func() {
-			r := <-ch.BroadcastRequests()
+			r := <-token.Requests()
 			assert.Equal(t, "topic", r.Topic)
 			assert.True(t, ch.SendBroadcastResponse(token, nil))
 		}()
@@ -245,7 +245,7 @@ func TestChannelBroadcastServing(t *testing.T) {
 		assert.False(t, ch.SendBroadcastResponse(first, assert.AnError))
 
 		go func() {
-			<-ch.BroadcastRequests()
+			<-second.Requests()
 			assert.True(t, ch.SendBroadcastResponse(second, nil))
 		}()
 
@@ -258,5 +258,48 @@ func TestChannelBroadcastServing(t *testing.T) {
 		case <-gotime.After(3 * gotime.Second):
 			t.Fatal("Broadcast blocked while its servicer was live")
 		}
+	})
+
+	t.Run("retiring servicer does not take its successor's request test", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+
+		first, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+
+		// The first servicer is still reading when its claim is released and
+		// the successor's is granted -- which is what a close followed by a
+		// rewatch does. A request it takes here is one it cannot answer, and
+		// the Broadcast that sent it would wait for an answer forever.
+		taken := make(chan channel.BroadcastRequest, 1)
+		go func() {
+			select {
+			case r := <-first.Requests():
+				taken <- r
+			case <-first.Done():
+			}
+		}()
+
+		ch.StopBroadcastServing(first)
+		second, ok := ch.StartBroadcastServing()
+		assert.True(t, ok)
+		defer ch.StopBroadcastServing(second)
+
+		go func() {
+			r := <-second.Requests()
+			assert.Equal(t, "topic", r.Topic)
+			assert.True(t, ch.SendBroadcastResponse(second, nil))
+		}()
+
+		done := make(chan error, 1)
+		go func() { done <- ch.Broadcast("topic", "payload") }()
+
+		select {
+		case err := <-done:
+			assert.NoError(t, err, "the successor's broadcast went unanswered")
+		case <-gotime.After(3 * gotime.Second):
+			t.Fatal("Broadcast blocked after the serving claim changed hands")
+		}
+		assert.Len(t, taken, 0, "the retiring servicer took its successor's request")
 	})
 }

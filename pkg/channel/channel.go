@@ -63,24 +63,18 @@ type Channel struct {
 	// seq is the last seen sequence number for ordering.
 	seq atomic.Int64
 
-	// broadcastRequests is the send-only channel to send broadcast requests.
-	broadcastRequests chan BroadcastRequest
-
-	// broadcastResponses is the receive-only channel to receive broadcast responses.
-	broadcastResponses chan error
-
-	// broadcastMu guards servingDone, the signal that tells Broadcast whether
-	// anything is servicing broadcastRequests. Broadcast hands its request to
-	// the goroutine Client.WatchChannel starts and then waits for that
-	// goroutine's answer; the goroutine lives on the attachment's watch
-	// context, so a detach or a deactivation retires it, and after that an
-	// unguarded Broadcast would block forever on an answer nobody sends.
-	// servingDone is closed whenever no servicer is running -- including before
-	// the first watch -- so those calls fail fast instead. It doubles as the
-	// current servicer's claim token, which is what keeps a retiring servicer
+	// broadcastMu guards serving, the claim that tells Broadcast whether
+	// anything is servicing this channel's broadcast requests. Broadcast hands
+	// its request to the goroutine Client.WatchChannel starts and then waits
+	// for that goroutine's answer; the goroutine lives on the attachment's
+	// watch context, so a detach or a deactivation retires it, and after that
+	// an unguarded Broadcast would block forever on an answer nobody sends.
+	// A retired claim is closed -- including the one a channel starts with,
+	// before its first watch -- so those calls fail fast instead. The claim
+	// also names the current servicer, which is what keeps a retiring servicer
 	// from retiring its successor instead of itself.
 	broadcastMu sync.Mutex
-	servingDone ServingToken
+	serving     *ServingToken
 
 	// broadcastEventHandlers is a map of registered event handlers for broadcast events.
 	broadcastEventHandlers map[string]func(
@@ -96,12 +90,44 @@ type BroadcastRequest struct {
 }
 
 // ServingToken identifies one servicer's claim on a channel's broadcast
-// requests. The channel hands it out in StartBroadcastServing and accepts it
-// back in StopBroadcastServing and SendBroadcastResponse, which both ignore a
-// token that no longer holds the claim: a servicer that outlives its own watch
-// must not retire its successor, nor land a late answer on its successor's
-// caller. It is closed once the claim it names is retired.
-type ServingToken chan struct{}
+// requests, and carries the request and response queues belonging to that
+// claim. The channel hands it out in StartBroadcastServing and accepts it back
+// in StopBroadcastServing and SendBroadcastResponse, which both ignore a token
+// that no longer holds the claim: a servicer that outlives its own watch must
+// not retire its successor, nor land a late answer on its successor's caller.
+//
+// The queues belong to the claim rather than to the channel so that a servicer
+// still reading when its claim is retired keeps reading its own, abandoned
+// queue. Sharing one queue across claims let a retiring servicer take a request
+// addressed to its successor and then discard it -- its own token no longer
+// delivers an answer -- leaving the Broadcast that sent it waiting forever.
+type ServingToken struct {
+	done      chan struct{}
+	requests  chan BroadcastRequest
+	responses chan error
+}
+
+// newServingToken creates a claim with its own request and response queues.
+func newServingToken() *ServingToken {
+	return &ServingToken{
+		done:      make(chan struct{}),
+		requests:  make(chan BroadcastRequest, 1),
+		responses: make(chan error, 1),
+	}
+}
+
+// Requests returns the broadcast requests addressed to this claim. The servicer
+// holding the token reads them from here, and must not read any other claim's.
+func (t *ServingToken) Requests() <-chan BroadcastRequest {
+	return t.requests
+}
+
+// Done is closed once this claim is retired, which tells the servicer holding
+// it to stop: every request it could still read belongs to a Broadcast that has
+// already been released.
+func (t *ServingToken) Done() <-chan struct{} {
+	return t.done
+}
 
 // New creates a new instance of Channel.
 func New(k key.Key) (*Channel, error) {
@@ -111,12 +137,10 @@ func New(k key.Key) (*Channel, error) {
 
 	ch := &Channel{
 		key:                    k,
-		broadcastRequests:      make(chan BroadcastRequest, 1),
-		broadcastResponses:     make(chan error, 1),
 		broadcastEventHandlers: make(map[string]func(topic, publisher string, payload []byte) error),
-		servingDone:            make(ServingToken),
+		serving:                newServingToken(),
 	}
-	close(ch.servingDone)
+	close(ch.serving.done)
 	ch.status.Store(int32(attachable.StatusDetached))
 	return ch, nil
 }
@@ -183,68 +207,50 @@ func (c *Channel) UpdateSessionCount(sessionCount int64, seq int64) bool {
 	return false
 }
 
-// BroadcastRequests returns the broadcast requests of this channel.
-func (c *Channel) BroadcastRequests() <-chan BroadcastRequest {
-	return c.broadcastRequests
-}
-
-// BroadcastResponses returns the broadcast responses of this channel.
-func (c *Channel) BroadcastResponses() chan error {
-	return c.broadcastResponses
-}
-
 // StartBroadcastServing claims this channel's broadcast requests for a servicer
 // that is about to start answering them, so Broadcast may wait for it.
 // Client.WatchChannel calls it before launching that goroutine.
 //
 // The claim is exclusive: a second servicer is refused while one still holds
-// it, since both would read from the same broadcastRequests and the answer
-// would go to whichever won the race. The caller must pass the returned token
-// back to StopBroadcastServing and SendBroadcastResponse, which is what keeps
-// a servicer retiring late from disowning its successor.
-func (c *Channel) StartBroadcastServing() (ServingToken, bool) {
+// it, since both would answer the same requests and the answer would go to
+// whichever won the race. The caller must pass the returned token back to
+// StopBroadcastServing and SendBroadcastResponse, which is what keeps a
+// servicer retiring late from disowning its successor.
+func (c *Channel) StartBroadcastServing() (*ServingToken, bool) {
 	c.broadcastMu.Lock()
 	defer c.broadcastMu.Unlock()
 
 	select {
-	case <-c.servingDone:
+	case <-c.serving.done:
 	default:
 		return nil, false
 	}
-	c.servingDone = make(ServingToken)
 
-	// A retired servicer can leave behind a request it never answered, or an
-	// answer whose caller has already given up on it. Both belong to a
-	// Broadcast that has returned, so drop them rather than let the new
-	// servicer pair them with the next call.
-	select {
-	case <-c.broadcastRequests:
-	default:
-	}
-	select {
-	case <-c.broadcastResponses:
-	default:
-	}
+	// Fresh queues per claim. A retired servicer can still be reading, and a
+	// request it never answered or an answer its caller gave up on can still be
+	// in flight; all of that stays on the old claim's queues, where it can no
+	// longer be paired with a call made against this one.
+	c.serving = newServingToken()
 
-	return c.servingDone, true
+	return c.serving, true
 }
 
 // StopBroadcastServing announces that the servicer holding token is gone:
 // waiting and subsequent Broadcast calls return ErrBroadcastUnavailable instead
 // of blocking on an answer nobody will send. It is idempotent, and a token that
 // no longer holds the claim retires nothing.
-func (c *Channel) StopBroadcastServing(token ServingToken) {
+func (c *Channel) StopBroadcastServing(token *ServingToken) {
 	c.broadcastMu.Lock()
 	defer c.broadcastMu.Unlock()
 
-	if token == nil || c.servingDone != token {
+	if token == nil || c.serving != token {
 		return
 	}
 
 	select {
-	case <-c.servingDone:
+	case <-c.serving.done:
 	default:
-		close(c.servingDone)
+		close(c.serving.done)
 	}
 }
 
@@ -253,19 +259,19 @@ func (c *Channel) StopBroadcastServing(token ServingToken) {
 // claim delivers nothing: its caller has already been released with
 // ErrBroadcastUnavailable, and the answer would otherwise be read by the next
 // servicer's caller as its own.
-func (c *Channel) SendBroadcastResponse(token ServingToken, result error) bool {
+func (c *Channel) SendBroadcastResponse(token *ServingToken, result error) bool {
 	c.broadcastMu.Lock()
 	defer c.broadcastMu.Unlock()
 
-	if token == nil || c.servingDone != token {
+	if token == nil || c.serving != token {
 		return false
 	}
 
 	// The send cannot block: the claim is exclusive and its holder answers one
-	// request at a time, so broadcastResponses -- drained at every claim -- has
-	// room for this answer.
+	// request at a time, so this claim's response queue -- empty when the claim
+	// was granted -- has room for this answer.
 	select {
-	case c.broadcastResponses <- result:
+	case token.responses <- result:
 		return true
 	default:
 		return false
@@ -281,27 +287,30 @@ func (c *Channel) Broadcast(topic string, payload any) error {
 		return fmt.Errorf("broadcast payload: %w", err)
 	}
 
+	// The request and the answer both travel on the claim held when this call
+	// started, so a claim granted while this call is waiting neither takes this
+	// request nor answers it.
 	c.broadcastMu.Lock()
-	done := c.servingDone
+	token := c.serving
 	c.broadcastMu.Unlock()
 
 	select {
-	case c.broadcastRequests <- BroadcastRequest{
+	case token.requests <- BroadcastRequest{
 		Topic:   topic,
 		Payload: marshaled,
 	}:
-	case <-done:
+	case <-token.done:
 		return ErrBroadcastUnavailable
 	}
 
 	select {
-	case err := <-c.broadcastResponses:
+	case err := <-token.responses:
 		return err
-	case <-done:
+	case <-token.done:
 		// The servicer may have answered just as it retired; prefer its answer
 		// over reporting a broadcast that did go out as unavailable.
 		select {
-		case err := <-c.broadcastResponses:
+		case err := <-token.responses:
 			return err
 		default:
 			return ErrBroadcastUnavailable

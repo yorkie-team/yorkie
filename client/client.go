@@ -1333,7 +1333,17 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 
 		for {
 			select {
-			case r := <-ch.BroadcastRequests():
+			case r := <-servingToken.Requests():
+				// The claim can be released between the send and this receive,
+				// and the request then belongs to a caller that has already
+				// been released with ErrBroadcastUnavailable. Skip the round
+				// trip rather than broadcast on nobody's behalf.
+				select {
+				case <-servingToken.Done():
+					return
+				default:
+				}
+
 				err := c.broadcast(ctx, ch, r.Topic, r.Payload)
 				// A broadcast that outlived its own watch answers nobody: the
 				// caller has been released already, and the answer must not
@@ -1341,6 +1351,11 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 				if !ch.SendBroadcastResponse(servingToken, err) {
 					return
 				}
+			case <-servingToken.Done():
+				// closeFunc releases the claim before this goroutine notices
+				// watchCtx, so stop on the claim too: a successor is already
+				// serving, and requests still reachable from here are not its.
+				return
 			case <-watchCtx.Done():
 				return
 			}
