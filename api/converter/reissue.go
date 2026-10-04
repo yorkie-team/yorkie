@@ -68,24 +68,47 @@ func ReissueOperations(
 		return nil, fmt.Errorf("reissue operations: %d in, %d out", len(ops), len(reissued))
 	}
 
-	// The wire drops a Text value's content: it carries the Text alone and
-	// the Edits that fill it. A Set/Add/ArraySet that restores a removed
-	// Text -- the reverse of a Remove, run by Undo -- carries the content,
-	// and a later Edit in the same document may target its nodes. Re-issue
-	// such a value through its full snapshot encoding instead, so the local
-	// root rebuilt from these operations keeps what the user sees.
+	// JSONElementSimple, the message a Set/Add/ArraySet carries its value in,
+	// is lossy for two element types, and a value that lost state would be
+	// replayed into the local root as that loss. Re-issue those through the
+	// full snapshot encoding instead, which carries every field.
 	for i, op := range ops {
-		if reissued[i], err = r.reissueTextValue(op, reissued[i]); err != nil {
+		if reissued[i], err = r.reissueLossyValue(op, reissued[i]); err != nil {
 			return nil, err
 		}
 	}
 	return reissued, nil
 }
 
-// reissueTextValue returns the decoded operation with its Text value replaced
-// by a re-issued copy of the original one, content included. Any other
-// operation is returned unchanged.
-func (r ticketReissuer) reissueTextValue(
+// isLossyOnWire reports whether JSONElementSimple -- the message a
+// Set/Add/ArraySet carries its value in -- drops state the element holds.
+//
+//   - Text: the wire carries the Text alone and the Edits that fill it, so a
+//     Set/Add/ArraySet that restores a removed Text -- the reverse of a
+//     Remove, run by Undo -- loses its content, which a later Edit in the same
+//     document may target the nodes of.
+//   - Counter: a dedup counter's value is derived from its HLL registers, and
+//     JSONElementSimple carries only the derived value (to_pb.go's
+//     toJSONElementSimple), not the registers that api.JSONElement_Counter's
+//     HllRegisters field carries. Decoding from the simple form alone rebuilds
+//     an empty sketch, so the counter reads back as zero.
+//
+// Object, Array and Tree are safe: the simple form carries them as the
+// marshalled bytes of the very api.JSONElement the snapshot encoding uses.
+// Primitive carries its own bytes. Keep this list in step with
+// toJSONElementSimple.
+func isLossyOnWire(elem crdt.Element) bool {
+	switch elem.(type) {
+	case *crdt.Text, *crdt.Counter:
+		return true
+	}
+	return false
+}
+
+// reissueLossyValue returns the decoded operation with its value replaced by a
+// re-issued copy of the original one, every field included, when the wire form
+// of that value is lossy. Any other operation is returned unchanged.
+func (r ticketReissuer) reissueLossyValue(
 	orig, decoded operations.Operation,
 ) (operations.Operation, error) {
 	var value crdt.Element
@@ -97,7 +120,7 @@ func (r ticketReissuer) reissueTextValue(
 	case *operations.ArraySet:
 		value = o.Value()
 	}
-	if _, ok := value.(*crdt.Text); !ok {
+	if value == nil || !isLossyOnWire(value) {
 		return decoded, nil
 	}
 
@@ -108,18 +131,18 @@ func (r ticketReissuer) reissueTextValue(
 	if err := r.walk(pbElem.ProtoReflect()); err != nil {
 		return nil, err
 	}
-	text, err := fromJSONElement(pbElem)
+	reissuedValue, err := fromJSONElement(pbElem)
 	if err != nil {
 		return nil, err
 	}
 
 	switch o := decoded.(type) {
 	case *operations.Set:
-		return operations.NewSet(o.ParentCreatedAt(), o.Key(), text, o.ExecutedAt()), nil
+		return operations.NewSet(o.ParentCreatedAt(), o.Key(), reissuedValue, o.ExecutedAt()), nil
 	case *operations.Add:
-		return operations.NewAdd(o.ParentCreatedAt(), o.PrevCreatedAt(), text, o.ExecutedAt()), nil
+		return operations.NewAdd(o.ParentCreatedAt(), o.PrevCreatedAt(), reissuedValue, o.ExecutedAt()), nil
 	case *operations.ArraySet:
-		return operations.NewArraySet(o.ParentCreatedAt(), o.CreatedAt(), text, o.ExecutedAt()), nil
+		return operations.NewArraySet(o.ParentCreatedAt(), o.CreatedAt(), reissuedValue, o.ExecutedAt()), nil
 	}
 	return decoded, nil
 }

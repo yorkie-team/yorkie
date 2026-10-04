@@ -261,6 +261,7 @@ authorization control and is not one:
 | Replay of a large pre-attach document costs time at attach | One replay of the local changes, the same work the server does on push |
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |
+| A document several clients fill before attaching now stores one element per client instead of one shared element, so it is larger and can hit `MaxSizePerDocument` (`packs.CheckLiveSize`, `pushPack`'s size gate) where it previously fit | Intended: the collapse it replaces was two distinct elements silently merged onto one `createdAt`, which lost one client's edits. The gate now measures what the document actually holds. Raise `MaxSizePerDocument` for projects that relied on the merge; `test/bench/grpc_bench_test.go` cut its pre-attach payload for this reason |
 
 ### Design Decisions
 

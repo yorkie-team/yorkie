@@ -17,6 +17,8 @@
 package document
 
 import (
+	"slices"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -95,6 +97,19 @@ type InternalDocument struct {
 	// under the actor they were re-issued to. Re-issuing them again, in either
 	// direction, would leave the two replicas naming them differently.
 	pushed bool
+
+	// mintedActors lists the actors, oldest first, that this never-synced
+	// document minted tickets under before its current one. SetActor rewrites
+	// the change IDs and each operation's executedAt but leaves the tickets
+	// inside an operation -- an element's createdAt, a text node ID, a position
+	// -- naming the actor that minted them, so a document the caller renamed
+	// through the exported Document.SetActor carries tickets of both. The
+	// re-issue has to sweep every one of them onto the attaching actor, or the
+	// rebuilt root would hold nodes the replayed positions no longer reach.
+	//
+	// It is empty for the overwhelmingly common document, which is renamed only
+	// by the attach, and reissue clears it: afterwards every ticket names `to`.
+	mintedActors []time.ActorID
 
 	// disableGC, when true, declares that this document does not produce or
 	// consume tombstones (see docs/design/disable-gc-on-attach.md). It is set
@@ -296,11 +311,48 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 // replica built from the server's state needs, where the root holds other
 // actors' elements. The client attaching a document it edited offline uses
 // ReissueActor instead, which re-issues every ticket the document minted.
+//
+// On a never-synced document it also moves the version vector's entry onto the
+// new actor. change.ID.SetActor deliberately leaves the vector alone -- on a
+// synced document the previous actor's entry is a claim other replicas rely on
+// -- but a never-synced document's vector holds nothing but its own entry, so
+// moving it loses no one else's claim. Without that, a document the caller
+// renamed through the exported Document.SetActor would carry a vector keyed on
+// the actor it no longer has, and neverSynced -- which reads the vector as
+// "names no actor but its own" -- would report false for it forever, skipping
+// the pre-attach re-issue the document still needs. The previous actor is
+// recorded in mintedActors at the same time, because its tickets are still in
+// the root and the operations for the re-issue to sweep.
 func (d *InternalDocument) SetActor(actor time.ActorID) {
-	for _, c := range d.localChanges {
-		c.SetActor(actor)
+	prev := d.changeID.ActorID()
+	rekey := prev != actor && d.neverSynced()
+	if rekey && !slices.Contains(d.mintedActors, prev) {
+		d.mintedActors = append(d.mintedActors, prev)
 	}
+
+	for i, c := range d.localChanges {
+		c.SetActor(actor)
+		if !rekey {
+			continue
+		}
+
+		// Change holds its ID by value, so the vector has to go back through a
+		// rebuilt change. The operations are shared, as in reissue.
+		id := c.ID()
+		d.localChanges[i] = change.New(
+			id.SetVersionVector(reissueVersionVector(id.VersionVector(), prev, actor)),
+			c.Message(),
+			c.Operations(),
+			c.PresenceChange(),
+		)
+	}
+
 	d.changeID = d.changeID.SetActor(actor)
+	if rekey {
+		d.changeID = d.changeID.SetVersionVector(
+			reissueVersionVector(d.changeID.VersionVector(), prev, actor),
+		)
+	}
 }
 
 // ReissueActor sets actor into this document like SetActor and, when the
@@ -384,14 +436,28 @@ func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, func() bool, 
 // rebuild reproduces the root from the local changes alone, so a root holding
 // anything the document did not mint itself would not survive it.
 func (d *InternalDocument) reissue(from, to time.ActorID) error {
+	// mintedActors first: the tickets a renamed document still carries under an
+	// earlier actor have to move too, or the rebuilt root would hold nodes the
+	// replayed positions no longer reach. See the field's comment.
+	froms := make([]time.ActorID, 0, len(d.mintedActors)+1)
+	for _, actor := range append(slices.Clone(d.mintedActors), from) {
+		if actor != to && !slices.Contains(froms, actor) {
+			froms = append(froms, actor)
+		}
+	}
+
 	changes := make([]*change.Change, 0, len(d.localChanges))
 	for _, c := range d.localChanges {
-		ops, err := converter.ReissueOperations(c.Operations(), from, to)
-		if err != nil {
-			return err
-		}
+		ops := c.Operations()
 		id := c.ID().SetActor(to)
-		id = id.SetVersionVector(reissueVersionVector(id.VersionVector(), from, to))
+		for _, actor := range froms {
+			reissuedOps, err := converter.ReissueOperations(ops, actor, to)
+			if err != nil {
+				return err
+			}
+			ops = reissuedOps
+			id = id.SetVersionVector(reissueVersionVector(id.VersionVector(), actor, to))
+		}
 		changes = append(changes, change.New(id, c.Message(), ops, c.PresenceChange()))
 	}
 
@@ -407,9 +473,15 @@ func (d *InternalDocument) reissue(from, to time.ActorID) error {
 	d.root = root
 	d.presences = presences
 	changeID := d.changeID.SetActor(to)
-	d.changeID = changeID.SetVersionVector(
-		reissueVersionVector(changeID.VersionVector(), from, to),
-	)
+	for _, actor := range froms {
+		changeID = changeID.SetVersionVector(
+			reissueVersionVector(changeID.VersionVector(), actor, to),
+		)
+	}
+	d.changeID = changeID
+
+	// Every ticket names `to` now, so nothing is left for a later sweep.
+	d.mintedActors = nil
 	return nil
 }
 
@@ -458,8 +530,13 @@ func (d *InternalDocument) MarkPushed() {
 }
 
 // reissueVersionVector returns a copy of the given vector with the entry of
-// the actor `from` moved to the actor `to`.
+// the actor `from` moved to the actor `to`. A nil vector is returned as nil:
+// DeepCopy would turn it into an empty map, and CreateChangePack tells the two
+// apart.
 func reissueVersionVector(vector time.VersionVector, from, to time.ActorID) time.VersionVector {
+	if vector == nil {
+		return nil
+	}
 	reissued := vector.DeepCopy()
 	if from == to {
 		return reissued
@@ -757,5 +834,6 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 
 		absorbedRemote: d.absorbedRemote,
 		pushed:         d.pushed,
+		mintedActors:   slices.Clone(d.mintedActors),
 	}, nil
 }

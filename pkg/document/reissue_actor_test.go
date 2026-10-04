@@ -600,4 +600,29 @@ func TestReissueActor(t *testing.T) {
 		assert.Equal(t, built.Marshal(), doc1.InternalDocumentForTest().Marshal())
 		assert.Equal(t, built.Marshal(), doc2.InternalDocumentForTest().Marshal())
 	})
+
+	t.Run("a document renamed by the public SetActor still re-issues", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+
+		// change.ID.SetActor does not rewrite the version vector, so without
+		// SetActor moving the never-synced document's own entry onto the new
+		// actor, neverSynced would read the stale entry as someone else's and
+		// skip the re-issue below for good.
+		doc.SetActor(actorA)
+		vector := doc.VersionVector()
+		_, hasInitial := vector.Get(time.InitialActorID)
+		assert.False(t, hasInitial, vector.Marshal())
+		assert.Equal(t, doc.InternalDocumentForTest().Lamport(), vector.VersionOf(actorA))
+
+		before := doc.Marshal()
+		reissueActor(t, doc, actorB)
+
+		actors := actorsOf(t, doc)
+		assert.Zero(t, actors[time.InitialActorID], "%v", actors)
+		assert.Zero(t, actors[actorA], "%v", actors)
+		assert.NotZero(t, actors[actorB])
+		assert.Equal(t, before, doc.Marshal())
+		assert.Equal(t, doc.Marshal(), serverBuild(t, doc).Marshal())
+	})
 }
