@@ -150,3 +150,27 @@ collision a legitimate history produces.
   mobile SDKs.
 - Archive these task docs before merging.
 
+## Round 3 (panel, 557dfbb1)
+
+- [x] Duplicate createdAt only rejected within one object (blocking, two
+      lenses). Identities are now claimed payload-wide: value root, object
+      members at any depth, array elements. Checked first against replica
+      histories: undo restores an array element as a copy re-identified at
+      its root only, so the tombstone and the copy share every descendant's
+      createdAt, and Document.Undo/Redo in
+      `TestPushBoundaryAcceptsReplicaHistories` emitted exactly that. Below
+      the elements of one array, the elements are judged apart; their own
+      createdAts and everything outside the array stay unique.
+- [x] The document root's identity (blocking). No element may be created at
+      lamport 0, which covers `time.InitialTicket`.
+- [x] Tree values bypassed the value rules (blocking). A tree value is read
+      from its bytes, where `BytesToTree` takes its tickets.
+- [x] Set's value removedAt rule untested (blocking):
+      `TestValidatePushedSetValueRemovedAt` pins both sides.
+- [x] Legacy member shapes copied back by undo (blocking). Not changed: no
+      replica builds them. `Element.Remove` refuses a removedAt that does not
+      follow createdAt in Go and JS since 2022, a winning member's movedAt is
+      its executedAt, and a live loser older replicas left behind is still
+      tombstonable, which `a live loser an older replica left behind` pins.
+      Recorded in the design doc.
+

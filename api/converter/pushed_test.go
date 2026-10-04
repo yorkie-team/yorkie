@@ -228,7 +228,7 @@ func TestValidatePushedObjectMembers(t *testing.T) {
 		pbOps := objectPayload(t, []string{"a", "b"}, func(nodes []*api.RHTNode) {
 			primitiveOf(byKey(nodes, "b")).CreatedAt = primitiveOf(byKey(nodes, "a")).CreatedAt
 		})
-		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrRefusedMember)
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
 	})
 
 	t.Run("a member hidden behind a duplicate is still judged first", func(t *testing.T) {
@@ -255,6 +255,19 @@ func TestValidatePushedObjectMembers(t *testing.T) {
 		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrRefusedMember)
 	})
 
+	t.Run("a live loser an older replica left behind", func(t *testing.T) {
+		// Before losers were marked removed by their own state, a loser whose
+		// occupant was already a tombstone stayed live. Documents still hold
+		// that shape, and an undo copies it back; it can be tombstoned, so
+		// the boundary takes it.
+		pbOps := objectPayload(t, []string{"a", "b"}, func(nodes []*api.RHTNode) {
+			b := byKey(nodes, "b")
+			b.Key = "a"
+			primitiveOf(byKey(nodes, "a")).MovedAt = converter.ToTimeTicket(pushedTicket(8))
+		})
+		assert.NoError(t, converter.ValidatePushedOperations(pbOps))
+	})
+
 	t.Run("a loser a replica emits", func(t *testing.T) {
 		// A displaced value under the same key, tombstoned by the Set that
 		// replaced it: the encoder writes both, in either order.
@@ -269,5 +282,129 @@ func TestValidatePushedObjectMembers(t *testing.T) {
 			})
 			assert.NoError(t, converter.ValidatePushedOperations(pbOps), order)
 		}
+	})
+}
+
+// TestValidatePushedPayloadIdentities pins that one payload never hands two
+// elements the same createdAt, except where undo really does: below the
+// elements of one array.
+func TestValidatePushedPayloadIdentities(t *testing.T) {
+	newObject := func(lamport int64, members map[string]crdt.Element) *crdt.Object {
+		obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(lamport))
+		for k, v := range members {
+			obj.Set(k, v)
+		}
+		return obj
+	}
+	newArray := func(lamport int64, elems ...crdt.Element) *crdt.Array {
+		arr := crdt.NewArray(crdt.NewRGATreeList(), pushedTicket(lamport))
+		for _, e := range elems {
+			require.NoError(t, arr.Add(e))
+		}
+		return arr
+	}
+	set := func(value crdt.Element) operations.Operation {
+		return operations.NewSet(pushedTicket(1), "k", value, pushedTicket(20))
+	}
+
+	for _, tc := range []struct {
+		name  string
+		value func() crdt.Element
+	}{{
+		name: "the value root and one of its members",
+		value: func() crdt.Element {
+			return newObject(5, map[string]crdt.Element{"a": pushedPrimitive(t, 5)})
+		},
+	}, {
+		name: "members of two sibling objects",
+		value: func() crdt.Element {
+			return newObject(5, map[string]crdt.Element{
+				"x": newObject(6, map[string]crdt.Element{"a": pushedPrimitive(t, 8)}),
+				"y": newObject(7, map[string]crdt.Element{"a": pushedPrimitive(t, 8)}),
+			})
+		},
+	}, {
+		name: "two elements of one array",
+		value: func() crdt.Element {
+			return newArray(5, pushedPrimitive(t, 6), pushedPrimitive(t, 6))
+		},
+	}, {
+		name: "an array element and an identity outside the array",
+		value: func() crdt.Element {
+			return newObject(5, map[string]crdt.Element{
+				"arr": newArray(6, newObject(7, map[string]crdt.Element{"a": pushedPrimitive(t, 9)})),
+				"b":   pushedPrimitive(t, 9),
+			})
+		},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.ErrorIs(t, validate(t, set(tc.value())), converter.ErrInvalidElementTicket)
+		})
+	}
+
+	t.Run("descendants of a restored array element and its tombstone", func(t *testing.T) {
+		// Undo restores a removed array element as a copy re-identified at
+		// its root only, so the tombstone and the copy share every
+		// descendant's createdAt. TestPushBoundaryAcceptsReplicaHistories
+		// reaches this shape through Document.Undo/Redo.
+		tombstone := newObject(6, map[string]crdt.Element{"a": pushedPrimitive(t, 7)})
+		tombstone.SetRemovedAt(pushedTicket(8))
+		restored := newObject(9, map[string]crdt.Element{"a": pushedPrimitive(t, 7)})
+		assert.NoError(t, validate(t, set(newArray(5, tombstone, restored))))
+	})
+
+	t.Run("the document root's identity", func(t *testing.T) {
+		// The root lives at time.InitialTicket; no replica issues lamport 0.
+		root, err := crdt.NewPrimitive("v", time.InitialTicket)
+		require.NoError(t, err)
+		assert.ErrorIs(t, validate(t, set(newObject(5, map[string]crdt.Element{"a": root}))),
+			converter.ErrInvalidElementTicket, "as a member")
+		assert.ErrorIs(t, validate(t, set(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))),
+			converter.ErrInvalidElementTicket, "as the value")
+	})
+}
+
+// TestValidatePushedSetValueRemovedAt pins the Set branch of the value rules.
+func TestValidatePushedSetValueRemovedAt(t *testing.T) {
+	value := func(removedAt int64) crdt.Element {
+		obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(5))
+		obj.SetRemovedAt(pushedTicket(removedAt))
+		return obj
+	}
+
+	assert.ErrorIs(t, validate(t, operations.NewSet(pushedTicket(1), "k", value(5), pushedTicket(9))),
+		converter.ErrInvalidElementTicket, "removed before it was created")
+	// The JS Remove reverse can restore a key's tombstone.
+	assert.NoError(t, validate(t, operations.NewSet(pushedTicket(1), "k", value(6), pushedTicket(9))),
+		"a tombstone the JS Remove reverse restores")
+}
+
+// TestValidatePushedTreeValue pins that a tree value is judged by the tickets
+// inside its bytes, which are the ones the decoder keeps.
+func TestValidatePushedTreeValue(t *testing.T) {
+	newTree := func(lamport int64) *crdt.Tree {
+		root := crdt.NewTreeNode(crdt.NewTreeNodeID(pushedTicket(lamport), 0), "doc", nil)
+		return crdt.NewTree(root, pushedTicket(lamport))
+	}
+
+	t.Run("created after its operation", func(t *testing.T) {
+		pbOps, err := converter.ToOperations([]operations.Operation{
+			operations.NewSet(pushedTicket(1), "k", newTree(9), pushedTicket(5)),
+		})
+		require.NoError(t, err)
+		// The simple element's outer ticket is not what the decoder reads.
+		pbOps[0].GetSet().Value.CreatedAt = converter.ToTimeTicket(pushedTicket(2))
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("an add that arrives removed", func(t *testing.T) {
+		tree := newTree(5)
+		tree.SetRemovedAt(pushedTicket(6))
+		assert.ErrorIs(t, validate(t, operations.NewAdd(pushedTicket(1), pushedTicket(1), tree, pushedTicket(5))),
+			converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("a fresh tree", func(t *testing.T) {
+		assert.NoError(t, validate(t, operations.NewSet(pushedTicket(1), "k", newTree(5), pushedTicket(5))))
 	})
 }

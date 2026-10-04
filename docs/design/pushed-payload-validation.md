@@ -17,11 +17,11 @@ no replica could have produced:
 - a member that `ElementRHT` can neither index by key nor tombstone, which
   stays live, unreachable, charged to `docSize.Live` and emitted into every
   later snapshot;
-- two members of one object under one `createdAt`, which collapse into one
-  `nodeMapByCreatedAt` entry on decode. One of them is never seen by any walk
-  of the decoded object, and the decoded copy answers to both keys while the
-  server's snapshot carries only one, so clients that attach later diverge
-  from clients that applied the change;
+- two elements of one payload under one `createdAt`, or one under the
+  document root's `time.InitialTicket`. `Root.elementMap` keeps one element
+  per `createdAt`, so the other becomes unaddressable; inside one object the
+  two also collapse on decode, so the decoded copy answers to both keys while
+  the server's snapshot carries one;
 - an Add value that arrives removed, which goes straight into
   `gcElementPairMap` under a `createdAt` of the sender's choosing.
 
@@ -94,11 +94,42 @@ them to `ElementRHT.SetWithExecutedAt`.
 - `movedAt` does not precede `createdAt`. `ElementRHT` anchors both the LWW
   comparison and the eviction on `PositionedAt`, so a member positioned before
   its creation loses its key without being tombstoned.
-- No two members share a `createdAt`. `Nodes()` reads `nodeMapByCreatedAt` in
-  both SDKs, so the encoder emits one node per `createdAt`.
 - A member that loses its key to one replayed before it carries a `removedAt`,
   or the winner's `positionedAt` follows its `createdAt`. Otherwise
   `Element.Remove` refuses the winner's ticket.
+
+No replica can have built a member that breaks these, so they hold for an
+undo copy of an existing document as well. `Element.Remove` refuses a
+`removedAt` that does not follow `createdAt` in both SDKs and has since 2022,
+`ElementRHT` stamps a winning member's `movedAt` with an `executedAt` no older
+than the value, and a live loser left by older replicas (before losers were
+removed by their own state) can still be tombstoned.
+
+### Identities across the whole value
+
+- No element of the value reuses a `createdAt`: not its root, not an object
+  member at any depth, not an array element. `Root` registers every element of
+  an applied value in one document-wide `elementMap` keyed by `createdAt`, so
+  two elements under one ticket leave one unaddressable (never removable,
+  charged to Live, re-emitted into every snapshot) and collapse into one
+  `gcElementPairMap` entry once both are removed. Within one object the
+  encoder cannot even emit two, since `Nodes()` reads `nodeMapByCreatedAt` in
+  both SDKs.
+- The exception is below the elements of one array. Undo restores a removed
+  array element as a deep copy re-identified at its root only, in both SDKs,
+  so the array holds the tombstone and the live copy and their descendants
+  share every `createdAt`. Two replicas undoing concurrent removals of one
+  element leave two live copies the same way, and any copy of an enclosing
+  value sends them together. The elements' own `createdAt`s stay unique, and
+  nothing in an array may reuse an identity from outside it. The
+  `RestoreMode` comment in `resources.proto` describes the same duplication.
+- No element is created at lamport 0. No replica issues such a ticket (a
+  client's first change is lamport 1), and the document root lives at
+  `time.InitialTicket`: a value claiming it would take over the root's
+  `elementMap` slot and capture every later root-level operation.
+
+A tree value is read from its bytes like a container, since `BytesToTree` takes
+its `createdAt`, `movedAt` and `removedAt` from there.
 
 Array elements are exempt from the ticket rules. Undo re-identifies an Add or
 ArraySet value with a fresh `createdAt` while the copy keeps its older
@@ -113,6 +144,7 @@ them. An object nested in an array is still checked.
 | A rule rejects a shape some client emits, wedging it | Every rule is derived from what Go and JS emit, including undo/redo and pre-attach tickets. `TestPushBoundaryAcceptsReplicaHistories` drives those histories through `FromPushedChangePack`. Refusals are logged, so a false positive is visible |
 | Mobile SDKs (iOS, Android) emit a shape the Go and JS SDKs do not | Not verified here. The rules only constrain a value against its own operation and members against their own object, which any SDK built on the same CRDT satisfies |
 | Element `RestoreMode` (revive by identity) ships on Set/Add | The wire field exists but no SDK emits it for elements yet. The value rules have to be revisited with it |
+| A document already corrupted by pre-attach collisions on `main` holds two elements under one `createdAt` outside an array, and an undo copies them back | Refused; the document's identity resolution is already broken there. [#2111](https://github.com/yorkie-team/yorkie/pull/2111) removes the source by re-issuing pre-attach tickets |
 | A second protobuf unmarshal per container payload on every push | No CRDT is built for validation; the cost is one `proto.Unmarshal` of the bytes the decoder reads anyway |
 
 ### Design Decisions

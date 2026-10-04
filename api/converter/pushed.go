@@ -88,15 +88,33 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 //     comparison and the eviction on PositionedAt, so a later Set whose ticket
 //     falls between the two would win the key without being able to
 //     tombstone the member.
-//   - No two members of one object share a createdAt. ElementRHT keys its
-//     second index by createdAt, so the encoder emits one node per createdAt
-//     (Nodes() reads that index, in both SDKs). Two of them collapse into one
-//     entry on decode: one is never validated, and the decoded copy answers
-//     to both keys while the server's snapshot carries one.
 //   - A member that loses its key to one decoded before it must be removed or
 //     removable: either it carries a removedAt, or the winner's positionedAt
 //     follows its createdAt. Otherwise ElementRHT can neither tombstone nor
 //     index it by key, and it stays live, unreachable and charged to Live.
+//
+// These are safe for undo copies of existing documents too, since a copy
+// carries what the document held. No replica can have built a member that
+// breaks them: Element.Remove refuses a removedAt that does not follow
+// createdAt in both SDKs (and has since 2022), ElementRHT stamps a winning
+// member's movedAt with an executedAt no older than the value, and a live
+// loser left by older replicas can still be tombstoned, which is all the
+// loser rule asks.
+//
+// Identities across the whole value (see payloadIDs and validateMembers):
+//
+//   - No element of the value -- its root, an object member at any depth, an
+//     array element -- reuses a createdAt another one claimed. Root registers
+//     every one of them in one document-wide map keyed by createdAt. Within
+//     one object the encoder cannot even emit two (Nodes() reads ElementRHT's
+//     createdAt index, in both SDKs), and two of them would collapse on
+//     decode. The one exception is below the elements of one array, where an
+//     undo-restored copy and its tombstone share their descendants.
+//   - No element is created at lamport 0, which no replica issues and which
+//     the document root's time.InitialTicket carries.
+//
+// A tree value is read from its bytes like a container, because that is where
+// the decoder takes its tickets from.
 //
 // Array elements nested in the value are exempt from the ticket rules. Undo
 // re-identifies an Add or ArraySet value with a fresh createdAt while the copy
@@ -154,7 +172,7 @@ func validatePushedOperation(pbOp *api.Operation) error {
 }
 
 // validateValue applies the value rules to the value of one operation, then
-// the member rules to every object nested in it.
+// the payload-wide identity rules and the member rules to its subtree.
 func validateValue(op string, pbValue *api.JSONElementSimple, pbExecutedAt *api.TimeTicket, rule valueRule) error {
 	executedAt, err := fromRequiredTimeTicket(pbExecutedAt, op+".executed_at")
 	if err != nil {
@@ -183,34 +201,44 @@ func validateValue(op string, pbValue *api.JSONElementSimple, pbExecutedAt *api.
 	case removedAtUnjudged:
 	}
 
+	ids := newPayloadIDs(nil)
+	if err := ids.claim(tickets.createdAt); err != nil {
+		return err
+	}
 	if root == nil {
 		return nil
 	}
-	return validateMembers(root)
+	return validateMembers(root, ids)
 }
 
 // valueTickets reads the tickets of an operation's value from the same bytes
-// fromElement builds it from: a container that carries its subtree is decoded
-// from the subtree, and it then also returns that subtree to walk; anything
-// else keeps only the createdAt of the simple element.
+// fromElement builds it from. A container that carries its subtree, and a
+// tree, are decoded from those bytes, and the subtree is returned to walk;
+// anything else keeps only the createdAt of the simple element, which is all
+// fromElement reads from it.
 func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, elementTickets, error) {
 	if pbValue == nil {
 		return nil, elementTickets{}, fmt.Errorf("%s.value: %w", op, ErrUnsupportedElement)
 	}
 
+	fromBytes := false
 	switch pbValue.GetType() {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT, api.ValueType_VALUE_TYPE_JSON_ARRAY:
-		if pbValue.GetValue() != nil {
-			root := &api.JSONElement{}
-			if err := proto.Unmarshal(pbValue.GetValue(), root); err != nil {
-				return nil, elementTickets{}, fmt.Errorf("%s.value: unmarshal element: %w", op, err)
-			}
-			tickets, err := ticketsOf(root)
-			if err != nil {
-				return nil, elementTickets{}, err
-			}
-			return root, tickets, nil
+		fromBytes = pbValue.GetValue() != nil
+	case api.ValueType_VALUE_TYPE_TREE:
+		fromBytes = true
+	}
+
+	if fromBytes {
+		root := &api.JSONElement{}
+		if err := proto.Unmarshal(pbValue.GetValue(), root); err != nil {
+			return nil, elementTickets{}, fmt.Errorf("%s.value: unmarshal element: %w", op, err)
 		}
+		tickets, err := ticketsOf(root)
+		if err != nil {
+			return nil, elementTickets{}, err
+		}
+		return root, tickets, nil
 	}
 
 	createdAt, err := fromRequiredTimeTicket(pbValue.GetCreatedAt(), op+".value.created_at")
@@ -220,20 +248,105 @@ func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, 
 	return nil, elementTickets{createdAt: createdAt}, nil
 }
 
-// validateMembers applies the member rules to every object in elem's subtree;
-// see ValidatePushedOperations.
-func validateMembers(elem *api.JSONElement) error {
+// payloadIDs is the set of element identities one operation's value has
+// claimed so far, from its root down through every object member and array
+// element. A scope opened for one element of an array sees what its parent
+// claimed but not what the array's other elements claimed; see
+// validateMembers.
+type payloadIDs struct {
+	parent *payloadIDs
+	ids    map[string]struct{}
+}
+
+func newPayloadIDs(parent *payloadIDs) *payloadIDs {
+	return &payloadIDs{parent: parent, ids: map[string]struct{}{}}
+}
+
+func (s *payloadIDs) has(key string) bool {
+	for scope := s; scope != nil; scope = scope.parent {
+		if _, ok := scope.ids[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// claim records createdAt as an identity of this payload. It refuses one the
+// payload already used: every element of a value is registered into
+// Root.elementMap, a document-wide map keyed by createdAt, so two of them
+// under one ticket leave one unaddressable -- never removable, charged to
+// Live, re-emitted into every snapshot -- and collapse into one
+// gcElementPairMap entry once both are removed.
+//
+// It also refuses lamport 0. No replica issues such a ticket -- a client's
+// first change is lamport 1 -- and the document root lives at
+// time.InitialTicket, so a value claiming it would take over the root's
+// elementMap slot and capture every later root-level operation.
+func (s *payloadIDs) claim(createdAt *time.Ticket) error {
+	if createdAt.Lamport() == 0 {
+		return fmt.Errorf("element %s: lamport 0 is never issued: %w",
+			createdAt.Key(), ErrInvalidElementTicket)
+	}
+
+	key := createdAt.Key()
+	if s.has(key) {
+		return fmt.Errorf("element %s: created_at reused within one payload: %w",
+			key, ErrInvalidElementTicket)
+	}
+	s.ids[key] = struct{}{}
+	return nil
+}
+
+// validateMembers claims the identity of every element in elem's subtree and
+// applies the member rules to every object in it; see
+// ValidatePushedOperations. Text and tree content keep their own node
+// identities, which are not elements and are not walked.
+//
+// The elements of one array are judged apart from each other below their own
+// level. Undo restores a removed array element as a deep copy re-identified
+// at its root only (Document.executeUndoRedo, document.ts), so the array then
+// holds the tombstone and the live copy, and their descendants share every
+// createdAt; two replicas undoing concurrent removals of one element leave
+// two live copies the same way. Both SDKs emit that array whole whenever an
+// enclosing value is copied. The elements' own createdAts stay unique -- the
+// re-identification is there to keep them so -- and every identity in the
+// array is still distinct from everything outside it.
+func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 	switch body := elem.GetBody().(type) {
 	case *api.JSONElement_JsonObject:
-		return validateObjectMembers(body.JsonObject)
+		return validateObjectMembers(body.JsonObject, ids)
 	case *api.JSONElement_JsonArray:
+		tops := map[string]struct{}{}
+		below := map[string]struct{}{}
 		for _, pbNode := range body.JsonArray.GetNodes() {
 			if pbNode.GetElement() == nil {
+				// A dead position left by a move; it is not an element.
 				continue
 			}
-			if err := validateMembers(pbNode.GetElement()); err != nil {
+			tickets, err := ticketsOf(pbNode.GetElement())
+			if err != nil {
 				return err
 			}
+
+			elemIDs := newPayloadIDs(ids)
+			if _, ok := tops[tickets.createdAt.Key()]; ok {
+				return fmt.Errorf("element %s: created_at reused within one array: %w",
+					tickets.createdAt.Key(), ErrInvalidElementTicket)
+			}
+			if err := elemIDs.claim(tickets.createdAt); err != nil {
+				return err
+			}
+			if err := validateMembers(pbNode.GetElement(), elemIDs); err != nil {
+				return err
+			}
+
+			tops[tickets.createdAt.Key()] = struct{}{}
+			for key := range elemIDs.ids {
+				below[key] = struct{}{}
+			}
+		}
+		for key := range below {
+			ids.ids[key] = struct{}{}
 		}
 	}
 
@@ -243,8 +356,7 @@ func validateMembers(elem *api.JSONElement) error {
 // validateObjectMembers replays the members of one object in the order
 // fromJSONObject feeds them to ElementRHT.SetWithExecutedAt, and rejects a
 // member that hashtable could not hold.
-func validateObjectMembers(pbObj *api.JSONElement_JSONObject) error {
-	createdAts := make(map[string]struct{}, len(pbObj.GetNodes()))
+func validateObjectMembers(pbObj *api.JSONElement_JSONObject, ids *payloadIDs) error {
 	positionedAts := make(map[string]*time.Ticket, len(pbObj.GetNodes()))
 
 	for _, pbNode := range pbObj.GetNodes() {
@@ -255,14 +367,11 @@ func validateObjectMembers(pbObj *api.JSONElement_JSONObject) error {
 		if err != nil {
 			return err
 		}
+		if err := ids.claim(tickets.createdAt); err != nil {
+			return err
+		}
 
 		key := tickets.createdAt.Key()
-		if _, ok := createdAts[key]; ok {
-			return fmt.Errorf("json_object.node %q: created_at %s already taken: %w",
-				pbNode.GetKey(), key, ErrRefusedMember)
-		}
-		createdAts[key] = struct{}{}
-
 		if err := tickets.validateRemovedAt(); err != nil {
 			return err
 		}
@@ -280,7 +389,7 @@ func validateObjectMembers(pbObj *api.JSONElement_JSONObject) error {
 				pbNode.GetKey(), key, ErrRefusedMember)
 		}
 
-		if err := validateMembers(pbNode.GetElement()); err != nil {
+		if err := validateMembers(pbNode.GetElement(), ids); err != nil {
 			return err
 		}
 	}

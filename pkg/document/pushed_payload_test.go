@@ -130,6 +130,34 @@ func TestPushBoundaryAcceptsReplicaHistories(t *testing.T) {
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
+	t.Run("concurrent removals of one array element, both undone, then copied whole", func(t *testing.T) {
+		// Each undo restores the element as a copy re-identified at its root
+		// only, so the array ends up holding two live copies and a tombstone
+		// whose descendants share every createdAt. Removing and restoring the
+		// array then sends all three in one payload.
+		d1, d2 := document.New("pushed"), document.New("pushed")
+		d1.SetActor(actorForTest(t, "000000000000000000000001"))
+		d2.SetActor(actorForTest(t, "000000000000000000000002"))
+		update(t, d1, func(r *json.Object) {
+			r.SetNewArray("arr").AddNewObject().SetNewObject("n").SetString("m", "v")
+		})
+		pushChanges(t, d1, d2)
+
+		update(t, d1, func(r *json.Object) { r.GetArray("arr").Delete(0) })
+		update(t, d2, func(r *json.Object) { r.GetArray("arr").Delete(0) })
+		require.NoError(t, d1.Undo())
+		require.NoError(t, d2.Undo())
+		pushChanges(t, d1, d2)
+		pushChanges(t, d2, d1)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+
+		update(t, d1, func(r *json.Object) { r.Delete("arr") })
+		pushChanges(t, d1, d2)
+		require.NoError(t, d1.Undo())
+		pushChanges(t, d1, d2)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+	})
+
 	t.Run("array set redo after a peer removed the target", func(t *testing.T) {
 		d1, d2 := document.New("pushed"), document.New("pushed")
 		update(t, d1, func(r *json.Object) { r.SetNewArray("arr").AddInteger(1) })

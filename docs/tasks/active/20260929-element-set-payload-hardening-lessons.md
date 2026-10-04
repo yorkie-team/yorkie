@@ -216,3 +216,14 @@ member it was meant to judge. Read the wire structure the decoder reads, in
 the order it reads it, and check the decoded tree only for what survives
 decoding.
 
+## "One payload never reuses a ticket" was false, and a test said so
+
+The panel's premise for payload-wide uniqueness was that a replica issues
+every ticket once. True for tickets, false for payloads: undo re-identifies a
+restored array element at its root only, so its descendants come back under
+the tickets the tombstone still carries, and a copy of the array sends both.
+The first version of the payload-wide rule rejected an ordinary
+undo/redo history. Before turning "no replica can produce X" into a rule, run
+the histories that copy state (undo, redo, restore of a container) through it,
+not only the ones that mint fresh tickets.
+
