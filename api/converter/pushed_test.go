@@ -353,6 +353,25 @@ func TestValidatePushedPayloadIdentities(t *testing.T) {
 		assert.NoError(t, validate(t, set(newArray(5, tombstone, restored))))
 	})
 
+	t.Run("an array element's own identity against a sibling's descendant", func(t *testing.T) {
+		// The exemption covers descendants only. An element's own createdAt is
+		// re-identified by undo precisely so it differs from everything the
+		// array already holds, so it is judged against the siblings'
+		// descendants too -- whichever of the two the sender encodes first.
+		t.Run("descendant first", func(t *testing.T) {
+			assert.ErrorIs(t, validate(t, set(newArray(5,
+				newObject(6, map[string]crdt.Element{"a": pushedPrimitive(t, 7)}),
+				pushedPrimitive(t, 7),
+			))), converter.ErrInvalidElementTicket)
+		})
+		t.Run("element first", func(t *testing.T) {
+			assert.ErrorIs(t, validate(t, set(newArray(5,
+				pushedPrimitive(t, 7),
+				newObject(6, map[string]crdt.Element{"a": pushedPrimitive(t, 7)}),
+			))), converter.ErrInvalidElementTicket)
+		})
+	})
+
 	t.Run("the document root's identity", func(t *testing.T) {
 		// The root lives at time.InitialTicket; no replica issues lamport 0.
 		root, err := crdt.NewPrimitive("v", time.InitialTicket)
@@ -377,6 +396,31 @@ func TestValidatePushedSetValueRemovedAt(t *testing.T) {
 	// The JS Remove reverse can restore a key's tombstone.
 	assert.NoError(t, validate(t, operations.NewSet(pushedTicket(1), "k", value(6), pushedTicket(9))),
 		"a tombstone the JS Remove reverse restores")
+}
+
+// TestValidatePushedArraySetValueRemovedAt pins the ArraySet branch of the
+// value rules. ArraySet reaches the same RegisterElement -> gcElementPairMap
+// sink as Add, so a tombstone arriving under a createdAt of the sender's
+// choosing has to be refused there too; the only removed value a replica
+// sends through ArraySet is a copy undo re-identified with a newer ticket.
+func TestValidatePushedArraySetValueRemovedAt(t *testing.T) {
+	value := func(createdAt, removedAt int64) crdt.Element {
+		obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(createdAt))
+		obj.SetRemovedAt(pushedTicket(removedAt))
+		return obj
+	}
+	arraySet := func(value crdt.Element) operations.Operation {
+		return operations.NewArraySet(pushedTicket(1), pushedTicket(2), value, pushedTicket(9))
+	}
+
+	assert.NoError(t, validate(t, arraySet(value(9, 6))),
+		"a displaced tombstone undo re-identified with its own ticket")
+	assert.ErrorIs(t, validate(t, arraySet(value(5, 6))), converter.ErrInvalidElementTicket,
+		"removed after the createdAt it arrives under")
+	assert.ErrorIs(t, validate(t, arraySet(value(5, 5))), converter.ErrInvalidElementTicket,
+		"removed at the createdAt it arrives under")
+	assert.NoError(t, validate(t, arraySet(crdt.NewObject(crdt.NewElementRHT(), pushedTicket(9)))),
+		"a fresh value")
 }
 
 // TestValidatePushedTreeValue pins that a tree value is judged by the tickets

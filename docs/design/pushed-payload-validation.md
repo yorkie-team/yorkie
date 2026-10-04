@@ -70,6 +70,7 @@ anything else from the simple element's `createdAt`.
 | `createdAt` does not follow `executedAt` | yes | yes | yes |
 | `removedAt` follows `createdAt` | yes | -- | -- |
 | no `removedAt` | -- | yes | -- |
+| `removedAt` precedes `createdAt` | -- | -- | yes |
 
 - Both SDKs issue one ticket for a fresh value and its operation. Undo
   restores an older value under a newer ticket (Set), or re-identifies the
@@ -81,9 +82,14 @@ anything else from the simple element's `createdAt`.
 - Both SDKs build the Add that undoes an array Remove from the target before
   deleting it, and skip the undo when the target is already gone. An Add never
   carries a tombstone.
-- The JS ArraySet reverse copies a displaced value a peer already removed, and
-  undo re-identifies the copy with a newer `createdAt`. An ArraySet value's
-  `removedAt` is therefore not judged.
+- The JS ArraySet reverse copies a displaced value a peer already removed, so
+  an ArraySet value can arrive removed. It only reaches a push through undo,
+  which re-identifies the copy with the undo's own fresh ticket
+  (`executeUndoRedo`), so its `removedAt` always precedes its `createdAt`.
+  `ArraySet.Execute` inserts and `RegisterElement`s its value exactly as
+  `Add.Execute` does, so a tombstone arriving under a `createdAt` no older
+  than its removal -- the shape the Add rule refuses -- is refused here too,
+  rather than left unjudged.
 
 ### Rules on object members nested in the value
 
@@ -120,8 +126,12 @@ removed by their own state) can still be tombstoned.
   so the array holds the tombstone and the live copy and their descendants
   share every `createdAt`. Two replicas undoing concurrent removals of one
   element leave two live copies the same way, and any copy of an enclosing
-  value sends them together. The elements' own `createdAt`s stay unique, and
-  nothing in an array may reuse an identity from outside it. The
+  value sends them together. The exemption is between *descendants* only: an
+  array element's own `createdAt` is checked against the descendants of its
+  siblings as well as against their roots, in both encoding orders, since
+  undo re-identifies a restored element precisely so that it differs from
+  everything the array already holds. Nothing in an array may reuse an
+  identity from outside it either. The
   `RestoreMode` comment in `resources.proto` describes the same duplication.
 - No element is created at lamport 0. No replica issues such a ticket (a
   client's first change is lamport 1), and the document root lives at
@@ -145,6 +155,7 @@ them. An object nested in an array is still checked.
 | Mobile SDKs (iOS, Android) emit a shape the Go and JS SDKs do not | Not verified here. The rules only constrain a value against its own operation and members against their own object, which any SDK built on the same CRDT satisfies |
 | Element `RestoreMode` (revive by identity) ships on Set/Add | The wire field exists but no SDK emits it for elements yet. The value rules have to be revisited with it |
 | A document already corrupted by pre-attach collisions on `main` holds two elements under one `createdAt` outside an array, and an undo copies them back | Refused; the document's identity resolution is already broken there. [#2111](https://github.com/yorkie-team/yorkie/pull/2111) removes the source by re-issuing pre-attach tickets |
+| A document crafted before this gate holds a member that breaks the member rules, and an honest undo copies it back into a Set | Refused, and the client that pushes it is wedged. The shape has one source -- a crafted push, which this gate closes going forward -- and the document it sits in is already broken: the member is unreachable by key and uncollectable. Accepting it to keep that one client moving would reopen the rule for every sender. A repair path for a client holding a rejected change is an explicit Non-Goal above, and refusals are logged so such a client is visible rather than silent |
 | A second protobuf unmarshal per container payload on every push | No CRDT is built for validation; the cost is one `proto.Unmarshal` of the bytes the decoder reads anyway |
 
 ### Design Decisions

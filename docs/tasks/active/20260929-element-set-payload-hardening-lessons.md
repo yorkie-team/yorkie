@@ -227,3 +227,27 @@ undo/redo history. Before turning "no replica can produce X" into a rule, run
 the histories that copy state (undo, redo, restore of a container) through it,
 not only the ones that mint fresh tickets.
 
+
+## An exemption scoped to a subtree has to say which end it exempts
+
+The array exemption was written as "elements of one array are judged apart
+below their own level", and the code gave each element a fresh scope whose
+siblings' identities were folded into the parent only after the loop. That
+exempted more than the undo shape needs: a sibling's *own* createdAt was never
+compared against another sibling's descendants, in either encoding order, so a
+payload could hand two elements one identity by hiding one of them a level
+down. Undo re-identifies a restored element precisely so its root differs from
+everything the array holds -- only the descendants are shared. Scope the
+exemption to the pair it was derived from (descendant vs descendant) and check
+both directions explicitly; a scope chain alone encodes only one of them.
+
+## A rule left "unjudged" on one operation is a rule on none
+
+ArraySet's removedAt was left unjudged because its reverse can carry a value a
+peer already removed, which made the Add rule ("a value never arrives removed")
+reachable around: ArraySet.Execute runs the same InsertAfter, RegisterElement
+and tombstone adoption. The legitimate shape was narrower than "anything":
+executeUndoRedo re-identifies an ArraySet value with the undo's own ticket, so
+removedAt always *precedes* createdAt. When a rule is about to be waived for an
+operation, derive the exact shape that operation emits before waiving it -- the
+waiver is the attacker's parameter otherwise.

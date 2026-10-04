@@ -77,9 +77,14 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 //   - An Add value carries no removedAt. Both SDKs build the Add that undoes
 //     an array Remove from the target before deleting it, skip it when the
 //     target is already gone, and add only live values otherwise.
-//   - An ArraySet value's removedAt is not judged: the JS SDK's ArraySet
-//     reverse copies a displaced value a peer already removed, and undo then
-//     re-identifies that copy with a newer createdAt.
+//   - An ArraySet value's removedAt, if any, must precede its createdAt. The
+//     JS SDK's ArraySet reverse copies a displaced value a peer already
+//     removed, so that value can arrive removed -- but it only ever reaches a
+//     push through undo, which re-identifies the copy with the undo's own
+//     fresh ticket (executeUndoRedo's ArraySet branch, document.go and
+//     document.ts). A tombstone arriving under a createdAt no older than its
+//     removal is a shape no replica emits, and it reaches the same
+//     RegisterElement -> gcElementPairMap sink the Add rule guards.
 //
 // Every object member nested in that value:
 //
@@ -108,8 +113,10 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 //     every one of them in one document-wide map keyed by createdAt. Within
 //     one object the encoder cannot even emit two (Nodes() reads ElementRHT's
 //     createdAt index, in both SDKs), and two of them would collapse on
-//     decode. The one exception is below the elements of one array, where an
-//     undo-restored copy and its tombstone share their descendants.
+//     decode. The one exception is between the descendants of two elements of
+//     one array, where an undo-restored copy and its tombstone share their
+//     descendants. An array element's own createdAt is never exempt, not even
+//     against another element's descendants.
 //   - No element is created at lamport 0, which no replica issues and which
 //     the document root's time.InitialTicket carries.
 //
@@ -151,8 +158,9 @@ const (
 	// removedAtAbsent accepts only a live value (Add).
 	removedAtAbsent
 
-	// removedAtUnjudged leaves removedAt alone (ArraySet).
-	removedAtUnjudged
+	// removedAtPrecedesCreatedAt accepts a removed value only when it was
+	// removed before the createdAt it arrives under (ArraySet).
+	removedAtPrecedesCreatedAt
 )
 
 func validatePushedOperation(pbOp *api.Operation) error {
@@ -165,7 +173,7 @@ func validatePushedOperation(pbOp *api.Operation) error {
 			removedAtAbsent)
 	case *api.Operation_ArraySet_:
 		return validateValue("array_set", decoded.ArraySet.GetValue(), decoded.ArraySet.GetExecutedAt(),
-			removedAtUnjudged)
+			removedAtPrecedesCreatedAt)
 	default:
 		return nil
 	}
@@ -198,7 +206,11 @@ func validateValue(op string, pbValue *api.JSONElementSimple, pbExecutedAt *api.
 			return fmt.Errorf("%s %s: value arrives removed: %w",
 				op, tickets.createdAt.Key(), ErrInvalidElementTicket)
 		}
-	case removedAtUnjudged:
+	case removedAtPrecedesCreatedAt:
+		if tickets.removedAt != nil && !tickets.createdAt.After(tickets.removedAt) {
+			return fmt.Errorf("%s %s: value arrives removed at or after its own created_at: %w",
+				op, tickets.createdAt.Key(), ErrInvalidElementTicket)
+		}
 	}
 
 	ids := newPayloadIDs(nil)
@@ -310,7 +322,10 @@ func (s *payloadIDs) claim(createdAt *time.Ticket) error {
 // two live copies the same way. Both SDKs emit that array whole whenever an
 // enclosing value is copied. The elements' own createdAts stay unique -- the
 // re-identification is there to keep them so -- and every identity in the
-// array is still distinct from everything outside it.
+// array is still distinct from everything outside it, and from every other
+// identity the array holds: an element's own createdAt is checked against the
+// descendants of its siblings as well as against their roots, in both decode
+// orders, so the exemption covers descendant-to-descendant collisions only.
 func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 	switch body := elem.GetBody().(type) {
 	case *api.JSONElement_JsonObject:
@@ -328,11 +343,24 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 				return err
 			}
 
-			elemIDs := newPayloadIDs(ids)
-			if _, ok := tops[tickets.createdAt.Key()]; ok {
+			key := tickets.createdAt.Key()
+			if _, ok := tops[key]; ok {
 				return fmt.Errorf("element %s: created_at reused within one array: %w",
-					tickets.createdAt.Key(), ErrInvalidElementTicket)
+					key, ErrInvalidElementTicket)
 			}
+			// An element's own identity is not covered by the exemption: a
+			// restored copy is re-identified precisely so it differs from
+			// everything the array already holds, descendants included. The
+			// check runs in both directions -- here against the descendants of
+			// the elements decoded before this one, and below against the
+			// elements decoded before this one's descendants -- since the
+			// decode order of the colliding pair is the sender's to choose.
+			if _, ok := below[key]; ok {
+				return fmt.Errorf("element %s: created_at reused below another element of one array: %w",
+					key, ErrInvalidElementTicket)
+			}
+
+			elemIDs := newPayloadIDs(ids)
 			if err := elemIDs.claim(tickets.createdAt); err != nil {
 				return err
 			}
@@ -340,10 +368,20 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 				return err
 			}
 
-			tops[tickets.createdAt.Key()] = struct{}{}
-			for key := range elemIDs.ids {
-				below[key] = struct{}{}
+			tops[key] = struct{}{}
+			for id := range elemIDs.ids {
+				if id == key {
+					continue
+				}
+				if _, ok := tops[id]; ok {
+					return fmt.Errorf("element %s: created_at reused below another element of one array: %w",
+						id, ErrInvalidElementTicket)
+				}
+				below[id] = struct{}{}
 			}
+		}
+		for key := range tops {
+			ids.ids[key] = struct{}{}
 		}
 		for key := range below {
 			ids.ids[key] = struct{}{}
