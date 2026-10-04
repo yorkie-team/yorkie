@@ -636,10 +636,7 @@ func (s *yorkieServer) Watch(
 	}
 
 	project := projects.From(ctx)
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	})
+	clientInfo, err := confirmActiveClient(ctx, s.backend, project, clientID)
 	if err != nil {
 		return err
 	}
@@ -669,6 +666,12 @@ func (s *yorkieServer) Watch(
 	targets, err := s.resolveResources(ctx, req.Msg, project)
 	if err != nil {
 		return err
+	}
+
+	for _, target := range targets {
+		if err := confirmWatchTarget(clientInfo, target); err != nil {
+			return err
+		}
 	}
 
 	keys := make([]key.Key, len(targets))
@@ -716,6 +719,42 @@ func (s *yorkieServer) Watch(
 	}
 
 	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs)
+}
+
+// confirmActiveClient confirms against the database that the client is still
+// activated, bypassing this node's client cache.
+//
+// A watch or a broadcast is admitted on the client row alone, and this node's
+// cache reaches another node's deactivation only when the entry expires
+// (MongoDB ClientCacheTTL). Admitting on the cached copy therefore keeps a
+// client revoked elsewhere streaming document events and peer presence, and
+// keeps it broadcasting, for up to that TTL — on a node that never writes,
+// nothing else would ever disprove the entry. The push/pull path confirms the
+// same way before it writes (packs.confirmAttachment).
+func confirmActiveClient(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	clientID time.ActorID,
+) (*database.ClientInfo, error) {
+	return clients.FindActiveClientInfo(ctx, be, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}, true)
+}
+
+// confirmWatchTarget confirms that the client may receive the target's events.
+// clientInfo must be the row confirmActiveClient read from the database, not
+// a cached copy. A channel carries no per-client attachment, so only a
+// document is confirmed; attaching passes so that a watch opened against the
+// attach that is still completing is not rejected. Server clients subscribe
+// without attaching, as they do in packs.pullPack.
+func confirmWatchTarget(clientInfo *database.ClientInfo, target watchTarget) error {
+	if target.docInfo == nil || clientInfo.IsServerClient() {
+		return nil
+	}
+
+	return clientInfo.EnsureDocumentAttachedOrAttaching(target.docInfo.ID)
 }
 
 // admitWatch admits a Watch stream: it registers the stream for later
@@ -1165,10 +1204,8 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	project := projects.From(ctx)
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	clientInfo, err := confirmActiveClient(ctx, s.backend, project, clientID)
+	if err != nil {
 		return err
 	}
 
@@ -1177,6 +1214,10 @@ func (s *yorkieServer) WatchDocument(
 	// carries.
 	target, err := s.resolveDocument(ctx, req.Msg.DocumentId, project)
 	if err != nil {
+		return err
+	}
+
+	if err := confirmWatchTarget(clientInfo, target); err != nil {
 		return err
 	}
 
@@ -1268,10 +1309,7 @@ func (s *yorkieServer) WatchChannel(
 	}
 
 	project := projects.From(ctx)
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if _, err = confirmActiveClient(ctx, s.backend, project, clientID); err != nil {
 		return err
 	}
 
@@ -1406,10 +1444,7 @@ func (s *yorkieServer) Broadcast(
 	project := projects.From(ctx)
 
 	// 03. Verify active client
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	}); err != nil {
+	if _, err = confirmActiveClient(ctx, s.backend, project, actorID); err != nil {
 		return nil, err
 	}
 

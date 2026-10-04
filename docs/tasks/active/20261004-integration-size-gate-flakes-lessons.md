@@ -45,6 +45,21 @@
   old ones, so the staleness window is bounded without reopening the race.
   `ActivateClient` now also takes the client's stripe lock, so every
   clientCache write pairs with its row write under one lock.
+- Round 3 (review panel): one blocking finding, raised by both the
+  blast-radius and the security lens — the database confirmation added for
+  push/pull covered only the paths that write, so `Watch`, `WatchDocument`,
+  `WatchChannel` and `Broadcast` still admitted on the cached client row. A
+  client deactivated on another node kept receiving document events and peer
+  presence and kept broadcasting for up to `ClientCacheTTL`, and on a node
+  that never writes nothing would ever disprove the entry. Fixed by reading
+  the client row with `skipCache` at those four entry points
+  (`confirmActiveClient`) and confirming the document attachment on that row
+  for document watches (`confirmWatchTarget`, attaching allowed so a watch
+  racing its own attach is not rejected, server clients exempt as in
+  `pullPack`). `TestStaleClientCacheWatch` covers both.
+- A write-path guard is not a gate. The read paths — streams, broadcasts —
+  disclose the same resource and have no later conditional write to catch
+  them, so they need the authoritative read themselves.
 - Deleting a cache fill removes a refresh path as well as a bug. Ask what
   else was keeping the entry fresh before deciding the removal is free; for
   a cache nothing invalidates across nodes, the answer is usually "nothing,

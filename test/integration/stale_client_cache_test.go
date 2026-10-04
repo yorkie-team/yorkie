@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -28,6 +29,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -111,4 +114,75 @@ func TestStaleClientCache(t *testing.T) {
 	for docID, docInfo := range stored.Documents {
 		assert.NotEqual(t, database.DocumentAttached, docInfo.Status, docID)
 	}
+}
+
+// TestStaleClientCacheWatch covers the read side of the same staleness: a
+// watch stream and a broadcast admitted on a node whose client cache has not
+// seen another node's deactivation yet. Neither writes the document, so the
+// conditional write-back in PushPull never sees them; they must be refused on
+// the client row the database holds, not on the cached copy.
+func TestStaleClientCacheWatch(t *testing.T) {
+	ctx := context.Background()
+
+	// A second node on the same database. defaultServer is the first.
+	nodeB, err := server.New(helper.TestConfig())
+	require.NoError(t, err)
+	require.NoError(t, nodeB.Start())
+	defer func() { assert.NoError(t, nodeB.Shutdown(true)) }()
+
+	c1, err := client.Dial(defaultServer.RPCAddr())
+	require.NoError(t, err)
+	// Close tries to deactivate c1 on the server, which the second node has
+	// already done, so its error is expected.
+	defer func() { _ = c1.Close() }()
+	require.NoError(t, c1.Activate(ctx))
+
+	// The attach runs through the first node, which caches c1 as activated
+	// with the document attached.
+	d1 := document.New(helper.TestKey(t))
+	require.NoError(t, c1.Attach(ctx, d1))
+
+	project, err := defaultServer.DefaultProject(ctx)
+	require.NoError(t, err)
+	docInfo, err := nodeB.Backend().DB.FindDocInfoByKey(ctx, project.ID, d1.Key())
+	require.NoError(t, err)
+
+	// The second node deactivates c1. Nothing tells the first node.
+	require.NoError(t, nodeB.DeactivateClient(ctx, c1))
+
+	raw := v1connect.NewYorkieServiceClient(http.DefaultClient, "http://"+defaultServer.RPCAddr())
+	withKey := func(req connect.AnyRequest, k string) {
+		req.Header().Add(types.ShardKey, "/"+k)
+	}
+
+	// A watch opened through the first node is refused: the deactivated client
+	// must not be handed the document's events or its peer presence.
+	watchReq := connect.NewRequest(&api.WatchRequest{
+		ClientId: c1.ID().String(),
+		Resources: []*api.ResourceDescriptor{{
+			Resource: &api.ResourceDescriptor_Document{
+				Document: &api.DocumentDescriptor{DocumentId: docInfo.ID.String()},
+			},
+		}},
+	})
+	withKey(watchReq, d1.Key().String())
+	stream, err := raw.Watch(ctx, watchReq)
+	require.NoError(t, err)
+	assert.False(t, stream.Receive())
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(stream.Err()))
+	assert.Equal(t, "ErrClientNotActivated", converter.ErrorCodeOf(stream.Err()))
+	assert.NoError(t, stream.Close())
+
+	// So is a broadcast, which would otherwise publish arbitrary payloads to
+	// every subscriber of the channel.
+	broadcastReq := connect.NewRequest(&api.BroadcastRequest{
+		ClientId:   c1.ID().String(),
+		ChannelKey: d1.Key().String(),
+		Topic:      "topic",
+		Payload:    []byte(`"payload"`),
+	})
+	withKey(broadcastReq, d1.Key().String())
+	_, err = raw.Broadcast(ctx, broadcastReq)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, "ErrClientNotActivated", converter.ErrorCodeOf(err))
 }

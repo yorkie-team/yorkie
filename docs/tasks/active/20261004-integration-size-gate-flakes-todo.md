@@ -62,7 +62,13 @@ write updates it. The model this PR leaves:
 - The cache expires (`--mongo-client-cache-ttl`, default 1m), so a node that
   did not perform a write reads a stale client row for at most the TTL.
 - RPC gates (`EnsureActivated`, `EnsureDocumentAttached`) still read the
-  cache, so within the TTL a stale node can admit a request.
+  cache, so within the TTL a stale node can admit a request. The exceptions
+  are the gates with no later write to catch them: `Watch`, `WatchDocument`,
+  `WatchChannel` and `Broadcast` read the client row from the database
+  (`confirmActiveClient`), and a document watch also confirms the attachment
+  on that row, so a client revoked on another node stops streaming and
+  broadcasting at once rather than after the TTL. The cost is one read per
+  stream opened and per broadcast published.
 - A push with changes, or one that removes the document, re-reads the client
   row from MongoDB under the document's push lock before writing, and is
   refused with `ErrClientNotActivated` / `ErrDocumentNotAttached` if the
