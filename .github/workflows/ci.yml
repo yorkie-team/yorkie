@@ -606,6 +606,13 @@ jobs:
   complex-test:
     name: complex-test
     runs-on: ubuntu-latest
+    # The same reason the bench job has a wall: an unbounded job holds its runner
+    # for the 6-hour default, and the two bench runs that did so left logs nobody
+    # could recover. `go test`'s own 10-minute -timeout bounds the test step, but
+    # not the `docker compose up --wait` steps in front of it, which wait on a
+    # sharded MongoDB that can fail to come up. Healthy runs take 4-5 minutes on
+    # main (Oct 2026); 30 is six times that and still far inside a working day.
+    timeout-minutes: 30
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.complex-test == 'true') }}
@@ -646,6 +653,10 @@ jobs:
   load-test:
     name: load-test
     runs-on: ubuntu-latest
+    # Bounded for the bench job's reason. k6 drives a docker-compose stack and
+    # has no wall of its own here; healthy runs take ~9 minutes on main (Oct
+    # 2026), so 30 leaves three times that before the runner is reclaimed.
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write

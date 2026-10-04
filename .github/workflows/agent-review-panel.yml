@@ -2977,9 +2977,11 @@ jobs:
     # job wall as `cancelled`, never `failure`.
     #
     # `cancelled` is excluded from the CI-CONCLUSION clause for a different
-    # reason than it is included for the JOBS. `ci.yml` declares no
-    # `timeout-minutes` and no `concurrency`, so hand-cancelling a hung CI run is
-    # the only way to stop one — a routine maintainer action, not an anomaly. And
+    # reason than it is included for the JOBS. `ci.yml`'s `build` job declares no
+    # `timeout-minutes` (only the tag-gated bench, complex-test and load-test lanes
+    # are walled) and the workflow no `concurrency`, so hand-cancelling a hung CI
+    # run is the usual way to stop one — a routine maintainer action, not an
+    # anomaly. And
     # this page writes the TERMINAL latch: the gate reads it and sets
     # `managed=false` for every subsequent run, so the panel would never run on
     # that PR again until someone typed `@claude rerun`. A cancelled run is also
