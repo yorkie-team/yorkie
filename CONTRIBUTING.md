@@ -68,6 +68,11 @@ make lint
 
 > [!NOTE]  
 > If you have an old version of `golangci-lint` installed locally, running `make lint` may fail—especially if the linter doesn't support the newer version of Go. It's recommended to run `make tools` periodically to keep your tools up to date.
+>
+> When your local Go is a newer minor than the `go` line in `go.mod` (CI's
+> version), the Makefile runs every target under that version by exporting
+> `GOTOOLCHAIN`, so `make lint` and the `go fix` check see what CI sees. The
+> first run downloads that toolchain. A `GOTOOLCHAIN` you set yourself wins.
 
 `make verify` is the gate a commit has to pass: `make lint`, the licence
 headers, the `go fix` check, and the unit tests. It leaves out the integration

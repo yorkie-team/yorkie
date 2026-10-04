@@ -17,6 +17,25 @@ GO_LDFLAGS ?=
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 
+# Run every Go command, and golangci-lint, under the Go minor go.mod names
+# when the local Go is a newer minor. GOTOOLCHAIN=auto never downgrades, and
+# a newer minor breaks the gate: golangci-lint cannot read its export data, and
+# its go fix has modernizers CI's toolchain lacks. Same or older local Go, or a
+# GOTOOLCHAIN set by the caller (golang images set `local`), is left alone, so
+# CI, which installs that minor, runs exactly as before.
+ifneq ($(OS),Windows_NT)
+ifeq ($(origin GOTOOLCHAIN),undefined)
+GO_MOD_VERSION := $(shell sed -n 's/^go //p' go.mod)
+GO_LOCAL_VERSION := $(shell GOTOOLCHAIN=local go env GOVERSION 2>/dev/null)
+GO_PIN_TOOLCHAIN := $(shell echo "$(GO_LOCAL_VERSION) go$(GO_MOD_VERSION)" | \
+	awk '{ split(substr($$1, 3), l, "."); split(substr($$2, 3), m, "."); \
+	if ($$1 ~ /^go[0-9]+\.[0-9]+/ && (l[1] > m[1] || (l[1] == m[1] && l[2] > m[2]))) print $$2 }')
+ifneq ($(GO_PIN_TOOLCHAIN),)
+export GOTOOLCHAIN := $(GO_PIN_TOOLCHAIN)
+endif
+endif
+endif
+
 default: help
 
 tools: ## install tools for developing yorkie
