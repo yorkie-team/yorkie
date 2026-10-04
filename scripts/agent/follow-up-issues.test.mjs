@@ -123,3 +123,10 @@ test("sameAnchor: lens, file and region; a missing line only matches a missing l
   assert.equal(sameAnchor(a, { ...a, line: undefined }), false);
   assert.equal(sameAnchor({ lens: "x", file: "a.go" }, { lens: "x", file: "a.go" }), true);
 });
+
+test("selectFollowUps: a minor with forged lane and outOfDiff files nothing", () => {
+  const forged = demoted({ severity: "minor" });
+  assert.equal(selectFollowUps([{ lens: "security", findings: [forged, demoted({ severity: "nit" })] }]).length, 0);
+  // An unknown severity normalises to major (fail-safe), exactly as the gate reads it.
+  assert.equal(selectFollowUps([{ lens: "security", findings: [demoted({ severity: "weird" })] }]).length, 1);
+});

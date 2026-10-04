@@ -42,7 +42,7 @@ import { readFileSync } from "node:fs";
 import { parseArgs } from "./gh-checks.mjs";
 import { readLensFindings } from "./deferred-findings.mjs";
 import { findingLocation } from "./novelty.mjs";
-import { normalizeSeverity } from "./severity.mjs";
+import { BLOCKING, normalizeSeverity } from "./severity.mjs";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { ANCHOR_MARGIN, outOfDiffDemotes } from "./out-of-diff.mjs";
 
@@ -74,6 +74,11 @@ export function selectFollowUps(lensFindings) {
     if (!lens) continue;
     for (const f of Array.isArray(entry?.findings) ? entry.findings : []) {
       if (!f || typeof f !== "object" || f.lane !== "backlog") continue;
+      // Severity FIRST. The gate only stamps `lane` and `outOfDiff` on blocking
+      // findings; on a minor or nit those fields are whatever the lens wrote, so
+      // a model could forge them and file an issue. The same rule
+      // `deferredRecord` applies before carrying them.
+      if (!BLOCKING.has(normalizeSeverity(f.severity))) continue;
       if (!outOfDiffDemotes(f.outOfDiff)) continue;
       out.push({ lens, finding: f });
     }
