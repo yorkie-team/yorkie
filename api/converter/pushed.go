@@ -40,12 +40,25 @@ import (
 // See docs/design/pushed-payload-validation.md.
 func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	for _, pbChange := range pbPack.GetChanges() {
-		if err := ValidatePushedOperations(pbChange.GetOperations()); err != nil {
+		if err := ValidatePushedChange(pbChange); err != nil {
 			return nil, err
 		}
 	}
 
 	return FromChangePack(pbPack)
+}
+
+// ValidatePushedChange applies ValidatePushedOperations to one change, bound
+// by the change's own ID: an operation's executedAt must be the change's
+// actor's and must not run ahead of the change's lamport, and no ticket in any
+// payload may either. See changeBound.
+func ValidatePushedChange(pbChange *api.Change) error {
+	bound, err := boundOf(pbChange.GetId())
+	if err != nil {
+		return err
+	}
+
+	return validatePushedOperations(pbChange.GetOperations(), bound)
 }
 
 // ValidatePushedOperations rejects an operation whose element payload is a
@@ -60,6 +73,23 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 // independently of each other and of the operation's executedAt, and nothing
 // between the wire and the CRDT makes them agree: Change.SetActor rewrites only
 // the operation's own executedAt.
+//
+// The change's own ID (ValidatePushedChange, changeBound):
+//
+//   - Every operation's executedAt is the change's actor's, at a lamport no
+//     greater than the change's own. Context.IssueTimeTicket stamps every
+//     operation of a change from that change's ID, and Change.SetActor rewrites
+//     the actor of both together.
+//   - No ticket anywhere in a payload runs ahead of the change's lamport. A
+//     pushed payload is a copy of what the sender's replica holds, and every
+//     ticket in a replica was issued by a change the sender had already applied,
+//     so it orders before the change carrying the copy. Without this an
+//     attacker picks MaxLamport: a createdAt there poisons an object key no
+//     later Set can ever win back, and a removedAt there is a tombstone no
+//     version vector ever passes, so it is charged to the document's size
+//     forever. Note this bounds a ticket's lamport, not its actor: a payload
+//     legitimately carries other replicas' tickets, and which actors exist is
+//     not knowable from the operation's own bytes.
 //
 // The value an operation carries (Set, Add, ArraySet):
 //
@@ -122,6 +152,16 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 //     against another element's descendants.
 //   - No element is created at lamport 0, which no replica issues and which
 //     the document root's time.InitialTicket carries.
+//   - The position identities of one array -- the position_created_at of a
+//     moved element and of a dead position, and the createdAt of every element
+//     that was never moved -- are distinct, and none is at lamport 0.
+//     RGATreeList.nodeMapByCreatedAt is keyed by them and is what every
+//     insert-after and move resolves against, so two nodes under one key leave
+//     one of them unaddressable, and lamport 0 is the dummy head's own slot.
+//     These are a per-array namespace, not element identities: a moved
+//     element's abandoned position legitimately keeps the element's own
+//     createdAt (RGATreeList.MoveAfter), so they are claimed apart from
+//     payloadIDs.
 //
 // A tree value is read from its bytes like a container, because that is where
 // the decoder takes its tickets from.
@@ -132,18 +172,94 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 // removedAt, so documents already hold both shapes inside arrays. An object
 // nested inside an array is still checked.
 //
-// What the validator cannot see is a createdAt that collides with an element
-// already in the document. Telling that apart needs the document, and on main
-// today legitimate histories produce it: elements created before attach share
+// What the validator cannot see, and does not claim to close, is a createdAt
+// that collides with an element outside the value carrying it: one already in
+// the document, or one another operation of the same push plants. The identity
+// rules above are scoped to one operation's value and say nothing about the
+// rest of the document. The scope cannot simply be widened to the change:
+// operations of one change legitimately carry one element twice, since a Set
+// holds a live reference to its value and encodes whatever that value has
+// grown by the time the pack is built (TestPushBoundaryAcceptsReplicaHistories
+// covers it). Telling a hijack
+// apart from a legitimate repeat needs the document, and on main today
+// legitimate histories produce the repeat: elements created before attach share
 // the initial actor's tickets across clients, and two replicas undoing
 // concurrent overwrites restore one value under one createdAt. A replicated
 // refusal keyed on that collision fires on those histories, in Go only, and
-// splits the Go replicas and the server's snapshot replay from the JS SDK.
+// splits the Go replicas and the server's snapshot replay from the JS SDK. See
+// the Non-Goals of docs/design/pushed-payload-validation.md.
 func ValidatePushedOperations(pbOps []*api.Operation) error {
+	return validatePushedOperations(pbOps, changeBound{})
+}
+
+func validatePushedOperations(pbOps []*api.Operation, bound changeBound) error {
+	// The identity scope is one operation's value, not the whole change. Two
+	// operations of one change legitimately carry one element: a Set holds a
+	// live reference to its value, so a change that creates an object and then
+	// fills it encodes the filled subtree into the first Set and each member
+	// again into its own -- see TestPushBoundaryAcceptsReplicaHistories.
 	for _, pbOp := range pbOps {
-		if err := validatePushedOperation(pbOp); err != nil {
+		if err := validatePushedOperation(pbOp, bound); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// changeBound is what a change's own ID bounds the tickets of its operations
+// by; see ValidatePushedOperations. The zero value is unbound, which is what
+// ValidatePushedOperations judges a bare operation list under.
+type changeBound struct {
+	bound   bool
+	actorID time.ActorID
+	lamport int64
+}
+
+func boundOf(pbID *api.ChangeID) (changeBound, error) {
+	if pbID == nil {
+		return changeBound{}, fmt.Errorf("change.id: %w", ErrInvalidElementTicket)
+	}
+	actorID, err := time.ActorIDFromBytes(pbID.GetActorId())
+	if err != nil {
+		return changeBound{}, err
+	}
+
+	return changeBound{bound: true, actorID: actorID, lamport: pbID.GetLamport()}, nil
+}
+
+// checkExecutedAt refuses an operation stamped by another actor or ahead of
+// the change carrying it.
+func (b changeBound) checkExecutedAt(op string, executedAt *time.Ticket) error {
+	if !b.bound {
+		return nil
+	}
+	if executedAt.ActorID() != b.actorID {
+		return fmt.Errorf("%s %s: executed_at is not the change's actor: %w",
+			op, executedAt.Key(), ErrInvalidElementTicket)
+	}
+	if executedAt.Lamport() > b.lamport {
+		return fmt.Errorf("%s %s: executed_at runs ahead of the change's lamport %d: %w",
+			op, executedAt.Key(), b.lamport, ErrInvalidElementTicket)
+	}
+
+	return nil
+}
+
+// checkTicket refuses a payload ticket that no change the sender had applied
+// could have issued: one at a negative lamport, or one ahead of the change
+// carrying the payload.
+func (b changeBound) checkTicket(what string, t *time.Ticket) error {
+	if t == nil {
+		return nil
+	}
+	if t.Lamport() < 0 {
+		return fmt.Errorf("%s %s: negative lamport is never issued: %w",
+			what, t.Key(), ErrInvalidElementTicket)
+	}
+	if b.bound && t.Lamport() > b.lamport {
+		return fmt.Errorf("%s %s: lamport runs ahead of the change's own %d: %w",
+			what, t.Key(), b.lamport, ErrInvalidElementTicket)
 	}
 
 	return nil
@@ -166,22 +282,81 @@ const (
 	removedAtPrecedesCreatedAt
 )
 
-func validatePushedOperation(pbOp *api.Operation) error {
+func validatePushedOperation(pbOp *api.Operation, bound changeBound) error {
 	switch decoded := pbOp.GetBody().(type) {
 	case *api.Operation_Set_:
 		return validateValue("set", decoded.Set.GetValue(), decoded.Set.GetExecutedAt(),
-			removedAtFollowsCreatedAt)
+			removedAtFollowsCreatedAt, bound)
 	case *api.Operation_Add_:
 		return validateValue("add", decoded.Add.GetValue(), decoded.Add.GetExecutedAt(),
-			removedAtAbsent)
+			removedAtAbsent, bound)
 	case *api.Operation_ArraySet_:
 		return validateValue("array_set", decoded.ArraySet.GetValue(), decoded.ArraySet.GetExecutedAt(),
-			removedAtPrecedesCreatedAt)
+			removedAtPrecedesCreatedAt, bound)
 	case *api.Operation_Increase_:
+		if err := validateExecutedAt("increase", decoded.Increase.GetExecutedAt(), bound); err != nil {
+			return err
+		}
 		return validateIncreaseValue(decoded.Increase.GetValue())
+	default:
+		return validateExecutedAt(operationName(pbOp), executedAtOf(pbOp), bound)
+	}
+}
+
+// operationName names an operation for an error message.
+func operationName(pbOp *api.Operation) string {
+	switch pbOp.GetBody().(type) {
+	case *api.Operation_Move_:
+		return "move"
+	case *api.Operation_Remove_:
+		return "remove"
+	case *api.Operation_Edit_:
+		return "edit"
+	case *api.Operation_Style_:
+		return "style"
+	case *api.Operation_TreeEdit_:
+		return "tree_edit"
+	case *api.Operation_TreeStyle_:
+		return "tree_style"
+	default:
+		return "operation"
+	}
+}
+
+// executedAtOf reads the executedAt of the operations that carry no element
+// payload. They reach the document's tickets all the same -- a Remove stamps a
+// tombstone, a TreeEdit stamps its nodes -- so the change's bound applies.
+func executedAtOf(pbOp *api.Operation) *api.TimeTicket {
+	switch decoded := pbOp.GetBody().(type) {
+	case *api.Operation_Move_:
+		return decoded.Move.GetExecutedAt()
+	case *api.Operation_Remove_:
+		return decoded.Remove.GetExecutedAt()
+	case *api.Operation_Edit_:
+		return decoded.Edit.GetExecutedAt()
+	case *api.Operation_Style_:
+		return decoded.Style.GetExecutedAt()
+	case *api.Operation_TreeEdit_:
+		return decoded.TreeEdit.GetExecutedAt()
+	case *api.Operation_TreeStyle_:
+		return decoded.TreeStyle.GetExecutedAt()
 	default:
 		return nil
 	}
+}
+
+// validateExecutedAt binds an operation's executedAt to the change carrying
+// it. A nil executedAt is left to the decoder, which already refuses it.
+func validateExecutedAt(op string, pbExecutedAt *api.TimeTicket, bound changeBound) error {
+	if pbExecutedAt == nil || !bound.bound {
+		return nil
+	}
+	executedAt, err := fromRequiredTimeTicket(pbExecutedAt, op+".executed_at")
+	if err != nil {
+		return err
+	}
+
+	return bound.checkExecutedAt(op, executedAt)
 }
 
 // validateIncreaseValue refuses an Increase whose delta is not a primitive.
@@ -207,13 +382,22 @@ func validateIncreaseValue(pbValue *api.JSONElementSimple) error {
 
 // validateValue applies the value rules to the value of one operation, then
 // the payload-wide identity rules and the member rules to its subtree.
-func validateValue(op string, pbValue *api.JSONElementSimple, pbExecutedAt *api.TimeTicket, rule valueRule) error {
+func validateValue(
+	op string,
+	pbValue *api.JSONElementSimple,
+	pbExecutedAt *api.TimeTicket,
+	rule valueRule,
+	bound changeBound,
+) error {
 	executedAt, err := fromRequiredTimeTicket(pbExecutedAt, op+".executed_at")
 	if err != nil {
 		return err
 	}
+	if err := bound.checkExecutedAt(op, executedAt); err != nil {
+		return err
+	}
 
-	root, tickets, err := valueTickets(op, pbValue)
+	root, tickets, err := valueTickets(op, pbValue, bound)
 	if err != nil {
 		return err
 	}
@@ -239,7 +423,7 @@ func validateValue(op string, pbValue *api.JSONElementSimple, pbExecutedAt *api.
 		}
 	}
 
-	ids := newPayloadIDs(nil)
+	ids := newPayloadIDs(nil, bound)
 	if err := ids.claim(tickets.createdAt); err != nil {
 		return err
 	}
@@ -254,7 +438,11 @@ func validateValue(op string, pbValue *api.JSONElementSimple, pbExecutedAt *api.
 // tree, are decoded from those bytes, and the subtree is returned to walk;
 // anything else keeps only the createdAt of the simple element, which is all
 // fromElement reads from it.
-func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, elementTickets, error) {
+func valueTickets(
+	op string,
+	pbValue *api.JSONElementSimple,
+	bound changeBound,
+) (*api.JSONElement, elementTickets, error) {
 	if pbValue == nil {
 		return nil, elementTickets{}, fmt.Errorf("%s.value: %w", op, ErrUnsupportedElement)
 	}
@@ -272,7 +460,7 @@ func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, 
 		if err := proto.Unmarshal(pbValue.GetValue(), root); err != nil {
 			return nil, elementTickets{}, fmt.Errorf("%s.value: unmarshal element: %w", op, err)
 		}
-		tickets, err := ticketsOf(root)
+		tickets, err := ticketsOf(root, bound)
 		if err != nil {
 			return nil, elementTickets{}, err
 		}
@@ -281,6 +469,9 @@ func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, 
 
 	createdAt, err := fromRequiredTimeTicket(pbValue.GetCreatedAt(), op+".value.created_at")
 	if err != nil {
+		return nil, elementTickets{}, err
+	}
+	if err := bound.checkTicket("element.created_at", createdAt); err != nil {
 		return nil, elementTickets{}, err
 	}
 	return nil, elementTickets{createdAt: createdAt}, nil
@@ -293,11 +484,17 @@ func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, 
 // validateMembers.
 type payloadIDs struct {
 	parent *payloadIDs
+	bound  changeBound
 	ids    map[string]struct{}
 }
 
-func newPayloadIDs(parent *payloadIDs) *payloadIDs {
-	return &payloadIDs{parent: parent, ids: map[string]struct{}{}}
+func newPayloadIDs(parent *payloadIDs, bound changeBound) *payloadIDs {
+	return &payloadIDs{parent: parent, bound: bound, ids: map[string]struct{}{}}
+}
+
+// child opens a scope nested in this one, carrying the same change bound.
+func (s *payloadIDs) child() *payloadIDs {
+	return newPayloadIDs(s, s.bound)
 }
 
 func (s *payloadIDs) has(key string) bool {
@@ -359,13 +556,22 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 	case *api.JSONElement_JsonArray:
 		tops := map[string]struct{}{}
 		below := map[string]struct{}{}
+		positions := newArrayPositions()
 		for _, pbNode := range body.JsonArray.GetNodes() {
 			if pbNode.GetElement() == nil {
-				// A dead position left by a move; it is not an element.
+				// A dead position left by a move; it is not an element, so it
+				// claims no element identity -- only the slot of
+				// RGATreeList.nodeMapByCreatedAt that fromJSONArray gives it.
+				if err := positions.claim(pbNode.GetPositionCreatedAt(), ids.bound); err != nil {
+					return err
+				}
 				continue
 			}
-			tickets, err := ticketsOf(pbNode.GetElement())
+			tickets, err := ticketsOf(pbNode.GetElement(), ids.bound)
 			if err != nil {
+				return err
+			}
+			if err := positions.claimOf(pbNode, tickets.createdAt, ids.bound); err != nil {
 				return err
 			}
 
@@ -386,7 +592,7 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 					key, ErrInvalidElementTicket)
 			}
 
-			elemIDs := newPayloadIDs(ids)
+			elemIDs := ids.child()
 			if err := elemIDs.claim(tickets.createdAt); err != nil {
 				return err
 			}
@@ -417,6 +623,64 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 	return nil
 }
 
+// arrayPositions is the set of position identities one array has claimed:
+// the keys fromJSONArray writes into RGATreeList.nodeMapByCreatedAt. They are
+// a namespace of their own, per array and separate from element identities,
+// because a move leaves behind a dead position still keyed by the moved
+// element's own createdAt (RGATreeList.MoveAfter).
+type arrayPositions struct {
+	ids map[string]struct{}
+}
+
+func newArrayPositions() *arrayPositions {
+	return &arrayPositions{ids: map[string]struct{}{}}
+}
+
+// claimOf claims the position the node occupies: the one it carries if it was
+// moved, and its element's own createdAt otherwise, which is what
+// RGATreeList.Add keys it by.
+func (p *arrayPositions) claimOf(pbNode *api.RGANode, createdAt *time.Ticket, bound changeBound) error {
+	if pbNode.GetPositionMovedAt() == nil {
+		return p.claimTicket(createdAt)
+	}
+
+	return p.claim(pbNode.GetPositionCreatedAt(), bound)
+}
+
+// claim claims a position carried on the wire. A missing one is left to
+// fromJSONArray, which refuses it.
+func (p *arrayPositions) claim(pbPosCreatedAt *api.TimeTicket, bound changeBound) error {
+	if pbPosCreatedAt == nil {
+		return nil
+	}
+	posCreatedAt, err := fromRequiredTimeTicket(pbPosCreatedAt, "json_array.node.position_created_at")
+	if err != nil {
+		return err
+	}
+	if err := bound.checkTicket("json_array.node.position_created_at", posCreatedAt); err != nil {
+		return err
+	}
+
+	return p.claimTicket(posCreatedAt)
+}
+
+func (p *arrayPositions) claimTicket(posCreatedAt *time.Ticket) error {
+	key := posCreatedAt.Key()
+	if posCreatedAt.Lamport() == 0 {
+		// The array's own dummy head lives at time.InitialTicket. A node
+		// landing on its slot captures every insert anchored on the head.
+		return fmt.Errorf("json_array.node %s: lamport 0 is never a position: %w",
+			key, ErrInvalidElementTicket)
+	}
+	if _, ok := p.ids[key]; ok {
+		return fmt.Errorf("json_array.node %s: position_created_at reused within one array: %w",
+			key, ErrInvalidElementTicket)
+	}
+	p.ids[key] = struct{}{}
+
+	return nil
+}
+
 // validateObjectMembers replays the members of one object in the order
 // fromJSONObject feeds them to ElementRHT.SetWithExecutedAt, and rejects a
 // member that hashtable could not hold.
@@ -427,7 +691,7 @@ func validateObjectMembers(pbObj *api.JSONElement_JSONObject, ids *payloadIDs) e
 		if pbNode.GetElement() == nil {
 			return fmt.Errorf("json_object.node %q: %w", pbNode.GetKey(), ErrUnsupportedElement)
 		}
-		tickets, err := ticketsOf(pbNode.GetElement())
+		tickets, err := ticketsOf(pbNode.GetElement(), ids.bound)
 		if err != nil {
 			return err
 		}
@@ -485,7 +749,7 @@ func (t elementTickets) validateRemovedAt() error {
 }
 
 // ticketsOf reads the ticket triple of any element body.
-func ticketsOf(elem *api.JSONElement) (elementTickets, error) {
+func ticketsOf(elem *api.JSONElement, bound changeBound) (elementTickets, error) {
 	var created, moved, removed *api.TimeTicket
 	switch body := elem.GetBody().(type) {
 	case *api.JSONElement_JsonObject:
@@ -518,6 +782,16 @@ func ticketsOf(elem *api.JSONElement) (elementTickets, error) {
 	}
 	if t.removedAt, err = fromTimeTicket(removed); err != nil {
 		return elementTickets{}, err
+	}
+
+	for what, ticket := range map[string]*time.Ticket{
+		"element.created_at": t.createdAt,
+		"element.moved_at":   t.movedAt,
+		"element.removed_at": t.removedAt,
+	} {
+		if err := bound.checkTicket(what, ticket); err != nil {
+			return elementTickets{}, err
+		}
 	}
 	return t, nil
 }

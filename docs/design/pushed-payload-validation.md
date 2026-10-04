@@ -75,6 +75,28 @@ the document, and it reads tickets from the same bytes `fromElement` builds
 the value from: a container that carries its subtree is read from the subtree,
 anything else from the simple element's `createdAt`.
 
+### Rules from the change's own ID
+
+The value rules below compare two tickets the sender picked, so they bound
+nothing on their own. `ValidatePushedChange` binds them to the change carrying
+them first:
+
+- Every operation's `executedAt` is the change's actor's, at a lamport no
+  greater than the change's own. `Context.IssueTimeTicket` stamps every
+  operation of a change from that change's ID, and `Change.SetActor` rewrites
+  the actor of both together.
+- No ticket anywhere in a payload runs ahead of the change's lamport. A pushed
+  payload is a copy of what the sender's replica holds, and every ticket in a
+  replica was issued by a change the sender had already applied. Without this
+  an attacker picks `MaxLamport`: a `createdAt` there poisons an object key no
+  later Set can win back, and a `removedAt` there is a tombstone no version
+  vector ever passes, so it is charged to the document's size forever.
+
+This bounds a ticket's lamport, not its actor. A payload legitimately carries
+other replicas' tickets, and which actors exist is not knowable from the
+operation's own bytes; the actor a *change* is stamped with is bound separately,
+against the authenticated client, in `packs.validateChangeActors`.
+
 ### Rules on the value of an operation
 
 | Rule | Set | Add | ArraySet |
@@ -125,6 +147,13 @@ removed by their own state) can still be tombstoned.
 
 ### Identities across the whole value
 
+- The scope is one operation's value, not the whole change. Operations of one
+  change legitimately carry one element twice: a Set holds a live reference to
+  its value, so a change that creates an object and then fills it encodes the
+  filled subtree into the first Set and each member again into its own
+  (`TestPushBoundaryAcceptsReplicaHistories` covers it). A collision an
+  attacker splits across two operations is therefore out of reach here, for
+  the same reason the document-wide collision is -- see the Non-Goals.
 - No element of the value reuses a `createdAt`: not its root, not an object
   member at any depth, not an array element. `Root` registers every element of
   an applied value in one document-wide `elementMap` keyed by `createdAt`, so
@@ -149,6 +178,15 @@ removed by their own state) can still be tombstoned.
   client's first change is lamport 1), and the document root lives at
   `time.InitialTicket`: a value claiming it would take over the root's
   `elementMap` slot and capture every later root-level operation.
+- The position identities of one array are distinct, and none is at lamport 0.
+  `fromJSONArray` feeds `position_created_at` to `AddDeadPosition` and
+  `AddMovedElement`, which key `RGATreeList.nodeMapByCreatedAt` by it; an
+  element that was never moved is keyed by its own `createdAt`. That map is
+  what every insert-after and move resolves against, so two nodes under one key
+  leave one of them unaddressable, and lamport 0 is the array's dummy head's
+  own slot. These are a per-array namespace, not element identities: a moved
+  element's abandoned position legitimately keeps the element's own
+  `createdAt` (`RGATreeList.MoveAfter`), so they are claimed apart.
 
 A tree value is read from its bytes like a container, since `BytesToTree` takes
 its `createdAt`, `movedAt` and `removedAt` from there.
@@ -164,7 +202,7 @@ them. An object nested in an array is still checked.
 | Risk | Mitigation |
 |------|------------|
 | A rule rejects a shape some client emits, wedging it | Every rule is derived from what Go and JS emit, including undo/redo and pre-attach tickets. `TestPushBoundaryAcceptsReplicaHistories` drives those histories through `FromPushedChangePack`. Refusals are logged, so a false positive is visible |
-| Mobile SDKs (iOS, Android) emit a shape the Go and JS SDKs do not | Not verified here. The rules only constrain a value against its own operation and members against their own object, which any SDK built on the same CRDT satisfies |
+| Mobile SDKs (iOS, Android) emit a shape the Go and JS SDKs do not | **Open.** Every rule here was derived by reading the Go and JS SDKs; the iOS and Android SDKs were not read. The rules only constrain a value against its own operation and members against their own object, which any SDK built on the same CRDT satisfies, but that is an argument, not a verification. The failure mode if it is wrong is a wedged client, so before this ships: (a) read the two mobile SDKs' undo/redo and element-copy paths for the shapes the rules judge, or (b) run the gate in log-only mode for a release -- every refusal already logs the client and document it came from (`fromPushedChangePack`) -- and ship the refusal once the logs are quiet. Until one of those is done, an affected client can still leave the document (the Detach/Remove leniency below), so the wedge is escapable by detaching and re-attaching, at the cost of its unpushed local changes |
 | Element `RestoreMode` (revive by identity) ships on Set/Add | The wire field exists but no SDK emits it for elements yet. The value rules have to be revisited with it |
 | A document already corrupted by pre-attach collisions on `main` holds two elements under one `createdAt` outside an array, and an undo copies them back | Refused; the document's identity resolution is already broken there. [#2111](https://github.com/yorkie-team/yorkie/pull/2111) removes the source by re-issuing pre-attach tickets |
 | A document crafted before this gate holds a member that breaks the member rules, and an honest undo copies it back into a Set | Refused, and the client that pushes it is wedged. The shape has one source -- a crafted push, which this gate closes going forward -- and the document it sits in is already broken: the member is unreachable by key and uncollectable. Accepting it to keep that one client moving would reopen the rule for every sender. A repair path for a client holding a rejected change is an explicit Non-Goal above, and refusals are logged so such a client is visible rather than silent |

@@ -119,6 +119,12 @@ func PushPull(
 		return nil, err
 	}
 
+	// 00-1. Bind the pushed changes to the authenticated client.
+	if err := validateChangeActors(clientInfo, reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+
 	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
 	// changes collection, regardless of which SDK version sent it.
@@ -237,6 +243,27 @@ func PushPull(
 	}
 
 	return resPack, nil
+}
+
+// validateChangeActors refuses a pack whose changes are stamped with an actor
+// that is not the pushing client's. The actor comes off the wire verbatim
+// (converter.FromChanges) and nothing downstream rewrites it: Change.SetActor
+// runs on the client only. Stored under another actor, a change is attributed
+// to a peer, counted into that peer's lamport lane in the version vector, and
+// -- since IsOwnActor is the same predicate self-echo dedup, min-VV and GC key
+// on -- can let GC advance past tombstones the real owner has not seen.
+func validateChangeActors(clientInfo *database.ClientInfo, reqPack *change.Pack) error {
+	for _, cn := range reqPack.Changes {
+		if !clientInfo.IsOwnActor(types.IDFromActorID(cn.ID().ActorID())) {
+			return connect.NewError(
+				connect.CodeInvalidArgument,
+				errors.InvalidArgument("change actor must be the pushing client").
+					WithCode("ErrInvalidChangeActor"),
+			)
+		}
+	}
+
+	return nil
 }
 
 func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {

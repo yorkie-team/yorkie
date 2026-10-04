@@ -466,3 +466,183 @@ func TestValidatePushedIncreaseValue(t *testing.T) {
 	assert.ErrorIs(t, validate(t, operations.NewIncrease(counterCreatedAt, obj, pushedTicket(5))),
 		converter.ErrInvalidElementTicket, "an object delta, carrying an identity collision besides")
 }
+
+// arrayPayload returns a Set whose value is an array with one primitive
+// element per lamport, and lets edit rewrite the encoded array before
+// validation. It is objectPayload for the branch that reads RGANodes.
+func arrayPayload(
+	t *testing.T,
+	lamports []int64,
+	edit func(arr *api.JSONElement_JSONArray),
+) []*api.Operation {
+	t.Helper()
+
+	arr := crdt.NewArray(crdt.NewRGATreeList(), pushedTicket(2))
+	for _, lamport := range lamports {
+		require.NoError(t, arr.Add(pushedPrimitive(t, lamport)))
+	}
+	pbOps, err := converter.ToOperations([]operations.Operation{
+		operations.NewSet(pushedTicket(1), "k", arr, pushedTicket(20)),
+	})
+	require.NoError(t, err)
+
+	value := pbOps[0].GetSet().GetValue()
+	root := &api.JSONElement{}
+	require.NoError(t, proto.Unmarshal(value.Value, root))
+	edit(root.GetJsonArray())
+	value.Value, err = proto.Marshal(root)
+	require.NoError(t, err)
+
+	return pbOps
+}
+
+// TestValidatePushedArrayPositions pins the branch that reads an array's
+// position identities: the dead position a move leaves behind, which carries
+// no element at all, and the position a moved element carries. Both are keys
+// of RGATreeList.nodeMapByCreatedAt once fromJSONArray feeds them to
+// AddDeadPosition and AddMovedElement.
+func TestValidatePushedArrayPositions(t *testing.T) {
+	deadPosition := func(createdAt, removedAt int64) *api.RGANode {
+		return &api.RGANode{
+			PositionCreatedAt: converter.ToTimeTicket(pushedTicket(createdAt)),
+			PositionRemovedAt: converter.ToTimeTicket(pushedTicket(removedAt)),
+		}
+	}
+
+	t.Run("a dead position a move leaves behind", func(t *testing.T) {
+		// MoveAfter keys the abandoned node by the position the element used
+		// to hold -- here the element's own createdAt, which it keeps as an
+		// element identity too. The two namespaces do not collide.
+		pbOps := arrayPayload(t, []int64{5, 6}, func(arr *api.JSONElement_JSONArray) {
+			arr.Nodes = append(arr.Nodes, deadPosition(5, 8))
+			moved := arr.GetNodes()[0]
+			moved.PositionCreatedAt = converter.ToTimeTicket(pushedTicket(8))
+			moved.PositionMovedAt = converter.ToTimeTicket(pushedTicket(8))
+		})
+		assert.NoError(t, converter.ValidatePushedOperations(pbOps))
+	})
+
+	t.Run("a dead position on the dummy head's slot", func(t *testing.T) {
+		// RGATreeList keys its dummy head by time.InitialTicket. A node
+		// landing there answers for every insert anchored on the head.
+		pbOps := arrayPayload(t, []int64{5}, func(arr *api.JSONElement_JSONArray) {
+			arr.Nodes = append(arr.Nodes, &api.RGANode{
+				PositionCreatedAt: converter.ToTimeTicket(time.InitialTicket),
+				PositionRemovedAt: converter.ToTimeTicket(pushedTicket(8)),
+			})
+		})
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("a dead position on a live element's slot", func(t *testing.T) {
+		// AddDeadPosition would overwrite nodeMapByCreatedAt[5], the slot the
+		// element created at 5 was added under, leaving it unaddressable.
+		pbOps := arrayPayload(t, []int64{5, 6}, func(arr *api.JSONElement_JSONArray) {
+			arr.Nodes = append(arr.Nodes, deadPosition(5, 8))
+		})
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("two dead positions sharing a slot", func(t *testing.T) {
+		pbOps := arrayPayload(t, []int64{5}, func(arr *api.JSONElement_JSONArray) {
+			arr.Nodes = append(arr.Nodes, deadPosition(8, 9), deadPosition(8, 10))
+		})
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("a moved element on another element's slot", func(t *testing.T) {
+		pbOps := arrayPayload(t, []int64{5, 6}, func(arr *api.JSONElement_JSONArray) {
+			moved := arr.GetNodes()[1]
+			moved.PositionCreatedAt = converter.ToTimeTicket(pushedTicket(5))
+			moved.PositionMovedAt = converter.ToTimeTicket(pushedTicket(8))
+		})
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps), converter.ErrInvalidElementTicket)
+	})
+}
+
+// TestValidatePushedArrayElementIdentityLeavesTheArray pins that an array
+// element's own createdAt is claimed in the payload scope the array sits in,
+// not only inside the array: an element of the array and a member outside it
+// cannot share one createdAt, whichever of the two is decoded first.
+func TestValidatePushedArrayElementIdentityLeavesTheArray(t *testing.T) {
+	// The object holds "arr" and "b". ElementRHT orders its nodes by key, so
+	// "arr" is decoded first and the array's own claims have to outlive it.
+	obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(2))
+	arr := crdt.NewArray(crdt.NewRGATreeList(), pushedTicket(3))
+	require.NoError(t, arr.Add(pushedPrimitive(t, 7)))
+	obj.Set("arr", arr)
+	obj.Set("b", pushedPrimitive(t, 7))
+
+	pbOps, err := converter.ToOperations([]operations.Operation{
+		operations.NewSet(pushedTicket(1), "k", obj, pushedTicket(20)),
+	})
+	require.NoError(t, err)
+
+	root := &api.JSONElement{}
+	require.NoError(t, proto.Unmarshal(pbOps[0].GetSet().GetValue().Value, root))
+	nodes := root.GetJsonObject().GetNodes()
+	require.Len(t, nodes, 2)
+
+	for _, order := range []string{"array first", "member first"} {
+		if order == "member first" {
+			nodes[0], nodes[1] = nodes[1], nodes[0]
+		}
+		if nodes[0].GetKey() != map[string]string{"array first": "arr", "member first": "b"}[order] {
+			nodes[0], nodes[1] = nodes[1], nodes[0]
+		}
+		pbOps[0].GetSet().GetValue().Value, err = proto.Marshal(root)
+		require.NoError(t, err)
+		assert.ErrorIs(t, converter.ValidatePushedOperations(pbOps),
+			converter.ErrInvalidElementTicket, order)
+	}
+}
+
+// TestValidatePushedChangeBound pins what a change's own ID bounds its
+// operations by. Without it the value rules compare two tickets the sender
+// picked, so a MaxLamport executedAt satisfies every one of them.
+func TestValidatePushedChangeBound(t *testing.T) {
+	otherActor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+	change := func(lamport int64, actor time.ActorID, ops ...operations.Operation) *api.Change {
+		pbOps, err := converter.ToOperations(ops)
+		require.NoError(t, err)
+		return &api.Change{
+			Id:         &api.ChangeID{Lamport: lamport, ActorId: actor[:]},
+			Operations: pbOps,
+		}
+	}
+
+	t.Run("a change a replica built", func(t *testing.T) {
+		assert.NoError(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewSet(pushedTicket(1), "k", pushedPrimitive(t, 9), pushedTicket(9)))))
+	})
+
+	t.Run("an executed_at ahead of the change", func(t *testing.T) {
+		far := time.NewTicket(time.MaxLamport, 0, pushedActor)
+		obj := crdt.NewObject(crdt.NewElementRHT(), far)
+		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewSet(pushedTicket(1), "k", obj, far))), converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("an executed_at of another actor", func(t *testing.T) {
+		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, otherActor,
+			operations.NewSet(pushedTicket(1), "k", pushedPrimitive(t, 9), pushedTicket(9)))),
+			converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("a payload ticket ahead of the change", func(t *testing.T) {
+		// A tombstone at MaxLamport is one no version vector ever passes, so
+		// it is charged to the document's size for good.
+		obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(5))
+		obj.SetRemovedAt(time.NewTicket(time.MaxLamport, 0, pushedActor))
+		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewSet(pushedTicket(1), "k", obj, pushedTicket(9)))),
+			converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("an operation carrying no element payload", func(t *testing.T) {
+		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewRemove(pushedTicket(1), pushedTicket(2),
+				time.NewTicket(time.MaxLamport, 0, pushedActor)))),
+			converter.ErrInvalidElementTicket)
+	})
+}
