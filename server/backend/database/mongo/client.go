@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -75,6 +76,14 @@ type Client struct {
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+
+	// clientLocks serializes, per client, a read or write of the client row
+	// with the clientCache update that follows it. Without it, requests of one
+	// client racing each other (a PushPull on one document and an attach of
+	// another) can land an older copy of the row in the cache after a newer
+	// one, and every later request of the client reads the stale copy: an
+	// attach that the database holds then fails with "document not attached".
+	clientLocks *locker.Locker
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -175,6 +184,7 @@ func Dial(conf *Config) (*Client, error) {
 		cacheManager:  cacheManager,
 		projectCache:  projectCache,
 		clientCache:   clientCache,
+		clientLocks:   locker.New(),
 		docCache:      docCache,
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
@@ -212,6 +222,27 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 	case types.CacheTypeProject:
 		if id := types.ID(key); id.Validate() == nil {
 			c.projectCache.Remove(id)
+		}
+	case types.CacheTypeClient:
+		// A client row is cached per node and only ever replaced by a write
+		// this node performed, so a deactivation or a detach another node
+		// wrote is invisible to the copy this node's gates read
+		// (EnsureActivated, EnsureDocumentAttached). Dropping the entry here
+		// is what makes those writes reach this node: the next read of the
+		// row misses and re-reads MongoDB.
+		//
+		// The drop takes the client's cache lock, which a read holds across
+		// its MongoDB FindOne and the Add that follows (see
+		// FindClientInfoByRefKey). Without it a read that fetched the row
+		// before the remote write landed could Add that pre-write copy right
+		// after this Remove, and since clientCache has no TTL, the dropped
+		// row would be back for good.
+		if refKey, err := types.ParseClientRefKey(key); err == nil {
+			unlock := c.lockClientCache(refKey)
+			c.clientCache.Remove(refKey)
+			unlock()
+		} else {
+			logging.DefaultLogger().Warnf("invalidate client cache %s: %v", key, err)
 		}
 	}
 }
@@ -1122,6 +1153,9 @@ func (c *Client) TryAttaching(
 	refKey types.ClientRefKey,
 	docID types.ID,
 ) (*database.ClientInfo, error) {
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	// client must be activated and document must not be attached
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx,
@@ -1200,6 +1234,9 @@ func (c *Client) DeactivateClient(
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
 
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx,
 		bson.M{
@@ -1237,6 +1274,18 @@ func (c *Client) DeactivateClient(
 	return info, nil
 }
 
+// lockClientCache locks the given client's entry of clientLocks and returns
+// its unlock function.
+func (c *Client) lockClientCache(refKey types.ClientRefKey) func() {
+	name := refKey.ClientID.String()
+	c.clientLocks.Lock(name)
+	return func() {
+		// Unlock fails only for a name that is not locked, which cannot
+		// happen here: this function locked it.
+		_ = c.clientLocks.Unlock(name)
+	}
+}
+
 // FindClientInfoByRefKey finds the client of the given refKey.
 func (c *Client) FindClientInfoByRefKey(
 	ctx context.Context,
@@ -1246,6 +1295,14 @@ func (c *Client) FindClientInfoByRefKey(
 	skip := len(skipCache) > 0 && skipCache[0]
 
 	if !skip {
+		if cached, ok := c.clientCache.Get(refKey); ok {
+			return cached.DeepCopy(), nil
+		}
+
+		// A miss reads the row and fills the cache under the client's lock,
+		// so the copy read here cannot overwrite one a write cached after it.
+		unlock := c.lockClientCache(refKey)
+		defer unlock()
 		if cached, ok := c.clientCache.Get(refKey); ok {
 			return cached.DeepCopy(), nil
 		}
@@ -1287,6 +1344,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			info.ID, docInfo.ID, database.ErrDocumentNeverAttached,
 		)
 	}
+
+	unlock := c.lockClientCache(clientKey)
+	defer unlock()
 
 	if existing, ok := c.clientCache.Get(clientKey); ok {
 		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
@@ -1382,14 +1442,16 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
+	// NOTE: The rows read here do not fill clientCache. The query runs outside
+	// the clients' cache locks, so a row read here may already be older than
+	// one a concurrent write cached. It used to be the only thing refreshing
+	// another node's attach on this one; that job now belongs to the
+	// invalidation the attach broadcasts (see yorkieServer.AttachDocument),
+	// which drops the stale entry instead of overwriting it with a row of
+	// unknown age.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
-	}
-
-	for _, info := range infos {
-		refKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
-		c.clientCache.Add(refKey, info.DeepCopy())
 	}
 
 	return infos, nil
