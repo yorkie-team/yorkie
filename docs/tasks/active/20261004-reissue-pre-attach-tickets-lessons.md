@@ -286,3 +286,29 @@
 - The server-side actor binding is real but belongs to the client
   identity model (`client_id` and `StableActorID` are not credentials):
   #2114, cross-linked with #2113.
+
+## Loop round 14 follow-up (panel)
+
+- The panel raised the same two findings a fifth time, now against the
+  re-scoped branch: the push path does not bind a pushed change's actor
+  to the authenticated client (`server/packs/pushpull.go`), and the
+  Watch `actor_id` check inherits the resulting bypass
+  (`server/rpc/yorkie_server.go`).
+- Nothing was changed, and this time the scope argument is mechanical
+  rather than a judgement call: `git diff origin/main...HEAD --
+  server/ api/types/` is empty. Both lines the findings quote are
+  byte-identical to main -- the pull dedup at
+  `origin/main:server/packs/pushpull.go:636` and the actor comparison
+  at `origin/main:server/rpc/yorkie_server.go:655`, comment included.
+  The guard the earlier rounds added, and whose comment round 8
+  rewrote, went back to main with the round-13 re-scope (da24ec0b).
+- Re-adding a push-side ownership check is the mechanism that
+  re-scope removed on purpose: it needs `StableActorID` to be
+  unforgeable, which needs per-client credentials at the protocol
+  level. The design doc already states the residual gap without
+  overclaiming -- "Out of Scope" and the risk row both name it and
+  point at #2114 (`docs/design/pre-attach-ticket-reissue.md:165`,
+  `:178`).
+- Rebuttals re-filed for both. Five rounds on the same pair of
+  findings is not a fixer problem; the identity model needs a
+  maintainer decision in #2114.
