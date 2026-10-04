@@ -229,10 +229,20 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 		// wrote is invisible to the copy this node's gates read
 		// (EnsureActivated, EnsureDocumentAttached). Dropping the entry here
 		// is what makes those writes reach this node: the next read of the
-		// row misses and re-reads MongoDB under the client's lock, so the
-		// drop can never put an older copy on top of a newer one.
+		// row misses and re-reads MongoDB.
+		//
+		// The drop takes the client's cache lock, which a read holds across
+		// its MongoDB FindOne and the Add that follows (see
+		// FindClientInfoByRefKey). Without it a read that fetched the row
+		// before the remote write landed could Add that pre-write copy right
+		// after this Remove, and since clientCache has no TTL, the dropped
+		// row would be back for good.
 		if refKey, err := types.ParseClientRefKey(key); err == nil {
+			unlock := c.lockClientCache(refKey)
 			c.clientCache.Remove(refKey)
+			unlock()
+		} else {
+			logging.DefaultLogger().Warnf("invalidate client cache %s: %v", key, err)
 		}
 	}
 }

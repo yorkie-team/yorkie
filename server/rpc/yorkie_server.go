@@ -1692,6 +1692,11 @@ func (s *yorkieServer) CreateRevision(
 	ctx context.Context,
 	req *connect.Request[api.CreateRevisionRequest],
 ) (*connect.Response[api.CreateRevisionResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
@@ -1702,10 +1707,22 @@ func (s *yorkieServer) CreateRevision(
 		ProjectID: project.ID,
 		DocID:     docID,
 	}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
 
+	// The response carries the snapshot this call builds, so it reads the
+	// document as much as it writes one: it is gated like its siblings, with
+	// the document's key as the attribute the webhook decides on.
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.CreateRevision,
+		Method:     types.CreateRevision,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.ReadWrite),
 	}); err != nil {
+		return nil, err
+	}
+
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1726,7 +1743,8 @@ func (s *yorkieServer) CreateRevision(
 }
 
 // confirmAttachedClient confirms against MongoDB, bypassing this node's client
-// cache, that the client is activated and holds the document attached.
+// cache, that the client is activated and holds the document attached, or is
+// in the middle of attaching it.
 //
 // The revision RPCs read and overwrite a whole document, and auth.VerifyAccess
 // is a no-op unless the project configures an auth webhook, so the client row
@@ -1735,6 +1753,11 @@ func (s *yorkieServer) CreateRevision(
 // node performed, so a detach or a deactivation another node wrote is
 // invisible to it. Unlike push/pull these calls are not per-sync, so the one
 // read they cost is worth paying.
+//
+// Attaching counts as holding the document, as it does on the detach and
+// remove paths: the row is written before the attach completes, and the
+// client that wrote it is the one asking here. Requiring Attached instead
+// would reject a client mid-attach, which this gate never meant to do.
 func confirmAttachedClient(
 	ctx context.Context,
 	be *backend.Backend,
@@ -1750,7 +1773,7 @@ func confirmAttachedClient(
 		return err
 	}
 
-	return clientInfo.EnsureDocumentAttached(docID)
+	return clientInfo.EnsureDocumentAttachedOrAttaching(docID)
 }
 
 // ListRevisions returns all revisions for the given document.

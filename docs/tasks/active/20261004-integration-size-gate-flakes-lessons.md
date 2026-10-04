@@ -68,3 +68,19 @@
   project auth webhook. `RestoreRevision` therefore overwrote a whole
   document for any activated client in the project. These are not per-sync
   calls, so they can afford to confirm the row in MongoDB.
+- The panel round after that found the gate was applied to three of four
+  revision RPCs: `CreateRevision` reads `client_id` off the wire but never
+  used it, and its response carries the snapshot it builds, so the one RPC
+  left ungated still handed a whole document to any caller in the project.
+  A gate added to siblings reads as covering the family; it only covers
+  the calls it is written into.
+- A drop that cannot put an older copy on top of a newer one still has to
+  take the lock the fill holds. The fill reads MongoDB and `Add`s under the
+  client's lock, so a `Remove` racing it lands between the read and the
+  `Add`, and the pre-write copy goes straight back in — with no TTL, for
+  good. Locking the drop orders it either before the read or after the
+  `Add`; both are correct.
+- Invalidation belongs where the write happens. The cluster-routed detach
+  handler wrote the client row and returned without broadcasting, leaving
+  it to its caller — so any other caller of that RPC, or a caller that
+  loses the response, left every peer's row stale.
