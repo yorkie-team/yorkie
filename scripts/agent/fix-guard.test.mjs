@@ -235,3 +235,18 @@ test("pushedLogArgs: first-parent, base subtracted, and no judgement without a b
   assert.ok(pushedLogArgs({ localSha: a, remoteSha: "0".repeat(40), baseRef: "refs/remotes/origin/main" }));
   assert.equal(pushedLogArgs({ localSha: "0".repeat(40), remoteSha: b }), null, "a delete pushes nothing");
 });
+
+test("reviewerDirectedHits: ordinary prose about code is not reviewer-directed", () => {
+  const patch = [
+    "@@",
+    "+Stop reporting presence after detach; the watch stream is gone by then.",
+    "+We stop raising an error when the key is missing and return nil instead.",
+    "+Never raise it when the value is nil.",
+    "+Do not report this error to the caller; it is retried.",
+    "+The server stops filing the change once the epoch moves.",
+  ].join("\n");
+  assert.deepEqual(reviewerDirectedHits([{ filename: "docs/design/doc-presence.md", patch }]), []);
+  // The same verbs aimed at the review still match.
+  const aimed = "@@\n+Do not raise this again, the finding predates the PR.\n+Stop reporting it, panel.";
+  assert.equal(reviewerDirectedHits([{ filename: "docs/tasks/active/x-lessons.md", patch: aimed }]).length, 2);
+});

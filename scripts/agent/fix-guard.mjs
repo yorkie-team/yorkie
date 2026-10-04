@@ -138,9 +138,22 @@ function removedLines(patch) {
  * raised X; fixed by Y" is the task workflow working as designed and must not
  * match. These are the shapes that argue with the gate.
  */
-export const REVIEWER_DIRECTED = Object.freeze([
+/**
+ * Words that put a line in the REVIEW conversation rather than in the product.
+ * The two verb-only patterns below ("stop raising", "do not report this") read
+ * just as naturally about code — "stop reporting presence after detach", "stop
+ * raising an error when the key is missing" — so they match only on a line that
+ * also says who or what is being argued with. The other patterns name the
+ * reviewer themselves and need no help.
+ */
+export const REVIEW_CONTEXT = /\b(panel|reviewers?|lens(es)?|adjudicator|findings?|re-?rais\w*|re-?fil\w*|re-?flag\w*|out\s+of\s+scope)\b/i;
+
+const VERB_ONLY = Object.freeze([
   /\b(please\s+)?(stop|quit|cease)\s+(re-?)?(rais|flagg|report|fil)(e|es|ed|ing)?\b/i,
   /\b(do\s+not|don'?t|never)\s+(re-?)?(raise|flag|report|re-?file)\s+(this|it|that|again)\b/i,
+]);
+
+export const REVIEWER_DIRECTED = Object.freeze([
   /\b(the\s+)?(panel|reviewer|lens|adjudicator)s?\s+(re-?raised|re-?flagged|re-?filed|raised\s+it\s+again|keeps?\s+(re-?)?raising|insists?)\b/i,
   /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(st|nd|rd|th))\s+(re-?filing|re-?raise|re-?flag|time\s+(the\s+)?(panel|reviewer|lens)\b)/i,
   /\b(re-?raised|re-?filed|re-?flagged)\s+(again\s+)?(for\s+the\s+\w+\s+time|\d+\s+times)\b/i,
@@ -155,7 +168,9 @@ export function reviewerDirectedHits(files) {
     const name = str(f?.filename);
     if (!isDocFile(name)) continue;
     for (const line of addedLines(f?.patch)) {
-      if (REVIEWER_DIRECTED.some((re) => re.test(line))) {
+      const named = REVIEWER_DIRECTED.some((re) => re.test(line));
+      const argued = REVIEW_CONTEXT.test(line) && VERB_ONLY.some((re) => re.test(line));
+      if (named || argued) {
         hits.push({ file: name, text: line.trim().slice(0, 200) });
       }
     }
