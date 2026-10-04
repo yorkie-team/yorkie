@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -43,9 +44,10 @@ import (
 
 // TestPushedPayloadValidation pins the push boundary at the RPC layer: a
 // change whose element payload no replica can produce is refused with
-// InvalidArgument by every RPC that takes a client's changes, nothing of it
-// reaches the document, and the client can still push an honest change under
-// the same client seq.
+// InvalidArgument by Attach and PushPull, and the client can still push an
+// honest change under the same client seq. Detach and Remove go through
+// without the refused changes, so a client holding one can still leave.
+// Nothing of a refused change reaches the document.
 func TestPushedPayloadValidation(t *testing.T) {
 	ctx := context.Background()
 	clients := activeClients(t, 1)
@@ -73,9 +75,9 @@ func TestPushedPayloadValidation(t *testing.T) {
 	// newPack builds a pack of one change at client seq 1 that sets "k" to an
 	// object; crafted gives the object's member a removedAt that does not
 	// follow its own createdAt, which no replica emits.
-	newPack := func(t *testing.T, crafted bool) *api.ChangePack {
+	newPack := func(t *testing.T, crafted bool, seq uint32, actorID time.ActorID) *api.ChangePack {
 		t.Helper()
-		lamport := int64(10)
+		lamport := int64(10 * seq)
 		ticket := time.NewTicket(lamport, 1, actorID)
 		obj := crdt.NewObject(crdt.NewElementRHT(), ticket)
 		member, err := crdt.NewPrimitive("v", time.NewTicket(lamport, 2, actorID))
@@ -87,13 +89,13 @@ func TestPushedPayloadValidation(t *testing.T) {
 		vv := time.NewVersionVector()
 		vv.Set(actorID, lamport)
 		c := change.New(
-			change.NewID(1, 0, lamport, actorID, vv),
+			change.NewID(seq, 0, lamport, actorID, vv),
 			"",
-			[]operations.Operation{operations.NewSet(rootCreatedAt, "k", obj, ticket)},
+			[]operations.Operation{operations.NewSet(rootCreatedAt, fmt.Sprintf("k%d", seq), obj, ticket)},
 			nil,
 		)
 		pbPack, err := converter.ToChangePack(change.NewPack(
-			docKey, change.NewCheckpoint(0, 1), []*change.Change{c}, nil, nil,
+			docKey, change.NewCheckpoint(0, seq), []*change.Change{c}, nil, nil,
 		))
 		require.NoError(t, err)
 		return pbPack
@@ -102,7 +104,7 @@ func TestPushedPayloadValidation(t *testing.T) {
 	// 01. Attach carrying the crafted change is refused.
 	attachReq := connect.NewRequest(&api.AttachDocumentRequest{
 		ClientId:   activated.Msg.ClientId,
-		ChangePack: newPack(t, true),
+		ChangePack: newPack(t, true, 1, actorID),
 	})
 	withKey(attachReq, docKey.String())
 	_, err = raw.AttachDocument(ctx, attachReq)
@@ -120,24 +122,15 @@ func TestPushedPayloadValidation(t *testing.T) {
 	attached, err := raw.AttachDocument(ctx, attachReq)
 	require.NoError(t, err)
 
-	// 03. PushPull and Detach carrying the crafted change are refused.
+	// 03. PushPull carrying the crafted change is refused.
 	pushReq := connect.NewRequest(&api.PushPullChangesRequest{
 		ClientId:   activated.Msg.ClientId,
 		DocumentId: attached.Msg.DocumentId,
-		ChangePack: newPack(t, true),
+		ChangePack: newPack(t, true, 1, actorID),
 	})
 	withKey(pushReq, docKey.String())
 	_, err = raw.PushPullChanges(ctx, pushReq)
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "push-pull: %v", err)
-
-	detachReq := connect.NewRequest(&api.DetachDocumentRequest{
-		ClientId:   activated.Msg.ClientId,
-		DocumentId: attached.Msg.DocumentId,
-		ChangePack: newPack(t, true),
-	})
-	withKey(detachReq, docKey.String())
-	_, err = raw.DetachDocument(ctx, detachReq)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "detach: %v", err)
 
 	// 04. Nothing of it reached the document.
 	require.NoError(t, c1.Sync(ctx))
@@ -148,16 +141,63 @@ func TestPushedPayloadValidation(t *testing.T) {
 	pushReq = connect.NewRequest(&api.PushPullChangesRequest{
 		ClientId:   activated.Msg.ClientId,
 		DocumentId: attached.Msg.DocumentId,
-		ChangePack: newPack(t, false),
+		ChangePack: newPack(t, false, 1, actorID),
 	})
 	withKey(pushReq, docKey.String())
 	_, err = raw.PushPullChanges(ctx, pushReq)
 	require.NoError(t, err)
 
 	require.NoError(t, c1.Sync(ctx))
-	assert.Equal(t, `{"k":{"m":"v"}}`, d1.Marshal())
+	assert.Equal(t, `{"k1":{"m":"v"}}`, d1.Marshal())
 
-	// 06. A document set by two clients before attach -- the shape
+	// 06. Detach carrying a crafted change goes through without it.
+	detachReq := connect.NewRequest(&api.DetachDocumentRequest{
+		ClientId:   activated.Msg.ClientId,
+		DocumentId: attached.Msg.DocumentId,
+		ChangePack: newPack(t, true, 2, actorID),
+	})
+	withKey(detachReq, docKey.String())
+	_, err = raw.DetachDocument(ctx, detachReq)
+	require.NoError(t, err, "a refused change must not keep a client from detaching")
+	pushReq = connect.NewRequest(&api.PushPullChangesRequest{
+		ClientId:   activated.Msg.ClientId,
+		DocumentId: attached.Msg.DocumentId,
+		ChangePack: newPack(t, false, 2, actorID),
+	})
+	withKey(pushReq, docKey.String())
+	_, err = raw.PushPullChanges(ctx, pushReq)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "the client is detached: %v", err)
+	require.NoError(t, c1.Sync(ctx))
+	assert.Equal(t, `{"k1":{"m":"v"}}`, d1.Marshal())
+
+	// 07. Remove carrying a crafted change goes through without it.
+	activateReq = connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name() + "-remover"})
+	withKey(activateReq, t.Name()+"-remover")
+	remover, err := raw.ActivateClient(ctx, activateReq)
+	require.NoError(t, err)
+	removerActor, err := time.ActorIDFromHex(remover.Msg.ClientId)
+	require.NoError(t, err)
+	attachReq = connect.NewRequest(&api.AttachDocumentRequest{
+		ClientId:   remover.Msg.ClientId,
+		ChangePack: &api.ChangePack{DocumentKey: docKey.String(), Checkpoint: &api.Checkpoint{}},
+	})
+	withKey(attachReq, docKey.String())
+	removerAttached, err := raw.AttachDocument(ctx, attachReq)
+	require.NoError(t, err)
+	removePack := newPack(t, true, 1, removerActor)
+	removePack.IsRemoved = true
+	removeReq := connect.NewRequest(&api.RemoveDocumentRequest{
+		ClientId:   remover.Msg.ClientId,
+		DocumentId: removerAttached.Msg.DocumentId,
+		ChangePack: removePack,
+	})
+	withKey(removeReq, docKey.String())
+	_, err = raw.RemoveDocument(ctx, removeReq)
+	require.NoError(t, err, "a refused change must not keep a client from removing")
+	require.NoError(t, c1.Sync(ctx))
+	assert.Equal(t, document.StatusRemoved, d1.Status())
+
+	// 08. A document set by two clients before attach -- the shape
 	// BenchmarkRPC's "attach large document" drives -- attaches through the
 	// boundary from both sides.
 	pre1, pre2 := document.New(helper.TestKey(t)+"-pre"), document.New(helper.TestKey(t)+"-pre")

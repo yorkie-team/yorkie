@@ -452,3 +452,17 @@ func TestValidatePushedTreeValue(t *testing.T) {
 		assert.NoError(t, validate(t, operations.NewSet(pushedTicket(1), "k", newTree(5), pushedTicket(5))))
 	})
 }
+
+// TestValidatePushedIncreaseValue pins that an Increase carries a primitive
+// delta and nothing else.
+func TestValidatePushedIncreaseValue(t *testing.T) {
+	counterCreatedAt := pushedTicket(1)
+
+	delta := pushedPrimitive(t, 5)
+	assert.NoError(t, validate(t, operations.NewIncrease(counterCreatedAt, delta, pushedTicket(5))))
+
+	obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(5))
+	obj.Set("a", pushedPrimitive(t, 5))
+	assert.ErrorIs(t, validate(t, operations.NewIncrease(counterCreatedAt, obj, pushedTicket(5))),
+		converter.ErrInvalidElementTicket, "an object delta, carrying an identity collision besides")
+}

@@ -42,7 +42,8 @@ no replica could have produced:
 - Changing what any replica does when it applies an operation. The CRDT side
   of the same family of bugs is
   [#2100](https://github.com/yorkie-team/yorkie/pull/2100).
-- A repair path for a client that already holds a rejected change.
+- Pushing a rejected change later. A client holding one can still detach or
+  remove the document (see Design), but the change itself is never accepted.
 
 ## Design
 
@@ -50,7 +51,18 @@ no replica could have produced:
 change of the pack, then decodes it with `FromChangePack`. The four RPCs that
 take a client's changes use it: `AttachDocument`, `DetachDocument`,
 `PushPullChanges` and `RemoveDocument`. They log a refusal with the client and
-document before returning `InvalidArgument`.
+document. Attach and PushPull then return `InvalidArgument`.
+
+Detach and Remove do not fail on a refused payload. Otherwise a client holding
+a rejected change could neither push it nor leave the document. They decode the
+pack leniently, authorize it as sent (changes included, so the leave is not
+judged as a read), and then drop its changes, so nothing of them reaches the
+document. A detach or remove over the size limit drops its changes the same way
+(`packs.PushPull`).
+
+An Increase carries a delta, not a document element. Its value must be a
+primitive: both SDKs send a number, and `Increase.Execute` drops anything else
+on every replica.
 
 Every other reader -- a client pulling, the server reading a stored change or a
 snapshot -- keeps the lenient decoders. Those bytes were already accepted, and

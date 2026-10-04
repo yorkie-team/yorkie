@@ -86,7 +86,10 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 //     removal is a shape no replica emits, and it reaches the same
 //     RegisterElement -> gcElementPairMap sink the Add rule guards.
 //
-// Every object member nested in that value:
+// An Increase carries a delta, not an element of the document, so only its type
+// is judged: it must be a primitive (validateIncreaseValue).
+//
+// Every object member nested in the value of a Set, Add or ArraySet:
 //
 //   - removedAt must follow createdAt, as above.
 //   - movedAt must not precede createdAt. ElementRHT anchors both the LWW
@@ -174,8 +177,31 @@ func validatePushedOperation(pbOp *api.Operation) error {
 	case *api.Operation_ArraySet_:
 		return validateValue("array_set", decoded.ArraySet.GetValue(), decoded.ArraySet.GetExecutedAt(),
 			removedAtPrecedesCreatedAt)
+	case *api.Operation_Increase_:
+		return validateIncreaseValue(decoded.Increase.GetValue())
 	default:
 		return nil
+	}
+}
+
+// validateIncreaseValue refuses an Increase whose delta is not a primitive.
+// Both SDKs build the delta as a number primitive, and Increase.Execute drops
+// anything else on every replica, so a container, text, counter or tree here
+// is a payload no replica sends -- and one fromElement would otherwise decode
+// whole, with none of the identity rules above applied to it.
+func validateIncreaseValue(pbValue *api.JSONElementSimple) error {
+	switch pbValue.GetType() {
+	case api.ValueType_VALUE_TYPE_NULL,
+		api.ValueType_VALUE_TYPE_BOOLEAN,
+		api.ValueType_VALUE_TYPE_INTEGER,
+		api.ValueType_VALUE_TYPE_LONG,
+		api.ValueType_VALUE_TYPE_DOUBLE,
+		api.ValueType_VALUE_TYPE_STRING,
+		api.ValueType_VALUE_TYPE_BYTES,
+		api.ValueType_VALUE_TYPE_DATE:
+		return nil
+	default:
+		return fmt.Errorf("increase: %s delta: %w", pbValue.GetType(), ErrInvalidElementTicket)
 	}
 }
 

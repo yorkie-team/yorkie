@@ -174,3 +174,22 @@ collision a legitimate history produces.
       tombstonable, which `a live loser an older replica left behind` pins.
       Recorded in the design doc.
 
+## Round 4 (panel, 700859c6) and CI on 2eae0ba5
+
+- [x] Kept the fixer's 2eae0ba5: an array element's own createdAt is checked
+      against its siblings' descendants in both orders, and an ArraySet
+      value's removedAt must precede its createdAt (the only removed shape a
+      replica sends is the re-identified JS reverse copy).
+- [x] CI `build` failure on 2eae0ba5 (`TestDocument/document_tombstone_test`,
+      "document not attached"). Not the validator: the run logged no
+      refusal outside `TestPushedPayloadValidation`, the branch passes the
+      full integration package locally, before and after merging `main`, and
+      the same subtest fails on `main` (13bb279d) under `-count=5`. Merged
+      `main` so CI and local runs test the same tree.
+- [x] Detach/Remove refusing a pack left a wedged client unable to leave
+      (suggestion; also hackerwins' "rejected document can't be recovered").
+      They now drop a refused pack's changes after authorizing the pack as
+      sent, like the size gate does.
+- [x] Increase values were not validated (suggestion): the delta must be a
+      primitive.
+
