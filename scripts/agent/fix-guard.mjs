@@ -303,12 +303,22 @@ export const COMPARE_FILE_CAP = 300;
  * dispatch. Null when it cannot be established — no dispatch yet and no
  * fallback head, an API failure, or a capped list.
  */
+/**
+ * The commit the scope is measured to: the first fix dispatch's head when the
+ * ledger has one, else the head this round started from. No dispatch on record
+ * means this is the first round (the head IS the original diff), or a fixer
+ * that keeps no ledger — the CI-fix arm and `@claude fix` — where the round's
+ * starting head is the narrowest honest answer. Without the fallback those two
+ * fixers' report checks ran with the scope switched off.
+ */
+export function scopeAnchor(comments, fallbackHead = "") {
+  return frozenShaFrom(comments) || (/^[0-9a-f]{40}$/i.test(str(fallbackHead)) ? str(fallbackHead) : "");
+}
+
 export function readOriginalFiles(pr, { base = "main", fallbackHead = "" } = {}) {
   try {
     const comments = ghJson(["api", "--paginate", `repos/{owner}/{repo}/issues/${pr}/comments?per_page=100`]);
-    // No dispatch on record means THIS is the first round, and the head the
-    // fixer starts from IS the original diff.
-    const frozen = frozenShaFrom(comments) || (/^[0-9a-f]{40}$/i.test(fallbackHead) ? fallbackHead : "");
+    const frozen = scopeAnchor(comments, fallbackHead);
     if (!frozen) return null;
     const files = ghJson(["api", `repos/{owner}/{repo}/compare/${encodeURIComponent(base)}...${frozen}?per_page=100`, "--jq", "[.files[].filename]"]);
     if (!Array.isArray(files) || files.length === 0 || files.length >= COMPARE_FILE_CAP) return null;
@@ -459,7 +469,9 @@ function cmdCheck(argv) {
     out("blocking", "false");
     return;
   }
-  const original = readOriginalFiles(pr, { base: flag(argv, "base") || "main" });
+  // `before` is validated above; it is the round's starting head, so a PR with
+  // no dispatch ledger still gets its scope checked.
+  const original = readOriginalFiles(pr, { base: flag(argv, "base") || "main", fallbackHead: before });
   const result = lintRound({ files, original, prBody });
   out("blocking", String(result.blocking));
   const anything = result.blocking || result.weakened.length || result.crdt.length;
