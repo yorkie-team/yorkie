@@ -425,6 +425,16 @@ advancing past genuine concurrent siblings from other actors.
 
 ### §7.8 Split: Same-Boundary Ordering
 
+> **Cross-SDK rule — change it in both SDKs at once.** This section is a
+> replicated convergence rule, applied by every replica and by the
+> server when it applies changes and builds snapshots. A peer running a
+> different version of it places the same split differently, and a
+> snapshot built by either flips the other (measured on #2030 /
+> js#1375). The `holdsKnownChild` walk below is the same rule as
+> yorkie-js-sdk#1435 — count every descendant the editor's version
+> vector covers, tombstones included, no merge skip — and neither side
+> may merge without the other.
+
 `SplitElement` places its product directly after the node it splits.
 When a concurrent split of the same node at the same boundary has
 already been applied, the second product lands in front of the first,
@@ -467,6 +477,104 @@ tombstoned sibling is not followed either: splitting it would make the
 product born tombstoned here but live on a replica that applied this
 split first. VV-dependent, like §7.5; without a version vector nothing
 is unknown and the split is placed as before.
+
+The walk ends at the first sibling holding a child the editor knew
+(`holdsKnownChild`, descending into element children). The chain is the
+whole split lineage of one node, not one boundary: when the other actor
+split its right piece *again* before seeing this split, that follow-up
+product is in the chain too, past the node holding the right half. The
+same-boundary products form a run of empty nodes ending at the one with
+the right half (the rule above puts every newer product in front of it),
+so anything after that node was split off *it* at a later boundary,
+which the replica applying this split first resolves by position, after
+the right half. Walking on would place the product after that later
+boundary here and before it there (yorkie-js-sdk#1433). The marker is a
+child within the editor's version vector, tombstones included: a known
+child was in the node when the concurrent split moved it; an unknown one
+may have been typed into an empty product since, and a split after that
+text is still a same-boundary split to this editor, so the walk goes on.
+It descends because an element split product is minted with a fresh
+ticket while a text split keeps `createdAt`: at a multi-level split the
+outer right-half product holds one unknown `<span>` and the known text
+sits below it. The descent is iterative and shares one visited set with
+the whole chain walk: a subtree already shown to hold nothing known is
+never re-entered (a hit ends the walk), so the walk costs one visit per
+reachable node rather than one subtree per chain step, and a cyclic
+parent/child graph terminates it the way `insNextWalker` terminates a
+cyclic chain. The shared set bounds the *descent* only. The node the
+chain walk asks about is always scanned afresh, even when an earlier
+step descended through it, because what that step established —
+"nothing known below this subtree" — is not the question asked of a node
+reached as a chain sibling.
+
+A child a merge moved in counts like any other child. §6.1/§6.3
+relocate the right node's children into the left one keeping their
+original `createdAt`, so a merge the editor had not seen can give an
+otherwise-empty product children the editor knew, and whether it has
+done so yet differs per replica while the merge is in flight. Skipping
+merge-moved children does not fix that. It was tried in two forms: as a
+bare `MergedFrom` presence test, which blinds the marker for good after
+any paragraph join because `MergedFrom` is never cleared on live
+content, and scoped to merges outside the editor's version vector via
+`MergedAt`. The scoped form reads a ticket that is stamped on a child's
+first move only (Fix 20), copied onto split products, rebuilt from a
+mutable `removedAt` for older snapshots, and left unvalidated on element
+payloads. A GC-free two- and three-replica fuzz (below) shows both forms
+diverge on more scripts than they fix (9–62 new divergent seeds per
+20 000 against 1–14 fixed), and yorkie-js-sdk#1435 has no skip. Merges
+in flight therefore remain an open input to the marker, in both SDKs.
+
+Counting tombstones keeps the answer the same whether or not a replica
+has applied a concurrent removal yet. GC unlinks tombstones, though, and
+a replica that collected one reads false where another reads true. How
+much that matters depends on what the editor knew.
+
+- *A removal the editor had not seen.* Such a tombstone is not
+  collected on any replica before the split is applied there. A replica
+  collects only with the min version vector of a pull reply, after
+  applying every change in that reply (`InternalDocument.ApplyChangePack`;
+  the server's snapshot path also applies before it collects). The
+  server records a client's vector only after storing the changes pushed
+  with it (`packs.PushPull` runs `pushPack` before `pullPack`'s
+  `UpdateMinVersionVector`, and a detaching client pushes before its
+  vector is dropped). So once the min covers the removal, the editor has
+  already pushed this split, and every reply carrying that min carries
+  the split too. This is the contract in
+  [garbage-collection.md](garbage-collection.md). yorkie#2110 describes
+  a race in how `PushPull` computes the min that can break it; the race
+  affects every tombstone-anchored operation, not only this rule.
+- *A removal the editor had seen.* **Known GC sensitivity.** Such a
+  tombstone can be collected before the split arrives, and the
+  collecting replica may then place the split differently from one that
+  still holds it. `TestTreeSameBoundarySplitUnderServerGC` and
+  `TestGarbageCollectionSameBoundarySplit` (through the real server)
+  pin one such schedule and assert today's outcome.
+
+The second case is in the same class as the other tombstone readers in
+the split rules. §7.4's re-parenting gates on a `Children(true)` count,
+the §7.5 advance stops at a node with any child, and this section's own
+entry gate compares the split offset against
+`len(parent.Index.Children(true))`. All three predate this rule and are
+just as exposed: `main` diverges with GC too. A fuzz that drives the
+server's ordering in process (three editing replicas and an observer;
+each sync pushes, records the pushed vector, takes the min over all
+recorded vectors, pulls everything, then collects), with 20 000 seeds
+in each of five mixes and every script replayed with and without GC,
+counts:
+
+| | holdsKnownChild answer changed by GC | diverges only with GC |
+|---|---|---|
+| `main` | — | 108 |
+| this rule (shipped) | 228 | 150 |
+| this rule, with an ancestor GC barrier (not shipped) | 67 | 74 |
+
+The barrier kept a tombstone while any ancestor's `createdAt` was
+outside the min. It was taken out because node IDs are client-supplied,
+so one client could pin tombstones forever. Skipping tombstones whose
+removal the editor knew is purge-invariant but diverges without GC
+(21–172 more seeds per 20 000). Making the split rules independent of
+GC needs a marker that does not live in tombstones, designed once for
+Go and yorkie-js-sdk. That work is tracked in yorkie#2099.
 
 Every `InsNextID` walk runs through `insNextWalker`, which refuses to
 visit a node twice — the §7.5 advance and the §7.8 retarget, `Edit`'s

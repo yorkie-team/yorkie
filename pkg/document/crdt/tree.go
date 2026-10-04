@@ -2983,13 +2983,19 @@ type advanceOpts struct {
 // and — until DropSplitLinks strips it — operation contents), so a chain that
 // loops back on itself would spin the applying goroutine forever while it
 // holds the document lock. Every chain walk runs through one of these.
-type insNextWalker struct {
+type insNextWalker = nodeSet
+
+// nodeSet records the nodes a walk has already passed through, so a walk over
+// pointers a peer controls stays bounded by the number of distinct nodes it
+// can reach. Both the InsNextID chain walks (see insNextWalker) and the
+// parent/child descent in holdsKnownChild use one.
+type nodeSet struct {
 	seen map[*TreeNode]struct{}
 }
 
 // visit records node and reports whether this walk had not already passed
-// through it. A false result means the chain is cyclic; stop following it.
-func (w *insNextWalker) visit(node *TreeNode) bool {
+// through it. A false result means the walk has looped; stop following it.
+func (w *nodeSet) visit(node *TreeNode) bool {
 	if w.seen == nil {
 		w.seen = make(map[*TreeNode]struct{}, 4)
 	}
@@ -3117,6 +3123,18 @@ func (t *Tree) emptyRunReachesActor(
 // ticket and split the last of them at its start. The right half lives in
 // that sibling on this replica, so it moves into our product exactly as it
 // would have moved out of parent on a replica that applied us first.
+//
+// The walk ends at the first sibling that holds a child the editor knew. The
+// same-boundary products sit in the chain as a run of empty nodes that ends
+// at the one holding the right half (yorkie#2030 orders every newer product
+// in front of it), so a sibling further down the chain was split off *that*
+// node at an offset past its children -- a different, later boundary that
+// the replica applying us first resolves by position, after the right half.
+// Walking on to it would put our product after that later boundary here and
+// before it there (yorkie-js-sdk#1433). A child the editor knew was in parent
+// when the concurrent split moved it, so it marks the right half; a child it
+// did not know may have been typed into an empty product afterwards, and a
+// split after that text is still a same-boundary split to us.
 func (t *Tree) orderSameBoundarySplit(
 	parent *TreeNode,
 	offset int,
@@ -3132,6 +3150,12 @@ func (t *Tree) orderSameBoundarySplit(
 	target := parent
 	var walker insNextWalker
 	walker.visit(target)
+	// One descent budget for the whole chain walk, not one per step: a node
+	// already descended into held nothing known (a hit returns immediately and
+	// ends the walk), so re-descending it can only repeat work. Sharing it
+	// bounds the walk at one visit per reachable node instead of one subtree
+	// per chain step. See holdsKnownChild.
+	var descended nodeSet
 	for target.InsNextID != nil {
 		next := t.findFloorNode(target.InsNextID)
 		if next == nil || next.IsText() || next.Index.Parent == nil {
@@ -3173,12 +3197,112 @@ func (t *Tree) orderSameBoundarySplit(
 		}
 
 		target = next
+
+		// next holds the right half: whatever follows it in the chain was
+		// split off at a boundary to the right of ours. Tombstones count --
+		// SplitElement partitions Children(true), so a child removed in the
+		// meantime still marks where that later boundary was, and counting it
+		// keeps the answer the same whether this replica has applied that
+		// removal yet or not -- and so do deeper descendants, which is where a
+		// multi-level split puts it. See holdsKnownChild for what GC does to
+		// that answer.
+		if t.holdsKnownChild(next, versionVector, &descended) {
+			break
+		}
 	}
 
 	if target == parent {
 		return parent, offset
 	}
 	return target, 0
+}
+
+// holdsKnownChild reports whether any descendant of node, tombstones
+// included, was created within versionVector -- content the editor had seen,
+// as opposed to content a peer inserted concurrently.
+//
+// It descends because a multi-level split hides the marker one level down. A
+// text split keeps the original createdAt, so at a flat <p>text</p> the right
+// half's text child is known by itself; but an element split product is
+// minted with a fresh ticket, so the outer right-half product of a
+// <p><span>..</span></p> split has a single unknown <span> child, and only
+// below it sits the text the editor knew. A node with no known content
+// anywhere below it is an empty same-boundary product, or one a peer has
+// typed into since.
+//
+// Tombstones count, so GC can change the answer: Purge unlinks a node, and a
+// replica that collected one reads false where a replica that did not reads
+// true. For a removal the editor had not seen, that cannot happen. A replica
+// collects only with a pull reply's min version vector, after applying the
+// reply (InternalDocument.ApplyChangePack), and the server records a client's
+// vector only after storing the changes pushed with it (packs.PushPull), so a
+// min that covers the removal arrives with this split. (yorkie#2110 is a race
+// in that ordering, and it affects every tombstone-anchored operation, not
+// only this one.) A removal the editor had seen can be collected before the
+// split arrives, and the collecting replica may then place the split
+// differently. That is a known GC sensitivity in the same class as §7.4's
+// re-parenting, the §7.5 advance and the §7.8 entry gate, which read
+// tombstones on main as well. It is tracked across both SDKs as yorkie#2099;
+// see §7.8 in docs/design/concurrent-merge-split.md.
+//
+// A child relocated by a merge keeps its createdAt and counts like any other.
+// Skipping merge-moved children was tried in both forms (MergedFrom presence,
+// and MergedAt scoped to the editor's vector). Both diverged on more scripts
+// than they fixed, and yorkie-js-sdk#1435 does not skip them either.
+//
+// The descent keeps its own stack instead of recursing, and takes the caller's
+// node set so one chain walk visits each node at most once (see
+// orderSameBoundarySplit) however the parent/child pointers are shaped.
+func (t *Tree) holdsKnownChild(
+	node *TreeNode,
+	versionVector time.VersionVector,
+	descended *nodeSet,
+) bool {
+	// A nil node has nothing below it. The §7.8 walk never passes one (it
+	// breaks on a nil findFloorNode result), but the helper is cheap to keep
+	// total rather than leaving the next caller to discover the precondition.
+	if node == nil {
+		return false
+	}
+
+	// An empty vector reads as "knows everything" (time.TicketKnown), which
+	// would make every child a marker. The §7.8 entry gate returns before that
+	// can reach here; keep the helper honest on its own terms anyway.
+	if len(versionVector) == 0 {
+		return false
+	}
+
+	stack := []*TreeNode{node}
+	entry := true
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		// Children are physical pointers index.MoveChild will relocate without
+		// an ancestor check, so the descent cannot assume it is acyclic.
+		//
+		// The entry node is scanned even when an earlier chain step already
+		// descended through it. The shared set bounds the descent; it must
+		// never answer a chain step out of the cache, because what that step
+		// proved was "nothing known below this subtree", which is not the
+		// question asked of a node reached as a chain sibling. Only the deeper
+		// descent, which is asking that same question again, is cached.
+		if !descended.visit(current) && !entry {
+			continue
+		}
+		entry = false
+
+		for _, child := range current.Children(true) {
+			if time.TicketKnown(versionVector, child.id.CreatedAt) {
+				return true
+			}
+			if !child.IsText() {
+				stack = append(stack, child)
+			}
+		}
+	}
+
+	return false
 }
 
 // sharesSplitFamilyParent reports whether next sits under node's parent, or

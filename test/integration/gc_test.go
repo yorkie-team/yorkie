@@ -21,12 +21,14 @@ package integration
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -1642,4 +1644,113 @@ func TestGarbageCollectionBarrierDrainsWithinOneRound(t *testing.T) {
 	}
 	assert.Equal(t, d1.Marshal(), d2.Marshal())
 	assert.Equal(t, `{"text":[{"val":"a"},{"val":"c"},{"val":"1"}]}`, d1.Marshal())
+}
+
+// TestGarbageCollectionSameBoundarySplit pins a known limitation (yorkie#2099)
+// through the real server: a removal the incoming split's editor had seen is
+// covered by the min version vector before that split reaches a collecting
+// replica. The removed character sits in a concurrent split's product there,
+// and once it is collected, §7.8's marker reads the right half as gone, so
+// that replica places the split differently. The visible document still
+// matches. When #2099 is fixed, this should assert full convergence.
+func TestGarbageCollectionSameBoundarySplit(t *testing.T) {
+	clients := activeClients(t, 4)
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	docs := make([]*document.Document, len(clients))
+	for i, c := range clients {
+		docs[i] = document.New(helper.TestKey(t))
+		assert.NoError(t, c.Attach(ctx, docs[i]))
+	}
+	sync := func(i int) { assert.NoError(t, clients[i].Sync(ctx)) }
+	edit := func(i, from, to, splitLevel int, content *json.TreeNode) {
+		assert.NoError(t, docs[i].Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(from, to, content, splitLevel)
+			return nil
+		}))
+	}
+
+	assert.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{
+			Type:     "doc",
+			Children: []json.TreeNode{{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}}},
+		})
+		return nil
+	}))
+	for i := range clients {
+		sync(0)
+		sync(i)
+	}
+
+	// d1 removes "d".
+	edit(0, 4, 5, 0, nil)
+	sync(0)
+
+	// d2, not having seen the removal, types a few characters (so its splits
+	// carry tickets newer than d1's next one), splits "...abc|d", and splits
+	// again after its "d".
+	const typed = 5
+	for range typed {
+		edit(1, 1, 1, 0, &json.TreeNode{Type: "text", Value: "x"})
+	}
+	edit(1, typed+4, typed+4, 1, nil)
+	edit(1, typed+7, typed+7, 1, nil)
+	sync(1)
+	sync(1)
+	sync(2)
+	sync(3)
+	sync(3)
+
+	// The removed "d" has reached d3 as a tombstone inside d2's product, and
+	// nothing has collected it yet. Asserting this before the collecting sync
+	// keeps the GarbageLen check below from passing vacuously: zero garbage
+	// after a sync means nothing if no garbage ever arrived, and the setup
+	// above (which replica removes what, and in which order the syncs run) is
+	// exactly the kind of thing a later edit can silently break.
+	held := docs[2].GarbageLen()
+	assert.NotZero(t, held, "the removed node must reach d3 as a tombstone")
+
+	// Every client the server tracks has now reported a vector covering the
+	// removal, so d3 pulls a min that covers it and collects the removed "d"
+	// from inside d2's product.
+	sync(2)
+	assert.Zero(t, docs[2].GarbageLen(), "d3 must collect the %d held node(s)", held)
+
+	// d1 splits after "c" without having seen d2's splits.
+	edit(0, 4, 4, 1, nil)
+	sync(0)
+	sync(2)
+	sync(3)
+	sync(1)
+	for range 3 {
+		for i := range clients {
+			sync(i)
+		}
+	}
+
+	shape := func(d *document.Document) string {
+		var walk func(n *crdt.TreeNode) string
+		walk = func(n *crdt.TreeNode) string {
+			if n.IsText() {
+				return n.IDString() + n.Value
+			}
+			var out strings.Builder
+			out.WriteString(n.Type() + "#" + n.IDString() + "[")
+			for _, child := range n.Children() {
+				out.WriteString(walk(child) + ",")
+			}
+			return out.String() + "]"
+		}
+		tree, ok := d.RootObject().Get("t").(*crdt.Tree)
+		assert.True(t, ok)
+		return walk(tree.Root())
+	}
+	for i := 1; i < len(docs); i++ {
+		assert.Equal(t, docs[0].Root().GetTree("t").ToXML(), docs[i].Root().GetTree("t").ToXML(), "replica %d", i)
+	}
+	assert.Equal(t, shape(docs[0]), shape(docs[1]))
+	assert.Equal(t, shape(docs[0]), shape(docs[3]))
+	assert.NotEqual(t, shape(docs[0]), shape(docs[2]),
+		"yorkie#2099: the replica that collected early places the split elsewhere")
 }
