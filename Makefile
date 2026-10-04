@@ -21,17 +21,23 @@ GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 # when the local Go is a newer minor. GOTOOLCHAIN=auto never downgrades, and
 # a newer minor breaks the gate: golangci-lint cannot read its export data, and
 # its go fix has modernizers CI's toolchain lacks. Same or older local Go, or a
-# GOTOOLCHAIN set by the caller (golang images set `local`), is left alone, so
-# CI, which installs that minor, runs exactly as before.
+# GOTOOLCHAIN set by the caller (environment, make argument or `go env -w`;
+# golang images set `local`), is left alone, so CI, which installs that minor,
+# runs exactly as before. A `go` line without a patch (`go 1.27`) pins the
+# first release of that minor; an unreadable go.mod pins nothing.
 ifneq ($(OS),Windows_NT)
 ifeq ($(origin GOTOOLCHAIN),undefined)
-GO_MOD_VERSION := $(shell sed -n 's/^go //p' go.mod)
+ifeq ($(shell go env GOTOOLCHAIN 2>/dev/null),auto)
+GO_MOD_VERSION := $(shell sed -n 's/^go //p' go.mod 2>/dev/null)
 GO_LOCAL_VERSION := $(shell GOTOOLCHAIN=local go env GOVERSION 2>/dev/null)
 GO_PIN_TOOLCHAIN := $(shell echo "$(GO_LOCAL_VERSION) go$(GO_MOD_VERSION)" | \
-	awk '{ split(substr($$1, 3), l, "."); split(substr($$2, 3), m, "."); \
-	if ($$1 ~ /^go[0-9]+\.[0-9]+/ && (l[1] > m[1] || (l[1] == m[1] && l[2] > m[2]))) print $$2 }')
+	awk '{ mv = $$2; if (mv ~ /^go[0-9]+\.[0-9]+$$/) mv = mv ".0"; \
+	if (mv !~ /^go[0-9]+\.[0-9]+\.[0-9]+$$/ || $$1 !~ /^go[0-9]+\.[0-9]+/) exit; \
+	split(substr($$1, 3), l, "."); split(substr(mv, 3), m, "."); \
+	if (l[1] > m[1] || (l[1] == m[1] && l[2] > m[2])) print mv }')
 ifneq ($(GO_PIN_TOOLCHAIN),)
 export GOTOOLCHAIN := $(GO_PIN_TOOLCHAIN)
+endif
 endif
 endif
 endif

@@ -72,7 +72,8 @@ make lint
 > When your local Go is a newer minor than the `go` line in `go.mod` (CI's
 > version), the Makefile runs every target under that version by exporting
 > `GOTOOLCHAIN`, so `make lint` and the `go fix` check see what CI sees. The
-> first run downloads that toolchain. A `GOTOOLCHAIN` you set yourself wins.
+> first run downloads that toolchain. A `GOTOOLCHAIN` you set yourself, in the
+> environment, on the `make` command line or with `go env -w`, wins.
 
 `make verify` is the gate a commit has to pass: `make lint`, the licence
 headers, the `go fix` check, and the unit tests. It leaves out the integration
