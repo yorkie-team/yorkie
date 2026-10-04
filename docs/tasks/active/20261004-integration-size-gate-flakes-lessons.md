@@ -46,14 +46,8 @@
   behavior that existed before the PR, stop and ask for a scope decision
   instead of fixing one more round. File an issue with the reproduction.
 - Deleting a cache fill removes a refresh path as well as a bug. Here it was
-  the only path that refreshed a client written by another node. The panel
-  re-raised it after the re-scope, so it is closed here in the smallest
-  form that does not reopen the scope: the bulk read now *drops* the rows'
-  cache entries instead of filling them -- dropping can never put an older
-  copy over a newer one, so it is safe outside the locks -- and
-  `clientCache` carries a fixed one-minute TTL constant, with no flag and
-  no config plumbing, unlike the version that was reverted. The rest of
-  the authorization-model work stays in #2113.
+  the only path that refreshed a client written by another node; that gap
+  is part of #2113.
 - The striped lock became a per-client `pkg/locker` lock: same guarantee,
   no false sharing between unrelated clients, and the locking utility the
   server already uses.

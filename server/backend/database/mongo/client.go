@@ -61,17 +61,6 @@ const (
 	// used, since a cancelled or expired context is the likeliest reason for
 	// that failure and would make the work that repairs it a no-op.
 	compactionUndoTimeout = 5 * gotime.Second
-
-	// clientCacheTTL bounds how long a cached client row may outlive the row
-	// MongoDB holds. Nothing invalidates clientCache across nodes, so a row a
-	// peer node activates, deactivates, attaches or detaches is invisible to
-	// this node's cached copy, and the gates that read it (EnsureActivated,
-	// EnsureDocumentAttached) would otherwise keep answering from a copy that
-	// no cluster-wide event can ever correct. Expiry drops the entry and the
-	// miss path re-reads the row under the client's lock, which bounds the
-	// staleness window without putting an older copy back on top of a newer
-	// one the way a bulk read's cache fill did.
-	clientCacheTTL = gotime.Minute
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -82,7 +71,7 @@ type Client struct {
 
 	cacheManager  *cache.Manager
 	projectCache  *ProjectCache
-	clientCache   *cache.LRUWithExpires[types.ClientRefKey, *database.ClientInfo]
+	clientCache   *cache.LRU[types.ClientRefKey, *database.ClientInfo]
 	docCache      *cache.LRU[types.DocRefKey, *database.DocInfo]
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
@@ -153,9 +142,7 @@ func Dial(conf *Config) (*Client, error) {
 	}
 	cacheManager.RegisterCache(projectCache)
 
-	clientCache, err := cache.NewLRUWithExpires[types.ClientRefKey, *database.ClientInfo](
-		conf.ClientCacheSize, clientCacheTTL, "clients",
-	)
+	clientCache, err := cache.NewLRU[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
 	if err != nil {
 		return nil, fmt.Errorf("initialize client cache: %w", err)
 	}
@@ -1434,20 +1421,12 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
+	// NOTE: The rows read here do not fill clientCache. The query runs outside
+	// the clients' cache locks, so a row read here may already be older than
+	// one a concurrent write cached.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
-	}
-
-	// NOTE: The rows read here drop the clients' cache entries instead of
-	// filling them. The query runs outside the clients' cache locks, so a row
-	// read here may already be older than one a concurrent write cached, and
-	// caching it would put the older copy on top. Dropping is safe in that
-	// race -- the worst it costs is a re-read under the client's lock -- and
-	// it still lets a row another node wrote reach this node, which a fill
-	// that is never allowed to happen cannot.
-	for _, info := range infos {
-		c.clientCache.Remove(types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID})
 	}
 
 	return infos, nil
