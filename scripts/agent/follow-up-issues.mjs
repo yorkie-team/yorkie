@@ -176,7 +176,7 @@ export function renderFollowUpIssue({ rec, finding }, { repo = "", pr = null, he
     : "";
   const body = [
     serializeFollowUpRecord(rec),
-    `The review panel raised this on ${pr ? `#${pr}` : "a pull request"} and deferred it: the code is outside that PR's diff, and an independent judge found the change did not cause it. It was confirmed real by the panel's verifier, so it is filed here instead of being fixed inside an unrelated PR.`,
+    `The review panel raised this on ${pr ? `#${pr}` : "a pull request"} and deferred it: the code is outside that PR's diff, and an independent judge found the change did not cause it. The panel's verifier did not refute it, so it is filed here instead of being fixed inside an unrelated PR.`,
     "",
     `- **Where:** ${link ? `[\`${neutralize(loc, { oneLine: true })}\`](${link})` : `\`${neutralize(loc, { oneLine: true })}\``}`,
     `- **Severity:** ${rec.severity} (lens: ${neutralize(rec.lens, { oneLine: true })})`,

@@ -265,7 +265,7 @@ function outOfDiffSection(rows) {
     .join("\n");
   return (
     `\n### Out of diff — not caused by this change (${rows.length}, not blocking)\n` +
-    "_Confirmed real, on code this PR does not touch, and an independent judge found " +
+    "_Not refuted by the verifier, on code this PR does not touch, and an independent judge found " +
     "that reverting the whole diff would leave it in place. It is filed as a " +
     "follow-up issue instead of gating this PR._\n" +
     `${body}\n`
