@@ -48,10 +48,10 @@ func (o *Object) Purge(elem Element) error {
 	return o.memberNodes.purge(elem)
 }
 
-// Set sets the given element of the given key. Like SetWithExecutedAt, it
-// reports both the element evicted from the key and whether v was taken in
-// at all; a refused v must not be booked into Root by the caller.
-func (o *Object) Set(k string, v Element) (Element, bool) {
+// Set sets the given element of the given key, and returns the element
+// evicted from that key, if any. Unlike SetWithExecutedAt it cannot refuse
+// v; see ElementRHT.Set.
+func (o *Object) Set(k string, v Element) Element {
 	return o.memberNodes.Set(k, v)
 }
 

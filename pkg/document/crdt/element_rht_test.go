@@ -357,8 +357,7 @@ func TestElementRHTSetLoser(t *testing.T) {
 		rht.SetWithExecutedAt("k", newer, time.NewTicket(9, 0, actorA))
 		occupant, err := crdt.NewPrimitive("x", time.NewTicket(10, 0, actorB))
 		assert.NoError(t, err)
-		removed, _ := rht.Set("k", occupant)
-		assert.Same(t, newer, removed)
+		assert.Same(t, newer, rht.Set("k", occupant))
 
 		older, err := crdt.NewPrimitive("restored", createdAt)
 		assert.NoError(t, err)

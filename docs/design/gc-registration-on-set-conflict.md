@@ -151,7 +151,8 @@ afterwards, and the document stops rebuilding once GC runs.
 `ElementRHT.SetWithExecutedAt` therefore refuses a **losing** value when the
 node holding its slot is still reachable through its key -- a live node, or a
 tombstone that is still its key's occupant -- and reports the refusal as a
-second return value (`Element, bool`). A tombstone already displaced from its
+second return value (`Element, bool`). `ElementRHT.Set` shares the body but
+not the refusal; see the caller table below. A tombstone already displaced from its
 key is taken over, so a losing restore ends where a restore that won first
 and was then evicted ends. The rule lives in `refusesLoser`'s doc comment in
 `pkg/document/crdt/element_rht.go`.
@@ -173,14 +174,32 @@ Callers:
 | Caller | On refusal |
 |--------|-----------|
 | `operations.Set.Execute` | `ErrOperationSkipped` -- the object is unchanged, so the operation did not apply and contributes no reverse |
-| `json.Object.setInternal` | panics -- unreachable, since only a loser is refused and a local Set always wins; the caller would otherwise be handed a detached proxy |
+| `json.Object.setInternal` | cannot refuse -- it calls `crdt.Object.Set`, which never declines |
 | `api/converter.fromJSONObject` | ignored -- encoder output has one node per `createdAt`, so a refusal needs crafted bytes |
 | `crdt.NewObject` | not affected -- empty RHT, no conflict possible |
+
+The refusal is confined to `SetWithExecutedAt` because only its caller can
+act on one. `crdt.Object.Set` -- the local path, inserting a value under the
+`createdAt` it is minting right now -- keeps its `Element`-only signature and
+always takes the value in. `setInternal` has already handed the caller a
+proxy for the value by then, so a refusal would leave it a choice between
+panicking and returning a child hanging off no container, whose nested
+operations would name a `parentCreatedAt` no replica can resolve. Neither is
+hypothetical: a peer that plants a member under the client's next `createdAt`
+and an occupant positioned in the future makes a local Set lose, since
+operation tickets are unvalidated off the wire (see
+[Out of scope: crafted payloads](#out-of-scope-crafted-payloads)), and the
+panic would escape `Document.Update` on a server that runs json proxies over
+a rebuilt document (`TestSetOnForgedIdentityCollision`).
 
 `Root.UnregisterRemovedElementPair` takes the owning container and retires
 only an entry that container registered. The json layer records the CRDT
 container, not its proxy, as the parent so that identity check holds on the
-local path.
+clone root the proxies run against -- the retire would otherwise silently
+miss, leaving the clone a worklist entry that resolves to the restored
+member and is purged out from under it
+(`TestCloneRemovedPairRecordsCRDTOwner`,
+`TestUndoRetiresClonePairAndSparesRestoredMember`).
 
 ### Out of scope: crafted payloads
 
