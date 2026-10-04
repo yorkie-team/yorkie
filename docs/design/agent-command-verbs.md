@@ -862,6 +862,38 @@ PR:
 - **No budget reset.** Only a maintainer's `@claude rerun` restarts the fix
   budget, as before; a retried fix round that fails again is charged.
 
+#### 7.3 A fix round may only change the PR's own files
+
+The prompt always said "stay in scope"; fixers still wrote caches, auth gates
+and proto changes into unrelated PRs. `fix-guard.mjs` makes the rule
+mechanical for all three fixers (the panel's `fix` job, `@claude fix`, and the
+CI-fix arm).
+
+- **The scope** is the PR's original diff — `main...<frozen>`, where `<frozen>`
+  is the head at the first fix dispatch, the surface gate's anchor — plus any
+  test file and any documentation file. A compare that cannot be read, or that
+  hits GitHub's 300-file cap, leaves the scope unknown and unenforced, and the
+  record says so.
+- **Guide: a pre-push hook.** Written into the fixer's checkout before the
+  agent starts, from the trusted staged scripts. It refuses a push whose
+  non-merge commits touch another path and tells the fixer to revert and skip
+  or dispute instead. The agent owns its checkout and can remove the hook, so
+  it is feedback, not the gate.
+- **Gate: the report job.** On a fresh runner, `fix-guard.mjs check` reads the
+  round's own commits through the API (the same round boundary
+  `test-removals.mjs` uses) and pages when any touched an out-of-scope path.
+  It pages rather than strips: stripping needs a second push path, and the
+  in-scope half may not build without the stripped half, which would hand the
+  PR to the CI-fix arm to put the code back.
+
+The same check lints the round's commits:
+
+| Check | Effect | Why |
+|-------|--------|-----|
+| Reviewer-directed text added to docs or task files ("stop raising", "the panel re-raised it", "fifth re-filing", "note to the reviewer") | Pages | Phrases, not topics, so a lessons file logging "panel round 3 raised X; fixed by Y" does not match. The rubric already calls such text a major finding; paging saves the panel round that would only say so, and disagreement belongs in a rebuttal |
+| A test file that lost more assertions than it gained, or gained a tautology | Warns | Refactors move assertions legitimately, and `test-removals.mjs` already puts removed tests in front of the adjudicator |
+| A non-test change under `pkg/document/crdt/` | Warns, unless the PR body names yorkie-js-sdk | A replicated rule must change in both SDKs or replicas diverge, and this repository cannot see the other one |
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -876,6 +908,7 @@ PR:
 | A fixer forges an execution log to look like an infra failure | The worst it can choose is which page a human reads; the PR is latched either way |
 | The causation judge is steered by text in the diff into calling a caused defect `independent` | It can only act on findings git already placed outside the diff; it is told reviewer-directed text is a reason to answer `caused`; the demoted finding is filed as an issue, not dropped |
 | The sweep re-runs CI on a PR a human is about to take over | It never acts while any latch other than a usage page exists, retries are capped per head, and the stuck path pages after one retrigger |
+| A legitimate fix needs a file outside the original diff | The fixer skips or disputes it and a human decides; an out-of-diff finding is filed as a follow-up by the panel |
 | A fixer's skipped reproducer reads as a removal | It is meant to: the record is evidence for the round's `--fixed` claims and disputes, and a skip that pairs with a `--skipped` item is consistent with it. A conditional skip copied into a new test is reported too |
 
 ### Design Decisions
@@ -894,6 +927,7 @@ PR:
 | Test removals are evidence for the adjudicator, not a gate | Removing a test can be legitimate; the adjudicator already re-reads the code |
 | A fix round ends at the App's last push, found by pusher, not by commit identity | The fixer's shell sets a commit's author and committer, so filtering on them would let it hide its own commits; it cannot choose who GitHub records as the pusher |
 | An out-of-diff finding needs both git and a judge to leave the gate | Git alone demotes on age, which #583 rejected; a judge alone decides scope on author-controlled text |
+| A fix round's scope violation pages rather than being stripped | Stripping needs a second push path and can leave a branch that does not build |
 | A Go reproducer is kept behind `t.Skip`, not left failing | A red test hands the PR to the CI-fix arm, whose job is to make CI pass, which deleting the test also does; a recorded skip keeps the reproducer committed and visible |
 
 ## Alternatives Considered
