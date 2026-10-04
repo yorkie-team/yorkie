@@ -115,6 +115,19 @@ already-applied attach to a concurrent `Deactivate`. An undo entry pushed
 during the attach window is dropped by the restore: its reverse operations name
 tickets the re-issue minted and the rollback has just re-issued away.
 
+`neverSynced` is a purely local signal, though, and there is a window it cannot
+see: between `AttachDocument` returning and `ApplyChangePack` absorbing the
+response, the server already holds the re-issued elements while the checkpoint
+is still initial, the status still `StatusDetached` and nothing absorbed. A
+failure in that window -- decoding the response pack, bringing the watch
+pipeline up, the post-attach `Update` or `ClearHistory` -- would pass the guard
+and re-issue away tickets the server has stored. `attachDocument` therefore
+reports whether the push reached the server, and `Client.Attach` runs the
+rollback only when it did not. A transport error counts as not reached even
+though the server may have committed before the response was lost: re-attaching
+with the same client re-issues the same tickets to the same actor, so the
+replicas still name those elements identically.
+
 ### Re-issuing the operations
 
 `converter.ReissueOperations` converts the operations to protobuf, rewrites
@@ -158,6 +171,17 @@ not-yet-acknowledged change whose actor the client does not own
 (`ClientInfo.IsOwnActor`), so the pull dedup and the `DocChanged` publisher
 can trust a stored change's actor. See offline-resumable-attach.md, "Pushed
 change actors must be owned by the pusher", for the legacy analysis.
+
+The gate is bounded by how the acting client is identified, which this design
+does not change: every document RPC resolves the client from the request's
+`client_id` and `clients.FindActiveClientInfo` only checks that the row exists
+and is activated, so authentication is project-scoped (API key, optional auth
+webhook) rather than per client. A caller inside the same project that learns
+another client's session id can still satisfy the ownership predicate for that
+client -- as it could already impersonate it everywhere else in the API. Per
+client credential binding is a protocol-level change and a separate task; the
+gate still removes the cross-client actor forgery that needed no session id at
+all.
 
 ### Risks and Mitigation
 
