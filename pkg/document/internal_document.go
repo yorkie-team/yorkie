@@ -78,6 +78,14 @@ type InternalDocument struct {
 	// server.
 	localChanges []*change.Change
 
+	// absorbedRemote records that this document has taken state in from the
+	// outside -- a snapshot or a batch of applied changes -- at least once.
+	// neverSynced reads it: the checkpoint and the version vector are only
+	// indirect evidence, and a snapshot applied to a still-detached document
+	// with an initial checkpoint leaves both of them looking untouched while
+	// the root holds elements this replica never minted.
+	absorbedRemote bool
+
 	// disableGC, when true, declares that this document does not produce or
 	// consume tombstones (see docs/design/disable-gc-on-attach.md). It is set
 	// by the client on Attach and consumed by ApplyChanges to skip merging
@@ -123,6 +131,10 @@ func NewInternalDocumentFromSnapshot(
 		onlineClients: make(map[string]bool),
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:      change.InitialID().SetClocks(lamport, vector),
+
+		// The root came from a snapshot, so it holds elements this replica
+		// never minted: never re-issue its tickets. See neverSynced.
+		absorbedRemote: true,
 	}, nil
 }
 
@@ -294,18 +306,27 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 // The root is rebuilt by replaying the re-issued local changes on a fresh
 // root, which is what the server builds from them. The document is left
 // untouched when any step fails.
-func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, error) {
+//
+// It also returns a rollback that puts the document back as it was. The attach
+// that the re-issued tickets are minted for can still fail after this returns,
+// and a failed attach must not leave the caller's document rewritten; see
+// Document.ReissueActor, which extends the rollback to the undo/redo stacks.
+func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, func(), error) {
 	prev := d.changeID.ActorID()
 	if prev == actor || !d.neverSynced() || !d.HasLocalChanges() {
 		d.SetActor(actor)
-		return false, nil
+
+		// SetActor writes the actor into the very change values the document
+		// still holds, so the rollback is the inverse call rather than a
+		// restore of the slice.
+		return false, func() { d.SetActor(prev) }, nil
 	}
 
 	changes := make([]*change.Change, 0, len(d.localChanges))
 	for _, c := range d.localChanges {
 		ops, err := converter.ReissueOperations(c.Operations(), prev, actor)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 		id := c.ID().SetActor(actor)
 		id = id.SetVersionVector(reissueVersionVector(id.VersionVector(), prev, actor))
@@ -316,9 +337,15 @@ func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, error) {
 	presences := presence.NewMap()
 	for _, c := range changes {
 		if _, err := c.Execute(root, presences, operations.OpSourceReplay); err != nil {
-			return false, err
+			return false, nil, err
 		}
 	}
+
+	// Nothing above touched the values being replaced: ReissueOperations
+	// returns freshly decoded operations and the replay runs on a root of its
+	// own, so these four are a complete snapshot of what the swap below
+	// overwrites.
+	prevChanges, prevRoot, prevPresences, prevID := d.localChanges, d.root, d.presences, d.changeID
 
 	d.localChanges = changes
 	d.root = root
@@ -327,15 +354,24 @@ func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, error) {
 	d.changeID = changeID.SetVersionVector(
 		reissueVersionVector(changeID.VersionVector(), prev, actor),
 	)
-	return true, nil
+	return true, func() {
+		d.localChanges, d.root, d.presences, d.changeID = prevChanges, prevRoot, prevPresences, prevID
+	}, nil
 }
 
 // neverSynced reports whether this document has neither sent nor received
-// anything: its checkpoint is the initial one, and its version vector names
-// no actor but its own. Every ticket naming its actor was then issued here and
-// is held only by its local changes and the state built from them.
+// anything: it has absorbed no snapshot and no applied change, its checkpoint
+// is the initial one, and its version vector names no actor but its own. Every
+// ticket naming its actor was then issued here and is held only by its local
+// changes and the state built from them.
+//
+// absorbedRemote is the load-bearing guard, not the checkpoint: applySnapshot
+// replaces the root and only its CALLER forwards the checkpoint, so a snapshot
+// pack carrying the initial checkpoint would leave the other two signals
+// looking untouched while the root is full of elements ReissueActor's rebuild
+// cannot reproduce from the local changes.
 func (d *InternalDocument) neverSynced() bool {
-	if d.status != StatusDetached || d.checkpoint != change.InitialCheckpoint {
+	if d.absorbedRemote || d.status != StatusDetached || d.checkpoint != change.InitialCheckpoint {
 		return false
 	}
 	actor := d.changeID.ActorID()
@@ -409,6 +445,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
+	d.absorbedRemote = true
 
 	// NOTE(chacha912): Documents created from snapshots were experiencing edit
 	// restrictions due to low lamport values.
@@ -457,6 +494,13 @@ func (d *InternalDocument) applyChanges(
 ) ([]DocEvent, []operations.Operation, error) {
 	var events []DocEvent
 	var executedOps []operations.Operation
+	if len(changes) > 0 {
+		// Every caller of this feeds it changes that came through a pack --
+		// a remote apply, a server replay, or the post-snapshot replay of
+		// this document's own pushed changes. None of them is a document
+		// that has never synced. See neverSynced.
+		d.absorbedRemote = true
+	}
 	for _, c := range changes {
 		var hadPresence, wasOnline bool
 		var prevPresence presence.Data

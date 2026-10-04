@@ -163,6 +163,28 @@ func serverBuild(t *testing.T, docs ...*document.Document) *document.InternalDoc
 	return built
 }
 
+// reissueActor re-issues the document's tickets and discards the rollback the
+// client runs when the attach these tickets were minted for fails.
+func reissueActor(t *testing.T, doc *document.Document, actor time.ActorID) {
+	t.Helper()
+
+	_, err := doc.ReissueActor(actor)
+	require.NoError(t, err)
+}
+
+// localActorsOf returns the actor of every local change the document would
+// push, which is what SetActor rewrites and what the server reads as the
+// author of the change.
+func localActorsOf(t *testing.T, doc *document.Document) []time.ActorID {
+	t.Helper()
+
+	var actors []time.ActorID
+	for _, c := range doc.CreateChangePack().Changes {
+		actors = append(actors, c.ID().ActorID())
+	}
+	return actors
+}
+
 func rootBytes(t *testing.T, doc *document.InternalDocument) []byte {
 	t.Helper()
 	b, err := converter.ObjectToBytes(doc.RootObject())
@@ -182,7 +204,7 @@ func TestReissueActor(t *testing.T) {
 		before := doc.Marshal()
 		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
 
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 
 		actors := actorsOf(t, doc)
 		assert.Zero(t, actors[time.InitialActorID], "%v", actors)
@@ -204,7 +226,7 @@ func TestReissueActor(t *testing.T) {
 	t.Run("local root equals the root the server builds", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		fillEverything(t, doc)
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 
 		built := serverBuild(t, doc)
 		assert.Equal(t, doc.Marshal(), built.Marshal())
@@ -214,7 +236,7 @@ func TestReissueActor(t *testing.T) {
 	t.Run("edits after the re-issue continue under the new actor", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		fillEverything(t, doc)
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 
 		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.GetText("text").Edit(0, 0, "Z")
@@ -231,8 +253,8 @@ func TestReissueActor(t *testing.T) {
 	t.Run("a retried attach re-issues to the next actor", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		fillEverything(t, doc)
-		require.NoError(t, doc.ReissueActor(actorA))
-		require.NoError(t, doc.ReissueActor(actorB))
+		reissueActor(t, doc, actorA)
+		reissueActor(t, doc, actorB)
 
 		actors := actorsOf(t, doc)
 		assert.Zero(t, actors[time.InitialActorID])
@@ -245,7 +267,7 @@ func TestReissueActor(t *testing.T) {
 		fillEverything(t, doc)
 		assert.True(t, doc.CanUndo())
 
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 		assert.False(t, doc.CanUndo())
 		assert.NoError(t, doc.Undo())
 	})
@@ -262,13 +284,95 @@ func TestReissueActor(t *testing.T) {
 			return nil
 		}))
 
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
+
+		// The fallback branch is what sets the actor on a document that has
+		// already synced -- a re-attach after a detach, say -- so it has to
+		// reach the change ID and every buffered local change, exactly as
+		// SetActor did before the client switched to ReissueActor.
+		assert.Equal(t, actorA, doc.ActorID())
+		local := localActorsOf(t, doc)
+		require.NotEmpty(t, local)
+		for _, actor := range local {
+			assert.Equal(t, actorA, actor)
+		}
+	})
+
+	t.Run("a document that absorbed a snapshot is not re-issued", func(t *testing.T) {
+		// The checkpoint, the status and the version vector all still look
+		// untouched after a snapshot pack carrying the initial checkpoint, so
+		// only the absorbed-snapshot guard keeps the rebuild -- which can
+		// reproduce the local changes and nothing else -- away from the root.
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+
+		snapshot, err := converter.SnapshotToBytes(doc.InternalDocumentForTest().RootObject(), nil)
+		require.NoError(t, err)
+		pack := change.NewPack(doc.Key(), change.InitialCheckpoint, nil, doc.VersionVector().DeepCopy(), nil)
+		pack.Snapshot = snapshot
+		require.NoError(t, doc.ApplyChangePack(pack))
+		require.True(t, doc.InternalDocumentForTest().HasLocalChanges())
+		before := doc.Marshal()
+
+		reissueActor(t, doc, actorA)
+
+		assert.Equal(t, before, doc.Marshal())
+		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
+	})
+
+	t.Run("the rollback restores what a failed attach rewrote", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+		before, size := doc.Marshal(), doc.DocSize()
+		require.True(t, doc.CanUndo())
+
+		rollback, err := doc.ReissueActor(actorA)
+		require.NoError(t, err)
+		require.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+		require.False(t, doc.CanUndo())
+
+		rollback()
+
+		assert.Equal(t, before, doc.Marshal())
+		assert.Equal(t, size, doc.DocSize())
+		assert.Equal(t, time.InitialActorID, doc.ActorID())
+		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
+		assert.Zero(t, actorsOf(t, doc)[actorA])
+		assert.True(t, doc.CanUndo())
+		assert.NoError(t, doc.Undo())
+	})
+
+	t.Run("the rollback of the fallback branch restores the actor", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k", "v")
+			return nil
+		}))
+		pack := doc.CreateChangePack()
+		require.NoError(t, doc.ApplyChangePack(change.NewPack(
+			doc.Key(), pack.Checkpoint.NextServerSeq(1), nil, nil, nil,
+		)))
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("late", "v")
+			return nil
+		}))
+
+		rollback, err := doc.ReissueActor(actorA)
+		require.NoError(t, err)
+		require.Equal(t, actorA, doc.ActorID())
+
+		rollback()
+
+		assert.Equal(t, time.InitialActorID, doc.ActorID())
+		for _, actor := range localActorsOf(t, doc) {
+			assert.Equal(t, time.InitialActorID, actor)
+		}
 	})
 
 	t.Run("an empty document only takes the actor", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 		assert.Equal(t, actorA, doc.ActorID())
 		assert.Equal(t, "{}", doc.Marshal())
 	})
@@ -299,7 +403,7 @@ func TestReissueActor(t *testing.T) {
 			}
 			before := doc.Marshal()
 
-			require.NoError(t, doc.ReissueActor(actorA))
+			reissueActor(t, doc, actorA)
 			assert.Equal(t, before, doc.Marshal())
 			assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
 		}
@@ -331,7 +435,7 @@ func TestReissueActor(t *testing.T) {
 		before := doc.Marshal()
 		size, garbage := doc.DocSize(), doc.GarbageLen()
 
-		require.NoError(t, doc.ReissueActor(actorA))
+		reissueActor(t, doc, actorA)
 		assert.Equal(t, before, doc.Marshal())
 		assert.Equal(t, size, doc.DocSize())
 		assert.Equal(t, garbage, doc.GarbageLen())
@@ -350,8 +454,8 @@ func TestReissueActor(t *testing.T) {
 				return nil
 			}))
 		}
-		require.NoError(t, doc1.ReissueActor(actorA))
-		require.NoError(t, doc2.ReissueActor(actorB))
+		reissueActor(t, doc1, actorA)
+		reissueActor(t, doc2, actorB)
 
 		// The values no longer share a createdAt.
 		created1 := doc1.InternalDocumentForTest().RootObject().Get("k1").CreatedAt()

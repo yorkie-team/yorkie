@@ -69,25 +69,38 @@ ReissueActor(actor):
   root, presences := replay the new changes on a fresh root
   swap in changes, root, presences, changeID (all or nothing)
   Document: drop the clone, clear the undo/redo stacks
+  return a rollback that puts all of the above back
 ```
 
 ### When re-issuing is sound
 
 A ticket can be re-issued only if no other replica has seen it. The
 discriminator is per document, not per ticket: `neverSynced` holds when the
-document is detached, its checkpoint is `InitialCheckpoint` and its version
-vector names no actor but its own. Then nothing has been pushed and nothing
-pulled, so every ticket naming the current actor was minted by a local change
-still in `localChanges`. The offline-resumable-attach design rejects a client
-side rebase because, after a sync, the pushed/pending boundary runs through
-individual tickets; that boundary does not exist before the first sync.
+document has absorbed no outside state, is detached, has `InitialCheckpoint`
+and a version vector naming no actor but its own. Then nothing has been pushed
+and nothing pulled, so every ticket naming the current actor was minted by a
+local change still in `localChanges`. The offline-resumable-attach design
+rejects a client side rebase because, after a sync, the pushed/pending boundary
+runs through individual tickets; that boundary does not exist before the first
+sync.
+
+The absorbed-state flag (`absorbedRemote`, set by `applySnapshot` and by
+`applyChanges`) is the load-bearing half of that test, not the checkpoint: the
+checkpoint is forwarded by `applySnapshot`'s *caller*, so a snapshot pack
+carrying the initial checkpoint would leave status, checkpoint and version
+vector all looking untouched while the root holds elements the rebuild cannot
+reproduce from `localChanges` -- and the rebuild would silently drop them.
 
 The lamport-0 ticket `time.InitialTicket` -- the root object and every sentinel
 node -- is shared by all replicas and is never re-issued. Every ticket a change
 mints has the change's lamport, which is at least 1.
 
 A failed attach leaves the document never-synced under the new actor, so a
-retry on another client re-issues again from that actor.
+retry on another client re-issues again from that actor. `Client.Attach` also
+runs the rollback `ReissueActor` returned when the attach fails with the
+document still detached, so the user is left holding the document handed over
+-- root, local changes and undo/redo stacks included -- rather than one
+rewritten for an attach that never happened.
 
 ### Re-issuing the operations
 
@@ -128,7 +141,7 @@ re-issue clears them.
 |------|------------|
 | Undo of a pre-attach edit is no longer possible after attach (user-visible behavior change) | Documented on `Document.ReissueActor`. Before this change such an undo already produced Edits whose node IDs the server did not know |
 | A pre-attach Undo that restored a removed Text pushes that Text empty | Existing wire gap (`toJSONElementSimple` sends no Text content); the local root keeps the content. Fixing the encoding is a protocol change for a separate task |
-| An undo change keeps operations that were skipped locally; the replay runs them | The rebuilt root then matches what the server builds from the same change, not the pre-attach view. Predates this design |
+| An undo change keeps operations that were skipped locally; the replay would run them | `executeUndoRedo` now buffers only the operations that executed, so the change carries nothing the undo declined to apply -- on the replay or on the wire |
 | Replay of a large pre-attach document costs time at attach | One replay of the local changes, the same work the server does on push |
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |

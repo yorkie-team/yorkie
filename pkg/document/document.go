@@ -585,6 +585,17 @@ func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 		return err
 	}
 
+	// An operation whose target was concurrently removed declines to execute
+	// under OpSourceUndoRedo (see Change.Execute), so it changed nothing here.
+	// Drop it from the change before the change is buffered: every other
+	// executor of this change runs it under a source where the skip guard does
+	// not run -- the server replays a pushed change, and
+	// InternalDocument.ReissueActor rebuilds the pre-attach root the same way
+	// -- and would resurrect exactly what the undo declined to touch.
+	if len(result.Executed) != len(c.Operations()) {
+		c = change.New(c.ID(), c.Message(), result.Executed, c.PresenceChange())
+	}
+
 	var reverse []HistoryOperation
 	for _, op := range result.ReverseOps {
 		reverse = append(reverse, HistoryOperation{Op: op})
@@ -990,21 +1001,37 @@ func (d *Document) SetActor(actor time.ActorID) {
 // stacks: their reverse operations name the tickets that no longer exist.
 // Changes made before the attach can therefore not be undone after it.
 //
+// It returns a rollback that restores everything it touched, the undo/redo
+// stacks included. The attach the re-issued tickets are minted for can still
+// fail afterwards -- a network error, a server refusal, a deactivated client --
+// and the caller runs the rollback so a failed attach leaves the document as
+// the user handed it over rather than rewritten and stripped of its history.
+//
 // It takes d.mu for writing, unconditionally, for the reasons SetActor does.
-func (d *Document) ReissueActor(actor time.ActorID) error {
+func (d *Document) ReissueActor(actor time.ActorID) (func(), error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	reissued, err := d.doc.ReissueActor(actor)
+	undoStack, redoStack := d.history.undoStack, d.history.redoStack
+
+	reissued, rollback, err := d.doc.ReissueActor(actor)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if reissued {
 		d.invalidateClone()
 		d.history.ClearUndo()
 		d.history.ClearRedo()
 	}
-	return nil
+
+	return func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+
+		rollback()
+		d.history.undoStack, d.history.redoStack = undoStack, redoStack
+		d.invalidateClone()
+	}, nil
 }
 
 // ActorID returns ID of the actor currently editing the document.

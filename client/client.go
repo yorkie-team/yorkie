@@ -725,7 +725,8 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 		// Re-issue, not just set: the tickets of elements created before the
 		// attach name the initial actor, and another client that filled the
 		// same key would push the very same createdAt.
-		if err := d.ReissueActor(c.loadID()); err != nil {
+		rollback, err := d.ReissueActor(c.loadID())
+		if err != nil {
 			return err
 		}
 
@@ -736,8 +737,22 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 			}
 		}
 
-		return c.attachDocument(ctx, d, attachOpts, generation)
-
+		if err := c.attachDocument(ctx, d, attachOpts, generation); err != nil {
+			// The re-issue rewrote the document for an attach that did not
+			// happen. Put it back, so a caller whose attach failed still holds
+			// the document it handed over -- root, local changes and undo/redo
+			// history included -- and can retry or keep editing offline.
+			//
+			// Only while the document is still detached: a failure past the
+			// point where the attach response was applied has left server state
+			// in the document, and restoring the pre-attach root over it would
+			// discard what the server already acknowledged.
+			if d.Status() == document.StatusDetached {
+				rollback()
+			}
+			return err
+		}
+		return nil
 	}
 
 	p, ok := r.(*channel.Channel)
