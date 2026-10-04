@@ -44,7 +44,7 @@ import { readLensFindings } from "./deferred-findings.mjs";
 import { findingLocation } from "./novelty.mjs";
 import { normalizeSeverity } from "./severity.mjs";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
-import { outOfDiffDemotes } from "./out-of-diff.mjs";
+import { ANCHOR_MARGIN, outOfDiffDemotes } from "./out-of-diff.mjs";
 
 export const FOLLOW_UP_LABEL = "agent:follow-up";
 export const FOLLOW_UP_MARKER = "<!-- agent-follow-up ";
@@ -111,7 +111,12 @@ export function parseFollowUpRecord(body) {
   try {
     const rec = JSON.parse(b.slice(i + FOLLOW_UP_MARKER.length, end));
     if (!rec || typeof rec !== "object" || rec.v !== FOLLOW_UP_VERSION) return null;
-    return { lens: str(rec.lens), file: str(rec.file), summary: str(rec.summary) };
+    return {
+      lens: str(rec.lens),
+      file: str(rec.file),
+      ...(Number.isInteger(rec.line) && rec.line > 0 ? { line: rec.line } : {}),
+      summary: str(rec.summary),
+    };
   } catch {
     return null;
   }
@@ -130,15 +135,36 @@ export function collectFollowUpRecords(issues) {
 }
 
 /**
- * Is this defect already filed? Same file, similar summary, ACROSS lenses: a
+ * The STABLE identity of a filed defect: same lens, same file, and an anchor in
+ * the same region (within `ANCHOR_MARGIN` lines), or no line on either side.
+ * Matched FIRST, because the panel rewords a deferred finding every round — a
+ * fresh lens session writes a fresh summary — and a summary-only match would
+ * file the same defect again each round it is reworded past the similarity
+ * threshold. Location is what does not change between rounds: the code is
+ * outside the diff, so nothing in the PR moves it.
+ */
+export function sameAnchor(a, b) {
+  if (!a || !b || str(a.lens) !== str(b.lens) || str(a.file) !== str(b.file) || !str(a.file)) return false;
+  const la = Number.isInteger(a.line) ? a.line : null;
+  const lb = Number.isInteger(b.line) ? b.line : null;
+  if (la === null || lb === null) return la === lb;
+  return Math.abs(la - lb) <= ANCHOR_MARGIN;
+}
+
+/**
+ * Is this defect already filed? The stable anchor first (see `sameAnchor`);
+ * then same file, similar summary, ACROSS lenses: a
  * pre-existing defect is the same defect whichever lens trips on it, and the
  * same one recurring on another PR is the case this exists to absorb. A CLOSED
  * match counts too — a maintainer who closed it as won't-fix has answered, and
  * refiling it every round would be the loop arguing with them.
  */
 export function knownFollowUp(rec, existing, { threshold = DEFAULT_SIMILARITY } = {}) {
+  const list = Array.isArray(existing) ? existing : [];
+  const anchored = list.find((e) => sameAnchor(rec, e));
+  if (anchored) return anchored;
   const a = { lens: "", file: rec.file, summary: rec.summary };
-  return (Array.isArray(existing) ? existing : []).find(
+  return list.find(
     (e) => findingSimilarity(a, { lens: "", file: e.file, summary: e.summary }) >= threshold,
   ) ?? null;
 }

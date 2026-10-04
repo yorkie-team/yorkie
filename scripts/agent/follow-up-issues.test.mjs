@@ -99,3 +99,27 @@ test("renderFollowUpIssue: no pings, no forged records, critical says so", () =>
   assert.match(body, /exists without|judged independent/);
   assert.equal(neutralize("a\nb", { oneLine: true }), "a b");
 });
+
+test("planFollowUps: the same defect reworded in a later round is matched by its anchor", () => {
+  const round1 = followUpRecordOf({ lens: "security", finding: demoted() }, { pr: 2111 });
+  const filed = parseFollowUpRecord(serializeFollowUpRecord(round1));
+  const existing = [{ ...filed, number: 2200, state: "open" }];
+  // Round 2: a fresh session words it with almost no shared vocabulary, a few lines off.
+  const reworded = demoted({ line: 640, summary: "pushPack trusts the client-supplied ActorID on every change" });
+  const plan = planFollowUps([{ lens: "security", finding: reworded }], existing, { pr: 2111 });
+  assert.equal(plan.file.length, 0);
+  assert.deepEqual(plan.known.map((k) => k.number), [2200]);
+  // A different region of the same file is a different defect.
+  const elsewhere = demoted({ line: 900, summary: "pushPack trusts the client-supplied ActorID on every change" });
+  assert.equal(planFollowUps([{ lens: "security", finding: elsewhere }], existing).file.length, 1);
+});
+
+test("sameAnchor: lens, file and region; a missing line only matches a missing line", async () => {
+  const { sameAnchor } = await import("./follow-up-issues.mjs");
+  const a = { lens: "security", file: "a.go", line: 100 };
+  assert.equal(sameAnchor(a, { ...a, line: 108 }), true);
+  assert.equal(sameAnchor(a, { ...a, line: 140 }), false);
+  assert.equal(sameAnchor(a, { ...a, lens: "correctness" }), false);
+  assert.equal(sameAnchor(a, { ...a, line: undefined }), false);
+  assert.equal(sameAnchor({ lens: "x", file: "a.go" }, { lens: "x", file: "a.go" }), true);
+});
