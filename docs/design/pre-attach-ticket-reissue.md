@@ -69,7 +69,7 @@ ReissueActor(actor):
   root, presences := replay the new changes on a fresh root
   swap in changes, root, presences, changeID (all or nothing)
   Document: drop the clone, clear the undo/redo stacks
-  return a rollback that puts all of the above back
+  return a rollback that re-issues actor -> prev, restoring the stacks
 ```
 
 ### When re-issuing is sound
@@ -97,10 +97,23 @@ mints has the change's lamport, which is at least 1.
 
 A failed attach leaves the document never-synced under the new actor, so a
 retry on another client re-issues again from that actor. `Client.Attach` also
-runs the rollback `ReissueActor` returned when the attach fails with the
-document still detached, so the user is left holding the document handed over
--- root, local changes and undo/redo stacks included -- rather than one
-rewritten for an attach that never happened.
+runs the rollback `ReissueActor` returned when the attach fails, so the user is
+left holding the document handed over -- root, local changes and undo/redo
+stacks included -- rather than one rewritten for an attach that never happened.
+
+The rollback is the same re-issue run the other way, `actor -> prev`, rather
+than a restore of a snapshot taken when the tickets were minted. The attach
+makes local changes of its own after that point -- the initial presence PUT --
+and an application goroutine may call `Update` while the round trip is in
+flight; a snapshot restore would drop both, while a reverse re-issue carries
+them back with it. `neverSynced` guards the rollback exactly as it guards the
+forward re-issue: it stops holding the moment the document takes the server's
+attach pack in, which is the state a rollback must not overwrite. Document
+status is no guard there -- `attachDocument` sets `StatusAttached` only *after*
+the pack is applied, and puts it back to `StatusDetached` when it hands an
+already-applied attach to a concurrent `Deactivate`. An undo entry pushed
+during the attach window is dropped by the restore: its reverse operations name
+tickets the re-issue minted and the rollback has just re-issued away.
 
 ### Re-issuing the operations
 

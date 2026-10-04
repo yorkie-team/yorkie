@@ -743,13 +743,13 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 			// the document it handed over -- root, local changes and undo/redo
 			// history included -- and can retry or keep editing offline.
 			//
-			// Only while the document is still detached: a failure past the
-			// point where the attach response was applied has left server state
-			// in the document, and restoring the pre-attach root over it would
-			// discard what the server already acknowledged.
-			if d.Status() == document.StatusDetached {
-				rollback()
-			}
+			// The rollback decides for itself whether it still may: it declines
+			// once the document has taken the server's attach pack in, which is
+			// the state restoring over would discard. Document status is no
+			// signal for that -- attachDocument sets StatusAttached only after
+			// the pack is applied, and puts it back to Detached when it gives an
+			// applied attach up to a concurrent Deactivate.
+			rollback()
 			return err
 		}
 		return nil

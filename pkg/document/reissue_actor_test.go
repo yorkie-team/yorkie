@@ -343,6 +343,61 @@ func TestReissueActor(t *testing.T) {
 		assert.NoError(t, doc.Undo())
 	})
 
+	t.Run("the rollback carries a change made during the attach back with it", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+
+		rollback, err := doc.ReissueActor(actorA)
+		require.NoError(t, err)
+
+		// What the attach itself does between the re-issue and the failure:
+		// attachDocument initializes presence, and an application goroutine
+		// may call Update while the round trip is in flight. Neither is in any
+		// snapshot taken at re-issue time.
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("duringAttach", "v")
+			p.Set("cursor", "2")
+			return nil
+		}))
+		during := doc.Marshal()
+
+		rollback()
+
+		assert.Equal(t, during, doc.Marshal())
+		assert.Equal(t, time.InitialActorID, doc.ActorID())
+		assert.Zero(t, actorsOf(t, doc)[actorA])
+		for _, actor := range localActorsOf(t, doc) {
+			assert.Equal(t, time.InitialActorID, actor)
+		}
+	})
+
+	t.Run("the rollback declines once the attach response has been applied", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+
+		rollback, err := doc.ReissueActor(actorA)
+		require.NoError(t, err)
+		require.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+
+		// The tail of attachDocument: the server acknowledges the pushed
+		// changes and the document absorbs the attach pack. A concurrent
+		// Deactivate then takes the attachment away, and the client puts the
+		// status back to Detached -- so status says nothing about whether the
+		// response was applied.
+		pack := doc.CreateChangePack()
+		require.NoError(t, doc.ApplyChangePack(change.NewPack(
+			doc.Key(), pack.Checkpoint.NextServerSeq(1), nil, nil, nil,
+		)))
+		doc.SetStatus(document.StatusDetached)
+		applied := doc.Marshal()
+
+		rollback()
+
+		assert.Equal(t, applied, doc.Marshal())
+		assert.Equal(t, actorA, doc.ActorID())
+		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+	})
+
 	t.Run("the rollback of the fallback branch restores the actor", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {

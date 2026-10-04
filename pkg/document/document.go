@@ -1001,11 +1001,19 @@ func (d *Document) SetActor(actor time.ActorID) {
 // stacks: their reverse operations name the tickets that no longer exist.
 // Changes made before the attach can therefore not be undone after it.
 //
-// It returns a rollback that restores everything it touched, the undo/redo
-// stacks included. The attach the re-issued tickets are minted for can still
-// fail afterwards -- a network error, a server refusal, a deactivated client --
-// and the caller runs the rollback so a failed attach leaves the document as
-// the user handed it over rather than rewritten and stripped of its history.
+// It returns a rollback that undoes the re-issue, the undo/redo stacks
+// included. The attach the re-issued tickets are minted for can still fail
+// afterwards -- a network error, a server refusal, a deactivated client -- and
+// the caller runs the rollback so a failed attach leaves the document as the
+// user handed it over rather than rewritten and stripped of its history.
+//
+// The rollback declines, leaving the document alone, once the attach has got
+// far enough to put the server's state into the document; see
+// InternalDocument.ReissueActor. The undo/redo stacks follow the decision, so
+// they are never restored over a document the rollback did not touch. An entry
+// pushed by an Update made while the attach was in flight is dropped with the
+// restore: its reverse operations name tickets the re-issue minted, which the
+// rollback has just re-issued away.
 //
 // It takes d.mu for writing, unconditionally, for the reasons SetActor does.
 func (d *Document) ReissueActor(actor time.ActorID) (func(), error) {
@@ -1028,7 +1036,9 @@ func (d *Document) ReissueActor(actor time.ActorID) (func(), error) {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 
-		rollback()
+		if !rollback() {
+			return
+		}
 		d.history.undoStack, d.history.redoStack = undoStack, redoStack
 		d.invalidateClone()
 	}, nil
