@@ -58,7 +58,6 @@ const (
 	DefaultMongoMonitoringSlowQueryThreshold = 100 * time.Millisecond
 	DefaultMongoCacheStatsInterval           = mongo.DefaultCacheStatsInterval
 	DefaultMongoClientCacheSize              = 10000
-	DefaultMongoClientCacheTTL               = mongo.DefaultClientCacheTTL
 	DefaultMongoDocCacheSize                 = 10000
 	DefaultMongoChangeCacheSize              = 10000
 	DefaultMongoVectorCacheSize              = 10000
@@ -354,9 +353,6 @@ func (c *Config) ensureMongoDefaultValue() {
 	}
 	if c.Mongo.ClientCacheSize == 0 {
 		c.Mongo.ClientCacheSize = DefaultMongoClientCacheSize
-	}
-	if c.Mongo.ClientCacheTTL == "" {
-		c.Mongo.ClientCacheTTL = DefaultMongoClientCacheTTL.String()
 	}
 	if c.Mongo.DocCacheSize == 0 {
 		c.Mongo.DocCacheSize = DefaultMongoDocCacheSize

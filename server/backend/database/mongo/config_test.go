@@ -97,31 +97,6 @@ func TestConfig(t *testing.T) {
 		assert.ErrorIs(t, err, cache.ErrInvalidTTL)
 	})
 
-	t.Run("client cache TTL test", func(t *testing.T) {
-		config := &mongo.Config{
-			ConnectionTimeout: "5s",
-			PingTimeout:       "5s",
-		}
-
-		// Unset falls back to the default instead of "never expire".
-		ttl, err := config.ParseClientCacheTTL()
-		assert.NoError(t, err)
-		assert.Equal(t, mongo.DefaultClientCacheTTL, ttl)
-
-		for _, value := range []string{"0s", "-1s", "1ms", "99ms"} {
-			config.ClientCacheTTL = value
-			assert.ErrorContains(t, config.Validate(), "--mongo-client-cache-ttl", value)
-			_, err := config.ParseClientCacheTTL()
-			assert.ErrorIs(t, err, cache.ErrInvalidTTL, value)
-		}
-
-		config.ClientCacheTTL = "2s"
-		assert.NoError(t, config.Validate())
-		ttl, err = config.ParseClientCacheTTL()
-		assert.NoError(t, err)
-		assert.Equal(t, "2s", ttl.String())
-	})
-
 	t.Run("parse monitoring test", func(t *testing.T) {
 		config := &mongo.Config{
 			MonitoringEnabled:            true,

@@ -242,12 +242,7 @@ type Database interface {
 	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey, skipCache ...bool) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
-	// after handling PushPull. Unless clientInfo detaches or removes the
-	// document, the stored client must still be activated and have the
-	// document attached or attaching; otherwise it returns
-	// ErrClientNotActivated or ErrDocumentNotAttached and writes nothing, so
-	// a clientInfo read from a stale cache cannot write its state back. A
-	// detach or removal is written unconditionally.
+	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
 	// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.

@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +47,7 @@ const (
 // test a nil client to panic on, which would take down every test after it in
 // the package. A rerun of the test under -count gets a database of its own,
 // since the shared testcases name their documents and users after the test.
-func setupTestWithDummyData(t *testing.T, opts ...func(*mongo.Config)) *mongo.Client {
+func setupTestWithDummyData(t *testing.T) *mongo.Client {
 	config := &mongo.Config{
 		ConnectionTimeout:  "5s",
 		ConnectionURI:      "mongodb://localhost:27017",
@@ -61,9 +60,6 @@ func setupTestWithDummyData(t *testing.T, opts ...func(*mongo.Config)) *mongo.Cl
 		DocCacheSize:       helper.MongoDocCacheSize,
 		ChangeCacheSize:    helper.MongoChangeCacheSize,
 		VectorCacheSize:    helper.MongoVectorCacheSize,
-	}
-	for _, opt := range opts {
-		opt(config)
 	}
 	require.NoError(t, config.Validate())
 
@@ -326,55 +322,6 @@ func TestClient_AttachedClientLookupDoesNotCacheStaleRows(t *testing.T) {
 	cached, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
 	require.NoError(t, err)
 	require.ErrorIs(t, cached.EnsureDocumentAttached(docInfo.ID), database.ErrDocumentNotAttached)
-}
-
-// TestClient_ClientCacheExpiresOnNodeThatDidNotWrite checks that the client
-// cache refreshes on a node that performed no write. Entries are written by
-// the node that performed the write and by the read miss path, and nothing
-// invalidates them across nodes, so the TTL is the only thing that keeps the
-// state the RPC gates read from drifting from what the database holds.
-func TestClient_ClientCacheExpiresOnNodeThatDidNotWrite(t *testing.T) {
-	ctx := context.Background()
-	const ttl = gotime.Second
-
-	nodeA := setupTestWithDummyData(t)
-	nodeB := setupTestWithDummyData(t, func(conf *mongo.Config) {
-		conf.ClientCacheTTL = ttl.String()
-	})
-
-	info, err := nodeA.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
-	require.NoError(t, err)
-	refKey := info.RefKey()
-
-	// nodeB caches the activated row.
-	cachedAt := gotime.Now()
-	cached, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
-	require.NoError(t, err)
-	require.NoError(t, cached.EnsureActivated())
-
-	// nodeA deactivates the client. Nothing tells nodeB.
-	deactivated, err := nodeA.DeactivateClient(ctx, refKey)
-	require.NoError(t, err)
-	require.Equal(t, database.ClientDeactivated, deactivated.Status)
-
-	// Within the TTL nodeB still reads the activated copy it cached, which
-	// shows the read below is served by an expiry and not by a cache that
-	// was never filled. Checked only while well inside the TTL, so a slow
-	// machine cannot turn an expiry into a false failure here.
-	stale, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
-	require.NoError(t, err)
-	if gotime.Since(cachedAt) < ttl/2 {
-		require.NoError(t, stale.EnsureActivated())
-	}
-
-	// Past the TTL the entry is gone and the miss path reads the row again.
-	require.Eventually(t, func() bool {
-		refreshed, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
-		return err == nil && refreshed.Status == database.ClientDeactivated
-	}, 10*ttl, ttl/10)
-	refreshed, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
-	require.NoError(t, err)
-	require.ErrorIs(t, refreshed.EnsureActivated(), database.ErrClientNotActivated)
 }
 
 func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {

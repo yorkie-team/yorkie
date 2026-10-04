@@ -143,15 +143,8 @@ func PushPull(
 	}
 
 	// 03. pull the pack from the database.
-	// pushPack confirmed the attachment against the database whenever it had
-	// something to write, so the pull does not read the client again. When the
-	// push wrote nothing, the pull confirms it itself before it hands the
-	// document back or writes the version vector. A push whose changes were
-	// discarded after the confirmation (stale epoch, over quota) reports no
-	// pushed changes here, which only costs the pull one redundant read.
-	attachmentConfirmed := len(pushedChanges) > 0 || reqPack.IsRemoved
 	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold,
-		docInfo, reqPack, cpAfterPush, initialSeq, attachmentConfirmed, opts)
+		docInfo, reqPack, cpAfterPush, initialSeq, opts)
 
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
@@ -358,18 +351,6 @@ func pushPack(
 				pushables = nil
 			}
 		}
-
-		// 05. Confirm the attachment against the database before writing to
-		// the document. A push admitted on a stale cached clientInfo must not
-		// land its changes, or mark the document removed, for a client the
-		// database no longer has attached. Pushes without changes write
-		// nothing to the document here; pullPack confirms them before its own
-		// write.
-		if (len(pushables) > 0 || reqPack.IsRemoved) && !clientInfo.IsServerClient() {
-			if err := confirmAttachment(ctx, be, clientInfo, docKey.DocID); err != nil {
-				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-			}
-		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
 		ctx,
@@ -399,69 +380,6 @@ func pushPack(
 	return pushables, docInfo, initialSeq, cpAfterPush, nil
 }
 
-// confirmAttachment confirms against the database that the given client still
-// has the document attached, or attaching for the push that completes an
-// attach. The RPC gate read clientInfo through this node's client cache, which
-// another node's deactivation or detach reaches only when the entry expires
-// (MongoDB ClientCacheTTL), so a request admitted on such a stale copy must
-// confirm before it writes anything keyed on the attachment. The read bypasses
-// the cache; call it only on a path that is about to write.
-func confirmAttachment(
-	ctx context.Context,
-	be *backend.Backend,
-	clientInfo *database.ClientInfo,
-	docID types.ID,
-) error {
-	stored, err := be.DB.FindClientInfoByRefKey(ctx, clientInfo.RefKey(), true)
-	if err != nil {
-		return err
-	}
-
-	return stored.EnsureDocumentAttachedOrAttaching(docID)
-}
-
-// pullNeedsConfirmation reports whether this pull has to confirm the client's
-// attachment against the database before it runs. confirmAttachment bypasses
-// the client cache, so the read is taken only on a pull that acts on the
-// attachment: one that hands the document's state back, or one that upserts
-// the client's row in version_vectors. A pull that does neither — a push-only
-// sync, or a sync the document has not moved past — observes nothing and
-// writes nothing, so it is left to the conditional write-back in
-// UpdateClientInfoAfterPushPull, which already refuses a stale client row.
-func pullNeedsConfirmation(
-	clientInfo *database.ClientInfo,
-	docInfo *database.DocInfo,
-	reqPack *change.Pack,
-	initialSeq int64,
-	opts PushPullOptions,
-) (bool, error) {
-	// The pull returns changes or a snapshot whenever the document has moved
-	// past the checkpoint the client presented, unless the client is push-only.
-	// A client revoked on another node must not be handed either, so this is
-	// checked before the DisableGC branch below: DisableGC is set verbatim from
-	// the request, and gating on it alone would let the client select its way
-	// past the confirmation.
-	if opts.Mode != types.SyncModePushOnly && initialSeq > reqPack.Checkpoint.ServerSeq {
-		return true, nil
-	}
-
-	// A GC-free sync writes no version_vectors row, and a pull that detaches or
-	// removes only deletes the row, which is idempotent.
-	if opts.DisableGC ||
-		opts.Status == document.StatusDetached ||
-		opts.Status == document.StatusRemoved {
-		return false, nil
-	}
-
-	// A pull that leaves the document attached upserts the client's row in
-	// version_vectors, keyed on the in-memory attachment status alone. On a
-	// stale cached clientInfo that re-creates the row another node's detach
-	// deleted, and nothing deletes it again: the resurrected entry holds the
-	// detached client's old vector down, so minVV stops advancing and the
-	// document's tombstones are never collected.
-	return clientInfo.IsAttached(docInfo.ID)
-}
-
 func pullPack(
 	ctx context.Context,
 	be *backend.Backend,
@@ -471,28 +389,9 @@ func pullPack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialSeq int64,
-	attachmentConfirmed bool,
 	opts PushPullOptions,
 ) (*ServerPack, error) {
-	// 01. Confirm the attachment against the database before the pull acts on
-	// it. This has to run ahead of preparePack, not next to the version vector
-	// write below: handing a revoked client the document's changes or a full
-	// snapshot is itself an effect of the attachment, and a request that sets
-	// DisableGC skips the version vector write entirely. Both effects are
-	// therefore gated here, on the one read, rather than per branch.
-	if !attachmentConfirmed && !clientInfo.IsServerClient() {
-		confirm, err := pullNeedsConfirmation(clientInfo, docInfo, reqPack, initialSeq, opts)
-		if err != nil {
-			return nil, err
-		}
-		if confirm {
-			if err := confirmAttachment(ctx, be, clientInfo, docInfo.ID); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	// 02. pull changes or a snapshot from the database and create a response pack.
+	// 01. pull changes or a snapshot from the database and create a response pack.
 	resPack, err := preparePack(ctx, be, clientInfo, snapshotThreshold,
 		docInfo, reqPack, cpAfterPush, initialSeq, opts)
 
@@ -514,12 +413,12 @@ func pullPack(
 	}
 	resPack.ApplyDocInfo(docInfo)
 
-	// 03. update the document's status in the client.
+	// 02. update the document's status in the client.
 	if err := clientInfo.UpdateDocStatus(docInfo.ID, opts.Status, resPack.Checkpoint); err != nil {
 		return nil, err
 	}
 
-	// 04. update client's vector and checkpoint to DB.
+	// 03. update client's vector and checkpoint to DB.
 	// Skip both minVV tracking and response VV when this PushPull is
 	// flagged as GC-free. The client never consumes the response VV for
 	// tombstone GC, and excluding it from minVV is correct because
@@ -552,7 +451,6 @@ func pullPack(
 			resPack.VersionVector = nil
 		}
 	} else {
-		// The attachment behind this upsert was confirmed in step 01.
 		minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
 		if err != nil {
 			return nil, err

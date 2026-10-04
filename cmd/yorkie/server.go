@@ -77,7 +77,6 @@ var (
 	mongoProjectCacheSize             int
 	mongoProjectCacheTTL              time.Duration
 	mongoClientCacheSize              int
-	mongoClientCacheTTL               time.Duration
 	mongoDocCacheSize                 int
 	mongoChangeCacheSize              int
 	mongoVectorCacheSize              int
@@ -147,7 +146,6 @@ func newServerCmd() *cobra.Command {
 					ProjectCacheSize:             mongoProjectCacheSize,
 					ProjectCacheTTL:              mongoProjectCacheTTL.String(),
 					ClientCacheSize:              mongoClientCacheSize,
-					ClientCacheTTL:               mongoClientCacheTTL.String(),
 					DocCacheSize:                 mongoDocCacheSize,
 					ChangeCacheSize:              mongoChangeCacheSize,
 					VectorCacheSize:              mongoVectorCacheSize,
@@ -441,14 +439,6 @@ func init() {
 		"mongo-client-cache-size",
 		server.DefaultMongoClientCacheSize,
 		"MongoDB client cache size",
-	)
-	cmd.Flags().DurationVar(
-		&mongoClientCacheTTL,
-		"mongo-client-cache-ttl",
-		server.DefaultMongoClientCacheTTL,
-		"TTL for MongoDB client cache (e.g. '1m', '30s'). Must be at least 100ms. "+
-			"It bounds how long a node that did not perform a write reads stale "+
-			"client activation and attachment state.",
 	)
 	cmd.Flags().IntVar(
 		&mongoDocCacheSize,

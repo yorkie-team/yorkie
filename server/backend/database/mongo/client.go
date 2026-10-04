@@ -22,9 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/maphash"
 	"strings"
-	"sync"
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -40,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -57,10 +56,6 @@ const (
 	// record written without one: type byte, "_id\x00" and a 12-byte ObjectID.
 	objectIDElementSize = 1 + 4 + 12
 
-	// clientCacheLockStripes is the number of locks that serialize client
-	// cache updates; see Client.clientCacheLocks.
-	clientCacheLockStripes = 1024
-
 	// compactionUndoTimeout bounds the reads and writes that settle a failed
 	// compaction. They run on a context detached from the one the failed write
 	// used, since a cancelled or expired context is the likeliest reason for
@@ -76,21 +71,19 @@ type Client struct {
 
 	cacheManager  *cache.Manager
 	projectCache  *ProjectCache
-	clientCache   *cache.LRUWithExpires[types.ClientRefKey, *database.ClientInfo]
+	clientCache   *cache.LRU[types.ClientRefKey, *database.ClientInfo]
 	docCache      *cache.LRU[types.DocRefKey, *database.DocInfo]
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 
-	// clientCacheLocks serializes, per client, a read or write of the client
-	// row with the clientCache update that follows it. Without it, requests of
-	// one client racing each other (a PushPull on one document and an attach
-	// of another) can land an older copy of the row in the cache after a newer
+	// clientLocks serializes, per client, a read or write of the client row
+	// with the clientCache update that follows it. Without it, requests of one
+	// client racing each other (a PushPull on one document and an attach of
+	// another) can land an older copy of the row in the cache after a newer
 	// one, and every later request of the client reads the stale copy: an
 	// attach that the database holds then fails with "document not attached".
-	// Clients are striped over a fixed set of locks by ID.
-	clientCacheLocks [clientCacheLockStripes]sync.Mutex
-	clientLockSeed   maphash.Seed
+	clientLocks *locker.Locker
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -149,19 +142,7 @@ func Dial(conf *Config) (*Client, error) {
 	}
 	cacheManager.RegisterCache(projectCache)
 
-	clientCacheTTL, err := conf.ParseClientCacheTTL()
-	if err != nil {
-		return nil, fmt.Errorf("initialize client cache: %w", err)
-	}
-
-	// NOTE: The client cache expires. Entries are written by the node that
-	// performed the write and by the miss path below, and nothing invalidates
-	// them across nodes, so without a TTL a node that did not perform a write
-	// would read activation and attachment state the database no longer holds
-	// for as long as the entry stayed resident. See DefaultClientCacheTTL.
-	clientCache, err := cache.NewLRUWithExpires[types.ClientRefKey, *database.ClientInfo](
-		conf.ClientCacheSize, clientCacheTTL, "clients",
-	)
+	clientCache, err := cache.NewLRU[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
 	if err != nil {
 		return nil, fmt.Errorf("initialize client cache: %w", err)
 	}
@@ -200,14 +181,14 @@ func Dial(conf *Config) (*Client, error) {
 		client:   client,
 		registry: registry,
 
-		cacheManager:   cacheManager,
-		projectCache:   projectCache,
-		clientCache:    clientCache,
-		clientLockSeed: maphash.MakeSeed(),
-		docCache:       docCache,
-		changeCache:    changeCache,
-		presenceCache:  presenceCache,
-		vectorCache:    vectorCache,
+		cacheManager:  cacheManager,
+		projectCache:  projectCache,
+		clientCache:   clientCache,
+		clientLocks:   locker.New(),
+		docCache:      docCache,
+		changeCache:   changeCache,
+		presenceCache: presenceCache,
+		vectorCache:   vectorCache,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -1134,18 +1115,11 @@ func (c *Client) ActivateClient(
 		UpdatedAt:     now,
 	}
 
-	// The ID is freshly generated, so no other request can be writing this
-	// client yet and the lock is uncontended. It is taken anyway so that every
-	// write of clientCache pairs its row write under the client's lock, and a
-	// later caller of this method cannot quietly break that rule.
-	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
-	unlock := c.lockClientCache(refKey)
-	defer unlock()
-
 	if _, err := c.collection(ColClients).InsertOne(ctx, info); err != nil {
 		return nil, fmt.Errorf("insert client: %w", err)
 	}
 
+	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
 	c.clientCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
@@ -1279,13 +1253,16 @@ func (c *Client) DeactivateClient(
 	return info, nil
 }
 
-// lockClientCache locks the stripe of clientCacheLocks the given client maps
-// to and returns its unlock function.
+// lockClientCache locks the given client's entry of clientLocks and returns
+// its unlock function.
 func (c *Client) lockClientCache(refKey types.ClientRefKey) func() {
-	stripe := maphash.String(c.clientLockSeed, refKey.ClientID.String()) % clientCacheLockStripes
-	mu := &c.clientCacheLocks[stripe]
-	mu.Lock()
-	return mu.Unlock
+	name := refKey.ClientID.String()
+	c.clientLocks.Lock(name)
+	return func() {
+		// Unlock fails only for a name that is not locked, which cannot
+		// happen here: this function locked it.
+		_ = c.clientLocks.Unlock(name)
+	}
 }
 
 // FindClientInfoByRefKey finds the client of the given refKey.
@@ -1409,35 +1386,14 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	filter := bson.M{
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": info.ProjectID,
 		"_id":        info.ID,
-	}
-	// Every update but a detach is written only while the database still has
-	// the client activated and the document attached (or attaching, for the
-	// push that completes an attach). info may come from a cache that has not
-	// seen another node's deactivation or detach yet, within the cache TTL;
-	// without these conditions the push would write that stale state back,
-	// putting the document into attached_docs of a client the database
-	// already deactivated or detached, and nothing would ever detach it
-	// again. A detach only clears the attachment, so it stays unconditional
-	// and idempotent.
-	if attached {
-		filter["status"] = database.ClientActivated
-		filter[clientDocInfoKey(docInfo.ID, StatusKey)] = bson.M{
-			"$in": bson.A{database.DocumentAttached, database.DocumentAttaching},
-		}
-	}
-	result := c.collection(ColClients).FindOneAndUpdate(
-		ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After),
-	)
+	}, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	updated := &database.ClientInfo{}
 	if err := result.Decode(updated); err != nil {
 		if err == mongo.ErrNoDocuments {
-			if attached {
-				return c.attachMissError(ctx, info, docInfo)
-			}
 			return fmt.Errorf("decode client of %s after PP %s: %w", info.ID, docInfo.ID, database.ErrClientNotFound)
 		}
 
@@ -1447,29 +1403,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	c.clientCache.Add(clientKey, updated.DeepCopy())
 
 	return nil
-}
-
-// attachMissError tells why an attaching update after PushPull matched no
-// client: the client is missing, it is deactivated, or the document is no
-// longer attached to it. It runs only after a miss, so the success path keeps
-// its single round trip. The read is not atomic with the update, so a
-// concurrent change can make it name the wrong reason; only the error differs.
-func (c *Client) attachMissError(
-	ctx context.Context,
-	info *database.ClientInfo,
-	docInfo *database.DocInfo,
-) error {
-	stored, err := c.FindClientInfoByRefKey(ctx, info.RefKey(), true)
-	if err != nil {
-		return fmt.Errorf("update client of %s after PP %s: %w", info.ID, docInfo.ID, err)
-	}
-	if err := stored.EnsureDocumentAttachedOrAttaching(docInfo.ID); err != nil {
-		return fmt.Errorf("update client of %s after PP %s: %w", info.ID, docInfo.ID, err)
-	}
-
-	// The row matches now, so a concurrent write changed it in between.
-	return fmt.Errorf("update client of %s after PP %s: %w",
-		info.ID, docInfo.ID, database.ErrConflictOnUpdate)
 }
 
 // FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
@@ -1490,10 +1423,7 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 
 	// NOTE: The rows read here do not fill clientCache. The query runs outside
 	// the clients' cache locks, so a row read here may already be older than
-	// one a concurrent write cached, and caching it would make every later
-	// request of that client read the stale copy. Refreshing a client this
-	// node did not write is left to the client cache's TTL; see
-	// DefaultClientCacheTTL.
+	// one a concurrent write cached.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
