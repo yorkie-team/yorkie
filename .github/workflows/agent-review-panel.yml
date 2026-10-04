@@ -1288,6 +1288,31 @@ jobs:
               });
             }
 
+      # FILE THE OUT-OF-DIFF FINDINGS AS FOLLOW-UP ISSUES. The out-of-diff gate
+      # (scripts/agent/out-of-diff.mjs) takes a confirmed finding off this PR's gate
+      # when git places it outside the diff and an independent judge finds the
+      # change did not cause it — #2100, #2111 and #2112 each paged on one of these.
+      # Real but not here must not become never: the deferred check above scrolls
+      # away with the next push, so the defect is filed where a maintainer will see
+      # it, once, de-duplicated against every follow-up already filed (open or
+      # closed) and capped per run. Same `!cancelled()` and carry conditions as the
+      # deferred record, for the same reasons. Best-effort: a filing failure leaves
+      # the finding in the deferred record, which is where it was before this.
+      - name: File follow-up issues for out-of-diff findings
+        if: >-
+          !cancelled() && steps.pr.outputs.number != '' && steps.carry.outputs.ok != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          [ -f .trusted/scripts/agent/follow-up-issues.mjs ] || { echo "follow-up-issues.mjs not on main yet; skipping"; exit 0; }
+          node .trusted/scripts/agent/follow-up-issues.mjs file \
+            --review-dir .agent-review \
+            --lenses .trusted/scripts/agent/lenses/lenses.json \
+            --pr "$PR" --head "$HEAD_SHA"
+
       # OBSERVABILITY (Phase 1): make the run page self-explanatory — a per-lens
       # verdict/verifier/cost table rendered from files the orchestrator already
       # wrote (panel.json, review-lens-stats.json, review-timing.json,
