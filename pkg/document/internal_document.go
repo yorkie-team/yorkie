@@ -86,6 +86,16 @@ type InternalDocument struct {
 	// the root holds elements this replica never minted.
 	absorbedRemote bool
 
+	// pushed records that a pack built from this document's local changes
+	// reached the server, even though nothing came back in: the attach RPC
+	// returned and then the client failed before applying the response.
+	// neverSynced reads it, because none of the other signals can see that
+	// window -- the checkpoint is still initial, the status still Detached and
+	// nothing absorbed -- while the server already holds the pushed elements
+	// under the actor they were re-issued to. Re-issuing them again, in either
+	// direction, would leave the two replicas naming them differently.
+	pushed bool
+
 	// disableGC, when true, declares that this document does not produce or
 	// consume tombstones (see docs/design/disable-gc-on-attach.md). It is set
 	// by the client on Attach and consumed by ApplyChanges to skip merging
@@ -409,13 +419,20 @@ func (d *InternalDocument) reissue(from, to time.ActorID) error {
 // ticket naming its actor was then issued here and is held only by its local
 // changes and the state built from them.
 //
+// "Sent" covers a pack the server stored but whose response this replica never
+// took in: the attach RPC returned and the client failed before applying what
+// came back. Nothing in the checkpoint, the status or the version vector
+// records that, so MarkPushed does, and a document carrying the mark is never
+// re-issued again -- neither back to its previous actor by the attach rollback
+// nor forward to another one by a later attach.
+//
 // absorbedRemote is the load-bearing guard, not the checkpoint: applySnapshot
 // replaces the root and only its CALLER forwards the checkpoint, so a snapshot
 // pack carrying the initial checkpoint would leave the other two signals
 // looking untouched while the root is full of elements ReissueActor's rebuild
 // cannot reproduce from the local changes.
 func (d *InternalDocument) neverSynced() bool {
-	if d.absorbedRemote || d.status != StatusDetached || d.checkpoint != change.InitialCheckpoint {
+	if d.pushed || d.absorbedRemote || d.status != StatusDetached || d.checkpoint != change.InitialCheckpoint {
 		return false
 	}
 	actor := d.changeID.ActorID()
@@ -425,6 +442,19 @@ func (d *InternalDocument) neverSynced() bool {
 		}
 	}
 	return true
+}
+
+// MarkPushed records that a pack built from this document's local changes
+// reached the server. The client calls it when the attach RPC returned and the
+// attach then failed, which is the one case the document cannot tell from
+// never having synced at all; a successful attach leaves the same evidence
+// through the applied response pack.
+//
+// After it, ReissueActor falls back to SetActor: the elements the server
+// stored keep the tickets it stored them under, whichever actor the document
+// is attached under next.
+func (d *InternalDocument) MarkPushed() {
+	d.pushed = true
 }
 
 // reissueVersionVector returns a copy of the given vector with the entry of
@@ -726,5 +756,6 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		localChanges:  d.localChanges,
 
 		absorbedRemote: d.absorbedRemote,
+		pushed:         d.pushed,
 	}, nil
 }

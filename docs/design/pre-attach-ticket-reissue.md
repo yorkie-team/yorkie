@@ -122,11 +122,22 @@ is still initial, the status still `StatusDetached` and nothing absorbed. A
 failure in that window -- decoding the response pack, bringing the watch
 pipeline up, the post-attach `Update` or `ClearHistory` -- would pass the guard
 and re-issue away tickets the server has stored. `attachDocument` therefore
-reports whether the push reached the server, and `Client.Attach` runs the
-rollback only when it did not. A transport error counts as not reached even
-though the server may have committed before the response was lost: re-attaching
-with the same client re-issues the same tickets to the same actor, so the
-replicas still name those elements identically.
+reports whether the push reached the server, and `Client.Attach` records it on
+the document with `MarkPushed` when it did. A transport error counts as not
+reached even though the server may have committed before the response was lost:
+re-attaching with the same client re-issues the same tickets to the same actor,
+so the replicas still name those elements identically.
+
+The mark lives on the document rather than in the attach that set it, because
+the forward re-issue reads the same blind signals as the rollback. A document
+left behind by a pushed-but-failed attach is still `StatusDetached` with an
+initial checkpoint and nothing absorbed, so attaching it again -- with the same
+client after a reactivation, or with another client altogether -- would re-issue
+to a second actor the very elements the server already holds under the first.
+`neverSynced` therefore reports false once the mark is set, in both directions:
+the rollback declines, and a later `ReissueActor` falls back to `SetActor`,
+which stamps the new actor into the change IDs while leaving every stored ticket
+as the server knows it.
 
 ### Re-issuing the operations
 
@@ -176,12 +187,17 @@ The gate is bounded by how the acting client is identified, which this design
 does not change: every document RPC resolves the client from the request's
 `client_id` and `clients.FindActiveClientInfo` only checks that the row exists
 and is activated, so authentication is project-scoped (API key, optional auth
-webhook) rather than per client. A caller inside the same project that learns
-another client's session id can still satisfy the ownership predicate for that
-client -- as it could already impersonate it everywhere else in the API. Per
+webhook) rather than per client. A caller inside the same project can still
+satisfy the ownership predicate for another client, by either identity
+`IsOwnActor` accepts: it can present that client's session id if it learns one,
+or -- for the `StableActorID` branch -- activate with that client's key, which
+is an application-chosen name the system has never treated as a secret and
+which `types.DeriveActorID` turns into the same actor every time. Neither is
+new: such a caller could already act as that client everywhere else in the API,
+since `client_id` is what every document RPC resolves the actor from. Per
 client credential binding is a protocol-level change and a separate task; the
-gate still removes the cross-client actor forgery that needed no session id at
-all.
+gate still removes the cross-client actor forgery that needed no client
+identity at all.
 
 ### Risks and Mitigation
 

@@ -1047,6 +1047,22 @@ func (d *Document) ReissueActor(actor time.ActorID) (func(), error) {
 	}, nil
 }
 
+// MarkPushed records that a pack built from this document's local changes
+// reached the server. The client calls it when an attach whose RPC had already
+// returned fails afterwards: the server holds the re-issued elements from then
+// on, so neither that attach's rollback nor a later attach under another actor
+// may re-issue them again. See InternalDocument.MarkPushed.
+//
+// It takes d.mu for writing, for the reason SetActor does: the attach path
+// calls it beside a running updater, and ReissueActor reads the flag under the
+// same lock.
+func (d *Document) MarkPushed() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.doc.MarkPushed()
+}
+
 // ActorID returns ID of the actor currently editing the document.
 //
 // It reads d.doc.changeID, which SetActor and every applied change write under

@@ -760,9 +760,17 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 			// StatusAttached only after the pack is applied, and puts it back to
 			// Detached when it gives an applied attach up to a concurrent
 			// Deactivate.
-			if !pushed {
-				rollback()
+			//
+			// The push is marked on the document rather than kept here, so a
+			// later attach of the same document -- under this client or another
+			// one, with a different actor -- re-issues no ticket the server
+			// already holds either. The mark makes the rollback below decline on
+			// its own; it is still called so the plain-SetActor path, which the
+			// mark does not cover, is put back.
+			if pushed {
+				d.MarkPushed()
 			}
+			rollback()
 			return err
 		}
 		return nil

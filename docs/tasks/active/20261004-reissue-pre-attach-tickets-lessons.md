@@ -102,3 +102,29 @@
   by `neverSynced` (it could revert the actor of a document whose attach
   already applied), the undo/redo stacks are restored only after a real
   re-issue, and `DeepCopy` keeps `absorbedRemote`.
+
+## Loop round 6 follow-up (panel)
+
+- Upheld: the forward re-issue had the same blind spot the round-5
+  rollback guard closed. After a pushed-but-failed attach, nothing local
+  records the push, so attaching the document again -- same client after a
+  reactivation, or another one -- re-issued elements the server already
+  held, under a second actor.
+- Fix: the push is now recorded on the document itself
+  (`InternalDocument.MarkPushed`, `Document.MarkPushed`, carried by
+  `DeepCopy`), and `neverSynced` reads it. One flag covers both
+  directions: the rollback declines, and a later `ReissueActor` falls back
+  to `SetActor`, which moves the change IDs and leaves every stored ticket
+  alone. `Client.Attach` sets it from the `pushed` report and then calls
+  the rollback unconditionally, since the rollback now decides for itself.
+- Reproducer: `TestReissueActor/a pushed but failed attach is never
+  re-issued again` -- without the guard the retried attach renames the
+  stored elements and diverges from the server's replica.
+- Disputed, not changed: the panel re-raised `client_id` not being bound
+  to a credential as a blocking finding on `server/rpc/yorkie_server.go`.
+  That is the project-scoped identity model this branch does not touch;
+  rebuttal filed. The one claim this PR did own -- the design doc stating
+  the residual bound as "learns another client's session id" -- was wrong,
+  since `IsOwnActor` also accepts the `StableActorID`, which
+  `types.DeriveActorID` derives from the project id and the client key.
+  The doc now names both ways in.

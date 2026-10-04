@@ -407,6 +407,44 @@ func TestReissueActor(t *testing.T) {
 		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
 	})
 
+	t.Run("a pushed but failed attach is never re-issued again", func(t *testing.T) {
+		// The window neverSynced cannot see on its own: AttachDocument
+		// returned, so the server stored the re-issued pack, and the attach
+		// then failed before the response was applied. The checkpoint is still
+		// initial, the status still Detached and nothing absorbed, so only the
+		// push mark keeps the document away from a second re-issue -- the
+		// rollback's and a later attach's alike.
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+
+		rollback, err := doc.ReissueActor(actorA)
+		require.NoError(t, err)
+		stored := serverBuild(t, doc)
+		require.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+
+		doc.MarkPushed()
+		rollback()
+
+		assert.Equal(t, actorA, doc.ActorID())
+		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+
+		// The retry -- a reactivated client, or another one taking the document
+		// over -- attaches under a second actor. Only the change IDs may move:
+		// the elements the server holds keep the tickets it stored them under.
+		reissueActor(t, doc, actorB)
+
+		assert.Equal(t, actorB, doc.ActorID())
+		assert.NotZero(t, actorsOf(t, doc)[actorA])
+		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+		for _, actor := range localActorsOf(t, doc) {
+			assert.Equal(t, actorB, actor)
+		}
+
+		// The server's replica, built from the first push, still names every
+		// element the way the retried document does.
+		assert.Equal(t, rootBytes(t, stored), rootBytes(t, doc.InternalDocumentForTest()))
+	})
+
 	t.Run("the rollback of the fallback branch restores a never-synced actor", func(t *testing.T) {
 		// A document without local changes takes the SetActor branch.
 		empty := document.New(helper.TestKey(t))
