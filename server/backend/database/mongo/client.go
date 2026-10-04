@@ -1444,7 +1444,11 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 
 	// NOTE: The rows read here do not fill clientCache. The query runs outside
 	// the clients' cache locks, so a row read here may already be older than
-	// one a concurrent write cached.
+	// one a concurrent write cached. It used to be the only thing refreshing
+	// another node's attach on this one; that job now belongs to the
+	// invalidation the attach broadcasts (see yorkieServer.AttachDocument),
+	// which drops the stale entry instead of overwriting it with a row of
+	// unknown age.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)

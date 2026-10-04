@@ -288,6 +288,17 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	// The attach writes the client row — TryAttaching above, then
+	// UpdateClientInfoAfterPushPull below — on this node only, and a row is
+	// cached per node. Without this the peers keep a copy that still says the
+	// document is not attached, and since nothing refills it (the bulk read in
+	// FindAttachedClientInfosByRefKey deliberately no longer caches, as the
+	// rows it reads run outside the client's cache lock) the gates reading it
+	// would reject the client for as long as the entry survives eviction.
+	// Deferred so it also covers the attaching row left behind when a step
+	// between here and the push fails.
+	defer clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
 	if err != nil {
@@ -1513,16 +1524,20 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pbChangePack, err := pulled.ToPBChangePack()
-	if err != nil {
-		return nil, err
-	}
-
 	// 05. Drop the client row every node has cached. A detach is routed to the
 	// document's owner node, which refreshes its own entry as it writes; every
 	// other node keeps a copy that still says attached, and nothing else would
 	// ever correct it.
+	//
+	// This sits directly after the write that detached the client, not after
+	// the response is built: the row MongoDB holds has already moved on, so
+	// any step failing in between must not leave the peers' copies behind.
 	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
 
 	return connect.NewResponse(&api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
@@ -1673,14 +1688,16 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
+	// 04. Removing the document detaches the client from it, so the same
+	// cached-row correction the detach path needs applies here, and for the
+	// same reason it sits directly after the write rather than after the
+	// response is built.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
 	}
-
-	// 04. Removing the document detaches the client from it, so the same
-	// cached-row correction the detach path needs applies here.
-	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
 
 	return connect.NewResponse(&api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,

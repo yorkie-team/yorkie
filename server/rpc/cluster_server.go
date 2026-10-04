@@ -136,13 +136,15 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	// The detach wrote the client row on this node, so every other node still
-	// holds a cached copy saying the document is attached. Invalidate here,
-	// where the write happened, rather than leaving it to the caller: this
-	// handler is reached by any node routing a detach to the document's owner,
-	// and a caller that drops the response never gets to correct them.
-	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
-
+	// NOTE: No cache invalidation is broadcast here. This handler is only
+	// reached from clients.Deactivate, which detaches every attached document
+	// of one client and then broadcasts a single invalidation for the whole
+	// client row — covering all of them, and on its failure paths too (see
+	// the deferred InvalidateCachedClient there). Broadcasting per document as
+	// well would multiply one deactivation into (documents+1) cluster-wide
+	// fan-outs, and housekeeping runs up to DeactivateConcurrency of those at
+	// once. A future caller that detaches a single document through this
+	// handler must broadcast the invalidation itself.
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
 }
 

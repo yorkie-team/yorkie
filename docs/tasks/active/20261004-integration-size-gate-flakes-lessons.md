@@ -84,3 +84,21 @@
   handler wrote the client row and returned without broadcasting, leaving
   it to its caller — so any other caller of that RPC, or a caller that
   loses the response, left every peer's row stale.
+- ...and the round after corrected that: "where the write happens" is not
+  the same as "per write". `clients.Deactivate` detaches every attached
+  document through the cluster handler and then drops the row itself, so
+  broadcasting in both places turned one deactivation into
+  (documents+1) cluster-wide fan-outs — times `DeactivateConcurrency`
+  under housekeeping. One deferred broadcast in `Deactivate` covers the
+  detaches and the deactivation write together, because they all land in
+  the same row and a drop drops all of them.
+- `defer` is the right shape for an invalidation, not a call at the end of
+  the happy path. The row MongoDB holds has already moved on by the time
+  the write returns, so a failure in a later step — serializing the
+  response, a detach midway through a deactivation — must not be what
+  decides whether the peers hear about it.
+- Removing the bulk-read cache fill removed the only thing that refreshed
+  a peer's row after an attach, and no attach path broadcast. Detach and
+  deactivation had counterparts; attach did not, which is exactly the
+  asymmetry that leaves a client the database says is attached rejected by
+  every node but the one that wrote it.

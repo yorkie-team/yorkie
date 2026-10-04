@@ -104,6 +104,14 @@ func Deactivate(
 		return nil, err
 	}
 
+	// One broadcast covers the whole deactivation: the detaches below and the
+	// DeactivateClient write all land in the same client row, and dropping the
+	// row drops every one of them at once. It is deferred rather than placed
+	// after the write so a detach that already committed is still announced
+	// when a later step fails — the row MongoDB holds has moved on either way,
+	// and the peers' copies must not outlive it.
+	defer InvalidateCachedClient(ctx, be, refKey)
+
 	for _, info := range docInfos {
 		if err := clusterClient.DetachDocument(
 			ctx,
@@ -120,8 +128,6 @@ func Deactivate(
 	if err != nil {
 		return nil, err
 	}
-
-	InvalidateCachedClient(ctx, be, refKey)
 
 	return deactivated, nil
 }
