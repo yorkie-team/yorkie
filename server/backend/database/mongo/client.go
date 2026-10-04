@@ -1413,13 +1413,20 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		"project_id": info.ProjectID,
 		"_id":        info.ID,
 	}
-	// An attachment is written only to an activated client. info may come
-	// from a cache that has not seen a deactivation yet (another node's write,
-	// within the cache TTL); without this condition the push would put the
-	// document back into attached_docs of a deactivated client, and nothing
-	// would ever detach it again. A detach needs no such condition.
+	// Every update but a detach is written only while the database still has
+	// the client activated and the document attached (or attaching, for the
+	// push that completes an attach). info may come from a cache that has not
+	// seen another node's deactivation or detach yet, within the cache TTL;
+	// without these conditions the push would write that stale state back,
+	// putting the document into attached_docs of a client the database
+	// already deactivated or detached, and nothing would ever detach it
+	// again. A detach only clears the attachment, so it stays unconditional
+	// and idempotent.
 	if attached {
 		filter["status"] = database.ClientActivated
+		filter[clientDocInfoKey(docInfo.ID, StatusKey)] = bson.M{
+			"$in": bson.A{database.DocumentAttached, database.DocumentAttaching},
+		}
 	}
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After),
@@ -1443,26 +1450,26 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 }
 
 // attachMissError tells why an attaching update after PushPull matched no
-// client: the client is deactivated, or it does not exist. It runs only after
-// a miss, so the success path keeps its single round trip.
+// client: the client is missing, it is deactivated, or the document is no
+// longer attached to it. It runs only after a miss, so the success path keeps
+// its single round trip. The read is not atomic with the update, so a
+// concurrent change can make it name the wrong reason; only the error differs.
 func (c *Client) attachMissError(
 	ctx context.Context,
 	info *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	err := c.collection(ColClients).FindOne(ctx, bson.M{
-		"project_id": info.ProjectID,
-		"_id":        info.ID,
-	}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
-	if err == nil {
-		return fmt.Errorf("update client of %s after PP %s: %w",
-			info.ID, docInfo.ID, database.ErrClientNotActivated)
+	stored, err := c.FindClientInfoByRefKey(ctx, info.RefKey(), true)
+	if err != nil {
+		return fmt.Errorf("update client of %s after PP %s: %w", info.ID, docInfo.ID, err)
 	}
-	if err != mongo.ErrNoDocuments {
-		return fmt.Errorf("find client of %s after PP %s: %w", info.ID, docInfo.ID, err)
+	if err := stored.EnsureDocumentAttachedOrAttaching(docInfo.ID); err != nil {
+		return fmt.Errorf("update client of %s after PP %s: %w", info.ID, docInfo.ID, err)
 	}
 
-	return fmt.Errorf("decode client of %s after PP %s: %w", info.ID, docInfo.ID, database.ErrClientNotFound)
+	// The row matches now, so a concurrent write changed it in between.
+	return fmt.Errorf("update client of %s after PP %s: %w",
+		info.ID, docInfo.ID, database.ErrConflictOnUpdate)
 }
 
 // FindAttachedClientInfosByRefKey returns the attached client infos of the given document.

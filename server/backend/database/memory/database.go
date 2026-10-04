@@ -1203,12 +1203,17 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	}
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
+	if loaded.ProjectID != clientInfo.ProjectID {
+		return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, database.ErrClientNotFound)
+	}
 
-	// An attachment is written only to an activated client; see the MongoDB
-	// implementation.
-	if attached && loaded.Status != database.ClientActivated {
-		return fmt.Errorf("update client of %s after PushPull %s: %w",
-			clientInfo.ID, docInfo.ID, database.ErrClientNotActivated)
+	// Every update but a detach is written only while the stored client is
+	// activated and has the document attached or attaching; see the
+	// Database interface.
+	if attached {
+		if err := loaded.EnsureDocumentAttachedOrAttaching(docRefKey.DocID); err != nil {
+			return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, err)
+		}
 	}
 
 	if !attached {
