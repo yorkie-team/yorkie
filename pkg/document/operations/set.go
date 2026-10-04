@@ -93,12 +93,15 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// Anything else names a live element this Set is not restoring -- a
 	// different key, a different object, or a descendant of either -- and
 	// taking it in would either strand that element or hand the sender an
-	// unaccounted subtree. It is rejected before a single map is touched.
-	// The general push-boundary validation this stands in for is tracked at
+	// unaccounted subtree. It is refused before a single map is touched.
+	//
+	// Refused, not failed, on everything but a local Set: the server stores a
+	// pushed change before executing it, so a hard error would be replayed out
+	// of the change log forever. See refuseInUseIdentity. The general
+	// push-boundary validation this stands in for is tracked at
 	// yorkie-team/yorkie#2081.
-	if occupant := root.FindByCreatedAt(o.value.CreatedAt()); occupant != nil &&
-		occupant.RemovedAt() == nil && occupant != obj.Get(o.key) {
-		return ExecutionResult{}, ErrInUseElementIdentity
+	if identityInUse(root, o.value, obj.Get(o.key)) {
+		return refuseInUseIdentity(source)
 	}
 
 	// The reverse must be built from the value at this key before it is

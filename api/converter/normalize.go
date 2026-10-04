@@ -49,11 +49,29 @@ func FromStoredOperations(pbOps []*api.Operation) ([]operations.Operation, error
 	if err == nil {
 		return ops, nil
 	}
-	if !goerrors.Is(err, ErrMissingTicket) {
+	if !droppableOnRead(err) {
 		return nil, err
 	}
 
 	return FromOperations(withoutUndatedOperations(pbOps))
+}
+
+// droppableOnRead reports whether a decode rejection is one the stored path
+// drops the operation for rather than failing the whole read.
+//
+// Both members are rejections no repair exists for, and both would otherwise
+// make a document holding such a change permanently unloadable -- and, since
+// the server rebuilds documents and snapshots by replaying the same change log
+// (packs.BuildInternalDocForServerSeq), permanently so.
+//
+//   - ErrMissingTicket: a ticket a well-formed operation always carries is
+//     absent. Such an operation could never have applied anywhere.
+//   - ErrAcausalElementIdentity: the payload names an identity the pushing
+//     change could not have issued (requireCausalIdentity). Only a forged or
+//     corrupt change carries one, and dropping it is what every replica that
+//     refused the identity already did (operations.refuseInUseIdentity).
+func droppableOnRead(err error) bool {
+	return goerrors.Is(err, ErrMissingTicket) || goerrors.Is(err, ErrAcausalElementIdentity)
 }
 
 // SanitizeStoredOperations applies the same repair-and-drop pass as
@@ -74,7 +92,7 @@ func SanitizeStoredOperations(pbOps []*api.Operation) []*api.Operation {
 	// Same shape as FromStoredOperations: the drop pass runs only once the
 	// ordinary decode has reported ErrMissingTicket, so intact changes -- every
 	// change, unless legacy data says otherwise -- pay one decode and no more.
-	if _, err := FromOperations(pbOps); err != nil && goerrors.Is(err, ErrMissingTicket) {
+	if _, err := FromOperations(pbOps); err != nil && droppableOnRead(err) {
 		return withoutUndatedOperations(pbOps)
 	}
 
@@ -82,7 +100,9 @@ func SanitizeStoredOperations(pbOps []*api.Operation) []*api.Operation {
 }
 
 // withoutUndatedOperations drops the operations FromOperations rejects for an
-// absent required time ticket, leaving every other rejection to surface.
+// absent required time ticket, or for an element identity the pushing change
+// could not have issued, leaving every other rejection to surface. See
+// droppableOnRead.
 //
 // It asks fromOperation rather than re-listing the required fields so the two
 // paths cannot drift: whatever the wire boundary decides is required is exactly
@@ -90,7 +110,7 @@ func SanitizeStoredOperations(pbOps []*api.Operation) []*api.Operation {
 func withoutUndatedOperations(pbOps []*api.Operation) []*api.Operation {
 	kept := make([]*api.Operation, 0, len(pbOps))
 	for _, pbOp := range pbOps {
-		if _, err := fromOperation(pbOp); err != nil && goerrors.Is(err, ErrMissingTicket) {
+		if _, err := fromOperation(pbOp); err != nil && droppableOnRead(err) {
 			continue
 		}
 

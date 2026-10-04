@@ -62,9 +62,9 @@ func TestDeepCopyCarriesAdoptedSlots(t *testing.T) {
 }
 
 // TestDeepCopyDropsOrphansWhoseSlotsWereTakenOver keeps the carried-over list
-// from growing with every restore: an orphan whose every slot has since been
-// taken over by a live element is unreachable in the original too, so there is
-// nothing for the copy to answer for.
+// from reaching the copy once it answers for nothing: an orphan whose every
+// slot has since been taken over by a live element is unreachable in the
+// original too, so there is nothing for the copy to answer for.
 func TestDeepCopyDropsOrphansWhoseSlotsWereTakenOver(t *testing.T) {
 	actor, err := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
 	require.NoError(t, err)
@@ -85,8 +85,69 @@ func TestDeepCopyDropsOrphansWhoseSlotsWereTakenOver(t *testing.T) {
 	root.RegisterElement(live, obj)
 	require.Same(t, Element(live), root.FindByCreatedAt(sharedAt))
 
-	_, err = root.DeepCopy()
+	copied, err := root.DeepCopy()
 	require.NoError(t, err)
-	assert.Empty(t, root.detached,
-		"an orphan that answers for nothing must not be carried forever")
+	assert.Empty(t, copied.detached,
+		"an orphan that answers for nothing must not reach the copy")
+	assert.Equal(t, "new", copied.FindByCreatedAt(sharedAt).(*Primitive).Value(),
+		"the copy must answer with the live element that took the slot over")
+}
+
+// TestDeepCopyDoesNotMutateReceiver pins DeepCopy as read-only. The server
+// copies an *InternalDocument it holds in be.Cache.Snapshot and shares across
+// concurrent requests (server/packs.BuildInternalDocForServerSeq), and
+// Document.Root's d.updating escape copies the live root with no lock held,
+// so a write to the receiver here is a data race in both. The orphan list is
+// swept on the mutation path instead -- see trackDetached.
+func TestDeepCopyDoesNotMutateReceiver(t *testing.T) {
+	actor, err := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+	require.NoError(t, err)
+
+	obj := NewObject(NewElementRHT(), time.InitialTicket)
+	root := NewRoot(obj)
+
+	sharedAt := time.NewTicket(1, 0, actor)
+	orphan, err := NewPrimitive("old", sharedAt)
+	require.NoError(t, err)
+	root.AdoptRefusedCopy(orphan)
+
+	live, err := NewPrimitive("new", sharedAt)
+	require.NoError(t, err)
+	obj.Set("k", live)
+	root.RegisterElement(live, obj)
+
+	before := append([]Element(nil), root.detached...)
+	for range 3 {
+		_, err = root.DeepCopy()
+		require.NoError(t, err)
+	}
+	assert.Equal(t, before, root.detached, "DeepCopy must not write to its receiver")
+}
+
+// TestTrackDetachedSweepsUnaddressableOrphans is the other half of the move:
+// with the sweep out of DeepCopy, the list must still not grow without bound
+// as orphans lose their slots.
+func TestTrackDetachedSweepsUnaddressableOrphans(t *testing.T) {
+	actor, err := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+	require.NoError(t, err)
+
+	obj := NewObject(NewElementRHT(), time.InitialTicket)
+	root := NewRoot(obj)
+
+	// Every orphan loses its slot to a live element right after it is
+	// adopted, so none of them is addressable by the time the sweep runs.
+	for i := range 4 * minDetachedPrune {
+		at := time.NewTicket(int64(i+1), 0, actor)
+		orphan, err := NewPrimitive("old", at)
+		require.NoError(t, err)
+		root.AdoptRefusedCopy(orphan)
+
+		live, err := NewPrimitive("new", at)
+		require.NoError(t, err)
+		obj.Set("k", live)
+		root.RegisterElement(live, obj)
+	}
+
+	assert.Less(t, len(root.detached), minDetachedPrune*2,
+		"orphans that answer for nothing must not accumulate")
 }

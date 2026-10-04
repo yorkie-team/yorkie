@@ -49,15 +49,64 @@ var (
 	// OpSourceRemote, where the skip guard does not run.
 	ErrOperationSkipped = errors.New("operation skipped")
 
-	// ErrInUseElementIdentity occurs when a Set payload's createdAt names an
-	// element the document is already holding live somewhere other than the
-	// key being set. Nothing between the RPC handler and the operation
+	// ErrInUseElementIdentity occurs when an element payload's createdAt names
+	// an element the document is already holding live somewhere the operation
+	// is not restoring. Nothing between the RPC handler and the operation
 	// validates that ticket -- api/converter's fromSet takes parent_created_at,
 	// executed_at and the element's own createdAt verbatim from the wire -- so
 	// it is checked where the collision becomes load-bearing. See
-	// Set.Execute; the broader push-boundary validation is yorkie-team/yorkie#2081.
+	// Set.Execute, Add.Execute and ArraySet.Execute; the broader
+	// push-boundary validation is yorkie-team/yorkie#2081.
+	//
+	// Only a local operation is reported with it; see refuseInUseIdentity.
 	ErrInUseElementIdentity = errors.New("element identity is already in use")
 )
+
+// identityInUse reports whether the payload's own createdAt already answers to
+// a live element other than the one the operation is allowed to be restoring.
+//
+// The payload's createdAt arrives verbatim off the wire (api/converter's
+// fromSet, fromAdd and fromArraySet each read the element's createdAt straight
+// from the request, and sanitizeElement checks none of them) and it is what
+// every element index in the document keys on, so a value carrying a live
+// element's ticket would take that element's elementMap slot over in
+// Root.index -- stranding the element and, with it, every operation a peer
+// addresses at the slot. `allowed` is the one occupant a legitimate history
+// can produce: the live element sitting at the very key a Set is overwriting,
+// which is the concurrent-restore shape. A tombstone is always allowed: that
+// is an undo restoring a value under the createdAt it was removed as, which is
+// the whole reason a reused ticket is tolerated at all.
+func identityInUse(root *crdt.Root, value crdt.Element, allowed crdt.Element) bool {
+	occupant := root.FindByCreatedAt(value.CreatedAt())
+	return occupant != nil && occupant.RemovedAt() == nil && occupant != allowed
+}
+
+// refuseInUseIdentity reports how an operation must react to a payload whose
+// createdAt is already in use (see identityInUse).
+//
+// A remote or replayed operation is declined, not failed. The push path
+// persists a client's change before anything executes it (server/packs'
+// pushPack validates clientSeq, serverSeq, epoch and size, then stores the
+// change verbatim), so a hard error here would be stored first and raised on
+// every later replay: BuildInternalDocForServerSeq rebuilds the document from
+// that same log on every snapshot, compaction and cache-missing push-pull, and
+// each one would abort at the same operation forever. One crafted ticket would
+// then be a permanent denial of service on the document -- precisely the
+// failure mode skipUnresolvedTarget exists to avoid. Declining instead leaves
+// the document exactly as it was: the operation is dropped from the executed
+// list and from the reverse operations, and nothing it carries is indexed.
+//
+// A local operation is a different matter: the json layer issues a fresh
+// ticket for every value it builds, so a collision there is a bug in this
+// process rather than a peer that saw history in another order, and it keeps
+// reporting itself as one.
+func refuseInUseIdentity(source OpSource) (ExecutionResult, error) {
+	if source == OpSourceLocal {
+		return ExecutionResult{}, ErrInUseElementIdentity
+	}
+
+	return ExecutionResult{}, ErrOperationSkipped
+}
 
 // skipUnresolvedTarget reports how an operation must react to a target
 // createdAt that resolves to no element.

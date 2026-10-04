@@ -142,10 +142,21 @@ type Root struct {
 	// (document.go) rejects exactly the operations the orphan exists to keep
 	// resolvable, before the root ever sees them.
 	//
-	// Pruned in DeepCopy rather than on insert: whether an orphan still owns
-	// any elementMap slot is decided by registrations that come after it.
+	// Pruned on insert rather than in DeepCopy: whether an orphan still owns
+	// any elementMap slot is decided by registrations that come after it, and
+	// insertion is the one moment this Root is already being mutated.
+	// DeepCopy must stay read-only -- see DeepCopy.
 	detached []Element
+
+	// detachedPruneAt is the length at which the next trackDetached sweeps
+	// r.detached. Doubled after each sweep, so the sweeps cost amortized
+	// constant work per orphan. The zero value prunes at minDetachedPrune.
+	detachedPruneAt int
 }
+
+// minDetachedPrune is the smallest number of orphans worth a sweep. Below it
+// the list costs less than walking it does.
+const minDetachedPrune = 8
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
@@ -568,8 +579,29 @@ func (r *Root) AdoptRefusedCopy(elem Element) {
 // trackDetached records an orphaned subtree so DeepCopy can put its elementMap
 // slots back into the copy. Only the subtree root is kept: the walk that
 // adopted its descendants is the same one DeepCopy replays.
+//
+// It is also where the list is swept of orphans whose every slot has since
+// been taken over by a live element. Those are unreachable in this Root too,
+// so a copy misses nothing by dropping them, and without the sweep the list
+// would grow with every restore. The sweep belongs here rather than in
+// DeepCopy because this Root is already being mutated by the caller, while
+// DeepCopy is called on Roots this goroutine does not own -- see DeepCopy.
 func (r *Root) trackDetached(elem Element) {
 	r.detached = append(r.detached, elem)
+
+	if len(r.detached) < max(r.detachedPruneAt, minDetachedPrune) {
+		return
+	}
+
+	kept := r.detached[:0]
+	for _, e := range r.detached {
+		if r.addressesAny(e) {
+			kept = append(kept, e)
+		}
+	}
+	clear(r.detached[len(kept):])
+	r.detached = kept
+	r.detachedPruneAt = 2 * len(kept)
 }
 
 // addressesAny reports whether any elementMap slot still answers with an
@@ -670,8 +702,18 @@ func (r *Root) DocSize() resource.DocSize {
 // here fails the change outright.
 //
 // Orphans whose slots have all since been taken over by live elements are
-// dropped on the way through: they are unreachable in the original too, and
-// keeping them would make the list grow with every restore.
+// skipped on the way through: they are unreachable in the original too, so the
+// copy misses nothing. They are only skipped, never dropped from r.detached --
+// this method writes nothing to its receiver, and must not.
+//
+// Read-only is a requirement two callers impose, not a preference. The server
+// copies an *InternalDocument it holds in be.Cache.Snapshot and shares across
+// requests (server/packs.BuildInternalDocForServerSeq), so a write here would
+// be a data race between concurrent requests on one document. And
+// Document.Root's d.updating escape reaches ensureClone with no lock held
+// (pkg/document/document.go), so a write here would race the updater that is
+// executing operations against this very Root. Pruning happens in
+// trackDetached, on the mutation path, instead.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
@@ -679,15 +721,10 @@ func (r *Root) DeepCopy() (*Root, error) {
 	}
 	copied := NewRoot(copiedObject.(*Object))
 
-	// Built as a fresh slice rather than filtered in place: an error below
-	// returns without committing it, and an in-place filter would already
-	// have shuffled entries out of r.detached by then.
-	kept := make([]Element, 0, len(r.detached))
 	for _, elem := range r.detached {
 		if !r.addressesAny(elem) {
 			continue
 		}
-		kept = append(kept, elem)
 
 		copiedElem, err := elem.DeepCopy()
 		if err != nil {
@@ -695,7 +732,6 @@ func (r *Root) DeepCopy() (*Root, error) {
 		}
 		copied.AdoptRefusedCopy(copiedElem)
 	}
-	r.detached = kept
 
 	return copied, nil
 }

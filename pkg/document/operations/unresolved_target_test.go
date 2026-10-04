@@ -83,13 +83,27 @@ func TestSetRejectsIdentityHeldLiveElsewhere(t *testing.T) {
 	require.NoError(t, err)
 
 	// A crafted payload reusing the live element's createdAt under another
-	// key.
+	// key. It is declined rather than failed: the server persists a pushed
+	// change before executing it, so a hard error would be replayed out of the
+	// change log on every later rebuild -- a permanent denial of service on
+	// the document. Declining leaves the document exactly as it was.
 	forged, err := crdt.NewPrimitive("forged", liveAt)
 	require.NoError(t, err)
 	_, err = operations.NewSet(time.InitialTicket, "b", forged, time.NewTicket(2, 0, actor)).
 		Execute(root, operations.OpSourceRemote, time.NewVersionVector())
-	assert.ErrorIs(t, err, operations.ErrInUseElementIdentity)
+	assert.ErrorIs(t, err, operations.ErrOperationSkipped)
+	assert.NotErrorIs(t, err, operations.ErrInUseElementIdentity)
 	assert.Equal(t, `{"a":"live"}`, root.Object().Marshal())
+	assert.Equal(t, "live", root.FindByCreatedAt(liveAt).(*crdt.Primitive).Value(),
+		"the live element must keep its own elementMap slot")
+
+	// A local Set is built against this very root a moment ago, so the same
+	// collision is a bug in this process and keeps reporting itself as one.
+	forgedLocal, err := crdt.NewPrimitive("forged", liveAt)
+	require.NoError(t, err)
+	_, err = operations.NewSet(time.InitialTicket, "b", forgedLocal, time.NewTicket(2, 0, actor)).
+		Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+	assert.ErrorIs(t, err, operations.ErrInUseElementIdentity)
 
 	// A restore under a tombstoned createdAt is the shape Set exists to
 	// tolerate, and still passes.
@@ -102,4 +116,65 @@ func TestSetRejectsIdentityHeldLiveElsewhere(t *testing.T) {
 		Execute(root, operations.OpSourceRemote, time.NewVersionVector())
 	require.NoError(t, err)
 	assert.Equal(t, `{"a":"live"}`, root.Object().Marshal())
+}
+
+// TestAddAndArraySetRefuseIdentityHeldLiveElsewhere covers the same push
+// boundary for the two sibling entry points. Both take the element's createdAt
+// straight off the wire (api/converter's fromAdd and fromArraySet) and both
+// reach Root.RegisterElement with it, where Root.index overwrites the slot of
+// whatever element already answers to that createdAt -- and drops that
+// element's release record with it. Unlike Set, neither has a legitimate
+// occupant: every value they introduce carries a fresh ticket.
+func TestAddAndArraySetRefuseIdentityHeldLiveElsewhere(t *testing.T) {
+	actor, err := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+	require.NoError(t, err)
+
+	obj := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
+	root := crdt.NewRoot(obj)
+
+	arrAt := time.NewTicket(1, 0, actor)
+	arr := crdt.NewArray(crdt.NewRGATreeList(), arrAt)
+	obj.Set("arr", arr)
+	root.RegisterElement(arr, obj)
+
+	liveAt := time.NewTicket(2, 0, actor)
+	live, err := crdt.NewPrimitive("live", liveAt)
+	require.NoError(t, err)
+	_, err = operations.NewSet(time.InitialTicket, "a", live, liveAt).
+		Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+	require.NoError(t, err)
+
+	// An Add naming the live element's identity.
+	forged, err := crdt.NewPrimitive("forged", liveAt)
+	require.NoError(t, err)
+	_, err = operations.NewAdd(arrAt, time.InitialTicket, forged, time.NewTicket(3, 0, actor)).
+		Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+	assert.ErrorIs(t, err, operations.ErrOperationSkipped)
+	assert.Equal(t, "live", root.FindByCreatedAt(liveAt).(*crdt.Primitive).Value(),
+		"Add must not take over the live element's elementMap slot")
+
+	// Seed one real member so ArraySet has a position to replace.
+	memberAt := time.NewTicket(4, 0, actor)
+	member, err := crdt.NewPrimitive("member", memberAt)
+	require.NoError(t, err)
+	_, err = operations.NewAdd(arrAt, time.InitialTicket, member, memberAt).
+		Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+	require.NoError(t, err)
+
+	// An ArraySet naming the live element's identity as its replacement.
+	forgedSet, err := crdt.NewPrimitive("forged", liveAt)
+	require.NoError(t, err)
+	_, err = operations.NewArraySet(arrAt, memberAt, forgedSet, time.NewTicket(5, 0, actor)).
+		Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+	assert.ErrorIs(t, err, operations.ErrOperationSkipped)
+	assert.Equal(t, "live", root.FindByCreatedAt(liveAt).(*crdt.Primitive).Value(),
+		"ArraySet must not take over the live element's elementMap slot")
+	assert.Equal(t, `{"a":"live","arr":["member"]}`, root.Object().Marshal())
+
+	// Local is a bug in this process and keeps reporting itself as one.
+	forgedLocal, err := crdt.NewPrimitive("forged", liveAt)
+	require.NoError(t, err)
+	_, err = operations.NewAdd(arrAt, time.InitialTicket, forgedLocal, time.NewTicket(6, 0, actor)).
+		Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+	assert.ErrorIs(t, err, operations.ErrInUseElementIdentity)
 }

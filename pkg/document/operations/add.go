@@ -63,6 +63,19 @@ func (o *Add) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
 
+	// An Add always introduces a new identity: the json layer issues a fresh
+	// ticket for the value it builds, and the one reverse that re-inserts a
+	// removed element -- the Add acting as UndoRemove -- is re-identified with
+	// a fresh ticket before it runs (Document.executeUndoRedo). So, unlike
+	// Set, no occupant at all is legitimate here. The ticket nonetheless
+	// arrives verbatim off the wire (api/converter's fromAdd), and
+	// RegisterElement below hands it to Root.index, which overwrites the slot
+	// of whatever element already answers to it and drops that element's
+	// release record with it. Refused before the insert, exactly as in Set.
+	if identityInUse(root, o.value, nil) {
+		return refuseInUseIdentity(source)
+	}
+
 	value, err := o.value.DeepCopy()
 	if err != nil {
 		return ExecutionResult{}, err
