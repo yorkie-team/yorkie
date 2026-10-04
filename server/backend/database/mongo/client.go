@@ -223,6 +223,17 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 		if id := types.ID(key); id.Validate() == nil {
 			c.projectCache.Remove(id)
 		}
+	case types.CacheTypeClient:
+		// A client row is cached per node and only ever replaced by a write
+		// this node performed, so a deactivation or a detach another node
+		// wrote is invisible to the copy this node's gates read
+		// (EnsureActivated, EnsureDocumentAttached). Dropping the entry here
+		// is what makes those writes reach this node: the next read of the
+		// row misses and re-reads MongoDB under the client's lock, so the
+		// drop can never put an older copy on top of a newer one.
+		if refKey, err := types.ParseClientRefKey(key); err == nil {
+			c.clientCache.Remove(refKey)
+		}
 	}
 }
 

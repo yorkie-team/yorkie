@@ -116,7 +116,36 @@ func Deactivate(
 		}
 	}
 
-	return be.DB.DeactivateClient(ctx, refKey)
+	deactivated, err := be.DB.DeactivateClient(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	InvalidateCachedClient(ctx, be, refKey)
+
+	return deactivated, nil
+}
+
+// InvalidateCachedClient asks every cluster node to drop its cached copy of
+// the given client's row.
+//
+// A client row is cached per node, and nothing but a write performed on that
+// same node replaces the entry: deactivation is not document-routed
+// (housekeeping runs on the leader, DeactivateClient is served wherever the
+// request lands), and a detach is routed only to the document's owner node.
+// Without this broadcast the gates that read the row — EnsureActivated here,
+// EnsureDocumentAttached in the RPC layer — keep admitting a client revoked
+// elsewhere until size eviction happens to drop the entry, which is to say
+// with no time bound at all. Dropping, rather than refilling, is what keeps
+// this safe outside the client's cache lock: it can never put an older copy
+// of the row on top of a newer one, and the next read re-reads MongoDB.
+//
+// Failure is logged, not returned: the write itself has already landed in
+// MongoDB, and the caller must not be told it did not.
+func InvalidateCachedClient(ctx context.Context, be *backend.Backend, refKey types.ClientRefKey) {
+	if err := be.BroadcastCacheInvalidation(ctx, types.CacheTypeClient, refKey.CacheKey()); err != nil {
+		logging.From(ctx).Warnf("broadcast client cache invalidation: %v", err)
+	}
 }
 
 // DeactivateAsync deactivates the given client asynchronously.

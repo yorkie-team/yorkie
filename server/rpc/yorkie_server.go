@@ -1518,6 +1518,12 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	// 05. Drop the client row every node has cached. A detach is routed to the
+	// document's owner node, which refreshes its own entry as it writes; every
+	// other node keeps a copy that still says attached, and nothing else would
+	// ever correct it.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	return connect.NewResponse(&api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
@@ -1672,6 +1678,10 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
+	// 04. Removing the document detaches the client from it, so the same
+	// cached-row correction the detach path needs applies here.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	return connect.NewResponse(&api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
@@ -1715,6 +1725,34 @@ func (s *yorkieServer) CreateRevision(
 	}), nil
 }
 
+// confirmAttachedClient confirms against MongoDB, bypassing this node's client
+// cache, that the client is activated and holds the document attached.
+//
+// The revision RPCs read and overwrite a whole document, and auth.VerifyAccess
+// is a no-op unless the project configures an auth webhook, so the client row
+// is the only thing standing between a request and another client's document.
+// A cached row is not enough for that: it is replaced only by a write this
+// node performed, so a detach or a deactivation another node wrote is
+// invisible to it. Unlike push/pull these calls are not per-sync, so the one
+// read they cost is worth paying.
+func confirmAttachedClient(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	clientID time.ActorID,
+	docID types.ID,
+) error {
+	clientInfo, err := clients.FindActiveClientInfo(ctx, be, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}, true)
+	if err != nil {
+		return err
+	}
+
+	return clientInfo.EnsureDocumentAttached(docID)
+}
+
 // ListRevisions returns all revisions for the given document.
 func (s *yorkieServer) ListRevisions(
 	ctx context.Context,
@@ -1750,10 +1788,7 @@ func (s *yorkieServer) ListRevisions(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1797,10 +1832,7 @@ func (s *yorkieServer) GetRevision(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1852,10 +1884,7 @@ func (s *yorkieServer) RestoreRevision(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 

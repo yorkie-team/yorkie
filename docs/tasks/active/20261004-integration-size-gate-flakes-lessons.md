@@ -51,3 +51,20 @@
 - The striped lock became a per-client `pkg/locker` lock: same guarantee,
   no false sharing between unrelated clients, and the locking utility the
   server already uses.
+- The panel re-raised the gap the revert left: with the bulk-read fill gone
+  and no TTL, nothing corrected a cached client row across nodes, and the
+  authorization gates read that row. Rather than re-add the TTL the
+  maintainer reverted, the fix uses the mechanism the repo already has —
+  the cluster `InvalidateCache` RPC — and implements its `CacheTypeClient`
+  case, which was the one branch of `mongo.Client.InvalidateCache` left
+  unwritten. Deactivation and detach now broadcast it. An invalidation is
+  a drop, so, unlike the fill that started all of this, it can never put an
+  older copy of a row on top of a newer one.
+- `ClientRefKey.String()` is a human-readable form, not a wire form.
+  Naming a client in a cluster RPC needs one that round-trips, hence
+  `CacheKey`/`ParseClientRefKey`.
+- The revision RPCs confirmed the client was activated but never that it
+  held the document attached, and `auth.VerifyAccess` is a no-op without a
+  project auth webhook. `RestoreRevision` therefore overwrote a whole
+  document for any activated client in the project. These are not per-sync
+  calls, so they can afford to confirm the row in MongoDB.
