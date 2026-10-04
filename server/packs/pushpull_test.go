@@ -385,6 +385,79 @@ func TestPacks(t *testing.T) {
 		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
 	})
 
+	t.Run("change stamped with another client's actor is rejected", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activate := func(k string) []byte {
+			resp, err := testClient.ActivateClient(ctx, connect.NewRequest(&api.ActivateClientRequest{ClientKey: k}))
+			assert.NoError(t, err)
+			id, err := hex.DecodeString(resp.Msg.ClientId)
+			assert.NoError(t, err)
+			return id
+		}
+		clientID := activate(helper.TestKey(t).String() + "-attacker")
+		victimID := activate(helper.TestKey(t).String() + "-victim")
+
+		// The attach pack itself is refused when it carries a foreign actor.
+		_, err = testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: hex.EncodeToString(clientID),
+			ChangePack: &api.ChangePack{
+				DocumentKey: helper.TestKey(t).String(),
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+				Changes: []*api.Change{{
+					Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: victimID},
+				}},
+			},
+		}))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+		// So is a later push on an attached document, and nothing is stored.
+		resPack, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: hex.EncodeToString(clientID),
+			ChangePack: &api.ChangePack{
+				DocumentKey: helper.TestKey(t).String(),
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+				Changes: []*api.Change{{
+					Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID},
+				}},
+			},
+		}))
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+		docID := types.ID(resPack.Msg.DocumentId)
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		clientRefKey := types.ClientRefKey{ProjectID: project.ID, ClientID: types.IDFromActorID(actorID)}
+
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
+		assert.NoError(t, err)
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, clientRefKey)
+		assert.NoError(t, err)
+		docServerSeqBefore := docInfo.ServerSeq
+		clientCPBefore := clientInfo.Checkpoint(docID)
+
+		pack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: docServerSeqBefore, ClientSeq: 2},
+			Changes: []*api.Change{{
+				Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: victimID},
+			}},
+		})
+		assert.NoError(t, err)
+
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
+			Mode:   types.SyncModePushPull,
+			Status: document.StatusAttached,
+		})
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assertRejectedPushPullUnchanged(t, ctx, docRefKey, clientRefKey, docID, docServerSeqBefore, clientCPBefore)
+	})
+
 	t.Run("future server seq checkpoint is rejected", func(t *testing.T) {
 		ctx := context.Background()
 

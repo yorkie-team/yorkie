@@ -716,12 +716,18 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	}
 	defer c.endAttach(r.Key())
 
-	r.SetActor(c.loadID())
-
 	if r.Type() == attachable.TypeDocument {
 		d, ok := r.(*document.Document)
 		if !ok {
 			return ErrInvalidResource
+		}
+
+		// Re-issue, not just set: the tickets of elements created before the
+		// attach name the initial actor, and another client that filled the
+		// same key would push the very same createdAt.
+		rollback, err := d.ReissueActor(c.loadID())
+		if err != nil {
+			return err
 		}
 
 		attachOpts := &AttachOptions{}
@@ -731,14 +737,42 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 			}
 		}
 
-		return c.attachDocument(ctx, d, attachOpts, generation)
-
+		pushed, err := c.attachDocument(ctx, d, attachOpts, generation)
+		if err != nil {
+			// The re-issue rewrote the document for an attach that did not
+			// happen. Put it back, so a caller whose attach failed still holds
+			// the document it handed over -- root, local changes and undo/redo
+			// history included -- and can retry or keep editing offline.
+			//
+			// Only while the server has not stored the re-issued pack. Once
+			// AttachDocument has returned, the server holds the elements under
+			// the re-issued actor whatever this client does with them next, and
+			// re-issuing them back here would leave the two replicas naming the
+			// same elements differently. The local signals cannot see that: a
+			// failure between the RPC returning and ApplyChangePack leaves the
+			// checkpoint initial, the status Detached and nothing absorbed, so
+			// the rollback's own never-synced guard still reads true.
+			//
+			// Past that point the rollback decides for itself whether it still
+			// may: it declines once the document has taken the server's attach
+			// pack in, which is the state restoring over would discard. Document
+			// status is no signal for that either -- attachDocument sets
+			// StatusAttached only after the pack is applied, and puts it back to
+			// Detached when it gives an applied attach up to a concurrent
+			// Deactivate.
+			if !pushed {
+				rollback()
+			}
+			return err
+		}
+		return nil
 	}
 
 	p, ok := r.(*channel.Channel)
 	if !ok {
 		return ErrInvalidResource
 	}
+	p.SetActor(c.loadID())
 
 	attachChannelOpts := &AttachChannelOptions{}
 	for _, opt := range opts {
@@ -873,12 +907,21 @@ func (c *Client) endAttach(k key.Key) {
 
 // attachDocument attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
+//
+// It reports whether the push reached the server -- whether AttachDocument
+// returned, so the server has stored the pushed pack -- alongside the error, so
+// a caller rolling a failed attach back can tell the failures that left the
+// server with nothing of this document from the ones that did not. A transport
+// error is reported as not pushed even though the server may have committed
+// before the response was lost: re-attaching with the same client re-issues the
+// same tickets to the same actor, so the two replicas still name the elements
+// the server stored identically.
 func (c *Client) attachDocument(
 	ctx context.Context,
 	d *document.Document,
 	opts *AttachOptions,
 	generation uint64,
-) error {
+) (bool, error) {
 	// 01. Initialize presence data. Skip when the caller declared the
 	// document presenceless so we never produce an initial PUT change for
 	// a doc that will reject presence on the wire anyway.
@@ -887,12 +930,12 @@ func (c *Client) attachDocument(
 			p.Initialize(opts.Presence)
 			return nil
 		}); err != nil {
-			return err
+			return false, err
 		}
 	}
 	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// 02. Call AttachDocument rpc
@@ -907,13 +950,16 @@ func (c *Client) attachDocument(
 		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
+
+	// From here on the server has stored the pushed pack, so every exit
+	// reports the push as landed.
 
 	// 03. Apply the received change pack
 	pack, err := converter.FromChangePack(res.Msg.ChangePack)
 	if err != nil {
-		return err
+		return true, err
 	}
 
 	// Through the setters, not the exported fields: Update reads both under
@@ -983,7 +1029,7 @@ func (c *Client) attachDocument(
 		// its pipeline down. stopWatchPipeline also runs cancelFunc, which is
 		// what releases watchCtx on the non-realtime path.
 		stopWatchPipeline(attachment)
-		return err
+		return true, err
 	}
 	if c.logger.Core().Enabled(zap.DebugLevel) {
 		c.logger.Debug(fmt.Sprintf(
@@ -998,7 +1044,7 @@ func (c *Client) attachDocument(
 
 	if d.Status() == attachable.StatusRemoved {
 		stopWatchPipeline(attachment)
-		return nil
+		return true, nil
 	}
 	d.SetStatus(attachable.StatusAttached)
 
@@ -1022,7 +1068,7 @@ func (c *Client) attachDocument(
 		}
 		stopWatchPipeline(attachment)
 		d.SetStatus(attachable.StatusDetached)
-		return err
+		return true, err
 	}
 	if opts.IsRealtime {
 		err = c.runWatchLoop(watchCtx, attachment, d)
@@ -1039,7 +1085,7 @@ func (c *Client) attachDocument(
 			// sync applying a pack in the meantime never wedges on a channel
 			// without a consumer.
 			attachment.watchBuf.close()
-			return err
+			return true, err
 		}
 	}
 
@@ -1055,7 +1101,7 @@ func (c *Client) attachDocument(
 
 		return nil
 	}); err != nil {
-		return err
+		return true, err
 	}
 
 	// 06. Clear the undo/redo stacks so that pre-attach changes, including
@@ -1071,10 +1117,10 @@ func (c *Client) attachDocument(
 	// d.Update above already has this same partial-attach property, so this
 	// widens an existing hole rather than opening a new one.
 	if err := d.ClearHistory(); err != nil {
-		return err
+		return true, err
 	}
 
-	return nil
+	return true, nil
 }
 
 // detachDocument detaches the given document from this client. It tells the
