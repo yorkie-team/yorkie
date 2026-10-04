@@ -659,7 +659,9 @@ func (s *yorkieServer) Watch(
 	// presenting that client_id or by activating a fresh client under the same
 	// client key -- the derivation is deliberately collision-by-design, which is
 	// how one logical client resumes its actor across sessions. The client key
-	// is an identifier, not a secret. See
+	// is an identifier, not a secret. ErrActorMismatch is therefore
+	// InvalidArgument, matching packs.validateChangeActors: it reports a
+	// request whose two self-asserted fields disagree, not a denied one. See
 	// docs/design/pre-attach-ticket-reissue.md ("Security boundary").
 	presenceID := clientID
 	if req.Msg.ActorId != "" {

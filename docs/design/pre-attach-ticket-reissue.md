@@ -222,7 +222,12 @@ authorization control and is not one:
   gate, exactly as they are not isolated by any other document RPC. The same
   two bypasses apply to the Watch `actor_id` check (`ErrActorMismatch`), which
   compares the declared actor against the same `StableActorID`. Closing either
-  needs per-client credentials at the protocol level: a separate task.
+  needs per-client credentials at the protocol level: a separate task. Until
+  then neither guard states otherwise in its status code: both are
+  `InvalidArgument` -- a request whose two self-asserted fields disagree --
+  and `ErrActorMismatch` is deliberately not `PermissionDenied`, which would
+  advertise an authorization boundary that is not there and would reach the
+  SDKs' auth-error path (see watch-access-revalidation.md).
 - **What it does not cover.** The pack's other client-supplied identity input,
   `ChangePack.VersionVector`, is stored verbatim by `UpdateMinVersionVector`
   and fed to min-VV and GC. Ownership is the wrong predicate for it -- a

@@ -183,3 +183,27 @@
   unauthenticated principal. Per-client credentials are a protocol
   change this branch does not carry; rebuttal re-filed so the standstill
   is on the record.
+
+## Loop round 9 follow-up (panel)
+
+- Upheld in part, and fixed in code: the Watch actor check still raised
+  `ErrActorMismatch` as `PermissionDenied`, so the one remaining place
+  the branch advertised an authorization boundary was the status code
+  itself -- every prose claim had already been bounded in round 8. The
+  check compares two self-asserted fields of the same request
+  (`actor_id` against the `StableActorID` of `client_id`), which is a
+  malformed request, not a denied one, and `PermissionDenied` also
+  reaches the SDKs' auth-error path (`watch-access-revalidation.md`).
+  `ErrActorMismatch` is now `InvalidArgument`, matching its sibling
+  `ErrInvalidChangeActor` in `validateChangeActors`. The `WithCode`
+  string is unchanged, so `converter.ErrorCodeOf` consumers and the
+  RPC testcase keep matching.
+- Disputed a fourth time, not changed: the underlying bypass -- the
+  project API key admitting a caller that can present any `client_id`
+  or activate a duplicate row under a victim's client key. Per-client
+  credentials are a protocol-level change this branch does not carry,
+  and `ActivateClient`'s duplicate rows are load-bearing for actor
+  resumption across sessions on a sharded `ColClients` with no
+  enforceable `{project_id, key}` uniqueness. Rebuttal re-filed; this
+  is the fourth round, so a human decision on the identity model is
+  what the standstill actually needs.

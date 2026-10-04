@@ -40,9 +40,17 @@ var (
 	ErrInvalidClientID = errors.InvalidArgument("invalid client id").WithCode("ErrInvalidClientID")
 
 	// ErrActorMismatch is returned when a request declares an actor that is not
-	// the authenticated client's own stable actor.
-	ErrActorMismatch = errors.PermissionDenied(
-		"actor id does not match the authenticated client",
+	// an actor of the client row the request names.
+	//
+	// InvalidArgument, not PermissionDenied: the check compares two fields of
+	// the same self-asserted request (actor_id against the StableActorID of
+	// client_id) and so reports an inconsistent request, not a denied one.
+	// Nothing about it is an authorization decision -- see FindActiveClientInfo
+	// for why the client row it reads is not an authenticated principal -- and
+	// a PermissionDenied would advertise a boundary that is not there, as well
+	// as reaching the SDKs' auth-error path, which this is not.
+	ErrActorMismatch = errors.InvalidArgument(
+		"actor id does not match the client it is declared under",
 	).WithCode("ErrActorMismatch")
 )
 
