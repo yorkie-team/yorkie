@@ -431,7 +431,7 @@ func init() {
 	cmd.Flags().DurationVar(
 		&mongoProjectCacheTTL,
 		"mongo-project-cache-ttl",
-		5*time.Minute,
+		server.DefaultProjectCacheTTL,
 		"TTL for MongoDB project cache (e.g. '5m', '60s'). Must be at least 100ms.",
 	)
 	cmd.Flags().IntVar(
