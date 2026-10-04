@@ -54,6 +54,37 @@ After #2108 two integration tests turned agent-loop CI red:
 - [x] Verify: `-count=10` of `TestDocumentSizeGate|TestDocument$`, 60 runs
       of the size gate test, full integration suite, lint, unit tests.
 
+## Client cache staleness across nodes (review rounds)
+
+Each node keeps its own client cache, and only the node that performs a
+write updates it. The model this PR leaves:
+
+- The cache expires (`--mongo-client-cache-ttl`, default 1m), so a node that
+  did not perform a write reads a stale client row for at most the TTL.
+- RPC gates (`EnsureActivated`, `EnsureDocumentAttached`) still read the
+  cache, so within the TTL a stale node can admit a request.
+- A push with changes, or one that removes the document, re-reads the client
+  row from MongoDB under the document's push lock before writing, and is
+  refused with `ErrClientNotActivated` / `ErrDocumentNotAttached` if the
+  database no longer has the client activated with the document attached.
+  The remaining window is that one read to the write, not the TTL.
+- The client-row update after PushPull is conditional for everything but a
+  detach (`status: activated` and the document attached or attaching), so a
+  stale copy cannot write itself back. A detach stays unconditional.
+- Pushes without changes are admitted on the cache alone. They write nothing
+  to the document, and the conditional update stops them from changing the
+  client row.
+- With consistent hashing, a deactivation detaches each document through the
+  node that owns it, so that node's cache sees the detach right away; the
+  checks above cover requests that reach another node.
+
+- [x] Pre-write client check in `pushPack`; conditional write-back in both
+      backends; precondition stated on the `Database` interface.
+- [x] Shared testcases for stale updates on a deactivated client and on a
+      detached document; two-node integration test
+      (`TestStaleClientCache`): without the pre-write check its changes land
+      (stored change count 1 -> 3), with it they do not.
+
 ## Known limitation (not fixed here)
 
 The skipped snapshot is also a product gap: an over-quota document whose

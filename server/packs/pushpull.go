@@ -351,6 +351,23 @@ func pushPack(
 				pushables = nil
 			}
 		}
+
+		// 05. Confirm the attachment against the database before writing to
+		// the document. The RPC gate read clientInfo through this node's
+		// client cache, which another node's deactivation or detach reaches
+		// only when the entry expires (MongoDB ClientCacheTTL). A push admitted
+		// on such a stale copy must not land its changes, or mark the document
+		// removed, for a client the database no longer has attached. Pushes
+		// without changes write nothing to the document and skip this read.
+		if (len(pushables) > 0 || reqPack.IsRemoved) && !clientInfo.IsServerClient() {
+			stored, err := be.DB.FindClientInfoByRefKey(ctx, clientInfo.RefKey(), true)
+			if err != nil {
+				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+			}
+			if err := stored.EnsureDocumentAttachedOrAttaching(docKey.DocID); err != nil {
+				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+			}
+		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
 		ctx,
