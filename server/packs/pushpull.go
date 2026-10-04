@@ -128,6 +128,16 @@ func PushPull(
 		return nil, err
 	}
 
+	// Bound the one client-supplied input whose membership cannot be checked.
+	// The vector is persisted in this client's VersionVectorInfo row, cached
+	// per document and unioned into the minVV every other client receives, so
+	// an unbounded entry count is an amplification regardless of whose
+	// lamports it names.
+	if err := validateVersionVectorSize(reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+
 	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
 	// changes collection, regardless of which SDK version sent it.
@@ -265,25 +275,38 @@ func publisherActor(
 //
 //   - It covers only the actor stamped into a stored change. The other
 //     client-supplied identity input in the same pack, reqPack.VersionVector,
-//     is stored verbatim (UpdateMinVersionVector, below) and is not checked:
-//     a version vector legitimately carries other actors' lamports, so
-//     ownership is the wrong predicate for it. The blast radius is bounded by
-//     how minVV is computed -- the pack is stored under the pusher's own
-//     VersionVectorInfo row, and MinVersionVector takes 0 for any actor
-//     missing from some row, so a forged entry can only pull the minimum down
-//     (stalling tombstone GC for docs this client is attached to), never push
-//     it past another client's own row and drop tombstones early.
+//     is stored verbatim (UpdateMinVersionVector, below) and its membership is
+//     not checked: a version vector legitimately carries other actors'
+//     lamports, so ownership is the wrong predicate for it. Only two things
+//     bound it. (a) Size: validateVersionVectorSize caps the entry count, so
+//     a pack cannot plant an arbitrarily wide vector in the pusher's
+//     VersionVectorInfo row, the per-document vectorCache and every later
+//     minVV. (b) Direction, and only partly: MinVersionVector takes 0 for an
+//     actor missing from any row, so a forged lamport generally drags the
+//     minimum down (stalling tombstone GC on documents this client is
+//     attached to) rather than up. That direction argument assumes every
+//     participant has a VersionVectorInfo row to clamp against, which clients
+//     attached with DisableGC do not have (updateVersionVector skips them by
+//     design -- see docs/design/disable-gc-on-attach.md); their position
+//     therefore does not hold the minimum back, as the GC opt-out already
+//     intends. Nothing checks that an entry belongs to an actor that ever
+//     touched the document.
 //   - It is a consistency guard inside the project's trust boundary, not an
 //     authentication boundary. clientInfo is resolved from the request's
 //     self-asserted client_id (clients.FindActiveClientInfo does a lookup plus
 //     EnsureActivated, no credential check) and the surrounding auth is
 //     project-scoped, so a caller already holding the project's API key can
-//     satisfy this check by presenting the victim's client_id instead of
-//     forging an actor. Closing that needs per-client credentials, which
-//     Yorkie does not have today; see docs/design/pre-attach-ticket-reissue.md
-//     ("Security boundary"). What this guard removes is the weaker,
-//     credential-free variant: a client acting under its own client_id
-//     stamping someone else's actor.
+//     satisfy this check by presenting the victim's client_id. It can also
+//     satisfy it under a client_id of its own: StableActorID is
+//     types.DeriveActorID(projectID, clientKey) and ActivateClient mints a row
+//     for a key already in use, so activating under the victim's client key --
+//     an identifier, not a secret -- yields a client that genuinely owns the
+//     victim's stable actor. Closing either needs per-client credentials,
+//     which Yorkie does not have today; see
+//     docs/design/pre-attach-ticket-reissue.md ("Security boundary"). What
+//     this guard removes is the narrower variant that needs no knowledge of
+//     the victim at all: stamping an actor that neither of the pusher's own
+//     identities matches.
 //
 // Every legitimate pusher stamps its own actor. Both SDKs rewrite the change
 // ID's actor to the client's actor on attach -- SetActor did so before the
@@ -313,6 +336,39 @@ func validateChangeActors(
 		}
 	}
 	return nil
+}
+
+// maxVersionVectorEntries caps the number of entries a pushed
+// ChangePack.VersionVector may carry.
+//
+// A legitimate vector holds one lamport per actor that has written to the
+// document and has not been pruned (nothing prunes detached actors today, see
+// the NOTE in UpdateMinVersionVector), so the ceiling has to sit far above any
+// real document: a document with this many distinct lifetime writers is
+// already pathological, because the vector itself then travels on every sync.
+// The cap exists for the forged case, where entry count is otherwise
+// unbounded by anything but the 16 MiB pack limit and each entry is persisted
+// in the pusher's VersionVectorInfo row, cached in the per-document
+// vectorCache, and unioned into the minVV returned to every other client.
+const maxVersionVectorEntries = 10000
+
+// validateVersionVectorSize refuses a pack whose version vector carries more
+// entries than maxVersionVectorEntries. Membership is not checked -- a version
+// vector legitimately carries other actors' lamports -- so size is the only
+// predicate available here; see validateChangeActors for the full scope.
+func validateVersionVectorSize(reqPack *change.Pack) error {
+	if len(reqPack.VersionVector) <= maxVersionVectorEntries {
+		return nil
+	}
+
+	return connect.NewError(
+		connect.CodeInvalidArgument,
+		errors.InvalidArgument(fmt.Sprintf(
+			"version vector has %d entries, exceeding the limit %d",
+			len(reqPack.VersionVector),
+			maxVersionVectorEntries,
+		)).WithCode("ErrVersionVectorTooLarge"),
+	)
 }
 
 func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {

@@ -148,3 +148,38 @@
   now says on its face that it returns a self-asserted identity, and the
   design doc carries a "Security boundary" section splitting what the gate
   enforces, what it does not, and what it does not cover.
+
+## Loop round 8 follow-up (panel)
+
+- Upheld: the Watch comment claimed "a client cannot subscribe under
+  another client's presence identity". It can. `StableActorID` is
+  `types.DeriveActorID(projectID, clientKey)` (`api/types/actor.go:48`)
+  and `ActivateClient` inserts a fresh row for a key already in use
+  (`server/backend/database/mongo/client.go:1096`), so activating under
+  the victim's client key yields a client that genuinely owns the
+  victim's stable actor. The collision is the point of the derivation --
+  one logical client resumes one actor across sessions -- so the fix is
+  in the claim, not the derivation: the Watch comment, the
+  `validateChangeActors` scope note, `FindActiveClientInfo` and the
+  design doc now all name the client key as an identifier, not a secret,
+  and list key-collision beside `client_id` presentation as the two ways
+  in.
+- Upheld and fixed in code: the "blast radius is bounded" argument for
+  the unchecked `ChangePack.VersionVector` only covered value direction.
+  Entry count was bounded by nothing but the 16 MiB pack, and every
+  entry is persisted per client row, cached per document and unioned
+  into the minVV sent to every other client. `validateVersionVectorSize`
+  now caps the count (`maxVersionVectorEntries`); membership stays
+  unchecked, because a version vector legitimately carries other actors'
+  lamports. The cap sits far above any real document: nothing prunes
+  detached actors today, so a legitimate vector grows with lifetime
+  writers.
+- Also corrected: the direction argument quietly assumed every client
+  has a `VersionVectorInfo` row to clamp against. `DisableGC` clients
+  have none (`updateVersionVector` skips them), which the GC opt-out
+  already intends -- but it means the clamp covers GC-tracked clients
+  only, and both the comment and the design doc now say so.
+- Disputed a third time, not changed: `client_id` resolving to an
+  unauthenticated principal. Per-client credentials are a protocol
+  change this branch does not carry; rebuttal re-filed so the standstill
+  is on the record.

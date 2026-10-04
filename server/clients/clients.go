@@ -217,10 +217,19 @@ func AttachDocument(
 // function only resolves it and checks that the client is activated. The
 // enclosing authorization is project-scoped (API key / auth webhook), so any
 // caller admitted to the project can present any client_id of that project.
+//
+// The info's StableActorID is no stronger: it is
+// types.DeriveActorID(projectID, clientKey) and ActivateClient mints a row for
+// a client key already in use, so a caller that knows a victim's client key --
+// an identifier, not a secret -- can activate its own client row carrying the
+// victim's stable actor. Resuming the same actor across sessions is the point
+// of the derivation, so this collision is by design.
+//
 // Callers must not read the result as proof of who the caller is; guards keyed
-// on it (e.g. packs.validateChangeActors) are consistency guards within the
-// project, not cross-client authorization. See
-// docs/design/pre-attach-ticket-reissue.md ("Security boundary").
+// on it (e.g. packs.validateChangeActors, the Watch actor check in
+// rpc.yorkie_server) are consistency guards within the project, not
+// cross-client authorization. See docs/design/pre-attach-ticket-reissue.md
+// ("Security boundary").
 func FindActiveClientInfo(
 	ctx context.Context,
 	be *backend.Backend,

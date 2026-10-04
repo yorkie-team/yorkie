@@ -206,24 +206,45 @@ authorization control and is not one:
 
 - **What it enforces.** For a not-yet-acknowledged change in a pushed pack, the
   change's actor must be one of the two identities of the `client_id` the
-  request carries. It removes actor forgery by a client acting under its own
-  identity -- the variant that needs no knowledge of the victim at all.
+  request carries. It removes the variant of actor forgery that needs no
+  knowledge of the victim at all: stamping an actor that matches neither of the
+  pusher's own identities.
 - **What it does not enforce.** It is satisfied by whoever presents the
   victim's `client_id`, because `clients.FindActiveClientInfo` resolves that id
-  without any credential check and the surrounding auth is project-scoped.
+  without any credential check and the surrounding auth is project-scoped. It
+  is equally satisfied by a caller acting under a `client_id` of its own:
+  `StableActorID` is `types.DeriveActorID(projectID, clientKey)` and
+  `ActivateClient` mints a new row for a client key already in use, so
+  activating under the victim's client key yields a client that genuinely owns
+  the victim's stable actor. The client key is an identifier, not a secret, and
+  resuming one actor across sessions is the whole point of the derivation.
   Co-tenants of a project are therefore not isolated from each other by this
-  gate, exactly as they are not isolated by any other document RPC. Closing
-  this needs per-client credentials at the protocol level: a separate task.
+  gate, exactly as they are not isolated by any other document RPC. The same
+  two bypasses apply to the Watch `actor_id` check (`ErrActorMismatch`), which
+  compares the declared actor against the same `StableActorID`. Closing either
+  needs per-client credentials at the protocol level: a separate task.
 - **What it does not cover.** The pack's other client-supplied identity input,
   `ChangePack.VersionVector`, is stored verbatim by `UpdateMinVersionVector`
   and fed to min-VV and GC. Ownership is the wrong predicate for it -- a
-  version vector legitimately carries other actors' lamports -- so it is left
-  unchecked. The exposure is bounded: the vector is stored under the pusher's
-  own `VersionVectorInfo` row, and `MinVersionVector` treats an actor missing
-  from any row as `0`, so a forged entry can only drag the minimum down and
-  stall tombstone GC on documents the pusher is attached to. It cannot raise
-  the minimum past another client's own row, so it cannot make the server drop
-  tombstones a client has not yet seen.
+  version vector legitimately carries other actors' lamports -- so membership
+  is left unchecked: nothing verifies that an entry names an actor that ever
+  touched the document. Two things bound the exposure, and only two:
+  - **Size.** `validateVersionVectorSize` caps the entry count
+    (`maxVersionVectorEntries`). Without it the count is limited only by the
+    16 MiB pack, and every entry is persisted in the pusher's
+    `VersionVectorInfo` row, held in the per-document `vectorCache` and
+    unioned into the minVV returned to every other client of that document.
+  - **Direction, partly.** The vector is stored under the pusher's own row,
+    and `MinVersionVector` treats an actor missing from any row as `0`, so a
+    forged lamport generally drags the minimum down -- stalling tombstone GC
+    on documents the pusher is attached to -- rather than raising it past
+    another client's own row. This assumes every participant has a
+    `VersionVectorInfo` row to clamp against; clients attached with
+    `DisableGC` have none (`updateVersionVector` skips them, see
+    `disable-gc-on-attach.md`), so their position does not hold the minimum
+    back. That is what the GC opt-out already asks for -- tombstones need not
+    be kept alive for them -- but it means the clamp argument covers
+    GC-tracked clients only.
 
 ### Risks and Mitigation
 

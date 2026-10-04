@@ -647,9 +647,20 @@ func (s *yorkieServer) Watch(
 	// Presence peers are keyed by the stable actor stamped into presence
 	// changes. Subscribe under the client-declared actor when present so the
 	// watch peer list and watched/unwatched events align with the presence
-	// CRDT keying; old SDKs omit it and fall back to the session id. The
-	// declared actor must be this authenticated client's own stable actor, so
-	// a client cannot subscribe under another client's presence identity.
+	// CRDT keying; old SDKs omit it and fall back to the session id.
+	//
+	// The declared actor must equal the stable actor of the client row the
+	// request names, which keeps a stream's presence identity consistent with
+	// the changes that client pushes. This is a consistency guard, not
+	// cross-client authorization: clientInfo comes from a self-asserted
+	// client_id (clients.FindActiveClientInfo) and StableActorID is
+	// types.DeriveActorID(projectID, clientKey), so a caller holding the
+	// project's API key can reach another client's presence identity either by
+	// presenting that client_id or by activating a fresh client under the same
+	// client key -- the derivation is deliberately collision-by-design, which is
+	// how one logical client resumes its actor across sessions. The client key
+	// is an identifier, not a secret. See
+	// docs/design/pre-attach-ticket-reissue.md ("Security boundary").
 	presenceID := clientID
 	if req.Msg.ActorId != "" {
 		if types.ID(req.Msg.ActorId) != clientInfo.StableActorID {
