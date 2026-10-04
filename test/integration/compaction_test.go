@@ -26,6 +26,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/client"
@@ -235,7 +236,16 @@ func TestDocumentCompaction(t *testing.T) {
 		project, err := defaultServer.DefaultProject(ctx)
 		assert.NoError(t, err)
 		docInfo, err := defaultServer.Backend().DB.FindDocInfoByKey(ctx, project.ID, d1.Key())
-		assert.NoError(t, err)
+		require.NoError(t, err)
+		// Purge the document when done. Left in the database every test shares,
+		// it stays a compaction candidate for the housekeeping of every server
+		// started on that database, and each one rebuilds all 18MB of it, for
+		// up to a minute on CI, before failing the same way. That load starves
+		// the tests that run after this one.
+		defer func() {
+			_, err := defaultServer.Backend().DB.PurgeDocument(ctx, docInfo.RefKey())
+			assert.NoError(t, err)
+		}()
 		before, err := helper.CountChangesWithDocID(helper.TestDBName(), docInfo.ID)
 		assert.NoError(t, err)
 		assert.Positive(t, before)
