@@ -31,36 +31,23 @@
   nudge only when no snapshot landed since the last poll; the loop also no
   longer calls `require` inside `assert.Eventually`'s goroutine. Also fixed:
   `TestKey` dropped the run suffix for names cut at 100 characters. Kept as
-  known limitations: the striped lock is held across one MongoDB round trip
+  known limitations: the client lock is held across one MongoDB round trip
   and ignores ctx; several server nodes still keep separate client caches,
   as before.
-- Round 2 (review panel): two blocking findings, both on the removed bulk
-  cache fill. The removal was a real behavior change with no test, and it
-  also removed the only path that ever refreshed a client row on a node
-  that did not write it — the LRU had no TTL and no cross-node
-  invalidation, so a stale activation or attachment could sit in a node's
-  cache until it was evicted by size. Fixed by giving `clientCache` a TTL
-  (`DefaultClientCacheTTL`, 1m, configurable via `--mongo-client-cache-ttl`)
-  instead of restoring the fill: expiry drops entries rather than writing
-  old ones, so the staleness window is bounded without reopening the race.
-  `ActivateClient` now also takes the client's stripe lock, so every
-  clientCache write pairs with its row write under one lock.
-- Round 3 (review panel): one blocking finding, raised by both the
-  blast-radius and the security lens — the database confirmation added for
-  push/pull covered only the paths that write, so `Watch`, `WatchDocument`,
-  `WatchChannel` and `Broadcast` still admitted on the cached client row. A
-  client deactivated on another node kept receiving document events and peer
-  presence and kept broadcasting for up to `ClientCacheTTL`, and on a node
-  that never writes nothing would ever disprove the entry. Fixed by reading
-  the client row with `skipCache` at those four entry points
-  (`confirmActiveClient`) and confirming the document attachment on that row
-  for document watches (`confirmWatchTarget`, attaching allowed so a watch
-  racing its own attach is not rejected, server clients exempt as in
-  `pullPack`). `TestStaleClientCacheWatch` covers both.
-- A write-path guard is not a gate. The read paths — streams, broadcasts —
-  disclose the same resource and have no later conditional write to catch
-  them, so they need the authoritative read themselves.
-- Deleting a cache fill removes a refresh path as well as a bug. Ask what
-  else was keeping the entry fresh before deciding the removal is free; for
-  a cache nothing invalidates across nodes, the answer is usually "nothing,
-  and it needs a TTL".
+- Later review rounds (panel and loop fixers) found real gaps in how a
+  cached `ClientInfo` authorizes requests across nodes, and each fix
+  exposed the next one: an expiring cache, conditional write-backs, an
+  uncached read before a push writes, then Watch/Broadcast checks, then
+  the `ClusterService.Broadcast` bypass. Eight rounds later the PR was
+  changing the server's authorization model. The maintainer re-scoped it
+  back to the flakes and the per-client cache race, reverted the rest, and
+  filed yorkie-team/yorkie#2113 with the evidence.
+- When review findings keep growing past the stated scope, especially into
+  behavior that existed before the PR, stop and ask for a scope decision
+  instead of fixing one more round. File an issue with the reproduction.
+- Deleting a cache fill removes a refresh path as well as a bug. Here it was
+  the only path that refreshed a client written by another node; that gap
+  is part of #2113.
+- The striped lock became a per-client `pkg/locker` lock: same guarantee,
+  no false sharing between unrelated clients, and the locking utility the
+  server already uses.
