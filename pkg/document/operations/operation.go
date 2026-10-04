@@ -48,7 +48,43 @@ var (
 	// look like a real change -- one that peers would then apply under
 	// OpSourceRemote, where the skip guard does not run.
 	ErrOperationSkipped = errors.New("operation skipped")
+
+	// ErrInUseElementIdentity occurs when a Set payload's createdAt names an
+	// element the document is already holding live somewhere other than the
+	// key being set. Nothing between the RPC handler and the operation
+	// validates that ticket -- api/converter's fromSet takes parent_created_at,
+	// executed_at and the element's own createdAt verbatim from the wire -- so
+	// it is checked where the collision becomes load-bearing. See
+	// Set.Execute; the broader push-boundary validation is yorkie-team/yorkie#2081.
+	ErrInUseElementIdentity = errors.New("element identity is already in use")
 )
+
+// skipUnresolvedTarget reports how an operation must react to a target
+// createdAt that resolves to no element.
+//
+// A createdAt can stop resolving without the document being broken: an
+// orphaned subtree -- a copy a container refused, or a tombstone a restore
+// displaced -- stays addressable only as long as the Root that adopted it
+// does (crdt.Root.AdoptRefusedCopy). A Root rebuilt from a snapshot cannot
+// carry one, because the snapshot encodes only what the tree reaches, so a
+// replica or server seeded that way answers for strictly fewer createdAts
+// than the replica that applied the changes in order. An operation a peer
+// addressed into such a subtree has therefore to be dropped rather than
+// reported as a failure: on the replicas that still hold the orphan it
+// mutates data no tree reaches and no reader can observe, so dropping it is
+// the same no-op, and failing instead would abort the whole change -- forever
+// on the server, which replays the same log on every rebuild.
+//
+// A local operation is a different matter: it was built against this very
+// root a moment ago, so an unresolved target is a bug here, not a replica
+// that saw history in another order, and it keeps reporting itself as one.
+func skipUnresolvedTarget(source OpSource) (ExecutionResult, error) {
+	if source == OpSourceLocal {
+		return ExecutionResult{}, ErrNotApplicableDataType
+	}
+
+	return ExecutionResult{}, ErrOperationSkipped
+}
 
 // OpSource represents the source of an operation execution. Some operations
 // behave differently under undo/redo, where a Set or an Add acts as a

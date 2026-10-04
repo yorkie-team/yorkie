@@ -424,6 +424,18 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 	return &p, nil
 }
 
+// fromSet decodes a Set operation.
+//
+// Every ticket it reads -- parent_created_at, executed_at and the element's
+// own createdAt inside fromElement -- comes straight off the wire, and the
+// element's createdAt is the one that decides control flow once the operation
+// runs: a value whose createdAt another element already answers to is refused
+// by the object rather than applied (crdt.ElementRHT.refusesLoser). Checking
+// it here would need the document, which the converter does not have, so the
+// check sits where the collision becomes load-bearing and every transport
+// passes through it: operations.Set.Execute rejects a createdAt that names a
+// live element the Set is not restoring (ErrInUseElementIdentity). The
+// broader push-boundary validation is tracked at yorkie-team/yorkie#2081.
 func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	if pbSet == nil {
 		return nil, goerrors.New("operation set missing")

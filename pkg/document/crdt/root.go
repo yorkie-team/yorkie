@@ -130,6 +130,21 @@ type Root struct {
 	// lives only as long as its element is addressable: index retires it when
 	// a restored copy takes the element's elementMap slot over.
 	sizeInGC map[Element]resource.DataSize
+
+	// detached holds the roots of the orphaned subtrees this Root still
+	// answers for. An orphan hangs off no container -- a copy a container
+	// refused (AdoptRefusedCopy), or a tombstone a restore displaced from its
+	// container's maps (UnregisterRemovedElementPair) -- so the tree walk
+	// NewRoot performs cannot find it, and a Root rebuilt from the tree alone
+	// would silently stop answering for every createdAt only that subtree
+	// carries. DeepCopy walks this slice to put those slots back; without it
+	// the clone Document.applyChanges executes each remote change against
+	// (document.go) rejects exactly the operations the orphan exists to keep
+	// resolvable, before the root ever sees them.
+	//
+	// Pruned in DeepCopy rather than on insert: whether an orphan still owns
+	// any elementMap slot is decided by registrations that come after it.
+	detached []Element
 }
 
 // NewRoot creates a new instance of Root.
@@ -495,6 +510,13 @@ func (r *Root) UnregisterRemovedElementPair(owner Container, createdAt *time.Tic
 	}
 
 	delete(r.gcElementPairMap, createdAt.Key())
+
+	// The subtree is orphaned but still addressable: release deliberately
+	// leaves its elementMap slots alone. Record it so a DeepCopy of this Root
+	// carries those slots too -- otherwise the two orders of the same pair of
+	// restores diverge again the moment one side rebuilds its clone.
+	r.trackDetached(pair.elem)
+
 	return true
 }
 
@@ -539,6 +561,38 @@ func (r *Root) AdoptRefusedCopy(elem Element) {
 			return false
 		})
 	}
+
+	r.trackDetached(elem)
+}
+
+// trackDetached records an orphaned subtree so DeepCopy can put its elementMap
+// slots back into the copy. Only the subtree root is kept: the walk that
+// adopted its descendants is the same one DeepCopy replays.
+func (r *Root) trackDetached(elem Element) {
+	r.detached = append(r.detached, elem)
+}
+
+// addressesAny reports whether any elementMap slot still answers with an
+// element of this subtree. An orphan whose every slot has since been taken
+// over by a live element is unreachable and carries nothing a copy would
+// miss, so DeepCopy drops it.
+func (r *Root) addressesAny(elem Element) bool {
+	if r.elementMap[elem.CreatedAt().Key()] == elem {
+		return true
+	}
+
+	found := false
+	if container, ok := elem.(Container); ok {
+		container.Descendants(func(e Element, _ Container) bool {
+			if r.elementMap[e.CreatedAt().Key()] == e {
+				found = true
+				return true
+			}
+			return false
+		})
+	}
+
+	return found
 }
 
 // release forgets the cost of an element that has become unreachable without
@@ -606,12 +660,44 @@ func (r *Root) DocSize() resource.DocSize {
 }
 
 // DeepCopy copies itself deeply.
+//
+// NewRoot indexes what it can reach from the tree, which is every live element
+// and every tombstone a container still holds -- but not an orphan, which
+// hangs off no container by definition. Those are re-indexed here from
+// r.detached, in the order they were orphaned, so the copy answers for exactly
+// the createdAts the original answers for. Document.applyChanges runs every
+// remote change against such a copy before the root sees it, so a slot missing
+// here fails the change outright.
+//
+// Orphans whose slots have all since been taken over by live elements are
+// dropped on the way through: they are unreachable in the original too, and
+// keeping them would make the list grow with every restore.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
 		return nil, err
 	}
-	return NewRoot(copiedObject.(*Object)), nil
+	copied := NewRoot(copiedObject.(*Object))
+
+	// Built as a fresh slice rather than filtered in place: an error below
+	// returns without committing it, and an in-place filter would already
+	// have shuffled entries out of r.detached by then.
+	kept := make([]Element, 0, len(r.detached))
+	for _, elem := range r.detached {
+		if !r.addressesAny(elem) {
+			continue
+		}
+		kept = append(kept, elem)
+
+		copiedElem, err := elem.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		copied.AdoptRefusedCopy(copiedElem)
+	}
+	r.detached = kept
+
+	return copied, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.

@@ -52,8 +52,11 @@ func NewAdd(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Add) Execute(root *crdt.Root, _ OpSource, _ time.VersionVector) (ExecutionResult, error) {
+func (o *Add) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
+	if parent == nil {
+		return skipUnresolvedTarget(source)
+	}
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {

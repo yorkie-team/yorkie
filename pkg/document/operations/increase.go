@@ -61,6 +61,9 @@ func NewIncreaseWithActor(
 // Execute executes this operation on the given document(`root`).
 func (o *Increase) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
+	if parent == nil {
+		return skipUnresolvedTarget(source)
+	}
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType

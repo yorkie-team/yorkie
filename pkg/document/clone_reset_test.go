@@ -49,12 +49,17 @@ func TestCloneResetOnFailedApply(t *testing.T) {
 	}))
 	c := source.CreateChangePack().Changes[0]
 
-	// Append an operation whose parent does not exist, so the change fails
-	// after its first operation already ran.
-	missing := time.NewTicket(100, 0, actor)
+	// Append an operation whose parent is the string the first operation set
+	// rather than an object, so the change fails after that operation already
+	// ran. A parent that does not resolve at all no longer fails: an
+	// unreachable createdAt is a replica that saw history in another order,
+	// which operations skip (see skipUnresolvedTarget), so it would not
+	// exercise the partway failure this test is about.
+	set, ok := c.Operations()[0].(*operations.Set)
+	require.True(t, ok)
 	value, err := crdt.NewPrimitive("x", time.NewTicket(101, 0, actor))
 	require.NoError(t, err)
-	ops := append(c.Operations(), operations.NewSet(missing, "x", value, value.CreatedAt()))
+	ops := append(c.Operations(), operations.NewSet(set.Value().CreatedAt(), "x", value, value.CreatedAt()))
 	broken := change.New(c.ID(), "", ops, nil)
 
 	target := document.New("d")

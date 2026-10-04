@@ -182,15 +182,40 @@ only an entry that container registered. The json layer records the CRDT
 container, not its proxy, as the parent so that identity check holds on the
 local path.
 
-### Out of scope: crafted payloads
+### Orphan addressability across a rebuild
 
-These rules are about histories the SDKs can produce. A pushed element whose
-`createdAt` names an element elsewhere in the document is crafted input, and
-`Add`, `ArraySet` and `Set` all register such a value the same way. Rejecting
-it belongs at the push boundary, tracked in yorkie-team/yorkie#2081, not in a
-Go-only guard on the apply path: the server's snapshot replay runs this code
-and the JS SDK does not, so any guard that fires in a legitimate history
-splits the server's snapshot from JS clients.
+A refused copy, and a tombstone a restore displaced, hang off no container.
+Both stay addressable on the `Root` that adopted them -- that is what keeps an
+operation a peer addressed at a descendant only one copy carries from aborting
+the change -- but a `Root` rebuilt from a tree cannot find them:
+
+| Rebuild | Orphan slots |
+|---------|--------------|
+| `Root.DeepCopy` (the clone every remote change runs against first) | carried over from `Root.detached`, re-adopted at no charge |
+| `InternalDocument.applySnapshot` | **lost**: a snapshot encodes only what the tree reaches, in every SDK |
+
+The snapshot case is unrecoverable, so addressability cannot be the only thing
+holding the apply path up. An operation whose target `createdAt` resolves to
+nothing is therefore skipped rather than failed off the local path
+(`operations.skipUnresolvedTarget`): on the replicas that still hold the
+orphan it mutates data no tree reaches and no reader can observe, so dropping
+it is the same no-op -- and failing instead aborts the change forever on the
+server, which replays the same log on every rebuild. A local operation was
+built against its own root a moment ago, so an unresolved target there is
+still `ErrNotApplicableDataType`.
+
+### Crafted payloads
+
+These rules are about histories the SDKs can produce, but the refusal makes
+the payload's `createdAt` decide which branch the apply path takes, and that
+ticket arrives verbatim off the wire (`api/converter.fromSet`). So `Set`
+rejects a payload whose `createdAt` answers to a **live** element that is not
+the current occupant of the key being set (`ErrInUseElementIdentity`). The two
+collisions a legitimate history produces -- a restore under a tombstoned
+`createdAt`, and a concurrent restore losing to the copy already at the key --
+both pass, so this does not split the server's snapshot replay from JS
+clients. The general push-boundary validation, covering `Add` and `ArraySet`
+too, is still tracked in yorkie-team/yorkie#2081.
 
 ### JS SDK port
 

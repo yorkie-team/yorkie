@@ -483,12 +483,17 @@ func orphanChange(t *testing.T, docKey string) *api.Change {
 	actor, err := time.ActorIDFromHex("00000000000000000000000b")
 	assert.NoError(t, err)
 	orphan.SetActor(actor)
+	// A Remove of a member the receiving document never saw created. Its
+	// parent is the root object, which every document has, so the operation
+	// resolves far enough to fail on the missing child rather than being
+	// skipped the way an unresolvable parent now is (see
+	// operations.skipUnresolvedTarget).
 	assert.NoError(t, orphan.Update(func(r *json.Object, _ *presence.Presence) error {
-		r.SetNewObject("nested")
+		r.SetString("k", "v")
 		return nil
 	}))
 	assert.NoError(t, orphan.Update(func(r *json.Object, _ *presence.Presence) error {
-		r.GetObject("nested").SetString("k", "v")
+		r.Delete("k")
 		return nil
 	}))
 

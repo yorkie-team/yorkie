@@ -110,8 +110,11 @@ func NewStyleSetAndRemove(
 // can carry both at once -- see toReverseOperation -- so both branches run
 // independently here, mirroring style_operation.ts's execute (:125-169),
 // rather than the two being mutually exclusive.
-func (e *Style) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
+func (e *Style) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
+	if parent == nil {
+		return skipUnresolvedTarget(source)
+	}
 	obj, ok := parent.(*crdt.Text)
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType

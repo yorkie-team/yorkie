@@ -323,6 +323,17 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 		return err
 	}
 
+	// NOTE(hackerwins): A snapshot encodes what the tree reaches and nothing
+	// else, so the Root built here cannot answer for an orphaned subtree the
+	// replica that applied the changes in order still holds -- a copy a
+	// container refused, or a tombstone a restore displaced
+	// (crdt.Root.AdoptRefusedCopy). Those slots are unrecoverable from the
+	// bytes, which is why an operation addressed into such a subtree is
+	// skipped rather than failed wherever it no longer resolves
+	// (operations.skipUnresolvedTarget): it mutates data no tree reaches on
+	// the replicas that do hold the orphan, so dropping it is the same no-op,
+	// and failing instead would abort the change forever here -- the server
+	// replays the same log on every rebuild.
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
 
