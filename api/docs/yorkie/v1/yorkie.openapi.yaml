@@ -1381,6 +1381,20 @@ components:
           description: ""
           title: created_at
           type: object
+        hllRegisters:
+          additionalProperties: false
+          description: |-
+            hll_registers carries the HLL sketch of a dedup counter (a value of type
+             INTEGER_DEDUP_CNT), which `value` cannot reproduce: `value` is the count
+             the sketch is derived from, so a counter rebuilt from it alone has an
+             empty sketch and reads back as zero. Empty for every other value type,
+             and for a dedup counter whose sketch is still empty -- which is every
+             counter a Set creates through the JSON API, so only a document seeded
+             from YSON (compaction, SetYSON) fills it. Mirrors
+             JSONElement.Counter.hll_registers.
+          format: byte
+          title: hll_registers
+          type: string
         movedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false

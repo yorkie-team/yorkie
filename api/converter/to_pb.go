@@ -621,10 +621,17 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			return nil, err
 		}
 
+		// HLLBytes, not just the value: a dedup counter's value is derived
+		// from its sketch, so a counter rebuilt from the value alone comes
+		// back with an empty sketch and reads as zero. Every path that carries
+		// an element in this message -- the operations a change pack pushes,
+		// the changes compaction stores -- would otherwise drop the sketch of
+		// a counter seeded from YSON. See JSONElementSimple.hll_registers.
 		return &api.JSONElementSimple{
-			Type:      pbCounterType,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     counterValue,
+			Type:         pbCounterType,
+			CreatedAt:    ToTimeTicket(elem.CreatedAt()),
+			Value:        counterValue,
+			HllRegisters: elem.HLLBytes(),
 		}, nil
 	case *crdt.Tree:
 		bytes, err := TreeToBytes(elem)

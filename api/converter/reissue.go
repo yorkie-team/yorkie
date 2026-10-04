@@ -69,9 +69,9 @@ func ReissueOperations(
 	}
 
 	// JSONElementSimple, the message a Set/Add/ArraySet carries its value in,
-	// is lossy for two element types, and a value that lost state would be
-	// replayed into the local root as that loss. Re-issue those through the
-	// full snapshot encoding instead, which carries every field.
+	// is lossy for one element type, and a value that lost state would be
+	// replayed into the local root as that loss. Re-issue it through the full
+	// snapshot encoding instead, which carries every field.
 	for i, op := range ops {
 		if reissued[i], err = r.reissueLossyValue(op, reissued[i]); err != nil {
 			return nil, err
@@ -87,19 +87,16 @@ func ReissueOperations(
 //     Set/Add/ArraySet that restores a removed Text -- the reverse of a
 //     Remove, run by Undo -- loses its content, which a later Edit in the same
 //     document may target the nodes of.
-//   - Counter: a dedup counter's value is derived from its HLL registers, and
-//     JSONElementSimple carries only the derived value (to_pb.go's
-//     toJSONElementSimple), not the registers that api.JSONElement_Counter's
-//     HllRegisters field carries. Decoding from the simple form alone rebuilds
-//     an empty sketch, so the counter reads back as zero.
 //
 // Object, Array and Tree are safe: the simple form carries them as the
 // marshalled bytes of the very api.JSONElement the snapshot encoding uses.
-// Primitive carries its own bytes. Keep this list in step with
-// toJSONElementSimple.
+// Primitive carries its own bytes, and a dedup Counter its HLL registers
+// alongside the derived value -- repairing that here would have been
+// local-only, since the operation the attach then pushes goes through
+// toJSONElementSimple too. Keep this list in step with toJSONElementSimple.
 func isLossyOnWire(elem crdt.Element) bool {
 	switch elem.(type) {
-	case *crdt.Text, *crdt.Counter:
+	case *crdt.Text:
 		return true
 	}
 	return false

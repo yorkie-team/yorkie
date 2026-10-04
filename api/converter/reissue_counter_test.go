@@ -28,10 +28,70 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// TestReissueOperationsKeepsCounterHLL covers the wire round-trip losing a
-// dedup Counter's HLL registers: JSONElementSimple, the message a Set carries
-// its value in, has no field for them, so a value re-issued through it alone
-// would come back as an empty sketch counting zero.
+// dedupCounter returns a dedup Counter whose sketch counts the given voters,
+// the state a document seeded from YSON holds before any Increase replays.
+func dedupCounter(t *testing.T, actor time.ActorID, voters ...string) *crdt.Counter {
+	t.Helper()
+
+	one, err := crdt.NewPrimitive(int32(1), time.NewTicket(1, 0, actor))
+	require.NoError(t, err)
+	counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.NewTicket(2, 0, actor))
+	require.NoError(t, err)
+	for _, voter := range voters {
+		_, err := counter.IncreaseDedup(one, voter)
+		require.NoError(t, err)
+	}
+	require.NotEmpty(t, counter.HLLBytes())
+	return counter
+}
+
+// TestOperationsKeepCounterHLLOnWire covers the push path, not the re-issue:
+// every Set/Add/ArraySet that leaves this replica -- the change pack a client
+// pushes, the compacted changes the server stores -- carries its value in a
+// JSONElementSimple, and a dedup counter's value is derived from its sketch.
+// Without the registers alongside it the peer rebuilds an empty sketch and
+// reads the counter as zero, which for a push is a divergence from the
+// pushing replica and for compaction is silent data loss.
+func TestOperationsKeepCounterHLLOnWire(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	counter := dedupCounter(t, actor, "a", "b", "c")
+	require.Equal(t, int32(3), counter.Value())
+
+	executedAt := time.NewTicket(3, 0, actor)
+	for name, op := range map[string]operations.Operation{
+		"set":      operations.NewSet(time.InitialTicket, "cnt", counter, executedAt),
+		"add":      operations.NewAdd(time.InitialTicket, time.InitialTicket, counter, executedAt),
+		"arraySet": operations.NewArraySet(time.InitialTicket, counter.CreatedAt(), counter, executedAt),
+	} {
+		t.Run(name, func(t *testing.T) {
+			pbOps, err := converter.ToOperations([]operations.Operation{op})
+			require.NoError(t, err)
+			decoded, err := converter.FromOperations(pbOps)
+			require.NoError(t, err)
+			require.Len(t, decoded, 1)
+
+			var value crdt.Element
+			switch o := decoded[0].(type) {
+			case *operations.Set:
+				value = o.Value()
+			case *operations.Add:
+				value = o.Value()
+			case *operations.ArraySet:
+				value = o.Value()
+			}
+			cnt, ok := value.(*crdt.Counter)
+			require.True(t, ok)
+			assert.Equal(t, int32(3), cnt.Value(), "dedup counter value survives the wire")
+			assert.Equal(t, counter.HLLBytes(), cnt.HLLBytes(), "HLL registers survive the wire")
+		})
+	}
+}
+
+// TestReissueOperationsKeepsCounterHLL covers the wire round-trip keeping a
+// dedup Counter's HLL registers through the re-issue, which goes through the
+// very encoding the push path uses: a sketch lost here would be replayed into
+// the local root as a counter reading zero.
 func TestReissueOperationsKeepsCounterHLL(t *testing.T) {
 	from, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)

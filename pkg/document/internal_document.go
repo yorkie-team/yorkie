@@ -374,9 +374,17 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 // after this returns, and a failed attach must not leave the caller's document
 // rewritten; see Document.ReissueActor, which extends the rollback to the
 // undo/redo stacks.
+//
+// A document already carrying the attaching actor still goes through the
+// re-issue when it minted tickets under an earlier one: the caller renamed it
+// through the exported Document.SetActor to the very actor it then attached
+// under, so changeID names `actor` while the root and the operations are full
+// of tickets naming the actor before it. Only a document with nothing left in
+// mintedActors falls back to SetActor.
 func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, func() bool, error) {
 	prev := d.changeID.ActorID()
-	if prev == actor || !d.neverSynced() || !d.HasLocalChanges() {
+	hasStaleTickets := prev != actor || len(d.mintedActors) > 0
+	if !hasStaleTickets || !d.neverSynced() || !d.HasLocalChanges() {
 		d.SetActor(actor)
 
 		// SetActor writes the actor into the very change values the document

@@ -192,6 +192,15 @@ message JSONElementSimple {
   TimeTicket removed_at = 3;
   ValueType type = 4;
   bytes value = 5;
+  // hll_registers carries the HLL sketch of a dedup counter (a value of type
+  // INTEGER_DEDUP_CNT), which `value` cannot reproduce: `value` is the count
+  // the sketch is derived from, so a counter rebuilt from it alone has an
+  // empty sketch and reads back as zero. Empty for every other value type,
+  // and for a dedup counter whose sketch is still empty -- which is every
+  // counter a Set creates through the JSON API, so only a document seeded
+  // from YSON (compaction, SetYSON) fills it. Mirrors
+  // JSONElement.Counter.hll_registers.
+  bytes hll_registers = 6;
 }
 
 /////////////////////////////////////////

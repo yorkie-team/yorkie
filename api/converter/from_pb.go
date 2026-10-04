@@ -1436,33 +1436,46 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT,
 		api.ValueType_VALUE_TYPE_LONG_CNT,
 		api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT:
-		counterType, err := fromCounterType(pbType)
-		if err != nil {
-			return nil, err
-		}
-		createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
-		if err != nil {
-			return nil, err
-		}
-		counterValue, err := crdt.CounterValueFromBytes(counterType, pbElement.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		counter, err := crdt.NewCounter(
-			counterType,
-			counterValue,
-			createdAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return counter, nil
+		return fromCounterElement(pbElement)
 	case api.ValueType_VALUE_TYPE_TREE:
 		return sanitizeElement(BytesToTree(pbElement.Value))
 	}
 
 	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)
+}
+
+// fromCounterElement decodes a counter carried in the simple element form a
+// Set/Add/ArraySet uses.
+func fromCounterElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
+	counterType, err := fromCounterType(pbElement.Type)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := fromRequiredTimeTicket(pbElement.CreatedAt, "element.created_at")
+	if err != nil {
+		return nil, err
+	}
+	counterValue, err := crdt.CounterValueFromBytes(counterType, pbElement.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	counter, err := crdt.NewCounter(counterType, counterValue, createdAt)
+	if err != nil {
+		return nil, err
+	}
+
+	// A dedup counter's value is derived from its sketch, and NewCounter gave
+	// it an empty one, so restore the registers the wire carried. Absent for a
+	// peer that predates the field, which is what this decoded to before it
+	// existed. See fromJSONCounter, which does the same for the snapshot
+	// encoding.
+	if counter.IsDedup() && len(pbElement.GetHllRegisters()) > 0 {
+		if err := counter.RestoreHLL(pbElement.GetHllRegisters()); err != nil {
+			return nil, err
+		}
+	}
+	return counter, nil
 }
 
 func fromPrimitiveValueType(valueType api.ValueType) (crdt.ValueType, error) {

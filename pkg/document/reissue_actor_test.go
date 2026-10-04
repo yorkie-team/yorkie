@@ -625,4 +625,25 @@ func TestReissueActor(t *testing.T) {
 		assert.Equal(t, before, doc.Marshal())
 		assert.Equal(t, doc.Marshal(), serverBuild(t, doc).Marshal())
 	})
+
+	t.Run("a document renamed to the attaching actor still re-issues", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+
+		// The caller renamed the document through the public SetActor to the
+		// very actor it then attaches under. changeID already names actorA, so
+		// a `prev == actor` early-out would skip the sweep and push a root full
+		// of tickets still naming time.InitialActorID.
+		doc.SetActor(actorA)
+		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
+
+		before := doc.Marshal()
+		reissueActor(t, doc, actorA)
+
+		actors := actorsOf(t, doc)
+		assert.Zero(t, actors[time.InitialActorID], "%v", actors)
+		assert.NotZero(t, actors[actorA])
+		assert.Equal(t, before, doc.Marshal())
+		assert.Equal(t, doc.Marshal(), serverBuild(t, doc).Marshal())
+	})
 }

@@ -207,3 +207,35 @@
   enforceable `{project_id, key}` uniqueness. Rebuttal re-filed; this
   is the fourth round, so a human decision on the identity model is
   what the standstill actually needs.
+
+## Loop round 10 follow-up (panel)
+
+- Upheld, and the root cause fixed rather than the symptom: repairing a
+  dedup `Counter`'s HLL registers inside `reissue.go` was local-only.
+  The operation the attach then pushes is encoded by the same
+  `toJSONElementSimple`, which had no field for the registers, so the
+  re-issued replica and the server would have disagreed about the
+  counter forever -- a divergence worse than the symmetric loss it
+  replaced. `JSONElementSimple` now carries `hll_registers = 6`,
+  `toJSONElementSimple` fills it and `fromCounterElement` restores it,
+  so the push path and the snapshot encoding are finally in step. The
+  `reissue.go` special case is gone; the round-trip is lossless at the
+  layer below it.
+- Same field, same fix, different caller: `CompactDocument` stores
+  `newDoc.CreateChangePack().Changes`, whose `Set` values go through
+  `toJSONElementSimple` too. A document seeded from YSON -- which is
+  the only way a `Set` ever carries a non-empty sketch -- had its
+  dedup counters silently emptied by compaction. Pre-existing, not
+  introduced by this branch, and `compaction.go` needed no change of
+  its own once the encoding carried the registers.
+- The field is additive and backward compatible: a peer that predates
+  it sends nothing and decodes exactly as it does today. The JS SDK
+  needs the mirror change before a JS client can seed a dedup counter
+  from YSON; until then the loss there is unchanged, not worsened.
+- Upheld: `ReissueActor`'s `prev == actor` early-out skipped the
+  `mintedActors` sweep. A caller that renames a document through the
+  public `Document.SetActor` to the very actor it then attaches under
+  left a root full of `InitialActorID` tickets to be pushed. The guard
+  is now `prev != actor || len(d.mintedActors) > 0`; the new subtest
+  "a document renamed to the attaching actor still re-issues" fails
+  without it (84 initial-actor tickets survive).
