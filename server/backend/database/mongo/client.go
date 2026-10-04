@@ -1409,14 +1409,28 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	filter := bson.M{
 		"project_id": info.ProjectID,
 		"_id":        info.ID,
-	}, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
+	}
+	// An attachment is written only to an activated client. info may come
+	// from a cache that has not seen a deactivation yet (another node's write,
+	// within the cache TTL); without this condition the push would put the
+	// document back into attached_docs of a deactivated client, and nothing
+	// would ever detach it again. A detach needs no such condition.
+	if attached {
+		filter["status"] = database.ClientActivated
+	}
+	result := c.collection(ColClients).FindOneAndUpdate(
+		ctx, filter, updater, options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
 
 	updated := &database.ClientInfo{}
 	if err := result.Decode(updated); err != nil {
 		if err == mongo.ErrNoDocuments {
+			if attached {
+				return c.attachMissError(ctx, info, docInfo)
+			}
 			return fmt.Errorf("decode client of %s after PP %s: %w", info.ID, docInfo.ID, database.ErrClientNotFound)
 		}
 
@@ -1426,6 +1440,29 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	c.clientCache.Add(clientKey, updated.DeepCopy())
 
 	return nil
+}
+
+// attachMissError tells why an attaching update after PushPull matched no
+// client: the client is deactivated, or it does not exist. It runs only after
+// a miss, so the success path keeps its single round trip.
+func (c *Client) attachMissError(
+	ctx context.Context,
+	info *database.ClientInfo,
+	docInfo *database.DocInfo,
+) error {
+	err := c.collection(ColClients).FindOne(ctx, bson.M{
+		"project_id": info.ProjectID,
+		"_id":        info.ID,
+	}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if err == nil {
+		return fmt.Errorf("update client of %s after PP %s: %w",
+			info.ID, docInfo.ID, database.ErrClientNotActivated)
+	}
+	if err != mongo.ErrNoDocuments {
+		return fmt.Errorf("find client of %s after PP %s: %w", info.ID, docInfo.ID, err)
+	}
+
+	return fmt.Errorf("decode client of %s after PP %s: %w", info.ID, docInfo.ID, database.ErrClientNotFound)
 }
 
 // FindAttachedClientInfosByRefKey returns the attached client infos of the given document.

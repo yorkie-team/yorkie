@@ -2141,6 +2141,40 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		clientInfo.ID = dummyClientID
 		assert.Error(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo), mongodb.ErrNoDocuments)
 	})
+
+	t.Run("stale attach on a deactivated client test", func(t *testing.T) {
+		// A node whose cache has not seen the deactivation yet still holds
+		// the attached copy of the client. Its push must not write the
+		// attachment back into the deactivated row.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		require.NoError(t, err)
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
+		require.NoError(t, err)
+		require.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
+		require.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		stale := clientInfo.DeepCopy()
+
+		require.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		require.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		require.NoError(t, err)
+
+		require.NoError(t, stale.UpdateCheckpoint(docInfo.ID, change.NewCheckpoint(1, 1)))
+		err = db.UpdateClientInfoAfterPushPull(ctx, stale, docInfo)
+		assert.ErrorIs(t, err, database.ErrClientNotActivated)
+
+		stored, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		require.NoError(t, err)
+		assert.Equal(t, database.ClientDeactivated, stored.Status)
+		require.Contains(t, stored.Documents, docInfo.ID)
+		assert.Equal(t, database.DocumentDetached, stored.Documents[docInfo.ID].Status)
+
+		// A detach still goes through: it only ever clears the attachment.
+		require.NoError(t, stale.DetachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, stale, docInfo))
+	})
 }
 
 // RunIsDocumentAttachedOrAttachingTest runs the IsDocumentAttachedOrAttaching tests for the given db.

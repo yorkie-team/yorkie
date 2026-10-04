@@ -1204,6 +1204,13 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
 
+	// An attachment is written only to an activated client; see the MongoDB
+	// implementation.
+	if attached && loaded.Status != database.ClientActivated {
+		return fmt.Errorf("update client of %s after PushPull %s: %w",
+			clientInfo.ID, docInfo.ID, database.ErrClientNotActivated)
+	}
+
 	if !attached {
 		loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{
 			Status: clientDocInfo.Status,
