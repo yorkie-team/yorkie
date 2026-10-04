@@ -188,3 +188,28 @@ Lesson: a local GC policy that needs to trust client-supplied tickets is a
 security boundary, not a GC detail. Before growing it, ask whether the
 sensitivity is new or only newly visible. Here `main` already diverged with
 GC through three other readers.
+
+## Round 7: the panel re-reviewed a reverted state
+
+Five of the ten blocking findings were against `api/converter/from_pb.go`,
+`api/converter/from_bytes.go` and an `api/converter/tree_edit_content_lamport_test.go`
+— the content-lamport bound and clamp that Round 6 reverted. `git diff
+origin/main...HEAD -- api/` is empty and the file never existed at HEAD. A
+sixth cited `holdsBackChainSplice`, removed in the same revert. Those went
+back as rebuttals, not edits.
+
+What did survive and was fixed: `holdsKnownChild` dereferenced its node
+argument with no nil guard, and `TestGarbageCollectionSameBoundarySplit`
+proved its GC premise with `assert.Zero(GarbageLen())` alone, which a setup
+that stopped delivering the tombstone would pass just as happily. It now
+asserts the tombstone arrived before the collecting sync.
+
+The cross-SDK gate moved out of this task file and into §7.8 of
+`concurrent-merge-split.md`: a task file is archived on merge, and a
+convergence rule that must change in both SDKs at once needs the constraint
+to live next to the rule.
+
+Lesson: a review panel reads the diff it was handed, so a revert mid-branch
+leaves findings pointing at code that is gone. Check existence first — a
+grep and a `git diff --stat` per flagged path is cheaper than reasoning
+about a fix for code that is not there.

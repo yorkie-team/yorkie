@@ -425,6 +425,16 @@ advancing past genuine concurrent siblings from other actors.
 
 ### §7.8 Split: Same-Boundary Ordering
 
+> **Cross-SDK rule — change it in both SDKs at once.** This section is a
+> replicated convergence rule, applied by every replica and by the
+> server when it applies changes and builds snapshots. A peer running a
+> different version of it places the same split differently, and a
+> snapshot built by either flips the other (measured on #2030 /
+> js#1375). The `holdsKnownChild` walk below is the same rule as
+> yorkie-js-sdk#1435 — count every descendant the editor's version
+> vector covers, tombstones included, no merge skip — and neither side
+> may merge without the other.
+
 `SplitElement` places its product directly after the node it splits.
 When a concurrent split of the same node at the same boundary has
 already been applied, the second product lands in front of the first,

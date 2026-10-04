@@ -3258,6 +3258,13 @@ func (t *Tree) holdsKnownChild(
 	versionVector time.VersionVector,
 	descended *nodeSet,
 ) bool {
+	// A nil node has nothing below it. The §7.8 walk never passes one (it
+	// breaks on a nil findFloorNode result), but the helper is cheap to keep
+	// total rather than leaving the next caller to discover the precondition.
+	if node == nil {
+		return false
+	}
+
 	// An empty vector reads as "knows everything" (time.TicketKnown), which
 	// would make every child a marker. The §7.8 entry gate returns before that
 	// can reach here; keep the helper honest on its own terms anyway.

@@ -1702,11 +1702,20 @@ func TestGarbageCollectionSameBoundarySplit(t *testing.T) {
 	sync(3)
 	sync(3)
 
+	// The removed "d" has reached d3 as a tombstone inside d2's product, and
+	// nothing has collected it yet. Asserting this before the collecting sync
+	// keeps the GarbageLen check below from passing vacuously: zero garbage
+	// after a sync means nothing if no garbage ever arrived, and the setup
+	// above (which replica removes what, and in which order the syncs run) is
+	// exactly the kind of thing a later edit can silently break.
+	held := docs[2].GarbageLen()
+	assert.NotZero(t, held, "the removed node must reach d3 as a tombstone")
+
 	// Every client the server tracks has now reported a vector covering the
 	// removal, so d3 pulls a min that covers it and collects the removed "d"
 	// from inside d2's product.
 	sync(2)
-	assert.Zero(t, docs[2].GarbageLen())
+	assert.Zero(t, docs[2].GarbageLen(), "d3 must collect the %d held node(s)", held)
 
 	// d1 splits after "c" without having seen d2's splits.
 	edit(0, 4, 4, 1, nil)
