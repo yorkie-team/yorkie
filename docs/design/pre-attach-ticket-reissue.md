@@ -148,6 +148,17 @@ new actor.
 The undo/redo stacks hold reverse operations naming the old tickets, so a
 re-issue clears them.
 
+### Server-side actor ownership
+
+With the re-issue, every ticket and every change ID a client pushes carries
+its own actor; before it the change ID already did (`SetActor` rewrote it),
+only the tickets inside did not. That makes the actor of a pushed change
+enforceable: `PushPull` refuses (`InvalidArgument`, `ErrInvalidChangeActor`) a
+not-yet-acknowledged change whose actor the client does not own
+(`ClientInfo.IsOwnActor`), so the pull dedup and the `DocChanged` publisher
+can trust a stored change's actor. See offline-resumable-attach.md, "Pushed
+change actors must be owned by the pusher", for the legacy analysis.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |

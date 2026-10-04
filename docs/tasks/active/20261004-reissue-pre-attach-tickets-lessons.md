@@ -81,3 +81,24 @@
   collection. Rejecting outright would break clients that legitimately
   push pre-attach changes stamped with `InitialActorID` -- the very case
   this task exists for -- and it is wider than the reported finding.
+
+## Loop round 4 follow-up (manual)
+
+- The panel upheld that the pull dedup (`pullChangeInfos`) trusts a
+  client-supplied change actor. Fixed at the door instead of per consumer:
+  `PushPull` now refuses (`ErrInvalidChangeActor`) any not-yet-acknowledged
+  change whose actor the client does not own. `publisherActor` lost its
+  mismatch branch, since a pushed change's actor is now owned by
+  construction.
+- Legacy check before enforcing: old Go and JS clients already stamped the
+  change ID with the client's actor (`SetActor` rewrote it on attach); only
+  the tickets inside kept the initial actor. The server's own pushes use
+  `SystemClientInfo` (ID = initial actor), the cluster presence-clear uses
+  the session id, and compaction bypasses `PushPull`. So no legitimate
+  pusher sends a foreign or initial actor, and no exception was needed.
+- Not fixed, documented: `client_id` is not bound to a credential
+  (project-scoped auth). That is the server's identity model, not this PR.
+- Rollback fixes from the same round: the fallback rollback is now guarded
+  by `neverSynced` (it could revert the actor of a document whose attach
+  already applied), the undo/redo stacks are restored only after a real
+  re-issue, and `DeepCopy` keeps `absorbedRemote`.

@@ -119,6 +119,15 @@ func PushPull(
 		return nil, err
 	}
 
+	// Refuse a change stamped with an actor the client does not own before
+	// anything is stored. Every consumer of a stored change's actor -- the
+	// DocChanged publisher, the pull dedup in pullChangeInfos, VV and GC
+	// bookkeeping -- reads it as "this client's own change".
+	if err := validateChangeActors(clientInfo, clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+
 	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
 	// changes collection, regardless of which SDK version sent it.
@@ -176,7 +185,7 @@ func PushPull(
 	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
-			publisher, err := publisherActor(ctx, clientInfo, pushedChanges)
+			publisher, err := publisherActor(clientInfo, pushedChanges)
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
@@ -226,42 +235,60 @@ func PushPull(
 // (WatchRequest.actor_id, yorkie_server.go Watch): new SDKs under the stable
 // actor, old SDKs under the session id. Read it from an accepted change
 // (pushedChanges), not reqPack.Changes[0], which may be an already-acknowledged
-// change with a different actor in a malformed pack.
+// change. validateChangeActors has already refused any pushed change whose
+// actor the client does not own, so the actor read here is the client's own.
 //
-// A change's ActorID is client-supplied and nothing upstream proves it belongs
-// to the authenticated client, so it is honored only when it matches one of
-// this client's own identities (session id or StableActorID). Without that
-// check the filter is a notification-suppression primitive: a client that
-// stamps a victim's actor into a change makes the server publish DocChanged
-// under the victim's actor, and the victim's own subscription drops it.
-//
-// Every other path falls back to the session id, which the client provably
-// owns. That covers a remove-only pack, which has no accepted change: the
-// client is detaching (its Watch is torn down), so a missed self-echo is moot.
-// It also covers a mismatch, where the worst case is a spurious self-echo —
-// one redundant sync for the sender, never a drop for anyone else.
-// OwnActorID() is not used for the fallback: ActivateClient sets
+// A remove-only pack has no accepted change, so fall back to the session id;
+// the client is detaching (its Watch is torn down), so a missed self-echo is
+// moot. OwnActorID() is not used for the fallback: ActivateClient sets
 // StableActorID for every client, so it would return the stable actor even for
 // old SDKs that subscribe under the session id.
 func publisherActor(
-	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	pushedChanges []*database.ChangeInfo,
 ) (time.ActorID, error) {
 	if len(pushedChanges) > 0 {
-		actorID := pushedChanges[0].ActorID
-		if clientInfo.IsOwnActor(actorID) {
-			return actorID.ToActorID()
-		}
-
-		logging.From(ctx).Warnf(
-			"publishing under the session id: pushed change actor(%s) is not owned by client(%s)",
-			actorID,
-			clientInfo.ID,
-		)
+		return pushedChanges[0].ActorID.ToActorID()
 	}
-
 	return clientInfo.ID.ToActorID()
+}
+
+// validateChangeActors refuses a pack carrying a not-yet-pushed change whose
+// actor the client does not own (ClientInfo.IsOwnActor: its session id or its
+// StableActorID). A change's actor is client-supplied, and the server reads a
+// stored change's actor as its author: pullChangeInfos skips a change whose
+// actor is the puller's own, and the DocChanged publisher and the subscription
+// self-echo filter key on it too. Honoring a forged actor would let one client
+// make another silently drop a change it never authored.
+//
+// Every legitimate pusher stamps its own actor. Both SDKs rewrite the change
+// ID's actor to the client's actor on attach -- SetActor did so before the
+// pre-attach re-issue existed -- so even a document edited before attach
+// pushes under the client's actor, never the initial one. The server's own
+// pushes (admin document update, revision restore) go through PushPull with
+// database.SystemClientInfo, whose ID is the initial actor, so they stay
+// accepted. Compaction writes changes directly and never reaches here.
+// Changes already acknowledged (clientSeq at or below the checkpoint) are not
+// stored again and are not checked.
+func validateChangeActors(
+	clientInfo *database.ClientInfo,
+	cpBeforePush change.Checkpoint,
+	reqPack *change.Pack,
+) error {
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			continue
+		}
+		if !clientInfo.IsOwnActor(types.IDFromActorID(cn.ID().ActorID())) {
+			return connect.NewError(
+				connect.CodeInvalidArgument,
+				errors.InvalidArgument(
+					"change actor is not owned by the client",
+				).WithCode("ErrInvalidChangeActor"),
+			)
+		}
+	}
+	return nil
 }
 
 func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {
