@@ -372,6 +372,11 @@ jobs:
   bench:
     name: bench
     runs-on: ubuntu-latest
+    # A healthy run takes 10-25 minutes. Without a bound a stuck run holds the
+    # runner for the 6-hour default: under -bench, `go test` arms neither its
+    # -timeout alarm nor its kill timer for the benchmarks, so nothing inside
+    # the step ends one.
+    timeout-minutes: 60
     permissions:
       contents: write
       pull-requests: write

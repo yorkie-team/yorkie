@@ -199,7 +199,11 @@ func TestRevision(t *testing.T) {
 		assert.Equal(t, `{"k1":"modified","k3":"v3"}`, doc.Marshal())
 
 		// 05. Restore to the revision
-		assert.NoError(t, revisions.Restore(ctx, be, project, revision.ID))
+		assert.NoError(t, revisions.Restore(
+			ctx, be, project,
+			types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID},
+			revision.ID,
+		))
 
 		// 06. Sync to get the restored state
 		assert.NoError(t, c1.Sync(ctx))

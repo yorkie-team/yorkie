@@ -142,3 +142,140 @@ threw the fix away instead of the mutation. Commit first, or mutate a copy.
     ever survived a disconnect.
   - Pushed back on nothing. Two findings turned on facts the branch's own
     notes had already recorded as limitations, which is not a defence.
+- **#2084.** A lifetime mismatch is rarely fixed by synchronising the
+  handoff: the object with the longer life (the attachment) has to own the
+  resource (the event pump).
+- "Cancel and join" is a complete shutdown only if the thing joined is the
+  last producer. Stop the producers first, the consumer last; and waiting on
+  a goroutine inherits every lock it takes.
+- A reconnect test must hold the window open on the server; publishing after
+  a full round trip tests nothing.
+- Never roll back local state for something the server already committed. A
+  failed initial Watch that dropped the attachment left the server attached
+  and the caller unable to Detach or re-Attach.
+- Stopping the sync loop is not the same as stopping synchronisation.
+  `Deactivate` tore every pipeline down arguing only that the loop was
+  joined, but `Client.Sync` is public: a user goroutine could be inside
+  `ApplyChangePack` with the attachment's `syncMu` held. The fix is the one
+  `Detach`, `Remove` and `pushPullChanges` already use — retire the pump
+  under `syncMu` — plus a `statusDeactivating` state so a sync that has yet
+  to reach `pushPullChanges`' guard is rejected instead of racing it. A
+  guard checked once at entry does not hold for the rest of the call.
+- A new intermediate state is a new set of edges, not one. `statusDeactivating`
+  was added for the guards that read `!= statusActivated` and left every other
+  reader of the field untouched: `Activate` would lay a new ID over the ended
+  session's attachments. A transient state needs an answer for every entry
+  point that observes it — and because it is observed by goroutines that never
+  wrote it, the field itself has to be atomic for the window to mean anything.
+
+## Review rounds (continued)
+
+- **Round 3 (the review panel on #2084, correctness + security).**
+  - *A failed `Deactivate` restored `statusActivated`.* The first attempt at an
+    "exit on the error path" picked the wrong exit. The restore was reasoned
+    about as a status question — a session the server still holds should read
+    as live — when it is a resource question: `Deactivate` retires every
+    pipeline *before* the RPC, and a retired pump does not come back. Restoring
+    `statusActivated` re-opened `Sync` on documents with no consumer for their
+    events, so the next `ApplyChangePack` would wedge on the capacity-one event
+    channel holding the document's event mutex. The exit from a transient state
+    has to leave the invariants the state was entered to establish intact; when
+    the entry destroyed something, there is no way back, only forward. The
+    client now stays deactivating and `Deactivate` is the one call it still
+    admits, so a retry is the way out.
+  - *Two `Deactivate`s could interleave their status writes.* A status read at
+    the top of a call does not survive an RPC in the middle of it. Serialised
+    on `deactivatingMu` (now `lifecycleMu`, which `Activate` takes too) and
+    re-read under the lock.
+  - *`AuthInterceptor.token` stayed a plain field.* The delta's own stated
+    invariant — a field read by goroutines that never wrote it is accessed
+    atomically — was applied to `status` and not to the credential beside it,
+    which `SetToken` swaps at runtime while every watch and sync goroutine
+    reads it. An invariant written down for one field is a checklist for the
+    rest of the struct.
+
+- **Round 4 (the review panel on #2084, blast radius + correctness).**
+  - *The deactivating guard covered one half of `syncInternal`.* The guard was
+    added to `pushPullChanges` because that is where the wedge was reasoned
+    about, and `refreshChannel` — the channel half of the very same
+    `syncInternal` — was left open, so a user-goroutine `Client.Sync` on a
+    channel still reached the server inside the window. A guard belongs to the
+    fan-out point's every branch, not to the branch the bug was found in.
+  - *"Retry until it succeeds" is only an exit for a failure that can stop
+    happening.* Round 3 answered the failed-`Deactivate` problem with a state
+    whose only exit was a successful `Deactivate`; a session the server has
+    already dropped fails identically forever, so the client was bricked and
+    `Close` returned the error before it ever released the connection. `Close`
+    is now the terminal disposal: it gives up on the server-side session and
+    finishes the local half itself. A recovery path has to work for the
+    permanent case, not just the transient one.
+  - *Build the consumer before the producer, everywhere.* The pipeline was
+    started before the watch stream but still after `ApplyChangePack` applied
+    the attach response — the one apply in `attachDocument` — so a pack
+    carrying two or more events would wedge `Attach` on the capacity-one event
+    channel. Ordering fixed in one place is not an invariant until every
+    publisher in the function is behind it.
+
+## Round 4 — test adequacy
+
+The panel accepted the delta's behavior but found its coverage one-sided: the
+attach reordering, the `stopWatchPipeline` cleanups on `attachDocument`'s two
+early exits, and `finishDeactivation`'s retirement were all argued for in
+comments and exercised by nothing.
+
+- `watchInitServer` now carries the `AttachDocument` response pack
+  (`attachChanges`, `attachRemoved`), so a test can drive `attachDocument`'s
+  `ApplyChangePack` with real remote changes instead of the empty pack the
+  fixtures had answered with since the file was written. Every attach test in
+  the package had been applying nothing, which is exactly why the deadlock the
+  reordering fixes was invisible.
+- `TestAttachStartsPumpBeforeApplyingPack` and
+  `TestAttachStopsPipelineOnFailedPaths` both fail against the pre-fix ordering
+  and against the cleanups removed, so they are reproducers rather than
+  descriptions.
+- *A post-condition test is not a branch test, and saying so is cheaper than
+  pretending otherwise.* `finishDeactivation`'s retirement loop cannot be
+  reached with a live pipeline today — every caller has already been through
+  `Deactivate`'s own loop — so `TestCloseRetiresTheDeliveryPipeline` pins the
+  state it guarantees and the comment says the loop is defensive. Writing the
+  test as if it covered the branch would have left the next reader believing a
+  guard was exercised when it never runs.
+- *Asserting a wedge needs its own helper.* `assertNoConsumer` is the inverse of
+  `assertPublishes`: a retired pipeline is only observable as a publisher that
+  parks on the capacity-one channel, so the test emits two events and requires
+  the second not to complete.
+
+## Round 12 — from call sites to an invariant
+
+The panel blocked on `Detach` and `Remove` checking the client status before
+taking `syncMu`, so a concurrent `Deactivate` could retire the pump between
+the check and the lock. It was the latest in a run of rounds that each found
+one more path into the same hole: `pushPullChanges`, then `refreshChannel`,
+then the attach ordering, then these two. Patching call sites one at a time
+had stopped converging.
+
+- *Name the invariant, then route every path through one helper.* The rule is
+  now written in `lockLiveAttachment`: a pipeline is retired only under its
+  `syncMu`, and only after the attachment has left `c.attachments` or the
+  client has left `statusActivated`. A goroutine that holds `syncMu` and sees
+  both conditions still true therefore has a live pump until it unlocks.
+  `Detach`, `Remove` and `syncInternal` go through the helper. The checks
+  before the lock stay as a fast path only.
+- *The audit found holes the panel had not reported yet.* `pushPullChanges`
+  re-read `c.attachments` by key, so a sync holding a stale attachment's
+  `syncMu` could apply into a replacement attached under the same key.
+  `beginAttach` dropped stale entries without retiring their pipelines. An
+  `Attach` overlapping a `Deactivate` registered an attachment nothing would
+  ever retire. `Attach` now registers under `attachingMu`, which is also the
+  lock `beginDeactivation` holds while it leaves `statusActivated`. It also
+  checks an activation generation, so an `Attach` that overlaps a
+  `Deactivate` followed by a new `Activate` is rejected as well.
+- *One teardown sequence, not two copies.* `Deactivate` and `Close`'s
+  `finishDeactivation` both call `beginDeactivation`. The ordering lives in
+  one place, so a later change cannot fix one copy and miss the other.
+- *Tests target the whole class.* `TestPackPathsRecheckStatusUnderSyncMu`
+  parks each path on `syncMu` (document detach, remove and sync, channel
+  detach and sync) while `Deactivate` leaves `statusActivated`, and requires
+  every path to back out before its RPC. Each new test was checked by
+  disabling the guard it covers and watching it fail.
+

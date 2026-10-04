@@ -166,6 +166,14 @@ func TestClient(t *testing.T) {
 		testcases.RunCreateChangeInfosTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("CompactChangeInfos test", func(t *testing.T) {
+		testcases.RunCompactChangeInfosTest(t, cli, dummyProjectID)
+	})
+
+	t.Run("SnapshotLiveSize test", func(t *testing.T) {
+		testcases.RunSnapshotLiveSizeTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
 		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
 	})
@@ -189,6 +197,19 @@ func TestClient(t *testing.T) {
 	t.Run("FindCompactionCandidates test", func(t *testing.T) {
 		testcases.RunFindCompactionCandidatesTest(t, cli, dummyProjectID)
 	})
+}
+
+func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {
+	// Two clients on one database stand in for two server nodes: each keeps
+	// its own document cache.
+	nodeA := setupTestWithDummyData(t)
+	nodeB := setupTestWithDummyData(t)
+	defer func() {
+		assert.NoError(t, nodeA.Close())
+		assert.NoError(t, nodeB.Close())
+	}()
+
+	testcases.RunCompactChangeInfosAcrossNodesTest(t, nodeA, nodeB, dummyProjectID)
 }
 
 func TestClient_RotateProjectKeys(t *testing.T) {

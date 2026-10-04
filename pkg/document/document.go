@@ -40,7 +40,9 @@ import (
 
 var (
 	// ErrDocumentSizeExceedsLimit is returned when the document size exceeds the limit.
-	ErrDocumentSizeExceedsLimit = errors.ResourceExhausted("document size exceeds the limit")
+	ErrDocumentSizeExceedsLimit = errors.ResourceExhausted(
+		"document size exceeds the limit",
+	).WithCode("ErrDocumentSizeExceedsLimit")
 
 	// ErrSchemaValidationFailed is returned when the document schema validation failed.
 	ErrSchemaValidationFailed = errors.InvalidArgument("schema validation failed").WithCode("ErrSchemaValidationFailed")

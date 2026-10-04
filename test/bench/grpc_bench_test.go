@@ -185,15 +185,20 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("attach large document", func(b *testing.B) {
 		str := strings.Repeat("a", 10485000)
 
-		for b.Loop() {
+		// Each iteration attaches its own document. Reusing one key would
+		// stack every iteration's 20 MB onto the same document, which crosses
+		// the project's MaxSizePerDocument after a few iterations and is then
+		// refused by the server's size gate.
+		for i := 0; b.Loop(); i++ {
 			func() {
 				clients := helper.ActiveClients(b, svr.RPCAddr(), 2)
 				c1, c2 := clients[0], clients[1]
 				defer helper.CleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(helper.TestKey(b))
-				doc2 := document.New(helper.TestKey(b))
+				docKey := helper.TestKey(b, i)
+				doc1 := document.New(docKey)
+				doc2 := document.New(docKey)
 
 				err := doc1.Update(func(r *json.Object, p *presence.Presence) error {
 					text := r.SetNewText("k1")

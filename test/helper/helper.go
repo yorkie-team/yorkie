@@ -623,6 +623,22 @@ func FindDocInfosWithID(
 	return infos, nil
 }
 
+// CountChangesWithDocID counts the change records stored for the given docID,
+// reading the database directly rather than through a server's caches.
+func CountChangesWithDocID(databaseName string, docID types.ID) (int64, error) {
+	ctx := context.Background()
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = cli.Disconnect(ctx) }()
+
+	return cli.Database(databaseName).Collection(mongo.ColChanges).CountDocuments(
+		ctx,
+		bson.M{"doc_id": docID},
+	)
+}
+
 // CreateDummyClientWithID creates a new dummy document with the given ID and key.
 func CreateDummyClientWithID(
 	databaseName string,

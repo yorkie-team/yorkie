@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -32,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -201,5 +203,58 @@ func TestDocumentCompaction(t *testing.T) {
 
 		assert.NoError(t, c1.Detach(ctx, d1))
 		assert.NoError(t, c3.Detach(ctx, d3))
+	})
+
+	t.Run("compaction over the change size limit keeps the document", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Two pushes of 9MB each: every change fits a request, but the single
+		// change compaction would write does not fit a MongoDB document. The
+		// client's per-document limit is lifted here to grow a document past
+		// what the compacted change can hold; the server's gate admits both
+		// pushes because no snapshot has measured the document yet.
+		chunk := strings.Repeat("a", 9*1024*1024)
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(
+			yson.ParseObject(`{"text": Text()}`),
+		)))
+		d1.SetMaxSizeLimit(0)
+		for range 2 {
+			assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+				text := r.GetText("text")
+				end := len(text.String())
+				text.Edit(end, end, chunk)
+				return nil
+			}))
+			assert.NoError(t, c1.Sync(ctx))
+		}
+		assert.NoError(t, c1.Detach(ctx, d1))
+
+		// Count the stored changes in the database itself: the server keeps
+		// answering from its caches after a purge, which would hide the loss.
+		project, err := defaultServer.DefaultProject(ctx)
+		assert.NoError(t, err)
+		docInfo, err := defaultServer.Backend().DB.FindDocInfoByKey(ctx, project.ID, d1.Key())
+		assert.NoError(t, err)
+		before, err := helper.CountChangesWithDocID(helper.TestDBName(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.Positive(t, before)
+
+		err = defaultServer.CompactDocument(ctx, d1.Key(), false)
+		assert.ErrorIs(t, err, database.ErrChangeTooLarge)
+		after, err := helper.CountChangesWithDocID(helper.TestDBName(), docInfo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, before, after)
+
+		// Housekeeping would retry every cycle; at the same server seq the
+		// second attempt is skipped instead of rebuilding the document.
+		err = defaultServer.CompactDocument(ctx, d1.Key(), false)
+		assert.ErrorIs(t, err, database.ErrChangeTooLarge)
+		assert.ErrorContains(t, err, "skipped")
+
+		d2 := document.New(d1.Key())
+		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.Equal(t, 2*len(chunk), len(d2.Root().GetText("text").String()))
+		assert.NoError(t, c2.Detach(ctx, d2))
 	})
 }
