@@ -57,7 +57,7 @@
 //
 // Usage:
 //   node fix-guard.mjs allowed <pr> [--base main] --out <file>
-//   node fix-guard.mjs prepush --allowed <file>          (git pre-push hook)
+//   node fix-guard.mjs prepush --allowed <file> [--base main]  (git pre-push hook)
 //   node fix-guard.mjs check <pr> --before <sha> --after <sha> [--base main]
 //       [--pusher <login> --since <iso> --branch <name>] [--github-output]
 // `check` posts one `<!-- agent-fix-guard -->` comment when it has anything to
@@ -325,10 +325,32 @@ function cmdAllowed(argv) {
 
 /**
  * The pre-push hook. Reads git's `<local ref> <local sha> <remote ref> <remote
- * sha>` lines from stdin, lists the files the pushed NON-MERGE commits touched
- * (a merge of main brings main's files, which are not the fixer's), and refuses
- * the push when any is out of scope.
+ * sha>` lines from stdin, lists the files the FIXER'S OWN commits touched, and
+ * refuses the push when any is out of scope.
+ *
+ * "Own" excludes the base branch's history, and `--no-merges` alone does not:
+ * after a `git merge origin/main`, `<remote>..<local>` still contains every main
+ * commit the merge brought in (only the merge commit itself is dropped), so a
+ * CI-fix round that merged main was refused for main's files. `pushedLogArgs`
+ * walks first-parent only — the branch's own line, never into a merged side —
+ * and subtracts `origin/<base>` when that ref exists, which also covers a rebase
+ * (its new base commits ARE on the first-parent line). That matches the report
+ * job, which takes only commits in the PR's own commit list.
  */
+export function pushedLogArgs({ localSha, remoteSha, baseRef = "" } = {}) {
+  const sha = /^[0-9a-f]{40}$/;
+  if (!sha.test(str(localSha)) || /^0{40}$/.test(localSha)) return null;
+  const hasRemote = sha.test(str(remoteSha)) && !/^0{40}$/.test(remoteSha);
+  // A new branch with no base to subtract would list the whole repository's
+  // history. There is nothing sound to judge, so do not judge (the report job
+  // still does).
+  if (!hasRemote && !baseRef) return null;
+  return [
+    "log", "--first-parent", "--no-merges", "--format=", "--name-only",
+    hasRemote ? `${remoteSha}..${localSha}` : localSha,
+    ...(baseRef ? ["--not", baseRef] : []),
+  ];
+}
 export function prepushVerdict({ touched = [], allowed = null } = {}) {
   if (!allowed || allowed.size === 0) return { ok: true, violations: [] };
   const violations = [...new Set(touched.filter((f) => !inScope(f, allowed)))].sort();
@@ -346,12 +368,20 @@ function cmdPrepush(argv) {
   }
   const stdin = (() => { try { return readFileSync(0, "utf8"); } catch { return ""; } })();
   const touched = [];
+  const baseName = flag(argv, "base") || "main";
+  let baseRef = "";
+  try {
+    execFileSync("git", ["rev-parse", "--verify", "-q", `refs/remotes/origin/${baseName}`], { stdio: "ignore" });
+    baseRef = `refs/remotes/origin/${baseName}`;
+  } catch {
+    // No remote-tracking base: first-parent alone still keeps a merge's side out.
+  }
   for (const line of stdin.split("\n")) {
     const [, localSha, , remoteSha] = line.trim().split(/\s+/);
-    if (!/^[0-9a-f]{40}$/.test(localSha ?? "") || /^0{40}$/.test(localSha)) continue;
-    const range = /^[0-9a-f]{40}$/.test(remoteSha ?? "") && !/^0{40}$/.test(remoteSha) ? `${remoteSha}..${localSha}` : localSha;
+    const args = pushedLogArgs({ localSha, remoteSha, baseRef });
+    if (!args) continue;
     try {
-      const out = execFileSync("git", ["log", "--no-merges", "--format=", "--name-only", range], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+      const out = execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
       touched.push(...out.split("\n").map((s) => s.trim()).filter(Boolean));
     } catch {
       // Cannot list → do not block; the report job's check is the gate.

@@ -173,3 +173,65 @@ test("prepush CLI: refuses a real push that touches an out-of-scope file", async
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("prepush CLI: main's commits brought in by a merge or a rebase are not the fixer's", async () => {
+  const { execFileSync, spawnSync } = await import("node:child_process");
+  const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const path = (await import("node:path")).default;
+  const { fixtureGitEnv } = await import("./git-env.mjs");
+  const dir = mkdtempSync(path.join(tmpdir(), "fix-guard-merge-"));
+  const git = (...a) => execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...a], { cwd: dir, encoding: "utf8", env: fixtureGitEnv(dir) }).trim();
+  const write = (f, c) => { mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); writeFileSync(path.join(dir, f), c); };
+  try {
+    git("init", "-q", "-b", "main");
+    write("client/client.go", "a\n");
+    git("add", "."); git("commit", "-q", "-m", "base");
+    git("checkout", "-q", "-b", "agent/x");
+    write("client/client.go", "pr\n");
+    git("commit", "-q", "-am", "pr");
+    const remote = git("rev-parse", "HEAD");
+    // main moves on, touching a file the PR never did.
+    git("checkout", "-q", "main");
+    write("server/other.go", "main\n");
+    git("add", "."); git("commit", "-q", "-m", "main moves");
+    git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+    git("checkout", "-q", "agent/x");
+    write("client/client.go", "fix\n");
+    git("commit", "-q", "-am", "fix");
+    git("merge", "-q", "--no-edit", "main");
+    const allowed = path.join(dir, "allowed.txt");
+    writeFileSync(allowed, "client/client.go\n");
+    const run = (local) => spawnSync(process.execPath, [new URL("./fix-guard.mjs", import.meta.url).pathname, "prepush", "--allowed", allowed], {
+      cwd: dir, env: fixtureGitEnv(dir), encoding: "utf8",
+      input: `refs/heads/agent/x ${local} refs/heads/agent/x ${remote}\n`,
+    });
+    const merged = run(git("rev-parse", "HEAD"));
+    assert.equal(merged.status, 0, `a merge of main must not be refused: ${merged.stderr}`);
+    // A fixer commit after the merge is still judged.
+    write("server/cache.go", "c\n");
+    git("add", "."); git("commit", "-q", "-m", "out of scope");
+    const after = run(git("rev-parse", "HEAD"));
+    assert.equal(after.status, 1);
+    assert.match(after.stderr, /server\/cache\.go/);
+    assert.doesNotMatch(after.stderr, /server\/other\.go/);
+    // A rebase onto main puts main's commits on the first-parent line; the
+    // origin/main subtraction keeps them out.
+    git("reset", "-q", "--hard", "HEAD~2");
+    git("rebase", "-q", "main");
+    const rebased = run(git("rev-parse", "HEAD"));
+    assert.equal(rebased.status, 0, `a rebase onto main must not be refused: ${rebased.stderr}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pushedLogArgs: first-parent, base subtracted, and no judgement without a bound", async () => {
+  const { pushedLogArgs } = await import("./fix-guard.mjs");
+  const a = "a".repeat(40), b = "b".repeat(40);
+  assert.deepEqual(pushedLogArgs({ localSha: a, remoteSha: b, baseRef: "refs/remotes/origin/main" }),
+    ["log", "--first-parent", "--no-merges", "--format=", "--name-only", `${b}..${a}`, "--not", "refs/remotes/origin/main"]);
+  assert.equal(pushedLogArgs({ localSha: a, remoteSha: "0".repeat(40) }), null, "new branch, no base: whole history");
+  assert.ok(pushedLogArgs({ localSha: a, remoteSha: "0".repeat(40), baseRef: "refs/remotes/origin/main" }));
+  assert.equal(pushedLogArgs({ localSha: "0".repeat(40), remoteSha: b }), null, "a delete pushes nothing");
+});
