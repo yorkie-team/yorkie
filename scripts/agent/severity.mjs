@@ -229,6 +229,10 @@ function demotedBy(f) {
   // third "reason unknown" bucket would invent a category that production cannot
   // produce — `routeFinding` demotes for exactly these two reasons.
   if (f?.novelty?.origin === "relocated") return "relocated";
+  if (f?.surface?.scope === "out-of-scope" && normalizeSeverity(f?.severity) !== "critical") return "out-of-scope";
+  // Third in `routeFinding`'s order, and claimed only when the out-of-diff gate's
+  // own record says it demoted — the same "only what it actually demoted" rule.
+  if (f?.outOfDiff?.anchor === "outside-diff" && f.outOfDiff.demotes === true) return "out-of-diff";
   return f?.surface?.scope === "out-of-scope" ? "out-of-scope" : "relocated";
 }
 
@@ -237,7 +241,35 @@ function demotedSection(demoted) {
   if (rows.length === 0) return "";
   const by = (kind) => rows.filter((f) => demotedBy(f) === kind);
   // Every row lands in exactly one section, so nothing can be demoted into silence.
-  return relocatedSection(by("relocated")) + outOfScopeSection(by("out-of-scope"));
+  return relocatedSection(by("relocated")) + outOfScopeSection(by("out-of-scope")) + outOfDiffSection(by("out-of-diff"));
+}
+
+/**
+ * Findings on code this PR's diff never touched, which an independent judge
+ * found the change did not cause (see `out-of-diff.mjs`). The proof line is the
+ * judge's own grounded citation, so a reader can check the demotion by opening
+ * the location rather than trusting it — the rule every demotion section here
+ * keeps.
+ */
+function outOfDiffSection(rows) {
+  if (rows.length === 0) return "";
+  const body = rows
+    .map((f) => {
+      const where = f.file ? `\`${f.file}\` — ` : "";
+      const o = f.outOfDiff ?? {};
+      const cite = Array.isArray(o.groundedIn) && o.groundedIn.length
+        ? `\n  - exists without this change: \`${neutralizeMarkers(String(o.groundedIn[0])).replace(/`/g, "'")}\``
+        : "";
+      return `- ${where}${f.summary ?? "(no summary)"}${cite}`;
+    })
+    .join("\n");
+  return (
+    `\n### Out of diff — not caused by this change (${rows.length}, not blocking)\n` +
+    "_Not refuted by the verifier, on code this PR does not touch, and an independent judge found " +
+    "that reverting the whole diff would leave it in place. It is filed as a " +
+    "follow-up issue instead of gating this PR._\n" +
+    `${body}\n`
+  );
 }
 
 /**

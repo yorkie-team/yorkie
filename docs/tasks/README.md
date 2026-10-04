@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-02
+updated: 2026-10-05
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Keep the agent loop inside the PR's scope (2026-10-05) | [20261005-agent-loop-scope-todo.md](./active/20261005-agent-loop-scope-todo.md) | [20261005-agent-loop-scope-lessons.md](./active/20261005-agent-loop-scope-lessons.md) |
 | Revalidate open Watch streams on demand (2026-10-02) | [20261002-revalidate-watch-access-todo.md](./active/20261002-revalidate-watch-access-todo.md) | [20261002-revalidate-watch-access-lessons.md](./active/20261002-revalidate-watch-access-lessons.md) |
 | Take the reply to a push-only request as a push ack only (2026-10-02) | [20261002-pushonly-reply-gc-todo.md](./active/20261002-pushonly-reply-gc-todo.md) | [20261002-pushonly-reply-gc-lessons.md](./active/20261002-pushonly-reply-gc-lessons.md) |
 | Auth webhook cache switch and cache TTL floor (#2068, PR #2076) (2026-10-02) | [20261002-auth-webhook-cache-switch-todo.md](./active/20261002-auth-webhook-cache-switch-todo.md) | [20261002-auth-webhook-cache-switch-lessons.md](./active/20261002-auth-webhook-cache-switch-lessons.md) |
