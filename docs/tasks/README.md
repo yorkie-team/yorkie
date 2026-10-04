@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-02
+updated: 2026-10-05
 ---
 
 # Tasks Index
@@ -21,6 +21,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Task | Todo | Lessons |
 |---|---|---|
 | Text: local edits went quadratic after the undo/redo port (2026-10-02) | [20261002-text-normalize-pos-quadratic-todo.md](./active/20261002-text-normalize-pos-quadratic-todo.md) | [20261002-text-normalize-pos-quadratic-lessons.md](./active/20261002-text-normalize-pos-quadratic-lessons.md) |
+| Keep the agent loop inside the PR's scope (2026-10-05) | [20261005-agent-loop-scope-todo.md](./active/20261005-agent-loop-scope-todo.md) | [20261005-agent-loop-scope-lessons.md](./active/20261005-agent-loop-scope-lessons.md) |
 | Revalidate open Watch streams on demand (2026-10-02) | [20261002-revalidate-watch-access-todo.md](./active/20261002-revalidate-watch-access-todo.md) | [20261002-revalidate-watch-access-lessons.md](./active/20261002-revalidate-watch-access-lessons.md) |
 | Take the reply to a push-only request as a push ack only (2026-10-02) | [20261002-pushonly-reply-gc-todo.md](./active/20261002-pushonly-reply-gc-todo.md) | [20261002-pushonly-reply-gc-lessons.md](./active/20261002-pushonly-reply-gc-lessons.md) |
 | A further split after concurrent same-boundary splits lands on different sides (2026-10-02) | [20261002-further-split-after-same-boundary-todo.md](./active/20261002-further-split-after-same-boundary-todo.md) | [20261002-further-split-after-same-boundary-lessons.md](./active/20261002-further-split-after-same-boundary-lessons.md) |

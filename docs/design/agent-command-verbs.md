@@ -774,6 +774,126 @@ failures.
 - **Both directions are observed.** The metrics count clean→blocking flips
   (escalations) as well as blocking→clean ones.
 
+### 7. The loop stays inside the PR's scope
+
+Measured on the October 2026 loop PRs (#2081, #2084, #2098, #2100, #2108,
+#2111, #2112, yorkie-js-sdk#1442). Most pages were not the panel being wrong.
+They were the panel being right about code the PR did not touch: the finding
+was confirmed, the fixer disputed it with an empty `git diff
+origin/main...HEAD -- <dir>`, the adjudicator upheld it (its grounds
+deliberately exclude `out-of-scope`), and the PR paged. When the fixer acted
+instead, it wrote the fix into the PR — TTL caches, auth gates, HLL proto
+changes, version-vector caps — and every one of those became new surface for
+the next round.
+
+#### 7.1 Out-of-diff findings are filed, not fixed here
+
+A blocking finding leaves the gate (lane `backlog`) only when both hold:
+
+1. **Its anchor is outside the diff.** `out-of-diff.mjs` asks git: the file is
+   not in the PR's cumulative diff against the merge base, or the line is more
+   than `ANCHOR_MARGIN` (10) lines from every changed line in it. A touched file
+   with no line is `unknown` and keeps gating.
+2. **The change did not cause it.** A causation judge — a fresh read-only
+   session handed the whole PR diff as data — answers the revert test: with
+   every line of the diff reverted, would the defect still be there with the
+   same impact? Only `independent` at `high` confidence with a `file:line`
+   citation demotes. `caused`, `unresolved`, low confidence, an errored session
+   or no citation keep the finding blocking.
+
+Either half alone is wrong. The anchor alone is the age-based demotion #583
+rejected: a new caller reaching an old unguarded path is anchored in untouched
+code and is this PR's defect, which is what the blast-radius lens is for. The
+judge alone hands a model the most persuadable argument there is, on text the
+author controls. Together, the model can only demote what git already placed
+outside the change.
+
+- **Order.** The gate runs after the verifier, novelty and surface gates and
+  only on findings still gating, so it never pays for a session that cannot
+  change an outcome. At most four judge sessions per lens per round; over the
+  cap a finding is `not-judged` and keeps gating.
+- **Carried findings.** Judged at file level only (their lines are stale), or
+  they inherit their fresh twin's judgement. Without this, `mergeCluster` would
+  re-arm a demoted fresh finding through its carried twin every round.
+- **No critical carve-out.** The surface gate keeps a critical blocking because
+  merging would ship it. A finding that passes the revert test is on `main`
+  whether or not the PR merges.
+- **Follow-up issues.** `follow-up-issues.mjs` files each demoted finding as an
+  `agent:follow-up` issue, de-duplicated against every follow-up the workflow
+  bot already filed (open or closed, across lenses, by the same similarity the
+  stall detector uses), at most three per run. Mentions and `<!--` in model
+  text are neutralised.
+- **The round guard.** `backlog` never reaches `output.text`, so the stall
+  detector and the standstill count never see a deferred finding.
+  `exhaustedFindings` also filters `backlog` itself, so the rule is pinned by a
+  test rather than by a YAML filter.
+- **Lens prompt.** Lenses are told an out-of-diff finding keeps blocking unless
+  the judge clears it, and to say in `evidence` how the change causes it.
+
+#### 7.2 An out-of-run sweep restarts what nothing else will
+
+Every net above runs inside the run it watches, and `stalled` is
+`!cancelled()` so a superseded run cannot latch a PR as a fresher round
+starts. That leaves the cancelled run nothing replaced: #2108 sat in
+`agent:reviewing` for eight hours after a green panel round. Usage-window pages
+had the same shape — their only remedy was a human guessing when the window
+reopened and typing `@claude rerun`.
+
+`agent-sweep.yml` runs `loop-sweep.mjs` every 30 minutes from `main`, behind
+`AGENT_PIPELINE_ENABLED`, and takes at most one action per open agent-managed
+PR:
+
+| Action | When | What it does |
+|--------|------|--------------|
+| `usage-retry` | Every latch on the PR is a usage-window page this pipeline wrote (it carries `<!-- agent-usage-limit -->`), and the backoff for this attempt (60, 180, 360 min) has passed | Deletes those pages, drops `agent:blocked`, re-runs the head's newest completed CI run |
+| `usage-exhausted` | Three retries on this head already | Says so once; the page stays |
+| `retrigger` | `agent:reviewing`, still draft, no latch, no run in flight for the head, idle 90 min | Re-runs CI once; the panel reuses the verdicts on the commit |
+| `page` | Still idle 90 min after its retrigger | Writes the paged latch and reconciles the label |
+
+- **Which pages retry.** `fix-outcome.mjs` (fixer died on `USAGE_LIMIT`,
+  `RATE_LIMITED` or `POOL_EXHAUSTED`), the round guard's infra page (same
+  codes, read from the closed `[CODE]` vocabulary), and the panel's
+  no-live-credential page. An auth failure gets no marker. A page of any other
+  kind beside a usage page means a human owns the PR, and nothing is retried.
+- **Bounded by records.** Each action posts a hidden `<!-- agent-sweep -->`
+  marker keyed on the head sha with the workflow token, and the sweep reads
+  them back by author, so a pasted marker cannot spend or refund a retry. A
+  push is a new head and restarts the count.
+- **No budget reset.** Only a maintainer's `@claude rerun` restarts the fix
+  budget, as before; a retried fix round that fails again is charged.
+
+#### 7.3 A fix round may only change the PR's own files
+
+The prompt always said "stay in scope"; fixers still wrote caches, auth gates
+and proto changes into unrelated PRs. `fix-guard.mjs` makes the rule
+mechanical for all three fixers (the panel's `fix` job, `@claude fix`, and the
+CI-fix arm).
+
+- **The scope** is the PR's original diff — `main...<frozen>`, where `<frozen>`
+  is the head at the first fix dispatch, the surface gate's anchor — plus any
+  test file and any documentation file. A compare that cannot be read, or that
+  hits GitHub's 300-file cap, leaves the scope unknown and unenforced, and the
+  record says so.
+- **Guide: a pre-push hook.** Written into the fixer's checkout before the
+  agent starts, from the trusted staged scripts. It refuses a push whose
+  non-merge commits touch another path and tells the fixer to revert and skip
+  or dispute instead. The agent owns its checkout and can remove the hook, so
+  it is feedback, not the gate.
+- **Gate: the report job.** On a fresh runner, `fix-guard.mjs check` reads the
+  round's own commits through the API (the same round boundary
+  `test-removals.mjs` uses) and pages when any touched an out-of-scope path.
+  It pages rather than strips: stripping needs a second push path, and the
+  in-scope half may not build without the stripped half, which would hand the
+  PR to the CI-fix arm to put the code back.
+
+The same check lints the round's commits:
+
+| Check | Effect | Why |
+|-------|--------|-----|
+| Reviewer-directed text added to docs or task files ("stop raising", "the panel re-raised it", "fifth re-filing", "note to the reviewer") | Pages | Phrases, not topics, so a lessons file logging "panel round 3 raised X; fixed by Y" does not match. The rubric already calls such text a major finding; paging saves the panel round that would only say so, and disagreement belongs in a rebuttal |
+| A test file that lost more assertions than it gained, or gained a tautology | Warns | Refactors move assertions legitimately, and `test-removals.mjs` already puts removed tests in front of the adjudicator |
+| A non-test change under `pkg/document/crdt/` | Warns, unless the PR body names yorkie-js-sdk | A replicated rule must change in both SDKs or replicas diverge, and this repository cannot see the other one |
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -786,6 +906,9 @@ failures.
 | Two verb tables disagree | One table, in `CONTRIBUTING.md`, generated from nothing else. Upstream carries two and records the disagreement as a known risk |
 | Main changes what an unchanged diff MEANS, and a carry hides it | CI must pass on the carried head before promote, and the third carry in a row is a full review |
 | A fixer forges an execution log to look like an infra failure | The worst it can choose is which page a human reads; the PR is latched either way |
+| The causation judge is steered by text in the diff into calling a caused defect `independent` | It can only act on findings git already placed outside the diff; it is told reviewer-directed text is a reason to answer `caused`; the demoted finding is filed as an issue, not dropped |
+| The sweep re-runs CI on a PR a human is about to take over | It never acts while any latch other than a usage page exists, retries are capped per head, and the stuck path pages after one retrigger |
+| A legitimate fix needs a file outside the original diff | The fixer skips or disputes it and a human decides; an out-of-diff finding is filed as a follow-up by the panel |
 | A fixer's skipped reproducer reads as a removal | It is meant to: the record is evidence for the round's `--fixed` claims and disputes, and a skip that pairs with a `--skipped` item is consistent with it. A conditional skip copied into a new test is reported too |
 
 ### Design Decisions
@@ -803,6 +926,8 @@ failures.
 | Credentials are probed before the round, not retried after | Nothing may run after the agent in its own job, and a probe spends no round at all |
 | Test removals are evidence for the adjudicator, not a gate | Removing a test can be legitimate; the adjudicator already re-reads the code |
 | A fix round ends at the App's last push, found by pusher, not by commit identity | The fixer's shell sets a commit's author and committer, so filtering on them would let it hide its own commits; it cannot choose who GitHub records as the pusher |
+| An out-of-diff finding needs both git and a judge to leave the gate | Git alone demotes on age, which #583 rejected; a judge alone decides scope on author-controlled text |
+| A fix round's scope violation pages rather than being stripped | Stripping needs a second push path and can leave a branch that does not build |
 | A Go reproducer is kept behind `t.Skip`, not left failing | A red test hands the PR to the CI-fix arm, whose job is to make CI pass, which deleting the test also does; a recorded skip keeps the reproducer committed and visible |
 
 ## Alternatives Considered

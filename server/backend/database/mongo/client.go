@@ -20,6 +20,7 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -37,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -44,12 +46,28 @@ import (
 const (
 	// StatusKey is the key of the status field.
 	StatusKey = "status"
+
+	// maxDocumentSize is the largest BSON document MongoDB stores
+	// (maxBsonObjectSize, 16 MiB on every server version). An insert over it
+	// is rejected by the server, not the driver.
+	maxDocumentSize = 16 * 1024 * 1024
+
+	// objectIDElementSize is the size of the `_id` element MongoDB adds to a
+	// record written without one: type byte, "_id\x00" and a 12-byte ObjectID.
+	objectIDElementSize = 1 + 4 + 12
+
+	// compactionUndoTimeout bounds the reads and writes that settle a failed
+	// compaction. They run on a context detached from the one the failed write
+	// used, since a cancelled or expired context is the likeliest reason for
+	// that failure and would make the work that repairs it a no-op.
+	compactionUndoTimeout = 5 * gotime.Second
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config *Config
-	client *mongo.Client
+	config   *Config
+	client   *mongo.Client
+	registry *bson.Registry
 
 	cacheManager  *cache.Manager
 	projectCache  *ProjectCache
@@ -58,6 +76,14 @@ type Client struct {
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+
+	// clientLocks serializes, per client, a read or write of the client row
+	// with the clientCache update that follows it. Without it, requests of one
+	// client racing each other (a PushPull on one document and an attach of
+	// another) can land an older copy of the row in the cache after a newer
+	// one, and every later request of the client reads the stale copy: an
+	// attach that the database holds then fails with "document not attached".
+	clientLocks *locker.Locker
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -65,9 +91,10 @@ func Dial(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
 	defer cancel()
 
+	registry := NewRegistryBuilder()
 	clientOptions := options.Client().
 		ApplyURI(conf.ConnectionURI).
-		SetRegistry(NewRegistryBuilder())
+		SetRegistry(registry)
 
 	if conf.MonitoringEnabled {
 		threshold, err := gotime.ParseDuration(conf.MonitoringSlowQueryThreshold)
@@ -150,12 +177,14 @@ func Dial(conf *Config) (*Client, error) {
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	yorkieClient := &Client{
-		config: conf,
-		client: client,
+		config:   conf,
+		client:   client,
+		registry: registry,
 
 		cacheManager:  cacheManager,
 		projectCache:  projectCache,
 		clientCache:   clientCache,
+		clientLocks:   locker.New(),
 		docCache:      docCache,
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
@@ -193,6 +222,27 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 	case types.CacheTypeProject:
 		if id := types.ID(key); id.Validate() == nil {
 			c.projectCache.Remove(id)
+		}
+	case types.CacheTypeClient:
+		// A client row is cached per node and only ever replaced by a write
+		// this node performed, so a deactivation or a detach another node
+		// wrote is invisible to the copy this node's gates read
+		// (EnsureActivated, EnsureDocumentAttached). Dropping the entry here
+		// is what makes those writes reach this node: the next read of the
+		// row misses and re-reads MongoDB.
+		//
+		// The drop takes the client's cache lock, which a read holds across
+		// its MongoDB FindOne and the Add that follows (see
+		// FindClientInfoByRefKey). Without it a read that fetched the row
+		// before the remote write landed could Add that pre-write copy right
+		// after this Remove, and since clientCache has no TTL, the dropped
+		// row would be back for good.
+		if refKey, err := types.ParseClientRefKey(key); err == nil {
+			unlock := c.lockClientCache(refKey)
+			c.clientCache.Remove(refKey)
+			unlock()
+		} else {
+			logging.DefaultLogger().Warnf("invalidate client cache %s: %v", key, err)
 		}
 	}
 }
@@ -1103,6 +1153,9 @@ func (c *Client) TryAttaching(
 	refKey types.ClientRefKey,
 	docID types.ID,
 ) (*database.ClientInfo, error) {
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	// client must be activated and document must not be attached
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx,
@@ -1181,6 +1234,9 @@ func (c *Client) DeactivateClient(
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
 
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx,
 		bson.M{
@@ -1218,6 +1274,18 @@ func (c *Client) DeactivateClient(
 	return info, nil
 }
 
+// lockClientCache locks the given client's entry of clientLocks and returns
+// its unlock function.
+func (c *Client) lockClientCache(refKey types.ClientRefKey) func() {
+	name := refKey.ClientID.String()
+	c.clientLocks.Lock(name)
+	return func() {
+		// Unlock fails only for a name that is not locked, which cannot
+		// happen here: this function locked it.
+		_ = c.clientLocks.Unlock(name)
+	}
+}
+
 // FindClientInfoByRefKey finds the client of the given refKey.
 func (c *Client) FindClientInfoByRefKey(
 	ctx context.Context,
@@ -1227,6 +1295,14 @@ func (c *Client) FindClientInfoByRefKey(
 	skip := len(skipCache) > 0 && skipCache[0]
 
 	if !skip {
+		if cached, ok := c.clientCache.Get(refKey); ok {
+			return cached.DeepCopy(), nil
+		}
+
+		// A miss reads the row and fills the cache under the client's lock,
+		// so the copy read here cannot overwrite one a write cached after it.
+		unlock := c.lockClientCache(refKey)
+		defer unlock()
 		if cached, ok := c.clientCache.Get(refKey); ok {
 			return cached.DeepCopy(), nil
 		}
@@ -1268,6 +1344,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			info.ID, docInfo.ID, database.ErrDocumentNeverAttached,
 		)
 	}
+
+	unlock := c.lockClientCache(clientKey)
+	defer unlock()
 
 	if existing, ok := c.clientCache.Get(clientKey); ok {
 		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
@@ -1363,14 +1442,16 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
+	// NOTE: The rows read here do not fill clientCache. The query runs outside
+	// the clients' cache locks, so a row read here may already be older than
+	// one a concurrent write cached. It used to be the only thing refreshing
+	// another node's attach on this one; that job now belongs to the
+	// invalidation the attach broadcasts (see yorkieServer.AttachDocument),
+	// which drops the stale entry instead of overwriting it with a row of
+	// unknown age.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
-	}
-
-	for _, info := range infos {
-		refKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
-		c.clientCache.Add(refKey, info.DeepCopy())
 	}
 
 	return infos, nil
@@ -1997,43 +2078,59 @@ func (c *Client) CompactChangeInfos(
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
-	// 1. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
-		return err
-	}
-
-	// 2. Store compacted change and update document
-	newServerSeq := 1
+	newServerSeq := int64(1)
 	if len(changes) == 0 {
 		newServerSeq = 0
 	} else if len(changes) != 1 {
 		return fmt.Errorf("compact document of %s: invalid change size %d", docInfo.RefKey(), len(changes))
 	}
 
-	for _, cn := range changes {
+	// 1. Encode the compacted change before touching anything. Compaction
+	// folds the whole document into one change record, so a large document
+	// can produce a record MongoDB refuses to store, and that has to be found
+	// while the document is still intact.
+	var compacted bson.Raw
+	if len(changes) == 1 {
+		cn := changes[0]
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
 			return err
 		}
 
-		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
-			"project_id":      docInfo.ProjectID,
-			"doc_id":          docInfo.ID,
-			"server_seq":      newServerSeq,
-			"client_seq":      cn.ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"actor_id":        types.ID(cn.ID().ActorID().String()),
-			"version_vector":  cn.ID().VersionVector(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": cn.PresenceChange(),
-		}); err != nil {
+		// No _id: the record replaces the one at newServerSeq in place, which
+		// keeps that record's _id, or is upserted with a fresh one.
+		compacted, err = c.marshal(bson.D{
+			{Key: "project_id", Value: docInfo.ProjectID},
+			{Key: "doc_id", Value: docInfo.ID},
+			{Key: "server_seq", Value: newServerSeq},
+			{Key: "client_seq", Value: cn.ClientSeq()},
+			{Key: "lamport", Value: cn.ID().Lamport()},
+			{Key: "actor_id", Value: types.ID(cn.ID().ActorID().String())},
+			{Key: "version_vector", Value: cn.ID().VersionVector()},
+			{Key: "message", Value: cn.Message()},
+			{Key: "operations", Value: encodedOperations},
+			{Key: "presence_change", Value: cn.PresenceChange()},
+		})
+		if err != nil {
 			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+		}
+		if size := len(compacted) + objectIDElementSize; size > maxDocumentSize {
+			return fmt.Errorf(
+				"compact document of %s: %d bytes: %w",
+				docInfo.RefKey(), size, database.ErrChangeTooLarge,
+			)
 		}
 	}
 
-	// 3. Update document
-	c.docCache.Remove(docInfo.RefKey())
+	// 2. Claim the document before writing to its changes. MongoDB is not
+	// guaranteed to run as a replica set here, so the steps below cannot share
+	// a transaction; this update is the commit point instead. It succeeds only
+	// if no push has landed since lastServerSeq, and once it has, a push that
+	// read the old server_seq fails its own conditional update and a client
+	// on the old epoch has its changes discarded (pushPack). A refused claim
+	// has touched nothing.
+	refKey := docInfo.RefKey()
+	c.docCache.Remove(refKey)
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
@@ -2048,13 +2145,197 @@ func (c *Client) CompactChangeInfos(
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+		return fmt.Errorf("compact document of %s: %w", refKey, err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return c.compactionClaimError(ctx, refKey)
+	}
+
+	// 3. Store the compacted change over the record at newServerSeq in one
+	// write, so the document reads as the compacted change the moment this
+	// returns rather than after a delete and an insert.
+	//
+	// Failing here would otherwise leave the claim standing over the
+	// pre-compaction record at newServerSeq: the document would silently read
+	// as its own first historical change, and with server_seq already at
+	// newServerSeq no later compaction could reach it. The steps cannot share
+	// a transaction, so settle the claim instead before reporting the error.
+	c.changeCache.Remove(refKey)
+	if compacted != nil {
+		if _, err := c.collection(ColChanges).ReplaceOne(ctx, bson.M{
+			"project_id": docInfo.ProjectID,
+			"doc_id":     docInfo.ID,
+			"server_seq": newServerSeq,
+		}, compacted, options.Replace().SetUpsert(true)); err != nil {
+			landed, settled := c.settleCompactionClaim(
+				ctx, docInfo, lastServerSeq, newServerSeq, compacted,
+				fmt.Errorf("compact document of %s: %w", refKey, err),
+			)
+			if !landed {
+				return settled
+			}
+
+			// The compacted change is stored despite the error, so the claim
+			// stands and the purge below is still due. Run it off a context
+			// the failure may already have cancelled.
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), compactionUndoTimeout)
+			defer cancel()
+		}
+	}
+
+	// 4. Drop what the compacted change replaces: the changes past it, the
+	// snapshots and the version vectors.
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID, newServerSeq); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+// settleCompactionClaim decides what to do with the claim CompactChangeInfos
+// took in step 2 once the write of the compacted change reported an error, and
+// reports whether that change is in fact stored at claimedServerSeq.
+//
+// A MongoDB write error is not proof the write did not apply: a write-concern
+// timeout, a retried command or an error surfaced after the primary accepted
+// the operation all error on a write that is there. Rolling server_seq back
+// over an applied compacted record would leave the whole-root change at
+// claimedServerSeq with the changes it replaces still in place, so every reader
+// that rebuilds the root from the change history would replay the document on
+// top of itself. The ambiguity is therefore settled by reading the record back
+// before anything is undone, and the claim is only rolled back when the stored
+// record is demonstrably not the compacted one.
+//
+// When the write did land, (true, nil) is returned and the caller carries on
+// with the purge the compacted change makes due. When the read itself fails
+// nothing is undone — an unverified rollback is the one outcome that corrupts
+// the history — and the cause is returned with the failure to verify joined to
+// it, since the document is then left mid-compaction and needs an operator.
+func (c *Client) settleCompactionClaim(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+	lastServerSeq, claimedServerSeq int64,
+	compacted bson.Raw,
+	cause error,
+) (bool, error) {
+	refKey := docInfo.RefKey()
+
+	// The failed write most likely failed because its context was cancelled or
+	// expired, which would make every repair below a no-op on that same
+	// context. Detach from it and bound the repair on its own.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), compactionUndoTimeout)
+	defer cancel()
+
+	stored, err := c.collection(ColChanges).FindOne(ctx, bson.M{
+		"project_id": docInfo.ProjectID,
+		"doc_id":     docInfo.ID,
+		"server_seq": claimedServerSeq,
+	}).Raw()
+	if err != nil && !errors.Is(err, mongo.ErrNoDocuments) {
+		return false, errors.Join(cause, fmt.Errorf(
+			"verify compacted change of %s: %w", refKey, err,
+		))
+	}
+	if err == nil && rawEqualIgnoringID(stored, compacted) {
+		return true, nil
+	}
+
+	return false, c.undoCompactionClaim(ctx, docInfo, lastServerSeq, claimedServerSeq, cause)
+}
+
+// undoCompactionClaim restores the document row CompactChangeInfos claimed in
+// step 2 after the write that follows it failed without landing, and returns
+// the cause.
+//
+// The restore is conditional on the claim still standing untouched, so it
+// cannot clobber a document something else has moved on; in that case, and if
+// the restore itself fails, the cause is returned with the failure to undo
+// joined to it, since the document is then left mid-compaction and needs an
+// operator. The epoch is left incremented either way: clients that already saw
+// it must re-attach, which is harmless, while lowering it back could hand two
+// different document states the same epoch.
+func (c *Client) undoCompactionClaim(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+	lastServerSeq, claimedServerSeq int64,
+	cause error,
+) error {
+	refKey := docInfo.RefKey()
+	c.docCache.Remove(refKey)
+
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": docInfo.ProjectID,
+		"_id":        docInfo.ID,
+		"server_seq": claimedServerSeq,
+	}, bson.M{
+		"$set": bson.M{
+			"server_seq":   lastServerSeq,
+			"compacted_at": docInfo.CompactedAt,
+		},
+	})
+	if err != nil {
+		return errors.Join(cause, fmt.Errorf("undo compaction claim of %s: %w", refKey, err))
+	}
+	if res.MatchedCount == 0 {
+		return errors.Join(cause, fmt.Errorf(
+			"undo compaction claim of %s: %w", refKey, database.ErrConflictOnUpdate,
+		))
+	}
+
+	return cause
+}
+
+// rawEqualIgnoringID reports whether stored holds exactly the elements of want,
+// in order, apart from the `_id` MongoDB keeps across a replace. Both sides
+// come from the same marshalling of the same fields in the same order, so an
+// applied replace is byte-identical and anything else — the pre-compaction
+// record, a partial write — is not.
+func rawEqualIgnoringID(stored, want bson.Raw) bool {
+	storedElements, err := stored.Elements()
+	if err != nil {
+		return false
+	}
+	wantElements, err := want.Elements()
+	if err != nil {
+		return false
+	}
+
+	idx := 0
+	for _, element := range storedElements {
+		if element.Key() == "_id" {
+			continue
+		}
+		if idx >= len(wantElements) {
+			return false
+		}
+
+		got, expected := element.Value(), wantElements[idx].Value()
+		if element.Key() != wantElements[idx].Key() ||
+			got.Type != expected.Type ||
+			!bytes.Equal(got.Value, expected.Value) {
+			return false
+		}
+		idx++
+	}
+
+	return idx == len(wantElements)
+}
+
+// compactionClaimError tells a document that is gone from one that moved past
+// the server seq compaction read.
+func (c *Client) compactionClaimError(ctx context.Context, refKey types.DocRefKey) error {
+	err := c.collection(ColDocuments).FindOne(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
+	}).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return fmt.Errorf("compact document of %s: %w", refKey, database.ErrDocumentNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("compact document of %s: %w", refKey, err)
+	}
+	return fmt.Errorf("compact document of %s: %w", refKey, database.ErrConflictOnUpdate)
 }
 
 // FindLatestChangeInfoByActor returns the latest change created by given actorID.
@@ -2215,6 +2496,7 @@ func (c *Client) CreateSnapshotInfo(
 
 	serverSeq := doc.Checkpoint().ServerSeq
 	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
+	liveSize := doc.DocSize().Live
 
 	docFields := bson.M{
 		"project_id":        docRefKey.ProjectID,
@@ -2223,6 +2505,7 @@ func (c *Client) CreateSnapshotInfo(
 		"lamport":           doc.Lamport(),
 		"version_vector":    vv,
 		"has_external_body": hasExternalBody,
+		"live_size":         int64(liveSize.Total()),
 		"created_at":        gotime.Now(),
 	}
 
@@ -2778,7 +3061,7 @@ func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) (map[string]int64, error) {
-	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID)
+	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -2793,10 +3076,13 @@ func (c *Client) PurgeDocument(
 	return res, nil
 }
 
+// purgeDocumentInternals deletes the document's snapshots, version vectors and
+// the changes past keepServerSeq; 0 deletes every change.
 func (c *Client) purgeDocumentInternals(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	keepServerSeq int64,
 ) (map[string]int64, error) {
 	counts := make(map[string]int64)
 
@@ -2804,10 +3090,14 @@ func (c *Client) purgeDocumentInternals(
 	c.presenceCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 	c.vectorCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 
-	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+	changesFilter := bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,
-	})
+	}
+	if keepServerSeq > 0 {
+		changesFilter["server_seq"] = bson.M{"$gt": keepServerSeq}
+	}
+	res, err := c.collection(ColChanges).DeleteMany(ctx, changesFilter)
 	if err != nil {
 		return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
 	}
@@ -2850,6 +3140,18 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+// marshal encodes v with the registry the client writes with, so the bytes
+// match what an insert of v would send.
+func (c *Client) marshal(v any) (bson.Raw, error) {
+	buf := new(bytes.Buffer)
+	enc := bson.NewEncoder(bson.NewDocumentWriter(buf))
+	enc.SetRegistry(c.registry)
+	if err := enc.Encode(v); err != nil {
+		return nil, fmt.Errorf("encode bson: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 // CreateInviteInfo creates a new reusable invite link for the project.

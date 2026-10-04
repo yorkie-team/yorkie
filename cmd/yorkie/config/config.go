@@ -88,7 +88,7 @@ func LoadAuth(addr string) (Auth, error) {
 func Load() (*Config, error) {
 	configPathValue, err := configPath()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		fmt.Fprintf(os.Stderr, "get config path: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -116,7 +116,7 @@ func Load() (*Config, error) {
 func Save(config *Config) error {
 	configPathValue, err := configPath()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		fmt.Fprintf(os.Stderr, "get config path: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -139,7 +139,7 @@ func Save(config *Config) error {
 func Delete() error {
 	configPathValue, err := configPath()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		fmt.Fprintf(os.Stderr, "get config path: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -154,7 +154,7 @@ func Delete() error {
 func Preload(_ *cobra.Command, _ []string) error {
 	configPathValue, err := configPath()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		fmt.Fprintf(os.Stderr, "get config path: %v\n", err)
 		os.Exit(1)
 	}
 

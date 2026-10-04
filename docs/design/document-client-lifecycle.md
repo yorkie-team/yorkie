@@ -99,6 +99,57 @@ From any document state, if the client is deactivated via `Deactivate()`, the sy
   - The document may be unlinked (`nil`, `Detached`) or already deleted (`Removed`).
   - The client has terminated its connection and can be reactivated via `Activate()`.
 
+### Client Deactivating (Go SDK)
+
+The Go client has a third, transient state between `Activated` and
+`Deactivated`. `Deactivate()` enters it before calling the
+`DeactivateClient` RPC and leaves it for `Deactivated` once the RPC
+succeeds.
+
+- On entry, the client stops its sync loop and retires the watch
+  delivery pipeline of every attachment: the pump that drains
+  `Document.Events()` and, for a channel, its `WatchChannel` stream.
+- `Attach`, `Detach`, `Remove` and `Sync` fail with `ErrNotActivated`.
+  `Activate()` fails with `ErrDeactivating`.
+- If the RPC fails, the client stays deactivating. It does not go back to
+  `Activated`, because the retired pipelines do not come back. Retrying
+  `Deactivate()` is the way out. When the failure is permanent, for
+  example because the server has already dropped the session, `Close()`
+  gives up on the server-side session and finishes the deactivation
+  locally. Housekeeping on the server reaps the leftover session.
+- `Activate`, `Deactivate` and `Close` are serialized against each
+  other, so a `Deactivate` issued while `Activate` is in flight waits
+  for it and then ends the new session.
+
+The state exists because of how documents publish events.
+`Document.ApplyChangePack` sends each event on a channel of capacity one
+while holding the document's event mutex, and that send cannot be
+cancelled. If a pack carrying two or more events is applied while no
+pump is draining the channel, the apply blocks forever, and every other
+publisher of the document blocks behind it. The client therefore keeps
+this invariant:
+
+> An attachment's pipeline is retired only while its `syncMu` is held,
+> and only after the attachment has been removed from the client or the
+> client has left `Activated`.
+
+Every path that applies a pack to an attached document or tears an
+attachment down (`Detach`, `Remove`, and both `Client.Sync` and the sync
+loop) takes the attachment's `syncMu` and then checks two things while
+holding it: the client is still `Activated`, and the attachment is still
+the one registered under its key. If either check fails, the path backs
+out before sending its RPC. If both pass, the pump is guaranteed to be
+draining until the lock is released. A status check made before taking
+the lock is not enough on its own, because `Deactivate` can retire the
+pipeline between that check and the lock.
+
+`Attach` follows the same rule when it registers the attachment. The
+status check and the registration happen under the same lock that
+`Deactivate` holds while it leaves `Activated`. An `Attach` whose round
+trip overlaps a `Deactivate`, or a `Deactivate` followed by a new
+`Activate`, is therefore rejected with `ErrNotActivated` and undoes its
+local state. It never publishes an attachment that nothing would retire.
+
 ## Document Deletion Behavior
 
 Documents can be deleted in either the `Attaching` or `Attached` state. Deletion is soft and proceeds as follows:
