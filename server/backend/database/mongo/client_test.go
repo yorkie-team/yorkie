@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ const (
 	projectTwoID   = types.ID("000000000000000000000002")
 )
 
-func setupTestWithDummyData(t *testing.T) *mongo.Client {
+func setupTestWithDummyData(t *testing.T, opts ...func(*mongo.Config)) *mongo.Client {
 	config := &mongo.Config{
 		ConnectionTimeout:  "5s",
 		ConnectionURI:      "mongodb://localhost:27017",
@@ -55,6 +56,9 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 		DocCacheSize:       helper.MongoDocCacheSize,
 		ChangeCacheSize:    helper.MongoChangeCacheSize,
 		VectorCacheSize:    helper.MongoVectorCacheSize,
+	}
+	for _, opt := range opts {
+		opt(config)
 	}
 	assert.NoError(t, config.Validate())
 
@@ -272,6 +276,96 @@ func TestClient_ClientCacheUnderConcurrentWrites(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, cached.EnsureDocumentAttached(docInfo.ID), "iteration %d", i)
 	}
+}
+
+// TestClient_AttachedClientLookupDoesNotCacheStaleRows pins the behavior of
+// FindAttachedClientInfosByRefKey: the rows it reads must not reach the client
+// cache. They are read outside the clients' cache locks, so a row it returns
+// may already be older than one a concurrent write cached, and caching it
+// would make every later request of that client read the stale copy.
+func TestClient_AttachedClientLookupDoesNotCacheStaleRows(t *testing.T) {
+	// Two clients on one database stand in for two server nodes: each keeps
+	// its own client cache.
+	ctx := context.Background()
+	nodeA := setupTestWithDummyData(t)
+	nodeB := setupTestWithDummyData(t)
+	defer func() {
+		assert.NoError(t, nodeA.Close())
+		assert.NoError(t, nodeB.Close())
+	}()
+
+	info, err := nodeA.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
+	require.NoError(t, err)
+	refKey := info.RefKey()
+
+	docInfo, err := nodeA.FindOrCreateDocInfo(
+		ctx, refKey, key.Key(fmt.Sprintf("tests$%s-%s", t.Name(), info.ID)), false,
+	)
+	require.NoError(t, err)
+	attaching, err := nodeA.TryAttaching(ctx, refKey, docInfo.ID)
+	require.NoError(t, err)
+	require.NoError(t, attaching.AttachDocument(
+		docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint,
+	))
+	require.NoError(t, nodeA.UpdateClientInfoAfterPushPull(ctx, attaching, docInfo))
+
+	// nodeB reads the row through the bulk lookup, which is the only way it
+	// sees this client at all so far.
+	attached, err := nodeB.FindAttachedClientInfosByRefKey(ctx, docInfo.RefKey())
+	require.NoError(t, err)
+	require.Len(t, attached, 1)
+	require.Equal(t, info.ID, attached[0].ID)
+
+	// nodeA detaches the document. If the lookup above had filled nodeB's
+	// cache, nodeB would still read the attached copy it cached.
+	detaching := attached[0].DeepCopy()
+	require.NoError(t, detaching.DetachDocument(docInfo.ID))
+	require.NoError(t, nodeA.UpdateClientInfoAfterPushPull(ctx, detaching, docInfo))
+
+	cached, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
+	require.NoError(t, err)
+	require.ErrorIs(t, cached.EnsureDocumentAttached(docInfo.ID), database.ErrDocumentNotAttached)
+}
+
+// TestClient_ClientCacheExpiresOnNodeThatDidNotWrite checks that the client
+// cache refreshes on a node that performed no write. Entries are written by
+// the node that performed the write and by the read miss path, and nothing
+// invalidates them across nodes, so the TTL is the only thing that keeps the
+// state the RPC gates read from drifting from what the database holds.
+func TestClient_ClientCacheExpiresOnNodeThatDidNotWrite(t *testing.T) {
+	ctx := context.Background()
+	const ttl = 200 * gotime.Millisecond
+
+	nodeA := setupTestWithDummyData(t)
+	nodeB := setupTestWithDummyData(t, func(conf *mongo.Config) {
+		conf.ClientCacheTTL = ttl.String()
+	})
+	defer func() {
+		assert.NoError(t, nodeA.Close())
+		assert.NoError(t, nodeB.Close())
+	}()
+
+	info, err := nodeA.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
+	require.NoError(t, err)
+	refKey := info.RefKey()
+
+	// nodeB caches the activated row.
+	cached, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
+	require.NoError(t, err)
+	require.NoError(t, cached.EnsureActivated())
+
+	// nodeA deactivates the client. Nothing tells nodeB.
+	deactivated, err := nodeA.DeactivateClient(ctx, refKey)
+	require.NoError(t, err)
+	require.Equal(t, database.ClientDeactivated, deactivated.Status)
+
+	// Past the TTL the entry is gone and the miss path reads the row again.
+	gotime.Sleep(3 * ttl)
+
+	refreshed, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
+	require.NoError(t, err)
+	require.Equal(t, database.ClientDeactivated, refreshed.Status)
+	require.ErrorIs(t, refreshed.EnsureActivated(), database.ErrClientNotActivated)
 }
 
 func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {

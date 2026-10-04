@@ -152,6 +152,12 @@ Mongo:
   # ClientCacheSize is the size of the client cache.
   ClientCacheSize: 10000
 
+  # ClientCacheTTL is the TTL value to set when caching a client. It must be at
+  # least 100ms. Nothing invalidates a cached client across nodes, so this
+  # bounds how long a node that did not perform a write reads client
+  # activation and attachment state the database no longer holds.
+  ClientCacheTTL: "1m0s"
+
   # DocCacheSize is the size of the document cache.
   DocCacheSize: 10000
 

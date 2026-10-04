@@ -76,7 +76,7 @@ type Client struct {
 
 	cacheManager  *cache.Manager
 	projectCache  *ProjectCache
-	clientCache   *cache.LRU[types.ClientRefKey, *database.ClientInfo]
+	clientCache   *cache.LRUWithExpires[types.ClientRefKey, *database.ClientInfo]
 	docCache      *cache.LRU[types.DocRefKey, *database.DocInfo]
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
@@ -149,7 +149,19 @@ func Dial(conf *Config) (*Client, error) {
 	}
 	cacheManager.RegisterCache(projectCache)
 
-	clientCache, err := cache.NewLRU[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
+	clientCacheTTL, err := conf.ParseClientCacheTTL()
+	if err != nil {
+		return nil, fmt.Errorf("initialize client cache: %w", err)
+	}
+
+	// NOTE: The client cache expires. Entries are written by the node that
+	// performed the write and by the miss path below, and nothing invalidates
+	// them across nodes, so without a TTL a node that did not perform a write
+	// would read activation and attachment state the database no longer holds
+	// for as long as the entry stayed resident. See DefaultClientCacheTTL.
+	clientCache, err := cache.NewLRUWithExpires[types.ClientRefKey, *database.ClientInfo](
+		conf.ClientCacheSize, clientCacheTTL, "clients",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("initialize client cache: %w", err)
 	}
@@ -1122,11 +1134,18 @@ func (c *Client) ActivateClient(
 		UpdatedAt:     now,
 	}
 
+	// The ID is freshly generated, so no other request can be writing this
+	// client yet and the lock is uncontended. It is taken anyway so that every
+	// write of clientCache pairs its row write under the client's lock, and a
+	// later caller of this method cannot quietly break that rule.
+	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	if _, err := c.collection(ColClients).InsertOne(ctx, info); err != nil {
 		return nil, fmt.Errorf("insert client: %w", err)
 	}
 
-	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
 	c.clientCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
@@ -1427,7 +1446,10 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 
 	// NOTE: The rows read here do not fill clientCache. The query runs outside
 	// the clients' cache locks, so a row read here may already be older than
-	// one a concurrent write cached.
+	// one a concurrent write cached, and caching it would make every later
+	// request of that client read the stale copy. Refreshing a client this
+	// node did not write is left to the client cache's TTL; see
+	// DefaultClientCacheTTL.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)

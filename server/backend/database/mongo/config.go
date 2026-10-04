@@ -34,6 +34,14 @@ const (
 	// DefaultProjectCacheTTL is the default TTL of the project metadata cache.
 	DefaultProjectCacheTTL = 10 * time.Minute
 
+	// DefaultClientCacheTTL is the default TTL of the client cache. The cache
+	// is filled by the node that performed the write and has no cross-node
+	// invalidation, so the TTL is the only thing that refreshes activation and
+	// attachment state on a node that did not perform the write. It is what
+	// bounds how long the RPC gates can read a client row the database no
+	// longer holds.
+	DefaultClientCacheTTL = time.Minute
+
 	// DefaultCacheStatsInterval is the default interval for logging cache statistics.
 	DefaultCacheStatsInterval = 30 * time.Second
 )
@@ -60,6 +68,9 @@ type Config struct {
 
 	// ClientCacheSize is the size of the client cache. It works as LRU cache.
 	ClientCacheSize int `yaml:"ClientCacheSize"`
+
+	// ClientCacheTTL is the TTL value for the client cache.
+	ClientCacheTTL string `yaml:"ClientCacheTTL"`
 
 	// DocCacheSize is the size of the document cache. It works as LRU cache.
 	DocCacheSize int `yaml:"DocCacheSize"`
@@ -119,6 +130,17 @@ func (c *Config) Validate() error {
 			return fmt.Errorf(
 				`invalid argument "%s" for "--mongo-project-cache-ttl" flag: %w`,
 				c.ProjectCacheTTL,
+				err,
+			)
+		}
+	}
+
+	// As above: empty falls back to DefaultClientCacheTTL.
+	if c.ClientCacheTTL != "" {
+		if _, err := cache.ParseTTL(c.ClientCacheTTL); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--mongo-client-cache-ttl" flag: %w`,
+				c.ClientCacheTTL,
 				err,
 			)
 		}
@@ -190,6 +212,22 @@ func (c *Config) ParseProjectCacheTTL() (time.Duration, error) {
 	result, err := cache.ParseTTL(c.ProjectCacheTTL)
 	if err != nil {
 		return 0, fmt.Errorf("parse project cache TTL: %w", err)
+	}
+
+	return result, nil
+}
+
+// ParseClientCacheTTL returns the TTL duration for the client cache, falling
+// back to DefaultClientCacheTTL when the value is unset, on the same terms as
+// ParseProjectCacheTTL.
+func (c *Config) ParseClientCacheTTL() (time.Duration, error) {
+	if c.ClientCacheTTL == "" {
+		return DefaultClientCacheTTL, nil
+	}
+
+	result, err := cache.ParseTTL(c.ClientCacheTTL)
+	if err != nil {
+		return 0, fmt.Errorf("parse client cache TTL: %w", err)
 	}
 
 	return result, nil

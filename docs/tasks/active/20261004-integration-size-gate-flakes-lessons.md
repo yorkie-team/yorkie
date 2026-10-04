@@ -34,3 +34,18 @@
   known limitations: the striped lock is held across one MongoDB round trip
   and ignores ctx; several server nodes still keep separate client caches,
   as before.
+- Round 2 (review panel): two blocking findings, both on the removed bulk
+  cache fill. The removal was a real behavior change with no test, and it
+  also removed the only path that ever refreshed a client row on a node
+  that did not write it — the LRU had no TTL and no cross-node
+  invalidation, so a stale activation or attachment could sit in a node's
+  cache until it was evicted by size. Fixed by giving `clientCache` a TTL
+  (`DefaultClientCacheTTL`, 1m, configurable via `--mongo-client-cache-ttl`)
+  instead of restoring the fill: expiry drops entries rather than writing
+  old ones, so the staleness window is bounded without reopening the race.
+  `ActivateClient` now also takes the client's stripe lock, so every
+  clientCache write pairs with its row write under one lock.
+- Deleting a cache fill removes a refresh path as well as a bug. Ask what
+  else was keeping the entry fresh before deciding the removal is free; for
+  a cache nothing invalidates across nodes, the answer is usually "nothing,
+  and it needs a TTL".
