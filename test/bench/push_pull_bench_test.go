@@ -25,6 +25,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -93,8 +94,15 @@ func setUpClientsAndDocs(
 		assert.NoError(b, err)
 		docInfo, err := be.DB.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(b, err)
-		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
-		assert.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// Mark the document attaching in the database, as the server does
+		// before the push that attaches it. UpdateClientInfoAfterPushPull
+		// writes an attachment only while the stored client still holds the
+		// document attached or attaching.
+		clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		require.NoError(b, err)
+		require.NoError(b, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
+		require.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
@@ -207,7 +215,9 @@ func benchmarkPushSnapshots(
 				Mode:   types.SyncModePushPull,
 				Status: document.StatusAttached,
 			})
-			assert.NoError(b, err)
+			// require, not assert: a failed PushPull returns no pack, and
+			// reading it below would panic and hide the error.
+			require.NoError(b, err)
 
 			b.StopTimer()
 			pbChangePack, err := pulled.ToPBChangePack()
