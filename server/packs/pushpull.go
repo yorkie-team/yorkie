@@ -143,8 +143,15 @@ func PushPull(
 	}
 
 	// 03. pull the pack from the database.
+	// pushPack confirmed the attachment against the database whenever it had
+	// something to write, so the pull does not read the client again. When the
+	// push wrote nothing, the pull confirms it itself before the version vector
+	// write. A push whose changes were discarded after the confirmation (stale
+	// epoch, over quota) reports no pushed changes here, which only costs the
+	// pull one redundant read.
+	attachmentConfirmed := len(pushedChanges) > 0 || reqPack.IsRemoved
 	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold,
-		docInfo, reqPack, cpAfterPush, initialSeq, opts)
+		docInfo, reqPack, cpAfterPush, initialSeq, attachmentConfirmed, opts)
 
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
@@ -353,18 +360,13 @@ func pushPack(
 		}
 
 		// 05. Confirm the attachment against the database before writing to
-		// the document. The RPC gate read clientInfo through this node's
-		// client cache, which another node's deactivation or detach reaches
-		// only when the entry expires (MongoDB ClientCacheTTL). A push admitted
-		// on such a stale copy must not land its changes, or mark the document
-		// removed, for a client the database no longer has attached. Pushes
-		// without changes write nothing to the document and skip this read.
+		// the document. A push admitted on a stale cached clientInfo must not
+		// land its changes, or mark the document removed, for a client the
+		// database no longer has attached. Pushes without changes write
+		// nothing to the document here; pullPack confirms them before its own
+		// write.
 		if (len(pushables) > 0 || reqPack.IsRemoved) && !clientInfo.IsServerClient() {
-			stored, err := be.DB.FindClientInfoByRefKey(ctx, clientInfo.RefKey(), true)
-			if err != nil {
-				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-			}
-			if err := stored.EnsureDocumentAttachedOrAttaching(docKey.DocID); err != nil {
+			if err := confirmAttachment(ctx, be, clientInfo, docKey.DocID); err != nil {
 				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
 			}
 		}
@@ -397,6 +399,27 @@ func pushPack(
 	return pushables, docInfo, initialSeq, cpAfterPush, nil
 }
 
+// confirmAttachment confirms against the database that the given client still
+// has the document attached, or attaching for the push that completes an
+// attach. The RPC gate read clientInfo through this node's client cache, which
+// another node's deactivation or detach reaches only when the entry expires
+// (MongoDB ClientCacheTTL), so a request admitted on such a stale copy must
+// confirm before it writes anything keyed on the attachment. The read bypasses
+// the cache; call it only on a path that is about to write.
+func confirmAttachment(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *database.ClientInfo,
+	docID types.ID,
+) error {
+	stored, err := be.DB.FindClientInfoByRefKey(ctx, clientInfo.RefKey(), true)
+	if err != nil {
+		return err
+	}
+
+	return stored.EnsureDocumentAttachedOrAttaching(docID)
+}
+
 func pullPack(
 	ctx context.Context,
 	be *backend.Backend,
@@ -406,6 +429,7 @@ func pullPack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialSeq int64,
+	attachmentConfirmed bool,
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	// 01. pull changes or a snapshot from the database and create a response pack.
@@ -468,6 +492,24 @@ func pullPack(
 			resPack.VersionVector = nil
 		}
 	} else {
+		// A pull that leaves the document attached upserts the client's row in
+		// version_vectors, keyed on the in-memory attachment status alone. On a
+		// stale cached clientInfo that re-creates the row another node's detach
+		// deleted, and nothing deletes it again: the resurrected entry holds the
+		// detached client's old vector down, so minVV stops advancing and the
+		// document's tombstones are never collected. Confirm the attachment
+		// first, unless the push already did. A pull that detaches or removes
+		// only deletes the row, which is idempotent and needs no confirmation.
+		attached, err := clientInfo.IsAttached(docInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+		if attached && !attachmentConfirmed && !clientInfo.IsServerClient() {
+			if err := confirmAttachment(ctx, be, clientInfo, docInfo.ID); err != nil {
+				return nil, err
+			}
+		}
+
 		minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
 		if err != nil {
 			return nil, err
