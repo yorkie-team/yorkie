@@ -27,6 +27,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	gotime "time"
 
@@ -432,21 +433,63 @@ func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) 
 	return y
 }
 
-// TestKey returns a new instance of resource key for testing.
-func TestKey(t testing.TB, prefix ...int) key.Key {
+// testRuns tracks the test run each test name was last seen in, so names
+// stay unique when `go test -count=N` runs the same test again against the
+// same database.
+var testRuns = struct {
+	sync.Mutex
+	last map[string]testing.TB
+	runs map[string]int
+}{
+	last: make(map[string]testing.TB),
+	runs: make(map[string]int),
+}
+
+// testRunName returns t.Name() and a suffix that carries the run number from
+// the second run of the same test in this process on, empty before that.
+// Every call with the same t returns the same pair, so documents a test opens
+// by name still meet. Callers append the suffix after any truncation.
+func testRunName(t testing.TB) (string, string) {
+	testRuns.Lock()
+	defer testRuns.Unlock()
+
 	name := t.Name()
+	if last, ok := testRuns.last[name]; ok && last != t {
+		testRuns.runs[name]++
+	}
+	testRuns.last[name] = t
+
+	if run := testRuns.runs[name]; run > 0 {
+		return name, fmt.Sprintf("-run%d", run)
+	}
+	return name, ""
+}
+
+// TestRunSuffix returns the suffix that keeps names of this run of the test
+// apart from those of its earlier runs under `go test -count=N`: empty on the
+// first run, "-runN" after. See testRunName.
+func TestRunSuffix(t testing.TB) string {
+	_, suffix := testRunName(t)
+	return suffix
+}
+
+// TestKey returns a new instance of resource key for testing. The key is
+// unique to each run of the test; see testRunName.
+func TestKey(t testing.TB, prefix ...int) key.Key {
+	name, suffix := testRunName(t)
 
 	if len(prefix) > 0 {
 		name = fmt.Sprintf("%d-%s", prefix[0], name)
 	}
 
-	if err := key.Key(name).Validate(); err == nil {
-		return key.Key(name)
+	if err := key.Key(name + suffix).Validate(); err == nil {
+		return key.Key(name + suffix)
 	}
 
 	if len(name) > 100 {
 		name = name[:100]
 	}
+	name += suffix
 
 	sb := strings.Builder{}
 	for _, c := range name {
@@ -464,21 +507,23 @@ func TestKey(t testing.TB, prefix ...int) key.Key {
 	return key.Key(sb.String())
 }
 
-// TestSlugName returns a new instance of slug name for testing.
+// TestSlugName returns a new instance of slug name for testing. The name is
+// unique to each run of the test; see testRunName.
 func TestSlugName(t testing.TB) string {
-	name := t.Name()
-	if err := validation.Validate(name, []any{
+	name, suffix := testRunName(t)
+	if err := validation.Validate(name+suffix, []any{
 		"required",
 		"min=4",
 		"max=30",
 		"slug",
 	}); err == nil {
-		return name
+		return name + suffix
 	}
 
-	if len(name) > 35 {
-		name = name[len(name)-30:]
+	if limit := 30 - len(suffix); len(name) > limit {
+		name = name[len(name)-limit:]
 	}
+	name += suffix
 
 	sb := strings.Builder{}
 	for _, c := range name {
