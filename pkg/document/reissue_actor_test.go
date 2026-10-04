@@ -315,10 +315,19 @@ func TestReissueActor(t *testing.T) {
 		require.True(t, doc.InternalDocumentForTest().HasLocalChanges())
 		before := doc.Marshal()
 
+		// A deep copy keeps the guard: the server's snapshot cache hands out
+		// copies, and a copy must not look never-synced either.
+		copied, err := doc.InternalDocumentForTest().DeepCopy()
+		require.NoError(t, err)
+		copiedDoc := copied.ToDocument()
+
 		reissueActor(t, doc, actorA)
 
 		assert.Equal(t, before, doc.Marshal())
 		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
+
+		reissueActor(t, copiedDoc, actorA)
+		assert.NotZero(t, actorsOf(t, copiedDoc)[time.InitialActorID])
 	})
 
 	t.Run("the rollback restores what a failed attach rewrote", func(t *testing.T) {
@@ -398,7 +407,22 @@ func TestReissueActor(t *testing.T) {
 		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
 	})
 
-	t.Run("the rollback of the fallback branch restores the actor", func(t *testing.T) {
+	t.Run("the rollback of the fallback branch restores a never-synced actor", func(t *testing.T) {
+		// A document without local changes takes the SetActor branch.
+		empty := document.New(helper.TestKey(t))
+		rollback, err := empty.ReissueActor(actorA)
+		require.NoError(t, err)
+		require.Equal(t, actorA, empty.ActorID())
+
+		rollback()
+		assert.Equal(t, time.InitialActorID, empty.ActorID())
+	})
+
+	// A document that has synced before cannot tell whether the failed attach
+	// already applied the server's pack: the checkpoint moved long ago. The
+	// rollback must then decline, or it would revert the actor of a document
+	// that may be live, and its next changes would carry the old actor.
+	t.Run("the rollback of the fallback branch declines once synced", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetString("k", "v")
@@ -412,17 +436,22 @@ func TestReissueActor(t *testing.T) {
 			r.SetString("late", "v")
 			return nil
 		}))
+		undoDepth := doc.CanUndo()
 
 		rollback, err := doc.ReissueActor(actorA)
 		require.NoError(t, err)
 		require.Equal(t, actorA, doc.ActorID())
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("during", "v")
+			return nil
+		}))
 
 		rollback()
 
-		assert.Equal(t, time.InitialActorID, doc.ActorID())
-		for _, actor := range localActorsOf(t, doc) {
-			assert.Equal(t, time.InitialActorID, actor)
-		}
+		assert.Equal(t, actorA, doc.ActorID())
+		assert.Equal(t, undoDepth, doc.CanUndo())
+		assert.NoError(t, doc.Undo())
+		assert.NotContains(t, doc.Marshal(), "during")
 	})
 
 	t.Run("an empty document only takes the actor", func(t *testing.T) {

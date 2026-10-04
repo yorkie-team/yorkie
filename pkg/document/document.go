@@ -1036,7 +1036,10 @@ func (d *Document) ReissueActor(actor time.ActorID) (func(), error) {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 
-		if !rollback() {
+		if !rollback() || !reissued {
+			// Only a re-issue cleared the stacks. After the plain SetActor
+			// fallback they are the live history, entries pushed during the
+			// attach included, so they are left alone.
 			return
 		}
 		d.history.undoStack, d.history.redoStack = undoStack, redoStack

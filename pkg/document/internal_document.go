@@ -322,8 +322,13 @@ func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, func() bool, 
 		// restore of the slice. It covers whatever local changes the document
 		// holds when it runs, the ones a concurrent Update added included:
 		// those were authored under actor too, so they belong in the sweep.
+		//
+		// It is guarded by neverSynced like the re-issue rollback below: an
+		// attach can fail after the server's pack was applied and the
+		// attachment registered, and reverting the actor of that live
+		// document would stamp its next changes with the wrong actor.
 		return false, func() bool {
-			if d.changeID.ActorID() != actor {
+			if d.changeID.ActorID() != actor || !d.neverSynced() {
 				return false
 			}
 			d.SetActor(prev)
@@ -719,5 +724,7 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		presences:     d.presences.DeepCopy(),
 		onlineClients: onlineClients,
 		localChanges:  d.localChanges,
+
+		absorbedRemote: d.absorbedRemote,
 	}, nil
 }
