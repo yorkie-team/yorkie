@@ -282,6 +282,11 @@ func TestEventWebhookThrottling(t *testing.T) {
 		numWindows     = 2
 		eventPerWindow = 30
 
+		// trailingEventSlack is how much longer than the debounce the trailing
+		// event is given to arrive, covering the expiration loop's tick and the
+		// webhook round trip.
+		trailingEventSlack = 1 * time.Second
+
 		testDuration  = webhookThrottleWindow * time.Duration(numWindows)
 		eventInterval = webhookThrottleWindow / eventPerWindow
 	)
@@ -307,6 +312,13 @@ func TestEventWebhookThrottling(t *testing.T) {
 		yson.ParseObject(`{"counter": Counter(Long(0))}`),
 	)))
 
+	// The attach pushes operations too, so it opens a throttle window of its
+	// own whose boundaries sit within a tick of the ones the loop below
+	// counts. Wait for that window's limiter entry to expire -- it carries no
+	// debounced callback, so expiring it sends nothing -- and the loop's first
+	// update then opens the first window the test measures.
+	time.Sleep(webhookThrottleWindow + debouncingTime + 2*expirationInterval)
+
 	t.Run("throttling Event Test", func(t *testing.T) {
 		ticker := time.NewTicker(eventInterval)
 		defer ticker.Stop()
@@ -331,9 +343,13 @@ func TestEventWebhookThrottling(t *testing.T) {
 				time.Sleep(waitWebhookReceived)
 				// Expect the request count to have increased by the expected number of updates.
 				assert.Equal(t, initialReqCount+int32(numWindows), getReqCnt.Load())
-				// Expect the trailing event webhook for eventual consistency.
-				time.Sleep(webhookThrottleWindow + debouncingTime + expirationInterval)
-				assert.Equal(t, initialReqCount+int32(numWindows+1), getReqCnt.Load())
+				// Expect the trailing event webhook for eventual consistency. It
+				// is sent when the limiter entry expires, which the expiration
+				// loop only notices on its next tick, so poll for it rather than
+				// sleep exactly as long as it should take.
+				assert.Eventually(t, func() bool {
+					return getReqCnt.Load() == initialReqCount+int32(numWindows+1)
+				}, webhookThrottleWindow+debouncingTime+trailingEventSlack, expirationInterval)
 				assert.NoError(t, svr.Shutdown(true))
 				assert.Equal(t, initialReqCount+int32(numWindows+1), getReqCnt.Load())
 				return
