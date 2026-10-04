@@ -53,7 +53,14 @@ func ReissueOperations(
 		return nil, err
 	}
 
-	r := ticketReissuer{from: from.Bytes(), to: to.Bytes()}
+	r := ticketReissuer{
+		from: from.Bytes(),
+		to:   to.Bytes(),
+		fromKeys: map[string]string{
+			from.String():       to.String(),
+			from.StringBase64(): to.StringBase64(),
+		},
+	}
 	for _, pbOp := range pbOps {
 		if err := r.walk(pbOp.ProtoReflect()); err != nil {
 			return nil, err
@@ -68,44 +75,24 @@ func ReissueOperations(
 		return nil, fmt.Errorf("reissue operations: %d in, %d out", len(ops), len(reissued))
 	}
 
-	// JSONElementSimple, the message a Set/Add/ArraySet carries its value in,
-	// is lossy for one element type, and a value that lost state would be
-	// replayed into the local root as that loss. Re-issue it through the full
-	// snapshot encoding instead, which carries every field.
+	// The wire drops a Text value's content: it carries the Text alone and
+	// the Edits that fill it. A Set/Add/ArraySet that restores a removed
+	// Text -- the reverse of a Remove, run by Undo -- carries the content,
+	// and a later Edit in the same document may target its nodes. Re-issue
+	// such a value through its full snapshot encoding instead, so the local
+	// root rebuilt from these operations keeps what the user sees.
 	for i, op := range ops {
-		if reissued[i], err = r.reissueLossyValue(op, reissued[i]); err != nil {
+		if reissued[i], err = r.reissueTextValue(op, reissued[i]); err != nil {
 			return nil, err
 		}
 	}
 	return reissued, nil
 }
 
-// isLossyOnWire reports whether JSONElementSimple -- the message a
-// Set/Add/ArraySet carries its value in -- drops state the element holds.
-//
-//   - Text: the wire carries the Text alone and the Edits that fill it, so a
-//     Set/Add/ArraySet that restores a removed Text -- the reverse of a
-//     Remove, run by Undo -- loses its content, which a later Edit in the same
-//     document may target the nodes of.
-//
-// Object, Array and Tree are safe: the simple form carries them as the
-// marshalled bytes of the very api.JSONElement the snapshot encoding uses.
-// Primitive carries its own bytes, and a dedup Counter its HLL registers
-// alongside the derived value -- repairing that here would have been
-// local-only, since the operation the attach then pushes goes through
-// toJSONElementSimple too. Keep this list in step with toJSONElementSimple.
-func isLossyOnWire(elem crdt.Element) bool {
-	switch elem.(type) {
-	case *crdt.Text:
-		return true
-	}
-	return false
-}
-
-// reissueLossyValue returns the decoded operation with its value replaced by a
-// re-issued copy of the original one, every field included, when the wire form
-// of that value is lossy. Any other operation is returned unchanged.
-func (r ticketReissuer) reissueLossyValue(
+// reissueTextValue returns the decoded operation with its Text value replaced
+// by a re-issued copy of the original one, content included. Any other
+// operation is returned unchanged.
+func (r ticketReissuer) reissueTextValue(
 	orig, decoded operations.Operation,
 ) (operations.Operation, error) {
 	var value crdt.Element
@@ -117,7 +104,7 @@ func (r ticketReissuer) reissueLossyValue(
 	case *operations.ArraySet:
 		value = o.Value()
 	}
-	if value == nil || !isLossyOnWire(value) {
+	if _, ok := value.(*crdt.Text); !ok {
 		return decoded, nil
 	}
 
@@ -128,18 +115,18 @@ func (r ticketReissuer) reissueLossyValue(
 	if err := r.walk(pbElem.ProtoReflect()); err != nil {
 		return nil, err
 	}
-	reissuedValue, err := fromJSONElement(pbElem)
+	text, err := fromJSONElement(pbElem)
 	if err != nil {
 		return nil, err
 	}
 
 	switch o := decoded.(type) {
 	case *operations.Set:
-		return operations.NewSet(o.ParentCreatedAt(), o.Key(), reissuedValue, o.ExecutedAt()), nil
+		return operations.NewSet(o.ParentCreatedAt(), o.Key(), text, o.ExecutedAt()), nil
 	case *operations.Add:
-		return operations.NewAdd(o.ParentCreatedAt(), o.PrevCreatedAt(), reissuedValue, o.ExecutedAt()), nil
+		return operations.NewAdd(o.ParentCreatedAt(), o.PrevCreatedAt(), text, o.ExecutedAt()), nil
 	case *operations.ArraySet:
-		return operations.NewArraySet(o.ParentCreatedAt(), o.CreatedAt(), reissuedValue, o.ExecutedAt()), nil
+		return operations.NewArraySet(o.ParentCreatedAt(), o.CreatedAt(), text, o.ExecutedAt()), nil
 	}
 	return decoded, nil
 }
@@ -148,6 +135,11 @@ func (r ticketReissuer) reissueLossyValue(
 type ticketReissuer struct {
 	from []byte
 	to   []byte
+
+	// fromKeys maps the string forms an actor-keyed map uses for `from` --
+	// hex (the deprecated created_at_map_by_actor) and base64 (VersionVector)
+	// -- to the same form of `to`.
+	fromKeys map[string]string
 }
 
 // walk rewrites every TimeTicket reachable from the given message in place.
@@ -176,10 +168,14 @@ func (r ticketReissuer) walk(m protoreflect.Message) error {
 				err = r.walk(list.Get(i).Message())
 			}
 		case fd.IsMap():
+			m := v.Map()
+			if fd.MapKey().Kind() == protoreflect.StringKind {
+				r.rekeyMap(m)
+			}
 			if fd.MapValue().Message() == nil {
 				return true
 			}
-			v.Map().Range(func(_ protoreflect.MapKey, mv protoreflect.Value) bool {
+			m.Range(func(_ protoreflect.MapKey, mv protoreflect.Value) bool {
 				err = r.walk(mv.Message())
 				return err == nil
 			})
@@ -189,6 +185,27 @@ func (r ticketReissuer) walk(m protoreflect.Message) error {
 		return err == nil
 	})
 	return err
+}
+
+// rekeyMap renames an entry keyed by `from` to the same key form of `to`. No
+// operation encodes an actor-keyed map today -- created_at_map_by_actor is
+// deprecated and never written -- but the walk handles one rather than leave
+// it naming the old actor if one comes back.
+func (r ticketReissuer) rekeyMap(m protoreflect.Map) {
+	type entry struct {
+		from, to protoreflect.MapKey
+	}
+	var renames []entry
+	m.Range(func(k protoreflect.MapKey, _ protoreflect.Value) bool {
+		if to, ok := r.fromKeys[k.String()]; ok {
+			renames = append(renames, entry{k, protoreflect.ValueOfString(to).MapKey()})
+		}
+		return true
+	})
+	for _, e := range renames {
+		m.Set(e.to, m.Get(e.from))
+		m.Clear(e.from)
+	}
 }
 
 // walkNestedElement rewrites the tickets inside the encoded value of an

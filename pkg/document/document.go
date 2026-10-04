@@ -585,17 +585,6 @@ func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 		return err
 	}
 
-	// An operation whose target was concurrently removed declines to execute
-	// under OpSourceUndoRedo (see Change.Execute), so it changed nothing here.
-	// Drop it from the change before the change is buffered: every other
-	// executor of this change runs it under a source where the skip guard does
-	// not run -- the server replays a pushed change, and
-	// InternalDocument.ReissueActor rebuilds the pre-attach root the same way
-	// -- and would resurrect exactly what the undo declined to touch.
-	if len(result.Executed) != len(c.Operations()) {
-		c = change.New(c.ID(), c.Message(), result.Executed, c.PresenceChange())
-	}
-
 	var reverse []HistoryOperation
 	for _, op := range result.ReverseOps {
 		reverse = append(reverse, HistoryOperation{Op: op})
@@ -998,69 +987,32 @@ func (d *Document) SetActor(actor time.ActorID) {
 // docs/design/pre-attach-ticket-reissue.md.
 //
 // A re-issue rebuilds the root, so it also drops the clone and the undo/redo
-// stacks: their reverse operations name the tickets that no longer exist.
-// Changes made before the attach can therefore not be undone after it.
+// stacks: their reverse operations name the tickets that no longer exist. A
+// successful attach clears those stacks anyway (Client.attachDocument), so
+// this only moves that point earlier, to before the RPC.
 //
-// It returns a rollback that undoes the re-issue, the undo/redo stacks
-// included. The attach the re-issued tickets are minted for can still fail
-// afterwards -- a network error, a server refusal, a deactivated client -- and
-// the caller runs the rollback so a failed attach leaves the document as the
-// user handed it over rather than rewritten and stripped of its history.
-//
-// The rollback declines, leaving the document alone, once the attach has got
-// far enough to put the server's state into the document; see
-// InternalDocument.ReissueActor. The undo/redo stacks follow the decision, so
-// they are never restored over a document the rollback did not touch. An entry
-// pushed by an Update made while the attach was in flight is dropped with the
-// restore: its reverse operations name tickets the re-issue minted, which the
-// rollback has just re-issued away.
+// There is no rollback. A re-issued document is a valid detached document
+// whatever the attach does next: a retry under the same client re-issues
+// nothing, and a retry under another client re-issues from this actor to that
+// one. Restoring the previous actor after a failure whose outcome is unknown
+// -- a lost AttachDocument response -- could not tell whether the server
+// already holds the re-issued elements.
 //
 // It takes d.mu for writing, unconditionally, for the reasons SetActor does.
-func (d *Document) ReissueActor(actor time.ActorID) (func(), error) {
+func (d *Document) ReissueActor(actor time.ActorID) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	undoStack, redoStack := d.history.undoStack, d.history.redoStack
-
-	reissued, rollback, err := d.doc.ReissueActor(actor)
+	reissued, err := d.doc.ReissueActor(actor)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if reissued {
 		d.invalidateClone()
 		d.history.ClearUndo()
 		d.history.ClearRedo()
 	}
-
-	return func() {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-
-		if !rollback() || !reissued {
-			// Only a re-issue cleared the stacks. After the plain SetActor
-			// fallback they are the live history, entries pushed during the
-			// attach included, so they are left alone.
-			return
-		}
-		d.history.undoStack, d.history.redoStack = undoStack, redoStack
-		d.invalidateClone()
-	}, nil
-}
-
-// MarkPushed records that a pack built from this document's local changes
-// reached the server. The client calls it when an attach whose RPC had already
-// returned fails afterwards: the server holds the re-issued elements from then
-// on, so neither that attach's rollback nor a later attach under another actor
-// may re-issue them again. See InternalDocument.MarkPushed.
-//
-// It takes d.mu for writing, for the reason SetActor does: the attach path
-// calls it beside a running updater, and ReissueActor reads the flag under the
-// same lock.
-func (d *Document) MarkPushed() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	d.doc.MarkPushed()
+	return nil
 }
 
 // ActorID returns ID of the actor currently editing the document.

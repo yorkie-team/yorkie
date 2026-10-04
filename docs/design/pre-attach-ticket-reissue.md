@@ -67,77 +67,50 @@ ReissueActor(actor):
       ops := converter.ReissueOperations(ops, prev, actor)
       id  := id with actor, version vector entry prev -> actor
   root, presences := replay the new changes on a fresh root
-  swap in changes, root, presences, changeID (all or nothing)
+  swap in changes, root, presences, online clients, changeID
+      (all or nothing; nothing is written in place)
   Document: drop the clone, clear the undo/redo stacks
-  return a rollback that re-issues actor -> prev, restoring the stacks
 ```
 
 ### When re-issuing is sound
 
 A ticket can be re-issued only if no other replica has seen it. The
 discriminator is per document, not per ticket: `neverSynced` holds when the
-document has absorbed no outside state, is detached, has `InitialCheckpoint`
-and a version vector naming no actor but its own. Then nothing has been pushed
-and nothing pulled, so every ticket naming the current actor was minted by a
-local change still in `localChanges`. The offline-resumable-attach design
-rejects a client side rebase because, after a sync, the pushed/pending boundary
-runs through individual tickets; that boundary does not exist before the first
-sync.
-
-The absorbed-state flag (`absorbedRemote`, set by `applySnapshot` and by
-`applyChanges`) is the load-bearing half of that test, not the checkpoint: the
-checkpoint is forwarded by `applySnapshot`'s *caller*, so a snapshot pack
-carrying the initial checkpoint would leave status, checkpoint and version
-vector all looking untouched while the root holds elements the rebuild cannot
-reproduce from `localChanges` -- and the rebuild would silently drop them.
+document is detached, has absorbed no snapshot and no applied change
+(`absorbedRemote`, set by `applySnapshot`, `applyChanges` and
+`NewInternalDocumentFromSnapshot`, and kept by `DeepCopy`), its checkpoint is
+`InitialCheckpoint` and its version vector names no actor but its own. The
+absorbed flag matters because a snapshot pack carrying the initial checkpoint
+would leave the other signals looking untouched. Then nothing has been pushed and nothing
+pulled, so every ticket naming the current actor was minted by a local change
+still in `localChanges`. The offline-resumable-attach design rejects a client
+side rebase because, after a sync, the pushed/pending boundary runs through
+individual tickets; that boundary does not exist before the first sync.
 
 The lamport-0 ticket `time.InitialTicket` -- the root object and every sentinel
 node -- is shared by all replicas and is never re-issued. Every ticket a change
 mints has the change's lamport, which is at least 1.
 
-A failed attach leaves the document never-synced under the new actor, so a
-retry on another client re-issues again from that actor. `Client.Attach` also
-runs the rollback `ReissueActor` returned when the attach fails, so the user is
-left holding the document handed over -- root, local changes and undo/redo
-stacks included -- rather than one rewritten for an attach that never happened.
+### A failed attach
 
-The rollback is the same re-issue run the other way, `actor -> prev`, rather
-than a restore of a snapshot taken when the tickets were minted. The attach
-makes local changes of its own after that point -- the initial presence PUT --
-and an application goroutine may call `Update` while the round trip is in
-flight; a snapshot restore would drop both, while a reverse re-issue carries
-them back with it. `neverSynced` guards the rollback exactly as it guards the
-forward re-issue: it stops holding the moment the document takes the server's
-attach pack in, which is the state a rollback must not overwrite. Document
-status is no guard there -- `attachDocument` sets `StatusAttached` only *after*
-the pack is applied, and puts it back to `StatusDetached` when it hands an
-already-applied attach to a concurrent `Deactivate`. An undo entry pushed
-during the attach window is dropped by the restore: its reverse operations name
-tickets the re-issue minted and the rollback has just re-issued away.
+There is no rollback. A re-issued document is a valid detached document
+whatever the attach does next, so it keeps the re-issued state:
 
-`neverSynced` is a purely local signal, though, and there is a window it cannot
-see: between `AttachDocument` returning and `ApplyChangePack` absorbing the
-response, the server already holds the re-issued elements while the checkpoint
-is still initial, the status still `StatusDetached` and nothing absorbed. A
-failure in that window -- decoding the response pack, bringing the watch
-pipeline up, the post-attach `Update` or `ClearHistory` -- would pass the guard
-and re-issue away tickets the server has stored. `attachDocument` therefore
-reports whether the push reached the server, and `Client.Attach` records it on
-the document with `MarkPushed` when it did. A transport error counts as not
-reached even though the server may have committed before the response was lost:
-re-attaching with the same client re-issues the same tickets to the same actor,
-so the replicas still name those elements identically.
+- a retry under the same client finds `prev == actor` and re-issues nothing;
+- a retry under another client re-issues from this actor to its own.
 
-The mark lives on the document rather than in the attach that set it, because
-the forward re-issue reads the same blind signals as the rollback. A document
-left behind by a pushed-but-failed attach is still `StatusDetached` with an
-initial checkpoint and nothing absorbed, so attaching it again -- with the same
-client after a reactivation, or with another client altogether -- would re-issue
-to a second actor the very elements the server already holds under the first.
-`neverSynced` therefore reports false once the mark is set, in both directions:
-the rollback declines, and a later `ReissueActor` falls back to `SetActor`,
-which stamps the new actor into the change IDs while leaving every stored ticket
-as the server knows it.
+Rolling back on failure could not be made safe. When the `AttachDocument`
+response is lost, the client cannot tell whether the server stored the
+re-issued pack. Restoring the initial actor would then let a later attach
+push the same changes a second time under the initial actor -- the very
+`createdAt` collision this design removes. Keeping the re-issued state means a
+retry under another client may still push those changes twice, but as two
+distinct elements that LWW resolves, never as one identity shared by two.
+That duplicate on an unknown outcome predates this design: the old `SetActor`
+path pushed the changes again too, with colliding tickets.
+
+The only thing a failed attach loses is the pre-attach undo/redo history, which
+a successful attach clears anyway (`Client.attachDocument`).
 
 ### Re-issuing the operations
 
@@ -149,7 +122,10 @@ IDs, TreeEdit contents and split tickets, restore spans -- without a per-type
 list that a new field could fall out of. Object, Array and Tree values travel
 as the bytes of an `api.JSONElement`; the walk decodes, rewrites and re-encodes
 them. Lamports and delimiters are untouched, so the order among the tickets is
-unchanged.
+unchanged. A string-keyed map entry naming the old actor (hex or base64 form)
+is renamed too; no operation encodes one today -- `created_at_map_by_actor` is
+deprecated and never written -- but the walk does not leave one behind if it
+comes back.
 
 One value does not survive the wire: a Text travels without its content, which
 normally arrives through the Edits that follow. A Set/Add/ArraySet that
@@ -158,6 +134,8 @@ content in the value itself. For those operations the Text value is re-issued
 through its full snapshot encoding instead, so the rebuilt local root keeps the
 content and a later Edit on its nodes still replays. The server still receives
 the Text empty; that wire gap predates this design and is listed under Risks.
+A dedup Counter value travels without its HLL registers the same way; it is
+not special-cased, so the local root matches what the server receives.
 
 ### Rebuilding the root
 
@@ -167,101 +145,24 @@ rebuilt by replaying the re-issued changes on a fresh root. A never-synced
 document's root is exactly the initial root plus its local changes, and the
 replay is the same computation the server performs on the pushed changes, so
 the two roots agree by construction. The presence map comes out keyed by the
-new actor.
+new actor, and an online-client entry for the old actor is renamed.
 
 The undo/redo stacks hold reverse operations naming the old tickets, so a
 re-issue clears them.
-
-### Server-side actor ownership
-
-With the re-issue, every ticket and every change ID a client pushes carries
-its own actor; before it the change ID already did (`SetActor` rewrote it),
-only the tickets inside did not. That makes the actor of a pushed change
-enforceable: `PushPull` refuses (`InvalidArgument`, `ErrInvalidChangeActor`) a
-not-yet-acknowledged change whose actor the client does not own
-(`ClientInfo.IsOwnActor`), so the pull dedup and the `DocChanged` publisher
-can trust a stored change's actor. See offline-resumable-attach.md, "Pushed
-change actors must be owned by the pusher", for the legacy analysis.
-
-The gate is bounded by how the acting client is identified, which this design
-does not change: every document RPC resolves the client from the request's
-`client_id` and `clients.FindActiveClientInfo` only checks that the row exists
-and is activated, so authentication is project-scoped (API key, optional auth
-webhook) rather than per client. A caller inside the same project can still
-satisfy the ownership predicate for another client, by either identity
-`IsOwnActor` accepts: it can present that client's session id if it learns one,
-or -- for the `StableActorID` branch -- activate with that client's key, which
-is an application-chosen name the system has never treated as a secret and
-which `types.DeriveActorID` turns into the same actor every time. Neither is
-new: such a caller could already act as that client everywhere else in the API,
-since `client_id` is what every document RPC resolves the actor from. Per
-client credential binding is a protocol-level change and a separate task; the
-gate still removes the cross-client actor forgery that needed no client
-identity at all.
-
-### Security boundary
-
-Stating the above as a boundary, because `validateChangeActors` reads like an
-authorization control and is not one:
-
-- **What it enforces.** For a not-yet-acknowledged change in a pushed pack, the
-  change's actor must be one of the two identities of the `client_id` the
-  request carries. It removes the variant of actor forgery that needs no
-  knowledge of the victim at all: stamping an actor that matches neither of the
-  pusher's own identities.
-- **What it does not enforce.** It is satisfied by whoever presents the
-  victim's `client_id`, because `clients.FindActiveClientInfo` resolves that id
-  without any credential check and the surrounding auth is project-scoped. It
-  is equally satisfied by a caller acting under a `client_id` of its own:
-  `StableActorID` is `types.DeriveActorID(projectID, clientKey)` and
-  `ActivateClient` mints a new row for a client key already in use, so
-  activating under the victim's client key yields a client that genuinely owns
-  the victim's stable actor. The client key is an identifier, not a secret, and
-  resuming one actor across sessions is the whole point of the derivation.
-  Co-tenants of a project are therefore not isolated from each other by this
-  gate, exactly as they are not isolated by any other document RPC. The same
-  two bypasses apply to the Watch `actor_id` check (`ErrActorMismatch`), which
-  compares the declared actor against the same `StableActorID`. Closing either
-  needs per-client credentials at the protocol level: a separate task. Until
-  then neither guard states otherwise in its status code: both are
-  `InvalidArgument` -- a request whose two self-asserted fields disagree --
-  and `ErrActorMismatch` is deliberately not `PermissionDenied`, which would
-  advertise an authorization boundary that is not there and would reach the
-  SDKs' auth-error path (see watch-access-revalidation.md).
-- **What it does not cover.** The pack's other client-supplied identity input,
-  `ChangePack.VersionVector`, is stored verbatim by `UpdateMinVersionVector`
-  and fed to min-VV and GC. Ownership is the wrong predicate for it -- a
-  version vector legitimately carries other actors' lamports -- so membership
-  is left unchecked: nothing verifies that an entry names an actor that ever
-  touched the document. Two things bound the exposure, and only two:
-  - **Size.** `validateVersionVectorSize` caps the entry count
-    (`maxVersionVectorEntries`). Without it the count is limited only by the
-    16 MiB pack, and every entry is persisted in the pusher's
-    `VersionVectorInfo` row, held in the per-document `vectorCache` and
-    unioned into the minVV returned to every other client of that document.
-  - **Direction, partly.** The vector is stored under the pusher's own row,
-    and `MinVersionVector` treats an actor missing from any row as `0`, so a
-    forged lamport generally drags the minimum down -- stalling tombstone GC
-    on documents the pusher is attached to -- rather than raising it past
-    another client's own row. This assumes every participant has a
-    `VersionVectorInfo` row to clamp against; clients attached with
-    `DisableGC` have none (`updateVersionVector` skips them, see
-    `disable-gc-on-attach.md`), so their position does not hold the minimum
-    back. That is what the GC opt-out already asks for -- tombstones need not
-    be kept alive for them -- but it means the clamp argument covers
-    GC-tracked clients only.
 
 ### Risks and Mitigation
 
 | Risk | Mitigation |
 |------|------------|
-| Undo of a pre-attach edit is no longer possible after attach (user-visible behavior change) | Documented on `Document.ReissueActor`. Before this change such an undo already produced Edits whose node IDs the server did not know |
+| Undo of a pre-attach edit is no longer possible after attach | A successful attach already clears the history; the re-issue moves that point before the RPC, so a failed attach loses it too |
+| A lost `AttachDocument` response, retried under another client, pushes the pre-attach changes twice | Pre-existing (the old path did the same, with colliding tickets); now the two copies are distinct elements |
 | A pre-attach Undo that restored a removed Text pushes that Text empty | Existing wire gap (`toJSONElementSimple` sends no Text content); the local root keeps the content. Fixing the encoding is a protocol change for a separate task |
-| An undo change keeps operations that were skipped locally; the replay would run them | `executeUndoRedo` now buffers only the operations that executed, so the change carries nothing the undo declined to apply -- on the replay or on the wire |
+| An undo change keeps operations that were skipped locally; the replay runs them | The rebuilt root then matches what the server builds from the same change, not the pre-attach view. Predates this design |
 | Replay of a large pre-attach document costs time at attach | One replay of the local changes, the same work the server does on push |
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |
-| A document several clients fill before attaching now stores one element per client instead of one shared element, so it is larger and can hit `MaxSizePerDocument` (`packs.CheckLiveSize`, `pushPack`'s size gate) where it previously fit | Intended: the collapse it replaces was two distinct elements silently merged onto one `createdAt`, which lost one client's edits. The gate now measures what the document actually holds. Raise `MaxSizePerDocument` for projects that relied on the merge; `test/bench/grpc_bench_test.go` cut its pre-attach payload for this reason |
+| `SetActor`, the fallback, rewrites shared change values in place | Pre-existing; the re-issue path replaces every structure instead, and no caller deep copies a document holding local changes |
+| The server trusts a pushed change's actor | Out of scope, tracked in #2114 |
 
 ### Design Decisions
 
@@ -272,6 +173,14 @@ authorization control and is not one:
 | Rewrite through protobuf | One generic walk over the wire format reaches every ticket; a per-operation rewrite would have to track every crdt type's ticket fields |
 | Rebuild the root by replay | Matches the server by construction; rewriting the root in place means re-keying every index |
 
+## Out of Scope
+
+The server does not bind a pushed change's actor to the authenticated client,
+so a forged actor can make another client drop a change on pull. Every change
+this design pushes carries the client's own actor, which makes a push-side
+check possible, but the client identities such a check would rely on
+(`client_id`, `StableActorID`) are not credentials. Tracked in #2114.
+
 ## Alternatives Considered
 
 | Alternative | Why not |
@@ -279,6 +188,7 @@ authorization control and is not one:
 | Rewrite tickets in place in the root and the operations | Touches `elementMap`, GC maps, RGA split and tree node indexes and every operation type; easy to miss one, and a miss is silent divergence |
 | Reject a pre-attach edit, or require attach before edit | Breaks the documented offline-first usage of both SDKs |
 | Server-side de-duplication of colliding `createdAt`s | The server cannot tell which client's later operations target which element |
+| Roll the re-issue back when the attach fails | Unsafe when the outcome is unknown (see "A failed attach"), and it only preserves history a successful attach clears anyway |
 
 ## Tasks
 

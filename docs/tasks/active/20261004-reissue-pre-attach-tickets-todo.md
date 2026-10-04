@@ -65,6 +65,31 @@ so `createdAt` is unique per client. Design:
       -benchtime 10x`, `make verify`.
 - [x] PR to `main`, `@claude loop` comment.
 
+## Re-scope (after loop round 13)
+
+The agent loop grew this PR well past its intent (attach rollback,
+pushed-marks, minted-actor tracking, server-side actor ownership, a
+version-vector size cap, HLL registers on the wire, undo-change pruning,
+an error-code change). Per the maintainer's call on the sibling #2112,
+it is narrowed back to the re-issue:
+
+- [x] Keep: `ReissueActor`, `converter.ReissueOperations`, replay
+      rebuild, version-vector re-key, history clear, design doc, tests.
+- [x] Fix in the core: the `absorbedRemote` guard (kept by `DeepCopy`);
+      copy-on-write online-client re-key; actor-keyed protobuf map
+      entries renamed by the walk; no rollback (a re-issued document is
+      valid as is, and a lost response makes a rollback unsafe).
+- [x] Tests: failure leaves the document untouched; no write into a deep
+      copy; DeepCopy keeps the guard; online clients; positive
+      counterparts to the zero-ticket checks; converter unit tests; the
+      `Client.Attach` wiring (failed attach keeps the re-issued state, a
+      retry under another client re-issues again).
+- [x] Revert to `main`: all `server/` changes, the proto/HLL change,
+      `executeUndoRedo` pruning, the bench payload change, the
+      offline-resumable-attach doc edits.
+- [x] Out of scope, filed: #2114 (server does not bind a pushed change's
+      actor to the authenticated client).
+
 ## JS follow-up (yorkie-js-sdk)
 
 `Document.setActor` in `packages/sdk/src/document/document.ts` has the

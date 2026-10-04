@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -42,8 +43,7 @@ func TestPreAttachEdits(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestKey(t)
 
-		var last string
-		var written []string
+		var last, lastText string
 		for round := range 3 {
 			clients := activeClients(t, 2)
 			docs := []*document.Document{document.New(docKey), document.New(docKey)}
@@ -51,7 +51,6 @@ func TestPreAttachEdits(t *testing.T) {
 				fmt.Sprintf("round%d-c1", round),
 				fmt.Sprintf("round%d-c2", round),
 			}
-			written = append(written, contents...)
 			for i, doc := range docs {
 				require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 					r.SetNewText("k1").Edit(0, 0, contents[i])
@@ -72,10 +71,15 @@ func TestPreAttachEdits(t *testing.T) {
 			})
 
 			// One whole client's write wins every key, never a mix or nothing.
-			// Every pre-attach write has lamport 1, so an earlier round's
-			// value may still win by the actor tie-break.
+			// Every pre-attach write has lamport 1, so the previous round's
+			// winner may still win by the actor tie-break -- but nothing older.
 			text := docs[0].Root().GetText("k1").String()
-			assert.Contains(t, written, text, docs[0].Marshal())
+			candidates := append([]string{}, contents...)
+			if lastText != "" {
+				candidates = append(candidates, lastText)
+			}
+			assert.Contains(t, candidates, text, docs[0].Marshal())
+			lastText = text
 			assert.Equal(t, fmt.Sprintf(`{"by":"%s"}`, text), docs[0].Root().GetObject("o").Marshal())
 			last = docs[0].Marshal()
 
@@ -87,5 +91,39 @@ func TestPreAttachEdits(t *testing.T) {
 		observed := document.New(docKey)
 		require.NoError(t, observers[0].Attach(ctx, observed))
 		assert.Equal(t, last, observed.Marshal())
+	})
+
+	t.Run("attach re-issues pre-attach tickets to the client's actor", func(t *testing.T) {
+		ctx := context.Background()
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
+
+		doc := document.New(helper.TestKey(t))
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("k1").Edit(0, 0, "abc")
+			return nil
+		}))
+		require.Equal(t, time.InitialActorID, doc.RootObject().Get("k1").CreatedAt().ActorID())
+		require.True(t, doc.CanUndo())
+
+		// A failed attach keeps the re-issued state: the document is valid as
+		// is, and the outcome of a failed RPC is not always known.
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+		assert.Error(t, clients[0].Attach(canceled, doc))
+		assert.Equal(t, clients[0].ID(), doc.ActorID())
+		assert.Equal(t, clients[0].ID(), doc.RootObject().Get("k1").CreatedAt().ActorID())
+		assert.False(t, doc.CanUndo())
+
+		// A retry under another client re-issues from that actor to its own.
+		require.NoError(t, clients[1].Attach(ctx, doc))
+		assert.Equal(t, clients[1].ID(), doc.ActorID())
+		assert.Equal(t, clients[1].ID(), doc.RootObject().Get("k1").CreatedAt().ActorID())
+		assert.Equal(t, `{"k1":[{"val":"abc"}]}`, doc.Marshal())
+
+		observer := document.New(doc.Key())
+		require.NoError(t, clients[0].Attach(ctx, observer))
+		assert.Equal(t, doc.Marshal(), observer.Marshal())
+		assert.Equal(t, clients[1].ID(), observer.RootObject().Get("k1").CreatedAt().ActorID())
 	})
 }

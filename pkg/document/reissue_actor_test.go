@@ -163,13 +163,11 @@ func serverBuild(t *testing.T, docs ...*document.Document) *document.InternalDoc
 	return built
 }
 
-// reissueActor re-issues the document's tickets and discards the rollback the
-// client runs when the attach these tickets were minted for fails.
+// reissueActor re-issues the document's tickets as Client.Attach does.
 func reissueActor(t *testing.T, doc *document.Document, actor time.ActorID) {
 	t.Helper()
 
-	_, err := doc.ReissueActor(actor)
-	require.NoError(t, err)
+	require.NoError(t, doc.ReissueActor(actor))
 }
 
 // localActorsOf returns the actor of every local change the document would
@@ -245,6 +243,7 @@ func TestReissueActor(t *testing.T) {
 			return nil
 		}))
 		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+		assert.NotZero(t, actorsOf(t, doc)[actorA])
 
 		built := serverBuild(t, doc)
 		assert.Equal(t, doc.Marshal(), built.Marshal())
@@ -330,168 +329,6 @@ func TestReissueActor(t *testing.T) {
 		assert.NotZero(t, actorsOf(t, copiedDoc)[time.InitialActorID])
 	})
 
-	t.Run("the rollback restores what a failed attach rewrote", func(t *testing.T) {
-		doc := document.New(helper.TestKey(t))
-		fillEverything(t, doc)
-		before, size := doc.Marshal(), doc.DocSize()
-		require.True(t, doc.CanUndo())
-
-		rollback, err := doc.ReissueActor(actorA)
-		require.NoError(t, err)
-		require.Zero(t, actorsOf(t, doc)[time.InitialActorID])
-		require.False(t, doc.CanUndo())
-
-		rollback()
-
-		assert.Equal(t, before, doc.Marshal())
-		assert.Equal(t, size, doc.DocSize())
-		assert.Equal(t, time.InitialActorID, doc.ActorID())
-		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
-		assert.Zero(t, actorsOf(t, doc)[actorA])
-		assert.True(t, doc.CanUndo())
-		assert.NoError(t, doc.Undo())
-	})
-
-	t.Run("the rollback carries a change made during the attach back with it", func(t *testing.T) {
-		doc := document.New(helper.TestKey(t))
-		fillEverything(t, doc)
-
-		rollback, err := doc.ReissueActor(actorA)
-		require.NoError(t, err)
-
-		// What the attach itself does between the re-issue and the failure:
-		// attachDocument initializes presence, and an application goroutine
-		// may call Update while the round trip is in flight. Neither is in any
-		// snapshot taken at re-issue time.
-		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-			r.SetString("duringAttach", "v")
-			p.Set("cursor", "2")
-			return nil
-		}))
-		during := doc.Marshal()
-
-		rollback()
-
-		assert.Equal(t, during, doc.Marshal())
-		assert.Equal(t, time.InitialActorID, doc.ActorID())
-		assert.Zero(t, actorsOf(t, doc)[actorA])
-		for _, actor := range localActorsOf(t, doc) {
-			assert.Equal(t, time.InitialActorID, actor)
-		}
-	})
-
-	t.Run("the rollback declines once the attach response has been applied", func(t *testing.T) {
-		doc := document.New(helper.TestKey(t))
-		fillEverything(t, doc)
-
-		rollback, err := doc.ReissueActor(actorA)
-		require.NoError(t, err)
-		require.Zero(t, actorsOf(t, doc)[time.InitialActorID])
-
-		// The tail of attachDocument: the server acknowledges the pushed
-		// changes and the document absorbs the attach pack. A concurrent
-		// Deactivate then takes the attachment away, and the client puts the
-		// status back to Detached -- so status says nothing about whether the
-		// response was applied.
-		pack := doc.CreateChangePack()
-		require.NoError(t, doc.ApplyChangePack(change.NewPack(
-			doc.Key(), pack.Checkpoint.NextServerSeq(1), nil, nil, nil,
-		)))
-		doc.SetStatus(document.StatusDetached)
-		applied := doc.Marshal()
-
-		rollback()
-
-		assert.Equal(t, applied, doc.Marshal())
-		assert.Equal(t, actorA, doc.ActorID())
-		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
-	})
-
-	t.Run("a pushed but failed attach is never re-issued again", func(t *testing.T) {
-		// The window neverSynced cannot see on its own: AttachDocument
-		// returned, so the server stored the re-issued pack, and the attach
-		// then failed before the response was applied. The checkpoint is still
-		// initial, the status still Detached and nothing absorbed, so only the
-		// push mark keeps the document away from a second re-issue -- the
-		// rollback's and a later attach's alike.
-		doc := document.New(helper.TestKey(t))
-		fillEverything(t, doc)
-
-		rollback, err := doc.ReissueActor(actorA)
-		require.NoError(t, err)
-		stored := serverBuild(t, doc)
-		require.Zero(t, actorsOf(t, doc)[time.InitialActorID])
-
-		doc.MarkPushed()
-		rollback()
-
-		assert.Equal(t, actorA, doc.ActorID())
-		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
-
-		// The retry -- a reactivated client, or another one taking the document
-		// over -- attaches under a second actor. Only the change IDs may move:
-		// the elements the server holds keep the tickets it stored them under.
-		reissueActor(t, doc, actorB)
-
-		assert.Equal(t, actorB, doc.ActorID())
-		assert.NotZero(t, actorsOf(t, doc)[actorA])
-		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
-		for _, actor := range localActorsOf(t, doc) {
-			assert.Equal(t, actorB, actor)
-		}
-
-		// The server's replica, built from the first push, still names every
-		// element the way the retried document does.
-		assert.Equal(t, rootBytes(t, stored), rootBytes(t, doc.InternalDocumentForTest()))
-	})
-
-	t.Run("the rollback of the fallback branch restores a never-synced actor", func(t *testing.T) {
-		// A document without local changes takes the SetActor branch.
-		empty := document.New(helper.TestKey(t))
-		rollback, err := empty.ReissueActor(actorA)
-		require.NoError(t, err)
-		require.Equal(t, actorA, empty.ActorID())
-
-		rollback()
-		assert.Equal(t, time.InitialActorID, empty.ActorID())
-	})
-
-	// A document that has synced before cannot tell whether the failed attach
-	// already applied the server's pack: the checkpoint moved long ago. The
-	// rollback must then decline, or it would revert the actor of a document
-	// that may be live, and its next changes would carry the old actor.
-	t.Run("the rollback of the fallback branch declines once synced", func(t *testing.T) {
-		doc := document.New(helper.TestKey(t))
-		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-			r.SetString("k", "v")
-			return nil
-		}))
-		pack := doc.CreateChangePack()
-		require.NoError(t, doc.ApplyChangePack(change.NewPack(
-			doc.Key(), pack.Checkpoint.NextServerSeq(1), nil, nil, nil,
-		)))
-		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-			r.SetString("late", "v")
-			return nil
-		}))
-		undoDepth := doc.CanUndo()
-
-		rollback, err := doc.ReissueActor(actorA)
-		require.NoError(t, err)
-		require.Equal(t, actorA, doc.ActorID())
-		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-			r.SetString("during", "v")
-			return nil
-		}))
-
-		rollback()
-
-		assert.Equal(t, actorA, doc.ActorID())
-		assert.Equal(t, undoDepth, doc.CanUndo())
-		assert.NoError(t, doc.Undo())
-		assert.NotContains(t, doc.Marshal(), "during")
-	})
-
 	t.Run("an empty document only takes the actor", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		reissueActor(t, doc, actorA)
@@ -528,6 +365,7 @@ func TestReissueActor(t *testing.T) {
 			reissueActor(t, doc, actorA)
 			assert.Equal(t, before, doc.Marshal())
 			assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+			assert.NotZero(t, actorsOf(t, doc)[actorA])
 		}
 	})
 
@@ -562,6 +400,7 @@ func TestReissueActor(t *testing.T) {
 		assert.Equal(t, size, doc.DocSize())
 		assert.Equal(t, garbage, doc.GarbageLen())
 		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
+		assert.NotZero(t, actorsOf(t, doc)[actorA])
 		assert.Equal(t, doc.Marshal(), serverBuild(t, doc).Marshal())
 	})
 
@@ -601,49 +440,15 @@ func TestReissueActor(t *testing.T) {
 		assert.Equal(t, built.Marshal(), doc2.InternalDocumentForTest().Marshal())
 	})
 
-	t.Run("a document renamed by the public SetActor still re-issues", func(t *testing.T) {
+	t.Run("an online client entry follows the re-issued actor", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		fillEverything(t, doc)
+		doc.InternalDocumentForTest().AddOnlineClient(time.InitialActorID.String())
 
-		// change.ID.SetActor does not rewrite the version vector, so without
-		// SetActor moving the never-synced document's own entry onto the new
-		// actor, neverSynced would read the stale entry as someone else's and
-		// skip the re-issue below for good.
-		doc.SetActor(actorA)
-		vector := doc.VersionVector()
-		_, hasInitial := vector.Get(time.InitialActorID)
-		assert.False(t, hasInitial, vector.Marshal())
-		assert.Equal(t, doc.InternalDocumentForTest().Lamport(), vector.VersionOf(actorA))
-
-		before := doc.Marshal()
-		reissueActor(t, doc, actorB)
-
-		actors := actorsOf(t, doc)
-		assert.Zero(t, actors[time.InitialActorID], "%v", actors)
-		assert.Zero(t, actors[actorA], "%v", actors)
-		assert.NotZero(t, actors[actorB])
-		assert.Equal(t, before, doc.Marshal())
-		assert.Equal(t, doc.Marshal(), serverBuild(t, doc).Marshal())
-	})
-
-	t.Run("a document renamed to the attaching actor still re-issues", func(t *testing.T) {
-		doc := document.New(helper.TestKey(t))
-		fillEverything(t, doc)
-
-		// The caller renamed the document through the public SetActor to the
-		// very actor it then attaches under. changeID already names actorA, so
-		// a `prev == actor` early-out would skip the sweep and push a root full
-		// of tickets still naming time.InitialActorID.
-		doc.SetActor(actorA)
-		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
-
-		before := doc.Marshal()
 		reissueActor(t, doc, actorA)
 
-		actors := actorsOf(t, doc)
-		assert.Zero(t, actors[time.InitialActorID], "%v", actors)
-		assert.NotZero(t, actors[actorA])
-		assert.Equal(t, before, doc.Marshal())
-		assert.Equal(t, doc.Marshal(), serverBuild(t, doc).Marshal())
+		online := doc.InternalDocumentForTest().Presences()
+		assert.Contains(t, online, actorA.String())
+		assert.NotContains(t, online, time.InitialActorID.String())
 	})
 }

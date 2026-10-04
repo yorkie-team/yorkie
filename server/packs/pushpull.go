@@ -119,25 +119,6 @@ func PushPull(
 		return nil, err
 	}
 
-	// Refuse a change stamped with an actor the client does not own before
-	// anything is stored. Every consumer of a stored change's actor -- the
-	// DocChanged publisher, the pull dedup in pullChangeInfos, VV and GC
-	// bookkeeping -- reads it as "this client's own change".
-	if err := validateChangeActors(clientInfo, clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
-		be.Metrics.AddPushPullErrors(hostname, project, 1)
-		return nil, err
-	}
-
-	// Bound the one client-supplied input whose membership cannot be checked.
-	// The vector is persisted in this client's VersionVectorInfo row, cached
-	// per document and unioned into the minVV every other client receives, so
-	// an unbounded entry count is an amplification regardless of whose
-	// lamports it names.
-	if err := validateVersionVectorSize(reqPack); err != nil {
-		be.Metrics.AddPushPullErrors(hostname, project, 1)
-		return nil, err
-	}
-
 	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
 	// changes collection, regardless of which SDK version sent it.
@@ -195,10 +176,31 @@ func PushPull(
 	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
-			publisher, err := publisherActor(clientInfo, pushedChanges)
+			// Publish under the actor of an accepted change so the pubsub
+			// self-echo filter (doc_subscription.go drops events whose Actor
+			// equals the subscriber) recognizes the author's own event. Watch
+			// subscribes under that same actor (WatchRequest.actor_id,
+			// yorkie_server.go Watch): new SDKs under the stable actor, old SDKs
+			// under the session id. Read it from an accepted change
+			// (pushedChanges), not reqPack.Changes[0], which may be an
+			// already-acknowledged change with a different actor in a malformed
+			// pack. A remove-only pack has no accepted change, so fall back to the
+			// session id; the client is detaching (its Watch is torn down), so a
+			// missed self-echo is moot. OwnActorID() is not used for the fallback:
+			// ActivateClient sets StableActorID for every client, so it would
+			// return the stable actor even for old SDKs that subscribe under the
+			// session id.
+			publisher, err := clientInfo.ID.ToActorID()
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
+			}
+			if len(pushedChanges) > 0 {
+				publisher, err = pushedChanges[0].ActorID.ToActorID()
+				if err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
 			}
 
 			// TODO(hackerwins): For now, we are publishing the event to pubsub and
@@ -235,140 +237,6 @@ func PushPull(
 	}
 
 	return resPack, nil
-}
-
-// publisherActor resolves the actor the DocChanged event is published under.
-//
-// Publish under the actor of an accepted change so the pubsub self-echo filter
-// (doc_subscription.go drops events whose Actor equals the subscriber)
-// recognizes the author's own event. Watch subscribes under that same actor
-// (WatchRequest.actor_id, yorkie_server.go Watch): new SDKs under the stable
-// actor, old SDKs under the session id. Read it from an accepted change
-// (pushedChanges), not reqPack.Changes[0], which may be an already-acknowledged
-// change. validateChangeActors has already refused any pushed change whose
-// actor the client does not own, so the actor read here is the client's own.
-//
-// A remove-only pack has no accepted change, so fall back to the session id;
-// the client is detaching (its Watch is torn down), so a missed self-echo is
-// moot. OwnActorID() is not used for the fallback: ActivateClient sets
-// StableActorID for every client, so it would return the stable actor even for
-// old SDKs that subscribe under the session id.
-func publisherActor(
-	clientInfo *database.ClientInfo,
-	pushedChanges []*database.ChangeInfo,
-) (time.ActorID, error) {
-	if len(pushedChanges) > 0 {
-		return pushedChanges[0].ActorID.ToActorID()
-	}
-	return clientInfo.ID.ToActorID()
-}
-
-// validateChangeActors refuses a pack carrying a not-yet-pushed change whose
-// actor the client does not own (ClientInfo.IsOwnActor: its session id or its
-// StableActorID). A change's actor is client-supplied, and the server reads a
-// stored change's actor as its author: pullChangeInfos skips a change whose
-// actor is the puller's own, and the DocChanged publisher and the subscription
-// self-echo filter key on it too. Honoring a forged actor would let one client
-// make another silently drop a change it never authored.
-//
-// Scope, deliberately narrow on two axes:
-//
-//   - It covers only the actor stamped into a stored change. The other
-//     client-supplied identity input in the same pack, reqPack.VersionVector,
-//     is stored verbatim (UpdateMinVersionVector, below) and its membership is
-//     not checked: a version vector legitimately carries other actors'
-//     lamports, so ownership is the wrong predicate for it. Only two things
-//     bound it. (a) Size: validateVersionVectorSize caps the entry count, so
-//     a pack cannot plant an arbitrarily wide vector in the pusher's
-//     VersionVectorInfo row, the per-document vectorCache and every later
-//     minVV. (b) Direction, and only partly: MinVersionVector takes 0 for an
-//     actor missing from any row, so a forged lamport generally drags the
-//     minimum down (stalling tombstone GC on documents this client is
-//     attached to) rather than up. That direction argument assumes every
-//     participant has a VersionVectorInfo row to clamp against, which clients
-//     attached with DisableGC do not have (updateVersionVector skips them by
-//     design -- see docs/design/disable-gc-on-attach.md); their position
-//     therefore does not hold the minimum back, as the GC opt-out already
-//     intends. Nothing checks that an entry belongs to an actor that ever
-//     touched the document.
-//   - It is a consistency guard inside the project's trust boundary, not an
-//     authentication boundary. clientInfo is resolved from the request's
-//     self-asserted client_id (clients.FindActiveClientInfo does a lookup plus
-//     EnsureActivated, no credential check) and the surrounding auth is
-//     project-scoped, so a caller already holding the project's API key can
-//     satisfy this check by presenting the victim's client_id. It can also
-//     satisfy it under a client_id of its own: StableActorID is
-//     types.DeriveActorID(projectID, clientKey) and ActivateClient mints a row
-//     for a key already in use, so activating under the victim's client key --
-//     an identifier, not a secret -- yields a client that genuinely owns the
-//     victim's stable actor. Closing either needs per-client credentials,
-//     which Yorkie does not have today; see
-//     docs/design/pre-attach-ticket-reissue.md ("Security boundary"). What
-//     this guard removes is the narrower variant that needs no knowledge of
-//     the victim at all: stamping an actor that neither of the pusher's own
-//     identities matches.
-//
-// Every legitimate pusher stamps its own actor. Both SDKs rewrite the change
-// ID's actor to the client's actor on attach -- SetActor did so before the
-// pre-attach re-issue existed -- so even a document edited before attach
-// pushes under the client's actor, never the initial one. The server's own
-// pushes (admin document update, revision restore) go through PushPull with
-// database.SystemClientInfo, whose ID is the initial actor, so they stay
-// accepted. Compaction writes changes directly and never reaches here.
-// Changes already acknowledged (clientSeq at or below the checkpoint) are not
-// stored again and are not checked.
-func validateChangeActors(
-	clientInfo *database.ClientInfo,
-	cpBeforePush change.Checkpoint,
-	reqPack *change.Pack,
-) error {
-	for _, cn := range reqPack.Changes {
-		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
-			continue
-		}
-		if !clientInfo.IsOwnActor(types.IDFromActorID(cn.ID().ActorID())) {
-			return connect.NewError(
-				connect.CodeInvalidArgument,
-				errors.InvalidArgument(
-					"change actor is not owned by the client",
-				).WithCode("ErrInvalidChangeActor"),
-			)
-		}
-	}
-	return nil
-}
-
-// maxVersionVectorEntries caps the number of entries a pushed
-// ChangePack.VersionVector may carry.
-//
-// A legitimate vector holds one lamport per actor that has written to the
-// document and has not been pruned (nothing prunes detached actors today, see
-// the NOTE in UpdateMinVersionVector), so the ceiling has to sit far above any
-// real document: a document with this many distinct lifetime writers is
-// already pathological, because the vector itself then travels on every sync.
-// The cap exists for the forged case, where entry count is otherwise
-// unbounded by anything but the 16 MiB pack limit and each entry is persisted
-// in the pusher's VersionVectorInfo row, cached in the per-document
-// vectorCache, and unioned into the minVV returned to every other client.
-const maxVersionVectorEntries = 10000
-
-// validateVersionVectorSize refuses a pack whose version vector carries more
-// entries than maxVersionVectorEntries. Membership is not checked -- a version
-// vector legitimately carries other actors' lamports -- so size is the only
-// predicate available here; see validateChangeActors for the full scope.
-func validateVersionVectorSize(reqPack *change.Pack) error {
-	if len(reqPack.VersionVector) <= maxVersionVectorEntries {
-		return nil
-	}
-
-	return connect.NewError(
-		connect.CodeInvalidArgument,
-		errors.InvalidArgument(fmt.Sprintf(
-			"version vector has %d entries, exceeding the limit %d",
-			len(reqPack.VersionVector),
-			maxVersionVectorEntries,
-		)).WithCode("ErrVersionVectorTooLarge"),
-	)
 }
 
 func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {

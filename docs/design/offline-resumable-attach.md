@@ -142,7 +142,7 @@ actor existed leave it empty, and an empty value must never match.
 |------|------|----------|
 | `pushpull.go` `pullChangeInfos` dedup (`clientInfo.ID == pulledChange.ActorID`) | Self-echo dedup — **the single most important switch** | `clientInfo.IsOwnActor(pulledChange.ActorID)` |
 | `pushpull.go` `DisableGC` VV truncation key | Size-1 VV keyed on the client's own actor so its lamport clock advances | `clientInfo.OwnActorID()` (StableActorID when present, else session id) |
-| `pushpull.go` pubsub publisher actor | DocChanged event author for self-echo filtering | the first accepted change's actor (owned, enforced by `validateChangeActors`), else `clientInfo.ID` (see below) |
+| `pushpull.go` pubsub publisher actor | DocChanged event author for self-echo filtering | **stays** on `clientInfo.ID` (see below) |
 | `client_info.go` `VersionVectorInfo.ClientID`; `memory/database.go`, `mongo/client.go` VV upsert / delete-on-detach / vector cache | VV **row identity** | **stays** on `clientInfo.ID` (see VV keying below) |
 
 Sites that **stay** on the session `_id`: all `IDFromActorID` RPC row lookups;
@@ -170,44 +170,14 @@ GC-safe precisely because dedup now uses compare-both: the actor stamped into a
 change is recognized as the same client's own by the predicate that governs
 dedup, while its VV contribution is dropped atomically with the row on detach.
 
-##### Pushed change actors must be owned by the pusher
+##### Pubsub publisher stays on the session id
 
-`Watch` subscribes under the actor in `WatchRequest.actor_id` — the stable actor
-for a new SDK, the session id for an old one — and the pubsub self-echo filter
-drops events whose `Actor` equals the subscriber. The `pullChangeInfos` dedup
-reads a stored change's actor the same way: a change whose actor `IsOwnActor`
-matches is the puller's own and is skipped. Both consumers therefore trust the
-actor stamped into a stored change to name its author.
-
-A change's `ActorID` is client-supplied, so `PushPull` enforces that at the
-door: `validateChangeActors` (`pushpull.go`) refuses with `InvalidArgument`
-(`ErrInvalidChangeActor`) any not-yet-acknowledged change whose actor the
-pushing client does not own — its session id or its `StableActorID` — before
-anything is stored. Without it a client could stamp a **victim's** actor and
-a low `ClientSeq` into a change, and the victim would drop that change on pull
-as its own (permanent divergence) and also miss its `DocChanged` event.
-
-Every legitimate pusher already stamps its own actor. Both SDKs rewrite the
-change ID's actor to the client's actor on attach (`SetActor`; since the
-pre-attach ticket re-issue, every pre-attach ticket too), old SDKs under the
-session id, new ones under the stable actor. The server's own pushes (admin
-document update, revision restore) run with `database.SystemClientInfo`, whose
-ID is the initial actor they stamp; the cluster presence-clear stamps the
-client's session id; compaction writes changes directly. An initial-actor
-change from a regular client is refused.
-
-The publisher then reads the actor of the first **accepted** change, not
-`reqPack.Changes[0]` (which may be an already-acknowledged change), and falls
-back to `clientInfo.ID` for a remove-only pack, where the client is detaching
-and a missed self-echo is moot. `OwnActorID()` is deliberately not the
-fallback — `ActivateClient` sets `StableActorID` for every client, so it would
-return the stable actor even for an old SDK subscribed under the session id.
-
-Out of scope: the acting client is resolved from the request's `client_id`,
-and authentication is project-scoped (API key, optional auth webhook), not
-per client. A caller in the same project who learns another client's session
-id can act as that client outright; the ownership check binds a change's actor
-to the client the request names, not to a credential.
+The DocChanged publisher stays on `clientInfo.ID`. `Watch` subscribes with the
+wire `clientId` (the session id), and the pubsub self-echo filter drops events
+whose `Actor` equals the subscriber. Keying the publisher on the stable actor
+would leak the client's own event back to itself. Even if it did, that self-echo
+would be re-caught by the compare-both dedup on the next pull (no double-apply),
+but avoiding the wasted round trip is why the publisher keys on the session id.
 
 ##### Version-vector transition staleness (accepted)
 

@@ -183,17 +183,11 @@ func BenchmarkRPC(b *testing.B) {
 	})
 
 	b.Run("attach large document", func(b *testing.B) {
-		// Sized so that both clients' text together stays under the default
-		// MaxSizePerDocument (10 MiB), which Text accounts for at two bytes
-		// per character. The two documents share a key but no longer share
-		// their elements: since pre-attach tickets are re-issued to the
-		// attaching client, each client's SetNewText("k1") lands as its own
-		// element on the server rather than collapsing into one.
-		str := strings.Repeat("a", 2600000)
+		str := strings.Repeat("a", 10485000)
 
 		// Each iteration attaches its own document. Reusing one key would
-		// stack every iteration onto the same document, which crosses the
-		// project's MaxSizePerDocument after a few iterations and is then
+		// stack every iteration's 20 MB onto the same document, which crosses
+		// the project's MaxSizePerDocument after a few iterations and is then
 		// refused by the server's size gate.
 		for i := 0; b.Loop(); i++ {
 			func() {

@@ -270,3 +270,19 @@
   enforceable on a sharded `ColClients` (offline-resumable-attach.md,
   "Alternatives"). Four rounds in, the standstill needs a maintainer
   decision on the identity model, not another fixer round.
+
+## Re-scope (after loop round 13)
+
+- Each loop round answered the newest finding with a new mechanism, and
+  each mechanism drew new findings: the rollback needed a pushed-mark,
+  the pushed-mark needed minted-actor tracking, the server-side actor
+  check needed StableActorID to be unforgeable. Thirteen rounds later
+  the PR touched the wire protocol. The fix was to ask what the original
+  intent needed, not what the newest finding wanted.
+- Dropping the rollback removed a whole class of findings at once. A
+  re-issued document is a valid detached document; the rollback only
+  preserved undo history that a successful attach clears anyway, and on
+  a lost response it could not be made safe.
+- The server-side actor binding is real but belongs to the client
+  identity model (`client_id` and `StableActorID` are not credentials):
+  #2114, cross-linked with #2113.

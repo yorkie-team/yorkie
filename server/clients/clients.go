@@ -40,17 +40,9 @@ var (
 	ErrInvalidClientID = errors.InvalidArgument("invalid client id").WithCode("ErrInvalidClientID")
 
 	// ErrActorMismatch is returned when a request declares an actor that is not
-	// an actor of the client row the request names.
-	//
-	// InvalidArgument, not PermissionDenied: the check compares two fields of
-	// the same self-asserted request (actor_id against the StableActorID of
-	// client_id) and so reports an inconsistent request, not a denied one.
-	// Nothing about it is an authorization decision -- see FindActiveClientInfo
-	// for why the client row it reads is not an authenticated principal -- and
-	// a PermissionDenied would advertise a boundary that is not there, as well
-	// as reaching the SDKs' auth-error path, which this is not.
-	ErrActorMismatch = errors.InvalidArgument(
-		"actor id does not match the client it is declared under",
+	// the authenticated client's own stable actor.
+	ErrActorMismatch = errors.PermissionDenied(
+		"actor id does not match the authenticated client",
 	).WithCode("ErrActorMismatch")
 )
 
@@ -219,25 +211,6 @@ func AttachDocument(
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.
-//
-// The returned ClientInfo is a lookup of a self-asserted identity, not an
-// authenticated principal: refKey.ClientID comes from the request and this
-// function only resolves it and checks that the client is activated. The
-// enclosing authorization is project-scoped (API key / auth webhook), so any
-// caller admitted to the project can present any client_id of that project.
-//
-// The info's StableActorID is no stronger: it is
-// types.DeriveActorID(projectID, clientKey) and ActivateClient mints a row for
-// a client key already in use, so a caller that knows a victim's client key --
-// an identifier, not a secret -- can activate its own client row carrying the
-// victim's stable actor. Resuming the same actor across sessions is the point
-// of the derivation, so this collision is by design.
-//
-// Callers must not read the result as proof of who the caller is; guards keyed
-// on it (e.g. packs.validateChangeActors, the Watch actor check in
-// rpc.yorkie_server) are consistency guards within the project, not
-// cross-client authorization. See docs/design/pre-attach-ticket-reissue.md
-// ("Security boundary").
 func FindActiveClientInfo(
 	ctx context.Context,
 	be *backend.Backend,

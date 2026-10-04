@@ -916,21 +916,12 @@ func (*Operation_TreeStyle_) isOperation_Body() {}
 func (*Operation_ArraySet_) isOperation_Body() {}
 
 type JSONElementSimple struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	CreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	MovedAt   *TimeTicket            `protobuf:"bytes,2,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
-	RemovedAt *TimeTicket            `protobuf:"bytes,3,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
-	Type      ValueType              `protobuf:"varint,4,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
-	Value     []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
-	// hll_registers carries the HLL sketch of a dedup counter (a value of type
-	// INTEGER_DEDUP_CNT), which `value` cannot reproduce: `value` is the count
-	// the sketch is derived from, so a counter rebuilt from it alone has an
-	// empty sketch and reads back as zero. Empty for every other value type,
-	// and for a dedup counter whose sketch is still empty -- which is every
-	// counter a Set creates through the JSON API, so only a document seeded
-	// from YSON (compaction, SetYSON) fills it. Mirrors
-	// JSONElement.Counter.hll_registers.
-	HllRegisters  []byte `protobuf:"bytes,6,opt,name=hll_registers,json=hllRegisters,proto3" json:"hll_registers,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	MovedAt       *TimeTicket            `protobuf:"bytes,2,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
+	RemovedAt     *TimeTicket            `protobuf:"bytes,3,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	Type          ValueType              `protobuf:"varint,4,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
+	Value         []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -996,13 +987,6 @@ func (x *JSONElementSimple) GetType() ValueType {
 func (x *JSONElementSimple) GetValue() []byte {
 	if x != nil {
 		return x.Value
-	}
-	return nil
-}
-
-func (x *JSONElementSimple) GetHllRegisters() []byte {
-	if x != nil {
-		return x.HllRegisters
 	}
 	return nil
 }
@@ -5288,7 +5272,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
 	"executedAt\x129\n" +
 	"\frestore_mode\x18\x05 \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreModeB\x06\n" +
-	"\x04body\"\x96\x02\n" +
+	"\x04body\"\xf1\x01\n" +
 	"\x11JSONElementSimple\x124\n" +
 	"\n" +
 	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
@@ -5296,8 +5280,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\fR\x05value\x12#\n" +
-	"\rhll_registers\x18\x06 \x01(\fR\fhllRegisters\"\x98\x10\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\"\x98\x10\n" +
 	"\vJSONElement\x12D\n" +
 	"\vjson_object\x18\x01 \x01(\v2!.yorkie.v1.JSONElement.JSONObjectH\x00R\n" +
 	"jsonObject\x12A\n" +
