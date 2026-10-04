@@ -127,6 +127,59 @@ func TestSet(t *testing.T) {
 		assert.Equal(t, size, root.DocSize())
 		assert.Equal(t, `{"k":"c"}`, root.Object().Marshal())
 	})
+
+	t.Run("a refused loser keeps the descendants only it carries addressable", func(t *testing.T) {
+		// The two copies a pair of concurrent restores carry are DeepCopies
+		// taken at different moments, so one can hold a member the other does
+		// not. The replica that applied the loser first registered that member
+		// and still answers to it after the winner evicted the copy, so the
+		// replica that refuses the loser has to answer to it too -- otherwise a
+		// peer's operation addressed at it resolves on one and hard-fails on
+		// the other, aborting the whole change there and on the server replay.
+		actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+
+		createdAt := time.NewTicket(1, 0, actor)
+		sharedAt := time.NewTicket(1, 1, actor)
+		onlyLoserAt := time.NewTicket(1, 2, actor)
+
+		copyOf := func(withExtra bool) crdt.Element {
+			members := crdt.NewElementRHT()
+			shared, err := crdt.NewPrimitive("s", sharedAt)
+			require.NoError(t, err)
+			members.Set("shared", shared)
+			if withExtra {
+				extra, err := crdt.NewPrimitive("x", onlyLoserAt)
+				require.NoError(t, err)
+				members.Set("extra", extra)
+			}
+			return crdt.NewObject(members, createdAt)
+		}
+
+		// The winner restores the copy taken after "extra" was removed.
+		_, err := operations.NewSet(time.InitialTicket, "k", copyOf(false), time.NewTicket(9, 0, actor)).
+			Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		require.NoError(t, err)
+
+		garbage, size := root.GarbageLen(), root.DocSize()
+
+		// The loser restores the older copy, which still carries "extra".
+		_, err = operations.NewSet(time.InitialTicket, "k", copyOf(true), time.NewTicket(5, 0, actor)).
+			Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		assert.ErrorIs(t, err, operations.ErrOperationSkipped)
+
+		// Nothing the winner answers to was taken over, and the refused copy
+		// costs the document nothing.
+		assert.Equal(t, `{"k":{"shared":"s"}}`, root.Object().Marshal())
+		assert.Equal(t, garbage, root.GarbageLen())
+		assert.Equal(t, size, root.DocSize())
+		assert.Same(t, root.Object().Get("k"), root.FindByCreatedAt(createdAt))
+
+		// ...but the member only the refused copy carries stays addressable.
+		extra := root.FindByCreatedAt(onlyLoserAt)
+		require.NotNil(t, extra, "a descendant only the refused copy carries was dropped")
+		assert.Equal(t, `"x"`, extra.Marshal())
+	})
 }
 
 // TestSetConcurrentRestoresConverge applies two restores of one value under

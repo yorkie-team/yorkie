@@ -119,7 +119,17 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// with an empty ExecutionResult reads as "applied, nothing to undo", and
 	// an undo whose Set is refused would push a redo entry describing work
 	// that never happened (Document.executeUndoRedo).
+	//
+	// What it does leave behind is the copy's elementMap slots. The replicas
+	// that met the two restores in the opposite order keep them -- there this
+	// copy took the key first, was registered, and was then evicted and
+	// released -- and a descendant only this copy carries exists on exactly one
+	// side, so dropping it here would hard-fail an operation addressed at it on
+	// these replicas alone. Root.AdoptRefusedCopy indexes exactly the slots
+	// nothing already answers to, at no cost, which is where the other order
+	// ends up.
 	if !indexed {
+		root.AdoptRefusedCopy(value)
 		return ExecutionResult{}, ErrOperationSkipped
 	}
 

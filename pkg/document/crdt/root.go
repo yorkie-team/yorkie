@@ -498,6 +498,49 @@ func (r *Root) UnregisterRemovedElementPair(owner Container, createdAt *time.Tic
 	return true
 }
 
+// AdoptRefusedCopy indexes the elements of a copy a container refused, for the
+// createdAts nothing already answers to, and charges the document nothing for
+// them.
+//
+// A refused copy (ElementRHT.refusesLoser) sits in no container, so it is
+// unreachable from the tree the moment it is built. The replicas that met the
+// two concurrent restores in the opposite order do not lose it, though: there
+// the copy took the key first and was registered, and the newer restore then
+// evicted and released it (operations.Set.Execute), which leaves every element
+// only that copy carries indexed in elementMap at a zero charge. The two copies
+// are DeepCopies taken at different moments, so a descendant one carries and the
+// other does not exists on exactly one side -- and without this, an operation a
+// peer addressed at that descendant resolves on the replicas that took the other
+// order and hard-fails here, aborting the whole change, permanently so on the
+// server, which replays the same log to rebuild the document and its snapshots.
+//
+// A slot another element already answers to is left alone: that element is the
+// copy that won the key, and taking its slot is the very thing the refusal
+// exists to prevent.
+func (r *Root) AdoptRefusedCopy(elem Element) {
+	adopt := func(e Element) {
+		key := e.CreatedAt().Key()
+		if _, ok := r.elementMap[key]; ok {
+			return
+		}
+		r.elementMap[key] = e
+
+		// A zero charge, exactly as release records one, and for the same
+		// reason: the element is addressable but docSize is not holding it, so
+		// a removal a peer sends into this subtree must not take its size out
+		// of Live a second time.
+		r.sizeInGC[e] = resource.DataSize{}
+	}
+
+	adopt(elem)
+	if container, ok := elem.(Container); ok {
+		container.Descendants(func(e Element, _ Container) bool {
+			adopt(e)
+			return false
+		})
+	}
+}
+
 // release forgets the cost of an element that has become unreachable without
 // being collected, and any collection entry naming it. It leaves elementMap
 // alone: the slot may since have been taken over by a live element restored

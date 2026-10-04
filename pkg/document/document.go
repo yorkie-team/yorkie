@@ -325,6 +325,20 @@ func (d *Document) Update(
 			return err
 		}
 
+		// NOTE(hackerwins): An operation the root declined -- it returned
+		// ErrOperationSkipped, which Change.Execute drops rather than reports --
+		// has already run on the clone, because the json proxy mutated the
+		// clone on the way in. The two are then apart with no error to say so,
+		// so the clone is dropped exactly as it is on the failure path above.
+		//
+		// Deferred rather than invalidated here, for the reason the presence
+		// branch defers it: a clone marked stale while this call is still
+		// running makes a concurrent reader's ensureClone DeepCopy the live
+		// root mid-change.
+		if len(result.Executed) != len(c.Operations()) {
+			defer d.invalidateClone()
+		}
+
 		// NOTE(hackerwins): An ArraySet replaces the element at this
 		// position with a freshly ticketed value. Any other stacked reverse
 		// operation that still references the replaced element's old
