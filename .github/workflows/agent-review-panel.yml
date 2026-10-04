@@ -2252,6 +2252,12 @@ jobs:
         run: |
           {
             printf '%s\n' '<!-- agent-review-paged -->'
+            # THE SWEEP'S RETRY MARKER (scripts/agent/loop-sweep.mjs). Usage windows
+            # reset on their own, so the out-of-run sweep retries this page on a
+            # backoff instead of waiting for a human to notice the window reopened.
+            # A probe can also be refused for a rejected credential; that retry is
+            # bounded and cheap — the probe refuses again before any round is spent.
+            printf '<!-- agent-usage-limit {"v":1,"code":"NO_LIVE_CREDENTIAL","at":"%s"} -->\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             # Two different findings, said differently: the probe TRIED every
             # slot and each refused, or the panel's pool state already showed
             # every slot retired and nothing was tried.
@@ -2262,8 +2268,8 @@ jobs:
             fi
             printf '%s\n\n' '**No fix round was consumed** — this PR'"'"'s budget is untouched.'
             printf 'Credential capacity: %s\n\n' "${CAPACITY:-unknown}"
-            printf '%s\n\n' 'This often clears by itself, because usage windows reset. Comment `@claude rerun` once they have, or register more `CLAUDE_CODE_OAUTH_TOKEN_N` repository secrets so a heavy review round cannot starve the fixer.'
-            printf '%s\n\n' 'The review panel will not run again on this PR by itself, so the `agent-review-*` checks are frozen at their current state and the ready gate will not promote it — a rerun is what restarts the loop.'
+            printf '%s\n\n' 'This often clears by itself, because usage windows reset, and the loop retries automatically (up to three times, backing off from an hour). Comment `@claude rerun` to retry sooner, or register more `CLAUDE_CODE_OAUTH_TOKEN_N` repository secrets so a heavy review round cannot starve the fixer.'
+            printf '%s\n\n' 'The review panel will not run again on this PR until the automatic retry or a rerun, so the `agent-review-*` checks are frozen at their current state and the ready gate will not promote it.'
             printf 'Where to look: [this run](%s) — the `Pick a live fixer credential` step names the slots it found.\n' "$RUN_URL"
           } > "$RUNNER_TEMP/no-credential.md"
           gh pr comment "$PR" --body-file "$RUNNER_TEMP/no-credential.md"
@@ -2948,6 +2954,14 @@ jobs:
 
   stalled:
     needs: [gate, ci, deps, review-panel, promote, fix, fix-report]
+    # WHAT THIS NET CANNOT SEE, by construction: a run cancelled before it got
+    # here. `!cancelled()` below is right for a supersede, but when the cancelled
+    # run is NOT followed by a fresher one — #2108 sat in `agent:reviewing` for
+    # eight hours after a green panel round that way — nothing in any run fires.
+    # agent-sweep.yml (scripts/agent/loop-sweep.mjs) is the out-of-run half: on a
+    # clock, it re-runs CI once for a PR idle in `agent:reviewing` with nothing
+    # running, and pages if that did not move it. It also retries usage-window
+    # pages on a backoff. This job's conditions are unchanged.
     # `!cancelled()`, NOT `always()`. This changed with the concurrency guard at
     # the top of the file: a superseded run is now cancelled mid-flight, and under
     # `always()` this job still fired — a panel cancelled before it started reports

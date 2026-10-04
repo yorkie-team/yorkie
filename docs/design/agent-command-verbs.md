@@ -830,6 +830,38 @@ outside the change.
 - **Lens prompt.** Lenses are told an out-of-diff finding keeps blocking unless
   the judge clears it, and to say in `evidence` how the change causes it.
 
+#### 7.2 An out-of-run sweep restarts what nothing else will
+
+Every net above runs inside the run it watches, and `stalled` is
+`!cancelled()` so a superseded run cannot latch a PR as a fresher round
+starts. That leaves the cancelled run nothing replaced: #2108 sat in
+`agent:reviewing` for eight hours after a green panel round. Usage-window pages
+had the same shape — their only remedy was a human guessing when the window
+reopened and typing `@claude rerun`.
+
+`agent-sweep.yml` runs `loop-sweep.mjs` every 30 minutes from `main`, behind
+`AGENT_PIPELINE_ENABLED`, and takes at most one action per open agent-managed
+PR:
+
+| Action | When | What it does |
+|--------|------|--------------|
+| `usage-retry` | Every latch on the PR is a usage-window page this pipeline wrote (it carries `<!-- agent-usage-limit -->`), and the backoff for this attempt (60, 180, 360 min) has passed | Deletes those pages, drops `agent:blocked`, re-runs the head's newest completed CI run |
+| `usage-exhausted` | Three retries on this head already | Says so once; the page stays |
+| `retrigger` | `agent:reviewing`, still draft, no latch, no run in flight for the head, idle 90 min | Re-runs CI once; the panel reuses the verdicts on the commit |
+| `page` | Still idle 90 min after its retrigger | Writes the paged latch and reconciles the label |
+
+- **Which pages retry.** `fix-outcome.mjs` (fixer died on `USAGE_LIMIT`,
+  `RATE_LIMITED` or `POOL_EXHAUSTED`), the round guard's infra page (same
+  codes, read from the closed `[CODE]` vocabulary), and the panel's
+  no-live-credential page. An auth failure gets no marker. A page of any other
+  kind beside a usage page means a human owns the PR, and nothing is retried.
+- **Bounded by records.** Each action posts a hidden `<!-- agent-sweep -->`
+  marker keyed on the head sha with the workflow token, and the sweep reads
+  them back by author, so a pasted marker cannot spend or refund a retry. A
+  push is a new head and restarts the count.
+- **No budget reset.** Only a maintainer's `@claude rerun` restarts the fix
+  budget, as before; a retried fix round that fails again is charged.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -843,6 +875,7 @@ outside the change.
 | Main changes what an unchanged diff MEANS, and a carry hides it | CI must pass on the carried head before promote, and the third carry in a row is a full review |
 | A fixer forges an execution log to look like an infra failure | The worst it can choose is which page a human reads; the PR is latched either way |
 | The causation judge is steered by text in the diff into calling a caused defect `independent` | It can only act on findings git already placed outside the diff; it is told reviewer-directed text is a reason to answer `caused`; the demoted finding is filed as an issue, not dropped |
+| The sweep re-runs CI on a PR a human is about to take over | It never acts while any latch other than a usage page exists, retries are capped per head, and the stuck path pages after one retrigger |
 | A fixer's skipped reproducer reads as a removal | It is meant to: the record is evidence for the round's `--fixed` claims and disputes, and a skip that pairs with a `--skipped` item is consistent with it. A conditional skip copied into a new test is reported too |
 
 ### Design Decisions
