@@ -187,7 +187,14 @@ export function planSweep({ pr, labels = [], comments = [], runs = [], now = Dat
     const pagedAt = ms(newest.c.created_at);
     const wait = USAGE_BACKOFF_MINUTES[Math.min(tries, USAGE_BACKOFF_MINUTES.length - 1)];
     if (pagedAt === null || now - pagedAt < wait * 60_000) return none(`usage retry ${tries + 1} waits ${wait} min after the page`);
+    // The retry IS the CI re-run. Without a completed run to re-run, clearing
+    // the page would leave a PR unlatched with nothing to move it: the sweep's
+    // own comment cannot trigger `@claude rerun` (agent-rerun.yml ignores bot
+    // comments), so the page and the label stay until there is a run.
+    const run = ciRunToRerun(list);
+    if (!run) return none("usage retry due, but no completed CI run to re-run; keeping the page");
     return {
+      runId: run.id,
       action: "usage-retry",
       reason: `${newest.rec.code}, retry ${tries + 1} of ${MAX_USAGE_RETRIES}`,
       sha,
@@ -256,23 +263,25 @@ function sweepOne(pr, { gh, ghJson, dry }) {
   console.error(`loop-sweep: #${pr.number}: ${plan.action} — ${plan.reason}`);
   if (plan.action === "none" || dry) return;
   const comment = (body) => gh(["pr", "comment", String(pr.number), "--body-file", "-"], body);
-  const rerunCi = () => {
-    const run = ciRunToRerun(runs);
-    if (!run) return false;
-    gh(["api", "-X", "POST", `repos/{owner}/{repo}/actions/runs/${run.id}/rerun`]);
+  const rerunCi = (runId = ciRunToRerun(runs)?.id) => {
+    if (!runId) return false;
+    gh(["api", "-X", "POST", `repos/{owner}/{repo}/actions/runs/${runId}/rerun`]);
     return true;
   };
   const short = plan.sha.slice(0, 9);
   if (plan.action === "usage-retry") {
+    // Re-run FIRST: if it throws, nothing has been cleared and the page stands.
+    // Clearing right after is safe — the re-run's completion, which is what the
+    // panel's gate admits, is minutes away.
+    rerunCi(plan.runId);
     for (const id of plan.clear) {
       try { gh(["api", "-X", "DELETE", `repos/{owner}/{repo}/issues/comments/${id}`]); } catch (e) { console.error(`  could not delete ${id}: ${e.message}`); }
     }
     try { gh(["api", "-X", "DELETE", `repos/{owner}/{repo}/issues/${pr.number}/labels/agent:blocked`]); } catch { /* not set */ }
-    const reran = rerunCi();
     comment(renderSweepComment(
       { kind: "usage-retry", sha: plan.sha, attempt: plan.attempt },
       `🔁 Automatic retry ${plan.attempt} of ${MAX_USAGE_RETRIES} on \`${short}\` after a closed usage window (${plan.reason}). ` +
-        (reran ? "Re-ran CI; the panel re-engages and reuses the verdicts already on this commit." : "No completed CI run to re-run — the next push re-engages the loop.") +
+        "Re-ran CI; the panel re-engages and reuses the verdicts already on this commit." +
         " This does not restart the fix budget; only a maintainer's `@claude rerun` does.",
     ));
   } else if (plan.action === "usage-exhausted") {

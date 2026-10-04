@@ -148,3 +148,12 @@ test("usage window: a CI-side latch from the App or a maintainer also means a hu
   // And a trusted CI latch alone stops the stuck-reviewing path too.
   assert.equal(planSweep({ pr: pr(), labels: ["agent:reviewing"], comments: [appCi], runs: [done(480)], now: NOW }).action, "none");
 });
+
+test("usage window: no completed CI run means no retry — the page and label stay", () => {
+  const noCi = [done(500, { path: ".github/workflows/agent-review-panel.yml" })];
+  const p = planSweep({ pr: pr(), labels: ["agent:blocked"], comments: [usagePage(USAGE_BACKOFF_MINUTES[0] + 1)], runs: noCi, now: NOW });
+  assert.equal(p.action, "none");
+  assert.match(p.reason, /no completed CI run/);
+  const ok = planSweep({ pr: pr(), labels: ["agent:blocked"], comments: [usagePage(USAGE_BACKOFF_MINUTES[0] + 1)], runs: [done(500, { id: 42 })], now: NOW });
+  assert.equal(ok.runId, 42, "the run the plan chose is the one re-run");
+});
