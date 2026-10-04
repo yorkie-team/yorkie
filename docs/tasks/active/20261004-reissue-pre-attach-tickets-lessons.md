@@ -239,3 +239,34 @@
   is now `prev != actor || len(d.mintedActors) > 0`; the new subtest
   "a document renamed to the attaching actor still re-issues" fails
   without it (84 initial-actor tickets survive).
+
+## Loop round 11 follow-up (panel)
+
+- Re-filed, with provenance this time rather than restating the
+  limitation. The panel raised the same two findings a fourth time:
+  `validateChangeActors` is bypassable by activating under a victim's
+  client key, and the Watch `actor_id` check inherits the bypass. Both
+  are accurate about the mechanism and neither is reachable from this
+  branch's diff.
+- Every component of the residual bypass predates the branch and is
+  untouched by it. `git diff origin/main...HEAD -- api/types/
+  server/backend/database/` is empty, so `types.DeriveActorID`
+  (`api/types/actor.go:48`) and `ActivateClient`'s unconditional
+  `InsertOne` (`server/backend/database/mongo/client.go:1098`, `:1108`)
+  are main's, from #1969. The Watch check the second finding names is
+  on main verbatim at `origin/main:server/rpc/yorkie_server.go:655`;
+  this branch edited only the comment above it. The pull dedup the
+  first finding's divergence chain runs through is main's too, at
+  `origin/main:server/packs/pushpull.go:636`.
+- What the branch adds to `pushpull.go` is the guard itself, which
+  strictly narrows the push path: before it, a pushed change could be
+  stamped with any actor at all and no server check looked. The finding
+  measures the guard against an authorization boundary Yorkie does not
+  have anywhere in its document API, rather than against the state it
+  replaced.
+- Closing it for real still needs per-client credentials at the
+  protocol level. The duplicate-row behaviour is load-bearing for actor
+  resumption across sessions, and `{project_id, key}` uniqueness is not
+  enforceable on a sharded `ColClients` (offline-resumable-attach.md,
+  "Alternatives"). Four rounds in, the standstill needs a maintainer
+  decision on the identity model, not another fixer round.
