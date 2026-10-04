@@ -176,31 +176,10 @@ func PushPull(
 	// 04. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Go(func(ctx context.Context) {
-			// Publish under the actor of an accepted change so the pubsub
-			// self-echo filter (doc_subscription.go drops events whose Actor
-			// equals the subscriber) recognizes the author's own event. Watch
-			// subscribes under that same actor (WatchRequest.actor_id,
-			// yorkie_server.go Watch): new SDKs under the stable actor, old SDKs
-			// under the session id. Read it from an accepted change
-			// (pushedChanges), not reqPack.Changes[0], which may be an
-			// already-acknowledged change with a different actor in a malformed
-			// pack. A remove-only pack has no accepted change, so fall back to the
-			// session id; the client is detaching (its Watch is torn down), so a
-			// missed self-echo is moot. OwnActorID() is not used for the fallback:
-			// ActivateClient sets StableActorID for every client, so it would
-			// return the stable actor even for old SDKs that subscribe under the
-			// session id.
-			publisher, err := clientInfo.ID.ToActorID()
+			publisher, err := publisherActor(ctx, clientInfo, pushedChanges)
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
-			}
-			if len(pushedChanges) > 0 {
-				publisher, err = pushedChanges[0].ActorID.ToActorID()
-				if err != nil {
-					logging.From(ctx).Error(err)
-					return
-				}
 			}
 
 			// TODO(hackerwins): For now, we are publishing the event to pubsub and
@@ -237,6 +216,52 @@ func PushPull(
 	}
 
 	return resPack, nil
+}
+
+// publisherActor resolves the actor the DocChanged event is published under.
+//
+// Publish under the actor of an accepted change so the pubsub self-echo filter
+// (doc_subscription.go drops events whose Actor equals the subscriber)
+// recognizes the author's own event. Watch subscribes under that same actor
+// (WatchRequest.actor_id, yorkie_server.go Watch): new SDKs under the stable
+// actor, old SDKs under the session id. Read it from an accepted change
+// (pushedChanges), not reqPack.Changes[0], which may be an already-acknowledged
+// change with a different actor in a malformed pack.
+//
+// A change's ActorID is client-supplied and nothing upstream proves it belongs
+// to the authenticated client, so it is honored only when it matches one of
+// this client's own identities (session id or StableActorID). Without that
+// check the filter is a notification-suppression primitive: a client that
+// stamps a victim's actor into a change makes the server publish DocChanged
+// under the victim's actor, and the victim's own subscription drops it.
+//
+// Every other path falls back to the session id, which the client provably
+// owns. That covers a remove-only pack, which has no accepted change: the
+// client is detaching (its Watch is torn down), so a missed self-echo is moot.
+// It also covers a mismatch, where the worst case is a spurious self-echo —
+// one redundant sync for the sender, never a drop for anyone else.
+// OwnActorID() is not used for the fallback: ActivateClient sets
+// StableActorID for every client, so it would return the stable actor even for
+// old SDKs that subscribe under the session id.
+func publisherActor(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	pushedChanges []*database.ChangeInfo,
+) (time.ActorID, error) {
+	if len(pushedChanges) > 0 {
+		actorID := pushedChanges[0].ActorID
+		if clientInfo.IsOwnActor(actorID) {
+			return actorID.ToActorID()
+		}
+
+		logging.From(ctx).Warnf(
+			"publishing under the session id: pushed change actor(%s) is not owned by client(%s)",
+			actorID,
+			clientInfo.ID,
+		)
+	}
+
+	return clientInfo.ID.ToActorID()
 }
 
 func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {

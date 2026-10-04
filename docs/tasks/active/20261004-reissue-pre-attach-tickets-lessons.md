@@ -61,3 +61,23 @@
   The legacy path "passed" because the colliding createdAt dropped
   elements. Giving each iteration its own key would fix the bench; left
   as is per the task, flagged in the PR.
+
+## Review panel: security round
+
+- Upheld: the server read the DocChanged publisher straight from
+  `pushedChanges[0].ActorID`, and nothing upstream proves a pushed
+  change's actor belongs to the authenticated client. Since the pubsub
+  self-echo filter drops events whose `Actor` equals the subscriber, a
+  client stamping a victim's actor into a change suppressed the
+  victim's `DocChanged`. Making the client rewrite actors wholesale
+  (`reissue`) did not create the hole, but it is the same trust
+  boundary, so it was closed here.
+- Fix: `publisherActor` in `server/packs/pushpull.go` honors the stamped
+  actor only when `clientInfo.IsOwnActor` accepts it, and otherwise
+  falls back to the session id the client provably owns. Mismatches are
+  logged. Worst case is now a spurious self-echo for the sender, never a
+  dropped event for another client.
+- Not changed: pushes still accept a foreign actor into the changes
+  collection. Rejecting outright would break clients that legitimately
+  push pre-attach changes stamped with `InitialActorID` -- the very case
+  this task exists for -- and it is wider than the reported finding.
