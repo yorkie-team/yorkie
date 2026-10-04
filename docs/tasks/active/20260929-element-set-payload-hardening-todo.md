@@ -2,6 +2,11 @@
 
 # Harden Set against payloads no replica can produce
 
+> **Scope since 2026-10-04:** this PR is the push-boundary validator only
+> ("PR B"). The CRDT-side refusals listed under "Carried over" and "Code
+> review" moved to #2100 or were dropped; see "Round 2 (panel, 8978a450)" at
+> the end and `docs/design/pushed-payload-validation.md`.
+
 Follow-up to #2069. Six review rounds on that PR grew defenses against
 crafted and duplicated payloads on top of its two parity fixes. They moved
 here so #2069 could land as the two fixes alone.
@@ -80,3 +85,68 @@ member's slot in `Root.elementMap`.
 - Follow-up for yorkie-js-sdk: its ArraySet reverse still copies a removed
   value, which the Go server now accepts as an array element.
 - `make verify` and `make test` green.
+
+## Round 2 (panel, 8978a450)
+
+The bench job hung for 6h on this head. `BenchmarkRPC/attach large document`
+has two clients `SetNewText("k1")` before attach, so both texts share one
+`createdAt` (InitialActorID, same lamport). The live-slot refusal in
+`ElementRHT` refused the losing text, both clients' edits landed on the
+surviving one, and the document grew past 16 MB. That refusal is keyed on a
+collision a legitimate history produces.
+
+- [x] Drop every replicated refusal from this PR: `ElementRHT`, `Object`,
+      `Root.UnregisterRemovedElementPair`, the json layer and the
+      `Set.Execute` guards go back to `main`. The CRDT fix is #2100; the
+      ArraySet reverse change ships separately. Set, Add and ArraySet are
+      now consistent: none refuses on apply.
+- [x] Add and ArraySet values get the push-boundary rules (blocking:
+      "Add.Execute and ArraySet.Execute have no createdAt-collision guard").
+      Value not created after its operation, for all three; an Add value
+      carries no removedAt. A collision with an element elsewhere in the
+      document is not checked -- it needs the document, and pre-attach
+      collisions and concurrent undo restores are legitimate on `main`.
+- [x] Duplicate createdAt among one object's members (blocking). The
+      validator walks the protobuf, not the decoded tree, and refuses with
+      `ErrRefusedMember`. The untombstonable-loser rule is replayed on the
+      protobuf too, so it no longer depends on `ElementRHT` reporting a
+      refusal.
+- [x] `FromPushedChangePack` has a test (blocking): `TestFromPushedChangePack`
+      checks a legitimate pack decodes and a crafted op in any change rejects
+      it.
+- [x] Document-level redo test asserting the lenient decoder (blocking):
+      removed with the ArraySet reverse change. Its history is now a subtest
+      of `TestPushBoundaryAcceptsReplicaHistories`, which requires the exempt
+      shape to be present and pushes it through `FromPushedChangePack`.
+- [x] Detach/Remove dropping a refused pack (blocking): `FromLeavingChangePack`
+      does not exist on this branch. Detach refuses a crafted pack like the
+      other RPCs; `TestPushedPayloadValidation` (integration) pins Attach,
+      PushPull and Detach refusing it with InvalidArgument, nothing reaching
+      the document, and an honest change at the same client seq going
+      through.
+- [x] json `setInternal` returning a detached element (blocking): gone with
+      the json-layer revert.
+- [x] Stored-change replay running new Execute refusals (blocking): gone; no
+      Execute path changes.
+- [x] Log a refused push with client and document (`fromPushedChangePack` in
+      `server/rpc/yorkie_server.go`).
+- [x] Design doc: `docs/design/pushed-payload-validation.md`.
+
+### Verification
+
+- `TestPushBoundaryAcceptsReplicaHistories`: object and array undo/redo,
+  ArraySet redo after a peer removal, the concurrent-undo history of
+  `TestConcurrentUndoRestoresSameValue`, and two clients setting one key
+  before attach. Every pack passes `FromPushedChangePack`.
+- `TestValidatePushedValues`, `TestValidatePushedObjectMembers`,
+  `TestSetElementRejectsImpossibleTickets`.
+- `TestPushedPayloadValidation` (integration, MongoDB).
+- `BenchmarkRPC` at default benchtime.
+
+### Still open
+
+- A client that already holds a rejected change has no repair path.
+- Re-check the value rules when element `RestoreMode` ships, and against the
+  mobile SDKs.
+- Archive these task docs before merging.
+

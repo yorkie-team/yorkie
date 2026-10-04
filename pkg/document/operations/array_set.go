@@ -78,26 +78,14 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 	// path could abort a change that applied fine before this operation grew
 	// a reverse. The insert, the delete and the registration below stay
 	// unconditional.
-	//
-	// A displaced value a peer has already removed is not restored: GetByID
-	// returns tombstones, and a copy of one keeps its removedAt while redo
-	// re-identifies it with a later createdAt (Document.executeUndoRedo). That
-	// value could be neither tombstoned nor purged, and a container carrying it
-	// is refused at the wire, failing the push. The reverse removes the new
-	// value instead, as Set.Execute does for a removed previous value.
 	var previousCopy crdt.Element
-	previousRemoved := false
 	if source.NeedsReverse() {
 		if previous := obj.GetByID(o.createdAt); previous != nil {
-			if previous.RemovedAt() != nil {
-				previousRemoved = true
-			} else {
-				copied, err := previous.DeepCopy()
-				if err != nil {
-					return ExecutionResult{}, err
-				}
-				previousCopy = copied
+			copied, err := previous.DeepCopy()
+			if err != nil {
+				return ExecutionResult{}, err
 			}
+			previousCopy = copied
 		}
 	}
 
@@ -132,10 +120,6 @@ func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVecto
 		root.RegisterRemovedElementPair(obj, removed)
 	}
 
-	if previousRemoved {
-		reverseOp := NewRemove(o.parentCreatedAt, value.CreatedAt(), o.executedAt)
-		return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
-	}
 	if previousCopy == nil {
 		return ExecutionResult{Observable: true}, nil
 	}

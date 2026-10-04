@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	stderrors "errors"
 	"sync"
 	gotime "time"
 
@@ -228,7 +229,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
+	pack, err := fromPushedChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1441,7 +1442,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
+	pack, err := fromPushedChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1535,7 +1536,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
+	pack, err := fromPushedChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1614,7 +1615,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromPushedChangePack(req.Msg.ChangePack)
+	pack, err := fromPushedChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1907,4 +1908,23 @@ func (s *yorkieServer) unwatchDoc(
 	)
 
 	return nil
+}
+
+// fromPushedChangePack decodes a pack a client pushes through the push
+// boundary (converter.FromPushedChangePack). A pack refused for its element
+// payload is logged with the client and document it came from: the client
+// keeps resending the same change, so this is how an operator finds it.
+func fromPushedChangePack(
+	ctx context.Context,
+	clientID string,
+	pbPack *api.ChangePack,
+) (*change.Pack, error) {
+	pack, err := converter.FromPushedChangePack(pbPack)
+	if stderrors.Is(err, converter.ErrInvalidElementTicket) || stderrors.Is(err, converter.ErrRefusedMember) {
+		logging.From(ctx).Warnf(
+			"refuse pushed pack of client %s for document %s: %v",
+			clientID, pbPack.GetDocumentKey(), err,
+		)
+	}
+	return pack, err
 }

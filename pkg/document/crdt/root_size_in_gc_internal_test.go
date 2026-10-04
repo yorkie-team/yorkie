@@ -74,7 +74,7 @@ func (f *sizeInGCFixture) removeAndRestore(t *testing.T, parent *Object, k strin
 	f.root.RegisterRemovedElementPair(parent, removed)
 
 	parent.SetWithExecutedAt(k, restored, f.tick())
-	f.root.UnregisterRemovedElementPair(parent, restored.CreatedAt())
+	f.root.UnregisterRemovedElementPair(restored.CreatedAt())
 	f.root.RegisterElement(restored, parent)
 }
 
@@ -157,7 +157,7 @@ func TestReleasedRecordStaysWhileAddressable(t *testing.T) {
 	f.root.RegisterRemovedElementPair(f.root.Object(), removed)
 
 	f.root.Object().SetWithExecutedAt("o", restored, f.tick())
-	f.root.UnregisterRemovedElementPair(f.root.Object(), restored.CreatedAt())
+	f.root.UnregisterRemovedElementPair(restored.CreatedAt())
 	f.root.RegisterElement(restored, f.root.Object())
 
 	assert.Same(t, n, f.root.FindByCreatedAt(n.CreatedAt()),

@@ -190,3 +190,29 @@ fix and not for the JS SDK, whose ArraySet reverse still keeps the tombstone.
 A boundary rule has to accept whatever any shipped client sends, so the
 premise is checked against every SDK's producer code, not the one being
 changed.
+
+## A guard keyed on a collision has to survive the collisions honest clients make
+
+The live-slot refusal was argued safe because "a causal change log issues a
+fresh createdAt per value". It does not: before attach, every client issues
+tickets as InitialActorID from the same lamport, so two clients that set the
+same key before attaching hand the server two different texts under one
+createdAt. The refusal judged the second one forged, the edits that followed
+it found the surviving text by createdAt, and the benchmark's document grew
+until the job timed out. Concurrent undos restoring one value make the same
+collision on purpose.
+
+Before keying a check on identity, list how honest clients mint identities:
+pre-attach tickets, undo restores, re-identification. A stateless rule over
+the operation's own bytes can only judge the shape of one payload; whether an
+identity is already taken needs the document, and the answer is only
+meaningful once honest clients stop sharing identities (#2111).
+
+## Validate the bytes, not what the decoder kept
+
+The validator walked the decoded object, and the decoder had already
+collapsed two members with one createdAt into one. The check never saw the
+member it was meant to judge. Read the wire structure the decoder reads, in
+the order it reads it, and check the decoded tree only for what survives
+decoding.
+
