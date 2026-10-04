@@ -118,9 +118,6 @@ func NewRestoreEdit(
 // Execute executes this operation on the given document(`root`).
 func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	if parent == nil {
-		return skipUnresolvedTarget(source)
-	}
 
 	switch obj := parent.(type) {
 	case *crdt.Text:

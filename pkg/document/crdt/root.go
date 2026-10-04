@@ -130,33 +130,7 @@ type Root struct {
 	// lives only as long as its element is addressable: index retires it when
 	// a restored copy takes the element's elementMap slot over.
 	sizeInGC map[Element]resource.DataSize
-
-	// detached holds the roots of the orphaned subtrees this Root still
-	// answers for. An orphan hangs off no container -- a copy a container
-	// refused (AdoptRefusedCopy), or a tombstone a restore displaced from its
-	// container's maps (UnregisterRemovedElementPair) -- so the tree walk
-	// NewRoot performs cannot find it, and a Root rebuilt from the tree alone
-	// would silently stop answering for every createdAt only that subtree
-	// carries. DeepCopy walks this slice to put those slots back; without it
-	// the clone Document.applyChanges executes each remote change against
-	// (document.go) rejects exactly the operations the orphan exists to keep
-	// resolvable, before the root ever sees them.
-	//
-	// Pruned on insert rather than in DeepCopy: whether an orphan still owns
-	// any elementMap slot is decided by registrations that come after it, and
-	// insertion is the one moment this Root is already being mutated.
-	// DeepCopy must stay read-only -- see DeepCopy.
-	detached []Element
-
-	// detachedPruneAt is the length at which the next trackDetached sweeps
-	// r.detached. Doubled after each sweep, so the sweeps cost amortized
-	// constant work per orphan. The zero value prunes at minDetachedPrune.
-	detachedPruneAt int
 }
-
-// minDetachedPrune is the smallest number of orphans worth a sweep. Below it
-// the list costs less than walking it does.
-const minDetachedPrune = 8
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
@@ -521,110 +495,7 @@ func (r *Root) UnregisterRemovedElementPair(owner Container, createdAt *time.Tic
 	}
 
 	delete(r.gcElementPairMap, createdAt.Key())
-
-	// The subtree is orphaned but still addressable: release deliberately
-	// leaves its elementMap slots alone. Record it so a DeepCopy of this Root
-	// carries those slots too -- otherwise the two orders of the same pair of
-	// restores diverge again the moment one side rebuilds its clone.
-	r.trackDetached(pair.elem)
-
 	return true
-}
-
-// AdoptRefusedCopy indexes the elements of a copy a container refused, for the
-// createdAts nothing already answers to, and charges the document nothing for
-// them.
-//
-// A refused copy (ElementRHT.refusesLoser) sits in no container, so it is
-// unreachable from the tree the moment it is built. The replicas that met the
-// two concurrent restores in the opposite order do not lose it, though: there
-// the copy took the key first and was registered, and the newer restore then
-// evicted and released it (operations.Set.Execute), which leaves every element
-// only that copy carries indexed in elementMap at a zero charge. The two copies
-// are DeepCopies taken at different moments, so a descendant one carries and the
-// other does not exists on exactly one side -- and without this, an operation a
-// peer addressed at that descendant resolves on the replicas that took the other
-// order and hard-fails here, aborting the whole change, permanently so on the
-// server, which replays the same log to rebuild the document and its snapshots.
-//
-// A slot another element already answers to is left alone: that element is the
-// copy that won the key, and taking its slot is the very thing the refusal
-// exists to prevent.
-func (r *Root) AdoptRefusedCopy(elem Element) {
-	adopt := func(e Element) {
-		key := e.CreatedAt().Key()
-		if _, ok := r.elementMap[key]; ok {
-			return
-		}
-		r.elementMap[key] = e
-
-		// A zero charge, exactly as release records one, and for the same
-		// reason: the element is addressable but docSize is not holding it, so
-		// a removal a peer sends into this subtree must not take its size out
-		// of Live a second time.
-		r.sizeInGC[e] = resource.DataSize{}
-	}
-
-	adopt(elem)
-	if container, ok := elem.(Container); ok {
-		container.Descendants(func(e Element, _ Container) bool {
-			adopt(e)
-			return false
-		})
-	}
-
-	r.trackDetached(elem)
-}
-
-// trackDetached records an orphaned subtree so DeepCopy can put its elementMap
-// slots back into the copy. Only the subtree root is kept: the walk that
-// adopted its descendants is the same one DeepCopy replays.
-//
-// It is also where the list is swept of orphans whose every slot has since
-// been taken over by a live element. Those are unreachable in this Root too,
-// so a copy misses nothing by dropping them, and without the sweep the list
-// would grow with every restore. The sweep belongs here rather than in
-// DeepCopy because this Root is already being mutated by the caller, while
-// DeepCopy is called on Roots this goroutine does not own -- see DeepCopy.
-func (r *Root) trackDetached(elem Element) {
-	r.detached = append(r.detached, elem)
-
-	if len(r.detached) < max(r.detachedPruneAt, minDetachedPrune) {
-		return
-	}
-
-	kept := r.detached[:0]
-	for _, e := range r.detached {
-		if r.addressesAny(e) {
-			kept = append(kept, e)
-		}
-	}
-	clear(r.detached[len(kept):])
-	r.detached = kept
-	r.detachedPruneAt = 2 * len(kept)
-}
-
-// addressesAny reports whether any elementMap slot still answers with an
-// element of this subtree. An orphan whose every slot has since been taken
-// over by a live element is unreachable and carries nothing a copy would
-// miss, so DeepCopy drops it.
-func (r *Root) addressesAny(elem Element) bool {
-	if r.elementMap[elem.CreatedAt().Key()] == elem {
-		return true
-	}
-
-	found := false
-	if container, ok := elem.(Container); ok {
-		container.Descendants(func(e Element, _ Container) bool {
-			if r.elementMap[e.CreatedAt().Key()] == e {
-				found = true
-				return true
-			}
-			return false
-		})
-	}
-
-	return found
 }
 
 // release forgets the cost of an element that has become unreachable without
@@ -692,48 +563,12 @@ func (r *Root) DocSize() resource.DocSize {
 }
 
 // DeepCopy copies itself deeply.
-//
-// NewRoot indexes what it can reach from the tree, which is every live element
-// and every tombstone a container still holds -- but not an orphan, which
-// hangs off no container by definition. Those are re-indexed here from
-// r.detached, in the order they were orphaned, so the copy answers for exactly
-// the createdAts the original answers for. Document.applyChanges runs every
-// remote change against such a copy before the root sees it, so a slot missing
-// here fails the change outright.
-//
-// Orphans whose slots have all since been taken over by live elements are
-// skipped on the way through: they are unreachable in the original too, so the
-// copy misses nothing. They are only skipped, never dropped from r.detached --
-// this method writes nothing to its receiver, and must not.
-//
-// Read-only is a requirement two callers impose, not a preference. The server
-// copies an *InternalDocument it holds in be.Cache.Snapshot and shares across
-// requests (server/packs.BuildInternalDocForServerSeq), so a write here would
-// be a data race between concurrent requests on one document. And
-// Document.Root's d.updating escape reaches ensureClone with no lock held
-// (pkg/document/document.go), so a write here would race the updater that is
-// executing operations against this very Root. Pruning happens in
-// trackDetached, on the mutation path, instead.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
 		return nil, err
 	}
-	copied := NewRoot(copiedObject.(*Object))
-
-	for _, elem := range r.detached {
-		if !r.addressesAny(elem) {
-			continue
-		}
-
-		copiedElem, err := elem.DeepCopy()
-		if err != nil {
-			return nil, err
-		}
-		copied.AdoptRefusedCopy(copiedElem)
-	}
-
-	return copied, nil
+	return NewRoot(copiedObject.(*Object)), nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.

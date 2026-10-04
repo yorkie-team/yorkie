@@ -325,20 +325,6 @@ func (d *Document) Update(
 			return err
 		}
 
-		// NOTE(hackerwins): An operation the root declined -- it returned
-		// ErrOperationSkipped, which Change.Execute drops rather than reports --
-		// has already run on the clone, because the json proxy mutated the
-		// clone on the way in. The two are then apart with no error to say so,
-		// so the clone is dropped exactly as it is on the failure path above.
-		//
-		// Deferred rather than invalidated here, for the reason the presence
-		// branch defers it: a clone marked stale while this call is still
-		// running makes a concurrent reader's ensureClone DeepCopy the live
-		// root mid-change.
-		if len(result.Executed) != len(c.Operations()) {
-			defer d.invalidateClone()
-		}
-
 		// NOTE(hackerwins): An ArraySet replaces the element at this
 		// position with a freshly ticketed value. Any other stacked reverse
 		// operation that still references the replaced element's old
@@ -591,33 +577,12 @@ func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 	}
 
 	c := ctx.ToChange()
-	cloneResult, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceUndoRedo)
-	if err != nil {
+	if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceUndoRedo); err != nil {
 		return err
 	}
 	result, err := c.Execute(d.doc.root, d.doc.presences, operations.OpSourceUndoRedo)
 	if err != nil {
-		// Execute does not roll back, so the root holds a prefix of the change
-		// the clone holds in full, exactly as in Update.
-		d.invalidateClone()
 		return err
-	}
-
-	// NOTE(hackerwins): An operation one root declined -- it returned
-	// ErrOperationSkipped, which Change.Execute drops rather than reports --
-	// and the other applied leaves the two apart with no error to say so. The
-	// clone and the root are at different states here (the clone has not seen
-	// the changes the root took since the last rebuild), so a skip guard that
-	// reads the state -- the concurrently-removed target in Set and Remove,
-	// the in-use identity in Set, Add and ArraySet -- can genuinely decide one
-	// way on one and the other way on the other. Drop the clone when it does,
-	// as Update and applyChanges do.
-	//
-	// Deferred rather than invalidated here, for the reason Update defers it:
-	// a clone marked stale while this call is still running makes a concurrent
-	// reader's ensureClone DeepCopy the live root mid-change.
-	if len(result.Executed) != len(cloneResult.Executed) {
-		defer d.invalidateClone()
 	}
 
 	var reverse []HistoryOperation
@@ -834,30 +799,14 @@ func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, er
 	// Execute does not roll back, so a change that fails partway leaves the
 	// two holding different prefixes of it. Drop the clone so the next access
 	// rebuilds it from the root.
-	//
-	// The same holds without an error: an operation one root declined -- it
-	// returned ErrOperationSkipped, which Change.Execute drops rather than
-	// reports -- and the other applied leaves the two apart silently. The
-	// clone trails the root by whatever it has not rebuilt against, so a skip
-	// guard that reads the state (the concurrently-removed target in Set and
-	// Remove, the in-use identity in Set, Add and ArraySet) can decide one way
-	// on one and the other way on the other. diverged carries that case into
-	// the same drop.
-	//
-	// Deferred rather than invalidated at the point of divergence, for the
-	// reason Update defers it: a clone marked stale while this call is still
-	// running makes a concurrent reader's ensureClone DeepCopy the live root
-	// mid-change.
-	diverged := false
 	defer func() {
-		if err != nil || diverged {
+		if err != nil {
 			d.invalidateClone()
 		}
 	}()
 
 	for _, c := range changes {
-		cloneResult, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote)
-		if err != nil {
+		if _, err := c.Execute(d.cloneRoot, d.clonePresences, operations.OpSourceRemote); err != nil {
 			return nil, err
 		}
 
@@ -872,9 +821,6 @@ func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, er
 		changeEvents, executed, err := d.doc.ApplyChanges(c)
 		if err != nil {
 			return nil, err
-		}
-		if len(executed) != len(cloneResult.Executed) {
-			diverged = true
 		}
 		events = append(events, changeEvents...)
 

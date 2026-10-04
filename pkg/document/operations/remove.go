@@ -50,9 +50,6 @@ func NewRemove(
 // Execute executes this operation on the given document(`root`).
 func (o *Remove) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
-	if parentElem == nil {
-		return skipUnresolvedTarget(source)
-	}
 
 	parent, ok := parentElem.(crdt.Container)
 	if !ok {

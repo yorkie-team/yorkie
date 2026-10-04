@@ -182,9 +182,6 @@ func (e *TreeEdit) Execute(
 	versionVector time.VersionVector,
 ) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	if parent == nil {
-		return skipUnresolvedTarget(source)
-	}
 
 	switch obj := parent.(type) {
 	case *crdt.Tree:

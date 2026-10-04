@@ -119,15 +119,8 @@ func NewTreeStyleSetAndRemove(
 // combined-reverse constructor without also copying Text's independent-if
 // execute shape from PR #1174), preserved here rather than fixed --
 // see docs/tasks/active/20260816-remote-redo-replica-divergence-todo.md.
-func (e *TreeStyle) Execute(
-	root *crdt.Root,
-	source OpSource,
-	versionVector time.VersionVector,
-) (ExecutionResult, error) {
+func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	if parent == nil {
-		return skipUnresolvedTarget(source)
-	}
 	obj, ok := parent.(*crdt.Tree)
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType

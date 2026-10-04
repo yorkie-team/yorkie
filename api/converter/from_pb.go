@@ -49,63 +49,7 @@ var (
 	// NaN or an infinity as its delta.
 	ErrNonFiniteCounterDelta = errors.InvalidArgument("non-finite counter delta").
 					WithCode("ErrNonFiniteCounterDelta")
-
-	// ErrAcausalElementIdentity is returned when an element payload carries a
-	// createdAt the change that pushed it could not have issued. See
-	// requireCausalIdentity.
-	ErrAcausalElementIdentity = errors.InvalidArgument("element identity is not causally reachable").
-					WithCode("ErrAcausalElementIdentity")
 )
-
-// requireCausalIdentity rejects an element payload whose createdAt -- its own,
-// or any of its descendants' -- is newer than the operation carrying it.
-//
-// Every ticket an operation carries arrives verbatim off the wire, and the
-// element's own createdAt is what every element index in the document keys on,
-// so it decides control flow once the operation runs: whether a container
-// refuses the value (crdt.ElementRHT.refusesLoser), and whether the operation
-// refuses it first (operations.identityInUse). A client therefore must not be
-// able to name an identity freely.
-//
-// The half of that a converter can check without the document is causality. A
-// change issues all of its tickets at one lamport (change.Context's delimiter
-// is what advances within a change, not the lamport), so an element the
-// pushing change created carries exactly the operation's lamport, and an
-// element an earlier change created -- the undo-restore shape, the only one
-// that legitimately reuses a ticket -- carries a smaller one. A larger lamport
-// names an identity no history the sender has observed could contain: it is
-// forged, and it is rejected here, before the change is persisted and before
-// anything replays it.
-//
-// The other half -- whether a well-dated ticket names an element the document
-// is already holding live -- needs the document, which the converter does not
-// have. That is checked where the collision becomes load-bearing and every
-// transport passes through it, and it is refused rather than failed there
-// because the server stores a pushed change before executing it: see
-// operations.refuseInUseIdentity. The push-boundary validation that would
-// subsume both is tracked at yorkie-team/yorkie#2081.
-func requireCausalIdentity(elem crdt.Element, executedAt *time.Ticket, field string) error {
-	violates := func(e crdt.Element) bool {
-		return e.CreatedAt().Lamport() > executedAt.Lamport()
-	}
-
-	acausal := violates(elem)
-	if container, ok := elem.(crdt.Container); ok && !acausal {
-		container.Descendants(func(e crdt.Element, _ crdt.Container) bool {
-			if violates(e) {
-				acausal = true
-				return true
-			}
-			return false
-		})
-	}
-
-	if acausal {
-		return fmt.Errorf("%s: %w", field, ErrAcausalElementIdentity)
-	}
-
-	return nil
-}
 
 // FromUser converts the given Protobuf formats to model format.
 func FromUser(pbUser *api.User) *types.User {
@@ -480,19 +424,6 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 	return &p, nil
 }
 
-// fromSet decodes a Set operation.
-//
-// Every ticket it reads -- parent_created_at, executed_at and the element's
-// own createdAt inside fromElement -- comes straight off the wire, and the
-// element's createdAt is the one that decides control flow once the operation
-// runs: a value whose createdAt another element already answers to is refused
-// by the object rather than applied (crdt.ElementRHT.refusesLoser). What can
-// be checked without the document is checked here --
-// requireCausalIdentity rejects a createdAt the pushing change could not have
-// issued -- and the rest sits where the collision becomes load-bearing and
-// every transport passes through it: operations.Set.Execute refuses a
-// createdAt that names a live element the Set is not restoring. The broader
-// push-boundary validation is tracked at yorkie-team/yorkie#2081.
 func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	if pbSet == nil {
 		return nil, goerrors.New("operation set missing")
@@ -508,9 +439,6 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	}
 	elem, err := fromElement(pbSet.Value)
 	if err != nil {
-		return nil, err
-	}
-	if err := requireCausalIdentity(elem, executedAt, "set.value.created_at"); err != nil {
 		return nil, err
 	}
 
@@ -541,9 +469,6 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 	}
 	executedAt, err := fromRequiredTimeTicket(pbAdd.ExecutedAt, "add.executed_at")
 	if err != nil {
-		return nil, err
-	}
-	if err := requireCausalIdentity(elem, executedAt, "add.value.created_at"); err != nil {
 		return nil, err
 	}
 	return operations.NewAdd(
@@ -998,9 +923,6 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 	}
 	executedAt, err := fromRequiredTimeTicket(pbSetByIndex.ExecutedAt, "array_set.executed_at")
 	if err != nil {
-		return nil, err
-	}
-	if err := requireCausalIdentity(elem, executedAt, "array_set.value.created_at"); err != nil {
 		return nil, err
 	}
 	return operations.NewArraySet(

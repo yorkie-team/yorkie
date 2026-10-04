@@ -54,23 +54,9 @@ func NewArraySet(
 // Execute executes this operation on the given document(`root`).
 func (o *ArraySet) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
-	if parent == nil {
-		return skipUnresolvedTarget(source)
-	}
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType
-	}
-
-	// The replacement value carries a new identity on every legitimate path:
-	// the json layer issues a fresh ticket for it, and the reverse that
-	// restores a replaced value is re-identified with a fresh ticket before it
-	// runs (Document.executeUndoRedo). The ticket still arrives verbatim off
-	// the wire (api/converter's fromArraySet), and RegisterElement below hands
-	// it to Root.index, which overwrites the slot of whatever element already
-	// answers to it. Refused before the insert, exactly as in Set.
-	if identityInUse(root, o.value, nil) {
-		return refuseInUseIdentity(source)
 	}
 
 	// The reverse must be built from the value currently at this position

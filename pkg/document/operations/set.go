@@ -55,9 +55,6 @@ func NewSet(
 // Execute executes this operation on the given document(`root`).
 func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (ExecutionResult, error) {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
-	if parent == nil {
-		return skipUnresolvedTarget(source)
-	}
 
 	obj, ok := parent.(*crdt.Object)
 	if !ok {
@@ -68,40 +65,6 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// ancestors has been concurrently removed (set_operation.ts:81-89).
 	if source == OpSourceUndoRedo && isRemovedOrOrphaned(root, obj) {
 		return ExecutionResult{}, ErrOperationSkipped
-	}
-
-	// NOTE(hackerwins): The payload's own createdAt now decides control flow
-	// below -- a value whose createdAt another element already answers to can
-	// be refused by the object (ElementRHT.refusesLoser), which leaves a
-	// subtree the document keeps addressable and charges to neither side of
-	// docSize. The ticket arrives verbatim off the wire (api/converter's
-	// fromSet reads parent_created_at, executed_at and the element's createdAt
-	// straight from the request, and sanitizeElement checks none of them), so
-	// without a check here a client picks which branch the server takes by
-	// naming any element it can see.
-	//
-	// A collision a legitimate history produces has exactly two shapes, and
-	// both pass:
-	//
-	//   - the ticket answers to a tombstone. That is an undo restoring the
-	//     value under the createdAt it was removed as, which is the whole
-	//     reason Set tolerates a reused ticket at all.
-	//   - the ticket answers to the live element sitting at this very key.
-	//     That is the concurrent-restore shape: another replica restored the
-	//     same value first, and this copy is about to lose the LWW compare.
-	//
-	// Anything else names a live element this Set is not restoring -- a
-	// different key, a different object, or a descendant of either -- and
-	// taking it in would either strand that element or hand the sender an
-	// unaccounted subtree. It is refused before a single map is touched.
-	//
-	// Refused, not failed, on everything but a local Set: the server stores a
-	// pushed change before executing it, so a hard error would be replayed out
-	// of the change log forever. See refuseInUseIdentity. The general
-	// push-boundary validation this stands in for is tracked at
-	// yorkie-team/yorkie#2081.
-	if identityInUse(root, o.value, obj.Get(o.key)) {
-		return refuseInUseIdentity(source)
 	}
 
 	// The reverse must be built from the value at this key before it is
@@ -156,17 +119,7 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// with an empty ExecutionResult reads as "applied, nothing to undo", and
 	// an undo whose Set is refused would push a redo entry describing work
 	// that never happened (Document.executeUndoRedo).
-	//
-	// What it does leave behind is the copy's elementMap slots. The replicas
-	// that met the two restores in the opposite order keep them -- there this
-	// copy took the key first, was registered, and was then evicted and
-	// released -- and a descendant only this copy carries exists on exactly one
-	// side, so dropping it here would hard-fail an operation addressed at it on
-	// these replicas alone. Root.AdoptRefusedCopy indexes exactly the slots
-	// nothing already answers to, at no cost, which is where the other order
-	// ends up.
 	if !indexed {
-		root.AdoptRefusedCopy(value)
 		return ExecutionResult{}, ErrOperationSkipped
 	}
 
