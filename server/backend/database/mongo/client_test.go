@@ -20,11 +20,16 @@ package mongo_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
@@ -197,6 +202,76 @@ func TestClient(t *testing.T) {
 	t.Run("FindCompactionCandidates test", func(t *testing.T) {
 		testcases.RunFindCompactionCandidatesTest(t, cli, dummyProjectID)
 	})
+}
+
+// TestClient_ClientCacheUnderConcurrentWrites checks that the client cache
+// ends up with what the database holds when requests of one client race. A
+// PushPull on one document, an attach of another and a plain read all touch
+// the same client row; if an older copy of the row reaches the cache after a
+// newer one, the cache forgets the attach and later requests of the client
+// fail with "document not attached".
+func TestClient_ClientCacheUnderConcurrentWrites(t *testing.T) {
+	ctx := context.Background()
+	cli := setupTestWithDummyData(t)
+	defer func() { assert.NoError(t, cli.Close()) }()
+
+	info, err := cli.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
+	require.NoError(t, err)
+	refKey := info.RefKey()
+	docKey := func(name string) key.Key {
+		return key.Key(fmt.Sprintf("tests$%s-%s-%s", t.Name(), info.ID, name))
+	}
+	attach := func(docInfo *database.DocInfo) error {
+		attaching, err := cli.TryAttaching(ctx, refKey, docInfo.ID)
+		if err != nil {
+			return err
+		}
+		if err := attaching.AttachDocument(
+			docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint,
+		); err != nil {
+			return err
+		}
+		return cli.UpdateClientInfoAfterPushPull(ctx, attaching, docInfo)
+	}
+
+	busy, err := cli.FindOrCreateDocInfo(ctx, refKey, docKey("busy"), false)
+	require.NoError(t, err)
+	require.NoError(t, attach(busy))
+	pushPuller, err := cli.FindClientInfoByRefKey(ctx, refKey)
+	require.NoError(t, err)
+
+	for i := range 200 {
+		docInfo, err := cli.FindOrCreateDocInfo(ctx, refKey, docKey(fmt.Sprint(i)), false)
+		require.NoError(t, err)
+
+		// Advance the busy document's checkpoint so the PushPull write is not
+		// skipped as already cached.
+		pp := pushPuller.DeepCopy()
+		require.NoError(t, pp.UpdateCheckpoint(busy.ID, change.NewCheckpoint(0, uint32(i+1))))
+
+		var ppErr, attachErr, readErr error
+		var wg sync.WaitGroup
+		wg.Go(func() { ppErr = cli.UpdateClientInfoAfterPushPull(ctx, pp, busy) })
+		wg.Go(func() { attachErr = attach(docInfo) })
+		wg.Go(func() {
+			for range 4 {
+				if _, readErr = cli.FindClientInfoByRefKey(ctx, refKey); readErr != nil {
+					return
+				}
+			}
+		})
+		wg.Wait()
+		require.NoError(t, ppErr)
+		require.NoError(t, attachErr)
+		require.NoError(t, readErr)
+
+		stored, err := cli.FindClientInfoByRefKey(ctx, refKey, true)
+		require.NoError(t, err)
+		require.NoError(t, stored.EnsureDocumentAttached(docInfo.ID))
+		cached, err := cli.FindClientInfoByRefKey(ctx, refKey)
+		require.NoError(t, err)
+		require.NoError(t, cached.EnsureDocumentAttached(docInfo.ID), "iteration %d", i)
+	}
 }
 
 func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {

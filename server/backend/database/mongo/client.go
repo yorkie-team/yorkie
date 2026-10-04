@@ -22,7 +22,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"strings"
+	"sync"
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -55,6 +57,10 @@ const (
 	// record written without one: type byte, "_id\x00" and a 12-byte ObjectID.
 	objectIDElementSize = 1 + 4 + 12
 
+	// clientCacheLockStripes is the number of locks that serialize client
+	// cache updates; see Client.clientCacheLocks.
+	clientCacheLockStripes = 1024
+
 	// compactionUndoTimeout bounds the reads and writes that settle a failed
 	// compaction. They run on a context detached from the one the failed write
 	// used, since a cancelled or expired context is the likeliest reason for
@@ -75,6 +81,16 @@ type Client struct {
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+
+	// clientCacheLocks serializes, per client, a read or write of the client
+	// row with the clientCache update that follows it. Without it, requests of
+	// one client racing each other (a PushPull on one document and an attach
+	// of another) can land an older copy of the row in the cache after a newer
+	// one, and every later request of the client reads the stale copy: an
+	// attach that the database holds then fails with "document not attached".
+	// Clients are striped over a fixed set of locks by ID.
+	clientCacheLocks [clientCacheLockStripes]sync.Mutex
+	clientLockSeed   maphash.Seed
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -172,13 +188,14 @@ func Dial(conf *Config) (*Client, error) {
 		client:   client,
 		registry: registry,
 
-		cacheManager:  cacheManager,
-		projectCache:  projectCache,
-		clientCache:   clientCache,
-		docCache:      docCache,
-		changeCache:   changeCache,
-		presenceCache: presenceCache,
-		vectorCache:   vectorCache,
+		cacheManager:   cacheManager,
+		projectCache:   projectCache,
+		clientCache:    clientCache,
+		clientLockSeed: maphash.MakeSeed(),
+		docCache:       docCache,
+		changeCache:    changeCache,
+		presenceCache:  presenceCache,
+		vectorCache:    vectorCache,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -1122,6 +1139,9 @@ func (c *Client) TryAttaching(
 	refKey types.ClientRefKey,
 	docID types.ID,
 ) (*database.ClientInfo, error) {
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	// client must be activated and document must not be attached
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx,
@@ -1200,6 +1220,9 @@ func (c *Client) DeactivateClient(
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
 
+	unlock := c.lockClientCache(refKey)
+	defer unlock()
+
 	result := c.collection(ColClients).FindOneAndUpdate(
 		ctx,
 		bson.M{
@@ -1237,6 +1260,15 @@ func (c *Client) DeactivateClient(
 	return info, nil
 }
 
+// lockClientCache locks the stripe of clientCacheLocks the given client maps
+// to and returns its unlock function.
+func (c *Client) lockClientCache(refKey types.ClientRefKey) func() {
+	stripe := maphash.String(c.clientLockSeed, refKey.ClientID.String()) % clientCacheLockStripes
+	mu := &c.clientCacheLocks[stripe]
+	mu.Lock()
+	return mu.Unlock
+}
+
 // FindClientInfoByRefKey finds the client of the given refKey.
 func (c *Client) FindClientInfoByRefKey(
 	ctx context.Context,
@@ -1246,6 +1278,14 @@ func (c *Client) FindClientInfoByRefKey(
 	skip := len(skipCache) > 0 && skipCache[0]
 
 	if !skip {
+		if cached, ok := c.clientCache.Get(refKey); ok {
+			return cached.DeepCopy(), nil
+		}
+
+		// A miss reads the row and fills the cache under the client's lock,
+		// so the copy read here cannot overwrite one a write cached after it.
+		unlock := c.lockClientCache(refKey)
+		defer unlock()
 		if cached, ok := c.clientCache.Get(refKey); ok {
 			return cached.DeepCopy(), nil
 		}
@@ -1287,6 +1327,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			info.ID, docInfo.ID, database.ErrDocumentNeverAttached,
 		)
 	}
+
+	unlock := c.lockClientCache(clientKey)
+	defer unlock()
 
 	if existing, ok := c.clientCache.Get(clientKey); ok {
 		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
@@ -1382,14 +1425,12 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
+	// NOTE: The rows read here do not fill clientCache. The query runs outside
+	// the clients' cache locks, so a row read here may already be older than
+	// one a concurrent write cached.
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
-	}
-
-	for _, info := range infos {
-		refKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
-		c.clientCache.Add(refKey, info.DeepCopy())
 	}
 
 	return infos, nil
