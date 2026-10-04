@@ -126,4 +126,37 @@ func TestPreAttachEdits(t *testing.T) {
 		assert.Equal(t, doc.Marshal(), observer.Marshal())
 		assert.Equal(t, clients[1].ID(), observer.RootObject().Get("k1").CreatedAt().ActorID())
 	})
+
+	t.Run("a second pre-attach document of the same key is not re-issued", func(t *testing.T) {
+		ctx := context.Background()
+		clients := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, clients)
+		cli := clients[0]
+		docKey := helper.TestKey(t)
+
+		first := document.New(docKey)
+		require.NoError(t, first.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("first").Edit(0, 0, "a")
+			return nil
+		}))
+		require.NoError(t, cli.Attach(ctx, first))
+		require.Equal(t, cli.ID(), first.RootObject().Get("first").CreatedAt().ActorID())
+		require.NoError(t, cli.Detach(ctx, first))
+
+		// A re-issue leaves the lamports as they are, and a fresh document
+		// starts them at 1, so re-issuing this one to the same actor would
+		// mint the createdAt the first attach already pushed. The tickets stay
+		// under the initial actor instead.
+		second := document.New(docKey)
+		require.NoError(t, second.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("second").Edit(0, 0, "b")
+			return nil
+		}))
+		require.NoError(t, cli.Attach(ctx, second))
+		assert.Equal(t, time.InitialActorID, second.RootObject().Get("second").CreatedAt().ActorID())
+
+		// Both elements survive: the server can still tell them apart.
+		assert.Equal(t, "a", second.Root().GetText("first").String())
+		assert.Equal(t, "b", second.Root().GetText("second").String())
+	})
 }

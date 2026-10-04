@@ -183,6 +183,26 @@ func localActorsOf(t *testing.T, doc *document.Document) []time.ActorID {
 	return actors
 }
 
+// assertLocalVectors checks that every local change the document would push
+// carries a version vector naming the given actor, at that change's own
+// lamport, and no one else. The re-issue re-keys these per-change vectors as
+// well as the document's own one, and they are what the server merges into
+// the document's vector -- an entry left under the initial actor would make
+// every replica wait on an actor that never syncs again.
+func assertLocalVectors(t *testing.T, doc *document.Document, actor time.ActorID) {
+	t.Helper()
+
+	changes := doc.CreateChangePack().Changes
+	require.NotEmpty(t, changes)
+	for i, c := range changes {
+		vector := c.ID().VersionVector()
+		for id := range vector {
+			assert.Equal(t, actor, id, "change %d: %s", i, vector.Marshal())
+		}
+		assert.Equal(t, c.ID().Lamport(), vector.VersionOf(actor), "change %d: %s", i, vector.Marshal())
+	}
+}
+
 func rootBytes(t *testing.T, doc *document.InternalDocument) []byte {
 	t.Helper()
 	b, err := converter.ObjectToBytes(doc.RootObject())
@@ -215,6 +235,8 @@ func TestSetActorWithReissue(t *testing.T) {
 		assert.Equal(t, doc.InternalDocumentForTest().Lamport(), vector.VersionOf(actorA))
 		assert.Equal(t, actorA, doc.ActorID())
 
+		assertLocalVectors(t, doc, actorA)
+
 		internal := doc.InternalDocumentForTest()
 		all := internal.AllPresences()
 		assert.Contains(t, all, actorA.String())
@@ -244,6 +266,7 @@ func TestSetActorWithReissue(t *testing.T) {
 		}))
 		assert.Zero(t, actorsOf(t, doc)[time.InitialActorID])
 		assert.NotZero(t, actorsOf(t, doc)[actorA])
+		assertLocalVectors(t, doc, actorA)
 
 		built := serverBuild(t, doc)
 		assert.Equal(t, doc.Marshal(), built.Marshal())
@@ -259,6 +282,7 @@ func TestSetActorWithReissue(t *testing.T) {
 		assert.Zero(t, actors[time.InitialActorID])
 		assert.Zero(t, actors[actorA])
 		assert.NotZero(t, actors[actorB])
+		assertLocalVectors(t, doc, actorB)
 	})
 
 	t.Run("re-issue clears the undo history it invalidates", func(t *testing.T) {

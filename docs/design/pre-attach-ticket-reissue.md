@@ -106,6 +106,36 @@ The lamport-0 ticket `time.InitialTicket` -- the root object and every sentinel
 node -- is shared by all replicas and is never re-issued. Every ticket a change
 mints has the change's lamport, which is at least 1.
 
+### One actor, two never-synced documents of one key
+
+`neverSynced` holds for a `Document` value, and the re-issue keeps each
+ticket's lamport, which starts at 1 in every fresh document. So the result is
+unique between clients -- the point of the design -- but not between two
+never-synced documents of the same key under one actor:
+
+```go
+first := document.New(k); first.Update(...); cli.Attach(ctx, first); cli.Detach(ctx, first)
+second := document.New(k); second.Update(...); cli.Attach(ctx, second)
+```
+
+`second`'s tickets would be re-issued to the same actor with the same lamports
+`first` already pushed -- the `createdAt` collision again, this time between
+one client's own elements. `Client.claimReissue` records, per key, the actor
+the client last attached it under, and declines the re-issue when that actor
+is attaching the same key again. Those tickets keep the initial actor, as they
+did before this design; they can still collide with another client's
+pre-attach tickets, which is strictly the state `main` is in, rather than the
+certain collision a re-issue would mint. The mark is taken before the round
+trip, since an attach whose response is lost may still have pushed, and is
+never cleared: a detach does not take pushed tickets back.
+
+The mark lives on the `Client`, so it does not carry across processes. A new
+client that reactivates with an explicit `WithKey` takes the same client id --
+hence the same actor -- and would re-issue a fresh document of a key it
+attached in an earlier process. Closing that needs state the client does not
+hold before the attach round trip (the server's lamport for the key); it is
+filed as a follow-up with the client identity model in #2114.
+
 ### A failed attach
 
 There is no rollback. A re-issued document is a valid detached document

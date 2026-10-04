@@ -50,6 +50,23 @@
 - The compaction log change was dropped at rebase: #2108 made the same
   change on `main`.
 
+### Round 2 — correctness/tests
+
+- Blocking, fixed: uniqueness held between clients but not within one.
+  The re-issue keeps each ticket's lamport, and a fresh `Document`
+  starts them at 1, so a second never-synced document of a key the same
+  actor already attached minted the very `createdAt` the first attach
+  pushed. `Client.claimReissue` records the actor per key and declines
+  the re-issue for the repeat, which falls back to `SetActor`. What it
+  cannot cover is a new process that reactivates with an explicit client
+  key and so takes the same actor; that needs the server's lamport for
+  the key, which the client does not have before the round trip.
+- Blocking, fixed: the per-change version vectors are re-keyed too, and
+  nothing asserted it -- `localActorsOf` reads only the change actor, and
+  the walk cannot see a change ID. `assertLocalVectors` now checks every
+  pushed change's vector names the new actor, at that change's own
+  lamport, and no one else. Red with the re-key removed.
+
 ## Bench
 
 - `BenchmarkRPC/attach_large_document` passes at the default benchtime
