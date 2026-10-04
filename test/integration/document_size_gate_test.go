@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	gotime "time"
@@ -59,7 +60,7 @@ func TestDocumentSizeGate(t *testing.T) {
 	// with each push.
 	sizeLimit := 1024
 	snapshotInterval := int64(1)
-	project, err := adminCli.CreateProject(ctx, "size-gate-test")
+	project, err := adminCli.CreateProject(ctx, helper.TestSlugName(t))
 	require.NoError(t, err)
 	project, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
 		MaxSizePerDocument: &sizeLimit,
@@ -121,6 +122,47 @@ func TestDocumentSizeGate(t *testing.T) {
 		require.NoError(t, err)
 		return info.ServerSeq
 	}
+	// waitForSnapshot waits until a snapshot covers every change pushed so
+	// far, which is when the size the gate reads is current. A push stores
+	// its snapshot in the background and gives up if another snapshot of the
+	// document is still being written, so two pushes in a row, like an
+	// attach followed by an update, can leave the last one without a
+	// snapshot until the next push. nudge pushes a presence-only change,
+	// which the gate always admits and which does not change the live size,
+	// to trigger another snapshot. It nudges only when no snapshot landed
+	// since the last poll, so it does not keep a slow snapshot from catching
+	// up by moving the target ahead of it.
+	waitForSnapshot := func(t *testing.T, nudge func()) {
+		target := serverSeq()
+		snapshotSeq := func() int64 {
+			info, err := svr.Backend().DB.FindClosestSnapshotInfo(ctx, refKey, change.MaxCheckpoint.ServerSeq, false)
+			require.NoError(t, err)
+			return info.ServerSeq
+		}
+		last := snapshotSeq()
+		deadline := gotime.Now().Add(10 * gotime.Second)
+		for last < target {
+			require.True(t, gotime.Now().Before(deadline),
+				"no snapshot at server seq %d; last at %d", target, last)
+			gotime.Sleep(200 * gotime.Millisecond)
+			seq := snapshotSeq()
+			if seq == last {
+				nudge()
+			}
+			last = seq
+		}
+	}
+	nudgeWith := func(t *testing.T, cli *client.Client, d *document.Document) func() {
+		n := 0
+		return func() {
+			n++
+			require.NoError(t, d.Update(func(r *json.Object, p *presence.Presence) error {
+				p.Set("nudge", strconv.Itoa(n))
+				return nil
+			}))
+			require.NoError(t, cli.Sync(ctx, client.WithKey(d.Key())))
+		}
+	}
 
 	t.Run("growth past the quota is refused", func(t *testing.T) {
 		// No snapshot yet, so the size is unknown and the push goes through.
@@ -129,9 +171,16 @@ func TestDocumentSizeGate(t *testing.T) {
 			return nil
 		}))
 		require.NoError(t, push())
-		assert.Eventually(t, func() bool {
-			return liveSize() > int64(sizeLimit)
-		}, 5*gotime.Second, 50*gotime.Millisecond)
+		n := 0
+		waitForSnapshot(t, func() {
+			n++
+			require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+				p.Set("nudge", strconv.Itoa(n))
+				return nil
+			}))
+			require.NoError(t, push())
+		})
+		require.Greater(t, liveSize(), int64(sizeLimit))
 
 		before := serverSeq()
 		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -167,9 +216,8 @@ func TestDocumentSizeGate(t *testing.T) {
 
 		// Once a snapshot measures the smaller document, growth is admitted
 		// again: the gate does not wedge a document that went over.
-		assert.Eventually(t, func() bool {
-			return liveSize() <= int64(sizeLimit)
-		}, 5*gotime.Second, 50*gotime.Millisecond)
+		waitForSnapshot(t, nudgeWith(t, cli, d2))
+		require.LessOrEqual(t, liveSize(), int64(sizeLimit))
 		require.NoError(t, d2.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetString("small", "y")
 			return nil
@@ -195,9 +243,8 @@ func TestDocumentSizeGate(t *testing.T) {
 			return nil
 		}))
 		require.NoError(t, cli.Sync(ctx))
-		assert.Eventually(t, func() bool {
-			return liveSize() > int64(sizeLimit)
-		}, 5*gotime.Second, 50*gotime.Millisecond)
+		waitForSnapshot(t, nudgeWith(t, cli, d3))
+		require.Greater(t, liveSize(), int64(sizeLimit))
 
 		before := serverSeq()
 		pbPack, err := converter.ToChangePack(doc.CreateChangePack())
