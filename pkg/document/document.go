@@ -980,6 +980,33 @@ func (d *Document) SetActor(actor time.ActorID) {
 	d.doc.SetActor(actor)
 }
 
+// ReissueActor sets actor into this document and, when the document has never
+// synced, re-issues every ticket it minted before to the given actor. The
+// client calls it on attach so that elements created before the attach get a
+// createdAt unique to this client. See InternalDocument.ReissueActor and
+// docs/design/pre-attach-ticket-reissue.md.
+//
+// A re-issue rebuilds the root, so it also drops the clone and the undo/redo
+// stacks: their reverse operations name the tickets that no longer exist.
+// Changes made before the attach can therefore not be undone after it.
+//
+// It takes d.mu for writing, unconditionally, for the reasons SetActor does.
+func (d *Document) ReissueActor(actor time.ActorID) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	reissued, err := d.doc.ReissueActor(actor)
+	if err != nil {
+		return err
+	}
+	if reissued {
+		d.invalidateClone()
+		d.history.ClearUndo()
+		d.history.ClearRedo()
+	}
+	return nil
+}
+
 // ActorID returns ID of the actor currently editing the document.
 //
 // It reads d.doc.changeID, which SetActor and every applied change write under

@@ -716,12 +716,17 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	}
 	defer c.endAttach(r.Key())
 
-	r.SetActor(c.loadID())
-
 	if r.Type() == attachable.TypeDocument {
 		d, ok := r.(*document.Document)
 		if !ok {
 			return ErrInvalidResource
+		}
+
+		// Re-issue, not just set: the tickets of elements created before the
+		// attach name the initial actor, and another client that filled the
+		// same key would push the very same createdAt.
+		if err := d.ReissueActor(c.loadID()); err != nil {
+			return err
 		}
 
 		attachOpts := &AttachOptions{}
@@ -739,6 +744,7 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	if !ok {
 		return ErrInvalidResource
 	}
+	p.SetActor(c.loadID())
 
 	attachChannelOpts := &AttachChannelOptions{}
 	for _, opt := range opts {

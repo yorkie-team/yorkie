@@ -268,13 +268,97 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
+//
+// It rewrites only the change IDs and each operation's executedAt: the root
+// and the tickets an operation carries keep the previous actor. That is what a
+// replica built from the server's state needs, where the root holds other
+// actors' elements. The client attaching a document it edited offline uses
+// ReissueActor instead, which re-issues every ticket the document minted.
 func (d *InternalDocument) SetActor(actor time.ActorID) {
 	for _, c := range d.localChanges {
 		c.SetActor(actor)
 	}
 	d.changeID = d.changeID.SetActor(actor)
+}
 
-	// TODO(hackerwins): We need to update the root object as well.
+// ReissueActor sets actor into this document like SetActor and, when the
+// document has never synced, re-issues every ticket it minted under its
+// previous actor -- usually time.InitialActorID -- to the given actor: in the
+// local changes, in the root and in the presences. It reports whether it
+// re-issued anything.
+//
+// Without it, two clients that fill the same key before attaching push values
+// with identical createdAt, and the server cannot tell the two elements apart.
+// See docs/design/pre-attach-ticket-reissue.md.
+//
+// The root is rebuilt by replaying the re-issued local changes on a fresh
+// root, which is what the server builds from them. The document is left
+// untouched when any step fails.
+func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, error) {
+	prev := d.changeID.ActorID()
+	if prev == actor || !d.neverSynced() || !d.HasLocalChanges() {
+		d.SetActor(actor)
+		return false, nil
+	}
+
+	changes := make([]*change.Change, 0, len(d.localChanges))
+	for _, c := range d.localChanges {
+		ops, err := converter.ReissueOperations(c.Operations(), prev, actor)
+		if err != nil {
+			return false, err
+		}
+		id := c.ID().SetActor(actor)
+		id = id.SetVersionVector(reissueVersionVector(id.VersionVector(), prev, actor))
+		changes = append(changes, change.New(id, c.Message(), ops, c.PresenceChange()))
+	}
+
+	root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+	presences := presence.NewMap()
+	for _, c := range changes {
+		if _, err := c.Execute(root, presences, operations.OpSourceReplay); err != nil {
+			return false, err
+		}
+	}
+
+	d.localChanges = changes
+	d.root = root
+	d.presences = presences
+	changeID := d.changeID.SetActor(actor)
+	d.changeID = changeID.SetVersionVector(
+		reissueVersionVector(changeID.VersionVector(), prev, actor),
+	)
+	return true, nil
+}
+
+// neverSynced reports whether this document has neither sent nor received
+// anything: its checkpoint is the initial one, and its version vector names
+// no actor but its own. Every ticket naming its actor was then issued here and
+// is held only by its local changes and the state built from them.
+func (d *InternalDocument) neverSynced() bool {
+	if d.status != StatusDetached || d.checkpoint != change.InitialCheckpoint {
+		return false
+	}
+	actor := d.changeID.ActorID()
+	for id := range d.changeID.VersionVector() {
+		if id != actor {
+			return false
+		}
+	}
+	return true
+}
+
+// reissueVersionVector returns a copy of the given vector with the entry of
+// the actor `from` moved to the actor `to`.
+func reissueVersionVector(vector time.VersionVector, from, to time.ActorID) time.VersionVector {
+	reissued := vector.DeepCopy()
+	if from == to {
+		return reissued
+	}
+	if lamport, ok := reissued.Get(from); ok {
+		reissued.Unset(from)
+		reissued.Set(to, max(lamport, reissued.VersionOf(to)))
+	}
+	return reissued
 }
 
 // Lamport returns the Lamport clock of this document.
