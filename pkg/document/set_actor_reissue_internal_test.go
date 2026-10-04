@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-func TestReissueActorInternal(t *testing.T) {
+func TestSetActorWithReissueInternal(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 
@@ -62,7 +62,7 @@ func TestReissueActorInternal(t *testing.T) {
 		doc.doc.localChanges = append(doc.doc.localChanges, bad)
 		changes := doc.doc.localChanges
 
-		assert.Error(t, doc.ReissueActor(actor))
+		assert.Error(t, doc.SetActorWithOptions(actor, WithReissue()))
 		assert.Equal(t, time.InitialActorID, doc.ActorID())
 		assert.Equal(t, before, doc.Marshal())
 		assert.Same(t, root, doc.doc.root)
@@ -78,7 +78,7 @@ func TestReissueActorInternal(t *testing.T) {
 		copiedChange := copied.localChanges[0]
 		copiedActor := copiedChange.ID().ActorID()
 
-		require.NoError(t, doc.ReissueActor(actor))
+		require.NoError(t, doc.SetActorWithOptions(actor, WithReissue()))
 
 		assert.Equal(t, actor, doc.doc.localChanges[0].ID().ActorID())
 		assert.Same(t, copiedChange, copied.localChanges[0])

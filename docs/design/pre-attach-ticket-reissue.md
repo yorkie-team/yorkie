@@ -55,10 +55,25 @@ identity break the document in ways that depend on the order things arrive:
 
 ## Design
 
-`Client.Attach` calls `Document.ReissueActor(actor)` instead of `SetActor`.
+`Client.Attach` calls `Document.SetActorWithOptions(actor, document.WithReissue())`
+instead of `SetActor`. The API:
+
+```go
+type SetActorOption func(*setActorOptions)
+
+func WithReissue() SetActorOption
+
+func (d *Document) SetActorWithOptions(actor time.ActorID, opts ...SetActorOption) error
+```
+
+Without options `SetActorWithOptions` is `SetActor` and returns nil. With
+`WithReissue` it re-issues a never-synced document's tickets as below, and
+falls back to plain `SetActor` for a document that has synced.
+`attachable.Attachable.SetActor` and every existing `SetActor` caller -- the
+server's snapshot path, channels, test cases -- are unchanged.
 
 ```text
-ReissueActor(actor):
+SetActorWithOptions(actor, WithReissue()):
   prev := current actor
   if prev == actor || !neverSynced() || no local changes:
       SetActor(actor)                       # legacy behavior
@@ -168,7 +183,7 @@ re-issue clears them.
 
 | Decision | Reason |
 |----------|--------|
-| A new `ReissueActor`, not a smarter `SetActor` | The server builds documents with `SetActor` from snapshots that legitimately hold initial-actor elements written by the server itself; only the attaching client may re-issue |
+| An opt-in `WithReissue` option, not a smarter `SetActor` | The server builds documents with `SetActor` from snapshots that legitimately hold initial-actor elements written by the server itself; only the attaching client may re-issue. An option of `SetActor` rather than a second verb keeps the attachable interface unchanged; a functional option rather than a bare bool follows the Uber style guide |
 | Guard on "never synced" rather than a lamport watermark | Before the first sync every ticket of the current actor is local; a watermark is unsound once pulls bump the lamport |
 | Rewrite through protobuf | One generic walk over the wire format reaches every ticket; a per-operation rewrite would have to track every crdt type's ticket fields |
 | Rebuild the root by replay | Matches the server by construction; rewriting the root in place means re-keying every index |

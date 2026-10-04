@@ -283,8 +283,9 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 // It rewrites only the change IDs and each operation's executedAt: the root
 // and the tickets an operation carries keep the previous actor. That is what a
 // replica built from the server's state needs, where the root holds other
-// actors' elements. The client attaching a document it edited offline uses
-// ReissueActor instead, which re-issues every ticket the document minted.
+// actors' elements. The client attaching a document it edited offline passes
+// WithReissue to Document.SetActorWithOptions instead, which re-issues every
+// ticket the document minted.
 func (d *InternalDocument) SetActor(actor time.ActorID) {
 	for _, c := range d.localChanges {
 		c.SetActor(actor)
@@ -292,7 +293,7 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 	d.changeID = d.changeID.SetActor(actor)
 }
 
-// ReissueActor sets actor into this document like SetActor and, when the
+// setActorWithReissue sets actor into this document like SetActor and, when the
 // document has never synced, re-issues every ticket it minted under its
 // previous actor -- usually time.InitialActorID -- to the given actor: in the
 // local changes, in the root and in the presences. It reports whether it
@@ -309,7 +310,7 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 // DeepCopy sharing the previous ones is unaffected. (SetActor, the fallback,
 // still rewrites the shared changes in place as it always has; no caller deep
 // copies a document that holds local changes.)
-func (d *InternalDocument) ReissueActor(actor time.ActorID) (bool, error) {
+func (d *InternalDocument) setActorWithReissue(actor time.ActorID) (bool, error) {
 	prev := d.changeID.ActorID()
 	if prev == actor || !d.neverSynced() || !d.HasLocalChanges() {
 		d.SetActor(actor)

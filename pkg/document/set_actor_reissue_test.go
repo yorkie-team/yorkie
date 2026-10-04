@@ -167,7 +167,7 @@ func serverBuild(t *testing.T, docs ...*document.Document) *document.InternalDoc
 func reissueActor(t *testing.T, doc *document.Document, actor time.ActorID) {
 	t.Helper()
 
-	require.NoError(t, doc.ReissueActor(actor))
+	require.NoError(t, doc.SetActorWithOptions(actor, document.WithReissue()))
 }
 
 // localActorsOf returns the actor of every local change the document would
@@ -190,7 +190,7 @@ func rootBytes(t *testing.T, doc *document.InternalDocument) []byte {
 	return b
 }
 
-func TestReissueActor(t *testing.T) {
+func TestSetActorWithReissue(t *testing.T) {
 	actorA, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 	actorB, err := time.ActorIDFromHex("000000000000000000000002")
@@ -289,7 +289,7 @@ func TestReissueActor(t *testing.T) {
 		// The fallback branch is what sets the actor on a document that has
 		// already synced -- a re-attach after a detach, say -- so it has to
 		// reach the change ID and every buffered local change, exactly as
-		// SetActor did before the client switched to ReissueActor.
+		// SetActor did before the client switched to WithReissue.
 		assert.Equal(t, actorA, doc.ActorID())
 		local := localActorsOf(t, doc)
 		require.NotEmpty(t, local)
@@ -327,6 +327,26 @@ func TestReissueActor(t *testing.T) {
 
 		reissueActor(t, copiedDoc, actorA)
 		assert.NotZero(t, actorsOf(t, copiedDoc)[time.InitialActorID])
+	})
+
+	t.Run("without options it is SetActor", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		fillEverything(t, doc)
+		before, initial := doc.Marshal(), actorsOf(t, doc)[time.InitialActorID]
+		require.True(t, doc.CanUndo())
+
+		require.NoError(t, doc.SetActorWithOptions(actorA))
+
+		assert.Equal(t, actorA, doc.ActorID())
+		assert.Equal(t, before, doc.Marshal())
+		assert.True(t, doc.CanUndo())
+		for _, actor := range localActorsOf(t, doc) {
+			assert.Equal(t, actorA, actor)
+		}
+		// The tickets inside the operations and the root keep the initial
+		// actor, exactly as SetActor leaves them.
+		assert.NotZero(t, actorsOf(t, doc)[time.InitialActorID])
+		assert.Less(t, actorsOf(t, doc)[time.InitialActorID], initial)
 	})
 
 	t.Run("an empty document only takes the actor", func(t *testing.T) {

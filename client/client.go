@@ -725,7 +725,7 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 		// Re-issue, not just set: the tickets of elements created before the
 		// attach name the initial actor, and another client that filled the
 		// same key would push the very same createdAt.
-		if err := d.ReissueActor(c.loadID()); err != nil {
+		if err := d.SetActorWithOptions(c.loadID(), document.WithReissue()); err != nil {
 			return err
 		}
 

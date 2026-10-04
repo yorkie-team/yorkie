@@ -36,7 +36,7 @@ so `createdAt` is unique per client. Design:
 
 ## Plan
 
-- [x] Red unit test (`pkg/document`): after `ReissueActor`, no ticket in
+- [x] Red unit test (`pkg/document`): after the re-issue, no ticket in
       the root snapshot or in the local changes names the initial actor
       (except the lamport-0 root ticket), and the local root equals the
       root a server builds from the pushed changes.
@@ -48,14 +48,14 @@ so `createdAt` is unique per client. Design:
 - [x] `converter.ReissueOperations`: wire round trip with a generic
       protoreflect walk over every `TimeTicket` (nested element bytes
       decoded and re-encoded).
-- [x] `InternalDocument.ReissueActor`: only for a never-synced document
+- [x] `InternalDocument.setActorWithReissue`: only for a never-synced document
       (initial checkpoint, version vector naming no other actor, local
       changes present). Re-issue the local changes, rebuild root and
       presences by replaying them on a fresh root, re-key the version
       vector. Atomic: assign only after every step succeeded.
-- [x] `Document.ReissueActor`: lock, invalidate the clone, clear the
+- [x] `Document.SetActorWithOptions` + `WithReissue()`: lock, invalidate the clone, clear the
       undo/redo stacks when tickets were re-issued.
-- [x] `Client.Attach`: call `Document.ReissueActor` for documents instead
+- [x] `Client.Attach`: call `SetActorWithOptions(..., WithReissue())` for documents instead
       of the plain `SetActor`.
 - [x] ~~Separate commit: compaction failure logs root size, not the
       whole root~~ -- landed on `main` in #2108 while this was in flight.
@@ -65,15 +65,15 @@ so `createdAt` is unique per client. Design:
       -benchtime 10x`, `make verify`.
 - [x] PR to `main`, `@claude loop` comment.
 
-## Re-scope (after loop round 13)
+## Re-scope
 
-The agent loop grew this PR well past its intent (attach rollback,
+Review added mechanisms beyond the re-issue (attach rollback,
 pushed-marks, minted-actor tracking, server-side actor ownership, a
 version-vector size cap, HLL registers on the wire, undo-change pruning,
 an error-code change). Per the maintainer's call on the sibling #2112,
-it is narrowed back to the re-issue:
+the PR is narrowed back to the re-issue:
 
-- [x] Keep: `ReissueActor`, `converter.ReissueOperations`, replay
+- [x] Keep: the re-issue, `converter.ReissueOperations`, replay
       rebuild, version-vector re-key, history clear, design doc, tests.
 - [x] Fix in the core: the `absorbedRemote` guard (kept by `DeepCopy`);
       copy-on-write online-client re-key; actor-keyed protobuf map
@@ -89,6 +89,14 @@ it is narrowed back to the re-issue:
       offline-resumable-attach doc edits.
 - [x] Out of scope, filed: #2114 (server does not bind a pushed change's
       actor to the authenticated client).
+
+## API (maintainer decision)
+
+- [x] Replace `Document.ReissueActor(actor) error` with
+      `Document.SetActorWithOptions(actor, opts ...SetActorOption) error`
+      and the functional option `document.WithReissue()`. Without options
+      it is `SetActor`; `Attachable.SetActor` and its callers are
+      unchanged.
 
 ## JS follow-up (yorkie-js-sdk)
 
