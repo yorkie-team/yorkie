@@ -199,6 +199,32 @@ client credential binding is a protocol-level change and a separate task; the
 gate still removes the cross-client actor forgery that needed no client
 identity at all.
 
+### Security boundary
+
+Stating the above as a boundary, because `validateChangeActors` reads like an
+authorization control and is not one:
+
+- **What it enforces.** For a not-yet-acknowledged change in a pushed pack, the
+  change's actor must be one of the two identities of the `client_id` the
+  request carries. It removes actor forgery by a client acting under its own
+  identity -- the variant that needs no knowledge of the victim at all.
+- **What it does not enforce.** It is satisfied by whoever presents the
+  victim's `client_id`, because `clients.FindActiveClientInfo` resolves that id
+  without any credential check and the surrounding auth is project-scoped.
+  Co-tenants of a project are therefore not isolated from each other by this
+  gate, exactly as they are not isolated by any other document RPC. Closing
+  this needs per-client credentials at the protocol level: a separate task.
+- **What it does not cover.** The pack's other client-supplied identity input,
+  `ChangePack.VersionVector`, is stored verbatim by `UpdateMinVersionVector`
+  and fed to min-VV and GC. Ownership is the wrong predicate for it -- a
+  version vector legitimately carries other actors' lamports -- so it is left
+  unchecked. The exposure is bounded: the vector is stored under the pusher's
+  own `VersionVectorInfo` row, and `MinVersionVector` treats an actor missing
+  from any row as `0`, so a forged entry can only drag the minimum down and
+  stall tombstone GC on documents the pusher is attached to. It cannot raise
+  the minimum past another client's own row, so it cannot make the server drop
+  tombstones a client has not yet seen.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |

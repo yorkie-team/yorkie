@@ -261,6 +261,30 @@ func publisherActor(
 // self-echo filter key on it too. Honoring a forged actor would let one client
 // make another silently drop a change it never authored.
 //
+// Scope, deliberately narrow on two axes:
+//
+//   - It covers only the actor stamped into a stored change. The other
+//     client-supplied identity input in the same pack, reqPack.VersionVector,
+//     is stored verbatim (UpdateMinVersionVector, below) and is not checked:
+//     a version vector legitimately carries other actors' lamports, so
+//     ownership is the wrong predicate for it. The blast radius is bounded by
+//     how minVV is computed -- the pack is stored under the pusher's own
+//     VersionVectorInfo row, and MinVersionVector takes 0 for any actor
+//     missing from some row, so a forged entry can only pull the minimum down
+//     (stalling tombstone GC for docs this client is attached to), never push
+//     it past another client's own row and drop tombstones early.
+//   - It is a consistency guard inside the project's trust boundary, not an
+//     authentication boundary. clientInfo is resolved from the request's
+//     self-asserted client_id (clients.FindActiveClientInfo does a lookup plus
+//     EnsureActivated, no credential check) and the surrounding auth is
+//     project-scoped, so a caller already holding the project's API key can
+//     satisfy this check by presenting the victim's client_id instead of
+//     forging an actor. Closing that needs per-client credentials, which
+//     Yorkie does not have today; see docs/design/pre-attach-ticket-reissue.md
+//     ("Security boundary"). What this guard removes is the weaker,
+//     credential-free variant: a client acting under its own client_id
+//     stamping someone else's actor.
+//
 // Every legitimate pusher stamps its own actor. Both SDKs rewrite the change
 // ID's actor to the client's actor on attach -- SetActor did so before the
 // pre-attach re-issue existed -- so even a document edited before attach

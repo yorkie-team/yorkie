@@ -211,6 +211,16 @@ func AttachDocument(
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.
+//
+// The returned ClientInfo is a lookup of a self-asserted identity, not an
+// authenticated principal: refKey.ClientID comes from the request and this
+// function only resolves it and checks that the client is activated. The
+// enclosing authorization is project-scoped (API key / auth webhook), so any
+// caller admitted to the project can present any client_id of that project.
+// Callers must not read the result as proof of who the caller is; guards keyed
+// on it (e.g. packs.validateChangeActors) are consistency guards within the
+// project, not cross-client authorization. See
+// docs/design/pre-attach-ticket-reissue.md ("Security boundary").
 func FindActiveClientInfo(
 	ctx context.Context,
 	be *backend.Backend,

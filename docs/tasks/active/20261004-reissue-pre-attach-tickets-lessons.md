@@ -128,3 +128,23 @@
   since `IsOwnActor` also accepts the `StableActorID`, which
   `types.DeriveActorID` derives from the project id and the client key.
   The doc now names both ways in.
+
+## Loop round 7 follow-up (panel)
+
+- Upheld in part: the `validateChangeActors` comment claimed the guard
+  backs "VV and GC bookkeeping", but the pack's `VersionVector` -- the
+  sibling client-supplied identity input -- is stored verbatim by
+  `UpdateMinVersionVector` and never checked. No validation was added:
+  ownership is the wrong predicate for a version vector, which
+  legitimately carries other actors' lamports. The comment now states the
+  gap and its bound -- the vector lands in the pusher's own
+  `VersionVectorInfo` row and `MinVersionVector` scores an actor missing
+  from any row as `0` (`pkg/document/time/version_vector.go:62`), so a
+  forged entry can only stall tombstone GC, never drop tombstones early.
+- Disputed again, not changed: `client_id` resolving to an unauthenticated
+  principal. Same project-scoped identity model as round 6; rebuttal
+  re-filed. What did change is the framing the finding objected to: the
+  gate no longer reads as an authorization control. `FindActiveClientInfo`
+  now says on its face that it returns a self-asserted identity, and the
+  design doc carries a "Security boundary" section splitting what the gate
+  enforces, what it does not, and what it does not cover.
