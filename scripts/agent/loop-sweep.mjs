@@ -49,7 +49,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "./gh-checks.mjs";
-import { isPagedLatchComment, PAGED_LATCH } from "./rounds.mjs";
+import { isPagedLatchComment, PAGED_LATCH, PAGE_AUTHOR_LOGINS } from "./rounds.mjs";
 
 export const SWEEP_MARKER = "<!-- agent-sweep ";
 export const USAGE_MARKER = "<!-- agent-usage-limit ";
@@ -106,6 +106,25 @@ function parseMarker(body, marker) {
   }
 }
 
+/**
+ * Is this comment a latch — review-side OR CI-side — from an author the rest of
+ * the pipeline believes? The CI-side `<!-- agent-paged -->` is written by the
+ * CI-fix arm with the App token (`yorkie-team-agent[bot]`) and can be written by
+ * a maintainer by hand; `set-state.mjs`, `agent-rerun.yml` and
+ * `agent-iterate-ci.yml` all trust those authors, so the sweep must too. Trusting
+ * only the workflow bot here would read a real non-usage page as "no latch" and
+ * let a usage retry unblock a PR a human owns. Same trust rule as
+ * `isPagedLatchComment`, which already covers the review-side marker.
+ */
+const TRUSTED_LATCH_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+export function isLatchComment(comment) {
+  if (isPagedLatchComment(comment)) return true;
+  const c = comment && typeof comment === "object" ? comment : {};
+  if (!str(c.body).includes(CI_PAGED_LATCH)) return false;
+  if (c.user?.type === "Bot" && PAGE_AUTHOR_LOGINS.includes(str(c.user.login))) return true;
+  return TRUSTED_LATCH_ASSOCIATIONS.has(str(c.author_association));
+}
+
 const byWorkflowBot = (c) => c?.user?.type === "Bot" && SWEEP_AUTHOR_LOGINS.includes(str(c.user.login));
 
 /** The usage-limit record on a comment, only when the workflow bot wrote it. */
@@ -148,9 +167,7 @@ export function planSweep({ pr, labels = [], comments = [], runs = [], now = Dat
   const list = Array.isArray(runs) ? runs : [];
   if (list.some((r) => str(r?.status) !== "completed")) return none("a run is in flight");
 
-  const latches = (Array.isArray(comments) ? comments : []).filter(
-    (c) => isPagedLatchComment(c) || (byWorkflowBot(c) && str(c.body).includes(CI_PAGED_LATCH)),
-  );
+  const latches = (Array.isArray(comments) ? comments : []).filter(isLatchComment);
   const records = sweepRecordsFor(comments, sha);
 
   // --- usage-window retry ---------------------------------------------------

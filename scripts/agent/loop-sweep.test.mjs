@@ -131,3 +131,20 @@ test("the sweep workflow runs main's script on a clock behind the kill switch", 
   assert.match(yml, /cancel-in-progress: false/);
   assert.match(yml, /node scripts\/agent\/loop-sweep\.mjs/);
 });
+
+test("usage window: a CI-side latch from the App or a maintainer also means a human owns the PR", async () => {
+  const { isLatchComment } = await import("./loop-sweep.mjs");
+  const appCi = { id: 20, user: { type: "Bot", login: "yorkie-team-agent[bot]" }, created_at: ago(400), body: "<!-- agent-paged -->\n🛑 the CI fix produced no commit" };
+  const humanCi = { id: 21, user: { type: "User", login: "hackerwins" }, author_association: "MEMBER", created_at: ago(400), body: "<!-- agent-paged --> holding this" };
+  const strangerCi = { id: 22, user: { type: "User", login: "mallory" }, author_association: "NONE", created_at: ago(400), body: "<!-- agent-paged -->" };
+  assert.equal(isLatchComment(appCi), true);
+  assert.equal(isLatchComment(humanCi), true);
+  assert.equal(isLatchComment(strangerCi), false);
+  for (const other of [appCi, humanCi]) {
+    assert.equal(planSweep({ pr: pr(), comments: [usagePage(400), other], runs: [done(500)], now: NOW }).action, "none");
+  }
+  // A stranger's pasted marker neither blocks the retry nor counts as a latch.
+  assert.equal(planSweep({ pr: pr(), comments: [usagePage(400), strangerCi], runs: [done(500)], now: NOW }).action, "usage-retry");
+  // And a trusted CI latch alone stops the stuck-reviewing path too.
+  assert.equal(planSweep({ pr: pr(), labels: ["agent:reviewing"], comments: [appCi], runs: [done(480)], now: NOW }).action, "none");
+});
