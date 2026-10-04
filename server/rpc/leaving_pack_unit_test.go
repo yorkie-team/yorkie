@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,26 +35,28 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
-// leavingPack builds a pack of one change, refused by the push boundary when
-// refuse is set.
-func leavingPack(t *testing.T, refuse bool) *api.ChangePack {
+// leavingPack builds a pack of count changes. When refuseLast is set, the
+// last of them is crafted into a payload the push boundary refuses.
+func leavingPack(t *testing.T, count int, refuseLast bool) *api.ChangePack {
 	t.Helper()
 
 	doc := document.New("leaving")
 	doc.SetActor(time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1})
-	require.NoError(t, doc.Update(func(r *json.Object, _ *presence.Presence) error {
-		r.SetString("a", "1")
-		return nil
-	}))
+	for i := range count {
+		require.NoError(t, doc.Update(func(r *json.Object, _ *presence.Presence) error {
+			r.SetString(strconv.Itoa(i), "1")
+			return nil
+		}))
+	}
 
 	pbPack, err := converter.ToChangePack(doc.CreateChangePack())
 	require.NoError(t, err)
-	require.Len(t, pbPack.Changes, 1)
+	require.Len(t, pbPack.Changes, count)
 
-	if refuse {
+	if refuseLast {
 		// A value created after its own operation; see
 		// converter.ValidatePushedOperations.
-		set := pbPack.Changes[0].Operations[0].GetSet()
+		set := pbPack.Changes[count-1].Operations[0].GetSet()
 		require.NotNil(t, set)
 		set.Value.CreatedAt = converter.ToTimeTicket(time.NewTicket(time.MaxLamport, 0, doc.ActorID()))
 	}
@@ -71,27 +74,47 @@ func TestLeavingChangePackAuthorizesBeforeDropping(t *testing.T) {
 	ctx := logging.With(context.Background(), logging.DefaultLogger())
 
 	t.Run("a pack the boundary takes", func(t *testing.T) {
-		pack, refused, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, false))
+		pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 1, false))
 		require.NoError(t, err)
-		assert.False(t, refused)
+		assert.Equal(t, -1, refusedFrom)
 		assert.True(t, pack.HasChanges())
 	})
 
 	t.Run("a refused pack is still a write when it is authorized", func(t *testing.T) {
-		pack, refused, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, true))
+		pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 1, true))
 		require.NoError(t, err)
-		require.True(t, refused, "the crafted pack must reach the lenient path")
+		require.Equal(t, 0, refusedFrom, "the crafted pack must reach the lenient path")
 
 		// What DetachDocument and RemoveDocument pass to auth.VerifyAccess,
-		// evaluated before they nil out pack.Changes.
+		// evaluated before they truncate pack.Changes.
 		assert.True(t, pack.HasChanges())
 		assert.Equal(t, []types.AccessAttribute{{
 			Key:  "leaving",
 			Verb: types.ReadWrite,
 		}}, auth.AccessAttributes(pack))
 
-		// And the drop the callers then apply leaves nothing of it.
-		pack.Changes = nil
+		// And the truncation the callers then apply leaves nothing of it.
+		pack.Changes = pack.Changes[:refusedFrom]
 		assert.Equal(t, types.Read, auth.AccessAttributes(pack)[0].Verb)
 	})
+}
+
+// TestLeavingChangePackKeepsChangesBeforeTheRefusedOne pins that one refused
+// change does not take the rest of a leaving pack with it. The changes the
+// client queued before it are legitimate, and a detach or remove is the last
+// chance they have to reach the document; everything from the refused change
+// on is dropped, since a gap in the middle would fail the clientSeq
+// continuity packs.PushPull requires.
+func TestLeavingChangePackKeepsChangesBeforeTheRefusedOne(t *testing.T) {
+	ctx := logging.With(context.Background(), logging.DefaultLogger())
+
+	pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 3, true))
+	require.NoError(t, err)
+	require.Equal(t, 2, refusedFrom)
+
+	pack.Changes = pack.Changes[:refusedFrom]
+	assert.Len(t, pack.Changes, 2)
+	for i, cn := range pack.Changes {
+		assert.Equal(t, uint32(i+1), cn.ClientSeq(), "the kept changes stay continuous")
+	}
 }

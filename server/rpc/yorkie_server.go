@@ -1442,7 +1442,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, refused, err := fromLeavingChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
+	pack, refusedFrom, err := fromLeavingChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1459,8 +1459,8 @@ func (s *yorkieServer) DetachDocument(
 	}); err != nil {
 		return nil, err
 	}
-	if refused {
-		pack.Changes = nil
+	if refusedFrom >= 0 {
+		pack.Changes = pack.Changes[:refusedFrom]
 	}
 
 	project := projects.From(ctx)
@@ -1620,7 +1620,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, refused, err := fromLeavingChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
+	pack, refusedFrom, err := fromLeavingChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -1637,8 +1637,8 @@ func (s *yorkieServer) RemoveDocument(
 	}); err != nil {
 		return nil, err
 	}
-	if refused {
-		pack.Changes = nil
+	if refusedFrom >= 0 {
+		pack.Changes = pack.Changes[:refusedFrom]
 	}
 
 	project := projects.From(ctx)
@@ -1948,29 +1948,47 @@ func fromPushedChangePack(
 // fromLeavingChangePack is fromPushedChangePack for Detach and Remove. A pack
 // refused for its element payload does not refuse the leave: the client would
 // otherwise hold a change it can neither push nor leave behind, and could
-// never detach. The pack is decoded leniently instead and reported refused;
-// the caller authorizes the pack as sent and then drops its changes, so
-// nothing of it reaches the document. A detach or remove over the size limit
-// drops its changes the same way (packs.PushPull).
+// never detach. The pack is decoded leniently instead, and the index of the
+// first refused change is returned alongside it -- -1 when the boundary took
+// the whole pack.
+//
+// The caller authorizes the pack as sent and only then truncates it there, so
+// the changes the client queued before the refused one still reach the
+// document: they are legitimate, and a leave is the client's last chance to
+// push them. Nothing from the refused change on is kept -- judging it is the
+// point, and a gap in the middle of the pack would fail the clientSeq
+// continuity packs.PushPull requires anyway. A detach or remove over the size
+// limit drops its changes the same way (packs.PushPull).
 func fromLeavingChangePack(
 	ctx context.Context,
 	clientID string,
 	pbPack *api.ChangePack,
-) (*change.Pack, bool, error) {
+) (*change.Pack, int, error) {
 	pack, err := fromPushedChangePack(ctx, clientID, pbPack)
 	if err == nil || !isRefusedPayload(err) {
-		return pack, false, err
+		return pack, -1, err
 	}
 
 	pack, err = converter.FromChangePack(pbPack)
 	if err != nil {
-		return nil, false, err
+		return nil, -1, err
+	}
+
+	refusedFrom := len(pack.Changes)
+	for i, pbChange := range pbPack.GetChanges() {
+		if i >= len(pack.Changes) {
+			break
+		}
+		if err := converter.ValidatePushedChange(pbChange); err != nil {
+			refusedFrom = i
+			break
+		}
 	}
 	logging.From(ctx).Warnf(
-		"discarding %d changes from a detach or remove of client %s for document %s",
-		len(pack.Changes), clientID, pbPack.GetDocumentKey(),
+		"discarding %d of %d changes from a detach or remove of client %s for document %s",
+		len(pack.Changes)-refusedFrom, len(pack.Changes), clientID, pbPack.GetDocumentKey(),
 	)
-	return pack, true, nil
+	return pack, refusedFrom, nil
 }
 
 // isRefusedPayload reports whether err is the push boundary refusing an

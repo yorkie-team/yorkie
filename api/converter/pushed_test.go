@@ -624,16 +624,46 @@ func TestValidatePushedChangeBound(t *testing.T) {
 	})
 
 	t.Run("an executed_at of another actor", func(t *testing.T) {
-		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, otherActor,
-			operations.NewSet(pushedTicket(1), "k", pushedPrimitive(t, 9), pushedTicket(9)))),
+		// Not refused: the Android SDK stamps the Add behind
+		// JsonArray.put(value, prevCreatedAt) with the createdAt of the
+		// element it reuses, which carries whichever actor created it. The
+		// change's own actor is bound to the pushing client in
+		// packs.validateChangeActors.
+		assert.NoError(t, converter.ValidatePushedChange(change(9, otherActor,
+			operations.NewSet(pushedTicket(1), "k", pushedPrimitive(t, 9), pushedTicket(9)))))
+	})
+
+	t.Run("a value created by a later change", func(t *testing.T) {
+		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewSet(pushedTicket(1), "k", pushedPrimitive(t, 10), pushedTicket(9)))),
 			converter.ErrInvalidElementTicket)
 	})
 
+	t.Run("a value created by its own change under a later delimiter", func(t *testing.T) {
+		// What the iOS SDK's JSONObject.set(key:_:) emits: the operation's
+		// ticket is issued first and the value's createdAt second, so the two
+		// share a lamport and an actor and differ only in delimiter.
+		value := crdt.NewObject(crdt.NewElementRHT(), time.NewTicket(9, 2, pushedActor))
+		assert.NoError(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewSet(pushedTicket(1), "k", value, time.NewTicket(9, 1, pushedActor)))))
+	})
+
 	t.Run("a payload ticket ahead of the change", func(t *testing.T) {
-		// A tombstone at MaxLamport is one no version vector ever passes, so
-		// it is charged to the document's size for good.
+		// Not refused: a replica seeded from a snapshot takes its lamport
+		// from the pulled version vector's MaxLamport (applySnapshot), and
+		// that vector carries no entry for a client that has since detached,
+		// so an element it copies can legitimately be created above the
+		// lamport of the change carrying the copy. Bounding it here would
+		// refuse that client's push for good.
 		obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(5))
 		obj.SetRemovedAt(time.NewTicket(time.MaxLamport, 0, pushedActor))
+		assert.NoError(t, converter.ValidatePushedChange(change(9, pushedActor,
+			operations.NewSet(pushedTicket(1), "k", obj, pushedTicket(9)))))
+	})
+
+	t.Run("a payload ticket at a negative lamport", func(t *testing.T) {
+		obj := crdt.NewObject(crdt.NewElementRHT(), pushedTicket(5))
+		obj.SetRemovedAt(time.NewTicket(-1, 0, pushedActor))
 		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, pushedActor,
 			operations.NewSet(pushedTicket(1), "k", obj, pushedTicket(9)))),
 			converter.ErrInvalidElementTicket)
@@ -643,6 +673,53 @@ func TestValidatePushedChangeBound(t *testing.T) {
 		assert.ErrorIs(t, converter.ValidatePushedChange(change(9, pushedActor,
 			operations.NewRemove(pushedTicket(1), pushedTicket(2),
 				time.NewTicket(time.MaxLamport, 0, pushedActor)))),
+			converter.ErrInvalidElementTicket)
+	})
+}
+
+// TestValidatePushedTreeNodes pins that the content nodes a TreeEdit carries
+// are judged too. fromTreeNode stamps a decoded node with the id and
+// removedAt the sender chose, so a node removed before the creation it is
+// keyed by is a tombstone no tree can have produced -- and one charged to the
+// document's size until GC passes it.
+func TestValidatePushedTreeNodes(t *testing.T) {
+	treeEdit := func(createdAt, removedAt *time.Ticket) []*api.Operation {
+		node := &api.TreeNode{
+			Id:    &api.TreeNodeID{CreatedAt: converter.ToTimeTicket(createdAt)},
+			Type:  "text",
+			Value: "a",
+		}
+		if removedAt != nil {
+			node.RemovedAt = converter.ToTimeTicket(removedAt)
+		}
+		return []*api.Operation{{Body: &api.Operation_TreeEdit_{TreeEdit: &api.Operation_TreeEdit{
+			ParentCreatedAt: converter.ToTimeTicket(pushedTicket(1)),
+			Contents:        []*api.TreeNodes{{Content: []*api.TreeNode{node}}},
+			ExecutedAt:      converter.ToTimeTicket(pushedTicket(9)),
+		}}}}
+	}
+
+	t.Run("a live node", func(t *testing.T) {
+		assert.NoError(t, converter.ValidatePushedOperations(treeEdit(pushedTicket(5), nil)))
+	})
+
+	t.Run("a node removed after it was created", func(t *testing.T) {
+		assert.NoError(t, converter.ValidatePushedOperations(treeEdit(pushedTicket(5), pushedTicket(6))))
+	})
+
+	t.Run("a node removed before it was created", func(t *testing.T) {
+		assert.ErrorIs(t, converter.ValidatePushedOperations(treeEdit(pushedTicket(5), pushedTicket(4))),
+			converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("a node removed at its own created_at", func(t *testing.T) {
+		assert.ErrorIs(t, converter.ValidatePushedOperations(treeEdit(pushedTicket(5), pushedTicket(5))),
+			converter.ErrInvalidElementTicket)
+	})
+
+	t.Run("a node at a negative lamport", func(t *testing.T) {
+		assert.ErrorIs(t,
+			converter.ValidatePushedOperations(treeEdit(time.NewTicket(-1, 0, pushedActor), nil)),
 			converter.ErrInvalidElementTicket)
 	})
 }

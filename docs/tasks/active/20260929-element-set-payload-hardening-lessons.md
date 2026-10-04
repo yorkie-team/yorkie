@@ -271,3 +271,30 @@ When a test asserts on a value a background timer produces, give the timer its
 period *plus* the poll interval *plus* the work, or poll with
 `assert.Eventually`. And start measuring from a quiesced state: let an earlier
 phase's timer entry expire instead of assuming its window lines up with yours.
+
+## A ceiling read from the pushed message bounds nothing, and wedges clients
+
+The change-lamport ceiling on payload tickets read its ceiling from
+`change.id.lamport` -- a field of the same pushed message it was meant to
+bound -- so an attacker moved one field over and kept `MaxLamport`. It was not
+free, either: `applySnapshot` seeds a replica's lamport from the pulled
+version vector's `MaxLamport`, and that vector has no entry for a client that
+has since detached, so a snapshot-seeded client holds elements created above
+its own lamport. Copying one into a Set would have refused its push for good.
+A bound that needs document state does not belong in a stateless converter;
+what stayed is what no clock issues at all -- a negative lamport, and lamport
+0 for an element identity.
+
+## Reading the SDKs you did not write is not optional before a hard refusal
+
+The design doc named "read the iOS and Android SDKs, or ship log-only for a
+release" as the precondition for the refusal, and both findings it would have
+caught were real. iOS `JSONObject.set(key:_:)` issues the operation's ticket
+first and the value's `createdAt` second, so every primitive set from every
+released iOS version arrives one delimiter *after* its own `executedAt` -- the
+value rule now compares by change (lamport and actor), not by full ticket
+order. Android's `JsonArray.put(value, prevCreatedAt)` stamps the Add with the
+reused element's `createdAt`, so requiring `executedAt` to carry the change's
+actor would have wedged that path; the change's actor is bound against the
+pushing client in `packs.validateChangeActors` instead, which is the binding
+the version vector and GC actually key on.

@@ -43,7 +43,10 @@ no replica could have produced:
   of the same family of bugs is
   [#2100](https://github.com/yorkie-team/yorkie/pull/2100).
 - Pushing a rejected change later. A client holding one can still detach or
-  remove the document (see Design), but the change itself is never accepted.
+  remove the document, keeping the changes it queued before the rejected one
+  (see Design), but the rejected change itself is never accepted.
+- Bounding the lamport of a ticket inside a payload. It needs the document the
+  push targets; see Design Decisions.
 
 ## Design
 
@@ -56,9 +59,12 @@ document. Attach and PushPull then return `InvalidArgument`.
 Detach and Remove do not fail on a refused payload. Otherwise a client holding
 a rejected change could neither push it nor leave the document. They decode the
 pack leniently, authorize it as sent (changes included, so the leave is not
-judged as a read), and then drop its changes, so nothing of them reaches the
-document. A detach or remove over the size limit drops its changes the same way
-(`packs.PushPull`).
+judged as a read), and then truncate it at the first refused change. The
+changes the client queued before that one are legitimate and a leave is their
+last chance to reach the document, so they are kept; nothing from the refused
+change on is, and a gap in the middle would fail the clientSeq continuity
+`packs.PushPull` requires anyway. A detach or remove over the size limit drops
+its changes the same way (`packs.PushPull`).
 
 An Increase carries a delta, not a document element. Its value must be a
 primitive: both SDKs send a number, and `Increase.Execute` drops anything else
@@ -81,32 +87,43 @@ The value rules below compare two tickets the sender picked, so they bound
 nothing on their own. `ValidatePushedChange` binds them to the change carrying
 them first:
 
-- Every operation's `executedAt` is the change's actor's, at a lamport no
-  greater than the change's own. `Context.IssueTimeTicket` stamps every
-  operation of a change from that change's ID, and `Change.SetActor` rewrites
-  the actor of both together.
-- No ticket anywhere in a payload runs ahead of the change's lamport. A pushed
-  payload is a copy of what the sender's replica holds, and every ticket in a
-  replica was issued by a change the sender had already applied. Without this
-  an attacker picks `MaxLamport`: a `createdAt` there poisons an object key no
-  later Set can win back, and a `removedAt` there is a tombstone no version
-  vector ever passes, so it is charged to the document's size forever.
+- Every operation's `executedAt` is at a lamport no greater than the change's
+  own. `Context.IssueTimeTicket` stamps every operation of a change from that
+  change's ID. The actor of an `executedAt` is *not* judged: the Android SDK's
+  `JsonArray.put(value, prevCreatedAt)` reuses an element the document already
+  holds and stamps the resulting Add with that element's `createdAt`
+  (`putCrdtElement`, `document/json/JsonArray.kt`), so the ticket carries
+  whichever actor created it.
+- A ticket *inside* a payload is not bound by the change's lamport. It looks
+  like it should be -- a payload is a copy of what the sender's replica holds
+  -- but a replica's lamport can sit below a ticket it holds: `applySnapshot`
+  seeds it from the pulled version vector's `MaxLamport`
+  (`pkg/document/internal_document.go`), and that vector carries no entry for
+  a client that has since detached, so a snapshot-seeded client legitimately
+  copies an element created above its own lamport. A ceiling there would
+  refuse that client's push for good. A payload ticket is judged only for what
+  no clock issues: a negative lamport, and lamport 0 for an element identity.
 
-This bounds a ticket's lamport, not its actor. A payload legitimately carries
-other replicas' tickets, and which actors exist is not knowable from the
-operation's own bytes; the actor a *change* is stamped with is bound separately,
-against the authenticated client, in `packs.validateChangeActors`.
+The actor a *change* is stamped with is bound separately, against the client
+the request names, in `packs.validateChangeActors` -- that is the binding the
+version vector and GC key on.
 
 ### Rules on the value of an operation
 
 | Rule | Set | Add | ArraySet |
 |---|---|---|---|
-| `createdAt` does not follow `executedAt` | yes | yes | yes |
+| `createdAt` is not issued by a change later than `executedAt` | yes | yes | yes |
 | `removedAt` follows `createdAt` | yes | -- | -- |
 | no `removedAt` | -- | yes | -- |
 | `removedAt` precedes `createdAt` | -- | -- | yes |
 
-- Both SDKs issue one ticket for a fresh value and its operation. Undo
+- The value rule compares the two tickets by *change*, not by full ticket
+  order: two tickets of one change (same lamport, same actor) count as
+  simultaneous however their delimiters order, because the iOS SDK's
+  `JSONObject.set(key:_:)` issues the operation's ticket first and the value's
+  `createdAt` second (`Sources/Document/Json/JSONObject.swift`), so its Set
+  values arrive one delimiter above their own `executedAt`.
+- The Go and JS SDKs issue one ticket for a fresh value and its operation. Undo
   restores an older value under a newer ticket (Set), or re-identifies the
   value with the undo's own ticket (Add, ArraySet; `executeUndoRedo` in Go,
   `document.ts` in JS). A value created before attach keeps `InitialActorID`,
@@ -191,6 +208,21 @@ removed by their own state) can still be tombstoned.
 A tree value is read from its bytes like a container, since `BytesToTree` takes
 its `createdAt`, `movedAt` and `removedAt` from there.
 
+### Rules on text and tree content nodes
+
+A content node is not an element -- it is keyed inside its own text or tree,
+not in `Root.elementMap` -- so it claims no payload identity. It does carry
+tickets `fromTextNode` and `fromTreeNode` stamp it with verbatim, so the nodes
+of a text or tree value, and the ones a `TreeEdit` carries to insert, are
+judged for them:
+
+- a node's `removedAt` follows the `createdAt` of its own id. A node is removed
+  by an edit that already applied its creation, so the removal orders after it
+  on every replica, and a split keeps the original node's `createdAt`. Without
+  this a push plants a tombstone no replica produced, charged to the document's
+  size until GC passes it;
+- no ticket a node carries is at a negative lamport.
+
 Array elements are exempt from the ticket rules. Undo re-identifies an Add or
 ArraySet value with a fresh `createdAt` while the copy keeps its older
 `movedAt`, and the JS ArraySet reverse also keeps an older `removedAt`, so
@@ -202,7 +234,8 @@ them. An object nested in an array is still checked.
 | Risk | Mitigation |
 |------|------------|
 | A rule rejects a shape some client emits, wedging it | Every rule is derived from what Go and JS emit, including undo/redo and pre-attach tickets. `TestPushBoundaryAcceptsReplicaHistories` drives those histories through `FromPushedChangePack`. Refusals are logged, so a false positive is visible |
-| Mobile SDKs (iOS, Android) emit a shape the Go and JS SDKs do not | **Open.** Every rule here was derived by reading the Go and JS SDKs; the iOS and Android SDKs were not read. The rules only constrain a value against its own operation and members against their own object, which any SDK built on the same CRDT satisfies, but that is an argument, not a verification. The failure mode if it is wrong is a wedged client, so before this ships: (a) read the two mobile SDKs' undo/redo and element-copy paths for the shapes the rules judge, or (b) run the gate in log-only mode for a release -- every refusal already logs the client and document it came from (`fromPushedChangePack`) -- and ship the refusal once the logs are quiet. Until one of those is done, an affected client can still leave the document (the Detach/Remove leniency below), so the wedge is escapable by detaching and re-attaching, at the cost of its unpushed local changes |
+| Mobile SDKs (iOS, Android) emit a shape the Go and JS SDKs do not | Closed by reading both. Each encodes an operation's value as a flat `JSONElementSimple` carrying only `created_at`, a type and primitive/counter/tree bytes -- never `removed_at`, `moved_at` or a nested subtree (`Sources/API/Converter.swift` `toElementSimple`; `api/ElementConverter.kt` `toPBJsonElementSimple`) -- so `valueTickets` takes its non-bytes branch and the member and identity rules are unreachable from either. Two rules did trip and were narrowed rather than shipped: iOS mints the value's `createdAt` from a second ticket of the same change as the Set's `executedAt` (`JSONObject.swift`), so the value rule now compares by change rather than by full ticket order; Android stamps one array write with an existing element's ticket (`JsonArray.kt`), so `executedAt` is no longer required to carry the change's actor. Refusals log the client and document, so a shape neither reading caught is visible |
+| An SDK emits a shape no reading caught, wedging the client | The client can still leave the document (the Detach/Remove truncation above) and keeps every change it queued before the refused one. The wedge costs the refused change and anything after it, not the session |
 | Element `RestoreMode` (revive by identity) ships on Set/Add | The wire field exists but no SDK emits it for elements yet. The value rules have to be revisited with it |
 | A document already corrupted by pre-attach collisions on `main` holds two elements under one `createdAt` outside an array, and an undo copies them back | Refused; the document's identity resolution is already broken there. [#2111](https://github.com/yorkie-team/yorkie/pull/2111) removes the source by re-issuing pre-attach tickets |
 | A document crafted before this gate holds a member that breaks the member rules, and an honest undo copies it back into a Set | Refused, and the client that pushes it is wedged. The shape has one source -- a crafted push, which this gate closes going forward -- and the document it sits in is already broken: the member is unreachable by key and uncollectable. Accepting it to keep that one client moving would reopen the rule for every sender. A repair path for a client holding a rejected change is an explicit Non-Goal above, and refusals are logged so such a client is visible rather than silent |
@@ -212,6 +245,7 @@ them. An object nested in an array is still checked.
 
 | Decision | Reason |
 |----------|--------|
+| No lamport ceiling on a payload ticket | Any ceiling the converter can see comes from the pushed message itself, so it bounds nothing an attacker must respect, while it does wedge an honest client whose lamport was seeded from a snapshot below a ticket the snapshot carries (see Rules from the change's own ID). A real bound needs the document's own clock at push time, where the pushed change's lamport can be judged as well |
 | No `createdAt`-collision check against the document | It needs the document, and legitimate histories produce the collision today. Elements created before attach share the initial actor's tickets across clients, and two replicas undoing concurrent overwrites restore one value under one `createdAt`. A refusal keyed on "a live element already has this `createdAt`" fired on the first of these in `BenchmarkRPC/attach large document`: the losing text was refused, both clients' edits landed on the surviving one, and the document grew past 16 MB until the job timed out |
 | No replicated refusal in `Set.Execute`, `Add.Execute` or `ArraySet.Execute` | A refusal that runs on apply exists only in Go. The JS SDK applies the operation, and the server's snapshot replay runs the Go guard, so any history the guard misjudges splits the server snapshot from JS clients. An earlier guard on every registration (e9fb7f52, reverted) split Go replicas in `TestConcurrentUndoRestoresSameValue` |
 | Validate at the push boundary only | Readers of accepted data must stay lenient; see Design |

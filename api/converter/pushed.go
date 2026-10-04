@@ -49,9 +49,10 @@ func FromPushedChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 }
 
 // ValidatePushedChange applies ValidatePushedOperations to one change, bound
-// by the change's own ID: an operation's executedAt must be the change's
-// actor's and must not run ahead of the change's lamport, and no ticket in any
-// payload may either. See changeBound.
+// by the change's own ID: an operation's executedAt must not run ahead of the
+// change's lamport. The tickets inside
+// a payload are not bound by it -- a replica legitimately copies an element
+// created above its own lamport. See changeBound.
 func ValidatePushedChange(pbChange *api.Change) error {
 	bound, err := boundOf(pbChange.GetId())
 	if err != nil {
@@ -76,30 +77,36 @@ func ValidatePushedChange(pbChange *api.Change) error {
 //
 // The change's own ID (ValidatePushedChange, changeBound):
 //
-//   - Every operation's executedAt is the change's actor's, at a lamport no
-//     greater than the change's own. Context.IssueTimeTicket stamps every
-//     operation of a change from that change's ID, and Change.SetActor rewrites
-//     the actor of both together.
-//   - No ticket anywhere in a payload runs ahead of the change's lamport. A
-//     pushed payload is a copy of what the sender's replica holds, and every
-//     ticket in a replica was issued by a change the sender had already applied,
-//     so it orders before the change carrying the copy. Without this an
-//     attacker picks MaxLamport: a createdAt there poisons an object key no
-//     later Set can ever win back, and a removedAt there is a tombstone no
-//     version vector ever passes, so it is charged to the document's size
-//     forever. Note this bounds a ticket's lamport, not its actor: a payload
-//     legitimately carries other replicas' tickets, and which actors exist is
-//     not knowable from the operation's own bytes.
+//   - Every operation's executedAt is at a lamport no greater than the
+//     change's own. Context.IssueTimeTicket stamps every operation of a change
+//     from that change's ID. The actor is not judged here: the Android SDK
+//     stamps one array write with an existing element's ticket (see
+//     checkExecutedAt), and the actor that matters -- the change's own -- is
+//     bound to the pushing client in packs.validateChangeActors.
+//   - A ticket inside a payload is *not* bound by the change's lamport. It
+//     looks like it should be -- a payload is a copy of what the sender's
+//     replica holds -- but a replica's own lamport can sit below a ticket it
+//     holds: applySnapshot seeds it from the pulled version vector's
+//     MaxLamport (pkg/document/internal_document.go), and that vector carries
+//     no entry for a client that has since detached, so a snapshot-seeded
+//     client legitimately copies an element created above its own lamport. A
+//     ceiling there would refuse that client's push for good. A payload
+//     ticket is only judged for what no clock ever issues: a negative lamport
+//     (checkPayloadTicket) and, for an element identity, lamport 0
+//     (payloadIDs.claim). Bounding the lamport itself needs the document the
+//     push targets -- see the Non-Goals of
+//     docs/design/pushed-payload-validation.md.
 //
 // The value an operation carries (Set, Add, ArraySet):
 //
-//   - It must not be created after its own operation. Both SDKs issue one
-//     ticket for a fresh value and its operation, and undo either restores an
-//     older value (Set) or re-identifies it with the undo's own ticket (Add,
-//     ArraySet; Document.executeUndoRedo). A value that pre-dates attach keeps
-//     InitialActorID, which orders before every real actor at the same
-//     lamport. A Set value created later than its Set would be positioned
-//     before its own createdAt once it wins.
+//   - It must not be created by a change later than its own operation
+//     (issuedAfter). The Go and JS SDKs issue one ticket for a fresh value and
+//     its operation, the iOS SDK issues two of the same change, and undo
+//     either restores an older value (Set) or re-identifies it with the undo's
+//     own ticket (Add, ArraySet; Document.executeUndoRedo). A value that
+//     pre-dates attach keeps InitialActorID, which orders before every real
+//     actor at the same lamport. A Set value created by a later change would
+//     be positioned before its own createdAt once it wins.
 //   - A Set value's removedAt must follow its createdAt, which is what
 //     Element.Remove and DeleteByCreatedAt accept. The JS Remove reverse can
 //     restore a key's tombstone, so a removed Set value is legitimate; one
@@ -166,6 +173,24 @@ func ValidatePushedChange(pbChange *api.Change) error {
 // A tree value is read from its bytes like a container, because that is where
 // the decoder takes its tickets from.
 //
+// The content nodes of a text or a tree -- the ones inside a text or tree
+// value, and the ones a TreeEdit carries to insert (validateTreeNodes):
+//
+//   - A node's removedAt follows the createdAt of its own id. fromTreeNode
+//     stamps a decoded node with both verbatim, so without this a push plants
+//     a tombstone the tree can never have produced: a node is removed by an
+//     edit that already applied its creation, so the removal's ticket orders
+//     after it on every replica, and a split keeps the original node's
+//     createdAt. A tombstone the tree holds is charged to the document's size
+//     until GC passes it.
+//   - No ticket a node carries is at a negative lamport.
+//
+// The nodes of a text value are judged by the same rule (validateTextNodes),
+// since fromTextNode stamps them the same way.
+//
+// A tree node is not an element: it is keyed inside its own tree's index, not
+// in Root.elementMap, so it claims no payload identity.
+//
 // Array elements nested in the value are exempt from the ticket rules. Undo
 // re-identifies an Add or ArraySet value with a fresh createdAt while the copy
 // keeps its older movedAt, and the JS ArraySet reverse also keeps an older
@@ -228,15 +253,20 @@ func boundOf(pbID *api.ChangeID) (changeBound, error) {
 	return changeBound{bound: true, actorID: actorID, lamport: pbID.GetLamport()}, nil
 }
 
-// checkExecutedAt refuses an operation stamped by another actor or ahead of
-// the change carrying it.
+// checkExecutedAt refuses an operation stamped ahead of the change carrying
+// it.
+//
+// It does not require executedAt to carry the change's own actor, though
+// Context.IssueTimeTicket stamps it that way in the Go and JS SDKs: the
+// Android SDK's JsonArray.put(value, prevCreatedAt) reuses an element the
+// document already holds and stamps the resulting Add with that element's
+// createdAt (putCrdtElement, document/json/JsonArray.kt), which carries
+// whichever actor created it. The change's own actor is bound against the
+// pushing client in packs.validateChangeActors instead, which is the binding
+// the version vector and GC key on.
 func (b changeBound) checkExecutedAt(op string, executedAt *time.Ticket) error {
 	if !b.bound {
 		return nil
-	}
-	if executedAt.ActorID() != b.actorID {
-		return fmt.Errorf("%s %s: executed_at is not the change's actor: %w",
-			op, executedAt.Key(), ErrInvalidElementTicket)
 	}
 	if executedAt.Lamport() > b.lamport {
 		return fmt.Errorf("%s %s: executed_at runs ahead of the change's lamport %d: %w",
@@ -246,20 +276,17 @@ func (b changeBound) checkExecutedAt(op string, executedAt *time.Ticket) error {
 	return nil
 }
 
-// checkTicket refuses a payload ticket that no change the sender had applied
-// could have issued: one at a negative lamport, or one ahead of the change
-// carrying the payload.
-func (b changeBound) checkTicket(what string, t *time.Ticket) error {
+// checkPayloadTicket refuses a payload ticket no clock ever issues: one at a
+// negative lamport. It deliberately does not bound the ticket by the change
+// carrying it; see ValidatePushedOperations for why a replica legitimately
+// copies an element created above its own lamport.
+func checkPayloadTicket(what string, t *time.Ticket) error {
 	if t == nil {
 		return nil
 	}
 	if t.Lamport() < 0 {
 		return fmt.Errorf("%s %s: negative lamport is never issued: %w",
 			what, t.Key(), ErrInvalidElementTicket)
-	}
-	if b.bound && t.Lamport() > b.lamport {
-		return fmt.Errorf("%s %s: lamport runs ahead of the change's own %d: %w",
-			what, t.Key(), b.lamport, ErrInvalidElementTicket)
 	}
 
 	return nil
@@ -298,6 +325,18 @@ func validatePushedOperation(pbOp *api.Operation, bound changeBound) error {
 			return err
 		}
 		return validateIncreaseValue(decoded.Increase.GetValue())
+	case *api.Operation_TreeEdit_:
+		if err := validateExecutedAt("tree_edit", decoded.TreeEdit.GetExecutedAt(), bound); err != nil {
+			return err
+		}
+		// A TreeEdit plants identities of its own: fromTreeNodes stamps every
+		// content node with the id and removedAt the sender chose.
+		for _, pbNodes := range decoded.TreeEdit.GetContents() {
+			if err := validateTreeNodes("tree_edit", pbNodes.GetContent()); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		return validateExecutedAt(operationName(pbOp), executedAtOf(pbOp), bound)
 	}
@@ -380,6 +419,21 @@ func validateIncreaseValue(pbValue *api.JSONElementSimple) error {
 	}
 }
 
+// issuedAfter reports whether a was issued after b by a *later* change. Two
+// tickets of one change -- same lamport, same actor -- count as simultaneous
+// however their delimiters order, because an SDK is free to mint more than
+// one ticket per change for one write: the iOS SDK's JSONObject.set(key:_:)
+// issues the operation's ticket first and the value's createdAt second
+// (Sources/Document/Json/JSONObject.swift), so its Set values arrive at the
+// same lamport one delimiter above their own executedAt.
+func issuedAfter(a, b *time.Ticket) bool {
+	if a.Lamport() == b.Lamport() && a.ActorID() == b.ActorID() {
+		return false
+	}
+
+	return a.After(b)
+}
+
 // validateValue applies the value rules to the value of one operation, then
 // the payload-wide identity rules and the member rules to its subtree.
 func validateValue(
@@ -397,12 +451,12 @@ func validateValue(
 		return err
 	}
 
-	root, tickets, err := valueTickets(op, pbValue, bound)
+	root, tickets, err := valueTickets(op, pbValue)
 	if err != nil {
 		return err
 	}
 
-	if tickets.createdAt.After(executedAt) {
+	if issuedAfter(tickets.createdAt, executedAt) {
 		return fmt.Errorf("%s %s: value created after the operation: %w",
 			op, tickets.createdAt.Key(), ErrInvalidElementTicket)
 	}
@@ -423,7 +477,7 @@ func validateValue(
 		}
 	}
 
-	ids := newPayloadIDs(nil, bound)
+	ids := newPayloadIDs(nil)
 	if err := ids.claim(tickets.createdAt); err != nil {
 		return err
 	}
@@ -438,11 +492,7 @@ func validateValue(
 // tree, are decoded from those bytes, and the subtree is returned to walk;
 // anything else keeps only the createdAt of the simple element, which is all
 // fromElement reads from it.
-func valueTickets(
-	op string,
-	pbValue *api.JSONElementSimple,
-	bound changeBound,
-) (*api.JSONElement, elementTickets, error) {
+func valueTickets(op string, pbValue *api.JSONElementSimple) (*api.JSONElement, elementTickets, error) {
 	if pbValue == nil {
 		return nil, elementTickets{}, fmt.Errorf("%s.value: %w", op, ErrUnsupportedElement)
 	}
@@ -460,7 +510,7 @@ func valueTickets(
 		if err := proto.Unmarshal(pbValue.GetValue(), root); err != nil {
 			return nil, elementTickets{}, fmt.Errorf("%s.value: unmarshal element: %w", op, err)
 		}
-		tickets, err := ticketsOf(root, bound)
+		tickets, err := ticketsOf(root)
 		if err != nil {
 			return nil, elementTickets{}, err
 		}
@@ -471,7 +521,7 @@ func valueTickets(
 	if err != nil {
 		return nil, elementTickets{}, err
 	}
-	if err := bound.checkTicket("element.created_at", createdAt); err != nil {
+	if err := checkPayloadTicket("element.created_at", createdAt); err != nil {
 		return nil, elementTickets{}, err
 	}
 	return nil, elementTickets{createdAt: createdAt}, nil
@@ -484,17 +534,16 @@ func valueTickets(
 // validateMembers.
 type payloadIDs struct {
 	parent *payloadIDs
-	bound  changeBound
 	ids    map[string]struct{}
 }
 
-func newPayloadIDs(parent *payloadIDs, bound changeBound) *payloadIDs {
-	return &payloadIDs{parent: parent, bound: bound, ids: map[string]struct{}{}}
+func newPayloadIDs(parent *payloadIDs) *payloadIDs {
+	return &payloadIDs{parent: parent, ids: map[string]struct{}{}}
 }
 
-// child opens a scope nested in this one, carrying the same change bound.
+// child opens a scope nested in this one.
 func (s *payloadIDs) child() *payloadIDs {
-	return newPayloadIDs(s, s.bound)
+	return newPayloadIDs(s)
 }
 
 func (s *payloadIDs) has(key string) bool {
@@ -535,7 +584,9 @@ func (s *payloadIDs) claim(createdAt *time.Ticket) error {
 // validateMembers claims the identity of every element in elem's subtree and
 // applies the member rules to every object in it; see
 // ValidatePushedOperations. Text and tree content keep their own node
-// identities, which are not elements and are not walked.
+// identities, which are not elements: they claim nothing in payloadIDs. They
+// are still judged for the tickets fromTreeNode and fromTextNode stamp them
+// with (validateTreeNodes, validateTextNodes).
 //
 // The elements of one array are judged apart from each other below their own
 // level. Undo restores a removed array element as a deep copy re-identified
@@ -553,6 +604,10 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 	switch body := elem.GetBody().(type) {
 	case *api.JSONElement_JsonObject:
 		return validateObjectMembers(body.JsonObject, ids)
+	case *api.JSONElement_Tree_:
+		return validateTreeNodes("tree", body.Tree.GetNodes())
+	case *api.JSONElement_Text_:
+		return validateTextNodes("text", body.Text.GetNodes())
 	case *api.JSONElement_JsonArray:
 		tops := map[string]struct{}{}
 		below := map[string]struct{}{}
@@ -562,16 +617,16 @@ func validateMembers(elem *api.JSONElement, ids *payloadIDs) error {
 				// A dead position left by a move; it is not an element, so it
 				// claims no element identity -- only the slot of
 				// RGATreeList.nodeMapByCreatedAt that fromJSONArray gives it.
-				if err := positions.claim(pbNode.GetPositionCreatedAt(), ids.bound); err != nil {
+				if err := positions.claim(pbNode.GetPositionCreatedAt()); err != nil {
 					return err
 				}
 				continue
 			}
-			tickets, err := ticketsOf(pbNode.GetElement(), ids.bound)
+			tickets, err := ticketsOf(pbNode.GetElement())
 			if err != nil {
 				return err
 			}
-			if err := positions.claimOf(pbNode, tickets.createdAt, ids.bound); err != nil {
+			if err := positions.claimOf(pbNode, tickets.createdAt); err != nil {
 				return err
 			}
 
@@ -639,17 +694,17 @@ func newArrayPositions() *arrayPositions {
 // claimOf claims the position the node occupies: the one it carries if it was
 // moved, and its element's own createdAt otherwise, which is what
 // RGATreeList.Add keys it by.
-func (p *arrayPositions) claimOf(pbNode *api.RGANode, createdAt *time.Ticket, bound changeBound) error {
+func (p *arrayPositions) claimOf(pbNode *api.RGANode, createdAt *time.Ticket) error {
 	if pbNode.GetPositionMovedAt() == nil {
 		return p.claimTicket(createdAt)
 	}
 
-	return p.claim(pbNode.GetPositionCreatedAt(), bound)
+	return p.claim(pbNode.GetPositionCreatedAt())
 }
 
 // claim claims a position carried on the wire. A missing one is left to
 // fromJSONArray, which refuses it.
-func (p *arrayPositions) claim(pbPosCreatedAt *api.TimeTicket, bound changeBound) error {
+func (p *arrayPositions) claim(pbPosCreatedAt *api.TimeTicket) error {
 	if pbPosCreatedAt == nil {
 		return nil
 	}
@@ -657,7 +712,7 @@ func (p *arrayPositions) claim(pbPosCreatedAt *api.TimeTicket, bound changeBound
 	if err != nil {
 		return err
 	}
-	if err := bound.checkTicket("json_array.node.position_created_at", posCreatedAt); err != nil {
+	if err := checkPayloadTicket("json_array.node.position_created_at", posCreatedAt); err != nil {
 		return err
 	}
 
@@ -691,7 +746,7 @@ func validateObjectMembers(pbObj *api.JSONElement_JSONObject, ids *payloadIDs) e
 		if pbNode.GetElement() == nil {
 			return fmt.Errorf("json_object.node %q: %w", pbNode.GetKey(), ErrUnsupportedElement)
 		}
-		tickets, err := ticketsOf(pbNode.GetElement(), ids.bound)
+		tickets, err := ticketsOf(pbNode.GetElement())
 		if err != nil {
 			return err
 		}
@@ -725,6 +780,66 @@ func validateObjectMembers(pbObj *api.JSONElement_JSONObject, ids *payloadIDs) e
 	return nil
 }
 
+// validateTreeNodes applies the tree node rules to the content nodes of one
+// tree payload; see ValidatePushedOperations. A node is not an element, so it
+// claims no payload identity -- it is keyed inside its own tree's index --
+// but fromTreeNode does stamp it with the id and removedAt the sender chose,
+// so a tombstone it could not have produced is refused here.
+//
+// A node with no id at all is left to fromTreeNode, which refuses it.
+func validateTreeNodes(what string, pbNodes []*api.TreeNode) error {
+	for _, pbNode := range pbNodes {
+		if err := validateNodeTickets(what, pbNode.GetId().GetCreatedAt(), pbNode.GetRemovedAt()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateTextNodes is validateTreeNodes for the nodes of a text payload,
+// which fromTextNode stamps with a removal ticket of their own the same way.
+func validateTextNodes(what string, pbNodes []*api.TextNode) error {
+	for _, pbNode := range pbNodes {
+		if err := validateNodeTickets(what, pbNode.GetId().GetCreatedAt(), pbNode.GetRemovedAt()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateNodeTickets judges the tickets of one content node of a text or a
+// tree: a node a push could not have produced is one removed before the
+// creation it is keyed by. A node with no id at all is left to the decoder,
+// which refuses it.
+func validateNodeTickets(what string, pbCreatedAt, pbRemovedAt *api.TimeTicket) error {
+	if pbCreatedAt == nil {
+		return nil
+	}
+	createdAt, err := fromRequiredTimeTicket(pbCreatedAt, what+".node.created_at")
+	if err != nil {
+		return err
+	}
+	if err := checkPayloadTicket(what+".node.created_at", createdAt); err != nil {
+		return err
+	}
+
+	removedAt, err := fromTimeTicket(pbRemovedAt)
+	if err != nil {
+		return err
+	}
+	if err := checkPayloadTicket(what+".node.removed_at", removedAt); err != nil {
+		return err
+	}
+	if removedAt != nil && !removedAt.After(createdAt) {
+		return fmt.Errorf("%s node %s: removed_at does not follow created_at: %w",
+			what, createdAt.Key(), ErrInvalidElementTicket)
+	}
+
+	return nil
+}
+
 // elementTickets is the ticket triple of one element payload.
 type elementTickets struct {
 	createdAt *time.Ticket
@@ -749,7 +864,7 @@ func (t elementTickets) validateRemovedAt() error {
 }
 
 // ticketsOf reads the ticket triple of any element body.
-func ticketsOf(elem *api.JSONElement, bound changeBound) (elementTickets, error) {
+func ticketsOf(elem *api.JSONElement) (elementTickets, error) {
 	var created, moved, removed *api.TimeTicket
 	switch body := elem.GetBody().(type) {
 	case *api.JSONElement_JsonObject:
@@ -789,7 +904,7 @@ func ticketsOf(elem *api.JSONElement, bound changeBound) (elementTickets, error)
 		"element.moved_at":   t.movedAt,
 		"element.removed_at": t.removedAt,
 	} {
-		if err := bound.checkTicket(what, ticket); err != nil {
+		if err := checkPayloadTicket(what, ticket); err != nil {
 			return elementTickets{}, err
 		}
 	}
