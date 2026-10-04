@@ -251,3 +251,23 @@ executeUndoRedo re-identifies an ArraySet value with the undo's own ticket, so
 removedAt always *precedes* createdAt. When a rule is about to be waived for an
 operation, derive the exact shape that operation emits before waiving it -- the
 waiver is the attacker's parameter otherwise.
+
+## A sleep sized to exactly what a timer owes leaves no margin for the poller
+
+`TestEventWebhookThrottling` waited `throttleWindow + debouncingTime +
+expirationInterval` for the trailing webhook. That is the debounce plus one
+tick of the expiration loop -- but the loop only *notices* an expired entry on
+its next tick, so the send lands anywhere inside that 100ms, and the webhook
+round trip comes after it. The margin was the 10ms `waitWebhookReceived`, so
+under `-race` on a loaded runner the assert fired first and only the
+shutdown flush made the next one pass: one failing assertion in an otherwise
+green suite, with nothing in the branch diff to explain it.
+
+The attach ahead of it was the same shape -- it pushes operations, so it opens
+a throttle window whose boundaries sit within one 33ms tick of the ones the
+loop counts, and whose webhook races the baseline read.
+
+When a test asserts on a value a background timer produces, give the timer its
+period *plus* the poll interval *plus* the work, or poll with
+`assert.Eventually`. And start measuring from a quiesced state: let an earlier
+phase's timer entry expire instead of assuming its window lines up with yours.
