@@ -43,11 +43,16 @@ const (
 	projectTwoID   = types.ID("000000000000000000000002")
 )
 
+// setupTestWithDummyData dials a mongo.Client for the test and closes it when
+// the test ends. A failed dial stops the test there, rather than handing the
+// test a nil client to panic on, which would take down every test after it in
+// the package. A rerun of the test under -count gets a database of its own,
+// since the shared testcases name their documents and users after the test.
 func setupTestWithDummyData(t *testing.T, opts ...func(*mongo.Config)) *mongo.Client {
 	config := &mongo.Config{
 		ConnectionTimeout:  "5s",
 		ConnectionURI:      "mongodb://localhost:27017",
-		YorkieDatabase:     helper.TestDBName(),
+		YorkieDatabase:     helper.TestDBName() + helper.TestRunSuffix(t),
 		PingTimeout:        "5s",
 		CacheStatsInterval: helper.MongoCacheStatsInterval,
 		ProjectCacheSize:   helper.MongoProjectCacheSize,
@@ -60,10 +65,11 @@ func setupTestWithDummyData(t *testing.T, opts ...func(*mongo.Config)) *mongo.Cl
 	for _, opt := range opts {
 		opt(config)
 	}
-	assert.NoError(t, config.Validate())
+	require.NoError(t, config.Validate())
 
 	cli, err := mongo.Dial(config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cli.Close()) })
 
 	return cli
 }
@@ -217,7 +223,6 @@ func TestClient(t *testing.T) {
 func TestClient_ClientCacheUnderConcurrentWrites(t *testing.T) {
 	ctx := context.Background()
 	cli := setupTestWithDummyData(t)
-	defer func() { assert.NoError(t, cli.Close()) }()
 
 	info, err := cli.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
 	require.NoError(t, err)
@@ -289,10 +294,6 @@ func TestClient_AttachedClientLookupDoesNotCacheStaleRows(t *testing.T) {
 	ctx := context.Background()
 	nodeA := setupTestWithDummyData(t)
 	nodeB := setupTestWithDummyData(t)
-	defer func() {
-		assert.NoError(t, nodeA.Close())
-		assert.NoError(t, nodeB.Close())
-	}()
 
 	info, err := nodeA.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
 	require.NoError(t, err)
@@ -334,22 +335,19 @@ func TestClient_AttachedClientLookupDoesNotCacheStaleRows(t *testing.T) {
 // state the RPC gates read from drifting from what the database holds.
 func TestClient_ClientCacheExpiresOnNodeThatDidNotWrite(t *testing.T) {
 	ctx := context.Background()
-	const ttl = 200 * gotime.Millisecond
+	const ttl = gotime.Second
 
 	nodeA := setupTestWithDummyData(t)
 	nodeB := setupTestWithDummyData(t, func(conf *mongo.Config) {
 		conf.ClientCacheTTL = ttl.String()
 	})
-	defer func() {
-		assert.NoError(t, nodeA.Close())
-		assert.NoError(t, nodeB.Close())
-	}()
 
 	info, err := nodeA.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
 	require.NoError(t, err)
 	refKey := info.RefKey()
 
 	// nodeB caches the activated row.
+	cachedAt := gotime.Now()
 	cached, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
 	require.NoError(t, err)
 	require.NoError(t, cached.EnsureActivated())
@@ -359,12 +357,23 @@ func TestClient_ClientCacheExpiresOnNodeThatDidNotWrite(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, database.ClientDeactivated, deactivated.Status)
 
-	// Past the TTL the entry is gone and the miss path reads the row again.
-	gotime.Sleep(3 * ttl)
+	// Within the TTL nodeB still reads the activated copy it cached, which
+	// shows the read below is served by an expiry and not by a cache that
+	// was never filled. Checked only while well inside the TTL, so a slow
+	// machine cannot turn an expiry into a false failure here.
+	stale, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
+	require.NoError(t, err)
+	if gotime.Since(cachedAt) < ttl/2 {
+		require.NoError(t, stale.EnsureActivated())
+	}
 
+	// Past the TTL the entry is gone and the miss path reads the row again.
+	require.Eventually(t, func() bool {
+		refreshed, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
+		return err == nil && refreshed.Status == database.ClientDeactivated
+	}, 10*ttl, ttl/10)
 	refreshed, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
 	require.NoError(t, err)
-	require.Equal(t, database.ClientDeactivated, refreshed.Status)
 	require.ErrorIs(t, refreshed.EnsureActivated(), database.ErrClientNotActivated)
 }
 
@@ -373,10 +382,6 @@ func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {
 	// its own document cache.
 	nodeA := setupTestWithDummyData(t)
 	nodeB := setupTestWithDummyData(t)
-	defer func() {
-		assert.NoError(t, nodeA.Close())
-		assert.NoError(t, nodeB.Close())
-	}()
 
 	testcases.RunCompactChangeInfosAcrossNodesTest(t, nodeA, nodeB, dummyProjectID)
 }
@@ -386,9 +391,6 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		// Given
 		ctx := context.Background()
 		client := setupTestWithDummyData(t)
-		defer func() {
-			assert.NoError(t, client.Close())
-		}()
 
 		// Create a test project
 		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-1", dummyProjectID)
@@ -417,9 +419,6 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		// Given
 		ctx := context.Background()
 		client := setupTestWithDummyData(t)
-		defer func() {
-			assert.NoError(t, client.Close())
-		}()
 
 		// When
 		_, _, err := client.RotateProjectKeys(

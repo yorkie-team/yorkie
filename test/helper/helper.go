@@ -465,6 +465,14 @@ func testRunName(t testing.TB) (string, string) {
 	return name, ""
 }
 
+// TestRunSuffix returns the suffix that keeps names of this run of the test
+// apart from those of its earlier runs under `go test -count=N`: empty on the
+// first run, "-runN" after. See testRunName.
+func TestRunSuffix(t testing.TB) string {
+	_, suffix := testRunName(t)
+	return suffix
+}
+
 // TestKey returns a new instance of resource key for testing. The key is
 // unique to each run of the test; see testRunName.
 func TestKey(t testing.TB, prefix ...int) key.Key {
