@@ -141,11 +141,23 @@ operation can carry a mid-pair offset.
 This is a local-API rule, not a convergence rule. Remote operations carry
 CRDT positions and never pass through `CreateRange` or `FindPos`, so an
 operation minted by an older client, or by an SDK that has not adopted the
-check, still applies exactly as before. `Tree` undo/redo does re-resolve the
-indexes its reverse operations store through `FindPos`, but those indexes are
-derived from node boundaries and shifted by whole remote edits, and a Go
-replica never holds a node boundary inside a pair: a mid-pair split left by
-an older client turns both halves into U+FFFD, so the pair no longer exists.
+check, still applies exactly as before.
+
+`Tree` undo/redo stores some reverse ranges as indexes and re-resolves them
+when it runs. Reconciliation against a remote edit can move such an index
+inside a pair: Case 5 (the remote range overlaps the start of the undo range)
+places the range at the start of the remote content without counting that
+content, the same formula the JS SDK uses. These indexes are the document's
+own, so they resolve through `Tree.FindPosUnchecked`, which skips the check.
+Rejecting one would only fail the undo after its history entry has been
+popped. Such an undo splits the pair as it did before the check existed;
+fixing Case 5 itself is a change to both SDKs and is left out of this rule.
+
+A rejected index reaches the caller as a panic from the `json` proxies.
+`Document.Update` discards the clone whenever the updater returns an error
+or panics, so an edit made earlier in the same updater does not survive in
+`Root` or leak into the next change.
+
 Aligning the split forward to the end of the pair instead would change node
 IDs for the same operation, making it a wire-level rule that needs a
 server-first rollout.
