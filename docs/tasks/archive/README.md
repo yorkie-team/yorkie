@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-02
+updated: 2026-10-05
 ---
 
 # Tasks Archive
@@ -8,22 +8,55 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 41
+Total archived tasks: 69
 
-## 2026/09 (11 tasks)
+## 2026/10 (9 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Keep the agent loop inside the PR's scope (2026-10-05) | [20261005-agent-loop-scope-todo.md](./2026/10/20261005-agent-loop-scope-todo.md) | [20261005-agent-loop-scope-lessons.md](./2026/10/20261005-agent-loop-scope-lessons.md) |
+| Re-issue pre-attach tickets to the real actor on attach (2026-10-04) | [20261004-reissue-pre-attach-tickets-todo.md](./2026/10/20261004-reissue-pre-attach-tickets-todo.md) | [20261004-reissue-pre-attach-tickets-lessons.md](./2026/10/20261004-reissue-pre-attach-tickets-lessons.md) |
+| Integration flakes after the server-side size gate (2026-10-04) | [20261004-integration-size-gate-flakes-todo.md](./2026/10/20261004-integration-size-gate-flakes-todo.md) | [20261004-integration-size-gate-flakes-lessons.md](./2026/10/20261004-integration-size-gate-flakes-lessons.md) |
+| Compacting a document past MongoDB's record limit (2026-10-03) | [20261003-compaction-oversized-doc-todo.md](./2026/10/20261003-compaction-oversized-doc-todo.md) | [20261003-compaction-oversized-doc-lessons.md](./2026/10/20261003-compaction-oversized-doc-lessons.md) |
+| Text: local edits went quadratic after the undo/redo port (2026-10-02) | [20261002-text-normalize-pos-quadratic-todo.md](./2026/10/20261002-text-normalize-pos-quadratic-todo.md) | [20261002-text-normalize-pos-quadratic-lessons.md](./2026/10/20261002-text-normalize-pos-quadratic-lessons.md) |
+| Revalidate open Watch streams on demand (2026-10-02) | [20261002-revalidate-watch-access-todo.md](./2026/10/20261002-revalidate-watch-access-todo.md) | [20261002-revalidate-watch-access-lessons.md](./2026/10/20261002-revalidate-watch-access-lessons.md) |
+| Take the reply to a push-only request as a push ack only (2026-10-02) | [20261002-pushonly-reply-gc-todo.md](./2026/10/20261002-pushonly-reply-gc-todo.md) | [20261002-pushonly-reply-gc-lessons.md](./2026/10/20261002-pushonly-reply-gc-lessons.md) |
+| Auth webhook cache switch and cache TTL floor (#2068, PR #2076) (2026-10-02) | [20261002-auth-webhook-cache-switch-todo.md](./2026/10/20261002-auth-webhook-cache-switch-todo.md) | [20261002-auth-webhook-cache-switch-lessons.md](./2026/10/20261002-auth-webhook-cache-switch-lessons.md) |
+| Port the agent-loop convergence work from yorkie-js-sdk (2026-10-01) | [20261001-harness-convergence-port-todo.md](./2026/10/20261001-harness-convergence-port-todo.md) | [20261001-harness-convergence-port-lessons.md](./2026/10/20261001-harness-convergence-port-lessons.md) |
+
+## 2026/09 (30 tasks)
+
+| Task | Todo | Lessons |
+|---|---|---|
+| A level-2 split before a style range styles the paragraph it split (2026-09-27) | [20260927-style-end-token-split-family-todo.md](./2026/09/20260927-style-end-token-split-family-todo.md) | [20260927-style-end-token-split-family-lessons.md](./2026/09/20260927-style-end-token-split-family-lessons.md) |
+| Lint every build tag, and turn staticcheck and unused back on (2026-09-27) | [20260927-lint-all-tags-todo.md](./2026/09/20260927-lint-all-tags-todo.md) | [20260927-lint-all-tags-lessons.md](./2026/09/20260927-lint-all-tags-lessons.md) |
+| Mark LWW losers removed and stop leaking GC size records (2026-09-27) | [20260927-element-rht-loser-and-gc-record-todo.md](./2026/09/20260927-element-rht-loser-and-gc-record-todo.md) | [20260927-element-rht-loser-and-gc-record-lessons.md](./2026/09/20260927-element-rht-loser-and-gc-record-lessons.md) |
+| Counter float deltas and duplicate attach (Go/JS parity) (2026-09-27) | [20260927-counter-float-cast-and-dup-attach-todo.md](./2026/09/20260927-counter-float-cast-and-dup-attach-todo.md) | [20260927-counter-float-cast-and-dup-attach-lessons.md](./2026/09/20260927-counter-float-cast-and-dup-attach-lessons.md) |
+| Guard empty-text anchors and reset the clone on failed applies (2026-09-26) | [20260926-tree-anchor-and-clone-reset-todo.md](./2026/09/20260926-tree-anchor-and-clone-reset-todo.md) | [20260926-tree-anchor-and-clone-reset-lessons.md](./2026/09/20260926-tree-anchor-and-clone-reset-lessons.md) |
+| Catch the codebase up to Go 1.26 and keep it there (2026-09-26) | [20260926-go126-catch-up-todo.md](./2026/09/20260926-go126-catch-up-todo.md) | [20260926-go126-catch-up-lessons.md](./2026/09/20260926-go126-catch-up-lessons.md) |
+| Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./2026/09/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./2026/09/20260926-backport-hook-fixes-lessons.md) |
+| `go fix` modernizations from the Go 1.26 upgrade (2026-09-25) | [20260925-go-fix-modernizations-todo.md](./2026/09/20260925-go-fix-modernizations-todo.md) | [20260925-go-fix-modernizations-lessons.md](./2026/09/20260925-go-fix-modernizations-lessons.md) |
+| Adopt `errors.AsType` for type-safe error inspection (2026-09-25) | [20260925-errors-astype-todo.md](./2026/09/20260925-errors-astype-todo.md) | [20260925-errors-astype-lessons.md](./2026/09/20260925-errors-astype-lessons.md) |
+| The index's silences: a coverage gate, a design-doc home, and the direct-run boundary (2026-09-25) | [20260925-doc-index-gate-todo.md](./2026/09/20260925-doc-index-gate-todo.md) | [20260925-doc-index-gate-lessons.md](./2026/09/20260925-doc-index-gate-lessons.md) |
+| Machine-readable CI lane reports (2026-09-25) | [20260925-ci-lane-reports-todo.md](./2026/09/20260925-ci-lane-reports-todo.md) | [20260925-ci-lane-reports-lessons.md](./2026/09/20260925-ci-lane-reports-lessons.md) |
+| Agent pipeline: the entry paths a human PR uses (2026-09-25) | [20260925-agent-pipeline-entry-paths-todo.md](./2026/09/20260925-agent-pipeline-entry-paths-todo.md) | [20260925-agent-pipeline-entry-paths-lessons.md](./2026/09/20260925-agent-pipeline-entry-paths-lessons.md) |
 | Tree unwrap vs. merge-delete divergence (#1956) (2026-09-24) | [20260924-tree-unwrap-merge-delete-todo.md](./2026/09/20260924-tree-unwrap-merge-delete-todo.md) | [20260924-tree-unwrap-merge-delete-lessons.md](./2026/09/20260924-tree-unwrap-merge-delete-lessons.md) |
 | SplitText records the left piece's length in runes (2026-09-24) | [20260924-tree-split-text-utf16-length-todo.md](./2026/09/20260924-tree-split-text-utf16-length-todo.md) | [20260924-tree-split-text-utf16-length-lessons.md](./2026/09/20260924-tree-split-text-utf16-length-lessons.md) |
+| A style's reached node set depends on delivery order (2026-09-24) | [20260924-style-reached-set-order-dependent-todo.md](./2026/09/20260924-style-reached-set-order-dependent-todo.md) | [20260924-style-reached-set-order-dependent-lessons.md](./2026/09/20260924-style-reached-set-order-dependent-lessons.md) |
 | Local harness enforcement (2026-09-24) | [20260924-local-harness-enforcement-todo.md](./2026/09/20260924-local-harness-enforcement-todo.md) | [20260924-local-harness-enforcement-lessons.md](./2026/09/20260924-local-harness-enforcement-lessons.md) |
 | docSize drifts from a rebuild in three places (2026-09-24) | [20260924-docsize-rebuild-drift-todo.md](./2026/09/20260924-docsize-rebuild-drift-todo.md) | [20260924-docsize-rebuild-drift-lessons.md](./2026/09/20260924-docsize-rebuild-drift-lessons.md) |
+| Expose cache hit/miss as Prometheus metrics (2026-09-24) | [20260924-cache-hit-miss-metrics-todo.md](./2026/09/20260924-cache-hit-miss-metrics-todo.md) | [20260924-cache-hit-miss-metrics-lessons.md](./2026/09/20260924-cache-hit-miss-metrics-lessons.md) |
+| Concurrent splits of one boundary sit in arrival order (2026-09-23) | [20260923-same-boundary-split-order-todo.md](./2026/09/20260923-same-boundary-split-order-todo.md) | [20260923-same-boundary-split-order-lessons.md](./2026/09/20260923-same-boundary-split-order-lessons.md) |
+| Maintainer Merge skill (2026-09-23) | [20260923-maintainer-merge-skill-todo.md](./2026/09/20260923-maintainer-merge-skill-todo.md) | [20260923-maintainer-merge-skill-lessons.md](./2026/09/20260923-maintainer-merge-skill-lessons.md) |
+| End the Watch stream when its subscriptions close (2026-09-22) | [20260922-watch-stream-zombie-todo.md](./2026/09/20260922-watch-stream-zombie-todo.md) | [20260922-watch-stream-zombie-lessons.md](./2026/09/20260922-watch-stream-zombie-lessons.md) |
+| Port `@claude fix` on an issue (issue → PR) (2026-09-22) | [20260922-agent-implement-issue-to-pr-todo.md](./2026/09/20260922-agent-implement-issue-to-pr-todo.md) | [20260922-agent-implement-issue-to-pr-lessons.md](./2026/09/20260922-agent-implement-issue-to-pr-lessons.md) |
 | A style lands on a deleted text node in Go and not in JS (2026-09-21) | [20260921-style-on-a-tombstoned-node-todo.md](./2026/09/20260921-style-on-a-tombstoned-node-todo.md) | [20260921-style-on-a-tombstoned-node-lessons.md](./2026/09/20260921-style-on-a-tombstoned-node-lessons.md) |
 | The attribute ledger, and which SDK's representation is canonical (2026-09-21) | [20260921-attribute-ledger-and-representation-todo.md](./2026/09/20260921-attribute-ledger-and-representation-todo.md) | [20260921-attribute-ledger-and-representation-lessons.md](./2026/09/20260921-attribute-ledger-and-representation-lessons.md) |
 | Post-GC style panic and the snapshot's lost text attribute tombstone (2026-09-20) | [20260920-post-gc-panic-and-snapshot-tombstone-todo.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-todo.md) | [20260920-post-gc-panic-and-snapshot-tombstone-lessons.md](./2026/09/20260920-post-gc-panic-and-snapshot-tombstone-lessons.md) |
 | Tree split drops the size of the element it creates (2026-09-19) | [20260919-tree-split-live-size-dropped-todo.md](./2026/09/20260919-tree-split-live-size-dropped-todo.md) | [20260919-tree-split-live-size-dropped-lessons.md](./2026/09/20260919-tree-split-live-size-dropped-lessons.md) |
 | A split reports no index growth to undo/redo reconciliation (2026-09-19) | [20260919-split-invisible-to-undo-reconcile-todo.md](./2026/09/20260919-split-invisible-to-undo-reconcile-todo.md) | [20260919-split-invisible-to-undo-reconcile-lessons.md](./2026/09/20260919-split-invisible-to-undo-reconcile-lessons.md) |
 | A split copies an attribute tombstone under the same id (2026-09-19) | [20260919-split-copies-attr-tombstone-id-todo.md](./2026/09/20260919-split-copies-attr-tombstone-id-todo.md) | [20260919-split-copies-attr-tombstone-id-lessons.md](./2026/09/20260919-split-copies-attr-tombstone-id-lessons.md) |
+| Precompute the daily peak sessions per channel (2026-09-17) | [20260917-peak-sessions-daily-summary-todo.md](./2026/09/20260917-peak-sessions-daily-summary-todo.md) | [20260917-peak-sessions-daily-summary-lessons.md](./2026/09/20260917-peak-sessions-daily-summary-lessons.md) |
 | The same document encodes to a different snapshot on every attach (2026-09-14) | [20260914-nondeterministic-snapshot-member-order-todo.md](./2026/09/20260914-nondeterministic-snapshot-member-order-todo.md) | [20260914-nondeterministic-snapshot-member-order-lessons.md](./2026/09/20260914-nondeterministic-snapshot-member-order-lessons.md) |
 
 ## 2026/08 (10 tasks)
