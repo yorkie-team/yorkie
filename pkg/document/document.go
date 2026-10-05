@@ -257,15 +257,24 @@ func (d *Document) Update(
 		d.cloneRoot,
 	)
 
+	// NOTE(hackerwins): If the updater fails, we need to discard the clone
+	// to prevent the user from accessing the invalid state. The json proxies
+	// report a rejected argument, such as an index inside a surrogate pair, by
+	// panicking, which skips a plain error check, so the discard is deferred
+	// until the updater has returned normally.
+	updated := false
+	defer func() {
+		if !updated {
+			d.invalidateClone()
+		}
+	}()
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
 		presence.New(ctx, presenceData),
 	); err != nil {
-		// NOTE(hackerwins): If the updater fails, we need to discard the clone
-		// to prevent the user from accessing the invalid state.
-		d.invalidateClone()
 		return err
 	}
+	updated = true
 
 	// Gate any presence emit when the document opted out. We warn once per
 	// document so the silent drop is discoverable without log spam if a
