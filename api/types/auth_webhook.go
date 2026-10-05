@@ -30,12 +30,14 @@ type VerbType string
 
 const (
 
-	// Read represents the case of only reading the given document. A change
-	// pack that carries presence changes but no operations is a Read.
+	// Read represents the case of only reading the given document. On
+	// AttachDocument and DetachDocument it also covers the presence the SDKs
+	// send with every attach and detach, which is stored but changes no
+	// content.
 	Read VerbType = "r"
 
 	// ReadWrite represents the case of reading and writing the given document,
-	// such as a change pack that carries operations or removes the document.
+	// such as a change pack that carries changes or removes the document.
 	ReadWrite VerbType = "rw"
 )
 

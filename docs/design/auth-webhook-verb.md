@@ -50,7 +50,23 @@ document.
 
 ## Design
 
-`auth.AccessAttributes(pack)` reports `rw` when the pack writes the document:
+The relaxation is scoped to the two methods that forced it. Attach and detach
+carry presence the SDKs send on their own, with no way for the caller to leave
+it out; `PushPull` and `RemoveDocument` carry the changes the caller chose to
+send. So there are two rules, not one.
+
+`auth.AccessAttributes(pack)` serves `PushPull` and `RemoveDocument`, where any
+change is a write:
+
+```go
+verb := types.Read
+if pack.HasChanges() || pack.IsRemoved {
+	verb = types.ReadWrite
+}
+```
+
+`auth.AttachmentAccessAttributes(pack)` serves `AttachDocument` and
+`DetachDocument`, where presence alone is a read:
 
 ```go
 verb := types.Read
@@ -59,16 +75,20 @@ if pack.OperationsLen() > 0 || pack.IsRemoved {
 }
 ```
 
-| Pack | `verb` |
-|------|--------|
-| no changes | `r` |
-| presence only (attach, detach, cursor move) | `r` |
-| at least one operation | `rw` |
-| removal requested by the client (`RemoveDocument`, `IsRemoved`), with or without changes | `rw` |
+| Pack | `AccessAttributes` | `AttachmentAccessAttributes` |
+|------|--------------------|------------------------------|
+| no changes | `r` | `r` |
+| presence only | `rw` | `r` |
+| at least one operation | `rw` | `rw` |
+| removal (`IsRemoved`), with or without changes | `rw` | `rw` |
 
-A pack reported as `r` can still carry presence changes, and the server
-stores them like any other change. `r` means the document's content is not
-changed, not that nothing is written.
+A pack reported as `r` on attach or detach can still carry presence changes,
+and the server stores them like any other change: it writes a change document
+and publishes it to every watcher. `r` there means the document's content is
+not changed, not that nothing is written. Presence changed at any other point
+in the attachment goes through `PushPull`, which reports `rw` for it, so a
+webhook that rejects `rw` bounds a read-only member to the presence it sets at
+attach and the clear it sends at detach.
 
 Methods that do not send a change pack build their attributes with
 `types.NewAccessAttributes` and are unaffected.
@@ -111,6 +131,15 @@ bind path, the second call is made only when the first check was a read, so an
 ordinary detach of a writer still costs one webhook call. A webhook that is
 unreachable fails the detach, the same as the first check does.
 
+This check covers `YorkieService.DetachDocument` only. `RemoveOnDetach` also
+removes the document on the deactivation path — `DeactivateClient` ->
+`clients.Deactivate` -> `ClusterService.DetachDocument` — which performs the
+same removal with no per-document webhook call, and is reached both by a client
+closing itself and by housekeeping deactivating idle clients. Closing that path
+needs the removal decision to travel from the handler that holds the caller's
+token down to the cluster handler that does the removal, which housekeeping has
+no token for at all. It is left as follow-up work.
+
 ### What `r` still allows
 
 This follows from the attach itself, not from the pack, and stays allowed for a
@@ -132,7 +161,7 @@ presence-only pack (`r`) is never reused for a pack that carries operations
 
 | Risk | Mitigation |
 |------|------------|
-| A webhook relied on presence reporting `rw` to block a member from showing presence | Such a rule could not be used: attach and detach always carry presence, so it blocked the member from opening the document at all, which rejecting the method does as well. Stated in the release notes. |
+| A webhook relied on presence reporting `rw` to block a member from showing presence | Only the presence attach and detach carry stops reporting `rw`, and such a rule could not be used for it: attach and detach always carry presence, so it blocked the member from opening the document at all, which rejecting the method does as well. Presence sent through `PushPull` still reports `rw`. Stated in the release notes. |
 | A webhook allowed `r` on `RemoveDocument` for read-only members | That allowed them to remove documents, which this change stops. Stated in the release notes. |
 | Webhook authors read `r` as "nothing is stored" | The security guide should state that `r` may carry presence changes, and what `r` still allows (above). The guide describes v0.7.23 today, so this is a follow-up for when this ships (yorkie-team.github.io#344). |
 
@@ -142,6 +171,7 @@ presence-only pack (`r`) is never reused for a pack that carries operations
 |----------|--------|
 | Change the meaning of `verb` rather than add a field (option A in #2104) | `verb` already exists to tell reads from writes, and the only behavior it loses is gating presence, which no webhook could use. A new field would leave every existing webhook as broken as before. |
 | Count operations with `pack.OperationsLen()` | A presence-only change has no operations, so "has operations" is exactly "edits the root". The helper already exists. |
+| Relax presence to `r` only on attach and detach, not on every change-pack method | Presence is stored and broadcast, so it is a write the webhook has to be able to reject. Attach and detach are the only methods where rejecting it also rejects the thing a read-only member must be allowed to do, because the SDKs send presence there with no way to leave it out. On `PushPull` the caller chooses what to send, so there is nothing to relax. |
 | Report removal as `rw` | Removing a document is a write. Without it, the new rule would keep reporting removals as reads. |
 | Let a refused `RemoveOnDetach` removal fall back to a plain detach, instead of failing the detach | The member asked to leave, not to remove; failing the detach would strand a read-only member in the document, and removing anyway would let it destroy the document. |
 | Ask again with `rw` before binding a schema, instead of reporting every attach that names a schema as `rw` | Whether the attach binds is known only after the document is looked up, which happens after the first check. Reporting `rw` for any named schema would block read-only members from every document that uses schemas. |

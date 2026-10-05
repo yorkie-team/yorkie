@@ -881,6 +881,27 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 		assert.NoError(t, writer.Detach(ctx, bound))
 	})
 
+	// Presence is stored as a change and published to every watcher, so only
+	// attach and detach report it as a read. A reader that changes presence
+	// mid-attachment goes through PushPull, which reports rw.
+	t.Run("a reader's presence update is rejected mid-attachment", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, reader.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			p.Set("cursor", "1")
+			return nil
+		}))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(reader.Sync(ctx)))
+		assert.NoError(t, reader.Detach(ctx, doc))
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Contains(t, seen[types.PushPull], types.AccessAttribute{
+			Key:  doc.Key().String(),
+			Verb: types.ReadWrite,
+		})
+	})
+
 	t.Run("a writer's edit is sent as rw", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, writer.Attach(ctx, doc))

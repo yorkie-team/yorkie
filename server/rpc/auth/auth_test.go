@@ -67,7 +67,9 @@ func TestAccessAttributes(t *testing.T) {
 		verb types.VerbType
 	}{
 		{"empty pack", newPack(), types.Read},
-		{"presence-only pack", newPack(newPresenceOnlyChange()), types.Read},
+		// Presence is stored and broadcast, so on the methods that carry the
+		// changes the client chose to send it is a write.
+		{"presence-only pack", newPack(newPresenceOnlyChange()), types.ReadWrite},
 		{"pack with operations", newPack(newOperationChange()), types.ReadWrite},
 		{"operations behind presence", newPack(newPresenceOnlyChange(), newOperationChange()), types.ReadWrite},
 		{"removal without changes", newRemovalPack(), types.ReadWrite},
@@ -81,25 +83,64 @@ func TestAccessAttributes(t *testing.T) {
 	}
 }
 
+func TestAttachmentAccessAttributes(t *testing.T) {
+	tests := []struct {
+		name string
+		pack *change.Pack
+		verb types.VerbType
+	}{
+		{"empty pack", newPack(), types.Read},
+		{"presence-only pack", newPack(newPresenceOnlyChange()), types.Read},
+		{"pack with operations", newPack(newOperationChange()), types.ReadWrite},
+		{"operations behind presence", newPack(newPresenceOnlyChange(), newOperationChange()), types.ReadWrite},
+		{"removal without changes", newRemovalPack(), types.ReadWrite},
+		{"removal with presence only", newRemovalPack(newPresenceOnlyChange()), types.ReadWrite},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(
+				t,
+				[]types.AccessAttribute{{Key: "doc-1", Verb: tt.verb}},
+				AttachmentAccessAttributes(tt.pack),
+			)
+		})
+	}
+}
+
 // TestVerifyAccessVerbCache checks that a decision cached for a presence-only
-// pack is not reused for a pack that carries operations. A webhook that allows
-// reads but rejects writes from a read-only member would otherwise be bypassed
-// by the cache for the next AuthWebhookCacheTTL.
+// detach is not reused for a detach that carries operations. A webhook that
+// allows reads but rejects writes from a read-only member would otherwise be
+// bypassed by the cache for the next AuthWebhookCacheTTL.
 func TestVerifyAccessVerbCache(t *testing.T) {
 	ctx := t.Context()
 	be, project, stub := newWebhookTest(t)
-	project.AuthWebhookMethods = []string{string(types.PushPull)}
+	project.AuthWebhookMethods = []string{string(types.DetachDocument)}
 
-	pushPull := func(c *change.Change) *types.AccessInfo {
-		return &types.AccessInfo{Method: types.PushPull, Attributes: AccessAttributes(newPack(c))}
+	detach := func(c *change.Change) *types.AccessInfo {
+		return &types.AccessInfo{
+			Method:     types.DetachDocument,
+			Attributes: AttachmentAccessAttributes(newPack(c)),
+		}
 	}
 
-	require.NoError(t, verifyAccess(ctx, be, project, "alice", pushPull(newPresenceOnlyChange()), false))
+	require.NoError(t, verifyAccess(ctx, be, project, "alice", detach(newPresenceOnlyChange()), false))
 	assert.Equal(t, int32(1), stub.calls.Load())
 
-	require.NoError(t, verifyAccess(ctx, be, project, "alice", pushPull(newOperationChange()), false))
+	require.NoError(t, verifyAccess(ctx, be, project, "alice", detach(newOperationChange()), false))
 	assert.Equal(t, int32(2), stub.calls.Load(), "a pack with operations reused a presence-only answer")
 
-	require.NoError(t, verifyAccess(ctx, be, project, "alice", pushPull(newPresenceOnlyChange()), false))
+	require.NoError(t, verifyAccess(ctx, be, project, "alice", detach(newPresenceOnlyChange()), false))
 	assert.Equal(t, int32(2), stub.calls.Load(), "a repeated presence-only pack missed the cache")
+}
+
+// TestPushPullPresenceIsWrite checks that a presence-only PushPull is reported
+// as a write, so a webhook that rejects writes from a read-only member can stop
+// it from persisting and broadcasting presence. Attach and detach are the only
+// methods where presence alone is a read.
+func TestPushPullPresenceIsWrite(t *testing.T) {
+	pack := newPack(newPresenceOnlyChange())
+
+	assert.Equal(t, types.ReadWrite, AccessAttributes(pack)[0].Verb)
+	assert.Equal(t, types.Read, AttachmentAccessAttributes(pack)[0].Verb)
 }

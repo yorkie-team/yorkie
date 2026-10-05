@@ -18,8 +18,11 @@ the lessons file.
 
 ## Tasks
 
-- [x] `auth.AccessAttributes(pack)`: `rw` iff `pack.OperationsLen() > 0 ||
-      pack.IsRemoved`.
+- [x] `auth.AttachmentAccessAttributes(pack)` for `AttachDocument` and
+      `DetachDocument`: `rw` iff `pack.OperationsLen() > 0 || pack.IsRemoved`.
+      `auth.AccessAttributes(pack)` keeps `rw` for any change and serves
+      `PushPull` and `RemoveDocument`, so presence sent mid-attachment stays
+      gateable.
 - [x] `types.Read` / `types.ReadWrite` doc comments state the new meaning.
 - [x] Unit tests: empty, presence-only, operations, operations behind
       presence, removal with and without changes; cache key differs between a

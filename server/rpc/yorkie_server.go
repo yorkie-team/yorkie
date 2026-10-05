@@ -237,7 +237,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	attrs := auth.AccessAttributes(pack)
+	attrs := auth.AttachmentAccessAttributes(pack)
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: attrs,
@@ -1475,7 +1475,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	attrs := auth.AccessAttributes(pack)
+	attrs := auth.AttachmentAccessAttributes(pack)
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.DetachDocument,
 		Attributes: attrs,

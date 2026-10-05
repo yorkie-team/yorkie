@@ -124,3 +124,38 @@ after this diff.
 `server/rpc/cluster_server.go` runs the same `RemoveOnDetach` removal for the
 server-internal detach of a deactivated client. It asks no webhook at all,
 before or after this change, and is outside this diff.
+
+## Review round 4 (panel)
+
+Blocking, fixed: the relaxation was applied to every method that sends a
+change pack, which made presence ungateable everywhere, not just where the
+SDKs force it. Presence is not discarded — `packs.PushPull` stores it as a
+change document and publishes it to every watcher, and the per-document size
+gate lets an operation-less change through — so under the single rule a
+read-only member could persist and broadcast arbitrary presence through
+`PushPull` with `verb: r`.
+
+The round-3 note above reasoned from attach and detach ("attach and detach
+always carry it") and then generalized to all four methods. That step was
+wrong: on `PushPull` the caller chooses what to send, so there is nothing the
+webhook has to let through, and rejecting presence there costs a read-only
+member nothing it must be able to do.
+
+Split into two helpers. `AccessAttributes` keeps the old "any change is a
+write" rule and serves `PushPull` and `RemoveDocument`; the new
+`AttachmentAccessAttributes` applies the presence relaxation and serves
+`AttachDocument` and `DetachDocument` only. A read-only member is now bounded
+to the presence it sets at attach and the clear it sends at detach.
+
+Lesson: when relaxing an authorization rule to unblock a caller, scope the
+relaxation to the calls that are actually blocked. "The SDK always sends this"
+is an argument about two methods; it does not carry to a method where the
+caller picks the payload.
+
+Not fixed, follow-up: the `RemoveOnDetach` removal on the deactivation path
+(`DeactivateClient` -> `clients.Deactivate` ->
+`ClusterService.DetachDocument`) still asks no webhook, so `canRemoveOnDetach`
+guards only the client-facing detach. Closing it needs the removal decision to
+travel from the handler holding the caller's token into the cluster handler,
+and housekeeping deactivates idle clients with no token at all. Both files are
+outside this diff. Recorded in `docs/design/auth-webhook-verb.md`.
