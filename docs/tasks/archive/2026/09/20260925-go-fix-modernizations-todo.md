@@ -64,8 +64,9 @@ reads `golang:1.25`, so the remaining move is 1.25 → 1.26, not 1.24 → 1.26.
 - [x] `make lint`
 - [x] `go build ./...`
 - [x] Targeted unit tests over every touched package.
-- [ ] Full `make verify`, `make test`, `make test-complex` — left to CI; they
+- [x] Full `make verify`, `make test`, `make test-complex` — left to CI; they
       need a MongoDB stack this run has no access to.
+      *Audit 2026-10-05:* #2058 (027f6b91) merged with CI green.
 
 ## Review
 

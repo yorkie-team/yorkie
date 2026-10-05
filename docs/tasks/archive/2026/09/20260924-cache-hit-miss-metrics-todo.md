@@ -90,7 +90,9 @@ inside `mongo.Dial`, which never receives `*prometheus.Metrics`.
 - [x] `make lint`, `go test ./...`.
 - [x] Scraped a locally running server (memory DB) and confirmed the three
       caches appear under the expected names and labels.
-- [ ] Self review (`/self-review`), lessons in the paired file.
+- [x] Self review (`/self-review`), lessons in the paired file.
+      *Audit 2026-10-05:* Self review recorded in the lessons file; merged as
+      #2039 (b7c1a215).
 
 ## Notes
 

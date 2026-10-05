@@ -119,9 +119,14 @@ dashboard goes blank — not just the peak chart. So the order is fixed:
       derived insert to `backfill.sql` and `refresh.sql` (after the session
       statement in both). Mirrored by hand — the ArgoCD application is still
       pinned at chart 0.6.0.
-- [ ] Delete and re-apply `analytics-summary-init` (a Job's pod template is
-      immutable), confirm the table is populated, then let the CronJob take over.
-- [ ] Only then roll out the server.
+- [x] Create and backfill the summary table by hand, apply the updated
+      ConfigMap and CronJob, and let the CronJob take over. The plan was to
+      delete and re-apply `analytics-summary-init`; that Job was left alone
+      instead, since its pod template is immutable. (Recorded 2026-10-05,
+      from the v0.7.23 release.)
+- [x] Roll out the server. The plan put this after the table existed;
+      0.7.23 actually rolled out first and was repaired right after, as the
+      release lessons record.
 
 ### Docs
 
@@ -129,8 +134,9 @@ dashboard goes blank — not just the peak chart. So the order is fixed:
       subsection, peak's ingest statement, the rewritten read-path paragraphs,
       the deployment-order hazard, and rows in Risks / Design Decisions /
       Alternatives Considered.
-- [ ] Capture lessons, archive the pair (`scripts/tasks-archive.sh`,
+- [x] Capture lessons, archive the pair (`scripts/tasks-archive.sh`,
       `scripts/tasks-index.sh`).
+      *Audit 2026-10-05:* Done by this archive.
 
 ## See Also
 
