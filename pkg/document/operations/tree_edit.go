@@ -81,10 +81,10 @@ type TreeEdit struct {
 	// separately from from/to (*crdt.TreePos) because TreePos is
 	// identity-based and has no arithmetic: ReconcileOperation shifts a
 	// pending undo/redo entry by adjusting these integers, and Execute
-	// converts them back into from/to via Tree.FindPos immediately before
-	// running, so a remote edit that lands in between is honored. nil for an
-	// op that was never built as a reverse (an ordinary forward edit) or
-	// whose reverse could not resolve a range (degrades to (0, 0) in
+	// converts them back into from/to via Tree.FindPosUnchecked immediately
+	// before running, so a remote edit that lands in between is honored. nil
+	// for an op that was never built as a reverse (an ordinary forward edit)
+	// or whose reverse could not resolve a range (degrades to (0, 0) in
 	// NormalizePos, mirroring the JS SDK's undefined case there).
 	fromIdx, toIdx *int
 
@@ -281,9 +281,12 @@ func (e *TreeEdit) Execute(
 		// before the mutation, so the reconciled range -- not the stale
 		// positions this op was constructed with -- is what actually runs.
 		// Mirrors TreeEditOperation.execute's "for undo ops: convert stored
-		// integer indices to CRDTTreePos" step in the JS SDK.
+		// integer indices to CRDTTreePos" step in the JS SDK. Reconciliation
+		// can move an index inside a surrogate pair (Case 5 does not count
+		// the remote content), so these resolve without the pair check that
+		// guards caller-supplied indexes.
 		if e.isUndoOp && e.fromIdx != nil && e.toIdx != nil {
-			fromPos, err := obj.FindPos(*e.fromIdx)
+			fromPos, err := obj.FindPosUnchecked(*e.fromIdx)
 			if err != nil {
 				return ExecutionResult{}, err
 			}
@@ -291,7 +294,7 @@ func (e *TreeEdit) Execute(
 			if *e.fromIdx == *e.toIdx {
 				e.to = fromPos
 			} else {
-				toPos, err := obj.FindPos(*e.toIdx)
+				toPos, err := obj.FindPosUnchecked(*e.toIdx)
 				if err != nil {
 					return ExecutionResult{}, err
 				}
@@ -643,13 +646,15 @@ func (e *TreeEdit) toReverseOperation(
 		return nil, err
 	}
 
-	fromPos, err := tree.FindPos(idx)
+	// These indexes come from the edited tree, not caller input. Preserve
+	// internal position resolution even when an index falls inside a pair.
+	fromPos, err := tree.FindPosUnchecked(idx)
 	if err != nil {
 		return nil, err
 	}
 	toPos := fromPos
 	if insertedSize > 0 {
-		if toPos, err = tree.FindPos(idx + insertedSize); err != nil {
+		if toPos, err = tree.FindPosUnchecked(idx + insertedSize); err != nil {
 			return nil, err
 		}
 	}
@@ -719,11 +724,11 @@ func (e *TreeEdit) toSplitReverseOperation(
 		return nil, nil
 	}
 
-	fromPos, err := tree.FindPos(fromIdx)
+	fromPos, err := tree.FindPosUnchecked(fromIdx)
 	if err != nil {
 		return nil, err
 	}
-	toPos, err := tree.FindPos(toIdx)
+	toPos, err := tree.FindPosUnchecked(toIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -760,7 +765,7 @@ func (e *TreeEdit) splitReverseAt(
 	preFromIdx int,
 	splitLevel int,
 ) (Operation, error) {
-	pos, err := tree.FindPos(preFromIdx)
+	pos, err := tree.FindPosUnchecked(preFromIdx)
 	if err != nil {
 		return nil, err
 	}

@@ -283,6 +283,49 @@ func TestTreeEditReconcileOperationRealistic(t *testing.T) {
 	assert.Equal(t, "<r><p>01XX23456789</p></r>", tree.ToXML())
 }
 
+// TestTreeEditReconciledIndexInsideSurrogatePair covers an undo whose
+// reconciled range ends inside a surrogate pair. Case 5 places the reconciled
+// range at the start of the remote content without counting that content, so
+// a remote edit whose content starts with a non-BMP character can leave toIdx
+// between its two code units. Execute must still resolve that index: the
+// mid-pair check in Tree.FindPos guards indexes a caller passes in, and
+// rejecting one that reconciliation computed would drop an undo entry the
+// user can do nothing about.
+func TestTreeEditReconciledIndexInsideSurrogatePair(t *testing.T) {
+	issue := ticketer()
+	root, tree := newTreeReconcileTestRoot(t, issue)
+
+	// Local: insert "AB" at index 5. Its undo deletes [5,7). The undo is
+	// built directly, as in TestTreeEditReconcileOperationCases: only the
+	// copy-reinsert fallback and split/merge reverses carry indexes.
+	content := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "AB")
+	editAt(t, tree, 5, 5, []*crdt.TreeNode{content}, issue)
+	assert.Equal(t, "<r><p>0123AB456789</p></r>", tree.ToXML())
+	edit := newUndoTreeEdit(5, 7)
+	edit.parentCreatedAt = tree.CreatedAt()
+
+	// Remote: replace [4,6) ("3A") with an emoji, overlapping the start of
+	// the undo range (Case 5).
+	emoji := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "\U0001F600")
+	remoteInfo := editAt(t, tree, 4, 6, []*crdt.TreeNode{emoji}, issue)
+	assert.Equal(t, "<r><p>012\U0001F600B456789</p></r>", tree.ToXML())
+
+	edit.ReconcileOperation(4, 6, remoteInfo.InsertedContentSize)
+	from, to := edit.NormalizePos()
+	assert.Equal(t, []int{4, 5}, []int{from, to}, "toIdx lands between the emoji's two code units")
+	_, err := tree.FindPos(5)
+	assert.ErrorIs(t, err, crdt.ErrInvalidUTF16Index)
+
+	edit.SetExecutedAt(issue())
+	_, err = edit.Execute(root, OpSourceUndoRedo, nil)
+	assert.NoError(t, err)
+
+	// The undo deletes [4,5), the emoji's high half, as it did before the
+	// check existed. The low half left behind becomes U+FFFD, and "B", which
+	// the undo was meant to delete, stays: that is Case 5's formula.
+	assert.Equal(t, "<r><p>012\uFFFDB456789</p></r>", tree.ToXML())
+}
+
 // TestTreeEditNormalizePosForwardExecution exercises NormalizePos on a
 // genuinely executed FORWARD TreeEdit -- neither an undo/redo entry (whose
 // fromIdx/toIdx TestTreeEditReconcileOperationCases already pins as
@@ -397,4 +440,38 @@ func newTwoParagraphTestRoot(t *testing.T, issue func() *time.Ticket) (*crdt.Roo
 	obj.Set("t", tree)
 
 	return crdt.NewRoot(obj), tree
+}
+
+// TestTreeEditReverseBuildersInsideSurrogatePair pins internal position
+// resolution after mutation. Caller-supplied indexes remain checked.
+func TestTreeEditReverseBuildersInsideSurrogatePair(t *testing.T) {
+	issue := ticketer()
+	_, tree := newTreeReconcileTestRoot(t, issue)
+	emoji := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "😀")
+	editAt(t, tree, 1, 1, []*crdt.TreeNode{emoji}, issue)
+	_, err := tree.FindPos(2)
+	assert.ErrorIs(t, err, crdt.ErrInvalidUTF16Index)
+	e := &TreeEdit{parentCreatedAt: tree.CreatedAt(), splitLevel: 1}
+
+	t.Run("copy reverse starts inside pair", func(t *testing.T) {
+		op, err := e.toReverseOperation(tree, []*crdt.TreeNode{emoji},
+			crdt.TreeEditReverseInfo{InsertedContentSize: 1}, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+	t.Run("split reverse starts inside pair", func(t *testing.T) {
+		op, err := e.toSplitReverseOperation(tree, 2, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+	t.Run("split reverse ends inside pair", func(t *testing.T) {
+		op, err := e.toSplitReverseOperation(tree, 1, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+	t.Run("merge reverse inside pair", func(t *testing.T) {
+		op, err := e.splitReverseAt(tree, 2, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
 }
