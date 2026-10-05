@@ -63,9 +63,11 @@ workflow-specific guards in `checks.test.mjs` are kept and skip through
       reordering and its risk stated
 - [x] Tests: the ISSUE-only guard already waiting in `checks.test.mjs`, plus
       the per-job PR-comment permission rule this verb is the first exception to
-- [ ] NOT DOING: `scripts/agent/classify.mjs`. Eval-rig machinery the design
+- [x] NOT DOING: `scripts/agent/classify.mjs`. Eval-rig machinery the design
       doc excludes, and it needs an API key this repository does not have. If it
       returns, its model call goes through `ask.mjs` on OAuth.
+      *Audit 2026-10-05:* Not doing, by design — `scripts/agent/classify.mjs`
+      is not on main.
 
 ## Adaptations from upstream
 
