@@ -74,6 +74,17 @@ it. The recheck now fires unless the attach was already approved as a
 document write (`auth.WritesDocument`), and the schema subtest attaches with
 `WithDisablePresence` too; it fails with the narrower condition.
 
+## `RemoveOnDetach` removal is policy, not a gap
+
+Reviewers (the panel on option A, CodeRabbit on option B) kept raising that a
+read-only member's last detach, or its deactivation, removes the document
+under `RemoveOnDetach` without the webhook being asked. The author's call:
+that is the policy working as designed. `RemoveOnDetach` removes a document
+no one is attached to, whoever left last; the webhook decides whether a member
+may detach. Gating it would fail a read-only member's detach when it leaves
+last, and deactivation has no caller token to ask with. The design doc states
+this under "Removal on the last detach", and no follow-up issue is filed.
+
 ## History (option A, superseded)
 
 Everything below describes option A as it was built and reviewed. Its

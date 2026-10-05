@@ -49,7 +49,7 @@ document.
 
 - Server-side roles. The webhook stays the only place where a decision is made.
 - Authorizing the removal that the project's `RemoveOnDetach` makes on the
-  last detach or deactivation. See Risks.
+  last detach or deactivation. See "Removal on the last detach".
 
 ## Design
 
@@ -117,6 +117,27 @@ asked again too. The second call is made while the document's attachment lock
 is held, so on the bind path other attaches and detaches of that document
 wait for the webhook.
 
+### Removal on the last detach
+
+With the project's `RemoveOnDetach` on, the detach of the last attached client
+also removes the document, and so does deactivating that client (through the
+cluster `DetachDocument`). The server decides this after the webhook was asked
+about the detach, so the webhook is never asked whether the member may remove
+the document. That is intended: `RemoveOnDetach` is the project's policy that
+a document no one is attached to is removed, and who left last does not
+change that. The webhook decides whether a member may detach, not whether
+the policy applies. So a read-only member whose presence-only detach is
+allowed can be the one whose leaving removes the document.
+
+### Read-only members with local edits
+
+The SDKs do not know a member's role, so a client keeps a local edit made by a
+read-only member and sends it with its next pack. `PushPull` and `DetachDocument`
+then carry operations, so `presenceOnly` is false and the read-only rule
+rejects them, the detach included. Applications should not let read-only
+members edit; a member that does not edit always detaches with a
+presence-only pack.
+
 ### Decision cache
 
 The decision cache is keyed by the marshaled request body
@@ -136,7 +157,6 @@ would print the `*bool` as an address.
 
 | Risk | Mitigation |
 |------|------------|
-| A webhook allows `presenceOnly` packs on a `RemoveOnDetach` project | The last detach removes the document although its pack is presence only, because the server sets `IsRemoved` after the webhook was asked. Deactivating the client removes it the same way through the cluster `DetachDocument`, with no per-document webhook call at all, so gating the detach alone would not stop it. This predates this change and is left to a follow-up; the security guide should state it. |
 | A webhook reads a missing field as "presence only" against an older server | The field is present on every pack method, so a missing field there means an older server. Webhook authors should treat it as `false`. |
 | A webhook allowed `r` removals | That let read-only members remove documents; a removal is now `rw`. Stated in the release notes. |
 | Cached answers keyed by the old body shape | The keys change with the field. Entries in the old shape expire within `AuthWebhookCacheTTL` and are never matched again. |
@@ -149,6 +169,7 @@ would print the `*bool` as an address.
 | `presenceOnly`, not `hasOperations` | A rule "allow when there are no operations" would also allow a removal, which carries none. `presenceOnly` is false for a removal, so the read-only rule is a single check. |
 | `*bool` with `omitempty` | Every pack method sends an explicit value, and every other method leaves the field out, so a webhook can tell "not presence only" from "not a pack" and from an older server. |
 | Report removal as `rw` | Removing a document is a write. |
+| Do not ask the webhook before a `RemoveOnDetach` removal | The removal is the project's policy for a document no one is attached to, not the member's request. Asking would also fail the detach of a read-only member who leaves last, and deactivation, which has no caller token, removes the document the same way. |
 | Ask again before binding a schema | Whether the attach binds is known only after the document is looked up, which happens after the first check. Reporting every attach that names a schema as a write would block read-only members from every document that uses schemas. |
 
 ## Alternatives Considered

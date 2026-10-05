@@ -32,5 +32,6 @@ file.
       writer's edit is not `presenceOnly`. Each guard checked by disabling it.
 - [x] Design doc; index it in `docs/design/README.md`.
 - [x] `make verify`; `make test` with MongoDB up.
-- [ ] Follow-up issue: the `RemoveOnDetach` removal on the last detach or on
-      deactivation is not authorized per document.
+- [x] `RemoveOnDetach` removal on the last detach or deactivation stays
+      outside the webhook: it is the project's policy, not the member's
+      request. Recorded in the design doc rather than as a follow-up.
