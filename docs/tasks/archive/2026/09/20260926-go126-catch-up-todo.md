@@ -31,8 +31,10 @@ PR 1 (this task) — code and gate. One commit per intent:
       `slices.AppendSeq` onto a sized slice, then `slices.Sort`.
 - [x] Gate: `make verify-modernize` in `make verify` and as a CI lane;
       `make modernize` to apply.
-- [ ] Lint every build tag, and `staticcheck` — pending a scope decision:
+- [x] Lint every build tag, and `staticcheck` — pending a scope decision:
       159 findings in tag-gated tests, 96 from staticcheck/unused.
+      *Audit 2026-10-05:* Done by its own task, lint-all-tags (#2067,
+      35e145ce).
 
 PR 2 (separate) — Dockerfile runtime image off EOL `debian:buster-slim` /
 `alpine:3.19`.
@@ -57,7 +59,8 @@ first), `t.Context()` (it is cancelled before `t.Cleanup` runs, so each of the
 - [x] `test/complex` tree lane: 1610 pass before the `parseSimpleXML` fix,
       1611 after (the new test included)
 - [x] `node --test scripts/test/*.test.mjs`, doc links, licence headers
-- [ ] `make test` / integration lanes via CI
+- [x] `make test` / integration lanes via CI
+      *Audit 2026-10-05:* #2063 (bf36a419) merged with CI green.
 
 ## Review
 

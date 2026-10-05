@@ -48,20 +48,25 @@ their workflows now exist.
 
 ## Phase 1 — still open
 
-- [ ] **Enable it.** Set the `AGENT_PIPELINE_ENABLED` repository variable to
+- [x] **Enable it.** Set the `AGENT_PIPELINE_ENABLED` repository variable to
       `true`. Until then every workflow's first condition is false and nothing
       runs, which is the intended state for the merge itself.
+      *Audit 2026-10-05:* `AGENT_PIPELINE_ENABLED` is `true`.
 - [ ] **Register the token pool.** `pick-credential.mjs` is ported and every
       model-running job is wired to it, reading `CLAUDE_CODE_OAUTH_TOKEN_1..8`.
       None of those secrets exist yet, so every job falls back to the single
       ambient credential and six concurrent lenses share it. Register slots if
       the first real rounds rate-limit.
-- [ ] **The first fork PR.** Confirm the placeholder comment posts under
+- [x] **The first fork PR.** Confirm the placeholder comment posts under
       `GITHUB_TOKEN`. The design doc records why it is expected to and what to
       do if it does not; the placeholder is `continue-on-error` either way.
-- [ ] **The Phase 1 exit criteria.** Run `@claude review` on twenty PRs and
+      *Audit 2026-10-05:* Panel comments posted on fork PRs #2079, #2085 and
+      #2109.
+- [x] **The Phase 1 exit criteria.** Run `@claude review` on twenty PRs and
       compare its blocking findings against CodeRabbit's on the same diff.
       Phase 2 is justified only by that comparison.
+      *Audit 2026-10-05:* Superseded — Phases 2 and 3 shipped on the
+      qualitative comparison the lessons file records.
 
 ## Phase 0 — done in this branch
 
@@ -93,13 +98,15 @@ its own credential handling to say anything the cloud panel does not.
 
 ## Phase 2 and 3 — still open
 
-- [ ] **The GitHub App** (`AGENT_APP_ID`, `AGENT_APP_PRIVATE_KEY`) and the
+- [x] **The GitHub App** (`AGENT_APP_ID`, `AGENT_APP_PRIVATE_KEY`) and the
       `agent` environment. Without them the panel still reviews, records check
       runs and latches, but never dispatches a fixer — a `GITHUB_TOKEN`-authored
       push does not re-trigger workflows, so the loop would stop silently.
-- [ ] **Branch protection.** Six `agent-review-*` check runs appear on a
+      *Audit 2026-10-05:* Both secrets and the `agent` environment exist.
+- [x] **Branch protection.** Six `agent-review-*` check runs appear on a
       labelled PR. Whether any is *required* to merge is a repository setting
       and should start as "no".
+      *Audit 2026-10-05:* No agent check is required on `main`.
 - [ ] **Keep the linter pin in sync** with the Makefile's `tools` target. The
       pin going stale shows up as a lint disagreement, which is the direction
       to fail in, but it still has to be noticed.
@@ -129,13 +136,15 @@ recorded. The classes worth carrying forward:
 - [ ] **The on-demand throttle is still racy.** Two `@claude review` comments
       seconds apart can both pass the gate before either marker lands. The
       release valve added here fixes the stuck case, not the double-run one.
-- [ ] **A 60-minute credential in a 90-minute job.** An App installation token
+- [x] **A 60-minute credential in a 90-minute job.** An App installation token
       lives exactly one hour and cannot be extended, so a fix round that runs
       past it loses the credential in `.git/config` and in `github_token` — the
       push 401s and the steps that would report that 401 too, stranding the
       placeholder comment. Both fixer jobs carry a comment saying so. Closing it
       means re-minting before the push and rewriting the git credential, which
       wants the App configured and a real round to test against.
+      *Audit 2026-10-05:* Mitigated by #2055, which cut the fixer walls to 55
+      minutes.
 - [ ] **The CI arm checks out a moving branch.** `agent-iterate-ci.yml` checks
       out `workflow_run.head_branch`, not the head SHA, and has no re-check of
       the kind `agent-fix.yml` does — so a push landing mid-run has the fixer

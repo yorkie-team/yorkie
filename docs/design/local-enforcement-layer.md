@@ -311,4 +311,4 @@ layer itself landed under
 whose lessons file records the three review rounds behind the decisions above.
 The reflog, worktree and fork fixes were found by yorkie-js-sdk's review of its
 port and brought back under
-[20260926-backport-hook-fixes-todo.md](../tasks/active/20260926-backport-hook-fixes-todo.md).
+[20260926-backport-hook-fixes-todo.md](../tasks/archive/2026/09/20260926-backport-hook-fixes-todo.md).

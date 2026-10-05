@@ -171,6 +171,14 @@ type Client struct {
 	attachingMu sync.Mutex
 	attaching   map[key.Key]struct{}
 
+	// minted records, per document key, the actor this client last attached
+	// that key under. A re-issue restarts the lamport at 1, so a second
+	// never-synced document for a key this actor has already attached would
+	// mint the very createdAt the first one pushed; claimReissue reads this to
+	// decline the re-issue there. It is guarded by attachingMu and never
+	// pruned: a detach does not take the pushed tickets back.
+	minted map[key.Key]time.ActorID
+
 	// lifecycleMu serializes Activate, Deactivate and Close's local finish.
 	// Each is a sequence of status transitions around an RPC, not a single
 	// store: two of them interleaving would let one caller's write land after
@@ -272,6 +280,7 @@ func New(opts ...Option) (*Client, error) {
 		key:         k,
 		attachments: cmap.New[key.Key, *Attachment](),
 		attaching:   make(map[key.Key]struct{}),
+		minted:      make(map[key.Key]time.ActorID),
 	}, nil
 }
 
@@ -716,12 +725,24 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	}
 	defer c.endAttach(r.Key())
 
-	r.SetActor(c.loadID())
-
 	if r.Type() == attachable.TypeDocument {
 		d, ok := r.(*document.Document)
 		if !ok {
 			return ErrInvalidResource
+		}
+
+		// Re-issue, not just set: the tickets of elements created before the
+		// attach name the initial actor, and another client that filled the
+		// same key would push the very same createdAt. Unless this actor has
+		// already attached this key, in which case a re-issue would collide
+		// with its own earlier tickets instead -- see claimReissue.
+		actor := c.loadID()
+		var setActorOpts []document.SetActorOption
+		if c.claimReissue(d.Key(), actor) {
+			setActorOpts = append(setActorOpts, document.WithReissue())
+		}
+		if err := d.SetActorWithOptions(actor, setActorOpts...); err != nil {
+			return err
 		}
 
 		attachOpts := &AttachOptions{}
@@ -739,6 +760,7 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 	if !ok {
 		return ErrInvalidResource
 	}
+	p.SetActor(c.loadID())
 
 	attachChannelOpts := &AttachChannelOptions{}
 	for _, opt := range opts {
@@ -861,6 +883,30 @@ func (c *Client) markAttaching(k key.Key) (*Attachment, error) {
 
 	c.attaching[k] = struct{}{}
 	return stale, nil
+}
+
+// claimReissue reports whether the pre-attach tickets of the document k may
+// be re-issued to actor, and records the claim either way.
+//
+// The re-issue gives a never-synced document's tickets the attaching client's
+// actor while leaving their lamports as they were, which start at 1 in every
+// fresh document. That is unique between clients, which is the point, but not
+// between two never-synced documents of the same key under one actor: an app
+// that attaches document.New(k), edits, detaches, then edits and attaches a
+// second document.New(k) would mint, the second time, the very createdAt the
+// first attach pushed. This declines the re-issue for the second one, leaving
+// its tickets under the initial actor as they were before the re-issue
+// existed. See docs/design/pre-attach-ticket-reissue.md.
+//
+// It is recorded before the round trip rather than after it: an attach whose
+// response is lost may still have pushed its pack.
+func (c *Client) claimReissue(k key.Key, actor time.ActorID) bool {
+	c.attachingMu.Lock()
+	defer c.attachingMu.Unlock()
+
+	minted, ok := c.minted[k]
+	c.minted[k] = actor
+	return !ok || minted != actor
 }
 
 // endAttach clears the in-flight mark that beginAttach set for k.
