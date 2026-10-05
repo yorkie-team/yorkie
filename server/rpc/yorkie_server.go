@@ -322,30 +322,14 @@ func (s *yorkieServer) AttachDocument(
 			return nil, err
 		}
 
-		// Rebinding the schema writes the document, which the pack does not
-		// show: an attach whose pack is empty (a presence-disabled document)
-		// or presence only was approved without a document write, and a
-		// webhook that allows those would let any member pick the schema
-		// later edits are checked against, or drop the binding by asking
-		// for none.
-		//
-		// Whether the key differs from the persisted one cannot decide this:
-		// docInfo was read before this locker was taken and is never re-read
-		// under it, so another attach may have rebound the schema since. A
-		// caller without a document write that asks for no schema leaves the
-		// persisted binding alone instead; one that asks for a schema is
-		// asked for the write first, before the lookup that would otherwise
-		// tell it whether that schema exists.
-		if count == 0 && (req.Msg.SchemaKey != "" || auth.WritesDocument(attrs)) {
-			if !auth.WritesDocument(attrs) {
-				if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-					Method:     types.AttachDocument,
-					Attributes: types.NewAccessAttributes([]key.Key{pack.DocumentKey}, types.ReadWrite),
-				}); err != nil {
-					return nil, err
-				}
+		rebind := false
+		if count == 0 {
+			if rebind, err = s.canRebindSchema(ctx, attrs, pack.DocumentKey, req.Msg.SchemaKey, docInfo.Schema); err != nil {
+				return nil, err
 			}
+		}
 
+		if rebind {
 			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.SchemaKey)
 			if err != nil {
 				return nil, err
@@ -1463,6 +1447,42 @@ func (s *yorkieServer) Broadcast(
 	})
 
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
+}
+
+// canRebindSchema reports whether an attach that finds no client attached
+// rebinds the document's schema to the one the request names.
+//
+// Rebinding writes the document, which the pack does not show: an attach
+// whose pack is empty (a presence-disabled document) or presence only was
+// approved without a document write, and a webhook that allows those would
+// let any member pick the schema later edits are checked against, or drop the
+// binding by asking for none. Such an attach never rebinds without asking.
+// bound was read before the attachment lock was taken, so the persisted
+// binding may have changed since; instead of comparing against it and then
+// writing over a binding it never saw, the attach writes nothing when it names
+// no schema or the schema it read, and is asked for the write before anything
+// else, the schema lookup included, otherwise.
+func (s *yorkieServer) canRebindSchema(
+	ctx context.Context,
+	attrs []types.AccessAttribute,
+	docKey key.Key,
+	requested string,
+	bound string,
+) (bool, error) {
+	if auth.WritesDocument(attrs) {
+		return true, nil
+	}
+	if requested == "" || requested == bound {
+		return false, nil
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.AttachDocument,
+		Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.ReadWrite),
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // DetachDocument detaches the given document to the client.

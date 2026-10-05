@@ -907,6 +907,48 @@ func TestAuthWebhookPresenceOnly(t *testing.T) {
 		assert.NoError(t, writer.Detach(ctx, bound))
 	})
 
+	t.Run("a reader attaching alone keeps the bound schema", func(t *testing.T) {
+		// With an attachment limit, every attach that finds no one attached
+		// reaches the rebind; a reader naming the bound schema or none must
+		// pass without being asked for a write, and one naming another
+		// schema must not.
+		limit := 10
+		_, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			MaxAttachmentsPerDocument: &limit,
+		})
+		assert.NoError(t, err)
+		defer func() {
+			off := 0
+			_, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+				MaxAttachmentsPerDocument: &off,
+			})
+			assert.NoError(t, err)
+		}()
+		assert.NoError(t, adminCli.CreateSchema(
+			ctx,
+			project.Name,
+			"memo",
+			1,
+			"type Document = {title: string;};",
+			[]types.Rule{{Path: "$.title", Type: "string"}},
+		))
+
+		docKey := helper.TestKey(t)
+		bound := document.New(docKey)
+		assert.NoError(t, writer.Attach(ctx, bound, client.WithSchema("memo@1")))
+		assert.NoError(t, writer.Detach(ctx, bound))
+
+		doc := document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc, client.WithSchema("memo@1")))
+		assert.NoError(t, reader.Detach(ctx, doc))
+		doc = document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc))
+		assert.NoError(t, reader.Detach(ctx, doc))
+
+		err = reader.Attach(ctx, document.New(docKey), client.WithSchema("note@1"))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	})
+
 	t.Run("a writer's edit is not presenceOnly", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, writer.Attach(ctx, doc))

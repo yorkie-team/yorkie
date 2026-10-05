@@ -74,6 +74,28 @@ it. The recheck now fires unless the attach was already approved as a
 document write (`auth.WritesDocument`), and the schema subtest attaches with
 `WithDisablePresence` too; it fails with the narrower condition.
 
+## Panel round 5 (after `@claude rerun`) and the fixer's schema change
+
+Round 5 raised three blockers on the option B head. One cited
+`canRemoveOnDetach`, which the head does not contain (it was option A code),
+and the key/ID split under it is closed on main by #2128; the fixer rebutted
+it. The `PresenceOnly` comment promised the pack "does not remove the
+document", which read as contradicting `RemoveOnDetach`; the fixer rescoped it
+to the pack the client sent and named the policy removal.
+
+The third was real: the schema recheck compared the request against a
+`DocInfo` read before the attachment lock, so a concurrent rebind could be
+overwritten unchecked. Re-reading under the lock does not work, because the
+mongo `docCache` is not refreshed by `UpdateDocInfoSchema`. The fixer's change
+asked for a write whenever a non-write attach named any schema, which
+rejects a read-only member attaching alone under the document's own schema,
+a path every first attach takes on a project with an attachment limit or
+`RemoveOnDetach`. It was replaced by "never write unchecked": a non-write
+attach writes nothing when it names no schema or the schema it read, and is
+asked for the write otherwise. The subtest "a reader attaching alone keeps
+the bound schema" fails under the fixer's condition and passes under this
+one.
+
 ## `RemoveOnDetach` removal is policy, not a gap
 
 Reviewers (the panel on option A, CodeRabbit on option B) kept raising that a

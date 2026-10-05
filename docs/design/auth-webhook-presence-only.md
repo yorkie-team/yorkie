@@ -109,15 +109,18 @@ not `presenceOnly`), the handler asks the webhook again for the same document
 with `rw` and no `presenceOnly`, which such a webhook rejects for a read-only
 member. An attach that binds nothing is asked once, as before.
 
-Whether the named key differs from the persisted one cannot decide whether to
-ask. The `DocInfo` the handler holds was read before the document's
-attachment lock was taken and is never re-read under it, so another attach may
-have rebound the schema in between; deciding on that snapshot would let a
-second attach overwrite the new binding with no check. The rule is on the
-request alone: a caller without a document write that names no schema skips
-the rebind and leaves the persisted binding standing, and one that names a
-schema is asked for the write. A caller already approved as a document write
-rebinds as before, the empty key included.
+Such an attach never rebinds without asking. The `DocInfo` the handler holds
+was read before the document's attachment lock was taken, and the cached
+`DocInfo` is not refreshed by a rebind, so the persisted binding may have
+changed in between. Instead of comparing against that snapshot and then
+writing over a binding it never saw, an attach that is not a document write
+writes nothing when it names no schema or the schema it read, and is asked
+for the write when it names another. So a read-only member attaching alone to
+a document under its bound schema, which on a project with an attachment
+limit or `RemoveOnDetach` reaches this path on every first attach, is not
+asked again; and a concurrent rebind is never overwritten unchecked. An
+attach already approved as a document write rebinds as before, the empty key
+included.
 
 The question is asked before the schema is looked up, so a rejected caller
 does not learn whether the schema it named exists. The second call is made
