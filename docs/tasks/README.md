@@ -21,6 +21,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Task | Todo | Lessons |
 |---|---|---|
 | Server-side gate for MaxSizePerDocument (2026-10-03) | [20261003-server-side-document-size-gate-todo.md](./active/20261003-server-side-document-size-gate-todo.md) | [20261003-server-side-document-size-gate-lessons.md](./active/20261003-server-side-document-size-gate-lessons.md) |
+| Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
 | Undoing a container removal discards a peer's concurrent edit inside it (2026-09-12) | [20260912-undo-discards-concurrent-peer-edit-todo.md](./active/20260912-undo-discards-concurrent-peer-edit-todo.md) | - |
@@ -34,5 +35,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 70
+- Archived task count: 69
 - Archive index: [archive/README.md](./archive/README.md)

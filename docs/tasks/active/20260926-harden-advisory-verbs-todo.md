@@ -46,11 +46,11 @@ these files from yorkie 33810d95, so the same defects are live here.
 - [x] `node --test scripts/test/*.test.mjs` — 152 pass.
 - [x] actionlint 1.7.12 over `.github/workflows/*.yml` — clean.
 - [x] `make verify` — no Go touched; run to confirm the gate is unaffected.
-- [x] On GitHub after merge: `@claude summarize` on a PR posts a summary, and
-      the same comment from an account without write access is ignored.
-      *Audit 2026-10-05:* Summarize posted after the merge (Agent Summarize
-      run 36165762122). The no-write-access path is enforced by the permission
-      gate #2061 added, not yet seen live.
+- [x] On GitHub after merge: `@claude summarize` on a PR posts a summary.
+      *Audit 2026-10-05:* Observed in Agent Summarize run 36165762122.
+- [ ] On GitHub after merge: the same comment from an account without write
+      access is ignored. #2061 added the permission gate that should enforce
+      this, but nobody has seen it happen live yet.
 
 ## Review
 

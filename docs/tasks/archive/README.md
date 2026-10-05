@@ -8,7 +8,7 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 70
+Total archived tasks: 69
 
 ## 2026/10 (9 tasks)
 
@@ -24,7 +24,7 @@ Total archived tasks: 70
 | Auth webhook cache switch and cache TTL floor (#2068, PR #2076) (2026-10-02) | [20261002-auth-webhook-cache-switch-todo.md](./2026/10/20261002-auth-webhook-cache-switch-todo.md) | [20261002-auth-webhook-cache-switch-lessons.md](./2026/10/20261002-auth-webhook-cache-switch-lessons.md) |
 | Port the agent-loop convergence work from yorkie-js-sdk (2026-10-01) | [20261001-harness-convergence-port-todo.md](./2026/10/20261001-harness-convergence-port-todo.md) | [20261001-harness-convergence-port-lessons.md](./2026/10/20261001-harness-convergence-port-lessons.md) |
 
-## 2026/09 (31 tasks)
+## 2026/09 (30 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
@@ -33,7 +33,6 @@ Total archived tasks: 70
 | Mark LWW losers removed and stop leaking GC size records (2026-09-27) | [20260927-element-rht-loser-and-gc-record-todo.md](./2026/09/20260927-element-rht-loser-and-gc-record-todo.md) | [20260927-element-rht-loser-and-gc-record-lessons.md](./2026/09/20260927-element-rht-loser-and-gc-record-lessons.md) |
 | Counter float deltas and duplicate attach (Go/JS parity) (2026-09-27) | [20260927-counter-float-cast-and-dup-attach-todo.md](./2026/09/20260927-counter-float-cast-and-dup-attach-todo.md) | [20260927-counter-float-cast-and-dup-attach-lessons.md](./2026/09/20260927-counter-float-cast-and-dup-attach-lessons.md) |
 | Guard empty-text anchors and reset the clone on failed applies (2026-09-26) | [20260926-tree-anchor-and-clone-reset-todo.md](./2026/09/20260926-tree-anchor-and-clone-reset-todo.md) | [20260926-tree-anchor-and-clone-reset-lessons.md](./2026/09/20260926-tree-anchor-and-clone-reset-lessons.md) |
-| Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./2026/09/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./2026/09/20260926-harden-advisory-verbs-lessons.md) |
 | Catch the codebase up to Go 1.26 and keep it there (2026-09-26) | [20260926-go126-catch-up-todo.md](./2026/09/20260926-go126-catch-up-todo.md) | [20260926-go126-catch-up-lessons.md](./2026/09/20260926-go126-catch-up-lessons.md) |
 | Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./2026/09/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./2026/09/20260926-backport-hook-fixes-lessons.md) |
 | `go fix` modernizations from the Go 1.26 upgrade (2026-09-25) | [20260925-go-fix-modernizations-todo.md](./2026/09/20260925-go-fix-modernizations-todo.md) | [20260925-go-fix-modernizations-lessons.md](./2026/09/20260925-go-fix-modernizations-lessons.md) |

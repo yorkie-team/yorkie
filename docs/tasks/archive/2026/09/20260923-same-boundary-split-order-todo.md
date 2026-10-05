@@ -63,10 +63,10 @@ paragraph split an editor makes.
         SDK reads the same client-supplied field;
       - operation content and Set/Add/SetByIndex element bytes lose
         `InsPrevID`/`InsNextID` on decode.
-      Track alongside yorkie-team/yorkie-js-sdk#1373; do not close this task
-      until the mirror lands, since a patched server against an unpatched
-      client diverges exactly as §7.8 first did.
-      *Audit 2026-10-05:* Re-mirrored in yorkie-js-sdk#1375 (c8928853).
+      Tracked alongside yorkie-team/yorkie-js-sdk#1373. The re-mirror landed
+      in yorkie-js-sdk#1375 (c8928853), which closed #1373. A patched server
+      against a JS client older than that still diverges exactly as §7.8
+      first did.
 
 ## Review
 

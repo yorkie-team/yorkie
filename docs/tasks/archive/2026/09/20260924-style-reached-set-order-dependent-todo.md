@@ -132,14 +132,13 @@ No pair or seed that converged before diverges after.
 
 ## Known limitation
 
-**The JS SDK is not ported.** §9.1, §9.2, §9.5 and §9.6 move which nodes a
-`Tree.Style`/`Tree.RemoveStyle` reaches, in the Go CRDT only.
-`server/packs/snapshot.go` rebuilds snapshots through this code, so until the
-port lands a JS client and the server resolve different reached sets for the
-concurrent split/merge shapes here, and a JS client only picks up the server's
-answer when it reloads from a snapshot.
+**The JS SDK port has landed** (yorkie-js-sdk#1404, b69169c0). §9.1, §9.2,
+§9.5 and §9.6 move which nodes a `Tree.Style`/`Tree.RemoveStyle` reaches, and
+`server/packs/snapshot.go` rebuilds snapshots through this code, so a JS
+client older than that port still resolves different reached sets from the
+server for the concurrent split/merge shapes here.
 
-Landing Go-first is deliberate. Every one of those shapes already diverged
+Landing Go-first was deliberate. Every one of those shapes already diverged
 *between two Go replicas* by delivery order — 135 split×style and 297
 merge×style rendered divergences on the scan base — which is the worse
 failure, because it is two replicas of the same implementation disagreeing
