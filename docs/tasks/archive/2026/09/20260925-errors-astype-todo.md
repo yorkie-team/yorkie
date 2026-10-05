@@ -29,16 +29,17 @@ Convert every `errors.As` call in non-generated Go code where the target
 is a plain local variable used only for that check. That is the whole of
 the repo's `errors.As` usage:
 
-- [ ] `server/rpc/connecthelper/errors.go` — 5 sites
-- [ ] `cluster/client.go` — 1 site
-- [ ] `pkg/errors/errors.go` — 2 sites
-- [ ] `pkg/errors/metadata.go` — 1 site
-- [ ] `pkg/webhook/client.go` — 1 site
-- [ ] `api/converter/errors.go` — 2 sites
-- [ ] `cmd/yorkie/version.go` — 1 site
-- [ ] `cmd/yorkie/project/create.go` — 1 site
-- [ ] `cmd/yorkie/project/update.go` — 1 site
-- [ ] `pkg/errors/errors_test.go` — 2 sites
+- [x] `server/rpc/connecthelper/errors.go` — 5 sites
+      *Audit 2026-10-05:* Every listed site converted in #2060 (c54a193f).
+- [x] `cluster/client.go` — 1 site
+- [x] `pkg/errors/errors.go` — 2 sites
+- [x] `pkg/errors/metadata.go` — 1 site
+- [x] `pkg/webhook/client.go` — 1 site
+- [x] `api/converter/errors.go` — 2 sites
+- [x] `cmd/yorkie/version.go` — 1 site
+- [x] `cmd/yorkie/project/create.go` — 1 site
+- [x] `cmd/yorkie/project/update.go` — 1 site
+- [x] `pkg/errors/errors_test.go` — 2 sites
 
 Interface targets (`errors.StatusError`, `errors.MetadataError`) work the
 same way: `AsType[StatusError](err)` matches any error in the chain that
@@ -55,9 +56,13 @@ did.
 
 ## Acceptance
 
-- [ ] No `errors.As` remains outside `api/yorkie/v1/` (generated).
-- [ ] `make lint` green.
-- [ ] `go test ./pkg/errors/... ./api/converter/... ./cluster/...
+- [x] No `errors.As` remains outside `api/yorkie/v1/` (generated).
+      *Audit 2026-10-05:* No `errors.As(` outside `api/yorkie/v1/` on main.
+- [x] `make lint` green.
+      *Audit 2026-10-05:* #2060 merged with CI green.
+- [x] `go test ./pkg/errors/... ./api/converter/... ./cluster/...
       ./server/rpc/... ./pkg/webhook/... ./cmd/...` green.
-- [ ] No behaviour change: each converted site keeps the same match
+      *Audit 2026-10-05:* #2060 merged with CI green.
+- [x] No behaviour change: each converted site keeps the same match
       semantics and the same branch structure.
+      *Audit 2026-10-05:* #2060 merged after review.
