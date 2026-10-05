@@ -30,10 +30,12 @@ type VerbType string
 
 const (
 
-	// Read represents the case of only reading the given document.
+	// Read represents the case of only reading the given document. A change
+	// pack that carries presence changes but no operations is a Read.
 	Read VerbType = "r"
 
-	// ReadWrite represents the case of reading and writing the given document.
+	// ReadWrite represents the case of reading and writing the given document,
+	// such as a change pack that carries operations or removes the document.
 	ReadWrite VerbType = "rw"
 )
 

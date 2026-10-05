@@ -33,8 +33,15 @@ import (
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
 func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
+	// The verb tells whether the pack writes the document: it carries
+	// operations, or it removes the document. A presence update is a change
+	// too, and the SDKs send one with every attach and detach, so a pack that
+	// carries presence alone is reported as a read; otherwise a webhook that
+	// rejects writes from a read-only member would block its attach and
+	// detach as well. A removal usually carries no change at all, which is
+	// why it is checked on its own.
 	verb := types.Read
-	if pack.HasChanges() {
+	if pack.OperationsLen() > 0 || pack.IsRemoved {
 		verb = types.ReadWrite
 	}
 

@@ -236,9 +236,10 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	attrs := auth.AccessAttributes(pack)
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
-		Attributes: auth.AccessAttributes(pack),
+		Attributes: attrs,
 	}); err != nil {
 		return nil, err
 	}
@@ -329,6 +330,18 @@ func (s *yorkieServer) AttachDocument(
 			schema, err = schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
 			if err != nil {
 				return nil, err
+			}
+			// Binding a schema writes the document, but a presence-only attach
+			// was verified as a read. Ask the webhook for the write before
+			// binding, so a read-only member cannot pick the schema that later
+			// edits are checked against.
+			if req.Msg.SchemaKey != docInfo.Schema && attrs[0].Verb != types.ReadWrite {
+				if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+					Method:     types.AttachDocument,
+					Attributes: types.NewAccessAttributes([]key.Key{pack.DocumentKey}, types.ReadWrite),
+				}); err != nil {
+					return nil, err
+				}
 			}
 			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.SchemaKey); err != nil {
 				return nil, err
