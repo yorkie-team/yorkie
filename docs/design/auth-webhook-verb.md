@@ -95,19 +95,31 @@ The second webhook call is made while the document's attachment lock is
 held, so on the bind path other attaches and detaches of that document wait
 for the webhook.
 
+### Removal on detach
+
+With the project's `RemoveOnDetach` on, the detach of the last attached client
+also removes the document, which the pack does not show either: the server sets
+`IsRemoved` itself, after the webhook was asked with the pack's own verb. So
+right before it does, if the detach was verified as `r`, `DetachDocument` asks
+the webhook again with `rw` for the same document.
+
+A refusal stops only the removal, not the detach: the client detaches and the
+document stays, to be removed by the next detach that is allowed to remove it.
+Refusing the detach instead would keep a read-only member from ever leaving,
+and removing anyway would let it destroy the document on the way out. As on the
+bind path, the second call is made only when the first check was a read, so an
+ordinary detach of a writer still costs one webhook call. A webhook that is
+unreachable fails the detach, the same as the first check does.
+
 ### What `r` still allows
 
-These follow from the attach and detach themselves, not from the pack, and
-stay allowed for a member whose writes are rejected:
+This follows from the attach itself, not from the pack, and stays allowed for a
+member whose writes are rejected:
 
 - Attaching to a key that does not exist yet creates an empty document, and
   the attach's `disable_presence` is fixed for it. Its content is not changed,
   and a webhook that authorizes per key decides which keys a member may open
   at all.
-- With the project's `RemoveOnDetach` on, the last client's detach removes the
-  document. The removal is the project's policy, set after the webhook was
-  asked, so the detach is reported as `r`. Rejecting it would keep a read-only
-  member from ever leaving.
 
 ### Decision cache
 
@@ -131,6 +143,7 @@ presence-only pack (`r`) is never reused for a pack that carries operations
 | Change the meaning of `verb` rather than add a field (option A in #2104) | `verb` already exists to tell reads from writes, and the only behavior it loses is gating presence, which no webhook could use. A new field would leave every existing webhook as broken as before. |
 | Count operations with `pack.OperationsLen()` | A presence-only change has no operations, so "has operations" is exactly "edits the root". The helper already exists. |
 | Report removal as `rw` | Removing a document is a write. Without it, the new rule would keep reporting removals as reads. |
+| Let a refused `RemoveOnDetach` removal fall back to a plain detach, instead of failing the detach | The member asked to leave, not to remove; failing the detach would strand a read-only member in the document, and removing anyway would let it destroy the document. |
 | Ask again with `rw` before binding a schema, instead of reporting every attach that names a schema as `rw` | Whether the attach binds is known only after the document is looked up, which happens after the first check. Reporting `rw` for any named schema would block read-only members from every document that uses schemas. |
 
 ## Alternatives Considered

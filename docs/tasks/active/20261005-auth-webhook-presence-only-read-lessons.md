@@ -94,3 +94,33 @@ No blocking findings in the diff; the rounds stop here.
 - The security guide (yorkie-team.github.io#344) currently describes v0.7.23,
   where `rw` means "any change, presence included". It needs updating once
   this ships.
+
+## Review round 3 (security)
+
+Blocking, fixed: with the project's `RemoveOnDetach`, `DetachDocument` sets
+`pack.IsRemoved` itself *after* the webhook was asked, so under the new rule
+an ordinary presence-only detach was verified as `r` and still removed the
+document — a read-only member could destroy it on the way out. Round 1 had
+accepted this on the grounds that rejecting the detach would strand the
+member; that framing missed a third option.
+
+`canRemoveOnDetach` now asks the webhook once more with `rw` for the same
+document, only when the first check was a read, right before the removal is
+decided. A refusal stops the removal alone: the client detaches, the document
+stays, and the next detach that is allowed to remove it does. So the reader
+can always leave and cannot destroy data. Any other webhook error still fails
+the detach, as the first check does.
+
+`TestAuthWebhookRemoveOnDetachRead` covers it end to end: a reader detaching
+last leaves the content intact, and the following writer detach removes it.
+
+Not changed: presence-only packs are stored and broadcast under `r`. That is
+the change's stated non-goal — the old rule could not gate presence either,
+since attach and detach always carry it, so blocking presence meant blocking
+the member from the document entirely. What is stored and fanned out, and the
+size gate's treatment of operation-less changes, are the same before and
+after this diff.
+
+`server/rpc/cluster_server.go` runs the same `RemoveOnDetach` removal for the
+server-internal detach of a deactivated client. It asks no webhook at all,
+before or after this change, and is outside this diff.

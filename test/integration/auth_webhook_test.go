@@ -900,6 +900,114 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 	})
 }
 
+// TestAuthWebhookRemoveOnDetachRead verifies that under the project's
+// RemoveOnDetach, a detach verified as a read does not remove the document
+// when the webhook refuses the write, and still lets the member detach.
+//
+// The server sets pack.IsRemoved itself, after the pack's own verb was
+// verified, so without the second check the removal would ride along with a
+// presence-only detach reported as r.
+func TestAuthWebhookRemoveOnDetachRead(t *testing.T) {
+	ctx := context.Background()
+
+	var mu sync.Mutex
+	seen := map[types.Method][]types.AccessAttribute{}
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, err := types.NewAuthWebhookRequest(r.Body)
+		assert.NoError(t, err)
+
+		mu.Lock()
+		seen[req.Method] = append(seen[req.Method], req.Attributes...)
+		mu.Unlock()
+
+		// The reader may read the document but must not write it.
+		res := types.AuthWebhookResponse{Allowed: true}
+		for _, attr := range req.Attributes {
+			if req.Token == "reader" && attr.Verb == types.ReadWrite {
+				res = types.AuthWebhookResponse{Allowed: false, Reason: "read-only member"}
+				w.WriteHeader(http.StatusForbidden)
+				break
+			}
+		}
+		_, err = res.Write(w)
+		assert.NoError(t, err)
+	}))
+	defer authServer.Close()
+
+	svr, err := server.New(helper.TestConfig())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer func() { adminCli.Close() }()
+	project, err := adminCli.CreateProject(ctx, "remove-on-detach-read")
+	assert.NoError(t, err)
+	project.AuthWebhookURL = authServer.URL
+	removeOnDetach := true
+	_, err = adminCli.UpdateProject(
+		ctx,
+		project.ID.String(),
+		&types.UpdatableProjectFields{
+			AuthWebhookURL:     &project.AuthWebhookURL,
+			AuthWebhookMethods: allWebhookMethods,
+			RemoveOnDetach:     &removeOnDetach,
+		},
+	)
+	assert.NoError(t, err)
+
+	dial := func(token string) *client.Client {
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithToken(token),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		return cli
+	}
+	writer, reader := dial("writer"), dial("reader")
+	defer func() { assert.NoError(t, writer.Close()) }()
+	defer func() { assert.NoError(t, reader.Close()) }()
+
+	docKey := helper.TestKey(t)
+
+	// A writer fills the document, so a later attach shows whether it survived.
+	seeded := document.New(docKey)
+	assert.NoError(t, writer.Attach(ctx, seeded))
+	assert.NoError(t, seeded.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetInteger("x", 1)
+		return nil
+	}))
+	assert.NoError(t, writer.Sync(ctx))
+
+	// The reader detaches last, so RemoveOnDetach would remove the document.
+	readerDoc := document.New(docKey)
+	assert.NoError(t, reader.Attach(ctx, readerDoc))
+	assert.NoError(t, writer.Detach(ctx, seeded))
+	assert.NoError(t, reader.Detach(ctx, readerDoc))
+
+	mu.Lock()
+	assert.Contains(t, seen[types.DetachDocument], types.AccessAttribute{
+		Key:  docKey.String(),
+		Verb: types.ReadWrite,
+	}, "the removal on detach is asked for as a write")
+	mu.Unlock()
+
+	// The refused write stopped the removal, not the detach: the document and
+	// its content are still there.
+	survived := document.New(docKey)
+	assert.NoError(t, writer.Attach(ctx, survived))
+	assert.Equal(t, `{"x":1}`, survived.Marshal())
+
+	// A writer's detach is allowed to remove it, so the next attach is empty.
+	assert.NoError(t, writer.Detach(ctx, survived))
+	fresh := document.New(docKey)
+	assert.NoError(t, writer.Attach(ctx, fresh))
+	assert.Equal(t, `{}`, fresh.Marshal())
+	assert.NoError(t, writer.Detach(ctx, fresh))
+}
+
 func TestAuthWebhookInitialWatchDenied(t *testing.T) {
 	ctx := context.Background()
 
