@@ -1578,6 +1578,12 @@ func (s *yorkieServer) DetachDocument(
 // already carries a write is not asked again. A webhook that denies the write
 // only stops the removal; the detach goes on, and the document is removed by
 // the next detach that is allowed to.
+//
+// This covers this handler only. RemoveOnDetach also removes the document on
+// the deactivation path, DeactivateClient -> clients.Deactivate ->
+// ClusterService.DetachDocument, which does the same removal with no
+// per-document webhook call; see "Removal on detach" in
+// docs/design/auth-webhook-verb.md.
 func (s *yorkieServer) canRemoveOnDetach(
 	ctx context.Context,
 	attrs []types.AccessAttribute,

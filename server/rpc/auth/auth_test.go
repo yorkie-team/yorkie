@@ -91,6 +91,14 @@ func TestAttachmentAccessAttributes(t *testing.T) {
 	}{
 		{"empty pack", newPack(), types.Read},
 		{"presence-only pack", newPack(newPresenceOnlyChange()), types.Read},
+		// Only the one presence change the SDKs send on their own is a read.
+		// A second presence change is one PushPull rejected and the client
+		// kept pending, which the detach pack carries along.
+		{
+			"deferred presence behind the SDK's presence",
+			newPack(newPresenceOnlyChange(), newPresenceOnlyChange()),
+			types.ReadWrite,
+		},
 		{"pack with operations", newPack(newOperationChange()), types.ReadWrite},
 		{"operations behind presence", newPack(newPresenceOnlyChange(), newOperationChange()), types.ReadWrite},
 		{"removal without changes", newRemovalPack(), types.ReadWrite},
@@ -143,4 +151,26 @@ func TestPushPullPresenceIsWrite(t *testing.T) {
 
 	assert.Equal(t, types.ReadWrite, AccessAttributes(pack)[0].Verb)
 	assert.Equal(t, types.Read, AttachmentAccessAttributes(pack)[0].Verb)
+}
+
+// TestDeferredPresenceIsWrite checks that the presence relaxed on attach and
+// detach cannot be used to defer a presence write past the PushPull that
+// rejected it. A client's pack carries every unacknowledged local change, so
+// the change a rejected PushPull left pending is sent again with the detach's
+// presence clear, and that pack is a write.
+func TestDeferredPresenceIsWrite(t *testing.T) {
+	clearChange := change.New(
+		change.InitialID(),
+		"",
+		nil,
+		&inner.Change{ChangeType: inner.Clear},
+	)
+
+	assert.Equal(t, types.Read, AttachmentAccessAttributes(newPack(clearChange))[0].Verb)
+	assert.Equal(
+		t,
+		types.ReadWrite,
+		AttachmentAccessAttributes(newPack(newPresenceOnlyChange(), clearChange))[0].Verb,
+		"a detach carrying a rejected presence change was reported as a read",
+	)
 }

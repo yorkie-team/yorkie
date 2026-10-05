@@ -56,13 +56,20 @@ func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
 // all, which is the one thing a read-only member must be able to do. A pack
 // that also carries operations, or that removes the document, is still a write.
 //
+// Only the one presence change the SDKs send on their own is relaxed, which is
+// why a pack carrying more than a single change is a write however presence-only
+// its changes are. An attach or detach pack is built from every unacknowledged
+// local change (see InternalDocument.CreateChangePack), so a presence change
+// PushPull rejected stays pending and rides along with the next detach; read
+// there, it would be written by deferring it past the method that rejected it.
+//
 // A presence-only attach or detach reported as a read still writes presence.
 // What that leaves ungated is bounded by the attachment lifecycle: presence set
 // at attach, cleared at detach, and every update in between goes through
 // PushPull, which is gated by AccessAttributes.
 func AttachmentAccessAttributes(pack *change.Pack) []types.AccessAttribute {
 	verb := types.Read
-	if pack.OperationsLen() > 0 || pack.IsRemoved {
+	if pack.OperationsLen() > 0 || pack.IsRemoved || pack.ChangesLen() > 1 {
 		verb = types.ReadWrite
 	}
 

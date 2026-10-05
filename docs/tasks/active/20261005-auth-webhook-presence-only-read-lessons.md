@@ -159,3 +159,35 @@ guards only the client-facing detach. Closing it needs the removal decision to
 travel from the handler holding the caller's token into the cluster handler,
 and housekeeping deactivates idle clients with no token at all. Both files are
 outside this diff. Recorded in `docs/design/auth-webhook-verb.md`.
+
+## Review round 5 (panel)
+
+Blocking, fixed: the relaxation could be used to defer a presence write past
+the method that rejected it. `AttachmentAccessAttributes` keyed only on
+`OperationsLen()`, but a pack is built from every unacknowledged local change
+(`InternalDocument.CreateChangePack`), so a presence change a rejected
+`PushPull` left pending was sent again with the next detach — and that pack,
+presence-only, was reported as `r` and written. The round-4 integration test
+walked exactly that sequence and asserted the detach succeeded.
+
+The count is now part of the rule: a pack carrying more than one change is a
+write however presence-only its changes are, because the relaxation only ever
+covered the single presence change the SDKs send on their own (initial
+presence at attach, clear at detach).
+
+The cost is that a read-only member whose presence write was rejected cannot
+detach either — its detach carries the rejected change. It still leaves by
+deactivating, where the server builds the presence clear itself from the
+client's checkpoint and the pending change is never sent, so "a read-only
+member can always leave" holds. The alternative, having the handler drop the
+deferred changes and detach anyway, would rewrite the client's pack and
+checkpoint on its behalf; recorded in Alternatives Considered.
+
+Lesson: an authorization rule over a change pack has to account for what the
+pack may carry *next time*, not only what the current call intends. Client
+changes that fail to sync are retained, so any method that flushes pending
+changes inherits the verb of everything still pending.
+
+Not fixed, follow-up (second round carrying it): the `RemoveOnDetach` removal
+on the deactivation path is still ungated, and both `cluster_server.go` and
+`server/clients` are outside this diff.

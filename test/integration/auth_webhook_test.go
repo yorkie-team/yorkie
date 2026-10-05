@@ -892,14 +892,24 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 			return nil
 		}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(reader.Sync(ctx)))
-		assert.NoError(t, reader.Detach(ctx, doc))
+
+		// The rejected change stays unacknowledged in the client, and a detach
+		// pack carries every unacknowledged change, so the detach that follows
+		// carries the rejected presence along with its clear. A pack that
+		// carries more than the presence the SDK sends on its own is reported
+		// as a write for that reason, so the webhook stops the deferred write
+		// too. The reader still leaves by deactivating, where the server
+		// builds the presence clear itself and the rejected change is dropped.
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(reader.Detach(ctx, doc)))
 
 		mu.Lock()
 		defer mu.Unlock()
-		assert.Contains(t, seen[types.PushPull], types.AccessAttribute{
-			Key:  doc.Key().String(),
-			Verb: types.ReadWrite,
-		})
+		for _, m := range []types.Method{types.PushPull, types.DetachDocument} {
+			assert.Contains(t, seen[m], types.AccessAttribute{
+				Key:  doc.Key().String(),
+				Verb: types.ReadWrite,
+			})
+		}
 	})
 
 	t.Run("a writer's edit is sent as rw", func(t *testing.T) {

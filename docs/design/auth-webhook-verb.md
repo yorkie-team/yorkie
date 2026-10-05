@@ -66,11 +66,11 @@ if pack.HasChanges() || pack.IsRemoved {
 ```
 
 `auth.AttachmentAccessAttributes(pack)` serves `AttachDocument` and
-`DetachDocument`, where presence alone is a read:
+`DetachDocument`, where the one presence change the SDKs send is a read:
 
 ```go
 verb := types.Read
-if pack.OperationsLen() > 0 || pack.IsRemoved {
+if pack.OperationsLen() > 0 || pack.IsRemoved || pack.ChangesLen() > 1 {
 	verb = types.ReadWrite
 }
 ```
@@ -78,17 +78,36 @@ if pack.OperationsLen() > 0 || pack.IsRemoved {
 | Pack | `AccessAttributes` | `AttachmentAccessAttributes` |
 |------|--------------------|------------------------------|
 | no changes | `r` | `r` |
-| presence only | `rw` | `r` |
+| one presence-only change | `rw` | `r` |
+| more than one change, presence only | `rw` | `rw` |
 | at least one operation | `rw` | `rw` |
 | removal (`IsRemoved`), with or without changes | `rw` | `rw` |
 
-A pack reported as `r` on attach or detach can still carry presence changes,
-and the server stores them like any other change: it writes a change document
+A pack reported as `r` on attach or detach can still carry a presence change,
+and the server stores it like any other change: it writes a change document
 and publishes it to every watcher. `r` there means the document's content is
 not changed, not that nothing is written. Presence changed at any other point
 in the attachment goes through `PushPull`, which reports `rw` for it, so a
 webhook that rejects `rw` bounds a read-only member to the presence it sets at
 attach and the clear it sends at detach.
+
+### Why more than one change is a write
+
+The relaxation covers the presence the SDKs send on their own, which is one
+change: the initial presence at attach, the clear at detach. A pack is built
+from every unacknowledged local change (`InternalDocument.CreateChangePack`),
+so a presence change `PushPull` rejected is not dropped — it stays pending and
+is sent again with the next detach. Reporting that pack as `r` would write the
+rejected change anyway, by deferring it past the method that rejected it. So
+the count is part of the rule, and a pack carrying anything besides the SDK's
+own presence change is a write however presence-only its changes are.
+
+A read-only member whose presence write was rejected therefore cannot detach
+either: its detach carries that change and is rejected with it. It still
+leaves by deactivating (`client.Close`), where the server builds the presence
+clear itself from the client's checkpoint and the pending change is never
+sent. Letting the detach through instead would make the rejection at
+`PushPull` cosmetic.
 
 Methods that do not send a change pack build their attributes with
 `types.NewAccessAttributes` and are unaffected.
@@ -171,6 +190,7 @@ presence-only pack (`r`) is never reused for a pack that carries operations
 |----------|--------|
 | Change the meaning of `verb` rather than add a field (option A in #2104) | `verb` already exists to tell reads from writes, and the only behavior it loses is gating presence, which no webhook could use. A new field would leave every existing webhook as broken as before. |
 | Count operations with `pack.OperationsLen()` | A presence-only change has no operations, so "has operations" is exactly "edits the root". The helper already exists. |
+| Report a pack carrying more than one change as `rw`, even when every change is presence only | The relaxation covers the one presence change the SDKs send on their own. A pack carries every unacknowledged local change, so counting only operations let a presence change `PushPull` rejected be deferred to the next detach and written there as an `r`. |
 | Relax presence to `r` only on attach and detach, not on every change-pack method | Presence is stored and broadcast, so it is a write the webhook has to be able to reject. Attach and detach are the only methods where rejecting it also rejects the thing a read-only member must be allowed to do, because the SDKs send presence there with no way to leave it out. On `PushPull` the caller chooses what to send, so there is nothing to relax. |
 | Report removal as `rw` | Removing a document is a write. Without it, the new rule would keep reporting removals as reads. |
 | Let a refused `RemoveOnDetach` removal fall back to a plain detach, instead of failing the detach | The member asked to leave, not to remove; failing the detach would strand a read-only member in the document, and removing anyway would let it destroy the document. |
@@ -182,6 +202,7 @@ presence-only pack (`r`) is never reused for a pack that carries operations
 |-------------|---------|
 | Keep `verb` and add `hasOperations` to change-pack attributes (option B in #2104) | Every webhook would have to learn a new field before read-only members work, and `verb` would keep a meaning that misleads. It also needs a `*bool` to tell "no operations" from "not a pack" or "an older server". |
 | Strip presence from the pack before building the attributes | Same result for `verb`, but it hides that the rule is about operations. |
+| Drop the deferred presence changes from a detach pack whose write was refused, so the detach still goes through | It needs the handler to rewrite the pack and its checkpoint, which decides on the client's behalf which of its changes were sent. Deactivation already lets such a member leave without the refused change, so the detach can be refused outright. |
 
 ## Tasks
 
