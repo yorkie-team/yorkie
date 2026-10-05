@@ -129,7 +129,7 @@ func TestPreAttachEdits(t *testing.T) {
 
 	t.Run("a second pre-attach document of the same key is not re-issued", func(t *testing.T) {
 		ctx := context.Background()
-		clients := activeClients(t, 1)
+		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 		cli := clients[0]
 		docKey := helper.TestKey(t)
@@ -155,8 +155,16 @@ func TestPreAttachEdits(t *testing.T) {
 		require.NoError(t, cli.Attach(ctx, second))
 		assert.Equal(t, time.InitialActorID, second.RootObject().Get("second").CreatedAt().ActorID())
 
-		// Both elements survive: the server can still tell them apart.
-		assert.Equal(t, "a", second.Root().GetText("first").String())
-		assert.Equal(t, "b", second.Root().GetText("second").String())
+		// Both elements survive: the two createdAt differ, so the server holds
+		// two elements rather than one. Read them through another client, not
+		// through `second`: a pull drops the changes the pulling client itself
+		// pushed up to its checkpoint's clientSeq, and `second` repeated the
+		// clientSeq that `first` pushed under, so its own pull filters
+		// `first`'s change out. That filter predates the re-issue -- a second
+		// document of a key always restarts its clientSeq at 1 -- and the
+		// re-issue neither causes it nor can work around it from the client.
+		observed := document.New(docKey)
+		require.NoError(t, clients[1].Attach(ctx, observed))
+		assert.Equal(t, `{"first":[{"val":"a"}],"second":[{"val":"b"}]}`, observed.Marshal())
 	})
 }

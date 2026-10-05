@@ -129,6 +129,15 @@ certain collision a re-issue would mint. The mark is taken before the round
 trip, since an attach whose response is lost may still have pushed, and is
 never cleared: a detach does not take pushed tickets back.
 
+Declining keeps the two elements distinct on the server, but `second` does not
+read `first`'s back on attach. `pullChangeInfos` drops a pulled change whose
+actor is the pulling client's own and whose `clientSeq` the client's checkpoint
+already covers, and `second` restarts its `clientSeq` at 1 -- the one `first`
+pushed under. That filter is the server's own-echo guard and is unchanged by
+this design: on `main` both documents push under the same actor too, so the
+same change is filtered there. Another client attaching the key sees both
+elements.
+
 The mark lives on the `Client`, so it does not carry across processes. A new
 client that reactivates with an explicit `WithKey` takes the same client id --
 hence the same actor -- and would re-issue a fresh document of a key it

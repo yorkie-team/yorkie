@@ -66,6 +66,18 @@
   the walk cannot see a change ID. `assertLocalVectors` now checks every
   pushed change's vector names the new actor, at that change's own
   lamport, and no one else. Red with the re-key removed.
+- Blocking, fixed: the test for the declined re-issue read both elements
+  back through the second document itself and dereferenced a nil Text in
+  CI. `pullChangeInfos` drops a pulled change whose actor is the pulling
+  client's and whose clientSeq the client's checkpoint already covers, and
+  a second `document.New(key)` restarts its clientSeq at 1 -- the one the
+  first attach pushed under -- so the second document never pulls the
+  first's change. It is the server's own-echo filter, not the re-issue:
+  the same hole is there on `main`, where both documents push under the
+  same actor too. The test now reads the merged state through another
+  client, which is where "the server can tell the two elements apart" is
+  observable. Closing the hole itself needs `server/packs`, outside this
+  change.
 
 ## Bench
 
