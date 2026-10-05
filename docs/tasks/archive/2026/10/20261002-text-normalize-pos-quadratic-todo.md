@@ -36,7 +36,9 @@ server's snapshot/compaction paths are fine; Go clients editing locally are.
       the node from the chain -- takes one out
 - [x] `TextValue.Len`: count UTF-16 units without allocating
 - [x] Verify: Red -> Green on the reproduction, `make verify`, bench numbers
-- [ ] Self review, PR
+- [x] Self review, PR
+      *Audit 2026-10-05:* Self review in the Review section; merged as #2107
+      (2625639c).
 
 ## Review
 

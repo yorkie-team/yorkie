@@ -99,13 +99,14 @@ identities, and they answer exactly the questions the index space cannot.
 - [x] Mirror every merge × style complex case in the unit lane
       (`TestStyleReachedSetMatchesComplexSuite`), so a reached-set change
       cannot move a `test/complex` golden unnoticed behind its path filter
-- [ ] Port to the JS SDK so snapshots and clients agree — the SDK is a
+- [x] Port to the JS SDK so snapshots and clients agree — the SDK is a
       separate repository (`yorkie-team/yorkie-js-sdk`), so it cannot land
       in this PR. The four rules are written up implementation-neutrally,
       with acceptance vectors, under **Port specification** in
       `docs/design/concurrent-merge-split.md`; the blast radius of landing
       Go-only is recorded under "Known limitation" below and under
       **Cross-implementation** in the same doc
+      *Audit 2026-10-05:* Ported in yorkie-js-sdk#1404 (b69169c0).
 
 ## Result
 

@@ -50,7 +50,7 @@ paragraph split an editor makes.
       that ends at the current actor's own product.
 - [x] Design doc §7.8, §7.5 note, Fix 24.
 - [x] Mirror in yorkie-js-sdk — the §7.8/§7.5 rules as first written.
-- [ ] **Re-mirror in yorkie-js-sdk.** Review hardened the rules after that
+- [x] **Re-mirror in yorkie-js-sdk.** Review hardened the rules after that
       mirror landed, and every item below changes what a replica computes, so
       a Go server and an unpatched JS client disagree on the same input:
       - `orderSameBoundarySplit` refuses a tombstoned sibling and requires
@@ -66,6 +66,7 @@ paragraph split an editor makes.
       Track alongside yorkie-team/yorkie-js-sdk#1373; do not close this task
       until the mirror lands, since a patched server against an unpatched
       client diverges exactly as §7.8 first did.
+      *Audit 2026-10-05:* Re-mirrored in yorkie-js-sdk#1375 (c8928853).
 
 ## Review
 
