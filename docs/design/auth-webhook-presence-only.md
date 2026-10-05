@@ -1,0 +1,163 @@
+---
+title: auth-webhook-presence-only
+target-version: 0.7.24
+---
+
+# Auth Webhook Presence-Only Packs
+
+## Problem
+
+The auth webhook gets one `attributes` entry for each resource a request
+touches. For the four methods that send a change pack (`AttachDocument`,
+`DetachDocument`, `RemoveDocument` and `PushPull`), `auth.AccessAttributes`
+sets the entry's `verb` from `pack.HasChanges()`:
+
+```go
+verb := types.Read
+if pack.HasChanges() {
+	verb = types.ReadWrite
+}
+```
+
+This rule was written before presence moved into the document (#582). A
+presence update has been a `Change` since then, so a pack that only moves a
+cursor reports `rw`, the same as a pack that edits the root (#2104).
+
+So a webhook cannot enforce read-only members. The SDKs send the initial
+presence with every attach and clear presence right before every detach,
+which means an ordinary attach or detach always reports `rw`:
+
+- If the webhook rejects `rw` for a read-only member, the member can neither
+  open the document nor detach from it.
+- If the webhook allows `rw` on `AttachDocument`, root operations made before
+  the attach go through with the attach. `PushPull` never runs, so its role
+  check is never reached.
+
+The same rule gets removal wrong the other way. `RemoveDocument` sends a pack
+with `IsRemoved` set and usually no change at all, so a removal reports `r`,
+and a webhook that rejects only `rw` lets a read-only member remove the
+document.
+
+### Goals
+
+- A webhook can allow presence-only packs on every method and reject packs
+  that edit or remove the document, including on `AttachDocument`.
+- Webhooks that read only `verb` keep their decisions, except that a removal
+  is now a write.
+
+### Non-Goals
+
+- Server-side roles. The webhook stays the only place where a decision is made.
+- Authorizing the removal that the project's `RemoveOnDetach` makes on the
+  last detach or deactivation. See Risks.
+
+## Design
+
+`types.AccessAttribute` gets one more field:
+
+```go
+type AccessAttribute struct {
+	Key          string   `json:"key"`
+	Verb         VerbType `json:"verb"`
+	PresenceOnly *bool    `json:"presenceOnly,omitempty"`
+}
+```
+
+`auth.AccessAttributes(pack)` sets both:
+
+```go
+verb := types.Read
+if pack.HasChanges() || pack.IsRemoved {
+	verb = types.ReadWrite
+}
+presenceOnly := pack.HasChanges() && pack.OperationsLen() == 0 && !pack.IsRemoved
+```
+
+| Pack | `verb` | `presenceOnly` |
+|------|--------|----------------|
+| no changes | `r` | `false` |
+| presence only (attach, detach, cursor move) | `rw` | `true` |
+| at least one operation | `rw` | `false` |
+| removal (`IsRemoved`), with or without changes | `rw` | `false` |
+
+`presenceOnly` is `true` only when the pack writes presence and nothing else.
+A webhook that enforces read-only members allows an entry when `verb` is `r`
+or `presenceOnly` is `true`, and rejects it otherwise.
+
+The field describes the whole pack, not the change that triggered the request.
+A client's pack carries every local change the server has not acknowledged,
+so a detach can carry presence changes a rejected `PushPull` left pending. A
+webhook that allows presence-only packs on some methods but not on others
+accepts that presence on the method it allows. A webhook that reads
+only `verb` sees the same verbs as before, except that a removal is now `rw`,
+so it can still gate presence on its own by rejecting `rw`.
+
+Methods that do not send a change pack build their attributes with
+`types.NewAccessAttributes`. That leaves the field nil, so it is not in the
+JSON at all. A webhook that wants to fail closed against an older server can
+treat a missing `presenceOnly` on one of the four pack methods as `false`.
+
+### Schema binding on attach
+
+An attach can also write something the pack does not show: when no client is
+attached and the request names a schema other than the document's,
+`AttachDocument` binds that schema to the document. The pack of such an
+attach is presence only, or empty for a presence-disabled document (`verb`
+`r`), so a webhook that allows those would let any member choose the schema
+that later edits are checked against. Right before binding, unless the attach
+was already approved as a document write (`rw` and not `presenceOnly`), the
+handler asks the webhook again for the same document with `rw` and no
+`presenceOnly`, which such a webhook rejects for a read-only member. An attach
+that binds nothing is asked once, as before.
+
+On projects with an attachment limit or `RemoveOnDetach`, an attach that
+finds no client attached rebinds the schema to whatever the request names,
+even an empty key. That predates this change; here it means such an attach is
+asked again too. The second call is made while the document's attachment lock
+is held, so on the bind path other attaches and detaches of that document
+wait for the webhook.
+
+### Decision cache
+
+The decision cache is keyed by the marshaled request body
+(`generateCacheKey`), so `presenceOnly` is part of the key. An answer cached
+for a presence-only pack is never reused for a pack that edits the document,
+although both report `rw`.
+
+`DropCachedDecisions` matches cached keys by the `"key":"<key>"` fragment of
+the body. That fragment does not change, because `key` is still the first
+field of each entry.
+
+`watchStream.decisionKey`, which groups open Watch streams that ask the same
+question, keys the attributes by their JSON too. Formatting them with `%v`
+would print the `*bool` as an address.
+
+### Risks and Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| A webhook allows `presenceOnly` packs on a `RemoveOnDetach` project | The last detach removes the document although its pack is presence only, because the server sets `IsRemoved` after the webhook was asked. Deactivating the client removes it the same way through the cluster `DetachDocument`, with no per-document webhook call at all, so gating the detach alone would not stop it. This predates this change and is left to a follow-up; the security guide should state it. |
+| A webhook reads a missing field as "presence only" against an older server | The field is present on every pack method, so a missing field there means an older server. Webhook authors should treat it as `false`. |
+| A webhook allowed `r` removals | That let read-only members remove documents; a removal is now `rw`. Stated in the release notes. |
+| Cached answers keyed by the old body shape | The keys change with the field. Entries in the old shape expire within `AuthWebhookCacheTTL` and are never matched again. |
+
+### Design Decisions
+
+| Decision | Reason |
+|----------|--------|
+| Add a field and keep `verb` (option B in #2104) | Option A, reporting presence-only packs as `r`, was built first and reviewed. It moved real writes under `r`: presence is stored and broadcast, a `RemoveOnDetach` detach removes the document, and every fix for one path left another (deactivation) ungated. Keeping `verb` changes no existing decision except removal. |
+| `presenceOnly`, not `hasOperations` | A rule "allow when there are no operations" would also allow a removal, which carries none. `presenceOnly` is false for a removal, so the read-only rule is a single check. |
+| `*bool` with `omitempty` | Every pack method sends an explicit value, and every other method leaves the field out, so a webhook can tell "not presence only" from "not a pack" and from an older server. |
+| Report removal as `rw` | Removing a document is a write. |
+| Ask again before binding a schema | Whether the attach binds is known only after the document is looked up, which happens after the first check. Reporting every attach that names a schema as a write would block read-only members from every document that uses schemas. |
+
+## Alternatives Considered
+
+| Alternative | Why not |
+|-------------|---------|
+| Report presence-only packs as `r` (option A in #2104) | See Design Decisions. Review showed the verb then no longer said whether a request writes. |
+| Strip presence before building the attributes | Presence would never reach the webhook, so a deployment that wants to gate it could not. |
+
+## Tasks
+
+Track execution plans in `docs/tasks/active/` as separate task documents.

@@ -753,14 +753,15 @@ func TestAuthWebhookWatchAttributes(t *testing.T) {
 	}}, watchAttrs)
 }
 
-// TestAuthWebhookPresenceOnlyRead verifies that a webhook rejecting rw from a
-// read-only member lets it attach and detach, and still stops its writes.
+// TestAuthWebhookPresenceOnly verifies that a webhook can let a read-only
+// member attach, detach and send presence while rejecting its edits, by
+// allowing a change pack that is presenceOnly.
 //
-// Attach always carries the initial presence and detach the presence clear.
-// While a presence-only pack reported rw, such a webhook blocked every attach
-// and detach, and one that allowed rw on AttachDocument let a root edit made
-// before the attach ride along with it.
-func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
+// Attach always carries the initial presence and detach the presence clear,
+// so both report verb rw. A webhook that rejects rw for a read-only member
+// blocks every attach and detach, and one that allows rw on AttachDocument
+// lets a root edit made before the attach ride along with it.
+func TestAuthWebhookPresenceOnly(t *testing.T) {
 	ctx := context.Background()
 
 	var mu sync.Mutex
@@ -773,10 +774,11 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 		seen[req.Method] = append(seen[req.Method], req.Attributes...)
 		mu.Unlock()
 
-		// The reader may read the document but must not write it.
+		// The reader may read and hold presence but must not edit.
 		res := types.AuthWebhookResponse{Allowed: true}
 		for _, attr := range req.Attributes {
-			if req.Token == "reader" && attr.Verb == types.ReadWrite {
+			presenceOnly := attr.PresenceOnly != nil && *attr.PresenceOnly
+			if req.Token == "reader" && attr.Verb == types.ReadWrite && !presenceOnly {
 				res = types.AuthWebhookResponse{Allowed: false, Reason: "read-only member"}
 				w.WriteHeader(http.StatusForbidden)
 				break
@@ -794,7 +796,7 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 	defer func() { adminCli.Close() }()
-	project, err := adminCli.CreateProject(ctx, "presence-only-read")
+	project, err := adminCli.CreateProject(ctx, "presence-only")
 	assert.NoError(t, err)
 	project.AuthWebhookURL = authServer.URL
 	_, err = adminCli.UpdateProject(
@@ -821,15 +823,24 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 	defer func() { assert.NoError(t, writer.Close()) }()
 	defer func() { assert.NoError(t, reader.Close()) }()
 
-	t.Run("a reader attaches and detaches with presence only", func(t *testing.T) {
+	yes, no := true, false
+
+	t.Run("a reader attaches, sends presence and detaches", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, reader.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			p.Set("cursor", "1")
+			return nil
+		}))
+		assert.NoError(t, reader.Sync(ctx))
 		assert.NoError(t, reader.Detach(ctx, doc))
 
+		// The verb is unchanged: presence is still reported as a write.
 		mu.Lock()
 		defer mu.Unlock()
-		for _, m := range []types.Method{types.AttachDocument, types.DetachDocument} {
-			assert.Contains(t, seen[m], types.AccessAttribute{Key: doc.Key().String(), Verb: types.Read})
+		want := types.AccessAttribute{Key: doc.Key().String(), Verb: types.ReadWrite, PresenceOnly: &yes}
+		for _, m := range []types.Method{types.AttachDocument, types.PushPull, types.DetachDocument} {
+			assert.Contains(t, seen[m], want, m)
 		}
 	})
 
@@ -855,6 +866,12 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 		err := reader.Remove(ctx, doc)
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 		assert.NoError(t, reader.Detach(ctx, doc))
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Contains(t, seen[types.RemoveDocument], types.AccessAttribute{
+			Key: doc.Key().String(), Verb: types.ReadWrite, PresenceOnly: &no,
+		})
 	})
 
 	t.Run("a reader cannot bind a schema but can attach under one", func(t *testing.T) {
@@ -868,11 +885,20 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 			[]types.Rule{{Path: "$.title", Type: "string"}},
 		))
 
-		// The first attach to a document binds the schema it names.
+		// The first attach to a document binds the schema it names, whether
+		// its pack is presence only or, for a presence-disabled document,
+		// empty.
 		err := reader.Attach(ctx, document.New(helper.TestKey(t, 1)), client.WithSchema(schemaKey))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		err = reader.Attach(
+			ctx,
+			document.New(helper.TestKey(t, 3)),
+			client.WithSchema(schemaKey),
+			client.WithDisablePresence(),
+		)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 
-		// Once a writer has bound it, attaching under the schema is a read.
+		// Once a writer has bound it, attaching under the schema binds nothing.
 		bound := document.New(helper.TestKey(t, 2))
 		assert.NoError(t, writer.Attach(ctx, bound, client.WithSchema(schemaKey)))
 		doc := document.New(helper.TestKey(t, 2))
@@ -881,38 +907,7 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 		assert.NoError(t, writer.Detach(ctx, bound))
 	})
 
-	// Presence is stored as a change and published to every watcher, so only
-	// attach and detach report it as a read. A reader that changes presence
-	// mid-attachment goes through PushPull, which reports rw.
-	t.Run("a reader's presence update is rejected mid-attachment", func(t *testing.T) {
-		doc := document.New(helper.TestKey(t))
-		assert.NoError(t, reader.Attach(ctx, doc))
-		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-			p.Set("cursor", "1")
-			return nil
-		}))
-		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(reader.Sync(ctx)))
-
-		// The rejected change stays unacknowledged in the client, and a detach
-		// pack carries every unacknowledged change, so the detach that follows
-		// carries the rejected presence along with its clear. A pack that
-		// carries more than the presence the SDK sends on its own is reported
-		// as a write for that reason, so the webhook stops the deferred write
-		// too. The reader still leaves by deactivating, where the server
-		// builds the presence clear itself and the rejected change is dropped.
-		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(reader.Detach(ctx, doc)))
-
-		mu.Lock()
-		defer mu.Unlock()
-		for _, m := range []types.Method{types.PushPull, types.DetachDocument} {
-			assert.Contains(t, seen[m], types.AccessAttribute{
-				Key:  doc.Key().String(),
-				Verb: types.ReadWrite,
-			})
-		}
-	})
-
-	t.Run("a writer's edit is sent as rw", func(t *testing.T) {
+	t.Run("a writer's edit is not presenceOnly", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, writer.Attach(ctx, doc))
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -925,118 +920,9 @@ func TestAuthWebhookPresenceOnlyRead(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		assert.Contains(t, seen[types.PushPull], types.AccessAttribute{
-			Key:  doc.Key().String(),
-			Verb: types.ReadWrite,
+			Key: doc.Key().String(), Verb: types.ReadWrite, PresenceOnly: &no,
 		})
 	})
-}
-
-// TestAuthWebhookRemoveOnDetachRead verifies that under the project's
-// RemoveOnDetach, a detach verified as a read does not remove the document
-// when the webhook refuses the write, and still lets the member detach.
-//
-// The server sets pack.IsRemoved itself, after the pack's own verb was
-// verified, so without the second check the removal would ride along with a
-// presence-only detach reported as r.
-func TestAuthWebhookRemoveOnDetachRead(t *testing.T) {
-	ctx := context.Background()
-
-	var mu sync.Mutex
-	seen := map[types.Method][]types.AccessAttribute{}
-	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req, err := types.NewAuthWebhookRequest(r.Body)
-		assert.NoError(t, err)
-
-		mu.Lock()
-		seen[req.Method] = append(seen[req.Method], req.Attributes...)
-		mu.Unlock()
-
-		// The reader may read the document but must not write it.
-		res := types.AuthWebhookResponse{Allowed: true}
-		for _, attr := range req.Attributes {
-			if req.Token == "reader" && attr.Verb == types.ReadWrite {
-				res = types.AuthWebhookResponse{Allowed: false, Reason: "read-only member"}
-				w.WriteHeader(http.StatusForbidden)
-				break
-			}
-		}
-		_, err = res.Write(w)
-		assert.NoError(t, err)
-	}))
-	defer authServer.Close()
-
-	svr, err := server.New(helper.TestConfig())
-	assert.NoError(t, err)
-	assert.NoError(t, svr.Start())
-	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
-
-	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-	defer func() { adminCli.Close() }()
-	project, err := adminCli.CreateProject(ctx, "remove-on-detach-read")
-	assert.NoError(t, err)
-	project.AuthWebhookURL = authServer.URL
-	removeOnDetach := true
-	_, err = adminCli.UpdateProject(
-		ctx,
-		project.ID.String(),
-		&types.UpdatableProjectFields{
-			AuthWebhookURL:     &project.AuthWebhookURL,
-			AuthWebhookMethods: allWebhookMethods,
-			RemoveOnDetach:     &removeOnDetach,
-		},
-	)
-	assert.NoError(t, err)
-
-	dial := func(token string) *client.Client {
-		cli, err := client.Dial(
-			svr.RPCAddr(),
-			client.WithToken(token),
-			client.WithAPIKey(project.PublicKey),
-		)
-		assert.NoError(t, err)
-		assert.NoError(t, cli.Activate(ctx))
-		return cli
-	}
-	writer, reader := dial("writer"), dial("reader")
-	defer func() { assert.NoError(t, writer.Close()) }()
-	defer func() { assert.NoError(t, reader.Close()) }()
-
-	docKey := helper.TestKey(t)
-
-	// A writer fills the document, so a later attach shows whether it survived.
-	seeded := document.New(docKey)
-	assert.NoError(t, writer.Attach(ctx, seeded))
-	assert.NoError(t, seeded.Update(func(r *json.Object, p *presence.Presence) error {
-		r.SetInteger("x", 1)
-		return nil
-	}))
-	assert.NoError(t, writer.Sync(ctx))
-
-	// The reader detaches last, so RemoveOnDetach would remove the document.
-	readerDoc := document.New(docKey)
-	assert.NoError(t, reader.Attach(ctx, readerDoc))
-	assert.NoError(t, writer.Detach(ctx, seeded))
-	assert.NoError(t, reader.Detach(ctx, readerDoc))
-
-	mu.Lock()
-	assert.Contains(t, seen[types.DetachDocument], types.AccessAttribute{
-		Key:  docKey.String(),
-		Verb: types.ReadWrite,
-	}, "the removal on detach is asked for as a write")
-	mu.Unlock()
-
-	// The refused write stopped the removal, not the detach: the document and
-	// its content are still there.
-	survived := document.New(docKey)
-	assert.NoError(t, writer.Attach(ctx, survived))
-	assert.Equal(t, `{"x":1}`, survived.Marshal())
-
-	// A writer's detach is allowed to remove it, so the next attach is empty.
-	assert.NoError(t, writer.Detach(ctx, survived))
-	fresh := document.New(docKey)
-	assert.NoError(t, writer.Attach(ctx, fresh))
-	assert.Equal(t, `{}`, fresh.Marshal())
-	assert.NoError(t, writer.Detach(ctx, fresh))
 }
 
 func TestAuthWebhookInitialWatchDenied(t *testing.T) {

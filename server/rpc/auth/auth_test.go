@@ -17,6 +17,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,115 +63,78 @@ func newRemovalPack(changes ...*change.Change) *change.Pack {
 
 func TestAccessAttributes(t *testing.T) {
 	tests := []struct {
-		name string
-		pack *change.Pack
-		verb types.VerbType
+		name           string
+		pack           *change.Pack
+		verb           types.VerbType
+		presenceOnly   bool
+		writesDocument bool
 	}{
-		{"empty pack", newPack(), types.Read},
-		// Presence is stored and broadcast, so on the methods that carry the
-		// changes the client chose to send it is a write.
-		{"presence-only pack", newPack(newPresenceOnlyChange()), types.ReadWrite},
-		{"pack with operations", newPack(newOperationChange()), types.ReadWrite},
-		{"operations behind presence", newPack(newPresenceOnlyChange(), newOperationChange()), types.ReadWrite},
-		{"removal without changes", newRemovalPack(), types.ReadWrite},
-		{"removal with presence only", newRemovalPack(newPresenceOnlyChange()), types.ReadWrite},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, []types.AccessAttribute{{Key: "doc-1", Verb: tt.verb}}, AccessAttributes(tt.pack))
-		})
-	}
-}
-
-func TestAttachmentAccessAttributes(t *testing.T) {
-	tests := []struct {
-		name string
-		pack *change.Pack
-		verb types.VerbType
-	}{
-		{"empty pack", newPack(), types.Read},
-		{"presence-only pack", newPack(newPresenceOnlyChange()), types.Read},
-		// Only the one presence change the SDKs send on their own is a read.
-		// A second presence change is one PushPull rejected and the client
-		// kept pending, which the detach pack carries along.
+		{"empty pack", newPack(), types.Read, false, false},
+		{"presence-only pack", newPack(newPresenceOnlyChange()), types.ReadWrite, true, false},
+		{"pack with operations", newPack(newOperationChange()), types.ReadWrite, false, true},
 		{
-			"deferred presence behind the SDK's presence",
-			newPack(newPresenceOnlyChange(), newPresenceOnlyChange()),
+			"operations behind presence",
+			newPack(newPresenceOnlyChange(), newOperationChange()),
 			types.ReadWrite,
+			false,
+			true,
 		},
-		{"pack with operations", newPack(newOperationChange()), types.ReadWrite},
-		{"operations behind presence", newPack(newPresenceOnlyChange(), newOperationChange()), types.ReadWrite},
-		{"removal without changes", newRemovalPack(), types.ReadWrite},
-		{"removal with presence only", newRemovalPack(newPresenceOnlyChange()), types.ReadWrite},
+		{"removal without changes", newRemovalPack(), types.ReadWrite, false, true},
+		{"removal with presence only", newRemovalPack(newPresenceOnlyChange()), types.ReadWrite, false, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(
-				t,
-				[]types.AccessAttribute{{Key: "doc-1", Verb: tt.verb}},
-				AttachmentAccessAttributes(tt.pack),
-			)
+			attrs := AccessAttributes(tt.pack)
+			require.Len(t, attrs, 1)
+			assert.Equal(t, "doc-1", attrs[0].Key)
+			assert.Equal(t, tt.verb, attrs[0].Verb)
+			require.NotNil(t, attrs[0].PresenceOnly)
+			assert.Equal(t, tt.presenceOnly, *attrs[0].PresenceOnly)
+			assert.Equal(t, tt.writesDocument, WritesDocument(attrs))
 		})
 	}
 }
 
-// TestVerifyAccessVerbCache checks that a decision cached for a presence-only
-// detach is not reused for a detach that carries operations. A webhook that
-// allows reads but rejects writes from a read-only member would otherwise be
-// bypassed by the cache for the next AuthWebhookCacheTTL.
-func TestVerifyAccessVerbCache(t *testing.T) {
+func TestAccessAttributesJSON(t *testing.T) {
+	t.Run("a pack sends presenceOnly even when false", func(t *testing.T) {
+		body, err := json.Marshal(AccessAttributes(newPack(newOperationChange())))
+		require.NoError(t, err)
+		assert.JSONEq(t, `[{"key":"doc-1","verb":"rw","presenceOnly":false}]`, string(body))
+	})
+
+	t.Run("a method without a pack omits presenceOnly", func(t *testing.T) {
+		attrs := types.NewAccessAttributes([]key.Key{"doc-1"}, types.ReadWrite)
+		body, err := json.Marshal(attrs)
+		require.NoError(t, err)
+		assert.JSONEq(t, `[{"key":"doc-1","verb":"rw"}]`, string(body))
+		assert.True(t, WritesDocument(attrs))
+	})
+}
+
+// TestVerifyAccessPresenceOnlyCache checks that a decision cached for a
+// presence-only pack is not reused for a pack that edits the document. Both
+// report verb rw, so only PresenceOnly tells them apart in the cache key; a
+// webhook that allows presence but rejects edits from a read-only member would
+// otherwise be bypassed by the cache for the next AuthWebhookCacheTTL.
+func TestVerifyAccessPresenceOnlyCache(t *testing.T) {
 	ctx := t.Context()
 	be, project, stub := newWebhookTest(t)
-	project.AuthWebhookMethods = []string{string(types.DetachDocument)}
+	project.AuthWebhookMethods = []string{string(types.PushPull)}
 
-	detach := func(c *change.Change) *types.AccessInfo {
-		return &types.AccessInfo{
-			Method:     types.DetachDocument,
-			Attributes: AttachmentAccessAttributes(newPack(c)),
-		}
+	pushPull := func(c *change.Change) *types.AccessInfo {
+		return &types.AccessInfo{Method: types.PushPull, Attributes: AccessAttributes(newPack(c))}
 	}
 
-	require.NoError(t, verifyAccess(ctx, be, project, "alice", detach(newPresenceOnlyChange()), false))
+	require.NoError(t, verifyAccess(ctx, be, project, "alice", pushPull(newPresenceOnlyChange()), false))
 	assert.Equal(t, int32(1), stub.calls.Load())
 
-	require.NoError(t, verifyAccess(ctx, be, project, "alice", detach(newOperationChange()), false))
+	require.NoError(t, verifyAccess(ctx, be, project, "alice", pushPull(newOperationChange()), false))
 	assert.Equal(t, int32(2), stub.calls.Load(), "a pack with operations reused a presence-only answer")
 
-	require.NoError(t, verifyAccess(ctx, be, project, "alice", detach(newPresenceOnlyChange()), false))
+	require.NoError(t, verifyAccess(ctx, be, project, "alice", pushPull(newPresenceOnlyChange()), false))
 	assert.Equal(t, int32(2), stub.calls.Load(), "a repeated presence-only pack missed the cache")
-}
 
-// TestPushPullPresenceIsWrite checks that a presence-only PushPull is reported
-// as a write, so a webhook that rejects writes from a read-only member can stop
-// it from persisting and broadcasting presence. Attach and detach are the only
-// methods where presence alone is a read.
-func TestPushPullPresenceIsWrite(t *testing.T) {
-	pack := newPack(newPresenceOnlyChange())
-
-	assert.Equal(t, types.ReadWrite, AccessAttributes(pack)[0].Verb)
-	assert.Equal(t, types.Read, AttachmentAccessAttributes(pack)[0].Verb)
-}
-
-// TestDeferredPresenceIsWrite checks that the presence relaxed on attach and
-// detach cannot be used to defer a presence write past the PushPull that
-// rejected it. A client's pack carries every unacknowledged local change, so
-// the change a rejected PushPull left pending is sent again with the detach's
-// presence clear, and that pack is a write.
-func TestDeferredPresenceIsWrite(t *testing.T) {
-	clearChange := change.New(
-		change.InitialID(),
-		"",
-		nil,
-		&inner.Change{ChangeType: inner.Clear},
-	)
-
-	assert.Equal(t, types.Read, AttachmentAccessAttributes(newPack(clearChange))[0].Verb)
-	assert.Equal(
-		t,
-		types.ReadWrite,
-		AttachmentAccessAttributes(newPack(newPresenceOnlyChange(), clearChange))[0].Verb,
-		"a detach carrying a rejected presence change was reported as a read",
-	)
+	// The key needle of DropCachedDecisions still finds both decisions.
+	assert.Equal(t, 2, DropCachedDecisions(be, project, []string{"doc-1"}))
 }

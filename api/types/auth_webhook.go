@@ -30,14 +30,12 @@ type VerbType string
 
 const (
 
-	// Read represents the case of only reading the given document. On
-	// AttachDocument and DetachDocument it also covers the presence the SDKs
-	// send with every attach and detach, which is stored but changes no
-	// content.
+	// Read represents the case of only reading the given document.
 	Read VerbType = "r"
 
-	// ReadWrite represents the case of reading and writing the given document,
-	// such as a change pack that carries changes or removes the document.
+	// ReadWrite represents the case of reading and writing the given document.
+	// A change pack is a ReadWrite when it carries any change, presence
+	// included, or removes the document.
 	ReadWrite VerbType = "rw"
 )
 
@@ -118,6 +116,14 @@ func AuthMethods() []Method {
 type AccessAttribute struct {
 	Key  string   `json:"key"`
 	Verb VerbType `json:"verb"`
+
+	// PresenceOnly reports whether a change pack writes presence and nothing
+	// else: it carries changes, none of them has an operation, and it does
+	// not remove the document. It is set only for the methods that send a
+	// change pack (AttachDocument, DetachDocument, RemoveDocument and
+	// PushPull) and is omitted otherwise, so a webhook can tell a presence
+	// write, which Verb reports as ReadWrite, from a document edit.
+	PresenceOnly *bool `json:"presenceOnly,omitempty"`
 }
 
 // NewAccessAttributes creates a new instance of AccessAttributes.

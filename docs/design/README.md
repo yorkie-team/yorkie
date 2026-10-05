@@ -50,7 +50,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them
-- [Auth Webhook Verb](auth-webhook-verb.md): `verb` on change-pack requests reports `rw` only for packs that write the document, so presence-only attach and detach pass as reads
+- [Auth Webhook Presence-Only Packs](auth-webhook-presence-only.md): `presenceOnly` on change-pack attributes, so a webhook can allow presence while rejecting edits and removals
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
 - [Document Size Limit](document-size-limit.md): Server-side backstop on `MaxSizePerDocument`: a lagging gate on the snapshot's live size that refuses only growth

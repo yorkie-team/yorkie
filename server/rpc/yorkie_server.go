@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	goerrors "errors"
 	"sync"
 	gotime "time"
 
@@ -237,7 +236,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	attrs := auth.AttachmentAccessAttributes(pack)
+	attrs := auth.AccessAttributes(pack)
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: attrs,
@@ -332,11 +331,13 @@ func (s *yorkieServer) AttachDocument(
 			if err != nil {
 				return nil, err
 			}
-			// Binding a schema writes the document, but a presence-only attach
-			// was verified as a read. Ask the webhook for the write before
-			// binding, so a read-only member cannot pick the schema that later
-			// edits are checked against.
-			if req.Msg.SchemaKey != docInfo.Schema && attrs[0].Verb != types.ReadWrite {
+			// Binding a schema writes the document, which the pack does not
+			// show: an attach whose pack is empty (a presence-disabled
+			// document) or presence only was approved without a document
+			// write, and a webhook that allows those would let any member
+			// pick the schema later edits are checked against. Ask for the
+			// write before binding.
+			if req.Msg.SchemaKey != docInfo.Schema && !auth.WritesDocument(attrs) {
 				if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 					Method:     types.AttachDocument,
 					Attributes: types.NewAccessAttributes([]key.Key{pack.DocumentKey}, types.ReadWrite),
@@ -1475,10 +1476,9 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	attrs := auth.AttachmentAccessAttributes(pack)
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.DetachDocument,
-		Attributes: attrs,
+		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
 	}
@@ -1516,20 +1516,8 @@ func (s *yorkieServer) DetachDocument(
 		}
 
 		if !isAttached {
-			// Removing the document here is a write the pack never showed: a
-			// presence-only detach was verified as a read. Ask the webhook for
-			// the write before removing, and when it refuses, detach without
-			// removing rather than refusing the detach, so a read-only member
-			// can always leave and cannot destroy the document on the way out.
-			allowed, err := s.canRemoveOnDetach(ctx, attrs, pack.DocumentKey)
-			if err != nil {
-				return nil, err
-			}
-
-			if allowed {
-				pack.IsRemoved = true
-				status = document.StatusRemoved
-			}
+			pack.IsRemoved = true
+			status = document.StatusRemoved
 		}
 	}
 
@@ -1569,43 +1557,6 @@ func (s *yorkieServer) DetachDocument(
 	return connect.NewResponse(&api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
-}
-
-// canRemoveOnDetach reports whether the detach being served may also remove
-// the document under the project's RemoveOnDetach. The detach itself was
-// verified with the pack's own verb, which is a read for the presence-only
-// pack the SDKs send, so the removal needs a write of its own. A detach that
-// already carries a write is not asked again. A webhook that denies the write
-// only stops the removal; the detach goes on, and the document is removed by
-// the next detach that is allowed to.
-//
-// This covers this handler only. RemoveOnDetach also removes the document on
-// the deactivation path, DeactivateClient -> clients.Deactivate ->
-// ClusterService.DetachDocument, which does the same removal with no
-// per-document webhook call; see "Removal on detach" in
-// docs/design/auth-webhook-verb.md.
-func (s *yorkieServer) canRemoveOnDetach(
-	ctx context.Context,
-	attrs []types.AccessAttribute,
-	docKey key.Key,
-) (bool, error) {
-	for _, attr := range attrs {
-		if attr.Verb == types.ReadWrite {
-			return true, nil
-		}
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.DetachDocument,
-		Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.ReadWrite),
-	}); err != nil {
-		if goerrors.Is(err, auth.ErrPermissionDenied) || goerrors.Is(err, auth.ErrUnauthenticated) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
 }
 
 // PushPullChanges stores the changes sent by the client and delivers the changes

@@ -32,57 +32,40 @@ import (
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
-// Any change the pack carries is a write, presence included: the server stores
-// it as a change and publishes it to every watcher, so a webhook that rejects
-// writes from a read-only member has to be able to reject it. A removal usually
-// carries no change at all, which is why it is checked on its own.
-//
-// Use this for the methods that carry changes the client chose to send, which
-// is PushPull and RemoveDocument. Attach and detach carry presence the SDKs
-// send on their own; see AttachmentAccessAttributes.
 func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
+	// A removal usually carries no change at all, so it is checked on its own:
+	// without it, removing the document would be reported as a read.
 	verb := types.Read
 	if pack.HasChanges() || pack.IsRemoved {
 		verb = types.ReadWrite
 	}
 
-	return accessAttributes(pack, verb)
-}
+	// A presence update is a change too, and the SDKs send one with every
+	// attach and detach, so the verb alone cannot tell it from an edit.
+	// PresenceOnly lets the webhook allow presence while rejecting edits.
+	presenceOnly := pack.HasChanges() && pack.OperationsLen() == 0 && !pack.IsRemoved
 
-// AttachmentAccessAttributes returns an array of AccessAttribute for the packs
-// that attach and detach send. These carry the initial presence and the
-// presence clear that the SDKs send with every attach and detach, so reporting
-// them as writes would keep a read-only member from opening the document at
-// all, which is the one thing a read-only member must be able to do. A pack
-// that also carries operations, or that removes the document, is still a write.
-//
-// Only the one presence change the SDKs send on their own is relaxed, which is
-// why a pack carrying more than a single change is a write however presence-only
-// its changes are. An attach or detach pack is built from every unacknowledged
-// local change (see InternalDocument.CreateChangePack), so a presence change
-// PushPull rejected stays pending and rides along with the next detach; read
-// there, it would be written by deferring it past the method that rejected it.
-//
-// A presence-only attach or detach reported as a read still writes presence.
-// What that leaves ungated is bounded by the attachment lifecycle: presence set
-// at attach, cleared at detach, and every update in between goes through
-// PushPull, which is gated by AccessAttributes.
-func AttachmentAccessAttributes(pack *change.Pack) []types.AccessAttribute {
-	verb := types.Read
-	if pack.OperationsLen() > 0 || pack.IsRemoved || pack.ChangesLen() > 1 {
-		verb = types.ReadWrite
-	}
-
-	return accessAttributes(pack, verb)
-}
-
-func accessAttributes(pack *change.Pack, verb types.VerbType) []types.AccessAttribute {
 	// NOTE(hackerwins): In the future, methods such as bulk PushPull can be
 	// added, so we declare it as an array.
 	return []types.AccessAttribute{{
-		Key:  pack.DocumentKey.String(),
-		Verb: verb,
+		Key:          pack.DocumentKey.String(),
+		Verb:         verb,
+		PresenceOnly: &presenceOnly,
 	}}
+}
+
+// WritesDocument reports whether the given attributes ask for a write of the
+// document itself: a ReadWrite that is not presence only. An access verified
+// with attributes for which it is false was approved as a read or as a
+// presence write, so a document write it leads to must be asked for again.
+func WritesDocument(attrs []types.AccessAttribute) bool {
+	for _, attr := range attrs {
+		presenceOnly := attr.PresenceOnly != nil && *attr.PresenceOnly
+		if attr.Verb == types.ReadWrite && !presenceOnly {
+			return true
+		}
+	}
+	return false
 }
 
 // VerifyAccess verifies the given access.

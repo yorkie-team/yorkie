@@ -1,9 +1,85 @@
 **Created**: 2026-10-05
 
-# Auth Webhook: Presence-only Packs Report `r` — Lessons
+# Auth Webhook: Presence-only Packs — Lessons
 
 Plan: `20261005-auth-webhook-presence-only-read-todo.md`. Design:
-`docs/design/auth-webhook-verb.md`.
+`docs/design/auth-webhook-presence-only.md`.
+
+## Outcome: option B, after option A failed review
+
+The branch first shipped option A (presence-only packs report `r`) and went
+through four rounds of the review panel, with fix rounds from the repo agent
+in between. Each round found a write that A had moved under `r`:
+
+1. A `RemoveOnDetach` detach removes the document, and the server sets
+   `IsRemoved` after the webhook was asked. A removal recheck on the detach
+   path was added.
+2. Deactivating the client removes it the same way through the cluster
+   `DetachDocument`, which asks no webhook and has no token to ask with. The
+   recheck read as a guard but was bypassable.
+3. Presence itself is stored and broadcast. Reporting it as `r` took away a
+   webhook's only way to stop a member's presence on `PushPull`. The
+   rebuttal ("no webhook could use that") was upheld against twice by the
+   panel's adjudicator, which stopped the loop for a human.
+
+The common cause is that A changed what an existing field means, and the
+server performs writes the pack does not show. Option B keeps `verb` and adds
+`presenceOnly`, so every existing decision stays as it was (removal aside),
+and a webhook opts into allowing presence-only packs knowing what they can
+lead to. The `RemoveOnDetach`/deactivation removal is then no worse than on
+main and is left to a follow-up, stated in the design doc's Risks.
+
+The final diff was rebuilt from the branch base rather than layered on the A
+commits: the A-specific pieces (`AttachmentAccessAttributes`, the removal
+recheck, the deferred-presence rule) are gone, and what carried over is the
+removal-as-`rw` fix and the schema-binding recheck.
+
+## `presenceOnly` rather than `hasOperations`
+
+The issue suggested `hasOperations`. A read-only rule built on it ("allow
+when there are no operations") also allows a removal, which carries no
+operations. `presenceOnly` is false for a removal and for an empty pack, so
+the rule is one check: allow when `verb` is `r` or `presenceOnly` is true.
+
+## `*bool`, and the decision key that followed
+
+The field is set on every pack method and omitted elsewhere, so a webhook can
+tell "not presence only" from "not a pack" and from an older server. A
+pointer field made `watchStream.decisionKey`, which formatted attributes with
+`%v`, print an address, so it now keys them by JSON like the webhook cache;
+a registry test with two equal pointers asserts one shared call.
+
+## Proving each subtest
+
+Each guard was disabled in turn and the integration test rerun:
+
+- `presenceOnly` always false: the reader cannot attach, so the attach/detach,
+  removal and schema subtests fail.
+- Verb without `IsRemoved`: only the removal subtest fails (the removal goes
+  through).
+- No schema recheck: only the schema subtest fails (the bind goes through).
+
+An earlier mutation that set the field to `nil` "passed" because the unused
+variable broke the build and the grep for `--- FAIL` saw nothing; the build
+error has to be checked too.
+
+## Review of option B (before push)
+
+An independent review found one blocking gap: the schema recheck first fired
+only for a presence-only attach. A presence-disabled document attaches with an
+empty pack (`verb` `r`, `presenceOnly` false), which the read-only rule
+allows, and that attach bound the schema unchecked. Option A's recheck ("the
+first check was a read") had covered it; narrowing it to `presenceOnly` lost
+it. The recheck now fires unless the attach was already approved as a
+document write (`auth.WritesDocument`), and the schema subtest attaches with
+`WithDisablePresence` too; it fails with the narrower condition.
+
+## History (option A, superseded)
+
+Everything below describes option A as it was built and reviewed. Its
+conclusions, including the release note under "For the PR body", no longer
+apply.
+
 
 ## Why option A after building option B
 
@@ -158,7 +234,7 @@ Not fixed, follow-up: the `RemoveOnDetach` removal on the deactivation path
 guards only the client-facing detach. Closing it needs the removal decision to
 travel from the handler holding the caller's token into the cluster handler,
 and housekeeping deactivates idle clients with no token at all. Both files are
-outside this diff. Recorded in `docs/design/auth-webhook-verb.md`.
+outside this diff. Recorded in the option A design doc, since replaced by `docs/design/auth-webhook-presence-only.md`.
 
 ## Review round 5 (panel)
 
