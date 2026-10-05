@@ -43,9 +43,12 @@ The panel approved with suggestions. Taken:
 
 - **Cluster `DetachDocument`** (correctness, security, design-fit,
   blast-radius) takes `DocumentId` and `DocumentKey` too and pushes a pack
-  built from the key. It is cluster-secret gated and only reached from
-  `clients.Deactivate`, but the invariant should hold on every path that
-  pairs the two, so it gets the same check.
+  built from the key. The server's only caller is `clients.Deactivate`, which
+  always sends a matching pair, but the service is gated by `ClusterSecret`
+  only when one is set: it is empty by default, and then the cluster
+  interceptor accepts any caller (see #2113). So the check is reachable from
+  outside in the default configuration, and the invariant should hold on
+  every path that pairs the two.
 - **Tests** (correctness, test-adequacy): each subtest now also sends the
   same request with the target's own key and expects it to succeed, which
   covers the guard not misfiring. The RemoveDocument subtest's "target is
@@ -71,3 +74,13 @@ Not taken, with reasons:
   handlers are where the two identifiers enter from a request, so the check
   sits at that boundary, next to the lookup the handlers already do.
 - **`verb` for removals** (relocated): handled by #2129.
+
+## Review panel (round 2 on 9a0f79ec)
+
+Approved. Fixed: the task records called the cluster handler cluster-secret
+gated, which is false by default, and still said "three handlers". Not taken:
+`PurgeDocument` and `CompactDocument` on the cluster service also pair an ID
+with a key, but they are housekeeping/admin operations that never reach the
+auth webhook with the key, so they are outside this PR's invariant and are
+left for #2113, which covers the unauthenticated cluster service. The
+lock-order and existence-oracle points were answered in round 1.
