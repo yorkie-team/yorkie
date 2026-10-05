@@ -56,7 +56,8 @@ Measured together on linux/amd64 with every tag: 282 findings.
       local MongoDB
 - [x] Bench compile + `-benchtime=2x` for touched benchmarks
 - [x] `node --test scripts/test/*.test.mjs scripts/agent/*.test.mjs`
-- [ ] CI
+- [x] CI
+      *Audit 2026-10-05:* #2067 (35e145ce) merged with CI green.
 
 ## Review
 

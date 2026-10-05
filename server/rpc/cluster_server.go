@@ -136,6 +136,15 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	// NOTE: No cache invalidation is broadcast here. This handler is only
+	// reached from clients.Deactivate, which detaches every attached document
+	// of one client and then broadcasts a single invalidation for the whole
+	// client row — covering all of them, and on its failure paths too (see
+	// the deferred InvalidateCachedClient there). Broadcasting per document as
+	// well would multiply one deactivation into (documents+1) cluster-wide
+	// fan-outs, and housekeeping runs up to DeactivateConcurrency of those at
+	// once. A future caller that detaches a single document through this
+	// handler must broadcast the invalidation itself.
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
 }
 

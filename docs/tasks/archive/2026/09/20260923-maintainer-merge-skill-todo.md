@@ -48,7 +48,8 @@ introduce a convention nobody agreed to.
 - [x] REFACTOR: folded in `strict: true` and corrected the fork-branch
       deletion claim, both surfaced by the GREEN run. Not re-tested — see the
       lessons file.
-- [ ] Open the PR.
+- [x] Open the PR.
+      *Audit 2026-10-05:* Merged as #2032 (fb73251f).
 
 ## Review
 

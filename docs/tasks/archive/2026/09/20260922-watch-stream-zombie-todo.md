@@ -116,7 +116,8 @@ delayed until disconnect rather than skipped — and two of those matter:
 - [x] `make lint` (0 issues), `go test ./...`, the target tests under `-race`,
       `make test` with MongoDB up.
 - [x] Address the review on #2025.
-- [ ] Merge.
+- [x] Merge.
+      *Audit 2026-10-05:* Merged as #2025 (a4fdec28).
 
 ## Known limitations, carried in the PR body
 

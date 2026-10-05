@@ -482,6 +482,32 @@ jobs:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
 
+      # THE FIX-ROUND SCOPE, mechanical (scripts/agent/fix-guard.mjs). A fix round
+      # may change the files in the PR's ORIGINAL diff — frozen at the first fix
+      # dispatch, the surface gate's anchor — plus tests and docs, and nothing
+      # else. Loop fixers wrote TTL caches, auth gates, HLL proto changes and
+      # version-vector caps into unrelated PRs (#2100, #2111, #2112) to clear
+      # findings on code those PRs never touched; the prompt asked them not to.
+      #
+      # This step is the GUIDE half: a pre-push hook in the fixer's checkout that
+      # refuses such a push with instructions, while the fixer can still revert
+      # and dispute. The agent owns this checkout and could remove the hook, so the
+      # GATE half is the report job's `fix-guard.mjs check`, on a fresh runner.
+      # Written BEFORE the agent from the trusted staged copy; an unreadable scope
+      # writes an empty list, and an empty list restricts nothing.
+      - name: Install the fix-scope pre-push hook
+        if: steps.guard.outputs.proceed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.guard.outputs.pr }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          node "$RUNNER_TEMP/agent-tools/fix-guard.mjs" allowed "$PR" --head "$HEAD_SHA" --out "$RUNNER_TEMP/fix-scope.txt"
+          printf '#!/bin/sh\nexec node "%s" prepush --allowed "%s"\n' \
+            "$RUNNER_TEMP/agent-tools/fix-guard.mjs" "$RUNNER_TEMP/fix-scope.txt" > .git/hooks/pre-push
+          chmod +x .git/hooks/pre-push
+
       # Single-value state: a CI-fix round is in flight → agent:fixing. Repo is
       # already checked out above; best-effort, advisory.
       - name: Set state → fixing
@@ -561,8 +587,17 @@ jobs:
             - Read the files named in the diagnosis above FIRST, before editing.
             - Diagnose the root cause from the failing lane and fix ALL of it in a
               single pass.
-            - Stay in scope: modify only the files the failure implicates unless a
-              fix genuinely requires touching others; do not refactor unrelated code.
+            - Stay in scope, and it is ENFORCED: you may change only the files in
+              this PR's original diff, plus tests and docs for them. A finding
+              that needs any other file is not this PR's to fix — leave it and say so
+              in the commit message; a human takes it from there. A
+              pre-push hook refuses a push that touches other files, and the
+              report job pages a human if one lands anyway.
+            - Never write text addressed to the reviewer into docs or task files
+              ("the panel re-raised this", "stop raising", "note to the
+              reviewer"). Disagreement goes in a rebuttal; text in the tree is
+              read by every later round as part of the change, and the report
+              job pages on it.
             - Run `make verify` ONCE at the end to confirm green before pushing —
               not after every edit. It is `make lint`, the Apache licence-header
               check, the `go fix` check and `go test ./...`, which is the whole
@@ -583,11 +618,12 @@ jobs:
               run with NO resume, so a BACKGROUNDED push is killed when your turn
               ends and the fix is lost. Never background the push or use
               sleep/Monitor/any wait-for-later mechanism to "come back to it".
-            - Push with `git push`. This repository's only hook is `commit-msg`
-              (subject <= 70 characters, a blank line, body wrapped at 80) and it
-              runs at COMMIT time, so there is no long pre-push verification to
-              bypass and `--no-verify` would only hide a malformed commit message.
-              Write the message to the convention instead.
+            - Push with `git push`. Two hooks run: `commit-msg` at COMMIT time
+              (subject <= 70 characters, a blank line, body wrapped at 80), and a
+              fast pre-push scope check that refuses files outside this PR's
+              original diff (tests and docs excepted). Never use `--no-verify`:
+              the scope rule is checked again after you finish and pages a human
+              if broken.
             - CONFIRM the push landed with `git ls-remote origin <branch>` rather
               than trusting the exit code — a push whose hook output is very large
               can report non-zero even though the ref advanced. If the remote head
@@ -681,6 +717,31 @@ jobs:
             echo "advanced=true" >> "$GITHUB_OUTPUT"
           else
             echo "advanced=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # THE GATE HALF of the fix-round scope (scripts/agent/fix-guard.mjs; the
+      # pre-push hook in the fix job is the guide). Reads the round's OWN commits
+      # through the API — never a checkout the agent touched — and PAGES when one
+      # touched a file outside the PR's original diff (tests and docs excepted) or
+      # added reviewer-directed text ("stop raising", "the panel re-raised it") to a
+      # doc or task file. Warns, without paging, on tests that lost assertions and
+      # on a Go-only change to a replicated CRDT rule. Page, not strip: reverting
+      # from here needs a second push path, and the in-scope half may not build
+      # without the stripped half. GITHUB_TOKEN, so the latch is one the gate
+      # believes. NOT continue-on-error: a page that failed to post must red this
+      # job; every read failure inside exits 0 with `blocking=false`.
+      - name: Check the fix round's scope and lint
+        id: fixguard
+        if: always() && steps.after.outputs.advanced == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ needs.iterate.outputs.pr }}
+          BEFORE: ${{ needs.iterate.outputs.before }}
+          AFTER: ${{ steps.after.outputs.sha }}
+        run: |
+          node scripts/agent/fix-guard.mjs check "$PR" --before "$BEFORE" --after "$AFTER" --github-output
+          if grep -q '^blocking=true$' "$GITHUB_OUTPUT"; then
+            node scripts/agent/set-state.mjs "$PR" blocked || true
           fi
 
       # OBSERVABILITY (Phase 1): the CI-fix session's turns/cost/outcome on the

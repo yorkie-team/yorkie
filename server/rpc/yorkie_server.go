@@ -289,6 +289,17 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	// The attach writes the client row — TryAttaching above, then
+	// UpdateClientInfoAfterPushPull below — on this node only, and a row is
+	// cached per node. Without this the peers keep a copy that still says the
+	// document is not attached, and since nothing refills it (the bulk read in
+	// FindAttachedClientInfosByRefKey deliberately no longer caches, as the
+	// rows it reads run outside the client's cache lock) the gates reading it
+	// would reject the client for as long as the entry survives eviction.
+	// Deferred so it also covers the attaching row left behind when a step
+	// between here and the push fails.
+	defer clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
 	if err != nil {
@@ -1519,6 +1530,16 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	// 05. Drop the client row every node has cached. A detach is routed to the
+	// document's owner node, which refreshes its own entry as it writes; every
+	// other node keeps a copy that still says attached, and nothing else would
+	// ever correct it.
+	//
+	// This sits directly after the write that detached the client, not after
+	// the response is built: the row MongoDB holds has already moved on, so
+	// any step failing in between must not leave the peers' copies behind.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
@@ -1678,6 +1699,12 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
+	// 04. Removing the document detaches the client from it, so the same
+	// cached-row correction the detach path needs applies here, and for the
+	// same reason it sits directly after the write rather than after the
+	// response is built.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
@@ -1693,6 +1720,11 @@ func (s *yorkieServer) CreateRevision(
 	ctx context.Context,
 	req *connect.Request[api.CreateRevisionRequest],
 ) (*connect.Response[api.CreateRevisionResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
@@ -1703,10 +1735,22 @@ func (s *yorkieServer) CreateRevision(
 		ProjectID: project.ID,
 		DocID:     docID,
 	}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
 
+	// The response carries the snapshot this call builds, so it reads the
+	// document as much as it writes one: it is gated like its siblings, with
+	// the document's key as the attribute the webhook decides on.
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.CreateRevision,
+		Method:     types.CreateRevision,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.ReadWrite),
 	}); err != nil {
+		return nil, err
+	}
+
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1724,6 +1768,40 @@ func (s *yorkieServer) CreateRevision(
 	return connect.NewResponse(&api.CreateRevisionResponse{
 		Revision: converter.ToRevisionSummary(revision),
 	}), nil
+}
+
+// confirmAttachedClient confirms against MongoDB, bypassing this node's client
+// cache, that the client is activated and holds the document attached, or is
+// in the middle of attaching it.
+//
+// The revision RPCs read and overwrite a whole document, and auth.VerifyAccess
+// is a no-op unless the project configures an auth webhook, so the client row
+// is the only thing standing between a request and another client's document.
+// A cached row is not enough for that: it is replaced only by a write this
+// node performed, so a detach or a deactivation another node wrote is
+// invisible to it. Unlike push/pull these calls are not per-sync, so the one
+// read they cost is worth paying.
+//
+// Attaching counts as holding the document, as it does on the detach and
+// remove paths: the row is written before the attach completes, and the
+// client that wrote it is the one asking here. Requiring Attached instead
+// would reject a client mid-attach, which this gate never meant to do.
+func confirmAttachedClient(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	clientID time.ActorID,
+	docID types.ID,
+) error {
+	clientInfo, err := clients.FindActiveClientInfo(ctx, be, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}, true)
+	if err != nil {
+		return err
+	}
+
+	return clientInfo.EnsureDocumentAttachedOrAttaching(docID)
 }
 
 // ListRevisions returns all revisions for the given document.
@@ -1761,10 +1839,7 @@ func (s *yorkieServer) ListRevisions(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1808,10 +1883,7 @@ func (s *yorkieServer) GetRevision(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1863,10 +1935,7 @@ func (s *yorkieServer) RestoreRevision(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
