@@ -442,6 +442,13 @@ func (p *Object) setInternal(
 	// replica can resolve. The refusal belongs to the restore path, which has
 	// a caller that can treat the Set as not having applied at all; see
 	// ElementRHT.refusesLoser and operations.Set.Execute.
+	//
+	// The operation pushed below still runs against the root through the
+	// refusing path, and this proxy runs against the clone, so the two can
+	// disagree on exactly the state that makes a locally minted createdAt
+	// lose. operations.Set.Execute fails such an apply with
+	// ErrRefusedLocalSet rather than skipping it, so Document.Update drops
+	// this clone instead of keeping it diverged from the root.
 	removed := p.Set(k, value)
 
 	p.context.RegisterElement(value, p.Object)

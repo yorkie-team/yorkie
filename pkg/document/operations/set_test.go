@@ -127,6 +127,35 @@ func TestSet(t *testing.T) {
 		assert.Equal(t, size, root.DocSize())
 		assert.Equal(t, `{"k":"c"}`, root.Object().Marshal())
 	})
+
+	t.Run("a refused local Set fails rather than skips", func(t *testing.T) {
+		// The same refusal, reached as a local edit. json.Object.setInternal
+		// has by then taken the value into the clone through crdt.Object.Set,
+		// which never declines, so a skip here would be swallowed by
+		// Change.Execute and leave Document.Update with a clone holding a
+		// member the root refused and no error to drop the clone on.
+		actor, _ := time.ActorIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaa")
+		root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+
+		original, err := crdt.NewPrimitive("c", time.NewTicket(1, 0, actor))
+		require.NoError(t, err)
+		_, err = operations.NewSet(time.InitialTicket, "k", original, original.CreatedAt()).
+			Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		require.NoError(t, err)
+		_, err = operations.NewSet(time.InitialTicket, "k", original, time.NewTicket(9, 0, actor)).
+			Execute(root, operations.OpSourceRemote, time.NewVersionVector())
+		require.NoError(t, err)
+
+		garbage, size := root.GarbageLen(), root.DocSize()
+		_, err = operations.NewSet(time.InitialTicket, "k", original, time.NewTicket(5, 0, actor)).
+			Execute(root, operations.OpSourceLocal, time.NewVersionVector())
+		assert.ErrorIs(t, err, operations.ErrRefusedLocalSet)
+		assert.NotErrorIs(t, err, operations.ErrOperationSkipped,
+			"a local refusal reported as a skip is swallowed by Change.Execute")
+		assert.Equal(t, garbage, root.GarbageLen())
+		assert.Equal(t, size, root.DocSize())
+		assert.Equal(t, `{"k":"c"}`, root.Object().Marshal())
+	})
 }
 
 // TestSetConcurrentRestoresConverge applies two restores of one value under

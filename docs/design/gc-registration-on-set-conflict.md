@@ -173,7 +173,8 @@ Callers:
 
 | Caller | On refusal |
 |--------|-----------|
-| `operations.Set.Execute` | `ErrOperationSkipped` -- the object is unchanged, so the operation did not apply and contributes no reverse |
+| `operations.Set.Execute` (remote, undo/redo) | `ErrOperationSkipped` -- the object is unchanged, so the operation did not apply and contributes no reverse |
+| `operations.Set.Execute` (local) | `ErrRefusedLocalSet` -- the clone already took the value in, so the update fails and the clone is dropped (see below) |
 | `json.Object.setInternal` | cannot refuse -- it calls `crdt.Object.Set`, which never declines |
 | `api/converter.fromJSONObject` | ignored -- encoder output has one node per `createdAt`, so a refusal needs crafted bytes |
 | `crdt.NewObject` | not affected -- empty RHT, no conflict possible |
@@ -191,6 +192,21 @@ operation tickets are unvalidated off the wire (see
 [Out of scope: crafted payloads](#out-of-scope-crafted-payloads)), and the
 panic would escape `Document.Update` on a server that runs json proxies over
 a rebuilt document (`TestSetOnForgedIdentityCollision`).
+
+That split leaves the two apply targets of a local edit under different
+contracts: the proxy mutates the **clone** through the non-refusing
+`crdt.Object.Set`, while the operation it pushes is applied to the **root**
+through `Set.Execute`, which can refuse. In the same crafted shape the root
+refuses what the clone already took, and `Change.Execute` swallows
+`ErrOperationSkipped`, so `Document.Update` would return `nil` and keep a
+clone that has silently diverged from the root -- every later edit, and every
+local change derived from it, built on members the root does not have.
+`Set.Execute` therefore reports a refusal under `OpSourceLocal` as
+`ErrRefusedLocalSet`, not as a skip: `Document.Update` takes its error path,
+which invalidates the clone so the next access rebuilds it from the root
+(`TestLocalSetRefusedOnForgedIdentityDropsClone`). Remote and undo/redo
+applies keep reporting a skip, because they run the same `Set.Execute`
+against both the clone and the root and so cannot disagree.
 
 `Root.UnregisterRemovedElementPair` takes the owning container and retires
 only an entry that container registered. The json layer records the CRDT

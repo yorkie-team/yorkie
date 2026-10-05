@@ -17,9 +17,20 @@
 package operations
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// ErrRefusedLocalSet is returned when a local Set is refused by the object it
+// targets. A local Set is the one source whose clone-side apply does not come
+// through this function -- json.Object.setInternal mutates the clone through
+// crdt.Object.Set, which never declines -- so reporting it as skipped would
+// leave the clone holding a member the root refused, with no error for
+// Document.Update to drop the clone on. See Set.Execute.
+var ErrRefusedLocalSet = errors.New("local set refused")
 
 // Set represents an operation that stores the value corresponding to the
 // given key in the Object.
@@ -119,7 +130,25 @@ func (o *Set) Execute(root *crdt.Root, source OpSource, _ time.VersionVector) (E
 	// with an empty ExecutionResult reads as "applied, nothing to undo", and
 	// an undo whose Set is refused would push a redo entry describing work
 	// that never happened (Document.executeUndoRedo).
+	//
+	// A local Set is the exception, because it alone reaches the root through
+	// a different contract than the clone did: json.Object.setInternal has
+	// already taken the value into the clone through crdt.Object.Set, which
+	// never declines. Skipping it here would leave Document.Update with a
+	// clone holding a member the root does not, and -- since Change.Execute
+	// swallows a skip -- no error to invalidate the clone on, so every later
+	// edit would be built on a clone that has silently diverged from the root.
+	// Failing the update instead takes document.go's error path, which drops
+	// the clone and rebuilds it from the root.
+	//
+	// Only a value whose createdAt another element already answers to is ever
+	// refused, and a local Set mints its own createdAt, so this is out of
+	// reach unless a peer planted that identity: operation tickets are not
+	// validated off the wire (yorkie-team/yorkie#2081).
 	if !indexed {
+		if source == OpSourceLocal {
+			return ExecutionResult{}, fmt.Errorf("set %q: %w", o.key, ErrRefusedLocalSet)
+		}
 		return ExecutionResult{}, ErrOperationSkipped
 	}
 

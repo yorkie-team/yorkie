@@ -17,14 +17,18 @@
 package document_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -77,4 +81,61 @@ func TestSetOnForgedIdentityCollision(t *testing.T) {
 	// comparison is what the loser branch is for, and it leaves the key's
 	// occupant alone.
 	assert.Same(t, occupant, root.Object().Get("k"))
+}
+
+// TestLocalSetRefusedOnForgedIdentityDropsClone pins what happens when the
+// same shape is reached through Document.Update, where a local edit has two
+// apply targets under two different contracts: the updater mutates the clone
+// through crdt.Object.Set, which never refuses, while the operation it pushes
+// reaches the root through operations.Set.Execute, which can.
+//
+// The root refuses the value here, so the clone is the only copy holding it --
+// and worse, holding it in the createdAt slot the planted member needs, which
+// is the only way DeepCopy, purge and GC address that member. Reporting the
+// refusal as ErrOperationSkipped would have Change.Execute swallow it and
+// Document.Update return nil, leaving that clone to serve every later read
+// and every later edit. The update has to fail instead, so document.go drops
+// the clone and rebuilds it from the root.
+func TestLocalSetRefusedOnForgedIdentityDropsClone(t *testing.T) {
+	doc := document.New("forged-identity-local-set")
+	root := doc.InternalDocumentForTest().Root()
+
+	// The document's changes are issued off change.InitialID(), so an
+	// identical context answers with the ticket the Update below will mint.
+	forged := change.NewContext(change.InitialID(), "",
+		crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))).IssueTimeTicket()
+
+	planted, err := crdt.NewPrimitive("planted", forged)
+	require.NoError(t, err)
+	root.Object().Set("planted", planted)
+	root.RegisterElement(planted, root.Object())
+
+	occupant, err := crdt.NewPrimitive("occupant", time.NewTicket(1<<40, 0, time.InitialActorID))
+	require.NoError(t, err)
+	root.Object().SetWithExecutedAt("k", occupant, crdt.PositionedAt(occupant))
+	root.RegisterElement(occupant, root.Object())
+
+	before := root.Object().Marshal()
+
+	err = doc.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetString("k", "v")
+		return nil
+	})
+	assert.ErrorIs(t, err, operations.ErrRefusedLocalSet,
+		"a Set the root refused was reported to the caller as applied")
+	assert.Equal(t, before, root.Object().Marshal())
+
+	// The clone the updater mutated is gone: what the next read rebuilds from
+	// the root still indexes the planted member under its own createdAt,
+	// rather than the refused value that overwrote that slot on the clone.
+	nodeValues := func(obj *crdt.Object) []string {
+		var out []string
+		for _, node := range obj.RHTNodes() {
+			out = append(out, node.Element().Marshal())
+		}
+		slices.Sort(out)
+		return out
+	}
+	assert.Equal(t, nodeValues(root.Object()), nodeValues(doc.Root().Object),
+		"the clone kept a member the root refused")
 }
