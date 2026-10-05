@@ -27,6 +27,9 @@ Remote operations carry CRDT positions and are not affected. See
       its history entry was popped
 - [x] Record the undo and panic behavior in the design doc
 
+- [x] Resolve reverse-operation builder indexes without the pair check and
+      cover all three builders with mid-pair regression cases
+
 ## Known Limitations
 
 - `TreeEdit.ReconcileOperation` Case 5 places the reconciled range at the

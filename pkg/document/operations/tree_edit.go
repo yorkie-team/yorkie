@@ -646,13 +646,15 @@ func (e *TreeEdit) toReverseOperation(
 		return nil, err
 	}
 
-	fromPos, err := tree.FindPos(idx)
+	// These indexes come from the edited tree, not caller input. Preserve
+	// internal position resolution even when an index falls inside a pair.
+	fromPos, err := tree.FindPosUnchecked(idx)
 	if err != nil {
 		return nil, err
 	}
 	toPos := fromPos
 	if insertedSize > 0 {
-		if toPos, err = tree.FindPos(idx + insertedSize); err != nil {
+		if toPos, err = tree.FindPosUnchecked(idx + insertedSize); err != nil {
 			return nil, err
 		}
 	}
@@ -722,11 +724,11 @@ func (e *TreeEdit) toSplitReverseOperation(
 		return nil, nil
 	}
 
-	fromPos, err := tree.FindPos(fromIdx)
+	fromPos, err := tree.FindPosUnchecked(fromIdx)
 	if err != nil {
 		return nil, err
 	}
-	toPos, err := tree.FindPos(toIdx)
+	toPos, err := tree.FindPosUnchecked(toIdx)
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +765,7 @@ func (e *TreeEdit) splitReverseAt(
 	preFromIdx int,
 	splitLevel int,
 ) (Operation, error) {
-	pos, err := tree.FindPos(preFromIdx)
+	pos, err := tree.FindPosUnchecked(preFromIdx)
 	if err != nil {
 		return nil, err
 	}

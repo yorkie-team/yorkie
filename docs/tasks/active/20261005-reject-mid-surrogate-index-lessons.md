@@ -22,3 +22,14 @@
   `FindPosUnchecked`. Their indexes are node boundaries of the post-edit
   tree, where a split has already turned any broken half into U+FFFD, so the
   check cannot fire there; the reviewer could not construct a case either.
+
+## Follow-up Review
+
+- Reverse builders resolve SDK-derived indexes after mutation, so they use
+  `FindPosUnchecked` consistently with undo execution. This supersedes the
+  earlier decision to retain the checks: size arithmetic is not a guarantee
+  of character boundaries.
+- White-box regression cases supply mid-pair indexes to all three builders,
+  covering both endpoints of the split reverse. These pin the resolver
+  contract; they do not reproduce a full concurrent-edit sequence. Checked
+  `FindPos` still rejects the same index.

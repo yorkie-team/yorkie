@@ -441,3 +441,37 @@ func newTwoParagraphTestRoot(t *testing.T, issue func() *time.Ticket) (*crdt.Roo
 
 	return crdt.NewRoot(obj), tree
 }
+
+// TestTreeEditReverseBuildersInsideSurrogatePair pins internal position
+// resolution after mutation. Caller-supplied indexes remain checked.
+func TestTreeEditReverseBuildersInsideSurrogatePair(t *testing.T) {
+	issue := ticketer()
+	_, tree := newTreeReconcileTestRoot(t, issue)
+	emoji := crdt.NewTreeNode(crdt.NewTreeNodeID(issue(), 0), index.TextNodeType, nil, "😀")
+	editAt(t, tree, 1, 1, []*crdt.TreeNode{emoji}, issue)
+	_, err := tree.FindPos(2)
+	assert.ErrorIs(t, err, crdt.ErrInvalidUTF16Index)
+	e := &TreeEdit{parentCreatedAt: tree.CreatedAt(), splitLevel: 1}
+
+	t.Run("copy reverse starts inside pair", func(t *testing.T) {
+		op, err := e.toReverseOperation(tree, []*crdt.TreeNode{emoji},
+			crdt.TreeEditReverseInfo{InsertedContentSize: 1}, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+	t.Run("split reverse starts inside pair", func(t *testing.T) {
+		op, err := e.toSplitReverseOperation(tree, 2, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+	t.Run("split reverse ends inside pair", func(t *testing.T) {
+		op, err := e.toSplitReverseOperation(tree, 1, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+	t.Run("merge reverse inside pair", func(t *testing.T) {
+		op, err := e.splitReverseAt(tree, 2, 1)
+		assert.NoError(t, err)
+		assert.NotNil(t, op)
+	})
+}
