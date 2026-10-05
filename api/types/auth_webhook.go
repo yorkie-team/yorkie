@@ -83,6 +83,13 @@ func IsAuthMethod(method string) bool {
 	return false
 }
 
+// IsDeprecated returns whether the method is a deprecated alias kept only for
+// backward compatibility. Enabling its replacement already covers it (see
+// Project.RequireAuth).
+func (m Method) IsDeprecated() bool {
+	return m == WatchDocument || m == WatchChannel
+}
+
 // AuthMethods returns a slice of methods that can be used for authorization.
 func AuthMethods() []Method {
 	return []Method{
