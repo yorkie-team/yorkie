@@ -205,7 +205,7 @@ func (c *Config) Validate() error {
 func (c *Config) ParseAdminTokenDuration() time.Duration {
 	result, err := time.ParseDuration(c.AdminTokenDuration)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse admin token duration: %w", err)
+		fmt.Fprintf(os.Stderr, "parse admin token duration: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -216,7 +216,7 @@ func (c *Config) ParseAdminTokenDuration() time.Duration {
 func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
+		fmt.Fprintf(os.Stderr, "parse auth webhook cache ttl: %v\n", err)
 		os.Exit(1)
 	}
 

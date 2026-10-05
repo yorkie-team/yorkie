@@ -24,6 +24,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
+- [Pre-Attach Ticket Re-issue](pre-attach-ticket-reissue.md): Re-issue the tickets a document minted before its first attach to the client's actor, so pre-attach elements get a unique `createdAt`
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Identity of Inserted Tree Content](tree-content-identity.md): One ticket per inserted node, and what still lets two nodes share an ID
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations
@@ -51,7 +52,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
-- [Document Size Limit](document-size-limit.md): Proposal for a server-side backstop on `MaxSizePerDocument`, which is enforced only on the client today
+- [Document Size Limit](document-size-limit.md): Server-side backstop on `MaxSizePerDocument`: a lagging gate on the snapshot's live size that refuses only growth
 - [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 - [Project Stats Cache](project-stats-cache.md): Asynchronously refreshed cache for `ClientsCount` and `DocumentsCount` to keep `GetProjectStats` fast at large scale
 - [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md): Daily HLL rollups that make the warehouse-backed `GetProjectStats` metrics independent of event volume

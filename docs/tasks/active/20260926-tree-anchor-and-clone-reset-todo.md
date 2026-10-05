@@ -53,9 +53,10 @@ needed):
   neighbors, merge sources, `TreePos`) are passed through as on `main`.
   Rejecting them in the shared decoder also rejected them on the stored-change
   and snapshot paths. A wire-only check is a follow-up.
-- The watch loop still ignores the error of a re-established stream
-  (`_ = c.runWatchLoop(ctx, d)`), as on `main`. If that restart fails, no
-  pump drains the document's events. Retry with backoff is a follow-up.
+- The watch loop makes one reconnect attempt and gives up if it fails. Since
+  #2084 the pump belongs to the attachment and keeps draining the document's
+  events either way, and a failed restart is logged and ends the stream.
+  Retry with backoff is a follow-up (#2080).
 - `MaxSizePerDocument` and schema rules are enforced only on the client.
   This is tracked in `docs/design/document-size-limit.md`.
 - `d.updating` is still per-document. Accessors that can be reached from
@@ -83,5 +84,5 @@ needed):
     `CreateChangePack`'s copy fixes the race, not the drift.
   - `applyChanges` drops the events of changes already applied when a later
     change in the same pack fails.
-  - The watch restart ignores `runWatchLoop`'s error.
+  - The watch restart makes a single attempt with no backoff (#2080).
   - `d.updating` is per-document, not per-goroutine.

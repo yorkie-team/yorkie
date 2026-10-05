@@ -75,17 +75,17 @@ func TestPushOnlySyncKeepsPullSignal(t *testing.T) {
 
 	cli, err := Dial(httpServer.URL)
 	require.NoError(t, err)
-	cli.status = statusActivated
+	cli.storeStatus(statusActivated)
 
 	attach := func(t *testing.T, mode SyncMode) (*document.Document, *Attachment) {
 		doc := document.New(key.Key("pushonly-pull-signal-" + string(mode)))
 		doc.SetStatus(document.StatusAttached)
 		attachment := &Attachment{
-			resourceID:          types.ID("000000000000000000000000"),
-			resource:            doc,
-			syncMode:            mode,
-			changeEventReceived: true,
+			resourceID: types.ID("000000000000000000000000"),
+			resource:   doc,
+			syncMode:   mode,
 		}
+		attachment.changeEventReceived.Store(true)
 		cli.attachments.Set(doc.Key(), attachment)
 		return doc, attachment
 	}
@@ -95,12 +95,12 @@ func TestPushOnlySyncKeepsPullSignal(t *testing.T) {
 
 		require.NoError(t, cli.Sync(ctx, WithKey(doc.Key()).WithPushOnly()))
 		assert.True(t, server.lastPushOnly.Load())
-		assert.True(t, attachment.changeEventReceived)
+		assert.True(t, attachment.changeEventReceived.Load())
 		assert.True(t, attachment.needSync(0))
 
 		require.NoError(t, cli.Sync(ctx, WithKey(doc.Key())))
 		assert.False(t, server.lastPushOnly.Load())
-		assert.False(t, attachment.changeEventReceived)
+		assert.False(t, attachment.changeEventReceived.Load())
 		assert.False(t, attachment.needSync(0))
 	})
 
@@ -109,6 +109,6 @@ func TestPushOnlySyncKeepsPullSignal(t *testing.T) {
 
 		require.NoError(t, cli.syncInternal(ctx, attachment, nil))
 		assert.True(t, server.lastPushOnly.Load())
-		assert.True(t, attachment.changeEventReceived)
+		assert.True(t, attachment.changeEventReceived.Load())
 	})
 }

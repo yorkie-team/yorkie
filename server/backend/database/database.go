@@ -57,6 +57,11 @@ var (
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
 	ErrConflictOnUpdate = errors.FailedPrecond("conflict on update").WithCode("ErrConflictOnUpdate")
 
+	// ErrChangeTooLarge is returned when a change does not fit in a single
+	// database record, such as the change compaction would collapse a large
+	// document into.
+	ErrChangeTooLarge = errors.ResourceExhausted("change too large").WithCode("ErrChangeTooLarge")
+
 	// ErrVersionVectorNotFound is returned when the version vector could not be found.
 	ErrVersionVectorNotFound = errors.NotFound("version vector not found").WithCode("ErrVersionVectorNotFound")
 
