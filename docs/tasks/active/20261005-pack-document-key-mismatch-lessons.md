@@ -36,3 +36,38 @@ uses its own pair of documents and checks its own target.
   changes, so a cached entry is as good as a fresh read.
 
 No blocking findings.
+
+## Review panel (round 1 on 3cc65c61), addressed in the next commit
+
+The panel approved with suggestions. Taken:
+
+- **Cluster `DetachDocument`** (correctness, security, design-fit,
+  blast-radius) takes `DocumentId` and `DocumentKey` too and pushes a pack
+  built from the key. It is cluster-secret gated and only reached from
+  `clients.Deactivate`, but the invariant should hold on every path that
+  pairs the two, so it gets the same check.
+- **Tests** (correctness, test-adequacy): each subtest now also sends the
+  same request with the target's own key and expects it to succeed, which
+  covers the guard not misfiring. The RemoveDocument subtest's "target is
+  `{}`" check proved nothing (a removed document re-attaches empty); it now
+  relies on the matching-key removal succeeding, which fails if the
+  mismatched one had removed the target. A cluster subtest was added.
+
+Not taken, with reasons:
+
+- **Locks keyed on the pack key before the check** (correctness, security,
+  design-fit nit, blast-radius): the check runs before any write, and once it
+  passes the pack key is the document's key, so the locks are the right ones.
+  A mismatched request only holds the other document's locks until it is
+  rejected. Moving the check before the locks needs the lookup before them;
+  it buys nothing for correctness.
+- **Distinct error as a document-ID existence oracle** (security): PushPull
+  checks attachment to `DocumentId` before the guard, and Detach/Remove
+  already answer `ErrDocumentNotFound` for unknown IDs, so an attached client
+  learns at most that an ID it sent exists in its own project. Folding the
+  mismatch into not-found would hide a client bug behind a misleading error.
+- **Enforce once inside `packs.PushPull`** (design-fit): `PushPull` looks the
+  document up inside `pushPack`, under the push lock, as part of writing. The
+  handlers are where the two identifiers enter from a request, so the check
+  sits at that boundary, next to the lookup the handlers already do.
+- **`verb` for removals** (relocated): handled by #2129.
