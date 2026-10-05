@@ -1678,7 +1678,8 @@ func (t *Tree) EditT(
 	return pairs, diff, err
 }
 
-// FindPos finds the position of the given index in the tree.
+// FindPos finds the position of the given index in the tree. It rejects an
+// index inside a surrogate pair with ErrInvalidUTF16Index.
 // (local) index -> (local) TreePos in indexTree -> (logical) TreePos in Tree
 func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	treePos, err := t.IndexTree.FindTreePos(offset) // local TreePos
@@ -1686,13 +1687,31 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 		return nil, err
 	}
 
-	node, offset := treePos.Node, treePos.Offset
-
-	if node.IsText() &&
-		!isUTF16Boundary(node.Value.Value, offset) {
+	if treePos.Node.IsText() &&
+		!isUTF16Boundary(treePos.Node.Value.Value, treePos.Offset) {
 		return nil, ErrInvalidUTF16Index
 	}
 
+	return toTreePos(treePos), nil
+}
+
+// FindPosUnchecked is FindPos without the surrogate pair check. It is for
+// indexes the document computed itself, such as an undo range reconciled
+// against a remote edit, which can land inside a pair through no fault of the
+// caller. Refusing such an index would only drop the undo, and it resolves
+// the way it did before the check existed.
+func (t *Tree) FindPosUnchecked(offset int) (*TreePos, error) {
+	treePos, err := t.IndexTree.FindTreePos(offset) // local TreePos
+	if err != nil {
+		return nil, err
+	}
+
+	return toTreePos(treePos), nil
+}
+
+// toTreePos converts a local TreePos in indexTree to a logical TreePos.
+func toTreePos(treePos *index.TreePos[*TreeNode]) *TreePos {
+	node, offset := treePos.Node, treePos.Offset
 	var leftNode *TreeNode
 
 	if node.IsText() {
@@ -1716,7 +1735,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 			CreatedAt: leftNode.id.CreatedAt,
 			Offset:    leftNode.id.Offset + offset,
 		},
-	}, nil
+	}
 }
 
 // TreeEditReverseInfo is everything Edit reports for building the operation

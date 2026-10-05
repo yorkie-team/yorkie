@@ -522,10 +522,8 @@ func TestRemoteMidSurrogateOperationStillApplies(t *testing.T) {
 	assert.NotContains(t, applied[0], "\U0001F600", "the remote edit split the pair")
 	assert.NotContains(t, applied[1], "\U0001F600", "the remote edit split the pair")
 
-	// Undo and redo of the receiver's earlier edit still work. Tree undo/redo
-	// re-resolves its stored indexes through FindPos, shifted by the remote
-	// insert, and none of them lands inside a pair: the split already turned
-	// both halves into U+FFFD.
+	// Undo and redo of the receiver's earlier edit still work after the
+	// remote insert shifted them.
 	require.NoError(t, receiver.Undo())
 	assert.Equal(t, strings.Replace(applied[0], "z", "", 1), tree())
 	assert.Equal(t, strings.Replace(applied[1], "z", "", 1), text())
@@ -534,10 +532,8 @@ func TestRemoteMidSurrogateOperationStillApplies(t *testing.T) {
 	assert.Equal(t, applied, []string{tree(), text()})
 }
 
-// TestUndoRedoAroundSurrogatePair covers the local undo/redo path, which for
-// Tree re-resolves stored indexes through FindPos and so passes through the
-// check. Indexes derived from an edit next to or over an intact pair are
-// whole-character boundaries, so undo and redo must never be rejected there.
+// TestUndoRedoAroundSurrogatePair covers the local undo/redo path next to and
+// over an intact pair, where undo and redo must never be rejected.
 func TestUndoRedoAroundSurrogatePair(t *testing.T) {
 	tests := []struct {
 		name string
