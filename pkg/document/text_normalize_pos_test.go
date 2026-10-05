@@ -56,7 +56,8 @@ func TestTextNormalizePosMatchesChainWalk(t *testing.T) {
 			case op < 4:
 				require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.GetText("t")
-					at := r.Intn(textLen(text) + 1)
+					bounds := textBoundaries(text)
+					at := bounds[r.Intn(len(bounds))]
 					var sb strings.Builder
 					for range 1 + r.Intn(4) {
 						runes := []rune(alphabet)
@@ -68,21 +69,25 @@ func TestTextNormalizePosMatchesChainWalk(t *testing.T) {
 			case op < 6:
 				require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.GetText("t")
-					if textLen(text) == 0 {
+					bounds := textBoundaries(text)
+					if len(bounds) == 1 {
 						return nil
 					}
-					from := r.Intn(textLen(text))
-					text.Edit(from, min(textLen(text), from+1+r.Intn(3)), "")
+					from := r.Intn(len(bounds) - 1)
+					to := min(len(bounds)-1, from+1+r.Intn(3))
+					text.Edit(bounds[from], bounds[to], "")
 					return nil
 				}))
 			case op < 7:
 				require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.GetText("t")
-					if textLen(text) == 0 {
+					bounds := textBoundaries(text)
+					if len(bounds) == 1 {
 						return nil
 					}
-					from := r.Intn(textLen(text))
-					text.Style(from, min(textLen(text), from+1+r.Intn(3)), map[string]string{"b": "1"})
+					from := r.Intn(len(bounds) - 1)
+					to := min(len(bounds)-1, from+1+r.Intn(3))
+					text.Style(bounds[from], bounds[to], map[string]string{"b": "1"})
 					return nil
 				}))
 			case op < 8:
@@ -125,8 +130,14 @@ func assertNormalizePosMatchesChainWalk(t *testing.T, text *crdt.Text, seed int6
 	}
 }
 
-// textLen is the live length of text in UTF-16 code units, the unit text
-// indices are measured in.
-func textLen(text *json.Text) int {
-	return len(utf16.Encode([]rune(text.String())))
+// textBoundaries returns the character boundaries of text, from 0 to its live
+// length, in UTF-16 code units, the unit text indices are measured in. The
+// index between the two units of a surrogate pair is not among them: Text
+// rejects it.
+func textBoundaries(text *json.Text) []int {
+	bounds := []int{0}
+	for _, r := range text.String() {
+		bounds = append(bounds, bounds[len(bounds)-1]+utf16.RuneLen(r))
+	}
+	return bounds
 }

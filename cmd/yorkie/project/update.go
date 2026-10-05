@@ -21,10 +21,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"gopkg.in/yaml.v3"
@@ -60,17 +62,16 @@ var (
 	flagRemoveOnDetach              bool
 )
 
-var allAuthWebhookMethods = []string{
-	string(types.ActivateClient),
-	string(types.DeactivateClient),
-	string(types.AttachDocument),
-	string(types.DetachDocument),
-	string(types.RemoveDocument),
-	string(types.PushPull),
-	string(types.Watch),
-	string(types.WatchDocument),
-	string(types.WatchChannel),
-	string(types.Broadcast),
+// allAuthWebhookMethods returns the methods 'ALL' expands to: every auth
+// method except the deprecated aliases, which an enabled Watch already covers.
+func allAuthWebhookMethods() []string {
+	var methods []string
+	for _, m := range types.AuthMethods() {
+		if !m.IsDeprecated() {
+			methods = append(methods, string(m))
+		}
+	}
+	return methods
 }
 
 var allEventWebhookEvents = []string{
@@ -88,6 +89,10 @@ func newUpdateCommand() *cobra.Command {
 				return errors.New("name is required")
 			}
 			name := args[0]
+
+			if !hasUpdateFlag(cmd) {
+				return errors.New("nothing to update: pass at least one option")
+			}
 
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
@@ -110,126 +115,7 @@ func newUpdateCommand() *cobra.Command {
 			}
 			id := project.ID.String()
 
-			newName := name
-			if flagName != "" {
-				newName = flagName
-			}
-
-			newAuthWebhookURL := project.AuthWebhookURL
-			if cmd.Flags().Lookup("auth-webhook-url").Changed { // allow empty string
-				newAuthWebhookURL = flagAuthWebhookURL
-			}
-
-			newAuthWebhookMethods := updateStringSlice(
-				project.AuthWebhookMethods, // prev
-				flagAuthWebhookMethodsRm,   // removes
-				flagAuthWebhookMethodsAdd,  // adds
-				allAuthWebhookMethods,      // all
-			)
-
-			newAuthWebhookMaxRetries := project.AuthWebhookMaxRetries
-			if cmd.Flags().Lookup("auth-webhook-max-retries").Changed {
-				newAuthWebhookMaxRetries = flagAuthWebhookMaxRetries
-			}
-			newAuthWebhookMinWaitInterval := project.AuthWebhookMinWaitInterval
-			if flagAuthWebhookMinWaitInterval != 0 {
-				newAuthWebhookMinWaitInterval = flagAuthWebhookMinWaitInterval.String()
-			}
-			newAuthWebhookMaxWaitInterval := project.AuthWebhookMaxWaitInterval
-			if flagAuthWebhookMaxWaitInterval != 0 {
-				newAuthWebhookMaxWaitInterval = flagAuthWebhookMaxWaitInterval.String()
-			}
-			newAuthWebhookRequestTimeout := project.AuthWebhookRequestTimeout
-			if flagAuthWebhookRequestTimeout != 0 {
-				newAuthWebhookRequestTimeout = flagAuthWebhookRequestTimeout.String()
-			}
-
-			newEventWebhookURL := project.EventWebhookURL
-			if cmd.Flags().Lookup("event-webhook-url").Changed { // allow empty string
-				newEventWebhookURL = flagEventWebhookURL
-			}
-
-			newEventWebhookEvents := updateStringSlice(
-				project.EventWebhookEvents, // prev
-				flagEventWebhookEventsRm,   // removes
-				flagEventWebhookEventsAdd,  // adds
-				allEventWebhookEvents,      // all
-			)
-
-			newEventWebhookMaxRetries := project.EventWebhookMaxRetries
-			if cmd.Flags().Lookup("event-webhook-max-retries").Changed {
-				newEventWebhookMaxRetries = flagEventWebhookMaxRetries
-			}
-			newEventWebhookMinWaitInterval := project.EventWebhookMinWaitInterval
-			if flagEventWebhookMinWaitInterval != 0 {
-				newEventWebhookMinWaitInterval = flagEventWebhookMinWaitInterval.String()
-			}
-			newEventWebhookMaxWaitInterval := project.EventWebhookMaxWaitInterval
-			if flagEventWebhookMaxWaitInterval != 0 {
-				newEventWebhookMaxWaitInterval = flagEventWebhookMaxWaitInterval.String()
-			}
-			newEventWebhookRequestTimeout := project.EventWebhookRequestTimeout
-			if flagEventWebhookRequestTimeout != 0 {
-				newEventWebhookRequestTimeout = flagEventWebhookRequestTimeout.String()
-			}
-
-			newClientDeactivateThreshold := project.ClientDeactivateThreshold
-			if flagClientDeactivateThreshold != 0 {
-				newClientDeactivateThreshold = flagClientDeactivateThreshold.String()
-			}
-
-			newChannelSessionTTL := project.ChannelSessionTTL
-			if cmd.Flags().Lookup("channel-session-ttl").Changed {
-				newChannelSessionTTL = flagChannelSessionTTL.String()
-			}
-
-			newSnapshotThreshold := project.SnapshotThreshold
-			if cmd.Flags().Lookup("snapshot-threshold").Changed {
-				newSnapshotThreshold = flagSnapshotThreshold
-			}
-
-			newSnapshotInterval := project.SnapshotInterval
-			if cmd.Flags().Lookup("snapshot-interval").Changed {
-				newSnapshotInterval = flagSnapshotInterval
-			}
-
-			newMaxSubscribersPerDocument := project.MaxSubscribersPerDocument
-			if flagMaxSubscribersPerDocument != 0 {
-				newMaxSubscribersPerDocument = flagMaxSubscribersPerDocument
-			}
-
-			newMaxAttachmentsPerDocument := project.MaxAttachmentsPerDocument
-			if flagMaxAttachmentsPerDocument != 0 {
-				newMaxAttachmentsPerDocument = flagMaxAttachmentsPerDocument
-			}
-
-			newRemoveOnDetach := project.RemoveOnDetach
-			if cmd.Flags().Lookup("remove-on-detach").Changed {
-				newRemoveOnDetach = flagRemoveOnDetach
-			}
-
-			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:                        &newName,
-				AuthWebhookURL:              &newAuthWebhookURL,
-				AuthWebhookMethods:          &newAuthWebhookMethods,
-				AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries,
-				AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval,
-				AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval,
-				AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout,
-				EventWebhookURL:             &newEventWebhookURL,
-				EventWebhookEvents:          &newEventWebhookEvents,
-				EventWebhookMaxRetries:      &newEventWebhookMaxRetries,
-				EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval,
-				EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
-				EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
-				ClientDeactivateThreshold:   &newClientDeactivateThreshold,
-				ChannelSessionTTL:           &newChannelSessionTTL,
-				SnapshotThreshold:           &newSnapshotThreshold,
-				SnapshotInterval:            &newSnapshotInterval,
-				MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
-				MaxAttachmentsPerDocument:   &newMaxAttachmentsPerDocument,
-				RemoveOnDetach:              &newRemoveOnDetach,
-			}
+			updatableProjectFields := updatableFieldsFromFlags(cmd, project)
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
@@ -262,6 +148,120 @@ func newUpdateCommand() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// hasUpdateFlag returns whether the user passed any option of this command.
+func hasUpdateFlag(cmd *cobra.Command) bool {
+	changed := false
+	cmd.LocalNonPersistentFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed {
+			changed = true
+		}
+	})
+	return changed
+}
+
+// updatableFieldsFromFlags builds the fields to update from the options the
+// user passed. A field whose option was not passed stays nil so the server
+// keeps the stored value. Resending it instead would revalidate a value the
+// user did not touch (an empty ChannelSessionTTL, which the server reads as
+// its default, fails validation) and, for options whose default is not zero,
+// overwrite the stored value with that default.
+func updatableFieldsFromFlags(
+	cmd *cobra.Command,
+	project *types.Project,
+) *types.UpdatableProjectFields {
+	flags := cmd.Flags()
+	fields := &types.UpdatableProjectFields{}
+
+	if flags.Changed("name") {
+		fields.Name = &flagName
+	}
+
+	if flags.Changed("auth-webhook-url") {
+		fields.AuthWebhookURL = &flagAuthWebhookURL
+	}
+	if flags.Changed("auth-webhook-method-add") || flags.Changed("auth-webhook-method-rm") {
+		methods := updateStringSlice(
+			project.AuthWebhookMethods, // prev
+			flagAuthWebhookMethodsRm,   // removes
+			flagAuthWebhookMethodsAdd,  // adds
+			allAuthWebhookMethods(),    // all
+		)
+		fields.AuthWebhookMethods = &methods
+	}
+	if flags.Changed("auth-webhook-max-retries") {
+		fields.AuthWebhookMaxRetries = &flagAuthWebhookMaxRetries
+	}
+	fields.AuthWebhookMinWaitInterval = changedDuration(
+		flags, "auth-webhook-min-wait-interval", flagAuthWebhookMinWaitInterval,
+	)
+	fields.AuthWebhookMaxWaitInterval = changedDuration(
+		flags, "auth-webhook-max-wait-interval", flagAuthWebhookMaxWaitInterval,
+	)
+	fields.AuthWebhookRequestTimeout = changedDuration(
+		flags, "auth-webhook-request-timeout", flagAuthWebhookRequestTimeout,
+	)
+
+	if flags.Changed("event-webhook-url") {
+		fields.EventWebhookURL = &flagEventWebhookURL
+	}
+	if flags.Changed("event-webhook-events-add") || flags.Changed("event-webhook-events-rm") {
+		events := updateStringSlice(
+			project.EventWebhookEvents, // prev
+			flagEventWebhookEventsRm,   // removes
+			flagEventWebhookEventsAdd,  // adds
+			allEventWebhookEvents,      // all
+		)
+		fields.EventWebhookEvents = &events
+	}
+	if flags.Changed("event-webhook-max-retries") {
+		fields.EventWebhookMaxRetries = &flagEventWebhookMaxRetries
+	}
+	fields.EventWebhookMinWaitInterval = changedDuration(
+		flags, "event-webhook-min-wait-interval", flagEventWebhookMinWaitInterval,
+	)
+	fields.EventWebhookMaxWaitInterval = changedDuration(
+		flags, "event-webhook-max-wait-interval", flagEventWebhookMaxWaitInterval,
+	)
+	fields.EventWebhookRequestTimeout = changedDuration(
+		flags, "event-webhook-request-timeout", flagEventWebhookRequestTimeout,
+	)
+
+	fields.ClientDeactivateThreshold = changedDuration(
+		flags, "client-deactivate-threshold", flagClientDeactivateThreshold,
+	)
+	fields.ChannelSessionTTL = changedDuration(
+		flags, "channel-session-ttl", flagChannelSessionTTL,
+	)
+
+	if flags.Changed("snapshot-threshold") {
+		fields.SnapshotThreshold = &flagSnapshotThreshold
+	}
+	if flags.Changed("snapshot-interval") {
+		fields.SnapshotInterval = &flagSnapshotInterval
+	}
+	if flags.Changed("max-subscribers-per-document") {
+		fields.MaxSubscribersPerDocument = &flagMaxSubscribersPerDocument
+	}
+	if flags.Changed("max-attachments-per-document") {
+		fields.MaxAttachmentsPerDocument = &flagMaxAttachmentsPerDocument
+	}
+	if flags.Changed("remove-on-detach") {
+		fields.RemoveOnDetach = &flagRemoveOnDetach
+	}
+
+	return fields
+}
+
+// changedDuration returns the duration option as the string the server
+// stores, or nil when the user did not pass it.
+func changedDuration(flags *pflag.FlagSet, name string, value time.Duration) *string {
+	if !flags.Changed(name) {
+		return nil
+	}
+	s := value.String()
+	return &s
 }
 
 func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Project) error {
@@ -321,10 +321,17 @@ func updateStringSlice(
 	for s := range items {
 		updated = append(updated, s)
 	}
+	slices.Sort(updated)
 	return updated
 }
 
 func init() {
+	SubCmd.AddCommand(newUpdateCommandWithFlags())
+}
+
+// newUpdateCommandWithFlags returns the update command with its options
+// registered.
+func newUpdateCommandWithFlags() *cobra.Command {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
 		&flagName,
@@ -459,5 +466,5 @@ func init() {
 		false,
 		"remove on detach",
 	)
-	SubCmd.AddCommand(cmd)
+	return cmd
 }

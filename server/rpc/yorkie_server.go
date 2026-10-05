@@ -80,6 +80,14 @@ var (
 		"unsupported resource descriptor",
 	).WithCode("ErrUnsupportedResource")
 
+	// ErrDocumentKeyMismatch is returned when the change pack of a request
+	// names a document key other than the key of the document the request
+	// targets by ID. The auth webhook is asked about the pack's key, so the
+	// two must name the same document.
+	ErrDocumentKeyMismatch = errors.InvalidArgument(
+		"change pack key does not match the document",
+	).WithCode("ErrDocumentKeyMismatch")
+
 	// ErrSubscriptionsClosed is returned when every subscription behind a
 	// Watch stream has closed itself. That only happens through the
 	// self-prune fallback in pubsub.Subscription.Publish, which is a
@@ -1606,6 +1614,9 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != pack.DocumentKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	// 04. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
@@ -1695,6 +1706,9 @@ func (s *yorkieServer) PushPullChanges(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != pack.DocumentKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	// 04. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
@@ -1769,6 +1783,9 @@ func (s *yorkieServer) RemoveDocument(
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil, err
+	}
+	if docInfo.Key != pack.DocumentKey {
+		return nil, ErrDocumentKeyMismatch
 	}
 
 	// 03. Push/Pull between the client and server.

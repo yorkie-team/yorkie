@@ -127,6 +127,9 @@ func (s *clusterServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:            types.SyncModePushOnly,
