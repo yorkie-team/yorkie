@@ -575,3 +575,195 @@ func TestUndoRedoAroundSurrogatePair(t *testing.T) {
 		})
 	}
 }
+
+// TestConcurrentTreeEditsWithSurrogatePair covers actual replica changes,
+// including reverse construction and propagation of undo/redo. These cases
+// also pass with checked reverse builders: they are compatibility coverage,
+// not a reproduction of the review's proposed reverse-builder rejection.
+func TestConcurrentTreeEditsWithSurrogatePair(t *testing.T) {
+	type edit struct {
+		from, to, splitLevel int
+		content              string
+	}
+	tests := []struct {
+		name                    string
+		local, remote           edit
+		applied, undone, redone string
+	}{
+		{
+			name:    "parent deletion and concurrent emoji insertion",
+			local:   edit{from: 0, to: 4},
+			remote:  edit{from: 1, to: 1, content: "😀"},
+			applied: "<r><p>cd</p></r>",
+			undone:  "<r><p>ab</p><p>cd</p></r>",
+			redone:  "<r><p>cd</p></r>",
+		},
+		{
+			name:    "split and overlapping emoji replacement",
+			local:   edit{from: 2, to: 2, splitLevel: 1},
+			remote:  edit{from: 1, to: 3, content: "😀"},
+			applied: "<r><p>😀</p><p></p><p>cd</p></r>",
+			// Existing reconciliation arithmetic splits the pair on undo.
+			// Pin that limitation explicitly rather than claiming restoration.
+			undone: "<r><p>\uFFFD</p><p></p><p>cd</p></r>",
+			redone: "<r><p></p><p>\uFFFD</p><p></p><p>cd</p></r>",
+		},
+		{
+			name:    "merge and overlapping emoji replacement",
+			local:   edit{from: 3, to: 5},
+			remote:  edit{from: 2, to: 6, content: "😀"},
+			applied: "<r><p>a😀d</p></r>",
+			undone:  "<r><p>a</p><p>😀d</p></r>",
+			redone:  "<r><p>a😀d</p></r>",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			newReplica := func(hexActor string) *document.Document {
+				doc := document.New(helper.TestKey(t))
+				actor, err := time.ActorIDFromHex(hexActor)
+				require.NoError(t, err)
+				doc.SetActor(actor)
+				return doc
+			}
+			a := newReplica("000000000000000000000001")
+			b := newReplica("000000000000000000000002")
+			// Only send the newest change; older local changes remain pending
+			// without a server acknowledgement in this in-memory setup.
+			latestPack := func(sender *document.Document) *change.Pack {
+				pack := sender.CreateChangePack()
+				require.NotEmpty(t, pack.Changes)
+				pack.Changes = pack.Changes[len(pack.Changes)-1:]
+				return pack
+			}
+			apply := func(receiver *document.Document, pack *change.Pack) {
+				pack.Checkpoint = receiver.Checkpoint()
+				pack.VersionVector.Set(receiver.ActorID(),
+					receiver.VersionVector().VersionOf(receiver.ActorID()))
+				require.NoError(t, receiver.ApplyChangePack(pack))
+			}
+			require.NoError(t, a.Update(func(root *json.Object, _ *presence.Presence) error {
+				root.SetNewTree("tree", json.TreeNode{Type: "r", Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				}})
+				return nil
+			}))
+			apply(b, latestPack(a))
+			runEdit := func(doc *document.Document, e edit) {
+				require.NoError(t, doc.Update(func(root *json.Object, _ *presence.Presence) error {
+					var content *json.TreeNode
+					if e.content != "" {
+						content = &json.TreeNode{Type: "text", Value: e.content}
+					}
+					root.GetTree("tree").Edit(e.from, e.to, content, e.splitLevel)
+					return nil
+				}))
+			}
+			// Neither replica has seen the other's edit when it creates its own.
+			runEdit(a, tc.local)
+			runEdit(b, tc.remote)
+			packA, packB := latestPack(a), latestPack(b)
+			apply(a, packB)
+			apply(b, packA)
+			assertState := func(expected string) {
+				t.Helper()
+				assert.Equal(t, expected, a.Root().GetTree("tree").ToXML())
+				assert.Equal(t, expected, b.Root().GetTree("tree").ToXML())
+			}
+			assertState(tc.applied)
+			for range 2 {
+				require.NoError(t, a.Undo())
+				apply(b, latestPack(a))
+				assertState(tc.undone)
+				require.NoError(t, a.Redo())
+				apply(b, latestPack(a))
+				assertState(tc.redone)
+			}
+		})
+	}
+}
+
+// TestTreeSplitReverseAfterRemoteSplitHistory reproduces a checked reverse
+// builder rejecting an SDK-computed index after the forward edit mutated the
+// root. A prior split's lineage changes where later split products land; the
+// reverse's preFromIdx + splitSize can therefore be inside live emoji text.
+func TestTreeSplitReverseAfterRemoteSplitHistory(t *testing.T) {
+	newReplica := func(hexActor string) *document.Document {
+		doc := document.New(helper.TestKey(t))
+		actor, err := time.ActorIDFromHex(hexActor)
+		require.NoError(t, err)
+		doc.SetActor(actor)
+		return doc
+	}
+	a := newReplica("000000000000000000000002")
+	b := newReplica("000000000000000000000001")
+	var sentA, sentB uint32
+	exchange := func() {
+		packA, packB := a.CreateChangePack(), b.CreateChangePack()
+		unsent := func(pack *change.Pack, sent *uint32) {
+			first := 0
+			for first < len(pack.Changes) && pack.Changes[first].ClientSeq() <= *sent {
+				first++
+			}
+			pack.Changes = pack.Changes[first:]
+			if len(pack.Changes) > 0 {
+				*sent = pack.Changes[len(pack.Changes)-1].ClientSeq()
+			}
+		}
+		unsent(packA, &sentA)
+		unsent(packB, &sentB)
+		// Peer changes do not acknowledge the receiver's pending local changes.
+		packA.Checkpoint, packB.Checkpoint = b.Checkpoint(), a.Checkpoint()
+		packA.VersionVector.Set(b.ActorID(), b.VersionVector().VersionOf(b.ActorID()))
+		packB.VersionVector.Set(a.ActorID(), a.VersionVector().VersionOf(a.ActorID()))
+		require.NoError(t, a.ApplyChangePack(packB))
+		require.NoError(t, b.ApplyChangePack(packA))
+	}
+	require.NoError(t, a.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.SetNewTree("tree", json.TreeNode{Type: "r", Children: []json.TreeNode{
+			{Type: "section", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a😀b"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c😀d"}}},
+			}},
+		}})
+		return nil
+	}))
+	exchange()
+	runEdit := func(doc *document.Document, from, to, splitLevel int, value string) {
+		require.NoError(t, doc.Update(func(root *json.Object, _ *presence.Presence) error {
+			var content *json.TreeNode
+			if value != "" {
+				content = &json.TreeNode{Type: "text", Value: value}
+			}
+			root.GetTree("tree").Edit(from, to, content, splitLevel)
+			return nil
+		}))
+	}
+	// B creates split lineage, which A then edits through remote positions.
+	runEdit(b, 3, 3, 2, "")
+	exchange()
+	runEdit(a, 2, 4, 0, "😀")
+	runEdit(a, 5, 7, 0, "😀")
+	exchange()
+	before := "<r><section><p>😀</p>😀</section><section><p>😀b</p><p>c😀d</p></section></r>"
+	require.Equal(t, before, a.Root().GetTree("tree").ToXML())
+	require.Equal(t, before, b.Root().GetTree("tree").ToXML())
+	// Index 4 is a valid caller boundary. The reverse, however, computes
+	// [4,8), and its endpoint 8 is inside the direct section text after split.
+	runEdit(b, 4, 4, 2, "")
+	after := "<r><section><p>😀</p></section><section>😀</section><section><p></p><p>😀b</p><p>c😀d</p></section></r>"
+	require.Equal(t, after, b.Root().GetTree("tree").ToXML())
+	_, err := b.Root().GetTree("tree").Tree.FindPos(8)
+	require.ErrorIs(t, err, crdt.ErrInvalidUTF16Index)
+	exchange()
+	require.Equal(t, after, a.Root().GetTree("tree").ToXML())
+	// A subsequent update must retain the same successful tree edit.
+	require.NoError(t, b.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.SetString("status", "ok")
+		return nil
+	}))
+	exchange()
+	require.Equal(t, after, b.Root().GetTree("tree").ToXML())
+	require.Equal(t, a.Marshal(), b.Marshal())
+}

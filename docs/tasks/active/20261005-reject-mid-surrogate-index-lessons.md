@@ -33,3 +33,43 @@
   covering both endpoints of the split reverse. These pin the resolver
   contract; they do not reproduce a full concurrent-edit sequence. Checked
   `FindPos` still rejects the same index.
+
+## Concurrent Replica Coverage
+
+- Added two-document ChangePack tests for parent deletion versus emoji
+  insertion, split versus overlapping emoji replacement, and merge versus
+  overlapping emoji replacement. Each propagates two undo/redo cycles and
+  checks both replicas' exact XML.
+- All three cases pass before and after the reverse-builder resolver change
+  (the prior implementation was tested with a Go source overlay). They are
+  compatibility tests, not reproductions of the review's claimed rejection.
+- A bounded exploratory program checked 58,248 valid schedules using local
+  deletion/split and remote deletion/emoji replacement, followed by up to two
+  undo/redo cycles. No ErrInvalidUTF16Index builder failure was found. This
+  does not exhaust all histories, nesting, actor orders, or GC states.
+- The concurrent split case reproduces existing surrogate corruption: undo
+  leaves U+FFFD and redo does not restore the original structure. Both
+  implementations have the same result. This remains a reconciliation
+  limitation, not a regression introduced or fixed by this change.
+
+## Reproduced Reverse-Builder Rejection
+
+- Extended exploratory histories found a real `toSplitReverseOperation`
+  endpoint inside a surrogate pair. Reduced it to four public Tree.Edit
+  calls plus two change exchanges after initial synchronization; random
+  generation and instrumentation are not part of the regression test.
+- B splits nested p/section at index 3, level 2. A receives it and replaces
+  [2,4) and [5,7) with emoji, then sends both changes back. B splits at the
+  valid caller boundary 4, level 2. Split lineage puts the new boundaries
+  apart, so the reverse range [4,8) ends inside direct section emoji text.
+- `TestTreeSplitReverseAfterRemoteSplitHistory` fails with
+  ErrInvalidUTF16Index on the previous implementation (Go source overlay),
+  and passes on the current implementation. The prior Update has already
+  changed root XML when it returns the error. The fixed test also checks
+  propagation and a subsequent Update retain the same tree on both replicas.
+- This proves rejection in the split reverse builder, not each of the other
+  four calls independently. Using the unchecked resolver across all three
+  builders follows the same documented internal-position policy.
+- Undo/redo of this reduced history still has existing reconstruction
+  limitations and can split an emoji; the resolver change preserves the
+  old internal resolution policy rather than repairing reverse ranges.
