@@ -278,3 +278,34 @@ changes inherits the verb of everything still pending.
 Not fixed, follow-up (second round carrying it): the `RemoveOnDetach` removal
 on the deactivation path is still ungated, and both `cluster_server.go` and
 `server/clients` are outside this diff.
+
+## Round 5 — schema snapshot and the field's promise
+
+Blocking, fixed: the schema recheck decided on a stale snapshot. The guard was
+`req.Msg.SchemaKey != docInfo.Schema`, but `docInfo` is read by
+`FindOrCreateDocInfo` before the document's attachment locker is taken and is
+never re-read under it, so a concurrent attach could rebind the schema in
+between. A caller holding the older snapshot then saw "no change" and
+`UpdateDocInfoSchema` overwrote the new binding with no `rw` check. Re-reading
+under the lock would not have fixed it either: `UpdateDocInfoSchema` leaves the
+`docCache` entry behind, so the re-read returns the same stale value.
+
+The rule is now on the request alone, which no snapshot can skew: a caller
+without a document write that names no schema skips the rebind entirely and
+leaves the persisted binding standing; one that names a schema is asked for the
+`rw`. A caller already approved as a document write behaves as before. The ask
+also moved ahead of `schemas.GetSchema`, so a rejected caller cannot use the
+error to learn whether the schema it named exists.
+
+Lesson: when an authorization decision is a comparison against persisted state,
+check where that state was read. A snapshot taken outside the lock that guards
+the write cannot decide whether the write happens — phrase the rule over the
+request, which is immutable, or hold the lock across both the read and the
+write.
+
+Also fixed: `PresenceOnly`'s doc comment read as a promise about the whole
+request ("it does not remove the document"), while a `RemoveOnDetach` project
+removes the document after a presence-only detach is allowed. The design doc
+already recorded that removal as the project's policy; the comment now scopes
+itself to the pack the client sent and names the `RemoveOnDetach` case, so a
+webhook author is not told the request cannot end in a removal.

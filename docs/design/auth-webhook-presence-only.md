@@ -100,22 +100,29 @@ treat a missing `presenceOnly` on one of the four pack methods as `false`.
 ### Schema binding on attach
 
 An attach can also write something the pack does not show: when no client is
-attached and the request names a schema other than the document's,
-`AttachDocument` binds that schema to the document. The pack of such an
-attach is presence only, or empty for a presence-disabled document (`verb`
-`r`), so a webhook that allows those would let any member choose the schema
-that later edits are checked against. Right before binding, unless the attach
-was already approved as a document write (`rw` and not `presenceOnly`), the
-handler asks the webhook again for the same document with `rw` and no
-`presenceOnly`, which such a webhook rejects for a read-only member. An attach
-that binds nothing is asked once, as before.
+attached, `AttachDocument` binds the schema the request names to the
+document. The pack of such an attach is presence only, or empty for a
+presence-disabled document (`verb` `r`), so a webhook that allows those would
+let any member choose the schema that later edits are checked against. Before
+binding, unless the attach was already approved as a document write (`rw` and
+not `presenceOnly`), the handler asks the webhook again for the same document
+with `rw` and no `presenceOnly`, which such a webhook rejects for a read-only
+member. An attach that binds nothing is asked once, as before.
 
-On projects with an attachment limit or `RemoveOnDetach`, an attach that
-finds no client attached rebinds the schema to whatever the request names,
-even an empty key. That predates this change; here it means such an attach is
-asked again too. The second call is made while the document's attachment lock
-is held, so on the bind path other attaches and detaches of that document
-wait for the webhook.
+Whether the named key differs from the persisted one cannot decide whether to
+ask. The `DocInfo` the handler holds was read before the document's
+attachment lock was taken and is never re-read under it, so another attach may
+have rebound the schema in between; deciding on that snapshot would let a
+second attach overwrite the new binding with no check. The rule is on the
+request alone: a caller without a document write that names no schema skips
+the rebind and leaves the persisted binding standing, and one that names a
+schema is asked for the write. A caller already approved as a document write
+rebinds as before, the empty key included.
+
+The question is asked before the schema is looked up, so a rejected caller
+does not learn whether the schema it named exists. The second call is made
+while the document's attachment lock is held, so on the bind path other
+attaches and detaches of that document wait for the webhook.
 
 ### Removal on the last detach
 

@@ -322,7 +322,30 @@ func (s *yorkieServer) AttachDocument(
 			return nil, err
 		}
 
-		if count == 0 {
+		// Rebinding the schema writes the document, which the pack does not
+		// show: an attach whose pack is empty (a presence-disabled document)
+		// or presence only was approved without a document write, and a
+		// webhook that allows those would let any member pick the schema
+		// later edits are checked against, or drop the binding by asking
+		// for none.
+		//
+		// Whether the key differs from the persisted one cannot decide this:
+		// docInfo was read before this locker was taken and is never re-read
+		// under it, so another attach may have rebound the schema since. A
+		// caller without a document write that asks for no schema leaves the
+		// persisted binding alone instead; one that asks for a schema is
+		// asked for the write first, before the lookup that would otherwise
+		// tell it whether that schema exists.
+		if count == 0 && (req.Msg.SchemaKey != "" || auth.WritesDocument(attrs)) {
+			if !auth.WritesDocument(attrs) {
+				if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+					Method:     types.AttachDocument,
+					Attributes: types.NewAccessAttributes([]key.Key{pack.DocumentKey}, types.ReadWrite),
+				}); err != nil {
+					return nil, err
+				}
+			}
+
 			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.SchemaKey)
 			if err != nil {
 				return nil, err
@@ -330,20 +353,6 @@ func (s *yorkieServer) AttachDocument(
 			schema, err = schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
 			if err != nil {
 				return nil, err
-			}
-			// Binding a schema writes the document, which the pack does not
-			// show: an attach whose pack is empty (a presence-disabled
-			// document) or presence only was approved without a document
-			// write, and a webhook that allows those would let any member
-			// pick the schema later edits are checked against. Ask for the
-			// write before binding.
-			if req.Msg.SchemaKey != docInfo.Schema && !auth.WritesDocument(attrs) {
-				if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-					Method:     types.AttachDocument,
-					Attributes: types.NewAccessAttributes([]key.Key{pack.DocumentKey}, types.ReadWrite),
-				}); err != nil {
-					return nil, err
-				}
 			}
 			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.SchemaKey); err != nil {
 				return nil, err
