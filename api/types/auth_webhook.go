@@ -34,6 +34,8 @@ const (
 	Read VerbType = "r"
 
 	// ReadWrite represents the case of reading and writing the given document.
+	// A change pack is a ReadWrite when it carries any change, presence
+	// included, or removes the document.
 	ReadWrite VerbType = "rw"
 )
 
@@ -121,6 +123,21 @@ func AuthMethods() []Method {
 type AccessAttribute struct {
 	Key  string   `json:"key"`
 	Verb VerbType `json:"verb"`
+
+	// PresenceOnly reports whether the change pack of this request writes
+	// presence and nothing else: it carries changes, none of them has an
+	// operation, and the pack does not ask to remove the document. It is set
+	// only for the methods that send a change pack (AttachDocument,
+	// DetachDocument, RemoveDocument and PushPull) and is omitted otherwise,
+	// so a webhook can tell a presence write, which Verb reports as
+	// ReadWrite, from a document edit.
+	//
+	// It describes the pack the client sent, not every effect the request
+	// has. A project with RemoveOnDetach removes a document once its last
+	// client detaches, so allowing a presence-only DetachDocument can still
+	// end in the document being removed: that removal is the project's
+	// policy, applied after this decision, and is not asked about here.
+	PresenceOnly *bool `json:"presenceOnly,omitempty"`
 }
 
 // NewAccessAttributes creates a new instance of AccessAttributes.

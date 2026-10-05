@@ -130,6 +130,35 @@ func TestWatchRegistry(t *testing.T) {
 		assert.NoError(t, s3.Err())
 	})
 
+	t.Run("equal attributes share one verification across pointer fields", func(t *testing.T) {
+		r := newWatchRegistry()
+		presenceOnly := func() types.AccessInfo {
+			yes := true
+			return types.AccessInfo{
+				Method: types.Watch,
+				Attributes: []types.AccessAttribute{
+					{Key: "doc-1", Verb: types.Read, PresenceOnly: &yes},
+				},
+			}
+		}
+		s1 := admit(t, r, projectA, "alice", presenceOnly())
+		s2 := admit(t, r, projectA, "alice", presenceOnly())
+
+		var calls atomic.Int32
+		closed, err := r.revalidate(ctx, projectA, nil, func(
+			context.Context, string, *types.AccessInfo,
+		) error {
+			calls.Add(1)
+			return auth.ErrPermissionDenied
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, int32(1), calls.Load())
+		assert.Equal(t, 2, closed)
+		assert.Error(t, s1.Err())
+		assert.Error(t, s2.Err())
+	})
+
 	t.Run("an uncertain answer leaves streams open and reports it", func(t *testing.T) {
 		r := newWatchRegistry()
 		failing := admit(t, r, projectA, "alice", watchAccess(types.Watch, "doc-1"))
