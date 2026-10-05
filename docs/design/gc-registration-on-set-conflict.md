@@ -208,6 +208,22 @@ which invalidates the clone so the next access rebuilds it from the root
 applies keep reporting a skip, because they run the same `Set.Execute`
 against both the clone and the root and so cannot disagree.
 
+`ErrRefusedLocalSet` is a new way for `Document.Update` to fail, and the
+server drives json proxies over documents rebuilt from stored client changes
+(`server/revisions`, `server/documents`, and compaction in `server/packs`,
+each through `packs.BuildDocForCheckpoint`). It cannot reach those rebuilds
+from a well-formed change log. A local Set is refused only when it *loses*
+its key, and a rebuilt document's clock is past every ticket it applied:
+`ApplyChanges` advances the lamport once per applied change
+(`change.ID.SyncClocks`, or `SyncLamport` for a GC-disabled attachment) and
+the change the update issues takes it one further (`change.ID.Next`), so the
+freshly minted ticket comes after every member already there and wins
+(`TestLocalSetAfterRemoteRebuildKeepsApplying`). Reaching the refusal needs
+an operation ticket no SDK mints, which is the crafted-payload case below;
+failing the update there is the intended outcome, since the alternative --
+returning `nil` with a clone the root has refused -- would have the server
+write back a document built on members the root does not hold.
+
 `Root.UnregisterRemovedElementPair` takes the owning container and retires
 only an entry that container registered. The json layer records the CRDT
 container, not its proxy, as the parent so that identity check holds on the

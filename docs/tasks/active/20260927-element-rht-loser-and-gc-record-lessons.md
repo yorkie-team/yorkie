@@ -50,3 +50,15 @@ limitations:
   they are collected, so the orphan is freed only after that.
 - Existing and out of scope: edits inside a still-addressable orphan member
   charge Live, and nothing ever collects them.
+
+## A refusal's blast radius is bounded by the clock, not by the call graph
+
+`ErrRefusedLocalSet` is a new failure mode for `Document.Update`, and three
+server paths drive json proxies over a document rebuilt from stored client
+changes. Tracing callers does not bound that: all three reach the error. What
+bounds it is the lamport clock -- a local Set is refused only when it loses
+its key, and a rebuild leaves the clock past every ticket it applied
+(`SyncClocks` per change, `Next` per update), so the minted ticket always
+wins. The bound belongs in a test
+(`TestLocalSetAfterRemoteRebuildKeepsApplying`), not in prose: it is a claim
+about ticket ordering that a later change to the clock would silently break.

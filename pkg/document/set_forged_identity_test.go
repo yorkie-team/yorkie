@@ -139,3 +139,64 @@ func TestLocalSetRefusedOnForgedIdentityDropsClone(t *testing.T) {
 	assert.Equal(t, nodeValues(root.Object()), nodeValues(doc.Root().Object),
 		"the clone kept a member the root refused")
 }
+
+// TestLocalSetAfterRemoteRebuildKeepsApplying pins that ErrRefusedLocalSet
+// stays out of reach of a document rebuilt from well-formed peer changes --
+// the shape the server drives json proxies over, where it rebuilds from the
+// stored change log (packs.BuildDocForCheckpoint) and then runs a local
+// Update over the result.
+//
+// A local Set reaches ElementRHT's loser branch only when its freshly minted
+// ticket does not come after the occupant of the key it targets, and a
+// rebuild leaves the local clock past every ticket it applied: ApplyChanges
+// advances the lamport once per applied change (change.ID.SyncClocks, and
+// SyncLamport for the GC-disabled attachment), and the change the Update
+// issues takes it one further (change.ID.Next). So an overwrite after a
+// rebuild wins its key whatever the peers did, and the refusal needs a ticket
+// no SDK mints -- see TestLocalSetRefusedOnForgedIdentityDropsClone for the
+// shape that does reach it.
+func TestLocalSetAfterRemoteRebuildKeepsApplying(t *testing.T) {
+	actorA, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+
+	peer := document.New("local-set-after-rebuild")
+	peer.SetActor(actorA)
+	require.NoError(t, peer.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetString("k", "peer")
+		r.SetNewObject("nested").SetString("k", "peer")
+		return nil
+	}))
+	require.NoError(t, peer.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetString("k", "peer-again")
+		r.Delete("nested")
+		return nil
+	}))
+
+	rebuilt := document.New("local-set-after-rebuild")
+	pack := peer.CreateChangePack()
+	pack.VersionVector.Set(rebuilt.ActorID(), rebuilt.VersionVector().VersionOf(rebuilt.ActorID()))
+	require.NoError(t, rebuilt.ApplyChangePack(pack))
+	// The server drives the proxies under InitialActorID, as
+	// packs.BuildDocForCheckpoint hands them over.
+	rebuilt.SetActor(time.InitialActorID)
+
+	// Repeated, because each round overwrites keys the previous round minted
+	// locally: a later local ticket has to keep winning against an earlier one.
+	for range 3 {
+		require.NoError(t, rebuilt.Update(func(r *json.Object, _ *presence.Presence) error {
+			var keys []string
+			for key := range r.Object.Members() {
+				keys = append(keys, key)
+			}
+			for _, key := range keys {
+				r.Delete(key)
+			}
+
+			r.SetString("k", "server")
+			r.SetNewObject("nested").SetString("k", "server")
+			return nil
+		}), "a local Set over a document rebuilt from peer changes was refused")
+	}
+
+	assert.Equal(t, `{"k":"server","nested":{"k":"server"}}`, rebuilt.Marshal())
+}
