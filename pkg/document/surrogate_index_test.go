@@ -272,6 +272,57 @@ func assertRejectsMidSurrogate(t *testing.T, doc *document.Document, fn func(roo
 	assert.Equal(t, before, doc.Marshal(), "the refused edit left no trace")
 }
 
+// TestRejectedEditDiscardsEarlierEditsOfTheSameUpdate covers a rejection
+// that comes after a valid edit in the same updater. The json proxies turn the
+// rejection into a panic, and the valid edit has already reached the clone, so
+// Update has to discard the clone on the way out. Otherwise Root shows an edit
+// the document never took, and the next change is built on top of it.
+func TestRejectedEditDiscardsEarlierEditsOfTheSameUpdate(t *testing.T) {
+	z := &json.TreeNode{Type: "text", Value: "z"}
+
+	tests := []struct {
+		name string
+		fn   func(root *json.Object)
+	}{
+		{"Text", func(root *json.Object) {
+			root.GetText("text").Edit(3, 3, "z")
+			root.GetText("text").Edit(1, 1, "y")
+		}},
+		{"Tree", func(root *json.Object) {
+			root.GetTree("tree").Edit(4, 4, z, 0)
+			root.GetTree("tree").Edit(2, 2, z, 0)
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := newSurrogateDoc(t)
+			state := func() []string {
+				return []string{
+					doc.Root().GetTree("tree").ToXML(),
+					doc.Root().GetText("text").String(),
+				}
+			}
+			original := state()
+
+			assertRejectsMidSurrogate(t, doc, tc.fn)
+			assert.Equal(t, original, state(), "the valid edit before the rejection was discarded")
+
+			updateSurrogateDoc(t, doc, func(root *json.Object) {
+				root.GetTree("tree").Edit(4, 4, z, 0)
+				root.GetText("text").Edit(3, 3, "z")
+			})
+			edited := []string{"<r><p>\U0001F600xz</p></r>", "\U0001F600xz"}
+			assert.Equal(t, edited, state())
+
+			require.NoError(t, doc.Undo())
+			assert.Equal(t, original, state())
+			require.NoError(t, doc.Redo())
+			assert.Equal(t, edited, state())
+		})
+	}
+}
+
 // TestRejectMidSurrogatePairIndexesAtEveryEntryPoint covers the Tree entry
 // points that resolve indexes or paths through Tree.FindPos, and the Text
 // ones that resolve offsets through Text.CreateRange, beyond Edit and Style.
