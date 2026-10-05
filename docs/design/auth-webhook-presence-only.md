@@ -97,6 +97,23 @@ Methods that do not send a change pack build their attributes with
 JSON at all. A webhook that wants to fail closed against an older server can
 treat a missing `presenceOnly` on one of the four pack methods as `false`.
 
+### Creating the document on attach
+
+`AttachDocument` creates the document when it does not exist, and the create
+fixates its `disable_presence`: the attach that inserts the row decides whether
+the document carries presence at all. Neither write is in the pack, so an
+attach approved as a read or as a presence write would otherwise let any member
+create documents and pick that flag. Before the create, unless the attach was
+already approved as a document write, the handler looks the document up and,
+when it is not there, asks the webhook again for the same document with `rw`
+and no `presenceOnly`. A read-only member can therefore attach to a document
+that exists, but not bring one into being.
+
+The lookup uses the predicate `FindOrCreateDocInfo` inserts on — the project's
+key, not removed — so a document missing there is one that call would create.
+It costs a read, so it is skipped when the project does not ask the webhook
+about attaches: `VerifyAccess` would return without a call anyway.
+
 ### Schema binding on attach
 
 An attach can also write something the pack does not show: when no client is
@@ -181,6 +198,7 @@ would print the `*bool` as an address.
 | Report removal as `rw` | Removing a document is a write. |
 | Do not ask the webhook before a `RemoveOnDetach` removal | The removal is the project's policy for a document no one is attached to, not the member's request. Asking would also fail the detach of a read-only member who leaves last, and deactivation, which has no caller token, removes the document the same way. |
 | Ask again before binding a schema | Whether the attach binds is known only after the document is looked up, which happens after the first check. Reporting every attach that names a schema as a write would block read-only members from every document that uses schemas. |
+| Ask again before creating the document | Same reason: whether the attach creates is known only after the lookup. Reporting every attach as a write would block read-only members from every document, which is the problem this change set out to fix. |
 
 ## Alternatives Considered
 

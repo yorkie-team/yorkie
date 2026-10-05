@@ -331,3 +331,39 @@ removes the document after a presence-only detach is allowed. The design doc
 already recorded that removal as the project's policy; the comment now scopes
 itself to the pack the client sent and names the `RemoveOnDetach` case, so a
 webhook author is not told the request cannot end in a removal.
+
+## Round 6 — the create is a write too
+
+Blocking, fixed: the rule this change set up for the schema rebind — a request
+approved as a read or as a presence write must be asked again before it writes
+the document — was not applied to the other write an attach makes. The attach
+creates the document when it does not exist, and the create fixates the
+document's `disable_presence` for every later attach. A webhook allowing
+presence-only packs therefore let a read-only member bring documents into being
+and choose that flag.
+
+`AttachDocument` now looks the document up before `FindOrCreateDocInfo` when
+the access was not approved as a document write, and asks the webhook for `rw`
+when it is not there. The lookup uses the same predicate the create upserts on
+(project key, not removed), so "not found" means "this call would insert". It
+is skipped unless the project asks the webhook about attaches, so a project
+without one keeps its single read.
+
+Lesson: the question "which writes does this handler make that the pack does
+not show?" has to be answered for the whole handler at once. Finding one of
+them (the rebind) and gating only that leaves the rule half-applied, and the
+other write is the one that decides a persisted flag nothing later can change.
+
+Also fixed: the integration subtests asserted only `NoError` on the attaches
+that must pass, so "a reader attaching alone keeps the bound schema" would
+still have passed if the attach had silently unbound the schema. They now
+assert the ruleset the server hands back (`doc.SchemaRules`) on every path —
+naming the bound schema, naming none, and after a rejected rebind — and that a
+violating write is still refused. The webhook's recorded attributes are keyed
+by token as well as method, so an assertion about what the reader was asked is
+no longer satisfied by the writer being asked the same thing about the same
+document.
+
+Lesson: for a change that *skips* a write, `NoError` is not coverage. The
+assertion has to read the state the skipped write would have changed;
+otherwise the test passes equally when the write happens and when it does not.
