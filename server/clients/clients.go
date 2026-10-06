@@ -40,8 +40,7 @@ var (
 	ErrInvalidClientID = errors.InvalidArgument("invalid client id").WithCode("ErrInvalidClientID")
 
 	// ErrActorMismatch is returned when a request declares an actor that is not
-	// the authenticated client's own stable actor, or pushes a change stamped
-	// with an actor that is not the client's own.
+	// the authenticated client's own stable actor.
 	ErrActorMismatch = errors.PermissionDenied(
 		"actor id does not match the authenticated client",
 	).WithCode("ErrActorMismatch")

@@ -216,7 +216,7 @@ re-issue clears them.
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |
 | `SetActor`, the fallback, rewrites shared change values in place | Pre-existing; the re-issue path replaces every structure instead, and no caller deep copies a document holding local changes |
-| A client pushes a change under another client's actor | Partly mitigated: `PushPull` refuses a change whose ID actor is not the actor of the client row named in `client_id` (`ErrActorMismatch`, #2120). It is not a fix for #2120 — the identity it binds to is unauthenticated, so a caller holding a victim's `client_id` or client key still passes, as do two honest sessions sharing a key; operation tickets are not checked either (#2114) |
+| A client pushes a change under another client's actor | Still accepted; `PushPull` only logs it (`logForeignActors`, #2120). Refusing it needs an authenticated client identity, tracked in #2114 — see Out of Scope |
 
 ### Design Decisions
 
@@ -229,15 +229,27 @@ re-issue clears them.
 
 ## Out of Scope
 
-Every change this design pushes carries the client's own actor, so the server
-refuses a change whose ID actor is not the actor of the client row the request
-names (`validateChangeActors` in `PushPull`, #2120). That binding is **not** a
-fix for #2120: the identities it relies on (`client_id`, the client key behind
-`StableActorID`) are not credentials, and a stable actor is shared by every
-session of one key, so a caller holding a victim's identifier — and an honest
-sibling session — still passes the check and can still hide a change behind the
-pull dedup. Nor are the tickets inside operations checked. Binding a push to an
-authenticated client identity is tracked in #2114.
+The server does not bind a pushed change's actor to the authenticated client,
+so a forged actor can still make another client drop a change on pull (#2120).
+Every change this design pushes carries the client's own actor, which makes a
+push-side compare possible, and `PushPull` runs one — `logForeignActors` warns
+when a stored change's ID, or an operation's `executedAt` ticket, names an
+actor the client row does not hold. It only logs:
+
+- The identities a compare can reach (`client_id`, the client key behind
+  `StableActorID`) are not credentials, and a stable actor is shared by every
+  session of one key, so a caller holding a victim's identifier — and an honest
+  sibling session — satisfies the compare for the victim's actor. Rejecting on
+  it would stop no attacker who holds an identifier.
+- The writers it would refuse are SDK versions outside this repository. A
+  client that skipped `SetActor` before attaching pushes pre-attach changes
+  under the initial actor, and a declined re-issue leaves initial-actor tickets
+  inside operations; the log skips the initial actor for exactly that reason,
+  but what other versions stamp cannot be enumerated here.
+
+So the log is the survey step: it makes the condition visible in production
+without refusing a push the server has always accepted. Enforcement waits on an
+authenticated client identity, tracked in #2114.
 
 ## Alternatives Considered
 

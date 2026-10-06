@@ -141,7 +141,7 @@ actor existed leave it empty, and an empty value must never match.
 | Site | Role | Decision |
 |------|------|----------|
 | `pushpull.go` `pullChangeInfos` dedup (`clientInfo.ID == pulledChange.ActorID`) | Self-echo dedup — **the single most important switch** | `clientInfo.IsOwnActor(pulledChange.ActorID)` |
-| `pushpull.go` `validateChangeActors` (push) | Refuses a stored change stamped with an actor the pushing client row does not hold, which dedup would otherwise hide from its owner (#2120). Bound to the unauthenticated `client_id`, and a stable actor is shared by every session of one key, so it does not separate same-key sessions (#2114) | `clientInfo.IsOwnActor(change ID actor)`, else `ErrActorMismatch` |
+| `pushpull.go` `logForeignActors` (push) | **Diagnostic only.** Warns when a stored change is stamped with an actor the pushing client row does not hold, which dedup would otherwise hide from its owner (#2120). It cannot refuse: the compare is bound to the unauthenticated `client_id`, and a stable actor is shared by every session of one key, so it separates no attacker from an honest writer (#2114) | `clientInfo.IsOwnActor(change ID actor / operation `executedAt` actor)`, log on mismatch |
 | `pushpull.go` `DisableGC` VV truncation key | Size-1 VV keyed on the client's own actor so its lamport clock advances | `clientInfo.OwnActorID()` (StableActorID when present, else session id) |
 | `pushpull.go` pubsub publisher actor | DocChanged event author for self-echo filtering | **stays** on `clientInfo.ID` (see below) |
 | `client_info.go` `VersionVectorInfo.ClientID`; `memory/database.go`, `mongo/client.go` VV upsert / delete-on-detach / vector cache | VV **row identity** | **stays** on `clientInfo.ID` (see VV keying below) |

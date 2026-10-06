@@ -27,21 +27,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-// TestPushActorCheck verifies that the server refuses a pushed change whose ID
-// actor is not the pushing client's own, on push and on attach, and accepts
-// the two actors a client may stamp: its session id (old SDKs, the Go client)
-// and its stable actor (new SDKs). See #2120.
-func TestPushActorCheck(t *testing.T) {
+// TestPushForeignActor pins that the actor of a pushed change is not a
+// precondition of the push: `logForeignActors` warns when a change names an
+// actor the pushing client row does not hold, but the push still lands. The
+// server can only compare against the client row the request names in
+// client_id, which is not a credential, so a rejection would refuse honest
+// writers (an SDK that pushes pre-attach changes under the initial actor)
+// without stopping a caller that holds a victim's identifier. See #2120, whose
+// fix needs an authenticated client identity (#2114).
+func TestPushForeignActor(t *testing.T) {
 	ctx := context.Background()
 
 	activate := func(t *testing.T, clientKey string) *api.ActivateClientResponse {
@@ -67,121 +69,76 @@ func TestPushActorCheck(t *testing.T) {
 			}},
 		}
 	}
-	assertActorMismatch := func(t *testing.T, err error) {
-		t.Helper()
-		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
-		assert.Equal(t, "ErrActorMismatch", converter.ErrorCodeOf(err))
-	}
 
 	initialActor := time.InitialActorID.Bytes()
 
-	t.Run("push with another actor is rejected", func(t *testing.T) {
-		attacker := activate(t, helper.TestKey(t, 1).String())
-		victim := activate(t, helper.TestKey(t, 2).String())
+	t.Run("push under another actor is accepted", func(t *testing.T) {
+		pusher := activate(t, helper.TestKey(t, 1).String())
+		other := activate(t, helper.TestKey(t, 2).String())
 		docKey := helper.TestKey(t).String()
 
 		attached, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   attacker.ClientId,
+			ClientId:   pusher.ClientId,
 			ChangePack: &api.ChangePack{DocumentKey: docKey, Checkpoint: &api.Checkpoint{}},
 		}))
 		require.NoError(t, err)
 
 		docID := types.ID(attached.Msg.DocumentId)
 		docRefKey := types.DocRefKey{ProjectID: database.DefaultProjectID, DocID: docID}
-		clientRefKey := types.ClientRefKey{
-			ProjectID: database.DefaultProjectID,
-			ClientID:  types.ID(attacker.ClientId),
-		}
 		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
-		require.NoError(t, err)
-		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, clientRefKey)
 		require.NoError(t, err)
 
 		push := func(clientSeq uint32, actor []byte) error {
 			_, err := testClient.PushPullChanges(ctx, connect.NewRequest(&api.PushPullChangesRequest{
-				ClientId:   attacker.ClientId,
+				ClientId:   pusher.ClientId,
 				DocumentId: attached.Msg.DocumentId,
 				ChangePack: packWith(docKey, clientSeq, actor),
 			}))
 			return err
 		}
 
-		// 01. The victim's session id, its stable actor and the initial actor
-		// are refused, and nothing is stored.
-		for _, forged := range [][]byte{
-			actorBytes(t, victim.ClientId),
-			actorBytes(t, victim.ActorId),
+		// Another client's session id and stable actor, the initial actor and
+		// the pusher's own two identities all land; only the first three are
+		// logged.
+		for i, actor := range [][]byte{
+			actorBytes(t, other.ClientId),
+			actorBytes(t, other.ActorId),
 			initialActor,
+			actorBytes(t, pusher.ClientId),
+			actorBytes(t, pusher.ActorId),
 		} {
-			assertActorMismatch(t, push(1, forged))
-			assertRejectedPushPullUnchanged(
-				t, ctx, docRefKey, clientRefKey, docID,
-				docInfo.ServerSeq, clientInfo.Checkpoint(docID),
-			)
+			assert.NoError(t, push(uint32(i+1), actor))
 		}
-
-		// 02. The attacker's own session id and stable actor are accepted.
-		assert.NoError(t, push(1, actorBytes(t, attacker.ClientId)))
-		assert.NoError(t, push(2, actorBytes(t, attacker.ActorId)))
 
 		docInfoAfter, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		require.NoError(t, err)
-		assert.Equal(t, docInfo.ServerSeq+2, docInfoAfter.ServerSeq)
+		assert.Equal(t, docInfo.ServerSeq+5, docInfoAfter.ServerSeq)
 	})
 
-	t.Run("already pushed changes are not checked", func(t *testing.T) {
-		cli := activate(t, helper.TestKey(t, 1).String())
+	t.Run("attach under another actor is accepted", func(t *testing.T) {
+		attacher := activate(t, helper.TestKey(t, 1).String())
 		other := activate(t, helper.TestKey(t, 2).String())
-		docKey := helper.TestKey(t).String()
-
-		attached, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   cli.ClientId,
-			ChangePack: packWith(docKey, 1, actorBytes(t, cli.ActorId)),
-		}))
-		require.NoError(t, err)
-
-		// clientSeq 1 is already stored, so pushPack skips it whatever its
-		// actor says; only clientSeq 2 is stored and checked.
-		pack := packWith(docKey, 2, actorBytes(t, cli.ActorId))
-		pack.Changes = append([]*api.Change{{
-			Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: actorBytes(t, other.ActorId)},
-		}}, pack.Changes...)
-		_, err = testClient.PushPullChanges(ctx, connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:   cli.ClientId,
-			DocumentId: attached.Msg.DocumentId,
-			ChangePack: pack,
-		}))
-		assert.NoError(t, err)
-	})
-
-	t.Run("attach with another actor is rejected", func(t *testing.T) {
-		attacker := activate(t, helper.TestKey(t, 1).String())
-		victim := activate(t, helper.TestKey(t, 2).String())
 
 		attach := func(docKey string, actor []byte) error {
 			_, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
-				ClientId:   attacker.ClientId,
+				ClientId:   attacher.ClientId,
 				ChangePack: packWith(docKey, 1, actor),
 			}))
 			return err
 		}
 
-		// A pre-attach change keeps the initial actor only in a client that
-		// skipped SetActor; both SDKs stamp their own actor before the attach.
-		assertActorMismatch(t, attach(helper.TestKey(t, 3).String(), actorBytes(t, victim.ActorId)))
-		assertActorMismatch(t, attach(helper.TestKey(t, 4).String(), initialActor))
-
-		assert.NoError(t, attach(helper.TestKey(t, 5).String(), actorBytes(t, attacker.ClientId)))
-		assert.NoError(t, attach(helper.TestKey(t, 6).String(), actorBytes(t, attacker.ActorId)))
+		// A pre-attach change keeps the initial actor in a client that skipped
+		// SetActor, so refusing it would be a new wire precondition.
+		assert.NoError(t, attach(helper.TestKey(t, 3).String(), initialActor))
+		assert.NoError(t, attach(helper.TestKey(t, 4).String(), actorBytes(t, other.ActorId)))
+		assert.NoError(t, attach(helper.TestKey(t, 5).String(), actorBytes(t, attacher.ClientId)))
+		assert.NoError(t, attach(helper.TestKey(t, 6).String(), actorBytes(t, attacher.ActorId)))
 	})
 
-	// This pins the limit of the check rather than a guarantee: StableActorID
-	// is derived from (project, client key) with no unique index, so every
-	// session of one key stamps the same actor and the check cannot tell two
-	// of them apart. A change one session stores under the shared actor is
-	// still dropped by the other session's pull dedup as its own echo, so a
-	// caller that holds a victim's client key keeps the #2120 hole. Closing it
-	// needs an authenticated client identity (#2114), not a push-side compare.
+	// Why a push-side compare cannot be an authorization boundary:
+	// StableActorID is derived from (project, client key) with no unique index,
+	// so every session of one key stamps the same actor and the compare cannot
+	// tell two of them apart.
 	t.Run("sessions sharing a client key share one actor", func(t *testing.T) {
 		clientKey := helper.TestKey(t, 1).String()
 		first := activate(t, clientKey)
