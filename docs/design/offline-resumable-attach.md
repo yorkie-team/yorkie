@@ -141,6 +141,7 @@ actor existed leave it empty, and an empty value must never match.
 | Site | Role | Decision |
 |------|------|----------|
 | `pushpull.go` `pullChangeInfos` dedup (`clientInfo.ID == pulledChange.ActorID`) | Self-echo dedup — **the single most important switch** | `clientInfo.IsOwnActor(pulledChange.ActorID)` |
+| `pushpull.go` `validateChangeActors` (push) | Refuses a stored change stamped with another client's actor, which dedup would otherwise hide from that client (#2120) | `clientInfo.IsOwnActor(change ID actor)`, else `ErrActorMismatch` |
 | `pushpull.go` `DisableGC` VV truncation key | Size-1 VV keyed on the client's own actor so its lamport clock advances | `clientInfo.OwnActorID()` (StableActorID when present, else session id) |
 | `pushpull.go` pubsub publisher actor | DocChanged event author for self-echo filtering | **stays** on `clientInfo.ID` (see below) |
 | `client_info.go` `VersionVectorInfo.ClientID`; `memory/database.go`, `mongo/client.go` VV upsert / delete-on-detach / vector cache | VV **row identity** | **stays** on `clientInfo.ID` (see VV keying below) |

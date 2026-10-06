@@ -216,7 +216,7 @@ re-issue clears them.
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |
 | `SetActor`, the fallback, rewrites shared change values in place | Pre-existing; the re-issue path replaces every structure instead, and no caller deep copies a document holding local changes |
-| The server trusts a pushed change's actor | Out of scope, tracked in #2114 |
+| A client pushes a change under another client's actor | `PushPull` refuses a change whose ID actor is not the pushing client's own (`ErrActorMismatch`, #2120); operation tickets are not checked, and the client identities themselves are not credentials (#2114) |
 
 ### Design Decisions
 
@@ -229,10 +229,10 @@ re-issue clears them.
 
 ## Out of Scope
 
-The server does not bind a pushed change's actor to the authenticated client,
-so a forged actor can make another client drop a change on pull. Every change
-this design pushes carries the client's own actor, which makes a push-side
-check possible, but the client identities such a check would rely on
+Every change this design pushes carries the client's own actor, so the
+server refuses a change whose ID actor is not the pushing client's own
+(`validateChangeActors` in `PushPull`, #2120). It does not check the tickets
+inside operations, and the client identities the check relies on
 (`client_id`, `StableActorID`) are not credentials. Tracked in #2114.
 
 ## Alternatives Considered

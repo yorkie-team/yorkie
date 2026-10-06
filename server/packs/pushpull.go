@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -115,6 +116,10 @@ func PushPull(
 	// Presence stripping must not run first: presence-only changes also
 	// occupy ClientSeq, and dropping them early would hide gaps.
 	if err := validateClientSeqContinuity(clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
+	if err := validateChangeActors(clientInfo, clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
@@ -255,6 +260,32 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 		}
 
 		expectedClientSeq++
+	}
+
+	return nil
+}
+
+// validateChangeActors rejects a pack carrying a change that is stamped with
+// another client's actor. The pull path takes a stored change whose actor
+// IsOwnActor accepts for the pulling client as that client's own echo and
+// drops it, so a change pushed under a victim's actor would never reach the
+// victim. Only changes the server would store (clientSeq above the checkpoint)
+// are checked; pushPack skips the others. Only the change ID is checked: the
+// tickets inside operations keep the actor they were minted under, which for
+// old SDKs is the initial actor of edits made before the attach.
+func validateChangeActors(
+	clientInfo *database.ClientInfo,
+	cpBeforePush change.Checkpoint,
+	reqPack *change.Pack,
+) error {
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			continue
+		}
+
+		if !clientInfo.IsOwnActor(types.IDFromActorID(cn.ID().ActorID())) {
+			return clients.ErrActorMismatch
+		}
 	}
 
 	return nil
