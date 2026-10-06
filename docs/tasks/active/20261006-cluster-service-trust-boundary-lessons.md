@@ -27,6 +27,15 @@ showed the change count drop to zero before the guard was added.
 the message does. Tests that go through the cluster client check the
 message, as the existing cluster `DetachDocument` subtest does.
 
+## Integration tests use fixed ports
+
+The first `make test` failed in `server`, `server/rpc` and
+`test/integration` with `bind: address already in use`: another worktree
+was running the integration suite at the same time, and the suites listen
+on fixed ports (11101, 11201, ...). Run one integration suite per machine
+at a time; a bind failure says nothing about the change. The rerun alone
+passed.
+
 ## Self-review
 
 Round 1 (correctness/tests), over the full branch diff:
