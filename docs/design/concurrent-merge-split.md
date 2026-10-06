@@ -190,22 +190,29 @@ The cascade still runs only when this edit wins the element's LWW
 converge, but it tombstones text nobody deleted: a delete that is undone,
 or a merge that turned into a delete, reaches a concurrent split product
 whose content the editor never saw (`tree_split_cascade_regression_test.go`).
-The cost is one empty element in the shapes where both sides split the
-same boundary: the replica whose own delete won the LWW keeps its own split
-product, emptied because the moved text went to the other side's product,
-while on the other replica that product was born tombstoned.
+The cost is that some deletes stop short. Mostly this leaves one extra
+empty element on one replica, with text agreeing: in the #1408 shape the
+replica whose own delete won the LWW keeps its own split product, emptied
+because the moved text went to the other side's product, while on the
+other replica that product was born tombstoned. With a third replica in
+the race, a delete that lost the LWW can also leave deleted text on one
+replica; random races hit this rarely.
 
 Known limitations:
 
-- A concurrent delete with a newer ticket can overwrite the tombstone of a
-  sibling the editor merged back. The walk then stops there, as for a
-  sibling the editor did not see removed, and a product split off it
-  concurrently survives on that replica only.
+- `removedAt` keeps only the newest tombstone. When a concurrent delete of
+  a sibling the editor merged back has a newer ticket than the merge, its
+  tombstone is the one kept, the walk stops there as for a sibling the
+  editor did not see removed, and a product split off that sibling
+  concurrently survives on that replica only. Enter, Undo (which merges
+  the split product back) and a delete of both spans, against a concurrent
+  Enter at the same place, is one such case; `main` converges there.
 - A sibling merged back by a change the editor did not know ends the walk.
-  A product split off it concurrently survives on a replica that applies
-  the delete before the merge, and is born tombstoned (split off a merged
-  element) on one that applies the merge first. The old walk hid this
-  merge-vs-split divergence in some delivery orders, not all.
+  A product split off it concurrently survives on the splitter's own
+  replica in every delivery order, while elsewhere it can be born
+  tombstoned (split off a merged element). Over the six delivery orders of
+  such a three-replica race `main` diverges in three and this rule in all
+  six; joining paragraphs instead of spans behaves the same.
 
 ### §4.2 Moved Children Guard
 

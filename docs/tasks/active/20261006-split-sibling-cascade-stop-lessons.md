@@ -35,3 +35,17 @@
   actor orders, an exact one-empty-span residue check and GC on that path;
   the docs describe the residue as observed. Two shapes stay as known
   limitations above, with their reason.
+- Round 2 (design fit, docs): no blocking findings. It confirmed the walk
+  tombstones a subset of what `main` did for any tree state, the lazy
+  `enclosed` traversal uses the outer range and is read-only, snapshots keep
+  every field the rule reads (3000 seeds with undo, 0 mismatches), and Go and
+  JS match. A 10,000-seed fuzz per setting (plain, undo, snapshot reload,
+  both) found no seed where this change loses a letter that `main` kept
+  without `main` already losing text. Fixed here: the residue count (12 of
+  40, not 6, and not only same-boundary splits), the cost of the LWW gate
+  (deleted text can survive with three replicas), both limitations' wording
+  (Enter + Undo + delete against Enter; the merge-vs-split order count) and
+  the version the cascade shipped in (v0.7.4). Out of scope, noted for a
+  separate issue: Go's Phase 3 range narrowing lacks the `toLeft != toParent`
+  guard that JS has (#1237 in yorkie-js-sdk).
+

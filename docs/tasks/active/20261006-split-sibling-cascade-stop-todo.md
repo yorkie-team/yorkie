@@ -22,7 +22,7 @@ because that delete lost the LWW there.
 The same walk loses the text of a concurrent Enter at the start of a known
 split sibling that the deleter did not delete (`main` diverges there too).
 
-The cascade dates from #1722 (yorkie-js-sdk#1202, v0.7.10). Editors hit it
+The cascade dates from #1722 (yorkie-js-sdk#1202, v0.7.4). Editors hit it
 once `splitByPath` became a real split in v0.7.23 (yorkie-js-sdk#1358).
 
 ## Plan
@@ -43,19 +43,27 @@ once `splitByPath` became a real split in v0.7.23 (yorkie-js-sdk#1358).
 
 ## Known Limitations
 
-- Six of the forty cascade runs leave one empty element on one replica, all
-  where both sides split the same boundary. In the #1408 shape the replica
-  whose own delete won the LWW keeps its own split product, emptied because
-  the moved text went to the other side's product; on the other replica that
-  product was born tombstoned. Text agrees.
-- `removedAt` keeps only the newest tombstone. If a concurrent delete with a
-  newer ticket overwrote the tombstone of a sibling the editor merged back,
-  the walk stops there and a product split off it concurrently survives on
-  that replica only (`main` converges here).
-- A sibling merged back by a change the editor did not know ends the walk.
-  Whether a product split off it concurrently survives then depends on
-  delivery order (born tombstoned when the merge arrives first). `main` hid
-  this merge-vs-split divergence in two of three orders.
+- 12 of the 40 cascade runs leave one extra empty element on one replica;
+  text agrees. Eight are the two #1408 shapes, where both sides split the
+  same boundary: the replica whose own delete won the LWW keeps its own
+  split product, emptied because the moved text went to the other side's
+  product, while on the other replica that product was born tombstoned. The
+  other four are "split at different offsets + drop left piece" and "split +
+  drop left piece against deleting the whole span" (the latter also on
+  `main`).
+- With a third replica, a delete that lost the LWW can leave deleted text on
+  one replica. In 10,000 random two-round races (round 2 review) 9 seeds do
+  this where `main` leaves none; in the two traced, `main`'s over-delete hid
+  an existing divergence.
+- `removedAt` keeps only the newest tombstone. If a concurrent delete of a
+  sibling the editor merged back has a newer ticket than the merge, the walk
+  stops there and a product split off it concurrently survives on that
+  replica only. Enter, Undo and a delete of both spans against a concurrent
+  Enter at the same place is one such case; `main` converges there.
+- A sibling merged back by a change the editor did not know ends the walk. A
+  product split off it concurrently survives on the splitter's own replica
+  in every delivery order. Over six delivery orders `main` diverges in
+  three, this change in all six; paragraph joins behave the same.
 - On a replica that already deleted an element, a concurrent split product
   of it is born tombstoned, so text typed into it there stays hidden (the
   "Enter + type vs Enter" regression case). Not the cascade.
