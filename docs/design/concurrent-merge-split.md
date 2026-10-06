@@ -141,6 +141,14 @@ Follow `fromLeft`'s `InsNextID` chain to find a split sibling whose
 parent is `toParent`, and use that sibling as the `collectBetween`
 from-position.
 
+Skip the narrowing when `toLeft == toParent`, the to position being the
+leftmost child position (offset 0) of `toParent`. Joining two paragraphs
+right after an Enter in the middle of a span names exactly that: from the
+end of the first paragraph to the start of the second. The split sibling in
+`toParent` is then its first child, so the narrowed from-position would lie
+after the to-position, a backwards range that drops the merge. The JS SDK
+has had this guard since yorkie-js-sdk#1237.
+
 Only the `collectBetween` range is narrowed. The original
 `fromParent`/`fromLeft` are preserved for merge, split, and insert
 steps so that content is inserted at the editor's intended position.

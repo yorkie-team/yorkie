@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Join paragraphs right after an Enter in the middle of a span (2026-10-06) | [20261006-join-after-split-leftmost-todo.md](./active/20261006-join-after-split-leftmost-todo.md) | [20261006-join-after-split-leftmost-lessons.md](./active/20261006-join-after-split-leftmost-lessons.md) |
 | Reject indexes that split a UTF-16 surrogate pair (2026-10-05) | [20261005-reject-mid-surrogate-index-todo.md](./active/20261005-reject-mid-surrogate-index-todo.md) | [20261005-reject-mid-surrogate-index-lessons.md](./active/20261005-reject-mid-surrogate-index-lessons.md) |
 | Server-side gate for MaxSizePerDocument (2026-10-03) | [20261003-server-side-document-size-gate-todo.md](./active/20261003-server-side-document-size-gate-todo.md) | [20261003-server-side-document-size-gate-lessons.md](./active/20261003-server-side-document-size-gate-lessons.md) |
 | Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
