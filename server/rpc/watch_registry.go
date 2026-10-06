@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	goerrors "errors"
 	"fmt"
 	"sync"
@@ -83,9 +84,16 @@ func (w *watchStream) covers(keys map[string]struct{}) bool {
 }
 
 // decisionKey identifies what the webhook is asked about for this stream, so
-// streams asking the same question share one webhook call.
+// streams asking the same question share one webhook call. The attributes
+// are keyed by their JSON, as the webhook receives them: %v would print a
+// pointer field such as PresenceOnly as an address, and streams asking the
+// same question would stop sharing a call.
 func (w *watchStream) decisionKey() string {
-	return fmt.Sprintf("%s\x00%s\x00%v", w.token, w.access.Method, w.access.Attributes)
+	attrs, err := json.Marshal(w.access.Attributes)
+	if err != nil {
+		attrs = fmt.Appendf(nil, "%v", w.access.Attributes)
+	}
+	return w.token + "\x00" + string(w.access.Method) + "\x00" + string(attrs)
 }
 
 // watchRegistry tracks the Watch streams this node serves, so their

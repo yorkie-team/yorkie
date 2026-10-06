@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -118,9 +119,7 @@ func PushPull(
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
-
-	// 00-1. Bind the pushed changes to the authenticated client.
-	if err := validateChangeActors(clientInfo, reqPack); err != nil {
+	if err := validateChangeActors(ctx, clientInfo, clientInfo.Checkpoint(docKey.DocID), docKey, reqPack); err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
@@ -245,27 +244,6 @@ func PushPull(
 	return resPack, nil
 }
 
-// validateChangeActors refuses a pack whose changes are stamped with an actor
-// that is not the pushing client's. The actor comes off the wire verbatim
-// (converter.FromChanges) and nothing downstream rewrites it: Change.SetActor
-// runs on the client only. Stored under another actor, a change is attributed
-// to a peer, counted into that peer's lamport lane in the version vector, and
-// -- since IsOwnActor is the same predicate self-echo dedup, min-VV and GC key
-// on -- can let GC advance past tombstones the real owner has not seen.
-func validateChangeActors(clientInfo *database.ClientInfo, reqPack *change.Pack) error {
-	for _, cn := range reqPack.Changes {
-		if !clientInfo.IsOwnActor(types.IDFromActorID(cn.ID().ActorID())) {
-			return connect.NewError(
-				connect.CodeInvalidArgument,
-				errors.InvalidArgument("change actor must be the pushing client").
-					WithCode("ErrInvalidChangeActor"),
-			)
-		}
-	}
-
-	return nil
-}
-
 func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change.Pack) error {
 	// The clientSeq of the changes in the request pack must be continuous.
 	expectedClientSeq := cpBeforePush.ClientSeq + 1
@@ -282,6 +260,75 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 		}
 
 		expectedClientSeq++
+	}
+
+	return nil
+}
+
+// validateChangeActors refuses a pushed change stamped with an actor the
+// pushing client row does not hold, with the ErrActorMismatch that the Watch
+// path already returns for the same compare (yorkie_server.go Watch, "so a
+// client cannot subscribe under another client's presence identity"). Without
+// it a change stored under another client's actor is applied by every peer,
+// with presence keyed on that actor, while the owner's pull drops it as its own
+// echo (pullChangeInfos, IsOwnActor) and never converges (#2120).
+//
+// What the compare establishes: a peer learns a collaborator's actor off the
+// wire — every pulled change carries it — but not the client_id or client key
+// behind it, since StableActorID is a digest of (project, client key) with no
+// preimage. Stamping a foreign actor is therefore the one identity move a
+// plain collaborator can make, and it is what this refuses. What it does not
+// establish: client_id is not a credential, so a caller that already holds a
+// victim's identifier resolves a clientInfo for which the victim's actor is
+// its own; and two honest sessions of one client key share a stable actor by
+// design, so they are indistinguishable here. Those remain open and need an
+// authenticated client identity, tracked in #2114.
+//
+// Only changes the server would store (clientSeq above the checkpoint) are
+// checked; pushPack drops the others. The initial actor is accepted: it is the
+// documented value of a pre-attach edit in a client that skipped SetActor and
+// of the tickets a declined re-issue leaves behind (see
+// docs/design/pre-attach-ticket-reissue.md), and it is no client's own actor on
+// pull, so a change stamped with it reaches every client and suppresses none.
+// The server's own writers hold it as their session id (IsServerClient), so
+// IsOwnActor accepts them regardless.
+//
+// Only the change ID is refused on, which is what both the pull dedup
+// (ChangeInfo.ActorID) and the presence keying read. An operation's executedAt
+// ticket keeps the actor it was minted under, which a declined re-issue
+// legitimately leaves behind, so a mismatch there is logged instead.
+func validateChangeActors(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	cpBeforePush change.Checkpoint,
+	docKey types.DocRefKey,
+	reqPack *change.Pack,
+) error {
+	foreign := func(actorID time.ActorID) bool {
+		return actorID != time.InitialActorID && !clientInfo.IsOwnActor(types.IDFromActorID(actorID))
+	}
+
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			continue
+		}
+
+		if foreign(cn.ID().ActorID()) {
+			return clients.ErrActorMismatch
+		}
+
+		for _, op := range cn.Operations() {
+			executedAt := op.ExecutedAt()
+			if executedAt == nil || !foreign(executedAt.ActorID()) {
+				continue
+			}
+
+			logging.From(ctx).Warnf(
+				"foreign actor in pushed operation: doc(%s), client(%s), clientSeq(%d), actor(%s)",
+				docKey.DocID, clientInfo.ID, cn.ID().ClientSeq(), executedAt.ActorID(),
+			)
+			break
+		}
 	}
 
 	return nil

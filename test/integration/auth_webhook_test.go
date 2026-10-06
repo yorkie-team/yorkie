@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -751,6 +752,309 @@ func TestAuthWebhookWatchAttributes(t *testing.T) {
 		Key:  doc.Key().String(),
 		Verb: types.Read,
 	}}, watchAttrs)
+}
+
+// TestAuthWebhookPresenceOnly verifies that a webhook can let a read-only
+// member attach, detach and send presence while rejecting its edits, by
+// allowing a change pack that is presenceOnly.
+//
+// Attach always carries the initial presence and detach the presence clear,
+// so both report verb rw. A webhook that rejects rw for a read-only member
+// blocks every attach and detach, and one that allows rw on AttachDocument
+// lets a root edit made before the attach ride along with it.
+func TestAuthWebhookPresenceOnly(t *testing.T) {
+	ctx := context.Background()
+
+	// The attributes are recorded per token, so an assertion about what the
+	// reader was asked is not satisfied by the writer being asked the same
+	// thing about the same document.
+	type call struct {
+		token  string
+		method types.Method
+	}
+
+	var mu sync.Mutex
+	seen := map[call][]types.AccessAttribute{}
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, err := types.NewAuthWebhookRequest(r.Body)
+		assert.NoError(t, err)
+
+		mu.Lock()
+		seen[call{req.Token, req.Method}] = append(seen[call{req.Token, req.Method}], req.Attributes...)
+		mu.Unlock()
+
+		// The reader may read and hold presence but must not edit.
+		res := types.AuthWebhookResponse{Allowed: true}
+		for _, attr := range req.Attributes {
+			presenceOnly := attr.PresenceOnly != nil && *attr.PresenceOnly
+			if req.Token == "reader" && attr.Verb == types.ReadWrite && !presenceOnly {
+				res = types.AuthWebhookResponse{Allowed: false, Reason: "read-only member"}
+				w.WriteHeader(http.StatusForbidden)
+				break
+			}
+		}
+		_, err = res.Write(w)
+		assert.NoError(t, err)
+	}))
+	defer authServer.Close()
+
+	svr, err := server.New(helper.TestConfig())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer func() { adminCli.Close() }()
+	project, err := adminCli.CreateProject(ctx, "presence-only")
+	assert.NoError(t, err)
+	project.AuthWebhookURL = authServer.URL
+	_, err = adminCli.UpdateProject(
+		ctx,
+		project.ID.String(),
+		&types.UpdatableProjectFields{
+			AuthWebhookURL:     &project.AuthWebhookURL,
+			AuthWebhookMethods: allWebhookMethods,
+		},
+	)
+	assert.NoError(t, err)
+
+	dial := func(token string) *client.Client {
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithToken(token),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		return cli
+	}
+	writer, reader := dial("writer"), dial("reader")
+	defer func() { assert.NoError(t, writer.Close()) }()
+	defer func() { assert.NoError(t, reader.Close()) }()
+
+	yes, no := true, false
+
+	// createDoc has the writer bring the document into being, which a reader
+	// may not do: creating the document is a write the pack does not show,
+	// and the attach that creates it is asked for that write.
+	createDoc := func(t *testing.T, docKey key.Key, opts ...any) {
+		doc := document.New(docKey)
+		assert.NoError(t, writer.Attach(ctx, doc, opts...))
+		assert.NoError(t, writer.Detach(ctx, doc))
+	}
+
+	t.Run("a reader cannot create the document", func(t *testing.T) {
+		docKey := helper.TestKey(t)
+
+		// The pack of this attach is presence only, so the first check allows
+		// it; the attach would create the document, so it is asked again for
+		// a document write and rejected.
+		err := reader.Attach(ctx, document.New(docKey))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+		mu.Lock()
+		asked := seen[call{"reader", types.AttachDocument}]
+		mu.Unlock()
+		assert.Contains(t, asked, types.AccessAttribute{
+			Key: docKey.String(), Verb: types.ReadWrite, PresenceOnly: &yes,
+		})
+		// The second question carries no presenceOnly at all, so a webhook
+		// that treats a missing field as "not presence only" rejects it.
+		assert.Contains(t, asked, types.AccessAttribute{
+			Key: docKey.String(), Verb: types.ReadWrite, PresenceOnly: nil,
+		})
+
+		// Nothing was created: the attach is rejected again rather than
+		// finding the document its first attempt would have inserted. Once
+		// the writer creates it, the same attach passes.
+		err = reader.Attach(ctx, document.New(docKey))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		createDoc(t, docKey)
+		doc := document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc))
+		assert.NoError(t, reader.Detach(ctx, doc))
+	})
+
+	t.Run("a reader attaches, sends presence and detaches", func(t *testing.T) {
+		docKey := helper.TestKey(t)
+		createDoc(t, docKey)
+
+		doc := document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			p.Set("cursor", "1")
+			return nil
+		}))
+		assert.NoError(t, reader.Sync(ctx))
+		assert.NoError(t, reader.Detach(ctx, doc))
+
+		// The verb is unchanged: presence is still reported as a write.
+		mu.Lock()
+		defer mu.Unlock()
+		want := types.AccessAttribute{Key: doc.Key().String(), Verb: types.ReadWrite, PresenceOnly: &yes}
+		for _, m := range []types.Method{types.AttachDocument, types.PushPull, types.DetachDocument} {
+			assert.Contains(t, seen[call{"reader", m}], want, m)
+		}
+	})
+
+	t.Run("a reader's edit before attach is rejected with the attach", func(t *testing.T) {
+		docKey := helper.TestKey(t)
+		doc := document.New(docKey)
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("x", 1)
+			return nil
+		}))
+		err := reader.Attach(ctx, doc)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+		other := document.New(docKey)
+		assert.NoError(t, writer.Attach(ctx, other))
+		assert.Equal(t, `{}`, other.Marshal())
+		assert.NoError(t, writer.Detach(ctx, other))
+	})
+
+	t.Run("a reader cannot remove the document", func(t *testing.T) {
+		docKey := helper.TestKey(t)
+		createDoc(t, docKey)
+
+		doc := document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc))
+		err := reader.Remove(ctx, doc)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		assert.NoError(t, reader.Detach(ctx, doc))
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Contains(t, seen[call{"reader", types.RemoveDocument}], types.AccessAttribute{
+			Key: doc.Key().String(), Verb: types.ReadWrite, PresenceOnly: &no,
+		})
+	})
+
+	t.Run("a reader cannot bind a schema but can attach under one", func(t *testing.T) {
+		const schemaKey = "note@1"
+		noteRules := []types.Rule{{Path: "$.title", Type: "string"}}
+		assert.NoError(t, adminCli.CreateSchema(
+			ctx,
+			project.Name,
+			"note",
+			1,
+			"type Document = {title: string;};",
+			noteRules,
+		))
+
+		// An attach that finds no client attached and names a schema the
+		// document is not bound to binds it, whether its pack is presence
+		// only or, for a presence-disabled document, empty. The documents
+		// exist, so what rejects these attaches is the binding, not the
+		// create.
+		unbound, disabled := helper.TestKey(t, 1), helper.TestKey(t, 3)
+		createDoc(t, unbound)
+		createDoc(t, disabled, client.WithDisablePresence())
+
+		err := reader.Attach(ctx, document.New(unbound), client.WithSchema(schemaKey))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		err = reader.Attach(
+			ctx,
+			document.New(disabled),
+			client.WithSchema(schemaKey),
+			client.WithDisablePresence(),
+		)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+		// The rejection bound nothing: the document still has no ruleset.
+		after := document.New(unbound)
+		assert.NoError(t, writer.Attach(ctx, after))
+		assert.Equal(t, []types.Rule(nil), after.SchemaRules)
+		assert.NoError(t, writer.Detach(ctx, after))
+
+		// Once a writer has bound it, attaching under the schema binds
+		// nothing and the reader is handed the binding that is already there.
+		boundKey := helper.TestKey(t, 2)
+		bound := document.New(boundKey)
+		assert.NoError(t, writer.Attach(ctx, bound, client.WithSchema(schemaKey)))
+		doc := document.New(boundKey)
+		assert.NoError(t, reader.Attach(ctx, doc, client.WithSchema(schemaKey)))
+		assert.Equal(t, noteRules, doc.SchemaRules)
+		assert.NoError(t, reader.Detach(ctx, doc))
+		assert.NoError(t, writer.Detach(ctx, bound))
+	})
+
+	t.Run("a reader attaching alone keeps the bound schema", func(t *testing.T) {
+		// With an attachment limit, every attach that finds no one attached
+		// reaches the rebind; a reader naming the bound schema or none must
+		// pass without being asked for a write, and one naming another
+		// schema must not.
+		limit := 10
+		_, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			MaxAttachmentsPerDocument: &limit,
+		})
+		assert.NoError(t, err)
+		defer func() {
+			off := 0
+			_, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+				MaxAttachmentsPerDocument: &off,
+			})
+			assert.NoError(t, err)
+		}()
+		memoRules := []types.Rule{{Path: "$.title", Type: "string"}}
+		assert.NoError(t, adminCli.CreateSchema(
+			ctx,
+			project.Name,
+			"memo",
+			1,
+			"type Document = {title: string;};",
+			memoRules,
+		))
+
+		docKey := helper.TestKey(t)
+		bound := document.New(docKey)
+		assert.NoError(t, writer.Attach(ctx, bound, client.WithSchema("memo@1")))
+		assert.NoError(t, writer.Detach(ctx, bound))
+
+		// Naming the bound schema keeps it: the server hands back its
+		// ruleset, so the attach neither rebound nor unbound the document.
+		doc := document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc, client.WithSchema("memo@1")))
+		assert.Equal(t, memoRules, doc.SchemaRules)
+		assert.NoError(t, reader.Detach(ctx, doc))
+
+		// Naming none keeps it too, and the ruleset is still enforced: a
+		// write that violates it is rejected.
+		doc = document.New(docKey)
+		assert.NoError(t, reader.Attach(ctx, doc))
+		assert.Equal(t, memoRules, doc.SchemaRules)
+		assert.ErrorIs(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("title", 1)
+			return nil
+		}), document.ErrSchemaValidationFailed)
+		assert.NoError(t, reader.Detach(ctx, doc))
+
+		err = reader.Attach(ctx, document.New(docKey), client.WithSchema("note@1"))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+		// The rejected rebind left the binding alone.
+		after := document.New(docKey)
+		assert.NoError(t, writer.Attach(ctx, after))
+		assert.Equal(t, memoRules, after.SchemaRules)
+		assert.NoError(t, writer.Detach(ctx, after))
+	})
+
+	t.Run("a writer's edit is not presenceOnly", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, writer.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("x", 1)
+			return nil
+		}))
+		assert.NoError(t, writer.Sync(ctx))
+		assert.NoError(t, writer.Detach(ctx, doc))
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Contains(t, seen[call{"writer", types.PushPull}], types.AccessAttribute{
+			Key: doc.Key().String(), Verb: types.ReadWrite, PresenceOnly: &no,
+		})
+	})
 }
 
 func TestAuthWebhookInitialWatchDenied(t *testing.T) {

@@ -1678,7 +1678,8 @@ func (t *Tree) EditT(
 	return pairs, diff, err
 }
 
-// FindPos finds the position of the given index in the tree.
+// FindPos finds the position of the given index in the tree. It rejects an
+// index inside a surrogate pair with ErrInvalidUTF16Index.
 // (local) index -> (local) TreePos in indexTree -> (logical) TreePos in Tree
 func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	treePos, err := t.IndexTree.FindTreePos(offset) // local TreePos
@@ -1686,6 +1687,30 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 		return nil, err
 	}
 
+	if treePos.Node.IsText() &&
+		!isUTF16Boundary(treePos.Node.Value.Value, treePos.Offset) {
+		return nil, ErrInvalidUTF16Index
+	}
+
+	return toTreePos(treePos), nil
+}
+
+// FindPosUnchecked is FindPos without the surrogate pair check. It is for
+// indexes the document computed itself, such as an undo range reconciled
+// against a remote edit, which can land inside a pair through no fault of the
+// caller. Refusing such an index would only drop the undo, and it resolves
+// the way it did before the check existed.
+func (t *Tree) FindPosUnchecked(offset int) (*TreePos, error) {
+	treePos, err := t.IndexTree.FindTreePos(offset) // local TreePos
+	if err != nil {
+		return nil, err
+	}
+
+	return toTreePos(treePos), nil
+}
+
+// toTreePos converts a local TreePos in indexTree to a logical TreePos.
+func toTreePos(treePos *index.TreePos[*TreeNode]) *TreePos {
 	node, offset := treePos.Node, treePos.Offset
 	var leftNode *TreeNode
 
@@ -1710,7 +1735,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 			CreatedAt: leftNode.id.CreatedAt,
 			Offset:    leftNode.id.Offset + offset,
 		},
-	}, nil
+	}
 }
 
 // TreeEditReverseInfo is everything Edit reports for building the operation
@@ -1898,29 +1923,7 @@ func (t *Tree) Edit(
 	// and narrow the collectBetween range. The original fromParent/
 	// fromLeft are preserved for merge, split, and insert steps.
 	// VV-independent for clone/root consistency.
-	collectFromParent, collectFromLeft := fromParent, fromLeft
-	if fromLeft != fromParent && fromParent != toParent {
-		current := fromLeft
-		var walker insNextWalker
-		walker.visit(current)
-		for current.InsNextID != nil {
-			next := t.findFloorNode(current.InsNextID)
-			if next == nil || next.IsText() {
-				break
-			}
-			// Stop on a chain that loops back on itself; see insNextWalker.
-			if !walker.visit(next) {
-				break
-			}
-			if next.Index.Parent != nil &&
-				next.Index.Parent.Value == toParent {
-				collectFromLeft = next
-				collectFromParent = toParent
-				break
-			}
-			current = next
-		}
-	}
+	collectFromParent, collectFromLeft := t.narrowCollectRange(fromParent, fromLeft, toParent, toLeft)
 
 	// Captured here, after Phase 3 -- matching JS's own capture point
 	// exactly (crdt/tree.ts:1872, after findNodesAndSplitText(to) and the
@@ -2856,6 +2859,44 @@ func (t *Tree) propagateMergeDeletes(
 		}
 	}
 	return pairs
+}
+
+// narrowCollectRange returns the from-position Phase 3 hands to
+// collectBetween: fromParent/fromLeft, or the split sibling of fromLeft that
+// sits in toParent when the range crosses a concurrent element split.
+func (t *Tree) narrowCollectRange(
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
+) (*TreeNode, *TreeNode) {
+	collectFromParent, collectFromLeft := fromParent, fromLeft
+	if fromLeft != fromParent && fromParent != toParent {
+		current := fromLeft
+		var walker insNextWalker
+		walker.visit(current)
+		for current.InsNextID != nil {
+			next := t.findFloorNode(current.InsNextID)
+			if next == nil || next.IsText() {
+				break
+			}
+			// Stop on a chain that loops back on itself; see insNextWalker.
+			if !walker.visit(next) {
+				break
+			}
+			if next.Index.Parent != nil &&
+				next.Index.Parent.Value == toParent {
+				// Skip narrowing when toLeft == toParent (leftmost child
+				// position, offset 0). The narrowed collectFromLeft would
+				// be a child at offset >= 1, a backwards range that
+				// suppresses the intended merge.
+				if toLeft != toParent {
+					collectFromLeft = next
+					collectFromParent = toParent
+				}
+				break
+			}
+			current = next
+		}
+	}
+	return collectFromParent, collectFromLeft
 }
 
 // collectBetween collects nodes that are marked as removed or moved.

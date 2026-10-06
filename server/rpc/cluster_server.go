@@ -127,6 +127,9 @@ func (s *clusterServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:            types.SyncModePushOnly,
@@ -171,6 +174,9 @@ func (s *clusterServer) CompactDocument(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	if err := packs.Compact(ctx, s.backend, projectID, docInfo, req.Msg.Force); err != nil {
 		// If the document is attached, we don't return an error.
@@ -210,6 +216,9 @@ func (s *clusterServer) PurgeDocument(
 	})
 	if err != nil {
 		return nil, err
+	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
 	}
 
 	if err := packs.Purge(ctx, s.backend, projectID, docInfo); err != nil {

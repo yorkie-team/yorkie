@@ -167,6 +167,8 @@ cluster.WithClusterSecret(b.Config.ClusterSecret)
 
 When running a single Yorkie server (no cluster), `ClusterSecret` is empty by default. The interceptor allows all requests when the secret is empty, maintaining backward compatibility with existing deployments.
 
+Because an empty secret leaves ClusterService open on the public RPC port, `Yorkie.Start` logs a warning when `ClusterSecret` is empty. It does not refuse to start, so single-node and local setups keep working with the default.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -174,7 +176,7 @@ When running a single Yorkie server (no cluster), `ClusterSecret` is empty by de
 | Secret transmitted in plaintext over h2c | Acceptable within VPC. If cross-VPC communication is needed, enable TLS with `--cluster-secure` (already exists) |
 | Secret leaked in logs or error messages | Never log the secret value. Error messages say "invalid cluster secret", not the actual value |
 | All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD |
-| Empty secret allows all requests | Backward compatible. Operators must set a secret in production to enable authentication |
+| Empty secret allows all requests | Backward compatible. Operators must set a secret in production to enable authentication; the server logs a warning at startup while it is empty |
 
 ### Design Decisions
 

@@ -74,23 +74,25 @@ func TestLeavingChangePackAuthorizesBeforeDropping(t *testing.T) {
 	ctx := logging.With(context.Background(), logging.DefaultLogger())
 
 	t.Run("a pack the boundary takes", func(t *testing.T) {
-		pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 1, false))
+		pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 1, false), false)
 		require.NoError(t, err)
 		assert.Equal(t, -1, refusedFrom)
 		assert.True(t, pack.HasChanges())
 	})
 
 	t.Run("a refused pack is still a write when it is authorized", func(t *testing.T) {
-		pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 1, true))
+		pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 1, true), false)
 		require.NoError(t, err)
 		require.Equal(t, 0, refusedFrom, "the crafted pack must reach the lenient path")
 
 		// What DetachDocument and RemoveDocument pass to auth.VerifyAccess,
 		// evaluated before they truncate pack.Changes.
+		no := false
 		assert.True(t, pack.HasChanges())
 		assert.Equal(t, []types.AccessAttribute{{
-			Key:  "leaving",
-			Verb: types.ReadWrite,
+			Key:          "leaving",
+			Verb:         types.ReadWrite,
+			PresenceOnly: &no,
 		}}, auth.AccessAttributes(pack))
 
 		// And the truncation the callers then apply leaves nothing of it.
@@ -108,7 +110,7 @@ func TestLeavingChangePackAuthorizesBeforeDropping(t *testing.T) {
 func TestLeavingChangePackKeepsChangesBeforeTheRefusedOne(t *testing.T) {
 	ctx := logging.With(context.Background(), logging.DefaultLogger())
 
-	pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 3, true))
+	pack, refusedFrom, err := fromLeavingChangePack(ctx, "c1", leavingPack(t, 3, true), false)
 	require.NoError(t, err)
 	require.Equal(t, 2, refusedFrom)
 
