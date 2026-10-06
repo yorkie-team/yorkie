@@ -741,18 +741,18 @@ func TestTreeSplitReverseAfterRemoteSplitHistory(t *testing.T) {
 		}))
 	}
 	// B creates split lineage, which A then edits through remote positions.
-	runEdit(b, 3, 3, 2, "")
+	runEdit(b, 8, 8, 2, "")
 	exchange()
-	runEdit(a, 2, 4, 0, "😀")
+	runEdit(a, 1, 3, 0, "😀")
 	runEdit(a, 5, 7, 0, "😀")
 	exchange()
-	before := "<r><section><p>😀</p>😀</section><section><p>😀b</p><p>c😀d</p></section></r>"
+	before := "<r><section>😀<p></p>😀b</section><section><p>c😀d</p></section></r>"
 	require.Equal(t, before, a.Root().GetTree("tree").ToXML())
 	require.Equal(t, before, b.Root().GetTree("tree").ToXML())
 	// Index 4 is a valid caller boundary. The reverse, however, computes
 	// [4,8), and its endpoint 8 is inside the direct section text after split.
 	runEdit(b, 4, 4, 2, "")
-	after := "<r><section><p>😀</p></section><section>😀</section><section><p></p><p>😀b</p><p>c😀d</p></section></r>"
+	after := "<r><section>😀<p></p></section><section>😀b</section><section><p></p><p>c😀d</p></section></r>"
 	require.Equal(t, after, b.Root().GetTree("tree").ToXML())
 	_, err := b.Root().GetTree("tree").Tree.FindPos(8)
 	require.ErrorIs(t, err, crdt.ErrInvalidUTF16Index)
