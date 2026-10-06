@@ -2900,12 +2900,14 @@ func (t *Tree) collectBetween(
 	// enclosed reports whether the range covers the element whole, start and
 	// end tokens both. Collected on first use; most deletes never ask.
 	var enclosedNodes map[*TreeNode]bool
+	// A failed collection leaves the memo empty, which would silently
+	// under-apply the cascade. Record the error and fail the whole collection
+	// instead of answering from a memo that was never filled.
+	var enclosedErr error
 	enclosed := func(n *TreeNode) bool {
 		if enclosedNodes == nil {
 			enclosedNodes = make(map[*TreeNode]bool)
-			// The range already resolved for the traversal below, so this
-			// one cannot fail differently.
-			_ = t.traverseInPosRange(
+			if err := t.traverseInPosRange(
 				fromParent, fromLeft, toParent, toLeft,
 				func(token index.TreeToken[*TreeNode], ended bool) {
 					if token.TokenType == index.Start && ended {
@@ -2913,7 +2915,9 @@ func (t *Tree) collectBetween(
 					}
 				},
 				true,
-			)
+			); err != nil {
+				enclosedErr = err
+			}
 		}
 		return enclosedNodes[n]
 	}
@@ -2988,6 +2992,9 @@ func (t *Tree) collectBetween(
 		true,
 	); err != nil {
 		return nil, nil, nil, err
+	}
+	if enclosedErr != nil {
+		return nil, nil, nil, enclosedErr
 	}
 
 	return toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, nil

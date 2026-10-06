@@ -48,4 +48,14 @@
   the version the cascade shipped in (v0.7.4). Out of scope, noted for a
   separate issue: Go's Phase 3 range narrowing lacks the `toLeft != toParent`
   guard that JS has (#1237 in yorkie-js-sdk).
+- Round 3 (the two remaining escapes, measured rather than argued): dropping
+  `seenGone` and stopping at every known sibling makes the rule a pure
+  function of creation tickets and the range, but all four runs of "merge the
+  split sibling back and delete, against splitting it" then diverge with "d"
+  live on one replica only. Dropping the `canDelete` gate so the cascade also
+  runs on a lost LWW fails all five `TestTreeSplitSiblingCascadeKeepsText`
+  cases. Both escapes are therefore closed with the single-slot `removedAt`
+  the data model keeps today; the two limitations above stand. Fixed here: the
+  lazy `enclosed` memo no longer swallows its traversal error, which would
+  have left an empty memo and a silently short cascade.
 
