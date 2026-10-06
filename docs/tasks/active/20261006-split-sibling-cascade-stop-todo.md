@@ -50,7 +50,9 @@ once `splitByPath` became a real split in v0.7.23 (yorkie-js-sdk#1358).
   product, while on the other replica that product was born tombstoned. The
   other four are "split at different offsets + drop left piece" and "split +
   drop left piece against deleting the whole span" (the latter also on
-  `main`).
+  `main`). The product is alive on one side and tombstoned on the other, so
+  the shapes differ too; `TestTreeSplitSiblingCascadeResidueConverges` is the
+  skipped reproducer that asserts the convergence this rule does not reach.
 - With a third replica, a delete that lost the LWW can leave deleted text on
   one replica. In 10,000 random two-round races (round 2 review) 9 seeds do
   this where `main` leaves none; in the two traced, `main`'s over-delete hid

@@ -268,3 +268,34 @@ func TestTreeSplitSiblingCascade(t *testing.T) {
 		}
 	}
 }
+
+// TestTreeSplitSiblingCascadeResidueConverges is the reproducer for the
+// empty-span residue §4.1 leaves, which TestTreeSplitSiblingCascade accepts
+// via its emptySpanResidue flag rather than fails on. Stopping the cascade at
+// a sibling the editor saw alive keeps the concurrent split product nobody
+// deleted alive on the replica whose own delete won the element's LWW; on the
+// other replica that product is born tombstoned (`split.removedAt =
+// n.removedAt`, tree.go). The two trees then differ by one empty span, with
+// text agreeing. Closing it needs the tombstone record to keep every delete
+// rather than the newest — a data model, snapshot encoding and JS-port change
+// past this rule; see the limitations in §4.1 of
+// docs/design/concurrent-merge-split.md.
+func TestTreeSplitSiblingCascadeResidueConverges(t *testing.T) {
+	t.Skip("still reproduces: breaking the cascade at a known-alive sibling " +
+		"leaves a concurrent split product alive on one replica and " +
+		"tombstoned on the other")
+
+	docs := cascadeReplicas(t, []string{"abc", "de"}, false)
+	for _, doc := range docs {
+		require.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			tree.EditByPath([]int{0, 1, 0}, []int{0, 1, 0}, nil, 1)
+			tree.EditByPath([]int{0, 1}, []int{0, 2}, nil, 0)
+			return nil
+		}))
+	}
+	exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+	assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]), "XML diverged")
+	assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]), "shape diverged")
+}

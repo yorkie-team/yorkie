@@ -213,6 +213,12 @@ replica; random races hit this rarely.
 
 Known limitations:
 
+- The residue is state divergence, not only a cosmetic extra element: the
+  product is alive on one replica and tombstoned on the other, so the trees
+  differ in shape as well as XML. `main` converged these shapes by deleting
+  the text too. `TestTreeSplitSiblingCascadeResidueConverges` is the skipped
+  reproducer asserting the convergence this rule does not reach; closing it
+  needs the multi-tombstone record described below.
 - `removedAt` keeps only the newest tombstone. When a concurrent delete of
   a sibling the editor merged back has a newer ticket than the merge, its
   tombstone is the one kept, the walk stops there as for a sibling the

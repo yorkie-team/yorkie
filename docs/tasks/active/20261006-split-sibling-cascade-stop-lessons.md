@@ -69,4 +69,14 @@
   with an undo cascades differently per replica. Both written down in §4.1
   and above. A field read for a causal decision needs its writers
   enumerated, not just its readers.
+- Round 5 (making the residue visible): the residue is divergence in shape as
+  well as XML — the product is alive on one replica
+  (`span#3:2:…:0[]`) and tombstoned on the other (`…:0x[]`), the latter from
+  `split.removedAt = n.removedAt` in `SplitElement`. A table flag that accepts
+  divergence reads as a passing test; a skipped test that asserts the
+  convergence the rule does not reach reads as the open problem it is.
+  `TestTreeSplitSiblingCascadeResidueConverges` added for that, skipped.
+  Un-tombstoning the born-tombstoned product was considered and rejected: the
+  inheritance is what keeps the cascade convergent for products the deleter
+  did not know, so flipping it diverges the ordinary cascade instead.
 
