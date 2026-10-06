@@ -1923,29 +1923,7 @@ func (t *Tree) Edit(
 	// and narrow the collectBetween range. The original fromParent/
 	// fromLeft are preserved for merge, split, and insert steps.
 	// VV-independent for clone/root consistency.
-	collectFromParent, collectFromLeft := fromParent, fromLeft
-	if fromLeft != fromParent && fromParent != toParent {
-		current := fromLeft
-		var walker insNextWalker
-		walker.visit(current)
-		for current.InsNextID != nil {
-			next := t.findFloorNode(current.InsNextID)
-			if next == nil || next.IsText() {
-				break
-			}
-			// Stop on a chain that loops back on itself; see insNextWalker.
-			if !walker.visit(next) {
-				break
-			}
-			if next.Index.Parent != nil &&
-				next.Index.Parent.Value == toParent {
-				collectFromLeft = next
-				collectFromParent = toParent
-				break
-			}
-			current = next
-		}
-	}
+	collectFromParent, collectFromLeft := t.narrowCollectRange(fromParent, fromLeft, toParent, toLeft)
 
 	// Captured here, after Phase 3 -- matching JS's own capture point
 	// exactly (crdt/tree.ts:1872, after findNodesAndSplitText(to) and the
@@ -2881,6 +2859,44 @@ func (t *Tree) propagateMergeDeletes(
 		}
 	}
 	return pairs
+}
+
+// narrowCollectRange returns the from-position Phase 3 hands to
+// collectBetween: fromParent/fromLeft, or the split sibling of fromLeft that
+// sits in toParent when the range crosses a concurrent element split.
+func (t *Tree) narrowCollectRange(
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
+) (*TreeNode, *TreeNode) {
+	collectFromParent, collectFromLeft := fromParent, fromLeft
+	if fromLeft != fromParent && fromParent != toParent {
+		current := fromLeft
+		var walker insNextWalker
+		walker.visit(current)
+		for current.InsNextID != nil {
+			next := t.findFloorNode(current.InsNextID)
+			if next == nil || next.IsText() {
+				break
+			}
+			// Stop on a chain that loops back on itself; see insNextWalker.
+			if !walker.visit(next) {
+				break
+			}
+			if next.Index.Parent != nil &&
+				next.Index.Parent.Value == toParent {
+				// Skip narrowing when toLeft == toParent (leftmost child
+				// position, offset 0). The narrowed collectFromLeft would
+				// be a child at offset >= 1, a backwards range that
+				// suppresses the intended merge.
+				if toLeft != toParent {
+					collectFromLeft = next
+					collectFromParent = toParent
+				}
+				break
+			}
+			current = next
+		}
+	}
+	return collectFromParent, collectFromLeft
 }
 
 // collectBetween collects nodes that are marked as removed or moved.

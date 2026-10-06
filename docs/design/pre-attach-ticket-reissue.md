@@ -216,7 +216,7 @@ re-issue clears them.
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |
 | `SetActor`, the fallback, rewrites shared change values in place | Pre-existing; the re-issue path replaces every structure instead, and no caller deep copies a document holding local changes |
-| The server trusts a pushed change's actor | Out of scope, tracked in #2114 |
+| A client pushes a change under another client's actor | `PushPull` refuses it with `ErrActorMismatch` (`validateChangeActors`, #2120). The initial actor stays accepted, which a declined re-issue needs; a caller holding a victim's `client_id` is still not separated — see Out of Scope |
 
 ### Design Decisions
 
@@ -229,11 +229,34 @@ re-issue clears them.
 
 ## Out of Scope
 
-The server does not bind a pushed change's actor to the authenticated client,
-so a forged actor can make another client drop a change on pull. Every change
-this design pushes carries the client's own actor, which makes a push-side
-check possible, but the client identities such a check would rely on
-(`client_id`, `StableActorID`) are not credentials. Tracked in #2114.
+Every change this design pushes carries the client's own actor, which makes a
+push-side compare possible, and `PushPull` runs one: `validateChangeActors`
+refuses a to-be-stored change whose ID names an actor the client row named in
+`client_id` does not hold, with the `ErrActorMismatch` the Watch path already
+returns for the same compare. That closes the reachable half of #2120 — a
+collaborator reads a peer's actor off every change it pulls, but
+`StableActorID` is a digest of (project, client key) with no preimage, so the
+actor is all it holds and stamping it is now refused.
+
+Two gaps stay open, because the compare is bound to an identifier rather than
+an authenticated principal:
+
+- `client_id` is not a credential, so a caller that already holds a victim's
+  identifier resolves a client row for which the victim's actor is its own.
+- A stable actor is shared by every session of one client key by design, so two
+  sessions of a key are indistinguishable here and one session's change still
+  lands in the other's pull dedup.
+
+The initial actor is accepted rather than refused: a client that skipped
+`SetActor` before attaching pushes pre-attach changes under it, a declined
+re-issue leaves initial-actor tickets inside operations, and it is no client's
+own actor on pull, so a change stamped with it reaches every client and
+suppresses none. An operation's `executedAt` ticket keeps the actor it was
+minted under and neither the pull dedup nor the presence keying reads it, so a
+mismatch there is logged instead of refused.
+
+Binding the actor to an authenticated client identity — which would close both
+gaps above — is tracked in #2114.
 
 ## Alternatives Considered
 

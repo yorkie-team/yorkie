@@ -117,6 +117,16 @@ func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	// ClusterService shares the public RPC port, and an empty secret lets
+	// every request through. Warn instead of refusing to start: single-node
+	// and local setups rely on the empty default.
+	if r.conf.Backend.ClusterSecret == "" {
+		logging.DefaultLogger().Warn(
+			"cluster secret is empty: ClusterService RPCs are not " +
+				"authenticated. Set --cluster-secret in production.",
+		)
+	}
+
 	if err := r.RegisterHousekeepingTasks(r.backend); err != nil {
 		return err
 	}

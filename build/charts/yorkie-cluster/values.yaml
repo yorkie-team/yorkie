@@ -18,7 +18,9 @@ yorkie:
     dbConnectionUri: ""
     dbName: yorkie-meta
     # Shared secret for authenticating inter-node cluster RPCs.
-    # If empty, all requests are allowed.
+    # If empty, all requests are allowed. Set it in production:
+    # ClusterService is reachable through the ingress gateway, since
+    # nodes call each other through it (--backend-gateway-addr).
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables

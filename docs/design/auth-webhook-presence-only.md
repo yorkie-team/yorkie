@@ -78,7 +78,7 @@ presenceOnly := pack.HasChanges() && pack.OperationsLen() == 0 && !pack.IsRemove
 | no changes | `r` | `false` |
 | presence only (attach, detach, cursor move) | `rw` | `true` |
 | at least one operation | `rw` | `false` |
-| removal (`IsRemoved`), with or without changes | `rw` | `false` |
+| removal (`RemoveDocument`), with or without changes | `rw` | `false` |
 
 `presenceOnly` is `true` only when the pack writes presence and nothing else.
 A webhook that enforces read-only members allows an entry when `verb` is `r`
@@ -91,6 +91,17 @@ webhook that allows presence-only packs on some methods but not on others
 accepts that presence on the method it allows. A webhook that reads
 only `verb` sees the same verbs as before, except that a removal is now `rw`,
 so it can still gate presence on its own by rejecting `rw`.
+
+`IsRemoved` here is the server's, not the client's. The handler sets it by
+the method right after decoding the pack: `true` for `RemoveDocument`, `false`
+for `AttachDocument`, `DetachDocument` and `PushPull`, whatever the client
+sent. Taking the client's flag would make the verb of a removal the client's
+choice, so a `RemoveDocument` without the flag and without changes would be
+asked as `r` and still remove, and it would let any pack method remove the
+document, past a webhook that gates only `RemoveDocument`. The SDKs set the
+flag only on `RemoveDocument`, so overriding it changes nothing for them. The
+removal that `RemoveOnDetach` makes sets the flag later, after the webhook was
+asked (see "Removal on the last detach").
 
 Methods that do not send a change pack build their attributes with
 `types.NewAccessAttributes`. That leaves the field nil, so it is not in the
@@ -196,6 +207,7 @@ would print the `*bool` as an address.
 | `presenceOnly`, not `hasOperations` | A rule "allow when there are no operations" would also allow a removal, which carries none. `presenceOnly` is false for a removal, so the read-only rule is a single check. |
 | `*bool` with `omitempty` | Every pack method sends an explicit value, and every other method leaves the field out, so a webhook can tell "not presence only" from "not a pack" and from an older server. |
 | Report removal as `rw` | Removing a document is a write. |
+| Decide removal by the method, not by the pack flag | The flag is the client's. Trusting it lets the client pick the verb of a removal and remove through methods the webhook does not gate (#2134, #2140). Overriding rather than rejecting a flag on the other methods keeps any client that sets it working. |
 | Do not ask the webhook before a `RemoveOnDetach` removal | The removal is the project's policy for a document no one is attached to, not the member's request. Asking would also fail the detach of a read-only member who leaves last, and deactivation, which has no caller token, removes the document the same way. |
 | Ask again before binding a schema | Whether the attach binds is known only after the document is looked up, which happens after the first check. Reporting every attach that names a schema as a write would block read-only members from every document that uses schemas. |
 | Ask again before creating the document | Same reason: whether the attach creates is known only after the lookup. Reporting every attach as a write would block read-only members from every document, which is the problem this change set out to fix. |

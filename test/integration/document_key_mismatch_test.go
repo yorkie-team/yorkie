@@ -36,9 +36,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/rpc"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -47,7 +50,9 @@ import (
 // RemoveDocument reject a request whose change pack names another document
 // than the one its DocumentId targets, and still accept the same request with
 // the target's own key. The auth webhook is asked about the pack's key, while
-// the request is applied to the DocumentId's document.
+// the request is applied to the DocumentId's document. The cluster service's
+// DetachDocument, CompactDocument and PurgeDocument take the same ID/key pair
+// and must reject it the same way.
 func TestChangePackKeyMismatch(t *testing.T) {
 	ctx := context.Background()
 	raw := v1connect.NewYorkieServiceClient(http.DefaultClient, "http://"+defaultServer.RPCAddr())
@@ -197,5 +202,78 @@ func TestChangePackKeyMismatch(t *testing.T) {
 		err = clusterCli.DetachDocument(ctx, project, actorID, types.ID(a.targetID), other)
 		assert.ErrorContains(t, err, rpc.ErrDocumentKeyMismatch.Error())
 		assert.NoError(t, clusterCli.DetachDocument(ctx, project, actorID, types.ID(a.targetID), target))
+	})
+
+	// clusterSetup stores {"x":1} in a fresh target document, detaches it,
+	// optionally removes it, and returns a cluster client and the target's
+	// DocInfo.
+	clusterSetup := func(t *testing.T, target key.Key, remove bool) (
+		*cluster.Client, *types.Project, *database.DocInfo,
+	) {
+		cli := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, cli)
+		doc := document.New(target)
+		require.NoError(t, cli[0].Attach(ctx, doc))
+		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("x", 1)
+			return nil
+		}))
+		require.NoError(t, cli[0].Sync(ctx))
+
+		project, err := defaultServer.DefaultProject(ctx)
+		require.NoError(t, err)
+		db := defaultServer.Backend().DB
+		info, err := db.FindDocInfoByKey(ctx, project.ID, target)
+		require.NoError(t, err)
+
+		if remove {
+			require.NoError(t, cli[0].Remove(ctx, doc))
+		} else {
+			require.NoError(t, cli[0].Detach(ctx, doc))
+		}
+		info, err = db.FindDocInfoByRefKey(ctx, info.RefKey())
+		require.NoError(t, err)
+
+		clusterCli, err := cluster.Dial(defaultServer.RPCAddr(), cluster.WithRPCTimeout(10*gotime.Second))
+		require.NoError(t, err)
+		t.Cleanup(clusterCli.Close)
+		return clusterCli, project, info
+	}
+
+	// mismatched returns a copy of info that keeps its ID but names k.
+	mismatched := func(info *database.DocInfo, k key.Key) *database.DocInfo {
+		m := *info
+		m.Key = k
+		return &m
+	}
+
+	t.Run("cluster CompactDocument", func(t *testing.T) {
+		target, other := helper.TestKey(t, 1), helper.TestKey(t, 2)
+		clusterCli, project, info := clusterSetup(t, target, false)
+
+		_, err := clusterCli.CompactDocument(ctx, project, mismatched(info, other), true)
+		assert.ErrorContains(t, err, rpc.ErrDocumentKeyMismatch.Error())
+
+		compacted, err := clusterCli.CompactDocument(ctx, project, info, true)
+		assert.NoError(t, err)
+		assert.True(t, compacted)
+		assert.Equal(t, `{"x":1}`, contentOf(t, target))
+	})
+
+	t.Run("cluster PurgeDocument", func(t *testing.T) {
+		target, other := helper.TestKey(t, 1), helper.TestKey(t, 2)
+		clusterCli, project, info := clusterSetup(t, target, true)
+		count := func() int64 {
+			n, err := helper.CountChangesWithDocID(helper.TestDBName(), info.ID)
+			require.NoError(t, err)
+			return n
+		}
+
+		err := clusterCli.PurgeDocument(ctx, project, mismatched(info, other))
+		assert.ErrorContains(t, err, rpc.ErrDocumentKeyMismatch.Error())
+		assert.Positive(t, count())
+
+		assert.NoError(t, clusterCli.PurgeDocument(ctx, project, info))
+		assert.Zero(t, count())
 	})
 }
