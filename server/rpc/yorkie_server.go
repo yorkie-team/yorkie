@@ -237,7 +237,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1553,7 +1553,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1660,7 +1660,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1731,6 +1731,22 @@ func (s *yorkieServer) PushPullChanges(
 	}), nil
 }
 
+// fromChangePack decodes the change pack of a request and sets its IsRemoved
+// by the method instead of taking the client's flag: removes says whether the
+// method removes the document, which only RemoveDocument does. Taking the
+// flag as sent would let any pack method remove the document, past a webhook
+// that gates only RemoveDocument, and would let a RemoveDocument without it be
+// asked as a read while it still removes. A server-side removal, such as
+// RemoveOnDetach, sets the flag later, after the webhook has been asked.
+func fromChangePack(pbPack *api.ChangePack, removes bool) (*change.Pack, error) {
+	pack, err := converter.FromChangePack(pbPack)
+	if err != nil {
+		return nil, err
+	}
+	pack.IsRemoved = removes
+	return pack, nil
+}
+
 // RemoveDocument removes the given document.
 func (s *yorkieServer) RemoveDocument(
 	ctx context.Context,
@@ -1742,7 +1758,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, true)
 	if err != nil {
 		return nil, err
 	}
