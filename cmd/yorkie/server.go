@@ -652,7 +652,7 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed.",
+		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed; set it in production.",
 	)
 	rootCmd.AddCommand(cmd)
 }
