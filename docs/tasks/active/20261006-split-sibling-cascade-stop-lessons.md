@@ -58,4 +58,15 @@
   the data model keeps today; the two limitations above stand. Fixed here: the
   lazy `enclosed` memo no longer swallows its traversal error, which would
   have left an empty memo and a silently short cascade.
+- Round 4 (what else writes the field the rule reads): two paths mutate a
+  node's `removedAt` outside the walk. `Tree.Purge` is benign and provably
+  so — `findFloorNode` compares `createdAt` exactly, so a purged ID is nil
+  rather than a stale read; `Purge` relinks the predecessor onto the same
+  successor the walk would have reached by passing the tombstone; and
+  `Root.collect` purges only once the minimum synced version vector covers
+  `removedAt`, the point at which the read answers true anyway. `Restore`
+  is not: `unremove` clears the tombstone in place, so a delete concurrent
+  with an undo cascades differently per replica. Both written down in §4.1
+  and above. A field read for a causal decision needs its writers
+  enumerated, not just its readers.
 

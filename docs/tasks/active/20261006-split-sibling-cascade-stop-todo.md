@@ -64,6 +64,15 @@ once `splitByPath` became a real split in v0.7.23 (yorkie-js-sdk#1358).
   product split off it concurrently survives on the splitter's own replica
   in every delivery order. Over six delivery orders `main` diverges in
   three, this change in all six; paragraph joins behave the same.
+- "Saw it gone" reads the node's current tombstone, not the editor's view of
+  it. GC is safe here (a purged ID resolves to nil through `findFloorNode`,
+  `Purge` relinks the chain past it, and nothing is purged before the minimum
+  synced version vector covers its `removedAt`), but `Restore` clears a
+  tombstone in place, so a delete racing an undo of a sibling's removal stops
+  the walk on a replica holding the undo and passes on one that does not.
+  Closing this, and the residue above, needs the tombstone record to keep
+  every delete rather than the newest: a data model, snapshot encoding and
+  JS-port change well past this rule.
 - On a replica that already deleted an element, a concurrent split product
   of it is born tombstoned, so text typed into it there stays hidden (the
   "Enter + type vs Enter" regression case). Not the cascade.

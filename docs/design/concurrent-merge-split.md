@@ -185,6 +185,19 @@ tombstone. A split product inherits its source's `removedAt`, so a product
 born tombstoned on this replica (split off an element already deleted here)
 still counts as alive for an editor that did not know that delete.
 
+Two paths outside the walk change what `removedAt` holds, and only one of
+them changes the walk. GC's `Purge` drops the node from `NodeMapByID` and
+relinks the chain around it, so the walk never reads a purged tombstone:
+`findFloorNode` compares `createdAt` exactly and resolves a purged ID to
+nil, and the predecessor already points past it to the same successor the
+walk would have reached by passing the tombstone. The decision is therefore
+the same before and after a purge — a node is purged only once the minimum
+synced version vector covers its `removedAt` (`Root.collect`), so every
+change applied after that knew the delete and read "saw it gone" as true.
+Undo is the path that does change the walk: `Restore` clears the tombstone
+in place, so on a replica holding the undo the walk stops at a sibling it
+would otherwise have passed. See the limitation below.
+
 The cascade still runs only when this edit wins the element's LWW
 (`canDelete`). Cascading on a lost LWW too would make every #1408 shape
 converge, but it tombstones text nobody deleted: a delete that is undone,
@@ -213,6 +226,20 @@ Known limitations:
   tombstoned (split off a merged element). Over the six delivery orders of
   such a three-replica race `main` diverges in three and this rule in all
   six; joining paragraphs instead of spans behaves the same.
+- "Saw it gone" reads the node's current tombstone, not the editor's own
+  view of it, so a delete concurrent with an undo of a sibling's removal
+  cascades differently on a replica that already holds the undo
+  (`TreeNode.unremove` cleared `removedAt`, the walk stops) than on one
+  that does not (the walk passes), and the difference outlives both changes
+  being applied. Reaching it needs the delete to be concurrent with the
+  undo and to know the delete the undo reverses. Pinning the test to the
+  editor's causal view instead needs the tombstone record to keep every
+  delete rather than the newest, which changes the data model, the snapshot
+  encoding and the JS port along with this rule.
+- The same single slot is why the cascade cannot both converge the #1408
+  residue and keep text: with only the newest tombstone to read, the rule
+  has no way to tell a sibling the editor merged back from one a concurrent
+  delete took, and the two want opposite answers.
 
 ### §4.2 Moved Children Guard
 

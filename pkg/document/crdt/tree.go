@@ -3015,6 +3015,15 @@ func (t *Tree) collectBetween(
 // on tombstoned it: after a split at offset 0 and a delete of the empty left
 // piece, the concurrent same-boundary product that holds the moved content
 // sits right after the editor's own product (yorkie-js-sdk#1408).
+//
+// "Saw it gone" reads the sibling's current tombstone, which keeps only the
+// newest delete. GC leaves that read alone: findFloorNode matches createdAt
+// exactly, so a purged ID resolves to nil and Purge's relink already points
+// the predecessor past it at the same successor; and a node is purged only
+// once the minimum synced version vector covers its removedAt, which is when
+// the read would have answered true anyway. Restore does not: clearing a
+// tombstone in place makes the walk stop where it used to pass. See the
+// limitations in §4.1 of docs/design/concurrent-merge-split.md.
 func (t *Tree) appendUnknownSplitSiblings(
 	toBeRemoveds []*TreeNode,
 	node *TreeNode,
