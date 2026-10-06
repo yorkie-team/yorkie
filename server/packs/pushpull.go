@@ -265,14 +265,27 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 	return nil
 }
 
-// validateChangeActors rejects a pack carrying a change that is stamped with
-// another client's actor. The pull path takes a stored change whose actor
-// IsOwnActor accepts for the pulling client as that client's own echo and
-// drops it, so a change pushed under a victim's actor would never reach the
-// victim. Only changes the server would store (clientSeq above the checkpoint)
-// are checked; pushPack skips the others. Only the change ID is checked: the
-// tickets inside operations keep the actor they were minted under, which for
-// old SDKs is the initial actor of edits made before the attach.
+// validateChangeActors rejects a pack carrying a change stamped with an actor
+// that is not the pushing client's own. The pull path takes a stored change
+// whose actor IsOwnActor accepts for the pulling client as that client's own
+// echo and drops it, so a change stored under another client's actor never
+// reaches that client (#2120). Only changes the server would store (clientSeq
+// above the checkpoint) are checked; pushPack skips the others. Only the change
+// ID is checked: the tickets inside operations keep the actor they were minted
+// under, which for old SDKs is the initial actor of edits made before the
+// attach.
+//
+// What this does and does not establish: the actor is bound to the client row
+// the request names in client_id, not to an authenticated principal. Neither
+// client_id nor the client key is a credential, and StableActorID is derived
+// deterministically from (project, client key) with no unique index, so a
+// caller holding either of a victim's identifiers resolves a clientInfo for
+// which the victim's actor is its own and still passes here — as do two honest
+// sessions of the same client key, which share one stable actor by design. For
+// those callers the pull-dedup hole stays reachable; closing it needs an
+// authenticated client identity, tracked in #2114. What the check does buy is
+// that a client cannot stamp an actor it holds no identifier for, including the
+// initial actor.
 func validateChangeActors(
 	clientInfo *database.ClientInfo,
 	cpBeforePush change.Checkpoint,

@@ -78,3 +78,26 @@ reviewer was launched.
   victim's key derives the victim's stable actor (#2114).
 
 No blocking findings; stopped after round 1.
+
+## What the check does not establish
+
+The identity the check binds to is unauthenticated, and that bounds what it
+can claim:
+
+- `clientInfo` comes from the request's `client_id`, which is not a
+  credential. A caller holding a victim's `client_id` is the victim as far as
+  every RPC is concerned, and the compare passes trivially.
+- `StableActorID = DeriveActorID(project_id, client_key)` is deterministic
+  with no unique index (`memory/database.go` `ActivateClient`), so a second
+  activation of the same key takes a new session id and the *same* actor.
+  A caller holding a victim's client key therefore passes the check for the
+  victim's actor, and two honest sessions of one key are indistinguishable —
+  one session's change still lands in the other's pull dedup.
+
+So the check hardens the push path (a client cannot stamp an actor it holds no
+identifier for, including the initial actor) but does not close #2120 on its
+own; that needs an authenticated client identity, which is #2114 and touches
+the auth and RPC layers rather than `packs`. The claim was scoped to this in
+`pushpull.go`, both design docs and the todo, and the shared-key case is
+pinned by a test in `server/packs/push_actor_test.go` so it reads as a known
+limit rather than a guarantee.

@@ -10,8 +10,17 @@ it, and the victim never converges (#2120). `Watch` already refuses a declared
 actor that is not the client's own (`ErrActorMismatch`). Refuse such a push the
 same way.
 
-Scope: the change ID actor only. Tickets inside operations are not checked;
-old SDKs carry pre-attach tickets under the initial actor.
+Scope: the change ID actor only, bound to the client row the request names in
+`client_id`. Tickets inside operations are not checked; old SDKs carry
+pre-attach tickets under the initial actor.
+
+This hardens the push path but does not close #2120. `client_id` and the
+client key are not credentials, and `StableActorID` is derived
+deterministically from (project, client key) with no unique index, so a caller
+holding a victim's `client_id` or client key resolves a client row for which
+the victim's actor is its own and passes the check; two honest sessions of one
+client key do too, and the pull dedup can still drop a sibling session's
+change. Binding a push to an authenticated identity is #2114.
 
 ## Tasks
 

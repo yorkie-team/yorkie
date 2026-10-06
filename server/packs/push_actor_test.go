@@ -175,4 +175,40 @@ func TestPushActorCheck(t *testing.T) {
 		assert.NoError(t, attach(helper.TestKey(t, 6).String(), actorBytes(t, attacker.ActorId)))
 	})
 
+	// This pins the limit of the check rather than a guarantee: StableActorID
+	// is derived from (project, client key) with no unique index, so every
+	// session of one key stamps the same actor and the check cannot tell two
+	// of them apart. A change one session stores under the shared actor is
+	// still dropped by the other session's pull dedup as its own echo, so a
+	// caller that holds a victim's client key keeps the #2120 hole. Closing it
+	// needs an authenticated client identity (#2114), not a push-side compare.
+	t.Run("sessions sharing a client key share one actor", func(t *testing.T) {
+		clientKey := helper.TestKey(t, 1).String()
+		first := activate(t, clientKey)
+		second := activate(t, clientKey)
+		require.NotEqual(t, first.ClientId, second.ClientId)
+		require.Equal(t, first.ActorId, second.ActorId)
+
+		docKey := helper.TestKey(t).String()
+		emptyPack := func() *api.ChangePack {
+			return &api.ChangePack{DocumentKey: docKey, Checkpoint: &api.Checkpoint{}}
+		}
+		attached, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   first.ClientId,
+			ChangePack: emptyPack(),
+		}))
+		require.NoError(t, err)
+		_, err = testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   second.ClientId,
+			ChangePack: emptyPack(),
+		}))
+		require.NoError(t, err)
+
+		_, err = testClient.PushPullChanges(ctx, connect.NewRequest(&api.PushPullChangesRequest{
+			ClientId:   second.ClientId,
+			DocumentId: attached.Msg.DocumentId,
+			ChangePack: packWith(docKey, 1, actorBytes(t, first.ActorId)),
+		}))
+		assert.NoError(t, err)
+	})
 }

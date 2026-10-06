@@ -216,7 +216,7 @@ re-issue clears them.
 | A conversion or replay error | The document is left untouched and `Attach` returns the error before any RPC |
 | Documents stored before the fix still hold colliding `createdAt`s | Out of scope; new attaches no longer create them |
 | `SetActor`, the fallback, rewrites shared change values in place | Pre-existing; the re-issue path replaces every structure instead, and no caller deep copies a document holding local changes |
-| A client pushes a change under another client's actor | `PushPull` refuses a change whose ID actor is not the pushing client's own (`ErrActorMismatch`, #2120); operation tickets are not checked, and the client identities themselves are not credentials (#2114) |
+| A client pushes a change under another client's actor | Partly mitigated: `PushPull` refuses a change whose ID actor is not the actor of the client row named in `client_id` (`ErrActorMismatch`, #2120). It is not a fix for #2120 — the identity it binds to is unauthenticated, so a caller holding a victim's `client_id` or client key still passes, as do two honest sessions sharing a key; operation tickets are not checked either (#2114) |
 
 ### Design Decisions
 
@@ -229,11 +229,15 @@ re-issue clears them.
 
 ## Out of Scope
 
-Every change this design pushes carries the client's own actor, so the
-server refuses a change whose ID actor is not the pushing client's own
-(`validateChangeActors` in `PushPull`, #2120). It does not check the tickets
-inside operations, and the client identities the check relies on
-(`client_id`, `StableActorID`) are not credentials. Tracked in #2114.
+Every change this design pushes carries the client's own actor, so the server
+refuses a change whose ID actor is not the actor of the client row the request
+names (`validateChangeActors` in `PushPull`, #2120). That binding is **not** a
+fix for #2120: the identities it relies on (`client_id`, the client key behind
+`StableActorID`) are not credentials, and a stable actor is shared by every
+session of one key, so a caller holding a victim's identifier — and an honest
+sibling session — still passes the check and can still hide a change behind the
+pull dedup. Nor are the tickets inside operations checked. Binding a push to an
+authenticated client identity is tracked in #2114.
 
 ## Alternatives Considered
 
