@@ -1,6 +1,6 @@
 **Created**: 2026-10-06
 
-# Log Pushed Changes Stamped With Another Client's Actor — Lessons
+# Refuse Pushed Changes Stamped With Another Client's Actor — Lessons
 
 Plan: `20261006-push-actor-check-todo.md`.
 
@@ -33,43 +33,68 @@ one that `IsOwnActor` accepts:
 presence strip and before `pushPack` writes, for all four RPC handlers, the
 cluster detach and the server writers at once.
 
-Only changes above the checkpoint are reported, because only those are
+Only changes above the checkpoint are checked, because only those are
 stored; `pushPack` drops the rest before they reach the database or the
 publisher.
 
-## Why it logs instead of refusing
+## What the compare is worth, and where it stops
 
-The first cut returned `clients.ErrActorMismatch` (PermissionDenied). That was
-wrong on both sides of the trade:
+The decisive question was what an attacker actually holds. The two identities
+the compare reaches are not symmetric:
 
-- It bought no security. The compare is against the client row the request
-  names in `client_id`, which is not a credential, and `StableActorID` is
-  derived from (project, client key) with no unique index. A caller that
-  activates with a victim's client key, or simply names the victim's
-  `client_id`, holds the victim's actor legitimately and passes — so the #2120
-  forgery stays reachable either way. The only caller a rejection stops is one
-  that stamps an actor it holds no identifier for, which is not the attack.
-- It cost compatibility. A client that never calls `SetActor` pushes its
-  pre-attach changes under `InitialActorID`, and a declined pre-attach re-issue
-  leaves initial-actor tickets inside operations. Refusing those is a new wire
-  precondition against SDK versions this repository cannot enumerate, delivered
-  with no staged rollout.
+- A **stable actor** is on the wire. Every change a peer pulls carries its
+  author's actor (`converter.ToChangePack`), so any collaborator in a document
+  holds every other participant's actor. It is `DeriveActorID(project_id,
+  client_key)` — a digest with no preimage — so holding it yields neither the
+  client key nor a `client_id`.
+- A **`client_id`** is not published to peers, and is not a credential either:
+  whoever holds one is that client as far as every RPC is concerned.
 
-So the condition is logged, which is the survey a rejection would have needed
-first, and the actor check is extended to operation `executedAt` tickets, where
-a rejection could not have gone at all. The initial actor is skipped as a known
-legitimate value, so the log stays a signal. Enforcement waits on #2114.
+So the realistic attacker is a collaborator that knows a victim's actor and
+nothing else, and the compare is exactly what stops it: it cannot resolve a
+client row that holds that actor. That is also the compare the Watch path
+already enforces (`yorkie_server.go` Watch, `ErrActorMismatch`, "so a client
+cannot subscribe under another client's presence identity"), and leaving the
+push path open made that gate reachable around — a pushed change sets presence
+keyed on its own actor (`internal_document.go` `applyPresenceChange`) for every
+peer, while the victim drops it as a self-echo.
+
+What the compare does not reach stays recorded as a limit rather than a
+guarantee: a caller already holding a victim's `client_id` or client key, and
+two honest sessions of one client key, which share a stable actor by design.
+Both need an authenticated client identity (#2114).
+
+Where a rejection could not go, the log stayed:
+
+- The **initial actor** is accepted. A client that never calls `SetActor`
+  pushes pre-attach changes under it, a declined pre-attach re-issue leaves
+  initial-actor tickets behind, and the server's own writers hold it as their
+  session id. It is also no client's own actor on pull, so a change stamped
+  with it reaches every client and suppresses none — accepting it gives up no
+  part of #2120.
+- An operation's **`executedAt`** ticket keeps the actor it was minted under,
+  which a declined re-issue legitimately leaves as the initial actor, and
+  neither the pull dedup nor the presence keying reads it. A mismatch there is
+  warned about, not refused.
 
 ## Proving the tests
 
-`TestPushForeignActor` in `server/packs` pins the accepted side: another
-client's session id, its stable actor and the initial actor all land, on push
-and on attach, so nothing new is refused.
+`validateChangeActors` is unexported but pure, so the gate is pinned by a
+unit test (`server/packs/push_actor_internal_test.go`, no build tag, runs in
+`make verify`): own session id, own stable actor, the initial actor, the server
+client row and an already-acknowledged change pass; another client's actor in a
+change ID returns `ErrActorMismatch`, and in an operation ticket does not.
+`logging.From(context.Background())` returns a nil logger until
+`logging.DefaultLogger()` has been called once, so the test seeds the context
+with it — the warn path panics otherwise.
 
-The #2120 forgery itself is an integration test kept as a skipped reproducer —
-the forged `{"x":1}` is stored, the honest retry with the same clientSeq is
-skipped as already pushed, and the victim stays at `{}` after a sync. It
-asserts the behaviour #2114 will deliver, and runs when it does.
+`TestPushForeignActor` in `server/packs` pins the same thing over the wire,
+including the error code, plus the accepted side (initial actor, the pusher's
+own two identities) on push and on attach.
+
+The #2120 forgery is an integration test that runs: the forged `{"x":1}` is
+refused with `ErrActorMismatch`, and the same change under the pusher's own
+actor reaches the victim.
 
 The integration test first re-attached a fresh document under the same actor.
 That reproduces the pre-attach re-issue design's known gap (the pull filter
@@ -120,20 +145,43 @@ one source), which is outside this change's files.
 
 ## Review round 2 (blast radius, design fit, security)
 
-Four blocking findings, all of them about the rejection rather than the
-compare, and they resolved together by dropping the rejection:
+Four blocking findings, all about the rejection rather than the compare. They
+were taken to mean the rejection had to go, and the first fix replaced it with
+a log:
 
 - A rejection is an un-negotiated wire precondition for initial-actor change
   IDs, and lands with no staged rollout for a writer population that lives in
   another repository.
 - The identity it authorizes on is not authenticated, so #2120 stays reachable
   with the gate in place.
-- Operation tickets were unchecked; they are now reported too, which only a
-  log can do, since a declined re-issue legitimately leaves initial-actor
-  tickets behind.
+- Operation tickets were unchecked.
 
-Still open and out of these files: #2120 needs an authenticated client
-identity (#2114), which touches the auth and RPC layers.
+## Review round 3 (security, test adequacy)
+
+Dropping the rejection went too far, and the two findings of this round are
+the same mistake seen from either end:
+
+- The "it buys no security" step conflated two identities. It is true of a
+  caller holding a victim's `client_id`; it is false of the collaborator that
+  only read the victim's actor off the wire, which is the reachable attack and
+  which the compare does refuse. See "What the compare is worth" above. The
+  Watch path enforcing the identical compare was the tell that the push path
+  should too.
+- With the rejection gone, nothing in the diff was testable: the tests
+  asserted that pushes succeed, which was already true on `main`, so deleting
+  the diagnostic or inverting its predicate left them green.
+
+The fix keeps the two carve-outs the round-2 findings were right about — the
+initial actor and operation `executedAt` tickets, neither of which is part of
+the attack — and restores `ErrActorMismatch` for a foreign actor in a change
+ID. Compatibility rests on the writer survey above, not on an assumption: both
+SDKs stamp an `IsOwnActor` actor into every change ID before the pack is built,
+and the server's writers hold the initial actor as their session id.
+
+Still open and out of these files: a caller holding a victim's identifier, and
+sibling sessions of one client key, need an authenticated client identity
+(#2114), which touches the auth and RPC layers. The pushed version vector's
+actors are still unexamined.
 
 ## Self-review (round 1, correctness/tests/compatibility)
 
@@ -171,8 +219,9 @@ can claim:
   victim's actor, and two honest sessions of one key are indistinguishable —
   one session's change still lands in the other's pull dedup.
 
-So the compare cannot close #2120; that needs an authenticated client identity,
-which is #2114 and touches the auth and RPC layers rather than `packs`. This is
-why it only logs, and the shared-key case is pinned by a test in
+So the compare refuses the collaborator that only holds a victim's actor, but
+not a caller that holds one of its identifiers; the rest of #2120 needs an
+authenticated client identity, which is #2114 and touches the auth and RPC
+layers rather than `packs`. The shared-key case is pinned by a test in
 `server/packs/push_actor_test.go` so the limit is recorded in the suite rather
 than only in prose.

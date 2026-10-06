@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -118,7 +119,10 @@ func PushPull(
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
-	logForeignActors(ctx, clientInfo, clientInfo.Checkpoint(docKey.DocID), docKey, reqPack)
+	if err := validateChangeActors(ctx, clientInfo, clientInfo.Checkpoint(docKey.DocID), docKey, reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
 
 	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
@@ -261,37 +265,45 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 	return nil
 }
 
-// logForeignActors records a pushed change stamped with an actor the pushing
-// client row does not hold, in its change ID or in an operation's executedAt
-// ticket. The pull path takes a stored change whose actor IsOwnActor accepts
-// for the pulling client as that client's own echo and drops it, so a change
-// stored under another client's actor never reaches that client (#2120).
+// validateChangeActors refuses a pushed change stamped with an actor the
+// pushing client row does not hold, with the ErrActorMismatch that the Watch
+// path already returns for the same compare (yorkie_server.go Watch, "so a
+// client cannot subscribe under another client's presence identity"). Without
+// it a change stored under another client's actor is applied by every peer,
+// with presence keyed on that actor, while the owner's pull drops it as its own
+// echo (pullChangeInfos, IsOwnActor) and never converges (#2120).
 //
-// It logs and does not reject, deliberately. The actor can only be compared
-// against the client row the request names in client_id, and neither client_id
-// nor the client key behind StableActorID is a credential: a caller holding
-// either of a victim's identifiers resolves a clientInfo for which the victim's
-// actor is its own, and two honest sessions of one client key share a single
-// stable actor by design. A compare against that identity therefore refuses no
-// attacker who holds an identifier, so turning it into a rejection would buy no
-// security while making the server refuse a push it has always accepted — and
-// the clients that might stamp a foreign actor are SDK versions this repository
-// cannot enumerate. Rejecting belongs with an authenticated client identity,
-// tracked in #2114; until then this records the condition so the honest-writer
-// population can be seen in production.
+// What the compare establishes: a peer learns a collaborator's actor off the
+// wire — every pulled change carries it — but not the client_id or client key
+// behind it, since StableActorID is a digest of (project, client key) with no
+// preimage. Stamping a foreign actor is therefore the one identity move a
+// plain collaborator can make, and it is what this refuses. What it does not
+// establish: client_id is not a credential, so a caller that already holds a
+// victim's identifier resolves a clientInfo for which the victim's actor is
+// its own; and two honest sessions of one client key share a stable actor by
+// design, so they are indistinguishable here. Those remain open and need an
+// authenticated client identity, tracked in #2114.
 //
 // Only changes the server would store (clientSeq above the checkpoint) are
-// reported; pushPack drops the others. The initial actor is not reported: it is
-// the documented value of a pre-attach edit in a client that skipped SetActor,
+// checked; pushPack drops the others. The initial actor is accepted: it is the
+// documented value of a pre-attach edit in a client that skipped SetActor and
 // of the tickets a declined re-issue leaves behind (see
-// docs/design/pre-attach-ticket-reissue.md) and of the server's own writers.
-func logForeignActors(
+// docs/design/pre-attach-ticket-reissue.md), and it is no client's own actor on
+// pull, so a change stamped with it reaches every client and suppresses none.
+// The server's own writers hold it as their session id (IsServerClient), so
+// IsOwnActor accepts them regardless.
+//
+// Only the change ID is refused on, which is what both the pull dedup
+// (ChangeInfo.ActorID) and the presence keying read. An operation's executedAt
+// ticket keeps the actor it was minted under, which a declined re-issue
+// legitimately leaves behind, so a mismatch there is logged instead.
+func validateChangeActors(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	cpBeforePush change.Checkpoint,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) {
+) error {
 	foreign := func(actorID time.ActorID) bool {
 		return actorID != time.InitialActorID && !clientInfo.IsOwnActor(types.IDFromActorID(actorID))
 	}
@@ -301,11 +313,8 @@ func logForeignActors(
 			continue
 		}
 
-		if actorID := cn.ID().ActorID(); foreign(actorID) {
-			logging.From(ctx).Warnf(
-				"foreign actor in pushed change id: doc(%s), client(%s), clientSeq(%d), actor(%s)",
-				docKey.DocID, clientInfo.ID, cn.ID().ClientSeq(), actorID,
-			)
+		if foreign(cn.ID().ActorID()) {
+			return clients.ErrActorMismatch
 		}
 
 		for _, op := range cn.Operations() {
@@ -321,6 +330,8 @@ func logForeignActors(
 			break
 		}
 	}
+
+	return nil
 }
 
 // pushPack pushes the given ChangePack to the database. maxSize is the

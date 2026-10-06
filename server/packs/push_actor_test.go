@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -35,14 +36,16 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-// TestPushForeignActor pins that the actor of a pushed change is not a
-// precondition of the push: `logForeignActors` warns when a change names an
-// actor the pushing client row does not hold, but the push still lands. The
-// server can only compare against the client row the request names in
-// client_id, which is not a credential, so a rejection would refuse honest
-// writers (an SDK that pushes pre-attach changes under the initial actor)
-// without stopping a caller that holds a victim's identifier. See #2120, whose
-// fix needs an authenticated client identity (#2114).
+// TestPushForeignActor pins the push-path actor gate over the wire:
+// `validateChangeActors` refuses a change whose ID names an actor the pushing
+// client row does not hold, with the ErrActorMismatch the Watch path already
+// returns for the same compare, while the pusher's own two identities and the
+// initial actor still land. A collaborator reads a peer's actor off the wire
+// but not the client_id behind it, so this is what stops it from pushing a
+// change the peer's own pull would then drop as a self-echo (#2120). What the
+// compare cannot separate — two sessions of one client key, or a caller
+// holding a victim's identifier — is pinned in the last subtest and needs an
+// authenticated client identity (#2114).
 func TestPushForeignActor(t *testing.T) {
 	ctx := context.Background()
 
@@ -72,7 +75,7 @@ func TestPushForeignActor(t *testing.T) {
 
 	initialActor := time.InitialActorID.Bytes()
 
-	t.Run("push under another actor is accepted", func(t *testing.T) {
+	t.Run("push under another actor is refused", func(t *testing.T) {
 		pusher := activate(t, helper.TestKey(t, 1).String())
 		other := activate(t, helper.TestKey(t, 2).String())
 		docKey := helper.TestKey(t).String()
@@ -97,12 +100,20 @@ func TestPushForeignActor(t *testing.T) {
 			return err
 		}
 
-		// Another client's session id and stable actor, the initial actor and
-		// the pusher's own two identities all land; only the first three are
-		// logged.
-		for i, actor := range [][]byte{
+		// Another client's session id and either of its actors are refused.
+		// Nothing is stored, so the checkpoint does not move and the accepted
+		// pushes below still start at clientSeq 1.
+		for _, actor := range [][]byte{
 			actorBytes(t, other.ClientId),
 			actorBytes(t, other.ActorId),
+		} {
+			err := push(1, actor)
+			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+			assert.Equal(t, "ErrActorMismatch", converter.ErrorCodeOf(err))
+		}
+
+		// The initial actor and the pusher's own two identities land.
+		for i, actor := range [][]byte{
 			initialActor,
 			actorBytes(t, pusher.ClientId),
 			actorBytes(t, pusher.ActorId),
@@ -112,10 +123,10 @@ func TestPushForeignActor(t *testing.T) {
 
 		docInfoAfter, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		require.NoError(t, err)
-		assert.Equal(t, docInfo.ServerSeq+5, docInfoAfter.ServerSeq)
+		assert.Equal(t, docInfo.ServerSeq+3, docInfoAfter.ServerSeq)
 	})
 
-	t.Run("attach under another actor is accepted", func(t *testing.T) {
+	t.Run("attach under another actor is refused", func(t *testing.T) {
 		attacher := activate(t, helper.TestKey(t, 1).String())
 		other := activate(t, helper.TestKey(t, 2).String())
 
@@ -127,18 +138,24 @@ func TestPushForeignActor(t *testing.T) {
 			return err
 		}
 
+		// The attach pack goes through the same gate: another client's actor is
+		// refused there too.
+		err := attach(helper.TestKey(t, 4).String(), actorBytes(t, other.ActorId))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		assert.Equal(t, "ErrActorMismatch", converter.ErrorCodeOf(err))
+
 		// A pre-attach change keeps the initial actor in a client that skipped
 		// SetActor, so refusing it would be a new wire precondition.
 		assert.NoError(t, attach(helper.TestKey(t, 3).String(), initialActor))
-		assert.NoError(t, attach(helper.TestKey(t, 4).String(), actorBytes(t, other.ActorId)))
 		assert.NoError(t, attach(helper.TestKey(t, 5).String(), actorBytes(t, attacher.ClientId)))
 		assert.NoError(t, attach(helper.TestKey(t, 6).String(), actorBytes(t, attacher.ActorId)))
 	})
 
-	// Why a push-side compare cannot be an authorization boundary:
-	// StableActorID is derived from (project, client key) with no unique index,
-	// so every session of one key stamps the same actor and the compare cannot
-	// tell two of them apart.
+	// The limit of the compare: StableActorID is derived from (project, client
+	// key) with no unique index, so every session of one key stamps the same
+	// actor and the gate cannot tell two of them apart. One session's change
+	// still lands in the other's pull dedup; closing that needs an
+	// authenticated client identity (#2114).
 	t.Run("sessions sharing a client key share one actor", func(t *testing.T) {
 		clientKey := helper.TestKey(t, 1).String()
 		first := activate(t, clientKey)
