@@ -146,7 +146,8 @@ leftmost child position (offset 0) of `toParent`. Joining two paragraphs
 right after an Enter in the middle of a span names exactly that: from the
 end of the first paragraph to the start of the second. The split sibling in
 `toParent` is then its first child, so the narrowed from-position would lie
-after the to-position, a backwards range that drops the merge. The JS SDK
+after the to-position, a backwards range that collects nothing and so
+drops the merge. The JS SDK
 has had this guard since yorkie-js-sdk#1237.
 
 Only the `collectBetween` range is narrowed. The original

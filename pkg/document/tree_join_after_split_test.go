@@ -113,3 +113,25 @@ func TestTreeJoinAfterSplitInSpan(t *testing.T) {
 		}
 	}
 }
+
+// TestTreeNarrowingAwayFromParagraphStart pins that Phase 3 still narrows
+// when the to position is not the start of toParent. One replica deletes the
+// second span while the other splits the first one twice with level 2; the
+// delete must not reach the paragraphs those splits made.
+func TestTreeNarrowingAwayFromParagraphStart(t *testing.T) {
+	docs := joinReplicas(t, []string{"cd", "jk"})
+	require.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, nil, 2)
+		root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 0}, nil, 2)
+		return nil
+	}))
+	require.NoError(t, docs[1].Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0, 1}, []int{0, 2}, nil, 0)
+		return nil
+	}))
+	exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+	want := "<doc><p><span></span></p><p><span>c</span></p><p><span>d</span></p></doc>"
+	assert.Equal(t, want, treeXML(t, docs[0]))
+	assert.Equal(t, want, treeXML(t, docs[1]))
+}

@@ -44,9 +44,16 @@ while every JS client has joined them.
       ([4,8)). It passes with and without the guard, and JS produces the
       same trees.
 - [x] Phase 3 in `docs/design/concurrent-merge-split.md`.
+- [x] Pin that the narrowing still applies away from a paragraph start
+      (`TestTreeNarrowingAwayFromParagraphStart`).
 - [x] `go test ./pkg/document/... ./api/...`, golangci-lint, `go fix -diff`,
       `go vet -tags integration ./test/...`.
 
 ## Known Limitations
 
+- In 18 of about 40,000 compared races (self-review), JS rejects a remote
+  change while building its reverse op on the post-edit tree ("index is out
+  of range") and rolls it back, while Go applies it. With that error
+  suppressed JS reaches the same state as Go. Both SDKs already lose content
+  or diverge in those races; Go reaches that state only now that it merges.
 - Not run: the MongoDB integration lane (no local MongoDB here).

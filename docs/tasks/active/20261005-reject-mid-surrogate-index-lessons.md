@@ -58,10 +58,13 @@
   endpoint inside a surrogate pair. Reduced it to four public Tree.Edit
   calls plus two change exchanges after initial synchronization; random
   generation and instrumentation are not part of the regression test.
-- B splits nested p/section at index 3, level 2. A receives it and replaces
-  [2,4) and [5,7) with emoji, then sends both changes back. B splits at the
+- B splits nested p/section at index 8, level 2. A receives it and replaces
+  [1,3) and [5,7) with emoji, then sends both changes back. B splits at the
   valid caller boundary 4, level 2. Split lineage puts the new boundaries
   apart, so the reverse range [4,8) ends inside direct section emoji text.
+  (The first reduction split at 3 and replaced [2,4); its tree came through
+  the Phase 3 narrowing that #2147 fixes, so it was Go-only and no longer
+  ends mid-pair once Go matches JS.)
 - `TestTreeSplitReverseAfterRemoteSplitHistory` fails with
   ErrInvalidUTF16Index on the previous implementation (Go source overlay),
   and passes on the current implementation. The prior Update has already
