@@ -58,6 +58,42 @@ Another agent's integration run held ports 11101/11201 for a while, and
 `make verify` failed in `TestWatchAccessRevalidation` on "address already in
 use". Re-running once the ports were free passed; it was not this change.
 
+### The `ErrEpochMismatch` integration failure is a doc-cache race
+
+`TestAuthWebhookPresenceOnly/a reader attaching alone keeps the bound schema`
+failed in one integration run at `auth_webhook_test.go:1037`, where a writer
+re-attaches a fresh `document.New(docKey)`:
+
+```text
+discarding 1 changes from stale epoch: client(1) != doc(0)
+client epoch(1) != document epoch(0): epoch mismatch
+```
+
+A client epoch *above* the document's is the signature of a stale `docCache`
+entry, not of a stale client:
+
+- Only compaction moves an epoch, and only upwards (`$inc epoch` in
+  `mongo.CompactChangeInfos`). Housekeeping sweeps `FindCompactionCandidates`
+  across every project in the database each interval, and the integration
+  package shares one `test-yorkie-meta-*` database between servers, so the
+  sweep reaches a document a test has just left detached.
+- `AttachDocument` seeds `ClientDocInfo.Epoch` from the `docInfo` the handler
+  got from `FindOrCreateDocInfo`, which reads MongoDB directly and neither
+  reads nor writes `docCache`. `pushPack` and `preparePack` compare that seed
+  against `FindDocInfoByRefKey`, which is served from `docCache`.
+- `CompactChangeInfos` calls `docCache.Remove` *before* its conditional
+  `UpdateOne`, so a read landing in that window re-adds the pre-compaction
+  `DocInfo` and leaves the cache an epoch behind the row indefinitely. The
+  next fresh attach then seeds the new epoch from the row and immediately
+  mismatches the stale cached one.
+
+Nothing on this branch touches compaction, `docCache` or epochs, and the
+branch's previous CI run passed on the same `pushpull.go` code — the only
+diff since was comments and docs. The repair belongs in
+`server/backend/database/mongo/client.go` (claim the document first, then
+invalidate, or have `FindOrCreateDocInfo` and `FindDocInfoByRefKey` agree on
+one source), which is outside this change's files.
+
 ## Self-review (round 1, correctness/tests/compatibility)
 
 Done by the implementing agent over the full branch diff; no separate
