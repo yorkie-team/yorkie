@@ -165,6 +165,48 @@ These siblings are part of the same logical element and must be
 deleted together. Element-only: text splits use deterministic
 offset-based IDs that `findFloorNode` already resolves.
 
+The walk passes a sibling the editor **knew** only if the editor saw it
+gone: removed by a change the editor knew (merged back into the deleted
+element, for instance), or enclosed whole by this same delete. What lies
+past such a sibling was inside the deleted element or the deleted range
+for the editor too. Any other known sibling ends the walk. The chain is in
+document order: a split product lands directly after the node it was split
+off, or under §7.8 after the same-boundary products ordered ahead of it. So
+an unknown sibling past a known one that the editor did not see removed
+holds content the editor saw inside that sibling, not inside the deleted
+element. Walking on tombstoned content the editor kept: after a split at
+offset 0 and a delete of the empty left piece, the concurrent same-boundary
+product holding the moved text sits right after the editor's own product
+(yorkie-js-sdk#1408), and a concurrent Enter at the start of a known
+sibling the editor did not delete put its moved text past that sibling.
+
+"Saw it gone" reads the sibling's `removedAt`, which keeps only the newest
+tombstone. A split product inherits its source's `removedAt`, so a product
+born tombstoned on this replica (split off an element already deleted here)
+still counts as alive for an editor that did not know that delete.
+
+The cascade still runs only when this edit wins the element's LWW
+(`canDelete`). Cascading on a lost LWW too would make every #1408 shape
+converge, but it tombstones text nobody deleted: a delete that is undone,
+or a merge that turned into a delete, reaches a concurrent split product
+whose content the editor never saw (`tree_split_cascade_regression_test.go`).
+The cost is one empty element in the shapes where both sides split the
+same boundary: the replica whose own delete won the LWW keeps its own split
+product, emptied because the moved text went to the other side's product,
+while on the other replica that product was born tombstoned.
+
+Known limitations:
+
+- A concurrent delete with a newer ticket can overwrite the tombstone of a
+  sibling the editor merged back. The walk then stops there, as for a
+  sibling the editor did not see removed, and a product split off it
+  concurrently survives on that replica only.
+- A sibling merged back by a change the editor did not know ends the walk.
+  A product split off it concurrently survives on a replica that applies
+  the delete before the merge, and is born tombstoned (split off a merged
+  element) on one that applies the merge first. The old walk hid this
+  merge-vs-split divergence in some delivery orders, not all.
+
 ### §4.2 Moved Children Guard
 
 Exclude children whose parent is in `toBeMergedNodes` from the
