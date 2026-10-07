@@ -2913,6 +2913,31 @@ func (t *Tree) collectBetween(
 	// nodes should not be cascade-deleted.
 	var toBeMergedNodes []*TreeNode
 
+	// enclosed reports whether the range covers the element whole, start and
+	// end tokens both. Collected on first use; most deletes never ask.
+	var enclosedNodes map[*TreeNode]bool
+	// A failed collection leaves the memo empty, which would silently
+	// under-apply the cascade. Record the error and fail the whole collection
+	// instead of answering from a memo that was never filled.
+	var enclosedErr error
+	enclosed := func(n *TreeNode) bool {
+		if enclosedNodes == nil {
+			enclosedNodes = make(map[*TreeNode]bool)
+			if err := t.traverseInPosRange(
+				fromParent, fromLeft, toParent, toLeft,
+				func(token index.TreeToken[*TreeNode], ended bool) {
+					if token.TokenType == index.Start && ended {
+						enclosedNodes[token.Node] = true
+					}
+				},
+				true,
+			); err != nil {
+				enclosedErr = err
+			}
+		}
+		return enclosedNodes[n]
+	}
+
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
 		toParent, toLeft,
@@ -2965,35 +2990,17 @@ func (t *Tree) collectBetween(
 				if tokenType == index.Text || tokenType == index.Start {
 					toBeRemoveds = append(toBeRemoveds, node)
 
-					// Cascade delete to split siblings created by concurrent
-					// SplitElement. Only for element nodes — text splits use
-					// offset-based IDs that findFloorNode already resolves.
-					// Skip nodes at the merge boundary (toParent side) whose
-					// children are moved rather than deleted — their split
-					// siblings should survive the merge.
+					// §4.1 Cascade delete to split siblings created by
+					// concurrent SplitElement. Only for element nodes — text
+					// splits use offset-based IDs that findFloorNode already
+					// resolves. Skip nodes at the merge boundary (toParent
+					// side) whose children are moved rather than deleted —
+					// their split siblings should survive the merge.
 					if !node.IsText() && node.InsNextID != nil &&
 						!slices.Contains(toBeMergedNodes, node) {
-						var walker insNextWalker
-						walker.visit(node)
-						next := t.findFloorNode(node.InsNextID)
-						// Stop on a chain that loops back on itself; see
-						// insNextWalker. Unbounded here would also grow
-						// toBeRemoveds without limit.
-						for next != nil && walker.visit(next) {
-							if !time.TicketKnown(versionVector, next.ID().CreatedAt) {
-								toBeRemoveds = append(toBeRemoveds, next)
-								// Cascade through the full subtree, not just immediate children.
-								index.TraverseNode(next.Index, func(n *index.Node[*TreeNode], _ int) {
-									if n.Value != next {
-										toBeRemoveds = append(toBeRemoveds, n.Value)
-									}
-								})
-							}
-							if next.InsNextID == nil {
-								break
-							}
-							next = t.findFloorNode(next.InsNextID)
-						}
+						toBeRemoveds = t.appendUnknownSplitSiblings(
+							toBeRemoveds, node, versionVector, enclosed,
+						)
 					}
 				}
 			}
@@ -3002,8 +3009,70 @@ func (t *Tree) collectBetween(
 	); err != nil {
 		return nil, nil, nil, err
 	}
+	if enclosedErr != nil {
+		return nil, nil, nil, enclosedErr
+	}
 
 	return toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, nil
+}
+
+// appendUnknownSplitSiblings appends to toBeRemoveds the split siblings of
+// the deleted element node that the editor did not know, with their
+// subtrees (§4.1).
+//
+// The walk passes a sibling the editor knew only if the editor saw it gone:
+// removed by a change the editor knew (merged back into node, say), or
+// enclosed whole by this delete. What lies past it was then inside node or
+// inside the deleted range for the editor too. Any other known sibling ends
+// the walk. The chain is in document order and a split product lands right
+// after the node it was split off (or, under §7.8, after the same-boundary
+// products ordered ahead of it), so an unknown sibling past such a sibling
+// holds content the editor saw inside that sibling, not inside node. Walking
+// on tombstoned it: after a split at offset 0 and a delete of the empty left
+// piece, the concurrent same-boundary product that holds the moved content
+// sits right after the editor's own product (yorkie-js-sdk#1408).
+//
+// "Saw it gone" reads the sibling's current tombstone, which keeps only the
+// newest delete. GC leaves that read alone: findFloorNode matches createdAt
+// exactly, so a purged ID resolves to nil and Purge's relink already points
+// the predecessor past it at the same successor; and a node is purged only
+// once the minimum synced version vector covers its removedAt, which is when
+// the read would have answered true anyway. Restore does not: clearing a
+// tombstone in place makes the walk stop where it used to pass. See the
+// limitations in §4.1 of docs/design/concurrent-merge-split.md.
+func (t *Tree) appendUnknownSplitSiblings(
+	toBeRemoveds []*TreeNode,
+	node *TreeNode,
+	versionVector time.VersionVector,
+	enclosed func(*TreeNode) bool,
+) []*TreeNode {
+	var walker insNextWalker
+	walker.visit(node)
+	next := t.findFloorNode(node.InsNextID)
+	// Stop on a chain that loops back on itself; see insNextWalker.
+	// Unbounded here would also grow toBeRemoveds without limit.
+	for next != nil && walker.visit(next) {
+		if time.TicketKnown(versionVector, next.ID().CreatedAt) {
+			seenGone := next.removedAt != nil && time.TicketKnown(versionVector, next.removedAt)
+			if !seenGone && !enclosed(next) {
+				break
+			}
+		} else {
+			toBeRemoveds = append(toBeRemoveds, next)
+			// Cascade through the full subtree, not just immediate children.
+			sibling := next
+			index.TraverseNode(sibling.Index, func(n *index.Node[*TreeNode], _ int) {
+				if n.Value != sibling {
+					toBeRemoveds = append(toBeRemoveds, n.Value)
+				}
+			})
+		}
+		if next.InsNextID == nil {
+			break
+		}
+		next = t.findFloorNode(next.InsNextID)
+	}
+	return toBeRemoveds
 }
 
 // advanceOpts holds optional parameters for advancePastUnknownSplitSiblings.
