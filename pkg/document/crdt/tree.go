@@ -3052,6 +3052,15 @@ func (t *Tree) appendUnknownSplitSiblings(
 	// Stop on a chain that loops back on itself; see insNextWalker.
 	// Unbounded here would also grow toBeRemoveds without limit.
 	for next != nil && walker.visit(next) {
+		// Node.Split links a product to the node it came off, so an element's
+		// chain holds elements only and this never fires today. Guard it the
+		// way the other chain walks do (advancePastUnknownSplitSiblings,
+		// narrowCollectRange) rather than ask enclosed() about a text node:
+		// enclosed() records element Start tokens, so it answers false for
+		// every text node and a known one would end the walk by accident.
+		if next.IsText() {
+			break
+		}
 		if time.TicketKnown(versionVector, next.ID().CreatedAt) {
 			seenGone := next.removedAt != nil && time.TicketKnown(versionVector, next.removedAt)
 			if !seenGone && !enclosed(next) {

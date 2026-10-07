@@ -256,6 +256,28 @@ Known limitations:
   has no way to tell a sibling the editor merged back from one a concurrent
   delete took, and the two want opposite answers.
 
+**This rule is not settled.** It is the one place in this document where a
+change knowingly converges fewer delivery orders than the version before
+it, and convergence is the stated Goal. The shapes it stops converging are
+the three limitations above; the shapes it starts converging in text are
+the #1408 family, which `main` converged by tombstoning text nobody
+deleted. Which of the two costs is the lesser one is a judgement for the
+maintainers, not a fact this document can settle, and the alternative that
+pays neither needs the multi-tombstone record described above. Until that
+judgement is made the skipped `TestTreeSplitSiblingCascadeResidueConverges`
+stands as the open half.
+
+**Cross-implementation.** §4.1's stop rule changes *which nodes* a
+`Tree.Edit` tombstones, and only the Go implementation has it; the JS port
+is yorkie-js-sdk#1456. Until it lands, a JS client and the server disagree
+on the cascade for exactly the shapes above: the server's snapshot
+(`server/packs/snapshot.go` rebuilds through this code) then holds a split
+product a JS client applying the same changes locally has tombstoned, and
+the disagreement survives until that client reloads from a snapshot. Unlike
+the §9.6 precedent, this is not a strict narrowing of an already-divergent
+set — the limitations above are shapes `main` and the JS SDK converge — so
+the two halves want to land close together.
+
 ### §4.2 Moved Children Guard
 
 Exclude children whose parent is in `toBeMergedNodes` from the
@@ -1209,6 +1231,7 @@ set. Until it does, the divergence is the one described above.
 | `skipActorID` in split loop advancement (§7.7) | Same-actor siblings are own split products, not concurrent; advancing past them diverges root from clone |
 | Boundary insert migration in SplitElement (§7.3) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
 | Empty sibling re-parenting in Split (§7.4) | When a concurrent parent split already separated siblings into different parents, a replay split's empty product must follow the existing chain to be deterministic; VV-independent to preserve clone/root consistency |
+| Stop the §4.1 cascade at a known sibling seen alive | Keeps text the deleter never saw inside the deleted element, at the cost of converging fewer delivery orders than before: an unresolved trade, see §4.1 |
 | Narrow collectBetween only, preserve insert point (§3) | Adjusting fromLeft/fromParent for both delete and insert changes the insertion position, diverging from the other replica where §7.3's boundary migration handles placement |
 
 ## Convergence Coverage
@@ -1237,6 +1260,15 @@ reconstructed from the snapshot must match the runtime tree node-for-node.
 | SplitSplit | 321 | 0 |
 | SplitEdit | 145 | 0 |
 | **Total** | **1597** | **0** |
+
+Both tables predate §4.1's stop rule and count the suites as they stand,
+which is not the same as "nothing diverges": neither suite covers the
+shapes §4.1 lists as limitations, and the split × delete matrices in the
+property-based suite `t.Skip` on divergence rather than fail. The
+divergence §4.1 leaves is counted where it is produced —
+`pkg/document/tree_split_sibling_cascade_test.go` (12 of its 40 runs leave
+an extra empty element on one replica) and the skipped
+`TestTreeSplitSiblingCascadeResidueConverges`.
 
 ### Clone/root consistency
 
@@ -1278,3 +1310,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
 | Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
+| Fix 28 | §4.1 | Stop the split-sibling cascade at a known sibling seen alive |

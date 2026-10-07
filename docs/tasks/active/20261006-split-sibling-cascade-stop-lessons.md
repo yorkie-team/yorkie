@@ -79,4 +79,20 @@
   Un-tombstoning the born-tombstoned product was considered and rejected: the
   inheritance is what keeps the cascade convergent for products the deleter
   did not know, so flipping it diverges the ordinary cascade instead.
+- Round 6 (external review): the chain walk gained the text-node guard the
+  other chain walks carry — `Node.Split` links products of the same kind, so
+  an element chain holds elements and it never fires, but without it a text
+  node would end the walk by accident, since `enclosed` records element
+  Start tokens only and answers false for every text node. The docs gained
+  what a behaviour reversal owes the reader: a Key Design Decisions row, a
+  Fix 28 entry, a cross-implementation note (unlike §9.6 this is not a
+  strict narrowing of an already-divergent set), a caveat on the two
+  coverage tables that predate the rule, and a paragraph saying plainly
+  that the convergence-for-text trade is a maintainer judgement this
+  document cannot settle. The "Enter + type vs Enter" residue was measured
+  against `main` rather than argued: `main` diverges on the same shape and
+  loses "de" on top of "y" (`<p><span>abc</span></p>…` against
+  `…<span>y</span><span>de</span>…`), so it predates the rule;
+  `TestTreeSplitProductBornTombstonedConverges` is the skipped reproducer
+  for the whole of it.
 

@@ -148,7 +148,9 @@ func TestTreeSplitSiblingCascadeKeepsText(t *testing.T) {
 	// at the start of its new span. Nobody deletes "de" or "y". Cascading on
 	// a lost LWW would tombstone r2's product with "y" in it on r2 as well.
 	// r1 does not show "y": on r1, r2's product is split off a span r1 has
-	// already deleted, so it is born tombstoned. That is not the cascade.
+	// already deleted, so it is born tombstoned. That is divergence, and the
+	// assertion below pins only the half this rule is responsible for — the
+	// whole of it is TestTreeSplitProductBornTombstonedConverges, skipped.
 	t.Run("Enter + type vs Enter keeps the typed y on the typist replica", func(t *testing.T) {
 		docs := regressionStart(t, 2)
 		regressionEdit(t, docs[0], regressionSplitAt0DropLeft)
@@ -219,4 +221,31 @@ func TestTreeSplitSiblingCascadeKeepsText(t *testing.T) {
 		assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]), "d2 diverged from d1")
 		assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[2]), "d3 diverged from d1")
 	})
+}
+
+// TestTreeSplitProductBornTombstonedConverges is the reproducer for the
+// divergence that the "Enter + type vs Enter" case above asserts around: the
+// "y" r2 typed into its own split product is visible on r2 and not on r1,
+// permanently. On r1 that product is split off a span r1 had already deleted,
+// so `SplitElement` gives it its source's `removedAt` and it is born
+// tombstoned. The §4.1 cascade is not what leaves it: the cascade runs only
+// where the delete wins the element's LWW, and this residue is on the replica
+// where it lost. Closing it means revisiting the inherited tombstone, which
+// §4.1's limitations record as the thing that keeps the ordinary cascade
+// convergent -- not the stop rule.
+func TestTreeSplitProductBornTombstonedConverges(t *testing.T) {
+	t.Skip("still reproduces: text typed into a split product born tombstoned " +
+		"is visible only on the replica that typed it")
+
+	docs := regressionStart(t, 2)
+	regressionEdit(t, docs[0], regressionSplitAt0DropLeft)
+	regressionEdit(t, docs[1], func(tree *json.Tree) {
+		regressionSplitAt0DropLeft(tree)
+		tree.EditByPath([]int{0, 1, 0}, []int{0, 1, 0}, &json.TreeNode{Type: "text", Value: "y"}, 0)
+	})
+	p1, p2 := regressionFlush(t, docs[0]), regressionFlush(t, docs[1])
+	regressionReceive(t, docs[1], p1)
+	regressionReceive(t, docs[0], p2)
+
+	assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]), "XML diverged")
 }
