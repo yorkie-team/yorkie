@@ -256,16 +256,15 @@ Known limitations:
   has no way to tell a sibling the editor merged back from one a concurrent
   delete took, and the two want opposite answers.
 
-**This rule is not settled.** It is the one place in this document where a
-change knowingly converges fewer delivery orders than the version before
-it, and convergence is the stated Goal. The shapes it stops converging are
-the three limitations above; the shapes it starts converging in text are
-the #1408 family, which `main` converged by tombstoning text nobody
-deleted. Which of the two costs is the lesser one is a judgement for the
-maintainers, not a fact this document can settle, and the alternative that
-pays neither needs the multi-tombstone record described above. Until that
-judgement is made the skipped `TestTreeSplitSiblingCascadeResidueConverges`
-stands as the open half.
+**The trade was taken by the maintainers.** It is the one place in this
+document where a change knowingly converges fewer delivery orders than the
+version before it, and convergence is the stated Goal. The shapes it stops
+converging are the three limitations above; the shapes it starts converging
+in text are the #1408 family, which `main` converged by tombstoning text
+nobody deleted. The maintainers took the text over the residue (yorkie#2143).
+Closing the residue without paying either cost is tracked in yorkie#2155;
+until then the skipped `TestTreeSplitSiblingCascadeResidueConverges` and
+`TestTreeSplitProductBornTombstonedConverges` stand as the open half.
 
 **Cross-implementation.** §4.1's stop rule changes *which nodes* a
 `Tree.Edit` tombstones, and only the Go implementation has it; the JS port

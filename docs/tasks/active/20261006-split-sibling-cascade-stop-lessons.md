@@ -96,3 +96,7 @@
   `TestTreeSplitProductBornTombstonedConverges` is the skipped reproducer
   for the whole of it.
 
+- Maintainer decision: take the rule with its residue and track the residue
+  in yorkie#2155. The round 6 text-node guard was reverted: it cannot fire
+  on a well-formed chain and yorkie-js-sdk#1456 has no counterpart, and the
+  two halves must carry the identical rule.
