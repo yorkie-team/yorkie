@@ -74,6 +74,19 @@ const (
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000
 
+	// DefaultWatchHeartbeatInterval is zero: the heartbeat stays off until an
+	// operator turns it on. A heartbeat is a new case on the Watch stream's
+	// response oneof, and a client older than it has no case for it: this
+	// repo's own Go client answers an unrecognized body with
+	// ErrUnsupportedWatchResponseType, which its reader loop treats as
+	// terminal and retires the watch pipeline on. Sending heartbeats by
+	// default would therefore break every client that predates them a few
+	// seconds after a server upgrade. Operators turn it on once their clients
+	// understand it; a suggested value is 20s, short enough that a client
+	// notices a half-open stream in well under a minute and long enough to
+	// stay below the idle timeout of a typical proxy or load balancer.
+	DefaultWatchHeartbeatInterval = 0 * time.Second
+
 	DefaultClusterRPCTimeout        = 10 * time.Second
 	DefaultClusterClientTimeout     = 30 * time.Second
 	DefaultClusterClientPoolSize    = 1
@@ -314,6 +327,9 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.ChannelSessionCleanupInterval == "" {
 		c.Backend.ChannelSessionCleanupInterval = DefaultChannelSessionCleanupInterval.String()
+	}
+	if c.Backend.WatchHeartbeatInterval == "" {
+		c.Backend.WatchHeartbeatInterval = DefaultWatchHeartbeatInterval.String()
 	}
 	if c.Backend.ChannelSessionCountCacheTTL == "" {
 		c.Backend.ChannelSessionCountCacheTTL = DefaultChannelSessionCountCacheTTL.String()

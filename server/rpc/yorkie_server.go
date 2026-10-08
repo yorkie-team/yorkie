@@ -104,6 +104,11 @@ type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
 	watches    *watchRegistry
+
+	// heartbeatInterval is how long a Watch stream may stay idle before it
+	// sends a heartbeat. Parsed once here rather than per stream, so a
+	// malformed value fails at startup instead of mid-request.
+	heartbeatInterval gotime.Duration
 }
 
 // newYorkieServer creates a new instance of yorkieServer
@@ -113,9 +118,10 @@ func newYorkieServer(
 	watches *watchRegistry,
 ) *yorkieServer {
 	return &yorkieServer{
-		backend:    be,
-		watches:    watches,
-		serviceCtx: serviceCtx,
+		backend:           be,
+		watches:           watches,
+		serviceCtx:        serviceCtx,
+		heartbeatInterval: be.Config.ParseWatchHeartbeatInterval(),
 	}
 }
 
@@ -741,17 +747,31 @@ func (s *yorkieServer) Watch(
 	if err := context.Cause(streamCtx); err != nil {
 		return err
 	}
-	if err := stream.Send(&api.WatchResponse{
-		Body: &api.WatchResponse_Initialization{
-			Initialization: &api.WatchInitialization{
-				ResourceInits: resourceInits,
-			},
-		},
-	}); err != nil {
+	if err := s.sendWatchInitialization(stream.Send, resourceInits); err != nil {
 		return err
 	}
 
-	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs)
+	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, s.heartbeatInterval)
+}
+
+// sendWatchInitialization sends the first response of a Watch stream.
+//
+// The heartbeat interval is advertised before the first heartbeat is due, so a
+// client knows what to expect from the moment the stream comes up. A server
+// with heartbeats disabled advertises 0, which tells the client not to apply
+// an idle timeout at all.
+func (s *yorkieServer) sendWatchInitialization(
+	send func(*api.WatchResponse) error,
+	resourceInits []*api.ResourceInit,
+) error {
+	return send(&api.WatchResponse{
+		Body: &api.WatchResponse_Initialization{
+			Initialization: &api.WatchInitialization{
+				ResourceInits:       resourceInits,
+				HeartbeatIntervalMs: s.heartbeatInterval.Milliseconds(),
+			},
+		},
+	})
 }
 
 // admitWatch admits a Watch stream: it registers the stream for later
@@ -1000,12 +1020,18 @@ func (s *yorkieServer) subscribeChannel(
 // open and that one resource silently undelivered. Streams carry a single
 // resource today, so the two cases coincide; multiplexing several resources
 // onto one stream will have to report the partial loss on its own.
+//
+// While no event arrives for heartbeatInterval, a heartbeat is sent so the
+// client can tell this stream from a half-open one; every sent response
+// restarts that wait, so a busy stream carries no heartbeats. A zero or
+// negative interval sends none.
 func (s *yorkieServer) streamMergedEvents(
 	ctx context.Context,
 	send func(*api.WatchResponse) error,
 	project *types.Project,
 	docSubs []docSub,
 	channelSubs []channelSub,
+	heartbeatInterval gotime.Duration,
 ) error {
 	merged := make(chan taggedEvent, len(docSubs)+len(channelSubs))
 	done := make(chan struct{})
@@ -1066,12 +1092,35 @@ func (s *yorkieServer) streamMergedEvents(
 		}(cs)
 	}
 
+	// A nil channel blocks forever in a select, which is how a disabled
+	// heartbeat drops out of the loop below without a second branch. Since Go
+	// 1.23 a Reset after the timer has fired cannot deliver the stale value,
+	// so re-arming needs no drain.
+	var heartbeats <-chan gotime.Time
+	resetHeartbeat := func() {}
+	if heartbeatInterval > 0 {
+		timer := gotime.NewTimer(heartbeatInterval)
+		defer timer.Stop()
+		heartbeats = timer.C
+		resetHeartbeat = func() { timer.Reset(heartbeatInterval) }
+	}
+
 	for {
 		select {
 		case <-s.serviceCtx.Done():
 			return context.Canceled
 		case <-ctx.Done():
 			return streamEndCause(ctx)
+		case <-heartbeats:
+			if ctx.Err() != nil {
+				return streamEndCause(ctx)
+			}
+			if err := send(&api.WatchResponse{
+				Body: &api.WatchResponse_Heartbeat{Heartbeat: &api.WatchHeartbeat{}},
+			}); err != nil {
+				return err
+			}
+			resetHeartbeat()
 		case te, ok := <-merged:
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -1103,6 +1152,7 @@ func (s *yorkieServer) streamMergedEvents(
 			if err := send(resp); err != nil {
 				return err
 			}
+			resetHeartbeat()
 		}
 	}
 }
