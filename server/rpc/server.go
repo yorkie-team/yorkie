@@ -25,6 +25,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"connectrpc.com/connect"
@@ -77,6 +78,14 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 			defaultInterceptor,
 		),
 		connect.WithReadMaxBytes(maxRequestBytes),
+		// NOTE(hackerwins): Without this, a panic in a handler is recovered by
+		// net/http, which resets the connection and leaves the caller with no
+		// response at all. Turning it into an Internal error keeps the bug
+		// visible in the log while the caller still gets an answer.
+		connect.WithRecover(func(ctx context.Context, _ connect.Spec, _ http.Header, p any) error {
+			logging.From(ctx).Errorf("panic in handler: %v\n%s", p, debug.Stack())
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("internal error"))
+		}),
 	}
 
 	healthChecker := grpchealth.NewStaticChecker(
