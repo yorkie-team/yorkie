@@ -35,26 +35,41 @@ var ErrPresenceBaseUnavailable = errors.FailedPrecond(
 	"presence base unavailable",
 ).WithCode("ErrPresenceBaseUnavailable")
 
-// maxPresenceBaseSize bounds the presence one cache entry holds, counted as
-// the bytes of its keys and values. Presence is excluded from every document
-// size gate, and the LRU bounds entries rather than bytes, so without this a
-// client could park an arbitrarily large presence per (document, client) and
-// the cache would be bounded only by entry count: at the default 10,000
-// entries this keeps it near 40 MiB. It also bounds what the fold hands the
-// store and the fan-out, so a small patch cannot expand into an arbitrarily
-// large put.
+// maxPresenceBaseSize bounds the presence one cache entry holds and the
+// presence a patch may be folded into, measured by presenceSize. Presence is
+// excluded from every document size gate, and the LRU bounds entries rather
+// than bytes, so without this a client could park an arbitrarily large
+// presence per (document, client) and the cache would be bounded only by entry
+// count: at the default 10,000 entries this keeps it near 40 MiB.
+//
+// It is also the bound on the amplification the fold allows. A patch is
+// rewritten into a put of the sender's whole presence, which is then stored
+// and fanned out, so a small request can cost more than its own bytes; this
+// caps that cost per folded change rather than leaving it to the size of the
+// presence the sender parked earlier.
 //
 // A client whose presence does not fit keeps its presence; the server only
 // never folds its patches, so it pushes full puts, which is what every client
 // did before patches existed.
 const maxPresenceBaseSize = 4 * 1024
 
-// presenceSize returns the bytes of presence data, keys plus values. It is the
-// same measure the cache is budgeted in; the map overhead itself is ignored.
+// presenceEntryOverhead is what one presence key costs beyond the bytes of its
+// key and value: two string headers in the map, the slack a Go map keeps per
+// slot, and the allocation behind each string. Counting it is what bounds the
+// key count, which nothing else does: a key and value of one byte each would
+// otherwise count as two bytes against maxPresenceBaseSize while costing this
+// much memory, so a presence of many tiny keys could hold orders of magnitude
+// more memory than the bound suggests. At 64 bytes a presence holds at most
+// 64 keys, well above what a presence is for.
+const presenceEntryOverhead = 64
+
+// presenceSize returns the memory one presence costs: the bytes of its keys
+// and values plus presenceEntryOverhead per key. It is the measure both the
+// cache entries and the folded puts are budgeted in.
 func presenceSize(data presence.Data) int {
 	size := 0
 	for k, v := range data {
-		size += len(k) + len(v)
+		size += presenceEntryOverhead + len(k) + len(v)
 	}
 	return size
 }
@@ -129,14 +144,25 @@ func foldPresencePatches(
 		case presence.Clear:
 			base = nil
 		case presence.Patch:
-			if base == nil {
+			// A fold whose result would not fit the bound is treated as having
+			// no base. The put a patch is rewritten into is stored and fanned
+			// out, so folding one over the bound would let a request cost
+			// arbitrarily more than its own bytes; the sender instead pushes
+			// the presence it holds as a put, paying for it itself.
+			next := base
+			if next != nil {
+				next = pc.ApplyTo(next)
+			}
+			if next == nil || presenceSize(next) > maxPresenceBaseSize {
+				base = nil
 				if i < lastReset {
 					cn.SetPresenceChange(nil)
 					continue
 				}
 				return nil, ErrPresenceBaseUnavailable
 			}
-			base = pc.ApplyTo(base)
+
+			base = next
 			cn.SetPresenceChange(&presence.Change{
 				ChangeType: presence.Put,
 				Presence:   base,

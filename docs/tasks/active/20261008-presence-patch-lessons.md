@@ -30,3 +30,12 @@
   client-controlled values needs a per-entry byte bound as well as a count;
   here it doubles as the bound on how large a put a small patch can expand
   into.
+- A byte bound over a map that counts only key and value bytes is not a
+  memory bound: a map entry costs tens of bytes whatever its contents, so a
+  presence of one-byte keys weighs orders of magnitude more than the bound
+  says. Counting a fixed overhead per entry bounds the key count too, which
+  nothing else did.
+- Bounding only what is cached leaves the hot path unbounded: the entry
+  written back was checked, but the put the fold had already handed the
+  store and the fan-out was not. A bound meant to cap amplification has to
+  be enforced where the amplification happens.

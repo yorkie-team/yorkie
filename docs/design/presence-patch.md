@@ -73,7 +73,7 @@ tracking the sender's full presence:
 |--------|--------------------------------|
 | `PUT` | becomes the tracked presence |
 | `CLEAR` | tracked presence becomes unknown |
-| `PATCH` | applied to the tracked presence; the change is rewritten to a `PUT` of the result |
+| `PATCH` | applied to the tracked presence; the change is rewritten to a `PUT` of the result, unless the result would pass `maxPresenceBaseSize`, which is handled as having no tracked presence |
 | no presence | none |
 
 A patch applies its deletions first and then its sets, so a key in both ends
@@ -116,7 +116,8 @@ whose result is thrown away.
 ### No base
 
 A patch with no tracked presence (no entry, a stale entry, or a patch after a
-`CLEAR`) fails the push with `ErrPresenceBaseUnavailable`
+`CLEAR`), or one whose result would pass `maxPresenceBaseSize`, fails the push
+with `ErrPresenceBaseUnavailable`
 (`FailedPrecondition`). Nothing in the pack is stored. The client resends the
 pack with that patch replaced by a full `PUT`.
 
@@ -127,10 +128,11 @@ Retrying the operations costs only latency, since none were stored.
 
 The SDK should send a full `PUT` on attach and after reconnecting, so this
 path is rare: it is taken after an eviction, a restart, a shard move, or a
-re-attach. A client whose presence is over `maxPresenceBaseSize` takes it on
-every patch, since no base is kept for it; sending full `PUT`s is both the
-fallback and the steady state for such a client. It is
-an expected signal, so it is not counted in the push-pull error metric.
+re-attach. A client whose presence is over `maxPresenceBaseSize`, or whose
+patch would take it over, takes it on every patch, since such a presence is
+neither folded into nor cached; sending full `PUT`s is both the fallback and
+the steady state for such a client. It is an expected signal, so it is not
+counted in the push-pull error metric.
 
 ### Risks and Mitigation
 
@@ -140,8 +142,9 @@ an expected signal, so it is not counted in the push-pull error metric.
 | An evicted or lost base | `ErrPresenceBaseUnavailable`; the client falls back to a full `PUT` |
 | A new SDK sends a patch to an old server during a rolling upgrade | The old server stores an empty presence; its reply has no capability, and the SDK resends a full `PUT` at once |
 | A base kept across a detach | A detach zeroes the client's checkpoint to what a fresh attach seeds, so `commit` drops the entry when the client is no longer attached and never stores one at the initial checkpoint |
-| Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB of keys and values), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
-| A small patch expanding into a large stored and fanned-out put | The same 4 KiB bound: a presence over it is never cached, so the patches of a client holding one are never folded and it pushes full puts, as it did before patches existed |
+| Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
+| A presence of many tiny keys costing far more memory than its bytes | `presenceSize` counts `presenceEntryOverhead` (64 B) per key as well as the key and value bytes, so the 4 KiB bound also caps a presence at 64 keys and the 40 MiB ceiling holds whatever shape the presence has |
+| A small patch expanding into a large stored and fanned-out put | The fold refuses a patch whose result would pass the same 4 KiB bound, so a folded put costs at most that however large a presence the sender parked earlier. The client then pushes the presence as a full `PUT`, paying for its own bytes, as every client did before patches existed |
 
 ### Design Decisions
 

@@ -52,7 +52,9 @@ type Manager struct {
 	// The LRU bounds entries, not bytes: the writer (packs.presenceFold) is
 	// what keeps one entry small, dropping a presence over
 	// maxPresenceBaseSize instead of caching it, so the cache as a whole is
-	// bounded by PresenceBaseCacheSize times that.
+	// bounded by PresenceBaseCacheSize times that. The bound counts a fixed
+	// overhead per presence key as well as its bytes, so a presence of many
+	// tiny keys cannot hold more memory than the product suggests.
 	// See docs/design/presence-patch.md.
 	PresenceBase *cache.LRU[PresenceBaseKey, PresenceBase]
 }

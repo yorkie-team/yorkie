@@ -17,6 +17,7 @@
 package packs
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	gotime "time"
@@ -318,7 +319,7 @@ func TestFoldPresencePatches(t *testing.T) {
 	t.Run("a presence within the size bound is cached", func(t *testing.T) {
 		be := newCacheBackend(t)
 		clientInfo := clientAt(docKey, 7, 1)
-		data := presence.Data{"blob": strings.Repeat("x", maxPresenceBaseSize-len("blob"))}
+		data := presence.Data{"blob": strings.Repeat("x", maxPresenceBaseSize-len("blob")-presenceEntryOverhead)}
 		pack := presencePack(2, put(data))
 
 		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
@@ -330,6 +331,50 @@ func TestFoldPresencePatches(t *testing.T) {
 		got, ok := be.Cache.PresenceBase.Get(baseKey)
 		require.True(t, ok)
 		assert.Equal(t, maxPresenceBaseSize, presenceSize(got.Presence))
+	})
+
+	// The put a patch is folded into is stored and fanned out, so the fold is
+	// what bounds how much a request can cost beyond its own bytes.
+	t.Run("a patch whose fold would pass the size bound is refused", func(t *testing.T) {
+		be := newCacheBackend(t)
+		big := presence.Data{"blob": strings.Repeat("x", maxPresenceBaseSize-len("blob")-presenceEntryOverhead)}
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, big))
+
+		pack := presencePack(4, patch(presence.Data{"cursor": "1"}))
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		assert.ErrorIs(t, err, ErrPresenceBaseUnavailable)
+		assert.Equal(t, presence.Patch, pack.Changes[0].PresenceChange().ChangeType)
+	})
+
+	t.Run("a patch folded within the size bound is stored as a put", func(t *testing.T) {
+		be := newCacheBackend(t)
+		blob := strings.Repeat("x", maxPresenceBaseSize-len("blob")-len("cursor")-len("1")-2*presenceEntryOverhead)
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, presence.Data{"blob": blob}))
+
+		pack := presencePack(4, patch(presence.Data{"cursor": "1"}))
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		require.NoError(t, err)
+		assert.Equal(t, put(presence.Data{"blob": blob, "cursor": "1"}), pack.Changes[0].PresenceChange())
+	})
+
+	// Nothing else bounds the key count, and a map entry costs far more than
+	// the two bytes a one-byte key and value weigh.
+	t.Run("a presence of many tiny keys is not cached", func(t *testing.T) {
+		be := newCacheBackend(t)
+		clientInfo := clientAt(docKey, 7, 1)
+		many := presence.Data{}
+		for i := range maxPresenceBaseSize/presenceEntryOverhead + 1 {
+			many[strconv.Itoa(i)] = "x"
+		}
+		pack := presencePack(2, put(many))
+
+		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
+		require.NoError(t, err)
+		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
+		pullTo(clientInfo, docKey.DocID, 8, 2)
+		fold.commit(be, clientInfo, docKey.DocID, pushed)
+
+		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
 
 	t.Run("the cached base is not aliased to the pushed change", func(t *testing.T) {
