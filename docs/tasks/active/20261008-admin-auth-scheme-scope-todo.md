@@ -29,3 +29,12 @@ before the handler runs.
       both directions: `API-Key` → `GetProject` and `Bearer` → `ListDocuments`
       both return a JSON error with `permission_denied`, not a reset.
 - [x] `make lint`, targeted `go test`.
+
+## Out of scope — follow-up
+
+The secret key carries no role, so every project-scoped procedure authorizes on
+possession alone, and `GetProject`/`ListProjects` hand the key to plain members.
+That chain predates this change and is untouched by it; closing it means
+withholding `SecretKey` below owner in `api/converter/to_pb.go` /
+`server/rpc/admin_server.go`, or authorizing those procedures on an identity.
+See the lessons file for the full chain.

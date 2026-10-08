@@ -34,10 +34,14 @@ in the context to check a role against, so `RemoveDocumentByAdmin`,
 `UpdateDocument`, `CompactDocumentByAdmin`, `CreateSchema`, `RemoveSchema`,
 `BroadcastByAdmin` and `RevalidateAccess` are reachable by anyone holding the
 key. `GetProject` hands that key to every member: `ProjectAndRole`
-(`server/projects/projects.go:89`) resolves owner, admin and member alike, and
-`converter.ToProject` (`api/converter/to_pb.go:107`) copies `SecretKey` into
-the response. A `member` can therefore read the key and act with the authority
-of an owner.
+(`server/projects/projects.go:89`) resolves owner, admin and member alike and
+the handler (`server/rpc/admin_server.go:208`) does not gate on the role it
+gets back, while `converter.ToProject` (`api/converter/to_pb.go:107`) copies
+`SecretKey` into the response. `ListProjects`
+(`server/rpc/admin_server.go:192`) is the same leak without even needing the
+project name: `projects.ListProjects` (`server/projects/projects.go:62`) adds
+every project the user is a member of, and `ToProjects` reuses `ToProject`. A
+`member` can therefore read the key and act with the authority of an owner.
 
 That chain predates this change and is untouched by it. Before the scheme
 check, these procedures already accepted `API-Key` on the same unchecked path,
@@ -47,10 +51,11 @@ assertion, so a session token reached the handler and panicked on its first
 line. The check converts that panic into `PermissionDenied`; it neither adds
 nor removes a way to reach the handler.
 
-Closing it needs work outside this change: withhold `SecretKey` from
-`GetProject` for roles below owner, or give the project-scoped procedures a
-credential that carries an identity to authorize. Both land in
-`api/converter/to_pb.go` and `server/rpc/admin_server.go`.
+Closing it needs work outside this change: withhold
+`SecretKey` from `GetProject` and `ListProjects` for roles below owner, or give
+the project-scoped procedures a credential that carries an identity to
+authorize. Both land in `api/converter/to_pb.go` and
+`server/rpc/admin_server.go`, neither of which this change touches.
 
 ## `connect.WithRecover` is a backstop, not the fix
 
