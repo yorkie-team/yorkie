@@ -12,6 +12,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [DocPresence](doc-presence.md): Data structure for presence in document
 - [Presence](presence.md): Dedicated presence for real-time user tracking
 - [Presenceless Document Option](disable-presence.md): Document-scoped `disable_presence` that permanently turns off presence storage and propagation for documents that never use it
+- [Presence Patch](presence-patch.md): Clients send only the changed top-level presence keys; the server folds them into a full put before storing, so every pulled presence change stays a put
 
 ### CRDT
 
