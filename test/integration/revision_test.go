@@ -280,4 +280,68 @@ func TestRevision(t *testing.T) {
 		// 07. Clean up
 		assert.NoError(t, c1.Detach(ctx, doc))
 	})
+
+	// A presence-only change takes a server_seq without carrying an operation,
+	// so cursor traffic alone can cross the snapshot interval. The snapshot it
+	// triggers has the same root as the previous one, so storing a revision for
+	// it would only duplicate the previous revision (#2152).
+	t.Run("no auto revision for presence-only changes test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+
+		countAutoRevisions := func(docRefKey types.DocRefKey) int {
+			revs, err := revisions.List(ctx, be, docRefKey, types.Paging[int]{
+				PageSize:  100,
+				Offset:    0,
+				IsForward: false,
+			}, false)
+			assert.NoError(t, err)
+
+			count := 0
+			for _, rev := range revs {
+				if strings.HasPrefix(rev.Label, "snapshot-") {
+					count++
+				}
+			}
+			return count
+		}
+
+		// 01. Edit past the snapshot interval, which stores a snapshot and the
+		// auto revision that goes with it.
+		for i := 0; i < int(helper.SnapshotInterval); i++ {
+			assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+				r.SetString(fmt.Sprintf("k%d", i), fmt.Sprintf("v%d", i))
+				return nil
+			}, fmt.Sprintf("add key%d", i)))
+			assert.NoError(t, c1.Sync(ctx))
+		}
+		time.Sleep(200 * time.Millisecond)
+
+		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
+		assert.NoError(t, err)
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+		before := countAutoRevisions(docRefKey)
+		assert.NotZero(t, before, "editing past the snapshot interval should store an auto revision")
+
+		// 02. Move only the cursor, twice as far as the snapshot interval.
+		for i := 0; i < int(helper.SnapshotInterval)*2; i++ {
+			assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+				p.Set("cursor", fmt.Sprintf("%d", i))
+				return nil
+			}, fmt.Sprintf("move cursor%d", i)))
+			assert.NoError(t, c1.Sync(ctx))
+		}
+		time.Sleep(200 * time.Millisecond)
+
+		// 03. The server_seq moved well past the interval, but no operation
+		// ran, so the auto revisions did not grow.
+		docInfo, err = be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, docInfo.ServerSeq, helper.SnapshotInterval*3)
+		assert.Equal(t, before, countAutoRevisions(docRefKey))
+
+		// 04. Clean up
+		assert.NoError(t, c1.Detach(ctx, doc))
+	})
 }
