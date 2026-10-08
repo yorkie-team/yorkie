@@ -59,6 +59,7 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
 	assert.Equal(t, server.DefaultSnapshotDisableGC, conf.Backend.SnapshotDisableGC)
 	assert.Equal(t, server.DefaultSnapshotCacheSize, conf.Backend.SnapshotCacheSize)
+	assert.Equal(t, server.DefaultPresenceBaseCacheSize, conf.Backend.PresenceBaseCacheSize)
 
 	assert.Equal(t, server.DefaultAuthWebhookCacheSize, conf.Backend.AuthWebhookCacheSize)
 	assert.False(t, conf.Backend.AuthWebhookCacheDisabled)

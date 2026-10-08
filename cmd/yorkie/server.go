@@ -502,6 +502,12 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
+	cmd.Flags().IntVar(
+		&conf.Backend.PresenceBaseCacheSize,
+		"presence-base-cache-size",
+		server.DefaultPresenceBaseCacheSize,
+		"The number of (document, client) presences kept to fold presence patches.",
+	)
 	cmd.Flags().BoolVar(
 		&conf.Backend.EnableWebhookValidation,
 		"backend-enable-webhook-validation",

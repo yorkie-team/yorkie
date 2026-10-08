@@ -158,12 +158,18 @@ func TestForwardOperationsCarryNoRestoreMode(t *testing.T) {
 		"a client must not advertise capabilities it has not been taught to honour")
 }
 
-// TestServerCapabilitiesContainElementRestore pins the handshake's default-deny
-// direction: absence has to read as unsupported, because a server that predates
-// a capability cannot report that it lacks it.
-func TestServerCapabilitiesContainElementRestore(t *testing.T) {
-	assert.True(t, api.HasCapability(api.ServerCapabilities, api.CapElementRestore))
-	assert.False(t, api.HasCapability(nil, api.CapElementRestore),
+// TestServerCapabilities pins what the server advertises and the handshake's
+// default-deny direction: absence has to read as unsupported, because a server
+// that predates a capability cannot report that it lacks it.
+func TestServerCapabilities(t *testing.T) {
+	assert.True(t, api.HasCapability(api.ServerCapabilities, api.CapPresencePatch))
+
+	// The server re-encodes element operations without RestoreMode, so
+	// advertising element restore would let a client's restore be silently
+	// stored as an ordinary insert.
+	assert.False(t, api.HasCapability(api.ServerCapabilities, api.CapElementRestore))
+
+	assert.False(t, api.HasCapability(nil, api.CapPresencePatch),
 		"an empty list must read as unsupported")
-	assert.False(t, api.HasCapability([]string{"something-else"}, api.CapElementRestore))
+	assert.False(t, api.HasCapability([]string{"something-else"}, api.CapPresencePatch))
 }
