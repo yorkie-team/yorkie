@@ -34,8 +34,7 @@ func TestStreamMergedEventsSendsHeartbeat(t *testing.T) {
 	s := &yorkieServer{serviceCtx: context.Background()}
 	cs := newChannelSub("idle")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sent := make(chan *api.WatchResponse, 4)
 	go func() {
@@ -71,8 +70,7 @@ func TestStreamMergedEventsWithoutHeartbeat(t *testing.T) {
 	s := &yorkieServer{serviceCtx: context.Background()}
 	cs := newChannelSub("quiet")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	sent := make(chan *api.WatchResponse, 4)
 	go func() {
