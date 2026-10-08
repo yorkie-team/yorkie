@@ -74,6 +74,12 @@ const (
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000
 
+	// DefaultWatchHeartbeatInterval is short enough that a client noticing a
+	// half-open stream at a small multiple of it still recovers in well under
+	// a minute, and long enough to stay below the idle timeout of a typical
+	// proxy or load balancer.
+	DefaultWatchHeartbeatInterval = 20 * time.Second
+
 	DefaultClusterRPCTimeout        = 10 * time.Second
 	DefaultClusterClientTimeout     = 30 * time.Second
 	DefaultClusterClientPoolSize    = 1
@@ -308,6 +314,9 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.ChannelSessionCleanupInterval == "" {
 		c.Backend.ChannelSessionCleanupInterval = DefaultChannelSessionCleanupInterval.String()
+	}
+	if c.Backend.WatchHeartbeatInterval == "" {
+		c.Backend.WatchHeartbeatInterval = DefaultWatchHeartbeatInterval.String()
 	}
 	if c.Backend.ChannelSessionCountCacheTTL == "" {
 		c.Backend.ChannelSessionCountCacheTTL = DefaultChannelSessionCountCacheTTL.String()
