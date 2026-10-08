@@ -97,9 +97,10 @@ var (
 	ChannelSessionCountCacheTTL   = "10s"
 	ChannelSessionCountCacheSize  = 100
 
-	// WatchHeartbeatInterval keeps the integration lane's Watch streams
-	// heartbeating well inside a test's lifetime, so a client's idle timeout
-	// is exercised rather than merely configured.
+	// WatchHeartbeatInterval turns the heartbeat on for the integration lane,
+	// which ships off by default, and keeps it firing well inside a test's
+	// lifetime so the heartbeat path is exercised rather than merely
+	// configured.
 	WatchHeartbeatInterval = "2s"
 
 	ClusterRPCTimeout        = "10s"

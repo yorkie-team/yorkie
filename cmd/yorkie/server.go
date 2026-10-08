@@ -621,7 +621,8 @@ func init() {
 		"backend-watch-heartbeat-interval",
 		server.DefaultWatchHeartbeatInterval,
 		"The interval at which the server sends a heartbeat on an idle Watch "+
-			"stream. 0 sends none, which keeps the client from applying an idle timeout.",
+			"stream. 0, the default, sends none: a client older than the heartbeat "+
+			"ends its watch on a response it cannot classify, so this is opt-in.",
 	)
 	cmd.Flags().DurationVar(
 		&channelSessionCountCacheTTL,

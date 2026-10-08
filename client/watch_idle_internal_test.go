@@ -17,6 +17,7 @@
 package client
 
 import (
+	"math"
 	"testing"
 	gotime "time"
 
@@ -40,6 +41,16 @@ func TestWatchIdleTimeout(t *testing.T) {
 		// down a stream that is merely slow.
 		assert.Equal(t, watchIdleTimeoutFactor*20*gotime.Second, watchIdleTimeout(20_000))
 		assert.Greater(t, watchIdleTimeout(20_000), 20*gotime.Second)
+	})
+
+	t.Run("a huge advertised interval is capped rather than overflowing", func(t *testing.T) {
+		// Multiplying an unchecked interval by the factor and by a
+		// millisecond overflows int64, and a timer armed with the negative
+		// duration that comes out fires at once: the stream would be timed
+		// out and reconnected in a loop.
+		assert.Equal(t, watchIdleTimeoutMax, watchIdleTimeout(math.MaxInt64))
+		assert.Equal(t, watchIdleTimeoutMax, watchIdleTimeout(math.MaxInt64/1_000_000))
+		assert.Positive(t, watchIdleTimeout(math.MaxInt64))
 	})
 
 	t.Run("an unset initialization reads as no heartbeat", func(t *testing.T) {

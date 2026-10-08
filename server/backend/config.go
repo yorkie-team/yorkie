@@ -74,7 +74,10 @@ type Config struct {
 	// heartbeat on an idle Watch stream, so a client can tell a live stream
 	// from a half-open one. The interval is advertised to the client in the
 	// stream's initialization response. "0s" sends none, which keeps a client
-	// from applying an idle timeout. Default is "20s".
+	// from applying an idle timeout, and is the default: a client that
+	// predates the heartbeat treats the response it cannot classify as
+	// terminal, so heartbeats are opt-in rather than something a server
+	// upgrade turns on under old clients.
 	WatchHeartbeatInterval string `yaml:"WatchHeartbeatInterval"`
 
 	// ChannelSessionCountCacheSize is the cache size of the session count.
@@ -264,6 +267,13 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 // ParseWatchHeartbeatInterval returns the interval at which the server sends
 // a heartbeat on an idle Watch stream. Zero disables the heartbeat.
 func (c *Config) ParseWatchHeartbeatInterval() time.Duration {
+	// An unset interval is no heartbeat, the same as "0s". A backend built
+	// without going through ensureBackendDefaultValue -- an embedded server,
+	// a test -- must not exit the process over an option it never set.
+	if c.WatchHeartbeatInterval == "" {
+		return 0
+	}
+
 	result, err := time.ParseDuration(c.WatchHeartbeatInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse watch heartbeat interval: %v\n", err)

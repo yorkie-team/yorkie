@@ -116,8 +116,11 @@ Backend:
   # on an idle Watch stream, so a client can tell a live stream from a half-open
   # one. The interval is advertised to the client in the stream's initialization
   # response, and "0s" sends none, which keeps the client from applying an idle
-  # timeout. (default: 20s).
-  WatchHeartbeatInterval: "20s"
+  # timeout. It defaults to "0s" because a client older than the heartbeat ends
+  # its watch on a response it cannot classify; turn it on -- "20s" is a good
+  # starting point -- once the clients of this server understand it.
+  # (default: 0s).
+  WatchHeartbeatInterval: "0s"
 
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
