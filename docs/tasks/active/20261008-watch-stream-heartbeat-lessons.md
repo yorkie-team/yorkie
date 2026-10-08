@@ -20,6 +20,17 @@
   watch context surfaces as a stream error, and the reader loop's existing
   reconnect path then does the recovery. No new reconnect logic.
 
+- The advertised heartbeat interval is attacker-controlled input in the same
+  sense any wire field is: it decides a timer the client arms against itself.
+  Clamping it on both ends (`watchIdleTimeoutMin`/`Max` in `client/client.go`)
+  is what keeps a one-millisecond advertisement from turning the reconnect
+  path into a loop that opens streams as fast as the transport allows. The
+  upper bound alone only stops the overflow, not the spin.
+- The initialization response's heartbeat field was unreachable from a unit
+  test while it was built inline in `Watch`, which needs a backend. Pulling it
+  into `sendWatchInitialization` makes the advertised value and its unit
+  assertable without a database.
+
 ## Self review
 
 `/self-review` was not run: this was an autonomous one-shot run with no tool

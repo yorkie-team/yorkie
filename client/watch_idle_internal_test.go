@@ -43,6 +43,20 @@ func TestWatchIdleTimeout(t *testing.T) {
 		assert.Greater(t, watchIdleTimeout(20_000), 20*gotime.Second)
 	})
 
+	t.Run("a tiny advertised interval is floored rather than spinning", func(t *testing.T) {
+		// The interval comes off the wire. Without a floor an endpoint
+		// advertising a few milliseconds -- a hostile server, or "10ms" typed
+		// where "10s" was meant -- gives every stream a deadline it cannot
+		// meet, and the client reconnects as fast as it can open streams.
+		assert.Equal(t, watchIdleTimeoutMin, watchIdleTimeout(1))
+		assert.Equal(t, watchIdleTimeoutMin, watchIdleTimeout(10))
+		assert.GreaterOrEqual(t, watchIdleTimeout(1), gotime.Second)
+
+		// The floor only lifts what falls below it; anything above is left as
+		// the multiple of the advertised interval.
+		assert.Greater(t, watchIdleTimeout(1_000), watchIdleTimeoutMin)
+	})
+
 	t.Run("a huge advertised interval is capped rather than overflowing", func(t *testing.T) {
 		// Multiplying an unchecked interval by the factor and by a
 		// millisecond overflows int64, and a timer armed with the negative

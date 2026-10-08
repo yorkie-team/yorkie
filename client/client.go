@@ -1713,6 +1713,15 @@ const (
 	// which fires at once and reconnects in a loop.
 	watchIdleTimeoutMax = 24 * gotime.Hour
 
+	// watchIdleTimeoutMin floors the timeout an advertised interval can ask
+	// for. The interval arrives off the wire, so an endpoint that advertises
+	// a handful of milliseconds -- a hostile server, or an operator who wrote
+	// "10ms" where they meant "10s" -- would otherwise time every stream out
+	// as soon as it came up and spin the client's reconnect loop at hundreds
+	// of handshakes a second. The floor bounds that to one attempt per
+	// second, and is far below any interval a server has reason to use.
+	watchIdleTimeoutMin = gotime.Second
+
 	// watchReconnectInitialDelay is how long the reader waits before its
 	// first attempt to re-establish a stream that ended, and
 	// watchReconnectMaxDelay caps the doubling that follows.
@@ -1725,6 +1734,11 @@ const (
 // milliseconds. A server that sends no heartbeats advertises 0, and gets 0
 // back: a client must not time out a stream nothing is expected to arrive on,
 // or every quiet document against an older server would reconnect forever.
+//
+// Every other value is clamped to [watchIdleTimeoutMin, watchIdleTimeoutMax].
+// The interval is server-supplied, so nothing but these bounds stands between
+// a nonsensical advertisement and a client that reconnects as fast as it can
+// open streams.
 func watchIdleTimeout(heartbeatIntervalMs int64) gotime.Duration {
 	if heartbeatIntervalMs <= 0 {
 		return 0
@@ -1733,7 +1747,12 @@ func watchIdleTimeout(heartbeatIntervalMs int64) gotime.Duration {
 		return watchIdleTimeoutMax
 	}
 
-	return watchIdleTimeoutFactor * gotime.Duration(heartbeatIntervalMs) * gotime.Millisecond
+	timeout := watchIdleTimeoutFactor * gotime.Duration(heartbeatIntervalMs) * gotime.Millisecond
+	if timeout < watchIdleTimeoutMin {
+		return watchIdleTimeoutMin
+	}
+
+	return timeout
 }
 
 // runWatchLoop subscribes to events on a given document using the unified Watch RPC.

@@ -747,22 +747,31 @@ func (s *yorkieServer) Watch(
 	if err := context.Cause(streamCtx); err != nil {
 		return err
 	}
-	// The heartbeat interval is advertised before the first heartbeat is due,
-	// so a client knows what to expect from the moment the stream comes up. A
-	// server with heartbeats disabled advertises 0, which tells the client not
-	// to apply an idle timeout at all.
-	if err := stream.Send(&api.WatchResponse{
+	if err := s.sendWatchInitialization(stream.Send, resourceInits); err != nil {
+		return err
+	}
+
+	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, s.heartbeatInterval)
+}
+
+// sendWatchInitialization sends the first response of a Watch stream.
+//
+// The heartbeat interval is advertised before the first heartbeat is due, so a
+// client knows what to expect from the moment the stream comes up. A server
+// with heartbeats disabled advertises 0, which tells the client not to apply
+// an idle timeout at all.
+func (s *yorkieServer) sendWatchInitialization(
+	send func(*api.WatchResponse) error,
+	resourceInits []*api.ResourceInit,
+) error {
+	return send(&api.WatchResponse{
 		Body: &api.WatchResponse_Initialization{
 			Initialization: &api.WatchInitialization{
 				ResourceInits:       resourceInits,
 				HeartbeatIntervalMs: s.heartbeatInterval.Milliseconds(),
 			},
 		},
-	}); err != nil {
-		return err
-	}
-
-	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, s.heartbeatInterval)
+	})
 }
 
 // admitWatch admits a Watch stream: it registers the stream for later

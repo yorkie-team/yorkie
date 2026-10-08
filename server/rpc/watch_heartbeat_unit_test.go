@@ -26,7 +26,54 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend"
 )
+
+// TestWatchInitializationAdvertisesHeartbeatInterval verifies that the first
+// response of a Watch stream carries the interval the server was configured
+// with, in milliseconds. A stream that advertised 0 -- or seconds where the
+// field is milliseconds -- would leave every client's idle watchdog unarmed or
+// armed a thousand times too long, and the client has nothing else to go on.
+func TestWatchInitializationAdvertisesHeartbeatInterval(t *testing.T) {
+	inits := []*api.ResourceInit{{
+		Init: &api.ResourceInit_ChannelInit{
+			ChannelInit: &api.ChannelInit{SessionCount: 1, Seq: 1},
+		},
+	}}
+
+	t.Run("the configured interval is advertised in milliseconds", func(t *testing.T) {
+		s := newYorkieServer(context.Background(), &backend.Backend{
+			Config: &backend.Config{WatchHeartbeatInterval: "30s"},
+		}, nil)
+		assert.Equal(t, 30*gotime.Second, s.heartbeatInterval)
+
+		var sent *api.WatchResponse
+		assert.NoError(t, s.sendWatchInitialization(func(resp *api.WatchResponse) error {
+			sent = resp
+			return nil
+		}, inits))
+
+		init := sent.GetInitialization()
+		assert.NotNil(t, init)
+		assert.Equal(t, int64(30_000), init.GetHeartbeatIntervalMs())
+		assert.Len(t, init.GetResourceInits(), 1)
+	})
+
+	t.Run("a disabled heartbeat advertises zero", func(t *testing.T) {
+		// Which is what tells a client not to apply an idle timeout at all.
+		s := newYorkieServer(context.Background(), &backend.Backend{
+			Config: &backend.Config{},
+		}, nil)
+		assert.Zero(t, s.heartbeatInterval)
+
+		var sent *api.WatchResponse
+		assert.NoError(t, s.sendWatchInitialization(func(resp *api.WatchResponse) error {
+			sent = resp
+			return nil
+		}, inits))
+		assert.Zero(t, sent.GetInitialization().GetHeartbeatIntervalMs())
+	})
+}
 
 // TestStreamMergedEventsSendsHeartbeat verifies that a stream with nothing to
 // deliver still sends something, so a client can tell it from a half-open one.
