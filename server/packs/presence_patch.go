@@ -35,6 +35,30 @@ var ErrPresenceBaseUnavailable = errors.FailedPrecond(
 	"presence base unavailable",
 ).WithCode("ErrPresenceBaseUnavailable")
 
+// maxPresenceBaseSize bounds the presence one cache entry holds, counted as
+// the bytes of its keys and values. Presence is excluded from every document
+// size gate, and the LRU bounds entries rather than bytes, so without this a
+// client could park an arbitrarily large presence per (document, client) and
+// the cache would be bounded only by entry count: at the default 10,000
+// entries this keeps it near 40 MiB. It also bounds what the fold hands the
+// store and the fan-out, so a small patch cannot expand into an arbitrarily
+// large put.
+//
+// A client whose presence does not fit keeps its presence; the server only
+// never folds its patches, so it pushes full puts, which is what every client
+// did before patches existed.
+const maxPresenceBaseSize = 4 * 1024
+
+// presenceSize returns the bytes of presence data, keys plus values. It is the
+// same measure the cache is budgeted in; the map overhead itself is ignored.
+func presenceSize(data presence.Data) int {
+	size := 0
+	for k, v := range data {
+		size += len(k) + len(v)
+	}
+	return size
+}
+
 // presenceFold carries the client's presence from before a push, read from
 // the cache in foldPresencePatches, to commit, which writes back the presence
 // after the push once it is stored and the client's checkpoint is final.
@@ -64,9 +88,17 @@ func foldPresencePatches(
 	fold := &presenceFold{
 		key: cache.PresenceBaseKey{DocRefKey: docKey, ClientID: clientInfo.ID},
 	}
-	if cached, ok := be.Cache.PresenceBase.Get(fold.key); ok &&
-		cached.Checkpoint == cp && cached.Epoch == clientEpoch(clientInfo, docKey.DocID) {
-		fold.base = cached.Presence
+	// The initial checkpoint identifies no attachment: it is both what a
+	// detach zeroes the client's checkpoint to and what a fresh attach seeds,
+	// so a base matching it could belong to an earlier attachment of the same
+	// client on this server. commit does not store one, and a leftover entry
+	// -- written before this check, or by a push whose pull then failed -- is
+	// not trusted here either.
+	if cp != change.InitialCheckpoint {
+		if cached, ok := be.Cache.PresenceBase.Get(fold.key); ok &&
+			cached.Checkpoint == cp && cached.Epoch == clientEpoch(clientInfo, docKey.DocID) {
+			fold.base = cached.Presence
+		}
 	}
 
 	var pushables []*change.Change
@@ -148,13 +180,35 @@ func (f *presenceFold) commit(
 		return
 	}
 
+	// Hold nothing for a client that is no longer attached. DetachDocument
+	// zeroes the client's checkpoint to the (0, 0) a fresh attach seeds, so a
+	// base kept past a detach would pass the freshness check on the client's
+	// next attachment to this server and fold its first patch onto presence
+	// from the previous one. The same goes for a checkpoint that is still the
+	// seeded one: it tells this attachment apart from no other.
+	cp := clientInfo.Checkpoint(docID)
+	if attached, err := clientInfo.IsAttached(docID); err != nil || !attached ||
+		cp == change.InitialCheckpoint {
+		be.Cache.PresenceBase.Remove(f.key)
+		return
+	}
+
+	// Presence is excluded from every document size gate, so the cache is the
+	// only place that bounds it. A presence too large to hold is dropped
+	// rather than stored: the client's next patch is refused and it pushes a
+	// full put, which is what it would have pushed anyway.
+	if presenceSize(base) > maxPresenceBaseSize {
+		be.Cache.PresenceBase.Remove(f.key)
+		return
+	}
+
 	// A presence taken from a stored change is shared with it; one carried
 	// over from the cache already belongs to the cache.
 	if changed {
 		base = base.DeepCopy()
 	}
 	be.Cache.PresenceBase.Add(f.key, cache.PresenceBase{
-		Checkpoint: clientInfo.Checkpoint(docID),
+		Checkpoint: cp,
 		Epoch:      clientEpoch(clientInfo, docID),
 		Presence:   base,
 	})

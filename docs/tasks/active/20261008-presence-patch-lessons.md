@@ -19,3 +19,14 @@
   the old code actually does before writing "the old server rejects it".
 - Stored rows decode through the same converter as pushed packs, so a strict
   default case must still accept every value the enum defines.
+- The checkpoint is not a monotonic identity after all: `DetachDocument`
+  zeroes it to exactly the (0, 0) a fresh attach seeds, so on one server a
+  base cached past a detach matches the next attachment. "Server seq only
+  grows" holds for the document, not for the client's record of it. The fix
+  is state the checkpoint does not carry: drop the entry when the client is
+  no longer attached, and never trust one at the initial checkpoint.
+- Presence sits in no document size gate, so an entry-counted LRU of
+  presences is bounded in entries and unbounded in bytes. A cache of
+  client-controlled values needs a per-entry byte bound as well as a count;
+  here it doubles as the bound on how large a put a small patch can expand
+  into.

@@ -17,6 +17,7 @@
 package packs
 
 import (
+	"strings"
 	"testing"
 	gotime "time"
 
@@ -267,6 +268,70 @@ func TestFoldPresencePatches(t *testing.T) {
 		assert.Equal(t, presence.Data{"name": "a"}, got.Presence)
 	})
 
+	// DetachDocument zeroes the client's checkpoint to the (0, 0) a fresh
+	// attach seeds, so a base kept past the detach would pass the freshness
+	// check on the next attachment to this server.
+	t.Run("a base is not kept past a detach", func(t *testing.T) {
+		be := newCacheBackend(t)
+		clientInfo := clientAt(docKey, 7, 1)
+		clientInfo.Status = database.ClientActivated
+		pack := presencePack(2, put(presence.Data{"name": "a"}))
+
+		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
+		require.NoError(t, err)
+		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
+
+		// pullPack detaches the client before commit runs.
+		require.NoError(t, clientInfo.DetachDocument(docKey.DocID))
+		fold.commit(be, clientInfo, docKey.DocID, pushed)
+		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
+	})
+
+	t.Run("a base cached at the seeded checkpoint is not used", func(t *testing.T) {
+		be := newCacheBackend(t)
+		be.Cache.PresenceBase.Add(baseKey, cached(0, 0, presence.Data{"name": "a"}))
+
+		_, err := foldPresencePatches(
+			be, clientAt(docKey, 0, 0), docKey,
+			presencePack(1, patch(presence.Data{"cursor": "1"})),
+		)
+		assert.ErrorIs(t, err, ErrPresenceBaseUnavailable)
+	})
+
+	// Presence is excluded from every document size gate, so the cache is
+	// what bounds it: an entry too large to hold is dropped instead.
+	t.Run("a presence over the size bound is not cached", func(t *testing.T) {
+		be := newCacheBackend(t)
+		clientInfo := clientAt(docKey, 7, 1)
+		big := presence.Data{"blob": strings.Repeat("x", maxPresenceBaseSize+1)}
+		pack := presencePack(2, put(big))
+
+		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
+		require.NoError(t, err)
+		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
+		pullTo(clientInfo, docKey.DocID, 8, 2)
+		fold.commit(be, clientInfo, docKey.DocID, pushed)
+
+		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
+	})
+
+	t.Run("a presence within the size bound is cached", func(t *testing.T) {
+		be := newCacheBackend(t)
+		clientInfo := clientAt(docKey, 7, 1)
+		data := presence.Data{"blob": strings.Repeat("x", maxPresenceBaseSize-len("blob"))}
+		pack := presencePack(2, put(data))
+
+		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
+		require.NoError(t, err)
+		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
+		pullTo(clientInfo, docKey.DocID, 8, 2)
+		fold.commit(be, clientInfo, docKey.DocID, pushed)
+
+		got, ok := be.Cache.PresenceBase.Get(baseKey)
+		require.True(t, ok)
+		assert.Equal(t, maxPresenceBaseSize, presenceSize(got.Presence))
+	})
+
 	t.Run("the cached base is not aliased to the pushed change", func(t *testing.T) {
 		be := newCacheBackend(t)
 		clientInfo := clientAt(docKey, 0, 0)
@@ -275,7 +340,9 @@ func TestFoldPresencePatches(t *testing.T) {
 
 		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
 		require.NoError(t, err)
-		fold.commit(be, clientInfo, docKey.DocID, stored(t, docKey, change.InitialCheckpoint, pack))
+		pushed := stored(t, docKey, change.InitialCheckpoint, pack)
+		pullTo(clientInfo, docKey.DocID, 1, 1)
+		fold.commit(be, clientInfo, docKey.DocID, pushed)
 
 		data["name"] = "changed"
 		got, ok := be.Cache.PresenceBase.Get(baseKey)

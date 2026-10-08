@@ -92,6 +92,13 @@ through another server can bring it back to the cached value. The server seq
 cannot come back, because any stored change, including the detach's clear or
 the re-attach's put, moves the document past it.
 
+A detach on this server is the one transition the checkpoint does not record:
+`ClientInfo.DetachDocument` zeroes both seqs to the (0, 0) a fresh attach
+seeds, so an entry kept past a detach would match the next attachment. Two
+rules close that: `commit` drops the entry when the client is no longer
+attached to the document, and neither stores nor uses one at the initial
+checkpoint, which identifies no attachment.
+
 After the pull, `commit` walks the changes `pushPack` actually stored and
 writes the resulting presence back under the client's new checkpoint. Changes
 `pushPack` discarded (a stale epoch, or the size gate on a detach) are not in
@@ -119,7 +126,10 @@ would leave the sender's peers showing a stale presence until the next `PUT`.
 Retrying the operations costs only latency, since none were stored.
 
 The SDK should send a full `PUT` on attach and after reconnecting, so this
-path is rare: it is taken after an eviction, a restart or a shard move. It is
+path is rare: it is taken after an eviction, a restart, a shard move, or a
+re-attach. A client whose presence is over `maxPresenceBaseSize` takes it on
+every patch, since no base is kept for it; sending full `PUT`s is both the
+fallback and the steady state for such a client. It is
 an expected signal, so it is not counted in the push-pull error metric.
 
 ### Risks and Mitigation
@@ -129,7 +139,9 @@ an expected signal, so it is not counted in the push-pull error metric.
 | A stale cached base produces a presence the client does not hold | The base is used only while the client's checkpoint and epoch are exactly the ones it was cached at |
 | An evicted or lost base | `ErrPresenceBaseUnavailable`; the client falls back to a full `PUT` |
 | A new SDK sends a patch to an old server during a rolling upgrade | The old server stores an empty presence; its reply has no capability, and the SDK resends a full `PUT` at once |
-| Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000); an eviction costs one refused push |
+| A base kept across a detach | A detach zeroes the client's checkpoint to what a fresh attach seeds, so `commit` drops the entry when the client is no longer attached and never stores one at the initial checkpoint |
+| Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB of keys and values), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
+| A small patch expanding into a large stored and fanned-out put | The same 4 KiB bound: a presence over it is never cached, so the patches of a client holding one are never folded and it pushes full puts, as it did before patches existed |
 
 ### Design Decisions
 
