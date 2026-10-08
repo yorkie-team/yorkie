@@ -44,7 +44,42 @@ var (
 
 	// ErrSecretKeyNotProvided is returned when the secret key is not provided.
 	ErrSecretKeyNotProvided = errors.Unauthenticated("secret key is not provided")
+
+	// ErrSchemeNotAllowed is returned when the authorization scheme is not the
+	// one the requested method expects.
+	ErrSchemeNotAllowed = errors.PermissionDenied("authorization scheme is not allowed for this method")
 )
+
+// projectScopedMethods is the set of AdminService methods that are
+// authenticated by a project secret key and read the project from the context
+// with projects.From. Every other authenticated method is user-scoped and
+// takes a session token.
+//
+// NOTE(hackerwins): The set lists the project-scoped side on purpose. A method
+// added later is user-scoped until it is listed here, so it cannot silently
+// inherit a scheme it does not read.
+var projectScopedMethods = map[string]struct{}{
+	"/yorkie.v1.AdminService/GetProjectStats":        {},
+	"/yorkie.v1.AdminService/CreateDocument":         {},
+	"/yorkie.v1.AdminService/ListDocuments":          {},
+	"/yorkie.v1.AdminService/GetDocument":            {},
+	"/yorkie.v1.AdminService/GetDocuments":           {},
+	"/yorkie.v1.AdminService/SearchDocuments":        {},
+	"/yorkie.v1.AdminService/UpdateDocument":         {},
+	"/yorkie.v1.AdminService/RemoveDocumentByAdmin":  {},
+	"/yorkie.v1.AdminService/CompactDocumentByAdmin": {},
+	"/yorkie.v1.AdminService/GetSnapshotMeta":        {},
+	"/yorkie.v1.AdminService/ListChanges":            {},
+	"/yorkie.v1.AdminService/CreateSchema":           {},
+	"/yorkie.v1.AdminService/ListSchemas":            {},
+	"/yorkie.v1.AdminService/GetSchema":              {},
+	"/yorkie.v1.AdminService/GetSchemas":             {},
+	"/yorkie.v1.AdminService/RemoveSchema":           {},
+	"/yorkie.v1.AdminService/ListChannels":           {},
+	"/yorkie.v1.AdminService/GetChannels":            {},
+	"/yorkie.v1.AdminService/BroadcastByAdmin":       {},
+	"/yorkie.v1.AdminService/RevalidateAccess":       {},
+}
 
 func isAdminService(method string) bool {
 	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
@@ -55,6 +90,13 @@ func isRequiredAuth(method string) bool {
 		method != "/yorkie.v1.AdminService/SignUp" &&
 		method != "/yorkie.v1.AdminService/ChangePassword" &&
 		method != "/yorkie.v1.AdminService/DeleteAccount"
+}
+
+// isProjectScoped reports whether the given method is authenticated by a
+// project secret key instead of a session token.
+func isProjectScoped(method string) bool {
+	_, ok := projectScopedMethods[method]
+	return ok
 }
 
 // AdminServiceInterceptor is an interceptor for building additional context
@@ -175,7 +217,7 @@ func (i *AdminServiceInterceptor) buildContext(
 	header http.Header,
 ) (context.Context, error) {
 	if isRequiredAuth(procedure) {
-		newContext, err := i.authenticate(ctx, header)
+		newContext, err := i.authenticate(ctx, procedure, header)
 		if err != nil {
 			return nil, err
 		}
@@ -190,6 +232,7 @@ func (i *AdminServiceInterceptor) buildContext(
 // authenticate does authenticate the request.
 func (i *AdminServiceInterceptor) authenticate(
 	ctx context.Context,
+	procedure string,
 	header http.Header,
 ) (context.Context, error) {
 	// NOTE(hackerwins): The token can be provided by the Authorization header or cookie.
@@ -213,6 +256,17 @@ func (i *AdminServiceInterceptor) authenticate(
 	}
 	scheme := parts[0]
 	param := parts[1]
+
+	// NOTE(hackerwins): Each scheme populates only one of the two scopes:
+	// Bearer puts the user into the context, API-Key puts the project. A method
+	// reads one of them, so the scheme that does not match the method is
+	// rejected here, before the handler reads a scope that was never set.
+	projectScoped := isProjectScoped(procedure)
+	apiKey := strings.EqualFold(scheme, types.AuthSchemeAPIKey)
+	bearer := strings.EqualFold(scheme, types.AuthSchemeBearer)
+	if (apiKey && !projectScoped) || (bearer && projectScoped) {
+		return nil, connect.NewError(connect.CodePermissionDenied, ErrSchemeNotAllowed)
+	}
 
 	switch {
 	case strings.EqualFold(scheme, types.AuthSchemeBearer):
