@@ -27,6 +27,31 @@ every `admin.Client` method that targets a project calls `projects.With` first.
 So the server is being taught a rule the Go client has followed since #1471;
 no client change is needed, and no correct caller loses a path that worked.
 
+## Known limitation: the secret key carries no role
+
+A project-scoped handler authorizes on the secret key alone — there is no user
+in the context to check a role against, so `RemoveDocumentByAdmin`,
+`UpdateDocument`, `CompactDocumentByAdmin`, `CreateSchema`, `RemoveSchema`,
+`BroadcastByAdmin` and `RevalidateAccess` are reachable by anyone holding the
+key. `GetProject` hands that key to every member: `ProjectAndRole`
+(`server/projects/projects.go:89`) resolves owner, admin and member alike, and
+`converter.ToProject` (`api/converter/to_pb.go:107`) copies `SecretKey` into
+the response. A `member` can therefore read the key and act with the authority
+of an owner.
+
+That chain predates this change and is untouched by it. Before the scheme
+check, these procedures already accepted `API-Key` on the same unchecked path,
+and the `Bearer` alternative was never a working credential for them —
+`projects.From` (`server/projects/context.go:30`) is an unchecked type
+assertion, so a session token reached the handler and panicked on its first
+line. The check converts that panic into `PermissionDenied`; it neither adds
+nor removes a way to reach the handler.
+
+Closing it needs work outside this change: withhold `SecretKey` from
+`GetProject` for roles below owner, or give the project-scoped procedures a
+credential that carries an identity to authorize. Both land in
+`api/converter/to_pb.go` and `server/rpc/admin_server.go`.
+
 ## `connect.WithRecover` is a backstop, not the fix
 
 The handler options are shared by the Yorkie, Admin and Cluster services, so
