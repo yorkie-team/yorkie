@@ -40,6 +40,24 @@
   `make verify-modernize` and `go test ./server/packs/...` are green. CI runs
   the integration lane on the PR.
 
+## What the integration lane caught
+
+- The first version of `no auto revision for presence-only changes test`
+  edited exactly `SnapshotInterval` times and then assumed the presence phase
+  started from a snapshotted document. It does not. Attach takes server_seq 1,
+  so ten edits land on 2..11 while the snapshot fires at 10; the edit at 11
+  stays outside it. The first presence-driven snapshot then covers 11..20,
+  which still holds that one operation change, so `storeRevision` ran — and
+  was right to. The test failed on its own premise, not on the fix.
+- The lesson generalises: the snapshot boundary is a multiple of the
+  interval, not wherever the editing loop happens to stop. A test that wants
+  a window containing *only* presence has to first drive the document to a
+  point where a stored snapshot covers every change pushed so far, and wait
+  for it — `storeSnapshot` runs in a background goroutine after pushpull, and
+  its try-lock makes it skip outright when a previous snapshot is still in
+  flight. Polling the stored snapshot's server_seq is the honest signal; a
+  fixed `time.Sleep` is not.
+
 ## Self review
 
 - Not run. This run has no tool that can dispatch the reviewer subagent, so

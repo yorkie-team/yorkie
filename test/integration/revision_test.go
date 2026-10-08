@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -290,58 +291,108 @@ func TestRevision(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, doc))
 
-		countAutoRevisions := func(docRefKey types.DocRefKey) int {
+		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
+		assert.NoError(t, err)
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+
+		// serverSeq reads the document's current server_seq.
+		serverSeq := func() int64 {
+			docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
+			assert.NoError(t, err)
+			return docInfo.ServerSeq
+		}
+
+		// snapshotSeq reads the server_seq of the newest snapshot stored at or
+		// below seq, or 0 when the document has none yet.
+		snapshotSeq := func(seq int64) int64 {
+			info, err := be.DB.FindClosestSnapshotInfo(ctx, docRefKey, seq, false)
+			if err != nil {
+				return 0
+			}
+			return info.ServerSeq
+		}
+
+		// autoRevisionLabels lists the labels of the revisions stored
+		// automatically alongside a snapshot.
+		autoRevisionLabels := func() []string {
 			revs, err := revisions.List(ctx, be, docRefKey, types.Paging[int]{
 				PageSize:  100,
 				Offset:    0,
 				IsForward: false,
 			}, false)
-			assert.NoError(t, err)
+			if err != nil {
+				return nil
+			}
 
-			count := 0
+			var labels []string
 			for _, rev := range revs {
 				if strings.HasPrefix(rev.Label, "snapshot-") {
-					count++
+					labels = append(labels, rev.Label)
 				}
 			}
-			return count
+			return labels
 		}
 
-		// 01. Edit past the snapshot interval, which stores a snapshot and the
-		// auto revision that goes with it.
-		for i := 0; i < int(helper.SnapshotInterval); i++ {
+		// 01. Edit until a stored snapshot covers every change pushed so far.
+		// Stopping at the interval instead would leave the edits made after the
+		// snapshot behind, and the next window would carry those operations
+		// rather than presence alone. Snapshots run in the background after
+		// pushpull, so wait for one to catch up with the document.
+		var boundary int64
+		for i := 0; i < int(helper.SnapshotInterval)*3 && boundary == 0; i++ {
 			assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 				r.SetString(fmt.Sprintf("k%d", i), fmt.Sprintf("v%d", i))
 				return nil
 			}, fmt.Sprintf("add key%d", i)))
 			assert.NoError(t, c1.Sync(ctx))
+
+			seq := serverSeq()
+			if seq%helper.SnapshotInterval != 0 {
+				continue
+			}
+
+			// This sync crossed the interval: give its snapshot time to land.
+			for range 20 {
+				if snapshotSeq(seq) == seq {
+					boundary = seq
+					break
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
 		}
-		time.Sleep(200 * time.Millisecond)
+		assert.NotZero(t, boundary, "editing past the snapshot interval should store a snapshot")
 
-		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
-		assert.NoError(t, err)
-		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
-		before := countAutoRevisions(docRefKey)
-		assert.NotZero(t, before, "editing past the snapshot interval should store an auto revision")
+		// 02. The revision is written right after the snapshot, so wait for it
+		// before taking the baseline.
+		label := fmt.Sprintf("snapshot-%d", boundary)
+		assert.Eventually(t, func() bool {
+			return slices.Contains(autoRevisionLabels(), label)
+		}, 3*time.Second, 50*time.Millisecond, "the snapshot should carry an auto revision")
+		before := autoRevisionLabels()
 
-		// 02. Move only the cursor, twice as far as the snapshot interval.
-		for i := 0; i < int(helper.SnapshotInterval)*2; i++ {
+		// 03. Move only the cursor, twice as far as the snapshot interval.
+		for i := range int(helper.SnapshotInterval) * 2 {
 			assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 				p.Set("cursor", fmt.Sprintf("%d", i))
 				return nil
 			}, fmt.Sprintf("move cursor%d", i)))
 			assert.NoError(t, c1.Sync(ctx))
 		}
+
+		// 04. One change per sync, so the server_seq moved two intervals past
+		// the snapshot and the server took another snapshot.
+		seq := serverSeq()
+		assert.Equal(t, boundary+helper.SnapshotInterval*2, seq)
+		assert.Eventually(t, func() bool {
+			return snapshotSeq(seq) > boundary
+		}, 3*time.Second, 50*time.Millisecond, "crossing the interval should store a snapshot")
+
+		// 05. That snapshot holds no operation, so it brought no revision with
+		// it. Let any revision write that would follow it land first.
 		time.Sleep(200 * time.Millisecond)
+		assert.Equal(t, before, autoRevisionLabels())
 
-		// 03. The server_seq moved well past the interval, but no operation
-		// ran, so the auto revisions did not grow.
-		docInfo, err = be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
-		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, docInfo.ServerSeq, helper.SnapshotInterval*3)
-		assert.Equal(t, before, countAutoRevisions(docRefKey))
-
-		// 04. Clean up
+		// 06. Clean up
 		assert.NoError(t, c1.Detach(ctx, doc))
 	})
 }
