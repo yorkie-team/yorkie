@@ -113,6 +113,7 @@ var (
 	SnapshotInterval          = int64(10)
 	SnapshotThreshold         = int64(10)
 	SnapshotCacheSize         = 10
+	PresenceBaseCacheSize     = 100
 	AuthWebhookSize           = 100
 	AuthWebhookCacheTTL       = 10 * gotime.Second
 	EventWebhookSize          = 100
@@ -341,6 +342,7 @@ func TestBackendConfig() *backend.Config {
 		UseDefaultProject:             UseDefaultProject,
 		SecretKey:                     SecretKey,
 		SnapshotCacheSize:             SnapshotCacheSize,
+		PresenceBaseCacheSize:         PresenceBaseCacheSize,
 		AuthWebhookCacheSize:          AuthWebhookSize,
 		AuthWebhookCacheTTL:           AuthWebhookCacheTTL.String(),
 		EnableWebhookValidation:       EnableWebhookValidation,

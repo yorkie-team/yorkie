@@ -61,6 +61,11 @@ type Config struct {
 	// SnapshotCacheSize is the cache size of the snapshot.
 	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
 
+	// PresenceBaseCacheSize is the number of (document, client) presences the
+	// server keeps to fold presence patches. An evicted entry costs the client
+	// one refused push and a resend of its full presence.
+	PresenceBaseCacheSize int `yaml:"PresenceBaseCacheSize"`
+
 	// ChannelSessionTTL is the time-to-live duration for channel sessions.
 	// If a channel session is not refreshed within this duration, it will be removed.
 	// Default is "60s".

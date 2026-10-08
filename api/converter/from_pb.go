@@ -419,6 +419,26 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 			ChangeType: presence.Clear,
 			Presence:   nil,
 		}
+	case api.PresenceChange_CHANGE_TYPE_PATCH:
+		// A patch that only removes keys may leave presence unset.
+		presenceData := fromPresence(pbPresenceChange.Presence)
+		if presenceData == nil {
+			presenceData = presence.NewData()
+		}
+		p = presence.Change{
+			ChangeType:  presence.Patch,
+			Presence:    presenceData,
+			RemovedKeys: pbPresenceChange.RemovedKeys,
+		}
+	default:
+		// Refuse a type this build does not define, rather than decoding it
+		// into an empty change that Execute would store as a nil presence: a
+		// client that negotiated a newer type must not wipe its presence on a
+		// server that predates it. Defined but unused types (UNSPECIFIED,
+		// DELETE) keep decoding as before, since stored rows go through here.
+		if _, ok := api.PresenceChange_ChangeType_name[int32(pbPresenceChange.Type)]; !ok {
+			return nil, fmt.Errorf("%d: %w", pbPresenceChange.Type, ErrUnsupportedPresenceChangeType)
+		}
 	}
 
 	return &p, nil

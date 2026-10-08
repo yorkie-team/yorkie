@@ -131,6 +131,19 @@ func PushPull(
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
+	// 01b. Fold presence patches into full puts, so only puts are stored and
+	// every client keeps pulling the full presence. A presence-disabled
+	// document has none left after the strip above.
+	var fold *presenceFold
+	if !opts.DisablePresence {
+		var err error
+		if fold, err = foldPresencePatches(be, clientInfo, docKey, reqPack); err != nil {
+			// A missing base is the expected fallback signal after an
+			// eviction, a restart or a shard move, not a failure.
+			return nil, err
+		}
+	}
+
 	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
@@ -155,6 +168,10 @@ func PushPull(
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
+
+	// 03b. Keep the client's presence for folding its next patch, keyed to
+	// the checkpoint the pull just recorded.
+	fold.commit(be, clientInfo, docKey.DocID, pushedChanges)
 
 	if logging.Enabled(zap.DebugLevel) {
 		pullLog := strconv.Itoa(resPack.ChangesLen())

@@ -114,6 +114,7 @@ func New(
 		AuthWebhookCacheSize:         conf.AuthWebhookCacheSize,
 		AuthWebhookCacheTTL:          conf.ParseAuthWebhookCacheTTL(),
 		SnapshotCacheSize:            conf.SnapshotCacheSize,
+		PresenceBaseCacheSize:        conf.PresenceBaseCacheSize,
 		ChannelSessionCountCacheSize: conf.ChannelSessionCountCacheSize,
 		ChannelSessionCountCacheTTL:  conf.ParseChannelSessionCountCacheTTL(),
 	})

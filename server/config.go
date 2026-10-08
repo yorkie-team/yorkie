@@ -106,6 +106,8 @@ const (
 	DefaultSnapshotDisableGC = false
 	DefaultSnapshotCacheSize = 1000
 
+	DefaultPresenceBaseCacheSize = 10000
+
 	DefaultAuthWebhookCacheSize = 5000
 	DefaultAuthWebhookCacheTTL  = 10 * time.Second
 
@@ -301,6 +303,10 @@ func (c *Config) ensureBackendDefaultValue() {
 
 	if c.Backend.SnapshotCacheSize == 0 {
 		c.Backend.SnapshotCacheSize = DefaultSnapshotCacheSize
+	}
+
+	if c.Backend.PresenceBaseCacheSize == 0 {
+		c.Backend.PresenceBaseCacheSize = DefaultPresenceBaseCacheSize
 	}
 
 	if c.Backend.AuthWebhookCacheSize == 0 {
