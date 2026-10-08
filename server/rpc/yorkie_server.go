@@ -104,6 +104,11 @@ type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
 	watches    *watchRegistry
+
+	// heartbeatInterval is how long a Watch stream may stay idle before it
+	// sends a heartbeat. Parsed once here rather than per stream, so a
+	// malformed value fails at startup instead of mid-request.
+	heartbeatInterval gotime.Duration
 }
 
 // newYorkieServer creates a new instance of yorkieServer
@@ -113,9 +118,10 @@ func newYorkieServer(
 	watches *watchRegistry,
 ) *yorkieServer {
 	return &yorkieServer{
-		backend:    be,
-		watches:    watches,
-		serviceCtx: serviceCtx,
+		backend:           be,
+		watches:           watches,
+		serviceCtx:        serviceCtx,
+		heartbeatInterval: be.Config.ParseWatchHeartbeatInterval(),
 	}
 }
 
@@ -745,19 +751,18 @@ func (s *yorkieServer) Watch(
 	// so a client knows what to expect from the moment the stream comes up. A
 	// server with heartbeats disabled advertises 0, which tells the client not
 	// to apply an idle timeout at all.
-	heartbeatInterval := s.backend.Config.ParseWatchHeartbeatInterval()
 	if err := stream.Send(&api.WatchResponse{
 		Body: &api.WatchResponse_Initialization{
 			Initialization: &api.WatchInitialization{
 				ResourceInits:       resourceInits,
-				HeartbeatIntervalMs: heartbeatInterval.Milliseconds(),
+				HeartbeatIntervalMs: s.heartbeatInterval.Milliseconds(),
 			},
 		},
 	}); err != nil {
 		return err
 	}
 
-	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, heartbeatInterval)
+	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, s.heartbeatInterval)
 }
 
 // admitWatch admits a Watch stream: it registers the stream for later

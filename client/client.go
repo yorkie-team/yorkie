@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -122,6 +123,13 @@ var (
 
 	// ErrInitNotReceived occurs when the first response of the watch stream is not received.
 	ErrInitNotReceived = errors.Internal("initialization is not received").WithCode("ErrInitNotReceived")
+
+	// ErrWatchStreamIdle occurs when a watch stream has gone quiet for longer
+	// than the heartbeat interval the server advertised allows, which is how a
+	// half-open connection -- a resumed laptop, a changed network, a proxy
+	// that dropped an idle socket without a reset -- is told from a quiet
+	// document.
+	ErrWatchStreamIdle = errors.Unavailable("watch stream is idle").WithCode("ErrWatchStreamIdle")
 
 	// ErrAlreadySubscribed occurs when the client is already subscribed to the document.
 	ErrAlreadySubscribed = errors.AlreadyExists("already subscribed").WithCode("ErrAlreadySubscribed")
@@ -1646,6 +1654,33 @@ func stopWatchPipeline(attachment *Attachment) {
 	})
 }
 
+const (
+	// watchIdleTimeoutFactor multiplies the heartbeat interval the server
+	// advertises to get how long a silent stream is given before it is treated
+	// as half-open. More than one interval, so a single late or dropped
+	// heartbeat does not tear down a stream that is merely slow.
+	watchIdleTimeoutFactor = 3
+
+	// watchInitTimeout bounds the wait for the initialization response, before
+	// the server has advertised anything. Without it a first attach or a
+	// switch back to realtime hangs forever on a stream the server accepted
+	// and never answered.
+	watchInitTimeout = 10 * gotime.Second
+)
+
+// watchIdleTimeout returns how long the stream may stay silent before it is
+// treated as half-open, given the heartbeat interval the server advertised in
+// milliseconds. A server that sends no heartbeats advertises 0, and gets 0
+// back: a client must not time out a stream nothing is expected to arrive on,
+// or every quiet document against an older server would reconnect forever.
+func watchIdleTimeout(heartbeatIntervalMs int64) gotime.Duration {
+	if heartbeatIntervalMs <= 0 {
+		return 0
+	}
+
+	return watchIdleTimeoutFactor * gotime.Duration(heartbeatIntervalMs) * gotime.Millisecond
+}
+
 // runWatchLoop subscribes to events on a given document using the unified Watch RPC.
 // If an error occurs before stream initialization, the error is returned and the
 // attachment's delivery pipeline is left untouched: it is owned by the attachment
@@ -1664,8 +1699,24 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 		return ErrNotAttached
 	}
 
+	// The idle watchdog cancels this stream alone and never the attachment's
+	// context: the reader below reads a cancelled parent as the client's own
+	// teardown, so a timeout has to stay distinguishable from that to
+	// reconnect instead of ending the pipeline. handedOff tracks whether the
+	// reader goroutine took ownership of the cancel and the timer; until it
+	// does, every return path here has to release them.
+	streamCtx, cancelStream := context.WithCancelCause(ctx)
+	idle := gotime.AfterFunc(watchInitTimeout, func() { cancelStream(ErrWatchStreamIdle) })
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			idle.Stop()
+			cancelStream(context.Canceled)
+		}
+	}()
+
 	stream, err := c.client.Watch(
-		ctx,
+		streamCtx,
 		withShardKey(connect.NewRequest(&api.WatchRequest{
 			ClientId: c.loadID().String(),
 			Resources: []*api.ResourceDescriptor{{
@@ -1697,7 +1748,19 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 		}
 		return ErrInitNotReceived
 	}
-	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
+
+	// Re-arm the watchdog from the interval the server advertised, now that
+	// the stream has answered. A zero timeout disarms it, which is what an
+	// older server that sends no heartbeats gets.
+	resp := stream.Msg()
+	timeout := watchIdleTimeout(resp.GetInitialization().GetHeartbeatIntervalMs())
+	if timeout > 0 {
+		idle.Reset(timeout)
+	} else {
+		idle.Stop()
+	}
+
+	if _, err := handleWatchResponse(resp, d); err != nil {
 		return err
 	}
 	if err = stream.Err(); err != nil {
@@ -1708,8 +1771,18 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 	// so stopWatchPipeline can wait for it; a reconnect registers its
 	// successor from inside this goroutine, before this one returns, so the
 	// counter never dips to zero across the handover.
+	handedOff = true
 	attachment.watchReaders.Go(func() {
+		defer cancelStream(context.Canceled)
+		defer idle.Stop()
+
 		for stream.Receive() {
+			// Any response, heartbeat or event, proves the stream is live, so
+			// it restarts the wait.
+			if timeout > 0 {
+				idle.Reset(timeout)
+			}
+
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
@@ -1743,7 +1816,15 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 			return
 		}
 
-		if err := stream.Err(); err != nil {
+		// A stream the watchdog cancelled ended on the client's own
+		// cancellation, which the transport may report as nothing at all.
+		// Name it instead, so the consumer hears that the stream went
+		// half-open and the reconnect below still runs.
+		err := stream.Err()
+		if stderrors.Is(context.Cause(streamCtx), ErrWatchStreamIdle) {
+			err = ErrWatchStreamIdle
+		}
+		if err != nil {
 			buf.push(WatchDocResponse{Err: err})
 
 			// A client that has begun deactivating is about to cancel ctx
@@ -1789,6 +1870,10 @@ func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*Watc
 				d.SetOnlineClients(clientIDs...)
 			}
 		}
+		return nil, nil
+	case *api.WatchResponse_Heartbeat:
+		// A heartbeat carries no payload: its arrival is the whole signal, and
+		// the caller has already taken it as proof the stream is live.
 		return nil, nil
 	case *api.WatchResponse_Event:
 		switch we := body.Event.Event.(type) {
