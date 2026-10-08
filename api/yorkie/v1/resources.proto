@@ -437,9 +437,19 @@ message PresenceChange {
     CHANGE_TYPE_PUT = 1;
     CHANGE_TYPE_DELETE = 2;
     CHANGE_TYPE_CLEAR = 3;
+    // CHANGE_TYPE_PATCH carries only the top-level keys that changed since
+    // the sender's previous presence: set entries in presence, deleted keys
+    // in removed_keys. Clients send it only to a server that advertises the
+    // "presence-patch" capability on ChangePack. The server folds it into
+    // a CHANGE_TYPE_PUT of the full presence before storing, so it never
+    // appears in a pulled change.
+    CHANGE_TYPE_PATCH = 4;
   }
   ChangeType type = 1;
   Presence presence = 2;
+  // removed_keys lists the top-level keys a CHANGE_TYPE_PATCH deletes. Unused
+  // by the other change types.
+  repeated string removed_keys = 3;
 }
 
 message Presence {

@@ -50,6 +50,12 @@ var (
 	// supported yet.
 	ErrUnsupportedCounterType = errors.InvalidArgument("unsupported counter type").WithCode("ErrUnsupportedCounterType")
 
+	// ErrUnsupportedPresenceChangeType is returned when the given presence
+	// change type is not defined in this build's wire format.
+	ErrUnsupportedPresenceChangeType = errors.InvalidArgument(
+		"unsupported presence change type",
+	).WithCode("ErrUnsupportedPresenceChangeType")
+
 	// ErrInvalidRestoreSpan is returned when a restore span is malformed:
 	// a nil entry, a negative or inverted Start/End offset, or a range
 	// whose length doesn't match its Content.
