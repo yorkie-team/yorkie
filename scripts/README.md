@@ -28,7 +28,7 @@ Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
 | Script | Invoked as | Role |
 |---|---|---|
-| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Copies `.githooks/` into `$GIT_DIR/githooks` and points `core.hooksPath` there — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — then runs `hooks/install.mjs` for the Claude Code hooks. Both are snapshots rather than the worktree, so a branch cannot supply the hook SCRIPT that runs on a reviewer's machine; what those scripts then invoke — `make lint`, `make verify` — is still the working tree's, which is why `.githooks/trusted-tree.sh` refuses when the checkout carries commits on top of `origin/main` that this clone did not create, judged from HEAD's reflog rather than from the branch-supplied author line. Re-run it to pick up hook changes. |
+| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Points `core.hooksPath` at the tracked `.githooks/` — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — so git hook changes take effect on checkout, as in wafflebase. Then runs `hooks/install.mjs` for the Claude Code hooks, which stay a `$GIT_DIR` snapshot because they fire when a session opens; it first refuses when those hook sources differ from `upstream/main`/`origin/main` (`YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed). Re-run it to pick up Claude Code hook changes. |
 
 ## Directories
 

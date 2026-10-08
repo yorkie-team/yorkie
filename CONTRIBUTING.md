@@ -127,43 +127,33 @@ To enable the local hooks, run:
 bash scripts/setup.sh
 ```
 
-This copies `.githooks/` into your clone's shared `$GIT_DIR` (the
-common one, so running it from a linked worktree is fine) and points
-`core.hooksPath` there, then does the same for the Claude Code hooks. The
-installed hooks validate every commit message against the format above,
-run `make lint` on commit, and run `make verify` (lint, licence headers,
-the `go fix` check and the unit tests) on push.
+This points `core.hooksPath` at the tracked `.githooks/` (a relative path,
+so every linked worktree of the clone uses its own checkout's copy) and
+installs the Claude Code hooks. The hooks validate every commit message
+against the format above, run `make lint` on commit, and run `make verify`
+(lint, licence headers, the `go fix` check and the unit tests) on push.
+Hook changes take effect on checkout; there is nothing to re-run.
 
-They are snapshots on purpose: a hook run out of the working tree is a
-script the branch you have checked out supplies, so a rewritten
-`pre-commit` would run the moment you committed in that checkout. The
-cost is that an improved hook reaches your clone when you next run this
-script — and because that re-run snapshots whatever the current
-worktree holds, `setup.sh` refuses when anything it installs or runs
-differs from `upstream/main` (or `origin/main` without one), untracked
-files included: `.githooks/`, `scripts/hooks/`, `setup.sh`
-itself, and the shared `scripts/*.mjs` modules the installer imports —
-the last because a branch that changes only one of those still gets its
-code executed by the install it passes. Re-run it on the default
-branch; if you are the one changing the hooks, say so with
+The hooks run the checked-out tree: its `Makefile`, `.golangci.yml` and
+test code. Committing or pushing in a checkout of someone else's branch
+therefore builds and tests that branch, exactly as `make verify` typed by
+hand would — read a branch before you build in it.
+
+The Claude Code hooks are different: they run when a session opens, so
+`setup.sh` copies them into your clone's shared `$GIT_DIR` and wires the
+gitignored `.claude/settings.local.json` at that copy. Re-run `setup.sh` to
+pick up changes to them. Because that re-run copies whatever the current
+worktree holds, it refuses when `scripts/hooks/`, `setup.sh` itself or the
+shared `scripts/*.mjs` modules the installer imports differ from
+`upstream/main` (or `origin/main` without one). Re-run it on the default
+branch; if you are the one changing those hooks, say so with
 `YORKIE_ALLOW_LOCAL_HOOKS=1 bash scripts/setup.sh`.
 
-The snapshot pins *which* hook runs, not *what it invokes*: `make lint`
-and `make verify` resolve through the working tree's `Makefile`,
-`.golangci.yml` and test code, so committing inside a checkout of
-someone else's branch would run that branch's build and test code. The
-two gates therefore refuse to run at all when the checkout carries
-commits on top of `origin/main` (or `upstream/main`, for a fork whose
-`main` lags) that this clone did not create — the shape a reviewed pull
-request has and your own work does not. What is checked is the reflog
-(HEAD's and the current branch's), which lives in `$GIT_DIR` and records
-which commits your git built, rather than the author address, which is
-a field the branch's author writes and so proves nothing. The cost is that a
-commit you wrote on another machine and fetched here presents the same
-evidence a stranger's does. Push a fix to a contributor's branch — or
-your own from elsewhere — with `--no-verify`, or, having read its diff,
-`YORKIE_ALLOW_FOREIGN_TREE=1 git push`.
-The integration lane is not in them — it needs MongoDB, so CI runs it.
+If your clone was set up before October 2026, run `bash scripts/setup.sh`
+once more: `core.hooksPath` still points at the old `$GIT_DIR/githooks`
+copy, which you can then delete.
+
+The integration lane is not in the git hooks — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.
 
 The two gates refuse rather than skip when the tool they need is absent
