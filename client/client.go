@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -122,6 +123,13 @@ var (
 
 	// ErrInitNotReceived occurs when the first response of the watch stream is not received.
 	ErrInitNotReceived = errors.Internal("initialization is not received").WithCode("ErrInitNotReceived")
+
+	// ErrWatchStreamIdle occurs when a watch stream has gone quiet for longer
+	// than the heartbeat interval the server advertised allows, which is how a
+	// half-open connection -- a resumed laptop, a changed network, a proxy
+	// that dropped an idle socket without a reset -- is told from a quiet
+	// document.
+	ErrWatchStreamIdle = errors.Unavailable("watch stream is idle").WithCode("ErrWatchStreamIdle")
 
 	// ErrAlreadySubscribed occurs when the client is already subscribed to the document.
 	ErrAlreadySubscribed = errors.AlreadyExists("already subscribed").WithCode("ErrAlreadySubscribed")
@@ -1320,7 +1328,7 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	}
 
 	// Start the watch stream using unified Watch RPC
-	stream, err := c.openChannelWatch(watchCtx, ch)
+	stream, cancelStream, err := c.openChannelWatch(watchCtx, ch)
 	if err != nil {
 		unlink()
 		cancel()
@@ -1340,7 +1348,12 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 			// pruned itself. Neither means the watch is over, so re-establish
 			// it — without a new stream the channel stops delivering
 			// broadcasts and session counts for the rest of its life.
-			if !c.pumpChannelWatch(watchCtx, ch, stream, countChan) {
+			alive := c.pumpChannelWatch(watchCtx, ch, stream, cancelStream, countChan)
+			// The stream is done with either way, and its context is this
+			// goroutine's to release: the idle watchdog inside the pump holds
+			// the only other reference to the cancel.
+			cancelStream()
+			if !alive {
 				return
 			}
 			if watchCtx.Err() != nil {
@@ -1350,7 +1363,7 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 			// Re-establishing only follows a stream that delivered something,
 			// so a server that ends every stream at once cannot spin this
 			// loop.
-			stream, err = c.openChannelWatch(watchCtx, ch)
+			stream, cancelStream, err = c.openChannelWatch(watchCtx, ch)
 			if err != nil {
 				if c.logger != nil {
 					c.logger.Error("WatchChannel re-establish failed", zap.Error(err))
@@ -1411,13 +1424,19 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	return countChan, closeFunc, nil
 }
 
-// openChannelWatch opens a Watch stream carrying the given channel.
+// openChannelWatch opens a Watch stream carrying the given channel. The
+// stream gets a context of its own below the caller's, so the idle watchdog
+// can end this stream alone and leave the watch free to open its successor;
+// the returned cancel has to be called once the stream is done with. It is
+// nil when an error is returned, the context having been released already.
 func (c *Client) openChannelWatch(
 	ctx context.Context,
 	ch *channel.Channel,
-) (*connect.ServerStreamForClient[api.WatchResponse], error) {
-	return c.client.Watch(
-		ctx,
+) (*connect.ServerStreamForClient[api.WatchResponse], context.CancelFunc, error) {
+	streamCtx, cancel := context.WithCancel(ctx)
+
+	stream, err := c.client.Watch(
+		streamCtx,
 		withShardKey(connect.NewRequest(&api.WatchRequest{
 			ClientId: c.loadID().String(),
 			Resources: []*api.ResourceDescriptor{{
@@ -1428,19 +1447,40 @@ func (c *Client) openChannelWatch(
 				},
 			}},
 		}), c.options.APIKey, ch.FirstKeyPath()))
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+
+	return stream, cancel, nil
 }
 
 // pumpChannelWatch delivers the responses of one channel watch stream until
 // the stream ends or the watch is canceled. It reports whether the stream
 // delivered at least one response, which is what tells the caller the server
 // still accepts this watch and re-establishing it is worth attempting.
+//
+// A channel watch runs the same idle watchdog a document watch does: once the
+// server advertises a heartbeat interval, a stream that then goes quiet for a
+// multiple of it is half-open, and cancelStream ends it so the caller opens a
+// successor. Without this a dropped socket silently stops every broadcast and
+// session count the channel would have delivered.
 func (c *Client) pumpChannelWatch(
 	ctx context.Context,
 	ch *channel.Channel,
 	stream *connect.ServerStreamForClient[api.WatchResponse],
+	cancelStream context.CancelFunc,
 	countChan chan<- int64,
 ) bool {
 	delivered := false
+
+	var idle *gotime.Timer
+	var timeout gotime.Duration
+	defer func() {
+		if idle != nil {
+			idle.Stop()
+		}
+	}()
 
 	for {
 		select {
@@ -1455,9 +1495,23 @@ func (c *Client) pumpChannelWatch(
 			}
 			delivered = true
 
+			// Any response, heartbeat or event, proves the stream is live,
+			// so it restarts the wait.
+			if idle != nil {
+				idle.Reset(timeout)
+			}
+
 			msg := stream.Msg()
 			switch body := msg.Body.(type) {
 			case *api.WatchResponse_Initialization:
+				// A server that sends no heartbeats advertises 0 and leaves
+				// the watchdog unarmed: nothing is expected to arrive on a
+				// quiet stream, so nothing may time one out.
+				if t := watchIdleTimeout(body.Initialization.GetHeartbeatIntervalMs()); t > 0 && idle == nil {
+					timeout = t
+					idle = gotime.AfterFunc(t, cancelStream)
+				}
+
 				for _, init := range body.Initialization.ResourceInits {
 					if ci, ok := init.Init.(*api.ResourceInit_ChannelInit); ok {
 						ch.UpdateSessionCount(ci.ChannelInit.SessionCount, ci.ChannelInit.Seq)
@@ -1646,6 +1700,61 @@ func stopWatchPipeline(attachment *Attachment) {
 	})
 }
 
+const (
+	// watchIdleTimeoutFactor multiplies the heartbeat interval the server
+	// advertises to get how long a silent stream is given before it is treated
+	// as half-open. More than one interval, so a single late or dropped
+	// heartbeat does not tear down a stream that is merely slow.
+	watchIdleTimeoutFactor = 3
+
+	// watchIdleTimeoutMax caps the timeout an advertised interval can ask
+	// for, so a nonsensical or hostile interval cannot overflow the
+	// multiplication above into a negative duration -- a timer armed with
+	// which fires at once and reconnects in a loop.
+	watchIdleTimeoutMax = 24 * gotime.Hour
+
+	// watchIdleTimeoutMin floors the timeout an advertised interval can ask
+	// for. The interval arrives off the wire, so an endpoint that advertises
+	// a handful of milliseconds -- a hostile server, or an operator who wrote
+	// "10ms" where they meant "10s" -- would otherwise time every stream out
+	// as soon as it came up and spin the client's reconnect loop at hundreds
+	// of handshakes a second. The floor bounds that to one attempt per
+	// second, and is far below any interval a server has reason to use.
+	watchIdleTimeoutMin = gotime.Second
+
+	// watchReconnectInitialDelay is how long the reader waits before its
+	// first attempt to re-establish a stream that ended, and
+	// watchReconnectMaxDelay caps the doubling that follows.
+	watchReconnectInitialDelay = 100 * gotime.Millisecond
+	watchReconnectMaxDelay     = 10 * gotime.Second
+)
+
+// watchIdleTimeout returns how long the stream may stay silent before it is
+// treated as half-open, given the heartbeat interval the server advertised in
+// milliseconds. A server that sends no heartbeats advertises 0, and gets 0
+// back: a client must not time out a stream nothing is expected to arrive on,
+// or every quiet document against an older server would reconnect forever.
+//
+// Every other value is clamped to [watchIdleTimeoutMin, watchIdleTimeoutMax].
+// The interval is server-supplied, so nothing but these bounds stands between
+// a nonsensical advertisement and a client that reconnects as fast as it can
+// open streams.
+func watchIdleTimeout(heartbeatIntervalMs int64) gotime.Duration {
+	if heartbeatIntervalMs <= 0 {
+		return 0
+	}
+	if heartbeatIntervalMs > int64(watchIdleTimeoutMax/(watchIdleTimeoutFactor*gotime.Millisecond)) {
+		return watchIdleTimeoutMax
+	}
+
+	timeout := watchIdleTimeoutFactor * gotime.Duration(heartbeatIntervalMs) * gotime.Millisecond
+	if timeout < watchIdleTimeoutMin {
+		return watchIdleTimeoutMin
+	}
+
+	return timeout
+}
+
 // runWatchLoop subscribes to events on a given document using the unified Watch RPC.
 // If an error occurs before stream initialization, the error is returned and the
 // attachment's delivery pipeline is left untouched: it is owned by the attachment
@@ -1664,8 +1773,31 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 		return ErrNotAttached
 	}
 
+	// The idle watchdog cancels this stream alone and never the attachment's
+	// context: the reader below reads a cancelled parent as the client's own
+	// teardown, so a timeout has to stay distinguishable from that to
+	// reconnect instead of ending the pipeline. It is armed only once the
+	// server has advertised a heartbeat interval, never before: everything
+	// the server does before its first response -- an auth webhook with
+	// project-configurable retries and wait intervals among it -- is a
+	// handshake this client has no basis to put a deadline on, and the caller
+	// owns ctx if it wants one. handedOff tracks whether the reader goroutine
+	// took ownership of the cancel and the timer; until it does, every return
+	// path here has to release them.
+	streamCtx, cancelStream := context.WithCancelCause(ctx)
+	var idle *gotime.Timer
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			if idle != nil {
+				idle.Stop()
+			}
+			cancelStream(context.Canceled)
+		}
+	}()
+
 	stream, err := c.client.Watch(
-		ctx,
+		streamCtx,
 		withShardKey(connect.NewRequest(&api.WatchRequest{
 			ClientId: c.loadID().String(),
 			Resources: []*api.ResourceDescriptor{{
@@ -1697,7 +1829,19 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 		}
 		return ErrInitNotReceived
 	}
-	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
+
+	// Arm the watchdog from the interval the server advertised, now that the
+	// stream has answered. A zero timeout leaves it unarmed, which is what a
+	// server that sends no heartbeats -- one older than them, or one with
+	// them turned off -- gets: nothing is expected to arrive on a quiet
+	// stream, so nothing may time one out.
+	resp := stream.Msg()
+	timeout := watchIdleTimeout(resp.GetInitialization().GetHeartbeatIntervalMs())
+	if timeout > 0 {
+		idle = gotime.AfterFunc(timeout, func() { cancelStream(ErrWatchStreamIdle) })
+	}
+
+	if _, err := handleWatchResponse(resp, d); err != nil {
 		return err
 	}
 	if err = stream.Err(); err != nil {
@@ -1708,8 +1852,20 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 	// so stopWatchPipeline can wait for it; a reconnect registers its
 	// successor from inside this goroutine, before this one returns, so the
 	// counter never dips to zero across the handover.
+	handedOff = true
 	attachment.watchReaders.Go(func() {
+		defer cancelStream(context.Canceled)
+		if idle != nil {
+			defer idle.Stop()
+		}
+
 		for stream.Receive() {
+			// Any response, heartbeat or event, proves the stream is live, so
+			// it restarts the wait.
+			if idle != nil {
+				idle.Reset(timeout)
+			}
+
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
@@ -1743,7 +1899,15 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 			return
 		}
 
-		if err := stream.Err(); err != nil {
+		// A stream the watchdog cancelled ended on the client's own
+		// cancellation, which the transport may report as nothing at all.
+		// Name it instead, so the consumer hears that the stream went
+		// half-open and the reconnect below still runs.
+		err := stream.Err()
+		if stderrors.Is(context.Cause(streamCtx), ErrWatchStreamIdle) {
+			err = ErrWatchStreamIdle
+		}
+		if err != nil {
 			buf.push(WatchDocResponse{Err: err})
 
 			// A client that has begun deactivating is about to cancel ctx
@@ -1758,10 +1922,9 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 			// stream. The buffer stays open and the pump keeps running across
 			// the handshake: they belong to the attachment, so the document
 			// has a consumer for the whole reconnect and the consumer keeps
-			// the same response channel. Only a reconnect that fails ends the
-			// stream for the consumer.
-			if err := c.runWatchLoop(ctx, attachment, d); err != nil {
-				c.logger.Warn(fmt.Sprintf("re-establish watch stream: %v", err))
+			// the same response channel. Only a reconnect that gives up ends
+			// the stream for the consumer.
+			if !c.reconnectWatch(ctx, attachment, d) {
 				buf.close()
 			}
 			return
@@ -1770,6 +1933,50 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 	})
 
 	return nil
+}
+
+// reconnectWatch re-establishes the watch stream of the given attachment,
+// retrying with a backoff until one handshake succeeds. It reports whether
+// one did: a false return means nothing will feed the pipeline again and its
+// buffer has to be closed.
+//
+// One attempt is not enough. What ends a stream -- a half-open socket the
+// idle watchdog caught, a server rolling, a network that came back different
+// -- is usually still true the instant afterwards, so the single retry would
+// fail too and the document would lose realtime for the rest of its life over
+// an outage that lasted seconds. Retrying stops only when the attachment is
+// going away: its context cancelled by Detach, Remove or Deactivate, the
+// client no longer activated, or the attachment no longer holding a pipeline.
+//
+// The caller runs inside the attachment's reader group, so the slot is held
+// across the whole retry and a teardown's Wait still has something to wait
+// for; the backoff watches ctx so that teardown is never delayed by a sleep.
+func (c *Client) reconnectWatch(ctx context.Context, attachment *Attachment, d *document.Document) bool {
+	delay := watchReconnectInitialDelay
+
+	for {
+		err := c.runWatchLoop(ctx, attachment, d)
+		if err == nil {
+			return true
+		}
+		c.logger.Warn(fmt.Sprintf("re-establish watch stream: %v", err))
+
+		if ctx.Err() != nil || c.loadStatus() != statusActivated || stderrors.Is(err, ErrNotAttached) {
+			return false
+		}
+
+		timer := gotime.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false
+		case <-timer.C:
+		}
+
+		if delay *= 2; delay > watchReconnectMaxDelay {
+			delay = watchReconnectMaxDelay
+		}
+	}
 }
 
 func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*WatchDocResponse, error) {
@@ -1789,6 +1996,10 @@ func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*Watc
 				d.SetOnlineClients(clientIDs...)
 			}
 		}
+		return nil, nil
+	case *api.WatchResponse_Heartbeat:
+		// A heartbeat carries no payload: its arrival is the whole signal, and
+		// the caller has already taken it as proof the stream is live.
 		return nil, nil
 	case *api.WatchResponse_Event:
 		switch we := body.Event.Event.(type) {

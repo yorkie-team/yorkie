@@ -58,6 +58,8 @@ var (
 	channelSessionCountCacheTTL   time.Duration
 	channelSessionCountCacheSize  int
 
+	watchHeartbeatInterval time.Duration
+
 	clusterRPCTimeout        time.Duration
 	clusterClientTimeout     time.Duration
 	clusterClientPoolSize    int
@@ -127,6 +129,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ChannelSessionCleanupInterval = channelSessionCleanupInterval.String()
 			conf.Backend.ChannelSessionCountCacheTTL = channelSessionCountCacheTTL.String()
 			conf.Backend.ChannelSessionCountCacheSize = channelSessionCountCacheSize
+
+			conf.Backend.WatchHeartbeatInterval = watchHeartbeatInterval.String()
 
 			conf.Backend.ClusterRPCTimeout = clusterRPCTimeout.String()
 			conf.Backend.ClusterClientTimeout = clusterClientTimeout.String()
@@ -611,6 +615,14 @@ func init() {
 		"channel-session-cleanup-interval",
 		server.DefaultChannelSessionCleanupInterval,
 		"The interval for running cleanup of expired channel sessions.",
+	)
+	cmd.Flags().DurationVar(
+		&watchHeartbeatInterval,
+		"backend-watch-heartbeat-interval",
+		server.DefaultWatchHeartbeatInterval,
+		"The interval at which the server sends a heartbeat on an idle Watch "+
+			"stream. 0, the default, sends none: a client older than the heartbeat "+
+			"ends its watch on a response it cannot classify, so this is opt-in.",
 	)
 	cmd.Flags().DurationVar(
 		&channelSessionCountCacheTTL,
