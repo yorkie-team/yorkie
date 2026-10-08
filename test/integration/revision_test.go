@@ -338,6 +338,14 @@ func TestRevision(t *testing.T) {
 		// snapshot behind, and the next window would carry those operations
 		// rather than presence alone. Snapshots run in the background after
 		// pushpull, so wait for one to catch up with the document.
+		//
+		// The snapshot is taken at whatever server_seq the sync that crossed the
+		// interval landed on, which is not a multiple of the interval: the
+		// background writer takes the snapshot lock with TryLock and gives up
+		// when a previous sync still holds it, so a window can be skipped and
+		// every later one offset by it. Drive the loop off the distance to the
+		// newest stored snapshot instead, and keep editing when a window is
+		// skipped — the next sync re-arms the trigger.
 		var boundary int64
 		for i := 0; i < int(helper.SnapshotInterval)*3 && boundary == 0; i++ {
 			assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -347,7 +355,7 @@ func TestRevision(t *testing.T) {
 			assert.NoError(t, c1.Sync(ctx))
 
 			seq := serverSeq()
-			if seq%helper.SnapshotInterval != 0 {
+			if seq-snapshotSeq(seq) < helper.SnapshotInterval {
 				continue
 			}
 
