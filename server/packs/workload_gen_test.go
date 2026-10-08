@@ -49,7 +49,9 @@ import (
 	stdjson "encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -468,15 +470,114 @@ func ApplyToDocument(
 
 const testTextKey = "content"
 
+// workloadCacheKey identifies a generated workload. The same
+// (totalChanges, seed) pair always produces the same edits and Changes.
+type workloadCacheKey struct {
+	totalChanges int
+	seed         int64
+}
+
+// cachedWorkload holds the generated Changes and the final text size.
+// The Changes are shared between callers and must be treated as read-only.
+type cachedWorkload struct {
+	changes     []*change.Change
+	actualBytes int
+}
+
+var workloadCache = struct {
+	sync.Mutex
+	entries map[workloadCacheKey]*cachedWorkload
+}{entries: make(map[workloadCacheKey]*cachedWorkload)}
+
+// includeLargeWorkload reports whether the expensive 3MB cases should run.
+// They are opt-in: set YORKIE_BENCH_LARGE and do not use -short.
+func includeLargeWorkload() bool {
+	return os.Getenv("YORKIE_BENCH_LARGE") != "" && !testing.Short()
+}
+
+// getOrCreateWorkload generates the workload once per (totalChanges, seed)
+// and reuses it afterwards, so a size/gap matrix does not regenerate the same
+// tens of thousands of Update calls for every case.
+func getOrCreateWorkload(
+	tb testing.TB,
+	docKey key.Key,
+	totalChanges int,
+	seed int64,
+) (*cachedWorkload, error) {
+	cacheKey := workloadCacheKey{totalChanges: totalChanges, seed: seed}
+
+	workloadCache.Lock()
+	defer workloadCache.Unlock()
+
+	if workload, ok := workloadCache.entries[cacheKey]; ok {
+		return workload, nil
+	}
+
+	// Keep the document size roughly proportional to the change count. The
+	// 40 bytes per change and the 0.2 DeleteRatio are the same as in
+	// DefaultConfig.
+	cfg := Config{
+		TargetBytes:   totalChanges * 40,
+		TargetChanges: totalChanges,
+		DeleteRatio:   0.2,
+		Seed:          seed,
+	}
+
+	ops, err := GenerateTextWorkload(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := document.New(docKey)
+
+	applied, err := ApplyToDocument(doc, testTextKey, ops)
+	if err != nil {
+		return nil, fmt.Errorf("apply workload (applied=%d): %w", applied, err)
+	}
+
+	if applied != totalChanges {
+		return nil, fmt.Errorf(
+			"applied changes (%d) differ from requested totalChanges (%d)",
+			applied,
+			totalChanges,
+		)
+	}
+
+	actualBytes := len(extractText(tb, doc, testTextKey))
+
+	pack := doc.CreateChangePack()
+	if len(pack.Changes) != totalChanges {
+		return nil, fmt.Errorf(
+			"change count from CreateChangePack mismatch: got=%d want=%d",
+			len(pack.Changes),
+			totalChanges,
+		)
+	}
+
+	workload := &cachedWorkload{changes: pack.Changes, actualBytes: actualBytes}
+	workloadCache.entries[cacheKey] = workload
+
+	tb.Logf(
+		"generated workload cache entry: totalChanges=%d seed=%d ops=%d actualBytes=%d",
+		totalChanges, seed, len(ops), actualBytes,
+	)
+
+	return workload, nil
+}
+
 // Checks that the generated workload reaches the target size on a real document
 func TestGenerateTextWorkload_ConvergesToTargetSize(t *testing.T) {
-	cases := []struct {
+	type tcase struct {
 		name        string
 		targetBytes int
-	}{
+	}
+	cases := []tcase{
 		{"50KB", 50 * 1024},
 		{"500KB", 500 * 1024},
-		{"3MB", 3 * 1024 * 1024},
+	}
+	// 3MB takes ~90s locally and times out CI; opt in via YORKIE_BENCH_LARGE.
+	if includeLargeWorkload() {
+		cases = append(cases, tcase{"3MB", 3 * 1024 * 1024})
 	}
 
 	for _, tc := range cases {
@@ -680,45 +781,19 @@ func seedDocumentAtGap(
 		tb.Fatalf("attach document in memory: %v", err)
 	}
 
-	// Keep the document size roughly proportional to the change count. The
-	// 40 bytes per change and the 0.2 DeleteRatio are the same as in
-	// DefaultConfig.
-	cfg := Config{
-		TargetBytes:   totalChanges * 40,
-		TargetChanges: totalChanges,
-		DeleteRatio:   0.2,
-		Seed:          seed,
-	}
-
-	ops, err := GenerateTextWorkload(cfg)
+	// The workload only depends on (totalChanges, seed), so it is generated
+	// once and reused. The cached Changes are read-only; NewFromChange binds
+	// each conversion to this document's RefKey, so it is not cached.
+	workload, err := getOrCreateWorkload(tb, docKey, totalChanges, seed)
 	if err != nil {
 		tb.Fatalf("generate workload: %v", err)
 	}
 
-	doc := document.New(docKey)
+	actualBytes := workload.actualBytes
 
-	applied, err := ApplyToDocument(doc, testTextKey, ops)
-	if err != nil {
-		tb.Fatalf("apply workload (applied=%d): %v", applied, err)
-	}
+	pushables := make([]*database.ChangeInfo, 0, len(workload.changes))
 
-	if applied != totalChanges {
-		tb.Fatalf(
-			"applied changes (%d) differ from requested totalChanges (%d)",
-			applied,
-			totalChanges,
-		)
-	}
-
-	// Check the final size of the document after all edits.
-	actualBytes := len(extractText(tb, doc, testTextKey))
-
-	// Convert the local changes into ChangeInfo for the database.
-	pack := doc.CreateChangePack()
-
-	pushables := make([]*database.ChangeInfo, 0, len(pack.Changes))
-
-	for _, cn := range pack.Changes {
+	for _, cn := range workload.changes {
 		info, err := database.NewFromChange(docInfoBefore.RefKey(), cn)
 		if err != nil {
 			tb.Fatalf("convert change to change info: %v", err)
@@ -905,18 +980,23 @@ func activateTestClient(tb testing.TB, ctx context.Context, clientKey string) *d
 }
 
 // TestWorkloadMatrix_SizeAndGap checks that each document size and gap
-// combination produces the expected state. It covers 9 subtests: 3 document
-// sizes (50KB, 500KB, 3MB) x 3 client gaps (50, 500, 1000). It validates the
+// combination produces the expected state. By default it covers 6 subtests: 2 document
+// sizes (50KB, 500KB) x 3 client gaps (50, 500, 1000); 3MB is added when
+// YORKIE_BENCH_LARGE is set. It validates the
 // workload and seeding matrix independently of the snapshot benchmark, so it
 // has no Cache axis and does not build a snapshot.
 func TestWorkloadMatrix_SizeAndGap(t *testing.T) {
-	sizeCases := []struct {
+	type sizeCase struct {
 		name  string
 		bytes int
-	}{
+	}
+	sizeCases := []sizeCase{
 		{"50KB", 50 * 1024},
 		{"500KB", 500 * 1024},
-		{"3MB", 3 * 1024 * 1024},
+	}
+	// 3MB regenerates tens of thousands of Updates and times out CI; opt in.
+	if includeLargeWorkload() {
+		sizeCases = append(sizeCases, sizeCase{"3MB", 3 * 1024 * 1024})
 	}
 
 	gapCases := []int64{50, 500, 1000}
