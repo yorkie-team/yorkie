@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	userScopedProcedure    = "/yorkie.v1.AdminService/GetProject"
-	projectScopedProcedure = "/yorkie.v1.AdminService/ListDocuments"
+	userScopedProcedure     = "/yorkie.v1.AdminService/GetProject"
+	projectScopedProcedure  = "/yorkie.v1.AdminService/ListDocuments"
+	schemeAgnosticProcedure = "/yorkie.v1.AdminService/GetServerVersion"
 )
 
 // adminProcedures returns every procedure of AdminService, read from the
@@ -80,6 +81,40 @@ func TestProjectScopedMethods(t *testing.T) {
 				assert.False(t, isProjectScoped(procedure), "%s needs no auth yet is project scoped", procedure)
 			}
 		}
+	})
+
+	t.Run("every scheme agnostic method exists and reads no scope test", func(t *testing.T) {
+		procedures := make(map[string]struct{})
+		for _, procedure := range adminProcedures(t) {
+			procedures[procedure] = struct{}{}
+		}
+
+		for procedure := range schemeAgnosticMethods {
+			_, ok := procedures[procedure]
+			assert.True(t, ok, "%s is not a method of AdminService", procedure)
+			assert.False(t, isProjectScoped(procedure), "%s reads no scope yet is project scoped", procedure)
+		}
+	})
+}
+
+func TestIsSchemeAllowed(t *testing.T) {
+	t.Run("scheme must match the scope the method reads test", func(t *testing.T) {
+		assert.True(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeBearer))
+		assert.False(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeAPIKey))
+		assert.True(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeAPIKey))
+		assert.False(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeBearer))
+	})
+
+	// GetServerVersion reads neither scope and answered to both schemes before
+	// the gate existed, so neither credential may be turned away here.
+	t.Run("a method reading no scope keeps both schemes test", func(t *testing.T) {
+		assert.True(t, isSchemeAllowed(schemeAgnosticProcedure, types.AuthSchemeAPIKey))
+		assert.True(t, isSchemeAllowed(schemeAgnosticProcedure, types.AuthSchemeBearer))
+	})
+
+	t.Run("an unknown scheme is left to credential verification test", func(t *testing.T) {
+		assert.True(t, isSchemeAllowed(userScopedProcedure, "Basic"))
+		assert.True(t, isSchemeAllowed(projectScopedProcedure, "Basic"))
 	})
 }
 

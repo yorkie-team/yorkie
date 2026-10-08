@@ -453,7 +453,27 @@ func TestRESTAPI(t *testing.T) {
 			fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr()),
 			`{"page_size": 1}`,
 		)
+
+		// GetServerVersion reads neither scope, so both credentials keep
+		// reaching it rather than being turned away by the scheme gate.
+		versionURL := fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetServerVersion", defaultServer.RPCAddr())
+		post(t, project, versionURL, `{}`)
+		assertOK(t, versionURL, fmt.Sprintf("%s %s", types.AuthSchemeBearer, token), `{}`)
 	})
+}
+
+// assertOK sends a POST request with the given authorization header and
+// asserts that it is answered with 200.
+func assertOK(t *testing.T, url, authHeader, body string) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(types.AuthorizationKey, authHeader)
+
+	res, err := http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, res.Body.Close()) }()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 }
 
 // logIn logs the default admin in over the REST API and returns its token.

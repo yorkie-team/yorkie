@@ -15,10 +15,17 @@ author sees `permission_denied` the first time they call it, instead of the
 panic that #1582 and #1616 inherited. The reverse allow-list would default new
 methods to accepting `API-Key`, which is the failure mode being fixed.
 
-`GetServerVersion` needs authentication but reads neither scope. It falls on
-the `Bearer` side, which is what `cmd/yorkie/version.go` already sends — it
-calls the client with a plain context, and `admin.AuthInterceptor` only
-switches to `API-Key` when the context carries a project.
+`GetServerVersion` needs authentication but reads neither scope, so neither
+side of the split fits it. Folding it into the `Bearer` side would have been a
+regression: `server/rpc/admin_server.go:1160` returns static version data and
+answers the same way whichever credential is presented, and an `API-Key` caller
+reached it successfully before the gate existed. `schemeAgnosticMethods`
+therefore exempts it from the scheme check and leaves only the credential
+itself to be verified, so both schemes keep working. A third set is cheaper
+than it looks because its members are exactly the methods that read no scope;
+`cmd/yorkie/version.go` is unaffected either way, since it calls the client
+with a plain context and `admin.AuthInterceptor` only switches to `API-Key`
+when the context carries a project.
 
 ## The scheme split was already the client's contract
 

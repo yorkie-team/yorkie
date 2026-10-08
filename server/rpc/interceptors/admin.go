@@ -81,6 +81,14 @@ var projectScopedMethods = map[string]struct{}{
 	"/yorkie.v1.AdminService/RevalidateAccess":       {},
 }
 
+// schemeAgnosticMethods is the set of authenticated AdminService methods that
+// read neither scope. They answer the same way whichever credential is
+// presented, so both schemes stay valid for them and only the credential
+// itself is verified.
+var schemeAgnosticMethods = map[string]struct{}{
+	"/yorkie.v1.AdminService/GetServerVersion": {},
+}
+
 func isAdminService(method string) bool {
 	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
 }
@@ -97,6 +105,31 @@ func isRequiredAuth(method string) bool {
 func isProjectScoped(method string) bool {
 	_, ok := projectScopedMethods[method]
 	return ok
+}
+
+// isSchemeAgnostic reports whether the given method reads neither scope and so
+// accepts either scheme.
+func isSchemeAgnostic(method string) bool {
+	_, ok := schemeAgnosticMethods[method]
+	return ok
+}
+
+// isSchemeAllowed reports whether the given scheme populates the scope the
+// given method reads. A scheme this does not recognize is left to the
+// credential verification below, which rejects it as unauthenticated.
+func isSchemeAllowed(method, scheme string) bool {
+	if isSchemeAgnostic(method) {
+		return true
+	}
+
+	if strings.EqualFold(scheme, types.AuthSchemeAPIKey) {
+		return isProjectScoped(method)
+	}
+	if strings.EqualFold(scheme, types.AuthSchemeBearer) {
+		return !isProjectScoped(method)
+	}
+
+	return true
 }
 
 // AdminServiceInterceptor is an interceptor for building additional context
@@ -260,11 +293,9 @@ func (i *AdminServiceInterceptor) authenticate(
 	// NOTE(hackerwins): Each scheme populates only one of the two scopes:
 	// Bearer puts the user into the context, API-Key puts the project. A method
 	// reads one of them, so the scheme that does not match the method is
-	// rejected here, before the handler reads a scope that was never set.
-	projectScoped := isProjectScoped(procedure)
-	apiKey := strings.EqualFold(scheme, types.AuthSchemeAPIKey)
-	bearer := strings.EqualFold(scheme, types.AuthSchemeBearer)
-	if (apiKey && !projectScoped) || (bearer && projectScoped) {
+	// rejected here, before the handler reads a scope that was never set. A
+	// method that reads neither scope keeps accepting both schemes.
+	if !isSchemeAllowed(procedure, scheme) {
 		return nil, connect.NewError(connect.CodePermissionDenied, ErrSchemeNotAllowed)
 	}
 
