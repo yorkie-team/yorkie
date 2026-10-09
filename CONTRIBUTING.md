@@ -136,8 +136,9 @@ Hook changes take effect on checkout; there is nothing to re-run.
 
 The hooks run the checked-out tree: its `Makefile`, `.golangci.yml` and
 test code. Committing or pushing in a checkout of someone else's branch
-therefore builds and tests that branch, exactly as `make verify` typed by
-hand would — read a branch before you build in it.
+therefore runs that branch's `.githooks/` and builds and tests it, exactly
+as `make verify` typed by hand would — read a branch, hooks included,
+before you build in it.
 
 The Claude Code hooks are different: they run when a session opens, so
 `setup.sh` copies them into your clone's shared `$GIT_DIR` and wires the
@@ -151,7 +152,9 @@ branch; if you are the one changing those hooks, say so with
 
 If your clone was set up before October 2026, run `bash scripts/setup.sh`
 once more: `core.hooksPath` still points at the old `$GIT_DIR/githooks`
-copy, which you can then delete.
+copy, which keeps running a guard that has since been removed. `make lint`
+warns when it finds that wiring, and `setup.sh` deletes the old copy once
+it rewires the clone.
 
 The integration lane is not in the git hooks — it needs MongoDB, so CI runs it.
 Any of the three can be bypassed with `--no-verify` when you mean to.

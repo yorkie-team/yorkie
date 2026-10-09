@@ -116,6 +116,29 @@ Both were removed, on the maintainer's call:
   The safe practice is unchanged and lives where it belongs: read a branch
   before you build in it, and use `--no-verify` when you only mean to push.
 
+**What this gives up, stated plainly.** With `core.hooksPath` in the tree, the
+hook scripts themselves are branch-controlled again: a fork pull request can
+rewrite `.githooks/pre-commit` to run anything, and a maintainer who checks it
+out and commits runs it. That is accepted because the snapshot never removed
+the exposure, only moved it — the snapshotted hooks already executed the
+branch's `Makefile`, `.golangci.yml` and test code. The rule is the same in
+both cases: read a fork branch, `.githooks/` included, before committing in
+it.
+
+A checkout with no `.githooks/` — an old release branch cut before the
+directory existed — runs no hooks at all, since git treats a missing hooks
+directory as empty. CI still gates anything pushed from it.
+
+**Stale clones are told, and cleaned up.** A clone set up before this change
+still points `core.hooksPath` at the legacy `$GIT_DIR/githooks` copy, which
+keeps running the removed guard. `make lint` runs `scripts/setup.sh --check`,
+which never fails the target and only warns on stderr: that the hooks are not
+installed when `core.hooksPath` is unset, that it names the legacy snapshot
+when it resolves (physically) to `$GIT_DIR/githooks`, or what else it names.
+It is silent under `CI`. `setup.sh` itself removes the legacy copy, but only
+when `core.hooksPath` currently resolves to it, and only after the
+install-time source check below has passed — a refused run changes nothing.
+
 ### The Claude Code hooks keep their `$GIT_DIR` snapshot
 
 `scripts/hooks/install.mjs`, run by `setup.sh`, copies `scripts/hooks/*.sh`
@@ -201,14 +224,18 @@ script the installer wires exists and is executable, and that no
 not a security control). `setup.sh` and the hooks are exercised for real in
 scratch clones, with `make` and `golangci-lint` stubbed on `PATH`: `setup.sh`
 wiring `core.hooksPath = .githooks` from the main checkout and from a linked
-worktree, refusing changed Claude Code hook sources, and both gates reaching
-`make` on a branch that carries somebody else's commits.
+worktree, refusing changed Claude Code hook sources without changing anything,
+`--check`'s warning for an unset and a legacy wiring, removing the legacy copy
+only when it is wired, and a real `git commit` on a branch carrying a
+bot-authored commit dispatching `pre-commit` through git and landing.
 
 ### Risks and Mitigation
 
 | Risk | Mitigation |
 |------|------------|
-| A branch's hooks or `Makefile` run when a reviewer commits or pushes in its checkout | Accepted: the gates exist to run the tree, and building a branch is running it. Read before building; `--no-verify` to push only |
+| A branch's hooks or `Makefile` run when a reviewer commits or pushes in its checkout | Accepted: the gates exist to run the tree, and building a branch is running it. Read before building, `.githooks/` included; `--no-verify` to push only |
+| A clone set up before 2026-10 keeps running the legacy snapshot and its guard | `make lint` warns via `setup.sh --check`; `setup.sh` removes the copy when the clone points at it |
+| A checkout without `.githooks/` (an old release branch) runs no hooks | Accepted; CI gates whatever is pushed from it |
 | Opening a Claude Code session in a branch's checkout runs its hooks | Wiring is gitignored `.claude/settings.local.json`, naming a `$GIT_DIR/agent-hooks/` snapshot |
 | `setup.sh` re-run inside a pull-request checkout persists that branch's Claude Code hooks | Their sources compared against `upstream/main` or `origin/main`; explicit `YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed |
 | `setup.sh` run in a linked worktree, which is later removed | `core.hooksPath` is relative, resolved per worktree; the Claude Code snapshot lives in the common git dir |
@@ -238,6 +265,7 @@ worktree, refusing changed Claude Code hook sources, and both gates reaching
 |-------------|---------|
 | Track `.claude/settings.json` so the Claude Code hooks wire themselves, as wafflebase does | Opening a session in a branch's checkout — routine when reviewing — would execute that branch's hook scripts with no confirmation and no commit or push chosen |
 | Snapshot `.githooks/` into `$GIT_DIR` plus `trusted-tree.sh`, refusing a checkout with commits this clone did not create | Shipped until 2026-10, then removed. Bot commits made every agent-loop branch "foreign", so maintainers set `YORKIE_ALLOW_FOREIGN_TREE=1` on every commit and push; the snapshot needed a re-run after each hook change |
+| Trust commits reachable from any `origin/*` branch and guard only fork-PR commits | Narrower, and it would stop refusing agent-loop branches, which live on `origin`. Rejected for the simpler wafflebase model: it keeps the reflog machinery and its false refusals for fork work, and guards a threat the gates cannot avoid anyway |
 | Keep the guard, but trust bot authors | Author lines are written by the branch, so an allow-list is spoofable — the reason the guard moved to the reflog in the first place. More rules on a guard whose threat the gates cannot avoid anyway |
 | Refuse when `Makefile` / `.golangci.yml` differ from upstream | Closes two of three paths; `go test ./...` runs every `_test.go` in the tree, and there is no file list for that |
 | Run `go test ./...` in `pre-commit` | 35 s per commit; the gate would be bypassed, and a bypassed gate enforces nothing |

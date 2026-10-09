@@ -45,3 +45,16 @@ maintainer chose wafflebase's model: `core.hooksPath = .githooks`.
 
 Existing clones keep `core.hooksPath` at the old `$GIT_DIR/githooks` copy
 until `bash scripts/setup.sh` is run once more.
+
+## Review follow-ups (#2166)
+
+- [x] `scripts/setup.sh --check`, run from `make lint`: warns, never fails,
+      on an unset or legacy `core.hooksPath`; silent under `CI`
+- [x] `setup.sh` removes `$GIT_COMMON/githooks` only when `core.hooksPath`
+      resolves to it, after the source check; a refused run changes nothing
+- [x] Test through git's own hook dispatch: setup, bot commit, `git commit`
+      with a stubbed `make`, marker file and landed commit asserted
+- [x] Tests for the `--check` text and the conditional removal
+- [x] Design doc: hook scripts are branch-controlled again and why that is
+      accepted; the rejected "trust `origin/*`, guard fork commits"
+      alternative; a checkout without `.githooks/` runs no hooks

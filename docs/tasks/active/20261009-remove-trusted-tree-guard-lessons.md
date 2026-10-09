@@ -15,3 +15,8 @@
 - A relative `core.hooksPath` is resolved per worktree, so one shared config
   value serves every linked worktree; `git rev-parse --git-path hooks` shows
   where git will look.
+- Removing a mechanism needs a migration path for clones still wired to it.
+  Warn from a target people already run (`make lint`), and clean up only what
+  the clone provably points at, after every refusal point has passed.
+- Running a hook file with `bash` proves the script, not the wiring. One test
+  should go through `git commit` so git's own dispatch is what finds the hook.

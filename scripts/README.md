@@ -28,7 +28,7 @@ Both take an optional tasks directory argument, defaulting to `docs/tasks`.
 
 | Script | Invoked as | Role |
 |---|---|---|
-| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Points `core.hooksPath` at the tracked `.githooks/` — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — so git hook changes take effect on checkout, as in wafflebase. Then runs `hooks/install.mjs` for the Claude Code hooks, which stay a `$GIT_DIR` snapshot because they fire when a session opens; it first refuses when those hook sources differ from `upstream/main`/`origin/main` (`YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed). Re-run it to pick up Claude Code hook changes. |
+| `setup.sh` | `bash scripts/setup.sh` | Installs both hook systems for this clone. Points `core.hooksPath` at the tracked `.githooks/` — `commit-msg` (message shape), `pre-commit` (`make lint`), `pre-push` (`make verify`) — so git hook changes take effect on checkout, as in wafflebase. Then runs `hooks/install.mjs` for the Claude Code hooks, which stay a `$GIT_DIR` snapshot because they fire when a session opens; it first refuses when those hook sources differ from `upstream/main`/`origin/main` (`YORKIE_ALLOW_LOCAL_HOOKS=1` to proceed). Re-run it to pick up Claude Code hook changes. It also removes the pre-2026-10 `$GIT_DIR/githooks` snapshot when the clone is still wired to it; `bash scripts/setup.sh --check`, which `make lint` runs, only warns about a missing or legacy wiring and never fails. |
 
 ## Directories
 
