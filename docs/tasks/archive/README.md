@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-05
+updated: 2026-10-09
 ---
 
 # Tasks Archive
@@ -8,12 +8,22 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 69
+Total archived tasks: 79
 
-## 2026/10 (9 tasks)
+## 2026/10 (19 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Remove the trusted-tree guard and the git-hook snapshot (2026-10-09) | [20261009-remove-trusted-tree-guard-todo.md](./2026/10/20261009-remove-trusted-tree-guard-todo.md) | [20261009-remove-trusted-tree-guard-lessons.md](./2026/10/20261009-remove-trusted-tree-guard-lessons.md) |
+| Stop the split-sibling cascade at a sibling the editor saw alive (2026-10-06) | [20261006-split-sibling-cascade-stop-todo.md](./2026/10/20261006-split-sibling-cascade-stop-todo.md) | [20261006-split-sibling-cascade-stop-lessons.md](./2026/10/20261006-split-sibling-cascade-stop-lessons.md) |
+| Decide Document Removal by Method, Not by the Pack Flag (2026-10-06) | [20261006-server-decided-is-removed-todo.md](./2026/10/20261006-server-decided-is-removed-todo.md) | [20261006-server-decided-is-removed-lessons.md](./2026/10/20261006-server-decided-is-removed-lessons.md) |
+| Refuse Pushed Changes Stamped With Another Client's Actor (2026-10-06) | [20261006-push-actor-check-todo.md](./2026/10/20261006-push-actor-check-todo.md) | [20261006-push-actor-check-lessons.md](./2026/10/20261006-push-actor-check-lessons.md) |
+| Join paragraphs right after an Enter in the middle of a span (2026-10-06) | [20261006-join-after-split-leftmost-todo.md](./2026/10/20261006-join-after-split-leftmost-todo.md) | [20261006-join-after-split-leftmost-lessons.md](./2026/10/20261006-join-after-split-leftmost-lessons.md) |
+| Harden the ClusterService Trust Boundary (2026-10-06) | [20261006-cluster-service-trust-boundary-todo.md](./2026/10/20261006-cluster-service-trust-boundary-todo.md) | [20261006-cluster-service-trust-boundary-lessons.md](./2026/10/20261006-cluster-service-trust-boundary-lessons.md) |
+| Reject indexes that split a UTF-16 surrogate pair (2026-10-05) | [20261005-reject-mid-surrogate-index-todo.md](./2026/10/20261005-reject-mid-surrogate-index-todo.md) | [20261005-reject-mid-surrogate-index-lessons.md](./2026/10/20261005-reject-mid-surrogate-index-lessons.md) |
+| `project update` CLI: stale `ALL`, resent untouched fields (#2106) (2026-10-05) | [20261005-project-update-cli-fields-todo.md](./2026/10/20261005-project-update-cli-fields-todo.md) | [20261005-project-update-cli-fields-lessons.md](./2026/10/20261005-project-update-cli-fields-lessons.md) |
+| Reject Change Packs Naming Another Document (2026-10-05) | [20261005-pack-document-key-mismatch-todo.md](./2026/10/20261005-pack-document-key-mismatch-todo.md) | [20261005-pack-document-key-mismatch-lessons.md](./2026/10/20261005-pack-document-key-mismatch-lessons.md) |
+| Auth Webhook: Presence-only Packs (2026-10-05) | [20261005-auth-webhook-presence-only-read-todo.md](./2026/10/20261005-auth-webhook-presence-only-read-todo.md) | [20261005-auth-webhook-presence-only-read-lessons.md](./2026/10/20261005-auth-webhook-presence-only-read-lessons.md) |
 | Keep the agent loop inside the PR's scope (2026-10-05) | [20261005-agent-loop-scope-todo.md](./2026/10/20261005-agent-loop-scope-todo.md) | [20261005-agent-loop-scope-lessons.md](./2026/10/20261005-agent-loop-scope-lessons.md) |
 | Re-issue pre-attach tickets to the real actor on attach (2026-10-04) | [20261004-reissue-pre-attach-tickets-todo.md](./2026/10/20261004-reissue-pre-attach-tickets-todo.md) | [20261004-reissue-pre-attach-tickets-lessons.md](./2026/10/20261004-reissue-pre-attach-tickets-lessons.md) |
 | Integration flakes after the server-side size gate (2026-10-04) | [20261004-integration-size-gate-flakes-todo.md](./2026/10/20261004-integration-size-gate-flakes-todo.md) | [20261004-integration-size-gate-flakes-lessons.md](./2026/10/20261004-integration-size-gate-flakes-lessons.md) |

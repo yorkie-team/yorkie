@@ -319,6 +319,38 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, change, clone)
 	})
 
+	t.Run("presence patch converting test", func(t *testing.T) {
+		change := &presence.Change{
+			ChangeType:  presence.Patch,
+			Presence:    presence.Data{"cursor": "1"},
+			RemovedKeys: []string{"selection"},
+		}
+
+		pbChange := converter.ToPresenceChange(change)
+		assert.Equal(t, api.PresenceChange_CHANGE_TYPE_PATCH, pbChange.Type)
+		clone, err := converter.FromPresenceChange(pbChange)
+		assert.NoError(t, err)
+		assert.Equal(t, change, clone)
+	})
+
+	t.Run("removal-only presence patch converting test", func(t *testing.T) {
+		clone, err := converter.FromPresenceChange(&api.PresenceChange{
+			Type:        api.PresenceChange_CHANGE_TYPE_PATCH,
+			RemovedKeys: []string{"selection"},
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, &presence.Change{
+			ChangeType:  presence.Patch,
+			Presence:    presence.NewData(),
+			RemovedKeys: []string{"selection"},
+		}, clone)
+	})
+
+	t.Run("unknown presence change type test", func(t *testing.T) {
+		_, err := converter.FromPresenceChange(&api.PresenceChange{Type: api.PresenceChange_ChangeType(99)})
+		assert.ErrorIs(t, err, converter.ErrUnsupportedPresenceChangeType)
+	})
+
 	t.Run("properly encode and decode tree test", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {

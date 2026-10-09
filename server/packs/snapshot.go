@@ -269,13 +269,33 @@ func storeSnapshot(
 		doc.Checkpoint().ServerSeq,
 	)
 
-	if err := storeRevision(ctx, be, docInfo, doc); err != nil {
-		return err
+	// 06. Store a revision of the snapshot, unless nothing but presence moved.
+	// Presence-only changes take a server_seq without carrying operations, so
+	// they can drive the snapshot interval on their own. When no operation ran
+	// since the previous snapshot, this snapshot has the same root as that one
+	// and its revision would duplicate the previous revision, so skip it.
+	if hasOperations(changes) {
+		if err := storeRevision(ctx, be, docInfo, doc); err != nil {
+			return err
+		}
 	}
 
 	be.Metrics.ObservePushPullSnapshotDurationSeconds(gotime.Since(start).Seconds())
 
 	return nil
+}
+
+// hasOperations returns true if any of the given changes carries an
+// operation. A change without operations only moves presence, which the
+// revision does not record.
+func hasOperations(changes []*change.Change) bool {
+	for _, cn := range changes {
+		if cn.HasOperations() {
+			return true
+		}
+	}
+
+	return false
 }
 
 // storeRevision stores the revision for the given document if needed.

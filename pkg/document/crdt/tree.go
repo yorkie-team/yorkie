@@ -1678,7 +1678,8 @@ func (t *Tree) EditT(
 	return pairs, diff, err
 }
 
-// FindPos finds the position of the given index in the tree.
+// FindPos finds the position of the given index in the tree. It rejects an
+// index inside a surrogate pair with ErrInvalidUTF16Index.
 // (local) index -> (local) TreePos in indexTree -> (logical) TreePos in Tree
 func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	treePos, err := t.IndexTree.FindTreePos(offset) // local TreePos
@@ -1686,6 +1687,30 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 		return nil, err
 	}
 
+	if treePos.Node.IsText() &&
+		!isUTF16Boundary(treePos.Node.Value.Value, treePos.Offset) {
+		return nil, ErrInvalidUTF16Index
+	}
+
+	return toTreePos(treePos), nil
+}
+
+// FindPosUnchecked is FindPos without the surrogate pair check. It is for
+// indexes the document computed itself, such as an undo range reconciled
+// against a remote edit, which can land inside a pair through no fault of the
+// caller. Refusing such an index would only drop the undo, and it resolves
+// the way it did before the check existed.
+func (t *Tree) FindPosUnchecked(offset int) (*TreePos, error) {
+	treePos, err := t.IndexTree.FindTreePos(offset) // local TreePos
+	if err != nil {
+		return nil, err
+	}
+
+	return toTreePos(treePos), nil
+}
+
+// toTreePos converts a local TreePos in indexTree to a logical TreePos.
+func toTreePos(treePos *index.TreePos[*TreeNode]) *TreePos {
 	node, offset := treePos.Node, treePos.Offset
 	var leftNode *TreeNode
 
@@ -1710,7 +1735,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 			CreatedAt: leftNode.id.CreatedAt,
 			Offset:    leftNode.id.Offset + offset,
 		},
-	}, nil
+	}
 }
 
 // TreeEditReverseInfo is everything Edit reports for building the operation
@@ -1898,29 +1923,7 @@ func (t *Tree) Edit(
 	// and narrow the collectBetween range. The original fromParent/
 	// fromLeft are preserved for merge, split, and insert steps.
 	// VV-independent for clone/root consistency.
-	collectFromParent, collectFromLeft := fromParent, fromLeft
-	if fromLeft != fromParent && fromParent != toParent {
-		current := fromLeft
-		var walker insNextWalker
-		walker.visit(current)
-		for current.InsNextID != nil {
-			next := t.findFloorNode(current.InsNextID)
-			if next == nil || next.IsText() {
-				break
-			}
-			// Stop on a chain that loops back on itself; see insNextWalker.
-			if !walker.visit(next) {
-				break
-			}
-			if next.Index.Parent != nil &&
-				next.Index.Parent.Value == toParent {
-				collectFromLeft = next
-				collectFromParent = toParent
-				break
-			}
-			current = next
-		}
-	}
+	collectFromParent, collectFromLeft := t.narrowCollectRange(fromParent, fromLeft, toParent, toLeft)
 
 	// Captured here, after Phase 3 -- matching JS's own capture point
 	// exactly (crdt/tree.ts:1872, after findNodesAndSplitText(to) and the
@@ -2858,6 +2861,44 @@ func (t *Tree) propagateMergeDeletes(
 	return pairs
 }
 
+// narrowCollectRange returns the from-position Phase 3 hands to
+// collectBetween: fromParent/fromLeft, or the split sibling of fromLeft that
+// sits in toParent when the range crosses a concurrent element split.
+func (t *Tree) narrowCollectRange(
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
+) (*TreeNode, *TreeNode) {
+	collectFromParent, collectFromLeft := fromParent, fromLeft
+	if fromLeft != fromParent && fromParent != toParent {
+		current := fromLeft
+		var walker insNextWalker
+		walker.visit(current)
+		for current.InsNextID != nil {
+			next := t.findFloorNode(current.InsNextID)
+			if next == nil || next.IsText() {
+				break
+			}
+			// Stop on a chain that loops back on itself; see insNextWalker.
+			if !walker.visit(next) {
+				break
+			}
+			if next.Index.Parent != nil &&
+				next.Index.Parent.Value == toParent {
+				// Skip narrowing when toLeft == toParent (leftmost child
+				// position, offset 0). The narrowed collectFromLeft would
+				// be a child at offset >= 1, a backwards range that
+				// suppresses the intended merge.
+				if toLeft != toParent {
+					collectFromLeft = next
+					collectFromParent = toParent
+				}
+				break
+			}
+			current = next
+		}
+	}
+	return collectFromParent, collectFromLeft
+}
+
 // collectBetween collects nodes that are marked as removed or moved.
 func (t *Tree) collectBetween(
 	fromParent *TreeNode, fromLeft *TreeNode,
@@ -2871,6 +2912,31 @@ func (t *Tree) collectBetween(
 	// children are moved (merged) rather than deleted. Split siblings of these
 	// nodes should not be cascade-deleted.
 	var toBeMergedNodes []*TreeNode
+
+	// enclosed reports whether the range covers the element whole, start and
+	// end tokens both. Collected on first use; most deletes never ask.
+	var enclosedNodes map[*TreeNode]bool
+	// A failed collection leaves the memo empty, which would silently
+	// under-apply the cascade. Record the error and fail the whole collection
+	// instead of answering from a memo that was never filled.
+	var enclosedErr error
+	enclosed := func(n *TreeNode) bool {
+		if enclosedNodes == nil {
+			enclosedNodes = make(map[*TreeNode]bool)
+			if err := t.traverseInPosRange(
+				fromParent, fromLeft, toParent, toLeft,
+				func(token index.TreeToken[*TreeNode], ended bool) {
+					if token.TokenType == index.Start && ended {
+						enclosedNodes[token.Node] = true
+					}
+				},
+				true,
+			); err != nil {
+				enclosedErr = err
+			}
+		}
+		return enclosedNodes[n]
+	}
 
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
@@ -2924,35 +2990,17 @@ func (t *Tree) collectBetween(
 				if tokenType == index.Text || tokenType == index.Start {
 					toBeRemoveds = append(toBeRemoveds, node)
 
-					// Cascade delete to split siblings created by concurrent
-					// SplitElement. Only for element nodes — text splits use
-					// offset-based IDs that findFloorNode already resolves.
-					// Skip nodes at the merge boundary (toParent side) whose
-					// children are moved rather than deleted — their split
-					// siblings should survive the merge.
+					// §4.1 Cascade delete to split siblings created by
+					// concurrent SplitElement. Only for element nodes — text
+					// splits use offset-based IDs that findFloorNode already
+					// resolves. Skip nodes at the merge boundary (toParent
+					// side) whose children are moved rather than deleted —
+					// their split siblings should survive the merge.
 					if !node.IsText() && node.InsNextID != nil &&
 						!slices.Contains(toBeMergedNodes, node) {
-						var walker insNextWalker
-						walker.visit(node)
-						next := t.findFloorNode(node.InsNextID)
-						// Stop on a chain that loops back on itself; see
-						// insNextWalker. Unbounded here would also grow
-						// toBeRemoveds without limit.
-						for next != nil && walker.visit(next) {
-							if !time.TicketKnown(versionVector, next.ID().CreatedAt) {
-								toBeRemoveds = append(toBeRemoveds, next)
-								// Cascade through the full subtree, not just immediate children.
-								index.TraverseNode(next.Index, func(n *index.Node[*TreeNode], _ int) {
-									if n.Value != next {
-										toBeRemoveds = append(toBeRemoveds, n.Value)
-									}
-								})
-							}
-							if next.InsNextID == nil {
-								break
-							}
-							next = t.findFloorNode(next.InsNextID)
-						}
+						toBeRemoveds = t.appendUnknownSplitSiblings(
+							toBeRemoveds, node, versionVector, enclosed,
+						)
 					}
 				}
 			}
@@ -2961,8 +3009,70 @@ func (t *Tree) collectBetween(
 	); err != nil {
 		return nil, nil, nil, err
 	}
+	if enclosedErr != nil {
+		return nil, nil, nil, enclosedErr
+	}
 
 	return toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, nil
+}
+
+// appendUnknownSplitSiblings appends to toBeRemoveds the split siblings of
+// the deleted element node that the editor did not know, with their
+// subtrees (§4.1).
+//
+// The walk passes a sibling the editor knew only if the editor saw it gone:
+// removed by a change the editor knew (merged back into node, say), or
+// enclosed whole by this delete. What lies past it was then inside node or
+// inside the deleted range for the editor too. Any other known sibling ends
+// the walk. The chain is in document order and a split product lands right
+// after the node it was split off (or, under §7.8, after the same-boundary
+// products ordered ahead of it), so an unknown sibling past such a sibling
+// holds content the editor saw inside that sibling, not inside node. Walking
+// on tombstoned it: after a split at offset 0 and a delete of the empty left
+// piece, the concurrent same-boundary product that holds the moved content
+// sits right after the editor's own product (yorkie-js-sdk#1408).
+//
+// "Saw it gone" reads the sibling's current tombstone, which keeps only the
+// newest delete. GC leaves that read alone: findFloorNode matches createdAt
+// exactly, so a purged ID resolves to nil and Purge's relink already points
+// the predecessor past it at the same successor; and a node is purged only
+// once the minimum synced version vector covers its removedAt, which is when
+// the read would have answered true anyway. Restore does not: clearing a
+// tombstone in place makes the walk stop where it used to pass. See the
+// limitations in §4.1 of docs/design/concurrent-merge-split.md.
+func (t *Tree) appendUnknownSplitSiblings(
+	toBeRemoveds []*TreeNode,
+	node *TreeNode,
+	versionVector time.VersionVector,
+	enclosed func(*TreeNode) bool,
+) []*TreeNode {
+	var walker insNextWalker
+	walker.visit(node)
+	next := t.findFloorNode(node.InsNextID)
+	// Stop on a chain that loops back on itself; see insNextWalker.
+	// Unbounded here would also grow toBeRemoveds without limit.
+	for next != nil && walker.visit(next) {
+		if time.TicketKnown(versionVector, next.ID().CreatedAt) {
+			seenGone := next.removedAt != nil && time.TicketKnown(versionVector, next.removedAt)
+			if !seenGone && !enclosed(next) {
+				break
+			}
+		} else {
+			toBeRemoveds = append(toBeRemoveds, next)
+			// Cascade through the full subtree, not just immediate children.
+			sibling := next
+			index.TraverseNode(sibling.Index, func(n *index.Node[*TreeNode], _ int) {
+				if n.Value != sibling {
+					toBeRemoveds = append(toBeRemoveds, n.Value)
+				}
+			})
+		}
+		if next.InsNextID == nil {
+			break
+		}
+		next = t.findFloorNode(next.InsNextID)
+	}
+	return toBeRemoveds
 }
 
 // advanceOpts holds optional parameters for advancePastUnknownSplitSiblings.

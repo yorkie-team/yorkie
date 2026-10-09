@@ -12,6 +12,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [DocPresence](doc-presence.md): Data structure for presence in document
 - [Presence](presence.md): Dedicated presence for real-time user tracking
 - [Presenceless Document Option](disable-presence.md): Document-scoped `disable_presence` that permanently turns off presence storage and propagation for documents that never use it
+- [Presence Patch](presence-patch.md): Clients send only the changed top-level presence keys; the server folds them into a full put before storing, so every pulled presence change stays a put
 
 ### CRDT
 
@@ -50,6 +51,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them
+- [Auth Webhook Presence-Only Packs](auth-webhook-presence-only.md): `presenceOnly` on change-pack attributes, so a webhook can allow presence while rejecting edits and removals
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
 - [Document Size Limit](document-size-limit.md): Server-side backstop on `MaxSizePerDocument`: a lagging gate on the snapshot's live size that refuses only growth

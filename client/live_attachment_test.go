@@ -561,12 +561,15 @@ func TestSyncObservingRemovalRetiresPipeline(t *testing.T) {
 	assertUndrained(t, "after the removal", doc, peerID)
 }
 
-// TestWatchReconnectFailureEndsStream pins the failed-reconnect branch of the
-// stream reader: the lost stream's error reaches the consumer, the failed
-// reconnect is logged and closes the response channel, and the pump keeps
-// draining the document until Detach retires the pipeline, so a sync applying
-// a pack in the meantime still has a consumer.
-func TestWatchReconnectFailureEndsStream(t *testing.T) {
+// TestWatchReconnectFailureIsRetried pins the failed-reconnect branch of the
+// stream reader: the lost stream's error reaches the consumer, and a
+// handshake that fails is retried with a backoff rather than retiring the
+// pipeline. The handshake after a lost stream is the one most likely to fail
+// -- whatever took the stream down is usually still true a moment later --
+// so giving up on it would cost the document realtime for good over an
+// outage that lasted seconds. The response channel therefore stays open and
+// the pump keeps draining the document until Detach retires the pipeline.
+func TestWatchReconnectFailureIsRetried(t *testing.T) {
 	srv := newLifecycleServer()
 	srv.rejectReconnect = true
 	core, logs := observer.New(zap.DebugLevel)
@@ -579,13 +582,21 @@ func TestWatchReconnectFailureEndsStream(t *testing.T) {
 	require.NoError(t, err)
 
 	close(srv.failStream)
-	errs := drainUntilClosed(t, "after the failed reconnect", rch)
-	assert.Len(t, errs, 1, "the lost stream's error must reach the consumer once")
-	assert.Equal(t, 2, srv.count("Watch"))
-	assert.Equal(t, 1, logs.FilterMessageSnippet("re-establish watch stream").Len())
+	select {
+	case resp, ok := <-rch:
+		assert.True(t, ok, "a failed reconnect must not close the response channel")
+		assert.Error(t, resp.Err, "the lost stream's error must reach the consumer")
+	case <-gotime.After(5 * gotime.Second):
+		t.Fatal("the lost stream was not reported to the consumer")
+	}
 
-	assertDrained(t, "after the stream ended", doc, peerID)
+	assert.Eventually(t, func() bool {
+		return srv.count("Watch") >= 3 && logs.FilterMessageSnippet("re-establish watch stream").Len() >= 2
+	}, 5*gotime.Second, 20*gotime.Millisecond, "a rejected reconnect must be retried, not given up on")
+
+	assertDrained(t, "while the reconnect retries", doc, peerID)
 	require.NoError(t, cli.Detach(context.Background(), doc))
+	drainUntilClosed(t, "after Detach", rch)
 	assertUndrained(t, "after Detach", doc, peerID)
 }
 

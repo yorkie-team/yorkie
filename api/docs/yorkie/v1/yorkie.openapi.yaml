@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.7.23
+  version: v0.7.24
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -2153,6 +2153,15 @@ components:
           description: ""
           title: presence
           type: object
+        removedKeys:
+          additionalProperties: false
+          description: |-
+            removed_keys lists the top-level keys a CHANGE_TYPE_PATCH deletes. Unused
+             by the other change types.
+          items:
+            type: string
+          title: removed_keys
+          type: array
         type:
           $ref: '#/components/schemas/yorkie.v1.PresenceChange.ChangeType'
           additionalProperties: false
@@ -2171,6 +2180,8 @@ components:
         - 2
         - CHANGE_TYPE_CLEAR
         - 3
+        - CHANGE_TYPE_PATCH
+        - 4
       title: ChangeType
       type: string
     yorkie.v1.PushPullChangesRequest:
@@ -3002,10 +3013,28 @@ components:
           type: object
       title: WatchEvent
       type: object
+    yorkie.v1.WatchHeartbeat:
+      additionalProperties: false
+      description: |-
+        WatchHeartbeat is sent on an idle Watch stream so a client can tell a live
+         stream from a half-open one. It carries no payload: its arrival is the
+         signal.
+      title: WatchHeartbeat
+      type: object
     yorkie.v1.WatchInitialization:
       additionalProperties: false
       description: ""
       properties:
+        heartbeatIntervalMs:
+          additionalProperties: false
+          description: |-
+            heartbeat_interval_ms is the interval, in milliseconds, at which the
+             server sends a WatchHeartbeat on this stream while it is idle. 0 means
+             the server sends none, so the client must not apply an idle timeout.
+          oneOf:
+          - type: string
+          - type: number
+          title: heartbeat_interval_ms
         resourceInits:
           additionalProperties: false
           description: ""
@@ -3058,6 +3087,12 @@ components:
           additionalProperties: false
           description: ""
           title: event
+          type: object
+        heartbeat:
+          $ref: '#/components/schemas/yorkie.v1.WatchHeartbeat'
+          additionalProperties: false
+          description: ""
+          title: heartbeat
           type: object
         initialization:
           $ref: '#/components/schemas/yorkie.v1.WatchInitialization'

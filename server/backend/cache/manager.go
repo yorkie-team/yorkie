@@ -23,6 +23,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 )
 
@@ -44,6 +46,36 @@ type Manager struct {
 	// record. Housekeeping skips the document until its server seq moves,
 	// instead of rebuilding it every cycle to fail the same way.
 	OversizedCompaction *cache.LRU[types.DocRefKey, int64]
+
+	// PresenceBase holds, per document and client, the full presence the
+	// client last pushed, so a presence patch can be folded into a full put.
+	// The LRU bounds entries, not bytes: the writer (packs.presenceFold) is
+	// what keeps one entry small, dropping a presence over
+	// maxPresenceBaseSize instead of caching it, so the cache as a whole is
+	// bounded by PresenceBaseCacheSize times that. The bound counts a fixed
+	// overhead per presence key as well as its bytes, so a presence of many
+	// tiny keys cannot hold more memory than the product suggests.
+	// See docs/design/presence-patch.md.
+	PresenceBase *cache.LRU[PresenceBaseKey, PresenceBase]
+}
+
+// PresenceBaseKey identifies the presence of one client in one document.
+type PresenceBaseKey struct {
+	DocRefKey types.DocRefKey
+	ClientID  types.ID
+}
+
+// PresenceBase is the full presence a client held when its checkpoint in the
+// document was Checkpoint, in Epoch. It is a valid base for the client's next
+// push only while the client's checkpoint and epoch are still those: any push
+// or pull that went through another server moves one of them. A detach does
+// not -- it zeroes the checkpoint to the value a fresh attach seeds -- so the
+// writer drops the entry when the client is no longer attached, and never
+// stores one at the initial checkpoint.
+type PresenceBase struct {
+	Checkpoint change.Checkpoint
+	Epoch      int64
+	Presence   presence.Data
 }
 
 // oversizedCompactionCacheSize bounds OversizedCompaction. An entry is a key
@@ -57,7 +89,8 @@ type Options struct {
 	AuthWebhookCacheTTL  time.Duration
 
 	// Document related cache options
-	SnapshotCacheSize int
+	SnapshotCacheSize     int
+	PresenceBaseCacheSize int
 
 	// Channel related cache options
 	ChannelSessionCountCacheSize int
@@ -100,11 +133,20 @@ func New(opts Options) (*Manager, error) {
 		return nil, err
 	}
 
+	presenceBaseCache, err := cache.NewLRU[PresenceBaseKey, PresenceBase](
+		opts.PresenceBaseCacheSize,
+		"presence-base",
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	m := &Manager{
 		AuthWebhook:         authWebhookCache,
 		Snapshot:            snapshotCache,
 		SessionCount:        sessionCountCache,
 		OversizedCompaction: oversizedCompactionCache,
+		PresenceBase:        presenceBaseCache,
 	}
 	return m, nil
 }

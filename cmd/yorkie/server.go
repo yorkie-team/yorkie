@@ -58,6 +58,8 @@ var (
 	channelSessionCountCacheTTL   time.Duration
 	channelSessionCountCacheSize  int
 
+	watchHeartbeatInterval time.Duration
+
 	clusterRPCTimeout        time.Duration
 	clusterClientTimeout     time.Duration
 	clusterClientPoolSize    int
@@ -127,6 +129,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ChannelSessionCleanupInterval = channelSessionCleanupInterval.String()
 			conf.Backend.ChannelSessionCountCacheTTL = channelSessionCountCacheTTL.String()
 			conf.Backend.ChannelSessionCountCacheSize = channelSessionCountCacheSize
+
+			conf.Backend.WatchHeartbeatInterval = watchHeartbeatInterval.String()
 
 			conf.Backend.ClusterRPCTimeout = clusterRPCTimeout.String()
 			conf.Backend.ClusterClientTimeout = clusterClientTimeout.String()
@@ -502,6 +506,12 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
+	cmd.Flags().IntVar(
+		&conf.Backend.PresenceBaseCacheSize,
+		"presence-base-cache-size",
+		server.DefaultPresenceBaseCacheSize,
+		"The number of (document, client) presences kept to fold presence patches.",
+	)
 	cmd.Flags().BoolVar(
 		&conf.Backend.EnableWebhookValidation,
 		"backend-enable-webhook-validation",
@@ -613,6 +623,14 @@ func init() {
 		"The interval for running cleanup of expired channel sessions.",
 	)
 	cmd.Flags().DurationVar(
+		&watchHeartbeatInterval,
+		"backend-watch-heartbeat-interval",
+		server.DefaultWatchHeartbeatInterval,
+		"The interval at which the server sends a heartbeat on an idle Watch "+
+			"stream. 0, the default, sends none: a client older than the heartbeat "+
+			"ends its watch on a response it cannot classify, so this is opt-in.",
+	)
+	cmd.Flags().DurationVar(
 		&channelSessionCountCacheTTL,
 		"channel-session-count-cache-ttl",
 		server.DefaultChannelSessionCountCacheTTL,
@@ -652,7 +670,7 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed.",
+		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed; set it in production.",
 	)
 	rootCmd.AddCommand(cmd)
 }

@@ -7,6 +7,44 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.24] - 2026-10-06
+
+### Added
+
+- Expose cache hit and miss counts as Prometheus metrics by @mr8356 in https://github.com/yorkie-team/yorkie/pull/2039
+- Add an auth webhook cache switch and a 100ms cache TTL floor by @easylogic in https://github.com/yorkie-team/yorkie/pull/2076
+- Revalidate open Watch streams on demand by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2095
+- Tell the auth webhook which change packs carry only presence by @chacha912 in https://github.com/yorkie-team/yorkie/pull/2129
+
+### Changed
+
+- Partition raw event tables by day with a 90-day TTL by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2043
+- Bump the Go toolchain from 1.25 to 1.26 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2059
+- Format config errors with Fprintf and align the project cache TTL default by @lemon0333 in https://github.com/yorkie-team/yorkie/pull/2109
+- Send only passed options from project update and fix ALL by @chacha912 in https://github.com/yorkie-team/yorkie/pull/2130
+
+### Fixed
+
+- End Watch stream when all its subscriptions close by @mr8356 in https://github.com/yorkie-team/yorkie/pull/2025
+- Order concurrent splits of one boundary by ticket by @easylogic in https://github.com/yorkie-team/yorkie/pull/2030
+- Drop split links from the payload a reverse operation carries by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2033
+- Record split text length in UTF-16 units, not runes by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2035
+- Make docSize agree with a rebuild in three places by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2037
+- Decide a style's reached nodes from the change, not the tree by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2038
+- Tombstone merge-moved children a delete range spans by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2042
+- Guard empty-text anchors and reset the clone on failed applies by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2064
+- Mark LWW losers removed and stop leaking GC size records by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2069
+- Style a split family reached by End only if the change began in it by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2070
+- Apply fractional Counter deltas and reject duplicate attaches by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2071
+- Keep Document.Events draining across a Watch reconnect by @easylogic in https://github.com/yorkie-team/yorkie/pull/2084
+- Reject indexes that split UTF-16 surrogate pairs by @Yeongeunn in https://github.com/yorkie-team/yorkie/pull/2085
+- Take the reply to a push-only request as a push ack only by @chacha912 in https://github.com/yorkie-team/yorkie/pull/2096
+- Read Text.normalizePos from the index tree instead of the chain by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2107
+- Keep a document intact when its compacted change is too large by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2108
+- Re-issue pre-attach tickets to the client's actor on attach by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2111
+- Fix the client cache race and test state behind size gate flakes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2112
+- Reject change packs that name another document by @chacha912 in https://github.com/yorkie-team/yorkie/pull/2128
+
 ## [v0.7.23] - 2026-09-22
 
 ### Changed
