@@ -156,8 +156,9 @@ function gitPath(flag) {
 
 function main() {
   const root = gitPath('--show-toplevel');
-  // The COMMON git dir, shared by every worktree — see scripts/setup.sh. A
-  // snapshot under `.git/worktrees/<name>` dies with that worktree.
+  // The COMMON git dir, shared by every worktree, not `--absolute-git-dir`: in
+  // a linked worktree that is `.git/worktrees/<name>`, and a snapshot there
+  // dies with the worktree while the wiring still names it.
   const common = gitPath('--git-common-dir');
   const gitDir = common ? realpathSync(path.resolve(common)) : null;
   if (!root || !gitDir) {
