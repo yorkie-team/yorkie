@@ -283,4 +283,4 @@ The reflog, worktree and fork fixes were found by yorkie-js-sdk's review of its
 port and brought back under
 [20260926-backport-hook-fixes-todo.md](../tasks/archive/2026/09/20260926-backport-hook-fixes-todo.md).
 The trust guard and the git-hook snapshot were removed under
-[20261009-remove-trusted-tree-guard-todo.md](../tasks/active/20261009-remove-trusted-tree-guard-todo.md).
+[20261009-remove-trusted-tree-guard-todo.md](../tasks/archive/2026/10/20261009-remove-trusted-tree-guard-todo.md).

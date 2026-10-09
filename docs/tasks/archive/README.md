@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 # Tasks Archive
@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 78
+Total archived tasks: 79
 
-## 2026/10 (18 tasks)
+## 2026/10 (19 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Remove the trusted-tree guard and the git-hook snapshot (2026-10-09) | [20261009-remove-trusted-tree-guard-todo.md](./2026/10/20261009-remove-trusted-tree-guard-todo.md) | [20261009-remove-trusted-tree-guard-lessons.md](./2026/10/20261009-remove-trusted-tree-guard-lessons.md) |
 | Stop the split-sibling cascade at a sibling the editor saw alive (2026-10-06) | [20261006-split-sibling-cascade-stop-todo.md](./2026/10/20261006-split-sibling-cascade-stop-todo.md) | [20261006-split-sibling-cascade-stop-lessons.md](./2026/10/20261006-split-sibling-cascade-stop-lessons.md) |
 | Decide Document Removal by Method, Not by the Pack Flag (2026-10-06) | [20261006-server-decided-is-removed-todo.md](./2026/10/20261006-server-decided-is-removed-todo.md) | [20261006-server-decided-is-removed-lessons.md](./2026/10/20261006-server-decided-is-removed-lessons.md) |
 | Refuse Pushed Changes Stamped With Another Client's Actor (2026-10-06) | [20261006-push-actor-check-todo.md](./2026/10/20261006-push-actor-check-todo.md) | [20261006-push-actor-check-lessons.md](./2026/10/20261006-push-actor-check-lessons.md) |
