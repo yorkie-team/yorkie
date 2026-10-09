@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
-
 # GIT HOOKS RUN FROM THE TRACKED `.githooks/`, the way wafflebase wires them.
 # A relative `core.hooksPath` is resolved against the top of whichever
 # worktree git is running in, so one setting serves every linked worktree of
 # the clone, and a hook change reaches it on the next checkout with nothing to
 # re-run.
 #
-# This used to copy the hooks into `$GIT_DIR` and point there, plus a
+# This used to copy the hooks into `$GIT_DIR/githooks` and point there, plus a
 # `trusted-tree.sh` guard inside the hooks that refused a checkout carrying
 # commits this clone did not create. Both existed so that committing in a
 # checkout of an unread pull request would not run it. They cost more than they
@@ -18,8 +16,41 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # snapshot went stale until someone re-ran this script. The hooks only run
 # `make lint` / `make verify`, which a reviewer building the branch runs
 # anyway. docs/design/local-enforcement-layer.md records the decision.
-git -C "$REPO_ROOT" config core.hooksPath .githooks
-echo "Git hooks enabled: core.hooksPath -> .githooks"
+HOOKS_PATH=.githooks
+
+# `cd -P` + `pwd -P`: the physical path, so a symlinked clone (macOS `/tmp` is
+# one) compares equal to itself. A path that does not exist is printed as is.
+physical() {
+  if [ -d "$1" ]; then (cd -P "$1" && pwd -P); else printf '%s\n' "$1"; fi
+}
+
+# `--check` changes nothing and never fails: `make lint` runs it so a clone
+# still wired the old way says so where its owner will see it. Skipped in CI,
+# which installs no hooks and has nobody to tell.
+if [ "${1:-}" = "--check" ]; then
+  [ -n "${CI:-}" ] && exit 0
+  git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+  current=$(git config --get core.hooksPath || true)
+  [ "$current" = "$HOOKS_PATH" ] && exit 0
+  legacy=$(physical "$(git rev-parse --git-common-dir)")/githooks
+  if [ -z "$current" ]; then
+    echo "setup: git hooks are not installed for this clone (core.hooksPath is unset)." >&2
+    echo "       Run: bash scripts/setup.sh" >&2
+  elif [ "$(physical "$current")" = "$legacy" ]; then
+    echo "setup: core.hooksPath points at $current, the legacy hook snapshot," >&2
+    echo "       which still runs the removed trusted-tree guard and goes stale." >&2
+    echo "       Run: bash scripts/setup.sh" >&2
+  else
+    echo "setup: core.hooksPath is $current, not $HOOKS_PATH, so this repository's" >&2
+    echo "       hooks do not run. Run: bash scripts/setup.sh" >&2
+  fi
+  exit 0
+fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+# The COMMON git dir, shared by every worktree: the legacy snapshot lived here.
+GIT_COMMON=$(physical "$(git rev-parse --git-common-dir)")
+LEGACY_HOOKS="$GIT_COMMON/githooks"
 
 # The Claude Code hooks are a different case and keep their `$GIT_DIR`
 # snapshot: Claude Code runs what project settings name at session start,
@@ -31,7 +62,8 @@ echo "Git hooks enabled: core.hooksPath -> .githooks"
 # pull request, the install below would make that branch's `scripts/hooks/*.sh`
 # the clone's checkout-proof Claude Code hooks. So compare what the install
 # runs and copies against the upstream default branch and refuse when it
-# differs. The escape hatch is an environment variable rather than a prompt,
+# differs — before anything is changed, so a refused run leaves the clone as it
+# found it. The escape hatch is an environment variable rather than a prompt,
 # because this script is also run non-interactively.
 #
 # This guards against ACCIDENT only. A malicious branch's setup.sh can simply
@@ -64,8 +96,7 @@ elif ! git -C "$REPO_ROOT" diff --quiet "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}";
     echo >&2
     echo "       Installing would snapshot THESE copies into \$GIT_DIR, where no later" >&2
     echo "       checkout can replace them. If this is a branch you are reviewing rather" >&2
-    echo "       than one you wrote, that is not what you want. The git hooks above are" >&2
-    echo "       already enabled." >&2
+    echo "       than one you wrote, that is not what you want. Nothing was changed." >&2
     echo "       Re-run on the default branch, or, if you meant it:" >&2
     echo "         YORKIE_ALLOW_LOCAL_HOOKS=1 bash scripts/setup.sh" >&2
     exit 1
@@ -73,6 +104,17 @@ elif ! git -C "$REPO_ROOT" diff --quiet "$UPSTREAM_REF" -- "${HOOK_SOURCES[@]}";
   echo "setup: Claude Code hook sources differ from ${UPSTREAM_REF#refs/remotes/};" >&2
   echo "       installing them anyway because YORKIE_ALLOW_LOCAL_HOOKS=1." >&2
 fi
+
+# Remove the legacy snapshot only when this clone is still wired to it. The
+# directory is named generically enough that a clone could hold one for some
+# other reason, and then it is not this script's to delete.
+previous=$(git -C "$REPO_ROOT" config --get core.hooksPath || true)
+git -C "$REPO_ROOT" config core.hooksPath "$HOOKS_PATH"
+if [ -n "$previous" ] && [ "$(physical "$previous")" = "$LEGACY_HOOKS" ] && [ -d "$LEGACY_HOOKS" ]; then
+  rm -rf "$LEGACY_HOOKS"
+  echo "Removed the legacy hook snapshot at $LEGACY_HOOKS"
+fi
+echo "Git hooks enabled: core.hooksPath -> $HOOKS_PATH"
 
 # Node is optional on this leg. `make verify-license` needs it anyway, but a
 # contributor without it must still end up with the git hooks enabled, so this

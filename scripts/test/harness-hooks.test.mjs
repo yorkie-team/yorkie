@@ -532,12 +532,24 @@ function plantSetup({ upstream, clone, at }) {
   at(clone)('reset', '-q', '--hard', 'origin/main');
 }
 
-function runSetup(cwd, env) {
-  return spawnSync('bash', [path.join(cwd, 'scripts', 'setup.sh')], {
+function runSetup(cwd, env, args = []) {
+  // `--check` is silent under CI, and the Docs workflow that runs this suite
+  // sets CI; every case here is about a developer's clone.
+  const { CI: _ci, ...local } = env;
+  return spawnSync('bash', [path.join(cwd, 'scripts', 'setup.sh'), ...args], {
     cwd,
     encoding: 'utf8',
-    env,
+    env: local,
   });
+}
+
+/** Wire `clone` the way setup.sh did before 2026-10: a `$GIT_DIR` snapshot. */
+function wireLegacySnapshot({ clone, at }) {
+  const legacy = path.join(clone, '.git', 'githooks');
+  mkdirSync(legacy, { recursive: true });
+  writeFileSync(path.join(legacy, 'pre-commit'), '#!/usr/bin/env bash\nexit 1\n');
+  at(clone)('config', 'core.hooksPath', legacy);
+  return legacy;
 }
 
 /** Where git will look for hooks when run in `cwd`, as an absolute path. */
@@ -664,13 +676,66 @@ test('setup.sh refuses Claude Code hook sources that differ from origin/main', (
     rmSync(path.join(clone, '.claude'), { recursive: true, force: true });
 
     writeFileSync(path.join(clone, 'scripts', 'hooks', 'session-prime.sh'), '#!/usr/bin/env bash\n');
+    // A refused run changes nothing — not the wiring, not the legacy copy.
+    const legacy = wireLegacySnapshot(ctx);
     const r = runSetup(clone, env);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /YORKIE_ALLOW_LOCAL_HOOKS=1/);
-    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '.githooks');
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), legacy);
+    assert.equal(existsSync(legacy), true, 'a refused run must delete nothing');
     assert.equal(existsSync(path.join(clone, '.claude', 'settings.local.json')), false);
 
     const forced = runSetup(clone, { ...env, YORKIE_ALLOW_LOCAL_HOOKS: '1' });
     assert.equal(forced.status, 0, forced.stderr);
+  });
+});
+
+test('setup.sh --check names what is wrong, and never fails', () => {
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+
+    const unset = runSetup(clone, env, ['--check']);
+    assert.equal(unset.status, 0);
+    assert.match(unset.stderr, /not installed.*unset/);
+
+    wireLegacySnapshot(ctx);
+    const legacy = runSetup(clone, env, ['--check']);
+    assert.equal(legacy.status, 0);
+    assert.match(legacy.stderr, /legacy hook snapshot/);
+    assert.match(legacy.stderr, /trusted-tree guard/);
+    assert.match(legacy.stderr, /bash scripts\/setup\.sh/);
+
+    at(clone)('config', 'core.hooksPath', '.githooks');
+    const ok = runSetup(clone, env, ['--check']);
+    assert.equal(ok.status, 0);
+    assert.equal(ok.stderr, '', 'a correctly wired clone must hear nothing');
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '.githooks');
+  });
+});
+
+test('make lint runs the hook check without letting it fail the target', () => {
+  const mk = readFileSync(path.join(REPO, 'Makefile'), 'utf8');
+  const recipe = mk.slice(mk.search(/^lint:/m)).split(/\n(?!\t)/)[0];
+  assert.match(recipe, /scripts\/setup\.sh --check \|\| true/);
+});
+
+test('setup.sh removes the legacy snapshot only when the clone points at it', () => {
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    const legacy = wireLegacySnapshot(ctx);
+    const r = runSetup(clone, env);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(existsSync(legacy), false, 'the legacy snapshot must go');
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '.githooks');
+  });
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    const legacy = wireLegacySnapshot(ctx);
+    at(clone)('config', '--unset', 'core.hooksPath');
+    assert.equal(runSetup(clone, env).status, 0);
+    assert.equal(existsSync(legacy), true, 'a directory nothing points at is not ours');
   });
 });

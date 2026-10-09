@@ -68,6 +68,8 @@ fmt: ## applies format and simplify codes
 # linted too. `|| exit 1` because a failed substitution would otherwise lint
 # with no tags and pass.
 lint: ## runs the golang-ci lint, checks for lint violations
+	@# Warns, never fails, when this clone's git hooks are missing or stale.
+	@bash scripts/setup.sh --check || true
 	@tags="$$(scripts/go-build-tags.sh)" || exit 1; \
 	GOOS=linux GOARCH=amd64 golangci-lint run --timeout 5m --build-tags "$$tags" ./...
 
