@@ -29,6 +29,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Identity of Inserted Tree Content](tree-content-identity.md): One ticket per inserted node, and what still lets two nodes share an ID
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations
+- [Split Boundary Insert Side](split-boundary-insert-side.md): Which side of a concurrent split boundary an insert lands on, ported from the JS SDK for parity
 - [Counter Dedup](counter-dedup.md): Counter dedup mode using HyperLogLog for high-volume idempotent counting
 - [Array Move Convergence](array-move-convergence.md): Fix convergence bugs in concurrent array move operations
 - [Range Deletion in SplayTree](range-deletion-in-splay-tree.md): Improving range deletion in SplayTree

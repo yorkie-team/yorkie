@@ -569,6 +569,13 @@ product exactly as it would have moved out of the original on a replica
 that applied this split first. A split that is not at the end of its
 node, or whose next sibling is older, is placed as before.
 
+One exception overrides the ticket order: a product that begins with a
+run of text inserts the splitter did not know. §7.3 keeps such a run on
+the left of a split boundary, so the split lands inside that product,
+past the run, and an insert applied after the split continues its RGA
+scan into the product over the same run. See
+[split-boundary-insert-side](split-boundary-insert-side.md).
+
 The parent check is relaxed for the same reason as §7.5: at a
 multi-level split the sibling may already sit under the next level's
 product. Relaxed, not dropped — the sibling must still sit under the
