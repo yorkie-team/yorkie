@@ -1899,6 +1899,27 @@ func (t *Tree) Edit(
 
 	diff.Add(diffFrom, diffTo)
 
+	// Phase 1-0: Continue the step 04 RGA scan into the products of a
+	// concurrent element split (§7.3), but only for an anchor an insert lands
+	// on -- a collapsed range, where the two endpoints resolved to the same
+	// place.
+	//
+	// A range endpoint must not move that way. The endpoints decide which
+	// parents the traversal below runs between: toParent feeds the Phase 3
+	// narrowing and both feed collectBetween, so an endpoint that walked into
+	// a split product would widen or shorten what this edit deletes and
+	// merges, over nodes the editor never saw. Phase 2's
+	// advancePastUnknownSplitSiblings is the rule that moves range endpoints
+	// past split products, and it stays the only one. styleTargets resolves
+	// its range through FindTreeNodesWithSplitText and is likewise untouched.
+	if fromParent == toParent && fromLeft == toLeft {
+		// Both ends, so the range stays collapsed: moving only one would point
+		// the traversal below from the product back at the node it came out
+		// of.
+		fromParent, fromLeft = t.advanceIntoSplitProducts(fromParent, fromLeft, editedAt)
+		toParent, toLeft = fromParent, fromLeft
+	}
+
 	// Phase 2: Split Sibling Advance — advance past concurrent split
 	// products linked via InsNextID that the editor could not have seen.
 	// Skip when leftNode == parent (leftmost child position).
@@ -3279,6 +3300,17 @@ func (t *Tree) orderSameBoundarySplit(
 			break
 		}
 		if !createdAt.After(editedAt) {
+			// The ticket order keeps our product in front of next, so the two
+			// boundaries would coincide -- unless next begins with inserts
+			// made at that boundary concurrently with us. §7.3 keeps such an
+			// insert on the left of a split boundary, and a replica that
+			// applied us first put it at the end of what we split. So our
+			// boundary is not next's after all: it is inside next, past that
+			// run, and the products are ordered by content rather than by
+			// ticket.
+			if run := boundaryInsertRunOf(next, versionVector); run > 0 {
+				return next, run
+			}
 			break
 		}
 
@@ -3288,7 +3320,42 @@ func (t *Tree) orderSameBoundarySplit(
 	if target == parent {
 		return parent, offset
 	}
-	return target, 0
+
+	// Same reason at the other end of the comparison: a newer product we
+	// step over may itself begin with a concurrent boundary insert, which
+	// belongs on our left too.
+	return target, boundaryInsertRunOf(target, versionVector)
+}
+
+// boundaryInsertRunOf counts the children at the start of node that were
+// inserted concurrently with the editing change -- the run §7.3 migrates to
+// the left of a split boundary. Text split siblings carry their original's
+// ticket and so end the run by being known.
+//
+// Only text children are counted, the same children advanceIntoSplitProducts
+// crosses on the other side of this boundary: the two rules have to agree on
+// how long the run is, and an element at the start of a product is §7.8's
+// business. Telling an element insert from an element split product would
+// need InsPrevID, which Purge relinks and clears and DropSplitLinks drops on
+// a copy -- so a run measured through it would depend on when each replica
+// ran GC, and two replicas would place the same split differently for no
+// reason but collection timing.
+//
+// Ported from yorkie-js-sdk#1467; see docs/design/split-boundary-insert-side.md.
+func boundaryInsertRunOf(node *TreeNode, versionVector time.VersionVector) int {
+	run := 0
+	for _, child := range node.Index.Children(true) {
+		if !child.Value.IsText() {
+			break
+		}
+		createdAt := child.Value.id.CreatedAt
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			break
+		}
+		run++
+	}
+
+	return run
 }
 
 // sharesSplitFamilyParent reports whether next sits under node's parent, or
@@ -4163,6 +4230,128 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	}
 
 	return realParentNode, leftNode, diff, nil
+}
+
+// advanceIntoSplitProducts continues the RGA scan of step 04 of
+// FindTreeNodesWithSplitText into the products of a concurrent split of
+// parent.
+//
+// parent's children are not the whole sequence once such a split has been
+// applied: what followed left has moved into the product. Stopping at
+// parent's last child would order this insert before concurrent inserts that
+// RGA puts ahead of it -- and the replica that applied the insert before the
+// split, where the whole run was still in one node, put it after them. Only a
+// run of newer tickets is crossed, the same rule step 04 applies inside one
+// node, so an insert at the boundary with nothing newer beyond it still stays
+// on the left of it (§7.3).
+//
+// Applied to the anchor of a collapsed (insert) range only; see the note at
+// its call site in Edit, and boundaryInsertRunOf -- this is the same §7.3
+// reading seen from the other side.
+//
+// Ported from yorkie-js-sdk#1467; see docs/design/split-boundary-insert-side.md.
+func (t *Tree) advanceIntoSplitProducts(
+	parent, left *TreeNode,
+	editedAt *time.Ticket,
+) (*TreeNode, *TreeNode) {
+	var walker insNextWalker
+	walker.visit(parent)
+
+	current, leftNode := parent, left
+	for current.InsNextID != nil {
+		// Only a position at the very end of current can continue into the
+		// product: anything else has its right neighbour here already.
+		//
+		// "The end" is measured against live content, not against all
+		// children. The anchor step 04 resolves is the last live child
+		// whenever a concurrently-removed node trails the live run -- that
+		// scan stops at the tombstone's older ticket -- while the replica that
+		// applied this insert before the split saw no tombstone between the
+		// run and the boundary at all. Counting a trailing tombstone as a
+		// right neighbour would block here the advance that replica makes.
+		if !atEndOfLiveContent(current, leftNode) {
+			break
+		}
+
+		next := t.findFloorNode(current.InsNextID)
+		if next == nil || next.IsText() || next.Index.Parent == nil {
+			break
+		}
+		// Stop on a chain that loops back on itself; see insNextWalker.
+		if !walker.visit(next) {
+			break
+		}
+		if !t.sharesSplitFamilyParent(current, next) {
+			break
+		}
+		// A product older than this edit was already in the sequence the
+		// editor saw, so the position it resolved to is the whole story.
+		if next.IsRemoved() || !next.id.CreatedAt.After(editedAt) {
+			break
+		}
+
+		nextChildren := next.Index.Children(true)
+		i := 0
+		for i < len(nextChildren) &&
+			nextChildren[i].Value.IsText() &&
+			nextChildren[i].Value.id.CreatedAt.After(editedAt) {
+			i++
+		}
+		if i == 0 {
+			break
+		}
+
+		current = next
+		leftNode = nextChildren[i-1].Value
+		if i < len(nextChildren) {
+			break
+		}
+	}
+
+	return current, leftNode
+}
+
+// atEndOfLiveContent reports whether leftNode is an anchor with no live
+// content after it inside node: either node itself with nothing live under
+// it, or a child of node every one of whose later siblings is a tombstone.
+//
+// Tombstones are skipped rather than counted because they are not content
+// the boundary can sit before, and because the two sides of a split boundary
+// see different ones -- the replica that applied an insert before the split
+// had the whole run in one node, with no tombstone standing between it and
+// the boundary.
+//
+// An anchor that is not a child of node at all did not come from the step 04
+// scan (the merge-target branch of FindTreeNodesWithSplitText returns before
+// it), so nothing can be concluded about what follows it: not at the end.
+func atEndOfLiveContent(node, leftNode *TreeNode) bool {
+	children := node.Index.Children(true)
+	if leftNode == node {
+		for _, child := range children {
+			if !child.Value.IsRemoved() {
+				return false
+			}
+		}
+		return true
+	}
+
+	index := -1
+	for i, child := range children {
+		if child.Value == leftNode {
+			index = i
+			break
+		}
+	}
+	if index == -1 {
+		return false
+	}
+	for _, child := range children[index+1:] {
+		if !child.Value.IsRemoved() {
+			return false
+		}
+	}
+
+	return true
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
