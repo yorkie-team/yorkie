@@ -690,6 +690,38 @@ test('setup.sh refuses Claude Code hook sources that differ from origin/main', (
   });
 });
 
+test('a real git commit on a bot-authored branch runs the hooks and lands', () => {
+  // Through git's own hook dispatch, not `bash <hook>`: setup.sh wires the
+  // clone, and `git commit` has to find `.githooks/pre-commit` by itself.
+  inScratchClone((ctx) => {
+    const { root, upstream, clone, at, env } = ctx;
+    plantSetup(ctx);
+    at(upstream)('-c', 'user.email=bot@example.com', '-c', 'user.name=bot',
+      'commit', '-qm', 'Bot commit', '--allow-empty', '--no-verify');
+    at(clone)('fetch', '-q', 'origin');
+    at(clone)('reset', '-q', '--hard', 'origin/main');
+    assert.equal(runSetup(clone, env).status, 0);
+
+    const bin = path.join(root, 'bin');
+    const marker = path.join(root, 'make-ran');
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, 'make'), `#!/usr/bin/env bash\necho "$*" >> '${marker}'\n`);
+    writeFileSync(path.join(bin, 'golangci-lint'), '#!/usr/bin/env bash\nexit 0\n');
+    chmodSync(path.join(bin, 'make'), 0o755);
+    chmodSync(path.join(bin, 'golangci-lint'), 0o755);
+
+    writeFileSync(path.join(clone, 'a.go'), 'package a\n');
+    at(clone)('add', 'a.go');
+    const r = spawnSync('git', ['-C', clone, 'commit', '-qm', 'Add a'], {
+      encoding: 'utf8',
+      env: { ...env, PATH: `${bin}${path.delimiter}${env.PATH}` },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(marker, 'utf8').trim(), 'lint', 'pre-commit did not reach make');
+    assert.equal(at(clone)('log', '-1', '--format=%s').stdout.trim(), 'Add a');
+  });
+});
+
 test('setup.sh --check names what is wrong, and never fails', () => {
   inScratchClone((ctx) => {
     const { clone, at, env } = ctx;
