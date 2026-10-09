@@ -148,3 +148,56 @@ func TestTreeInsertAtConcurrentSplitBoundary(t *testing.T) {
 		})
 	}
 }
+
+// TestTreeInsertAtSplitBoundaryPastRemovedChild covers an insert whose anchor
+// is followed, inside the paragraph, only by a child another replica removes
+// concurrently, while a third replica splits the paragraph right after that
+// child. The typist put u between a and c, so u belongs before c and in the
+// left paragraph whatever happens to c.
+//
+// advanceIntoSplitProducts gates on atEndOfLiveContent, which skips
+// tombstones, so whether the insert crosses into the split product depends on
+// whether the removal arrived before the insert. Both yorkie-js-sdk#1467 at
+// 89b0b2a8 and this port diverge on the first ordering; the base of each
+// converges on both.
+func TestTreeInsertAtSplitBoundaryPastRemovedChild(t *testing.T) {
+	// <p>acb</p>: index 2 is between a and c, 3 between c and b.
+	for _, tc := range []struct {
+		name   string
+		orders [][]int
+		known  string // why the case is skipped; empty when it converges
+	}{
+		{
+			name:   "splitter receives the removal before the insert",
+			orders: [][]int{{1, 2}, {2, 0}, {1, 0}},
+			known: "KNOWN (yorkie-js-sdk#1467 review, round 5, finding (a)): atEndOfLiveContent " +
+				"skips tombstones, so the replicas that applied the removal of c first carry u " +
+				"past c into the split product (<p>a</p><p>rub</p>) while the typist keeps it " +
+				"in the paragraph (<p>au</p><p>rb</p>). Kept for parity with the JS rule; " +
+				"converges on main.",
+		},
+		{
+			name:   "splitter receives the insert before the removal",
+			orders: [][]int{{2, 1}, {0, 2}, {0, 1}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.known != "" {
+				t.Skip(tc.known)
+			}
+
+			docs := boundaryReplicas(t, 3, "acb")
+			updateTree(t, docs[1], insertText(3, "r"))
+			updateTree(t, docs[1], splitAt(3))
+			updateTree(t, docs[0], insertText(2, "u"))
+			updateTree(t, docs[2], func(tree *json.Tree) { tree.Edit(2, 3, nil, 0) })
+			exchangeInOrder(t, docs, tc.orders)
+
+			for i := 1; i < len(docs); i++ {
+				assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[i]))
+				assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[i]))
+			}
+			assert.Equal(t, "<doc><p>au</p><p>rb</p></doc>", treeXML(t, docs[0]))
+		})
+	}
+}
