@@ -101,17 +101,9 @@ func (rht *ElementRHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key. If there is an existing value, it is
-// removed. It returns the element evicted from the key, if any.
-//
-// Unlike SetWithExecutedAt it never refuses v: v is being inserted under its
-// own creation ticket, so it is a value whose identity is being minted here
-// rather than one restored under an identity the hashtable may already hold,
-// and the caller (json.Object.setInternal) has no way to decline a key it has
-// already handed a proxy for. The refusal exists for the restore path, where
-// two copies really can arrive under one createdAt; see refusesLoser.
-func (rht *ElementRHT) Set(k string, v Element) Element {
-	removed, _ := rht.setWithExecutedAt(k, v, v.CreatedAt(), false)
-	return removed
+// removed. It reports the same pair as SetWithExecutedAt.
+func (rht *ElementRHT) Set(k string, v Element) (Element, bool) {
+	return rht.SetWithExecutedAt(k, v, v.CreatedAt())
 }
 
 // SetWithExecutedAt behaves like Set, but uses the given executedAt as the
@@ -166,19 +158,6 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 // is a separate concern, tracked at the push boundary in
 // yorkie-team/yorkie#2081, and is deliberately not done here.
 func (rht *ElementRHT) SetWithExecutedAt(k string, v Element, executedAt *time.Ticket) (Element, bool) {
-	return rht.setWithExecutedAt(k, v, executedAt, true)
-}
-
-// setWithExecutedAt is the body of Set and SetWithExecutedAt. refuseLoser
-// selects which of the two contracts applies: only the restore path can
-// decline, and only it has a caller able to treat the call as having done
-// nothing.
-func (rht *ElementRHT) setWithExecutedAt(
-	k string,
-	v Element,
-	executedAt *time.Ticket,
-	refuseLoser bool,
-) (Element, bool) {
 	node, ok := rht.nodeMapByKey[k]
 	newNode := newElementRHTNode(k, v)
 
@@ -193,7 +172,7 @@ func (rht *ElementRHT) setWithExecutedAt(
 		return removed, true
 	}
 
-	if refuseLoser && rht.refusesLoser(v) {
+	if rht.refusesLoser(v) {
 		return nil, false
 	}
 

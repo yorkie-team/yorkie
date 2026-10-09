@@ -429,27 +429,29 @@ func (p *Object) setInternal(
 		panic(err)
 	}
 
-	// Object.Set, unlike SetWithExecutedAt, always takes the value in, so
-	// there is no refusal to handle here and the Root bookkeeping below
-	// always has a member to book. That is deliberate rather than incidental:
-	// this function has already handed the caller a proxy for the new value
-	// (SetNewObject goes straight on to SetYSONElement on it, SetNewArray to
-	// AddYSON, SetNewText to EditFromYSON), so it has no way to decline
-	// without either panicking on document state -- which a peer can shape,
-	// since an operation's tickets are not validated off the wire
-	// (yorkie-team/yorkie#2081) -- or returning a child hanging off no
-	// container, whose nested operations would name a parentCreatedAt no
-	// replica can resolve. The refusal belongs to the restore path, which has
-	// a caller that can treat the Set as not having applied at all; see
-	// ElementRHT.refusesLoser and operations.Set.Execute.
+	// A value the object refused is in neither of its member maps, so none of
+	// the Root bookkeeping below may run for it -- the same guard
+	// operations.Set.Execute applies to the remote and replay paths.
+	// RegisterElement would charge docSize.Live for an element hanging off no
+	// container and point elementMap at it, over whatever copy already answers
+	// to that createdAt.
 	//
-	// The operation pushed below still runs against the root through the
-	// refusing path, and this proxy runs against the clone, so the two can
-	// disagree on exactly the state that makes a locally minted createdAt
-	// lose. operations.Set.Execute fails such an apply with
-	// ErrRefusedLocalSet rather than skipping it, so Document.Update drops
-	// this clone instead of keeping it diverged from the root.
-	removed := p.Set(k, value)
+	// Here it cannot happen: only a value that loses its key is ever refused
+	// (ElementRHT.refusesLoser), and a local Set mints a fresh ticket that
+	// follows every ticket this client has seen, so it always wins. Returning
+	// elem would be worse than failing -- every caller treats the return as a
+	// live child (SetNewObject immediately calls SetYSONElement on it,
+	// SetNewArray AddYSON, SetNewText EditFromYSON), and those nested
+	// operations would name a parentCreatedAt that is in no element map on
+	// any replica, so each one fails the moment it is replayed. Panicking
+	// matches how this function already reports a value it cannot build.
+	removed, indexed := p.Set(k, value)
+	if !indexed {
+		panic(fmt.Errorf(
+			"set %q: object refused %s, which is already taken",
+			k, value.CreatedAt().Key(),
+		))
+	}
 
 	p.context.RegisterElement(value, p.Object)
 	if removed != nil {

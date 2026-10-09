@@ -151,8 +151,7 @@ afterwards, and the document stops rebuilding once GC runs.
 `ElementRHT.SetWithExecutedAt` therefore refuses a **losing** value when the
 node holding its slot is still reachable through its key -- a live node, or a
 tombstone that is still its key's occupant -- and reports the refusal as a
-second return value (`Element, bool`). `ElementRHT.Set` shares the body but
-not the refusal; see the caller table below. A tombstone already displaced from its
+second return value (`Element, bool`). A tombstone already displaced from its
 key is taken over, so a losing restore ends where a restore that won first
 and was then evicted ends. The rule lives in `refusesLoser`'s doc comment in
 `pkg/document/crdt/element_rht.go`.
@@ -173,65 +172,15 @@ Callers:
 
 | Caller | On refusal |
 |--------|-----------|
-| `operations.Set.Execute` (remote, undo/redo) | `ErrOperationSkipped` -- the object is unchanged, so the operation did not apply and contributes no reverse |
-| `operations.Set.Execute` (local) | `ErrRefusedLocalSet` -- the clone already took the value in, so the update fails and the clone is dropped (see below) |
-| `json.Object.setInternal` | cannot refuse -- it calls `crdt.Object.Set`, which never declines |
+| `operations.Set.Execute` | `ErrOperationSkipped` -- the object is unchanged, so the operation did not apply and contributes no reverse |
+| `json.Object.setInternal` | panics -- unreachable, since only a loser is refused and a local Set always wins; the caller would otherwise be handed a detached proxy |
 | `api/converter.fromJSONObject` | ignored -- encoder output has one node per `createdAt`, so a refusal needs crafted bytes |
 | `crdt.NewObject` | not affected -- empty RHT, no conflict possible |
-
-The refusal is confined to `SetWithExecutedAt` because only its caller can
-act on one. `crdt.Object.Set` -- the local path, inserting a value under the
-`createdAt` it is minting right now -- keeps its `Element`-only signature and
-always takes the value in. `setInternal` has already handed the caller a
-proxy for the value by then, so a refusal would leave it a choice between
-panicking and returning a child hanging off no container, whose nested
-operations would name a `parentCreatedAt` no replica can resolve. Neither is
-hypothetical: a peer that plants a member under the client's next `createdAt`
-and an occupant positioned in the future makes a local Set lose, since
-operation tickets are unvalidated off the wire (see
-[Out of scope: crafted payloads](#out-of-scope-crafted-payloads)), and the
-panic would escape `Document.Update` on a server that runs json proxies over
-a rebuilt document (`TestSetOnForgedIdentityCollision`).
-
-That split leaves the two apply targets of a local edit under different
-contracts: the proxy mutates the **clone** through the non-refusing
-`crdt.Object.Set`, while the operation it pushes is applied to the **root**
-through `Set.Execute`, which can refuse. In the same crafted shape the root
-refuses what the clone already took, and `Change.Execute` swallows
-`ErrOperationSkipped`, so `Document.Update` would return `nil` and keep a
-clone that has silently diverged from the root -- every later edit, and every
-local change derived from it, built on members the root does not have.
-`Set.Execute` therefore reports a refusal under `OpSourceLocal` as
-`ErrRefusedLocalSet`, not as a skip: `Document.Update` takes its error path,
-which invalidates the clone so the next access rebuilds it from the root
-(`TestLocalSetRefusedOnForgedIdentityDropsClone`). Remote and undo/redo
-applies keep reporting a skip, because they run the same `Set.Execute`
-against both the clone and the root and so cannot disagree.
-
-`ErrRefusedLocalSet` is a new way for `Document.Update` to fail, and the
-server drives json proxies over documents rebuilt from stored client changes
-(`server/revisions`, `server/documents`, and compaction in `server/packs`,
-each through `packs.BuildDocForCheckpoint`). It cannot reach those rebuilds
-from a well-formed change log. A local Set is refused only when it *loses*
-its key, and a rebuilt document's clock is past every ticket it applied:
-`ApplyChanges` advances the lamport once per applied change
-(`change.ID.SyncClocks`, or `SyncLamport` for a GC-disabled attachment) and
-the change the update issues takes it one further (`change.ID.Next`), so the
-freshly minted ticket comes after every member already there and wins
-(`TestLocalSetAfterRemoteRebuildKeepsApplying`). Reaching the refusal needs
-an operation ticket no SDK mints, which is the crafted-payload case below;
-failing the update there is the intended outcome, since the alternative --
-returning `nil` with a clone the root has refused -- would have the server
-write back a document built on members the root does not hold.
 
 `Root.UnregisterRemovedElementPair` takes the owning container and retires
 only an entry that container registered. The json layer records the CRDT
 container, not its proxy, as the parent so that identity check holds on the
-clone root the proxies run against -- the retire would otherwise silently
-miss, leaving the clone a worklist entry that resolves to the restored
-member and is purged out from under it
-(`TestCloneRemovedPairRecordsCRDTOwner`,
-`TestUndoRetiresClonePairAndSparesRestoredMember`).
+local path.
 
 ### Out of scope: crafted payloads
 

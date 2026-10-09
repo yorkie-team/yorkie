@@ -35,14 +35,6 @@ func (p *ElementPair) Elem() Element {
 	return p.elem
 }
 
-// Parent returns the container the pair was registered against, for testing
-// purposes. UnregisterRemovedElementPair matches it by identity, so what a
-// registration records here -- the CRDT container, never a json proxy over
-// it -- decides whether the retire finds the entry.
-func (p *ElementPair) Parent() Container {
-	return p.parent
-}
-
 // gcPairKey identifies a registered GC pair by both of its ends.
 //
 // The child's id alone is not unique document-wide. An RHTNode is identified
