@@ -22,6 +22,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 |---|---|---|
 | Send presence as a patch on the way up (#2154) (2026-10-08) | [20261008-presence-patch-todo.md](./active/20261008-presence-patch-todo.md) | [20261008-presence-patch-lessons.md](./active/20261008-presence-patch-lessons.md) |
 | Server-side gate for MaxSizePerDocument (2026-10-03) | [20261003-server-side-document-size-gate-todo.md](./active/20261003-server-side-document-size-gate-todo.md) | [20261003-server-side-document-size-gate-lessons.md](./active/20261003-server-side-document-size-gate-lessons.md) |
+| Harden Set against payloads no replica can produce (2026-09-29) | [20260929-element-set-payload-hardening-todo.md](./active/20260929-element-set-payload-hardening-todo.md) | [20260929-element-set-payload-hardening-lessons.md](./active/20260929-element-set-payload-hardening-lessons.md) |
 | Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./active/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./active/20260926-harden-advisory-verbs-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
