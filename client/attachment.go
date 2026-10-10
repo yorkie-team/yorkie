@@ -90,20 +90,25 @@ type Attachment struct {
 	// waits for the readers to exit.
 	changeEventReceived atomic.Bool
 
-	// writeRejected parks a document whose last push from the sync loop the
-	// server refused outright (see isWriteRejected): resending the same pack
-	// gets the same answer, so the loop skips the document until an explicit
-	// Sync goes through. That takes the server changing its mind -- the
-	// limit raised, or peers shrinking the document -- since the refused
-	// change stays queued and a pack holding it is refused whole however much
-	// this client deletes after it.
-	//
-	// retryAt holds an attachment off after any other failed sync of the
+	// retryAt holds this attachment alone off after a failed sync of the
 	// loop's, instead of the loop sleeping and holding every other attachment
-	// up with it. Both are guarded by syncMu: recordSync writes them under
-	// the write lock and needSync reads them under the read lock.
-	writeRejected bool
-	retryAt       gotime.Time
+	// up with it. A push the server refused outright (see isWriteRejected)
+	// gets the longer RejectedPushRetryDelay rather than RetrySyncLoopDelay:
+	// resending the same pack at the loop's own cadence gets the same answer
+	// every few milliseconds, since the refused change stays queued and a
+	// pack holding it is refused whole however much this client deletes after
+	// it. The hold-off is bounded all the same, because the refusal is the
+	// server's current answer and not a permanent one: the limit can be
+	// raised, or peers can shrink the document, neither of which this client
+	// is party to. So the loop re-probes once the delay has passed, and a
+	// probe that goes through puts the document straight back in the loop.
+	//
+	// A document waiting out a refusal pulls nothing either, since push and
+	// pull share one PushPull and the refused pack goes with every pull. That
+	// is what bounds the delay: it is how stale a refused document's view of
+	// its peers can get. It is guarded by syncMu: recordSync writes it under
+	// the write lock and needSync reads it under the read lock.
+	retryAt gotime.Time
 
 	// disableGC is set when the document was attached with
 	// WithDisableGC. The client sets the matching wire field on every
@@ -124,23 +129,25 @@ func (a *Attachment) Is(resourceType attachable.ResourceType) bool {
 }
 
 // recordSync records the outcome of a sync; the caller holds syncMu. A success puts the attachment
-// back in the loop. A failure of the loop's own sync parks a refused document
-// or delays the next attempt by retryDelay; a failed explicit Sync changes
-// neither, since its caller already has the error.
-func (a *Attachment) recordSync(err error, fromLoop bool, retryDelay gotime.Duration) {
+// back in the loop. A failure of the loop's own sync holds the attachment off
+// until the next attempt is worth making: rejectedDelay for a push the server
+// refused outright, retryDelay for anything else. A failed explicit Sync
+// changes neither, since its caller already has the error and decides for
+// itself what to do about it.
+func (a *Attachment) recordSync(err error, fromLoop bool, retryDelay, rejectedDelay gotime.Duration) {
 	if err == nil {
-		a.writeRejected = false
 		a.retryAt = gotime.Time{}
 		return
 	}
 	if !fromLoop {
 		return
 	}
+
+	delay := retryDelay
 	if a.Is(attachable.TypeDocument) && isWriteRejected(err) {
-		a.writeRejected = true
-		return
+		delay = rejectedDelay
 	}
-	a.retryAt = gotime.Now().Add(retryDelay)
+	a.retryAt = gotime.Now().Add(delay)
 }
 
 // needSync determines if the attachment needs sync.
@@ -148,7 +155,10 @@ func (a *Attachment) needSync(heartbeatInterval gotime.Duration) bool {
 	a.syncMu.RLock()
 	defer a.syncMu.RUnlock()
 
-	if a.writeRejected || gotime.Now().Before(a.retryAt) {
+	// Held off after a failed sync of the loop's, including one the server
+	// refused: a pull would carry the refused pack with it and be refused
+	// too. See retryAt for why the hold-off always ends.
+	if gotime.Now().Before(a.retryAt) {
 		return false
 	}
 

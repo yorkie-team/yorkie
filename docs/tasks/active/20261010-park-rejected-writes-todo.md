@@ -26,25 +26,35 @@ document, and the server measures what peers wrote too.
 
 ## Plan
 
-1. `Attachment` — a `writeRejected` flag. `needSync` returns false while it
-   is set, so the loop leaves that document alone; every other attachment
-   keeps syncing.
+1. `Attachment.retryAt` — the time before which the loop leaves this
+   attachment alone. `needSync` returns false until then; every other
+   attachment keeps syncing meanwhile.
 2. `Attachment.recordSync`, called by `syncInternal` while it still holds
    `syncMu` — on `ErrDocumentSizeExceedsLimit` or `ErrChangeTooLarge` from
-   the loop's own sync, set the flag. On any other loop failure, hold that
-   attachment off for `RetrySyncLoopDelay` instead of
-   `runSyncLoop` sleeping the whole loop.
-3. A successful sync clears both, so an explicit `Client.Sync` that goes
-   through puts the document back in the loop. An explicit `Sync` still
-   returns the refusal to the caller, as today, and does not park.
+   the loop's own sync, hold the document off for the longer
+   `RejectedPushRetryDelay` (10s). On any other loop failure, hold that
+   attachment off for `RetrySyncLoopDelay` instead of `runSyncLoop`
+   sleeping the whole loop.
+3. A successful sync clears it, so an explicit `Client.Sync` that goes
+   through puts the document back in the loop at once. An explicit `Sync`
+   still returns the refusal to the caller, as today, and holds nothing off.
+
+Why a delay and not a park until an explicit `Sync`: the refusal is the
+server's current answer, not a permanent one. The size gate reads the
+project's limit and the document's latest snapshot size, and both can move
+without this client — an operator raises the limit, or peers delete content.
+An app driven by the watch stream alone never calls `Sync`, so a park would
+leave it desynced for good, and silently: push and pull share one `PushPull`,
+so a document waiting out a refusal pulls nothing either. The delay bounds
+that staleness, and costs one refused push per document per 10s.
 
 What this does not fix: the refused change stays in the local queue, and the
 server refuses a pack that holds any growing change, so deleting content on
-this client does not unpark the document. It syncs again only when the
-server would accept the pack — the operator raised the limit, or peers
-shrank the document. Until then the document is stuck, as it was before;
-the difference is that it no longer floods the server or stalls the rest of
-the client.
+this client does not get the document moving again. It syncs again only when
+the server would accept the pack. Until then the document is stuck, as it was
+before; the difference is that it no longer floods the server, no longer
+stalls the rest of the client, and recovers by itself when the server's
+answer changes.
 
 Out of scope: recovering a document whose writes the auth webhook denies
 (the JS #1463 resync), which needs an API Go does not have.
@@ -85,3 +95,18 @@ Out of scope: recovering a document whose writes the auth webhook denies
   fields like `lastSyncTime`, with `time.Time` carrying the monotonic
   reading; the `opts == nil` means-the-loop contract is now stated on
   `syncInternal`.
+- Self review round 3 (blast radius/correctness/tests): the indefinite park
+  was the blocking one. A document parked until an explicit `Sync` never
+  pulls again either, so an app that only watches keeps being told about
+  remote changes it will never see, with no signal and no way back — and
+  the server's refusal is not permanent to begin with. The flag is gone:
+  a refused push now takes the same `retryAt` hold-off as any other
+  failure, with the longer `RejectedPushRetryDelay`, so the loop re-probes
+  by itself. Tests added for the paths the end-to-end ones could not
+  reach: the re-probe, a failed explicit `Sync` leaving the attachment
+  alone, a held-off document not pulling a pending remote change, and a
+  channel not taking the document delay.
+  Known, for the PR body: a document whose push keeps being refused is
+  still up to `RejectedPushRetryDelay` behind its peers, because the Go
+  client has no pull that leaves the refused pack behind — that needs a
+  pull-only request the wire protocol does not have today.

@@ -24,6 +24,12 @@
 
 - Round 1 (correctness/tests): see the todo's Review. Five fixed, two left
   as known limitations with reasons.
+- Round 3 (blast radius): "stop retrying" is not the same as "stop for
+  good". A permanent park reads as safe because it only removes work, but
+  push and pull share one call here, so it also removed every pull — and
+  the condition it waited on was one this client could not observe. A
+  failure whose cause lives on another machine wants a bounded hold-off
+  and a re-probe, not a terminal state.
 - Round 2 (design fit/docs): three stale docs and an over-built field
   (atomics + clock anchor where `syncMu` already guards access) fixed.
   Match the guard the neighbouring fields use before reaching for atomics.

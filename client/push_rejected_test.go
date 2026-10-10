@@ -139,10 +139,10 @@ func (s *pushRejectServer) pushesOf(docKey string) int {
 }
 
 // TestSyncLoopParksRejectedPush pins what the realtime sync loop does with a
-// push the server refuses outright: it stops resending that document's pack,
-// it keeps syncing the client's other documents without waiting on the
-// refused one, and an explicit Sync that goes through puts the document back
-// in the loop.
+// push the server refuses outright: it stops resending that document's pack
+// for RejectedPushRetryDelay, it keeps syncing the client's other documents
+// without waiting on the refused one, and an explicit Sync that goes through
+// puts the document back in the loop without waiting the delay out.
 func TestSyncLoopParksRejectedPush(t *testing.T) {
 	ctx := context.Background()
 	rejected := key.Key("rejected-doc")
@@ -160,6 +160,7 @@ func TestSyncLoopParksRejectedPush(t *testing.T) {
 	cli, err := client.Dial(httpServer.URL,
 		client.WithSyncLoopDuration(10*gotime.Millisecond),
 		client.WithRetrySyncLoopDelay(gotime.Second),
+		client.WithRejectedPushRetryDelay(30*gotime.Second),
 	)
 	require.NoError(t, err)
 	require.NoError(t, cli.Activate(ctx))
@@ -177,7 +178,7 @@ func TestSyncLoopParksRejectedPush(t *testing.T) {
 		}))
 	}
 
-	// The refused document is pushed once and then left alone.
+	// The refused document is pushed once and then left alone for the delay.
 	update(d1, "too big")
 	assert.Eventually(t, func() bool { return srv.pushesOf(rejected.String()) >= 1 },
 		gotime.Second, 5*gotime.Millisecond)
@@ -205,6 +206,58 @@ func TestSyncLoopParksRejectedPush(t *testing.T) {
 	update(d1, "smaller")
 	assert.Eventually(t, func() bool { return srv.pushesOf(rejected.String()) > pushed },
 		gotime.Second, 5*gotime.Millisecond, "the loop did not resume the document")
+}
+
+// TestSyncLoopReprobesRejectedPush pins that the hold-off a refused push gets
+// ends by itself: the loop re-probes once RejectedPushRetryDelay has passed,
+// so a document the server would now accept -- the limit raised, or peers
+// having shrunk it, neither of which this client is party to -- syncs again
+// with no explicit Sync from the app. The probe is one push per delay, not
+// one per round.
+func TestSyncLoopReprobesRejectedPush(t *testing.T) {
+	ctx := context.Background()
+	rejected := key.Key("rejected-doc")
+
+	srv := newPushRejectServer(rejected.String())
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(func() {
+		close(srv.release)
+		httpServer.Close()
+	})
+
+	cli, err := client.Dial(httpServer.URL,
+		client.WithSyncLoopDuration(10*gotime.Millisecond),
+		client.WithRetrySyncLoopDelay(gotime.Second),
+		client.WithRejectedPushRetryDelay(500*gotime.Millisecond),
+	)
+	require.NoError(t, err)
+	require.NoError(t, cli.Activate(ctx))
+	t.Cleanup(func() { _ = cli.Close() })
+
+	d := document.New(rejected)
+	require.NoError(t, cli.Attach(ctx, d, client.WithRealtimeSync()))
+	require.NoError(t, d.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetString("k", "too big")
+		return nil
+	}))
+
+	assert.Eventually(t, func() bool { return srv.pushesOf(rejected.String()) >= 1 },
+		gotime.Second, 5*gotime.Millisecond)
+
+	// Over four delays the document is probed a handful of times, not on
+	// every one of the ~200 rounds they hold.
+	gotime.Sleep(2 * gotime.Second)
+	n := srv.pushesOf(rejected.String())
+	assert.GreaterOrEqual(t, n, 2, "a refused document is never probed again")
+	assert.LessOrEqual(t, n, 8, "a refused document is probed every round")
+
+	// Once the server would accept it, the probe goes through on its own.
+	srv.reject.Store(false)
+	assert.Eventually(t, func() bool { return !d.HasLocalChanges() },
+		3*gotime.Second, 10*gotime.Millisecond,
+		"the loop never recovered the document by itself")
 }
 
 // TestSyncLoopRetriesFailedSyncAlone pins that a transient failure holds back

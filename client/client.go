@@ -246,6 +246,11 @@ func New(opts ...Option) (*Client, error) {
 		options.RetrySyncLoopDelay = 1000 * gotime.Millisecond
 	}
 
+	// Set default rejected push retry delay if not configured
+	if options.RejectedPushRetryDelay == 0 {
+		options.RejectedPushRetryDelay = 10 * gotime.Second
+	}
+
 	// Set default heartbeat interval if not configured
 	if options.ChannelHeartbeatInterval == 0 {
 		options.ChannelHeartbeatInterval = 30 * gotime.Second
@@ -634,13 +639,14 @@ func (c *Client) runSyncLoop(ctx context.Context) {
 					}
 
 					// A failure holds back this attachment alone: syncInternal
-					// parks a refused document or delays the next attempt, so
-					// the loop goes straight on to the other attachments.
+					// records how long before the next attempt is worth
+					// making, so the loop goes straight on to the other
+					// attachments.
 					if err := c.syncInternal(c.syncCtx, attachment, nil); err != nil {
-						if isWriteRejected(err) {
+						if attachment.Is(attachable.TypeDocument) && isWriteRejected(err) {
 							logging.DefaultLogger().Warnf(
-								"sync of %s parked until an explicit Sync: %v",
-								attachment.resource.Key(), err,
+								"push of %s refused, retrying in %s: %v",
+								attachment.resource.Key(), c.options.RejectedPushRetryDelay, err,
 							)
 						} else {
 							logging.DefaultLogger().Warnf("sync failed: %v", err)
@@ -669,7 +675,12 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 	defer attachment.syncMu.Unlock()
 	// Recorded before the unlock above, so a concurrent explicit Sync cannot
 	// succeed in between and have its result overwritten by this one.
-	defer func() { attachment.recordSync(err, opts == nil, c.options.RetrySyncLoopDelay) }()
+	defer func() {
+		attachment.recordSync(
+			err, opts == nil,
+			c.options.RetrySyncLoopDelay, c.options.RejectedPushRetryDelay,
+		)
+	}()
 
 	if attachment.Is(attachable.TypeDocument) {
 		d, ok := attachment.resource.(*document.Document)
@@ -722,9 +733,13 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 }
 
 // isWriteRejected reports whether the server refused a push in a way that
-// resending the same pack cannot change: the document would grow past the
-// project's MaxSizePerDocument. The size gate re-evaluates the pack on every
-// attempt, so the sync loop parks the document instead of retrying it.
+// resending the same pack at once cannot change: the document would grow past
+// the project's MaxSizePerDocument. The size gate re-evaluates the pack on
+// every attempt, so the sync loop holds the document off for
+// RejectedPushRetryDelay instead of retrying it every round. It is a hold-off
+// rather than a park because the gate reads the project's limit and the
+// document's latest size, both of which can move without this client: see
+// Attachment.retryAt.
 //
 // ErrChangeTooLarge (database.ErrChangeTooLarge, named by its code because the
 // client does not import the server) is listed for parity with the JS SDK and
