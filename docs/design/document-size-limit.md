@@ -128,10 +128,23 @@ node at the range boundary. That growth is bounded by the content already in
 the document, since each position can be deleted only once.
 
 The only client this refuses is one that skipped its own check, or one whose
-pack mixes deletions with growth: the whole pack is refused, and the SDK
-currently retries the same pack. Handling the refusal in the SDKs (stop
-retrying, surface a terminal over-quota state, let the user detach) is a
-follow-up tracked in the task.
+pack mixes deletions with growth: the whole pack is refused. Resending it at
+once gets the same answer, so both SDKs' realtime sync loops stop retrying the
+document every round and keep syncing the client's other documents; an
+explicit sync still reports the refusal. The refused change stays queued, so
+deleting content on that client afterwards does not help either: a pack
+holding the change is refused whole.
+
+The refusal is not permanent, though. The gate reads the project's limit and
+the document's latest snapshot size, and both can move without the refused
+client being party to it: an operator raises the limit, or peers delete
+content. So the Go client holds the document off for `RejectedPushRetryDelay`
+(10 seconds by default) and then re-probes, rather than waiting for an
+explicit sync an app driven by the watch stream alone never makes. A document
+waiting out a refusal pulls nothing either, since push and pull share one
+`PushPull` and the refused pack goes with every pull, so that delay is also
+how stale its view of its peers can get. The JS SDK can also drop the refused
+change through its resync; the Go client cannot yet.
 
 ### The server-side write paths
 
@@ -174,7 +187,7 @@ projects that need a tighter bound lower `SnapshotInterval`.
 | Snapshots written before the field existed carry no size | Zero means unknown and admits; the next snapshot records it |
 | Compaction shrinks a document while an old size keeps refusing growth | Compaction purges snapshots, so the size goes back to unknown |
 | Server and client disagree on the number, so an honest client is refused | The server compares `Live`, which is at most the client's `Total`; making the accumulator agree with a rebuild is tracked by the rebuild-drift work |
-| A pack mixing deletions with growth is refused whole and the SDK retries it | SDK follow-up: treat `ErrDocumentSizeExceedsLimit` from a push as terminal |
+| A pack mixing deletions with growth is refused whole and the SDK retries it | The SDKs stop resending it every round; the Go client re-probes once per `RejectedPushRetryDelay`, so a limit raised later is picked up; see above |
 | One more read on the push path | Only for packs that can grow, and only the snapshot's metadata through an index |
 
 ### Design Decisions

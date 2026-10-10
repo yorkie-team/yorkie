@@ -58,10 +58,25 @@ type Options struct {
 	// The default value is 50ms (same as JS SDK).
 	SyncLoopDuration gotime.Duration
 
-	// RetrySyncLoopDelay is the delay of the retry sync loop.
-	// If the sync loop fails, the client waits for the delay to retry the sync loop.
+	// RetrySyncLoopDelay is how long the sync loop holds an attachment off
+	// after its sync failed. The loop keeps syncing the client's other
+	// attachments meanwhile.
 	// The default value is 1000ms.
 	RetrySyncLoopDelay gotime.Duration
+
+	// RejectedPushRetryDelay is how long the sync loop holds a document off
+	// after the server refused its push outright -- a pack that would carry
+	// the document past the project's size limit. Resending it at the loop's
+	// own cadence gets the same answer every few milliseconds, so the loop
+	// waits this much longer before trying again. It does try again: the
+	// refusal is the server's current answer, not a permanent one, since the
+	// limit can be raised and peers can shrink the document without this
+	// client being party to either. The document pulls nothing while it
+	// waits, because push and pull share one PushPull and the refused pack
+	// goes with every pull, so this delay is also how stale a refused
+	// document's view of its peers can get.
+	// The default value is 10 seconds.
+	RejectedPushRetryDelay gotime.Duration
 
 	// ChannelHeartbeatInterval is the interval of the presence heartbeat.
 	// The client sends a heartbeat to the server to refresh the presence TTL.
@@ -104,9 +119,16 @@ func WithSyncLoopDuration(duration gotime.Duration) Option {
 	return func(o *Options) { o.SyncLoopDuration = duration }
 }
 
-// WithRetrySyncLoopDelay configures the delay of the retry sync loop.
+// WithRetrySyncLoopDelay configures how long the sync loop holds an
+// attachment off after its sync failed.
 func WithRetrySyncLoopDelay(delay gotime.Duration) Option {
 	return func(o *Options) { o.RetrySyncLoopDelay = delay }
+}
+
+// WithRejectedPushRetryDelay configures how long the sync loop holds a
+// document off after the server refused its push outright.
+func WithRejectedPushRetryDelay(delay gotime.Duration) Option {
+	return func(o *Options) { o.RejectedPushRetryDelay = delay }
 }
 
 // WithChannelHeartbeatInterval configures the interval of the channel heartbeat.
