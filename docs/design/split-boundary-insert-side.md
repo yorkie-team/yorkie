@@ -34,12 +34,17 @@ splitter never saw, both cannot hold.
 yorkie-js-sdk#1467 resolves this in the JS SDK. Where a same-boundary split
 lands is a replicated contract -- the server and every SDK must pick the same
 node for the same change -- so this document records the Go port of the same
-two rules, made for parity with that PR at `89b0b2a8`.
+two rules, made for parity with that PR: first at `89b0b2a8`, then with the
+three review fixes described under
+[Order-independent gates](#order-independent-gates) that the JS PR takes too.
 
 ### Goals
 
 - The minima of yorkie-js-sdk#1436 converge in Go, in tree shape (node IDs)
   and in XML, with the same converged XML the JS SDK produces.
+- Every gate the two rules apply reads only state that is the same on every
+  replica whatever the delivery order and GC timing: the change's version
+  vector, node tickets and `removedAt`.
 - No regression in the existing split-ordering and split-cascade suites.
 
 ### Non-Goals
@@ -49,7 +54,9 @@ two rules, made for parity with that PR at `89b0b2a8`.
   endpoints past split products; style targets (§9.4) and delete ranges are
   untouched.
 - Departing from the JS rule, even where it is known to be wrong. See
-  [Known gap](#known-gap-a-trailing-tombstone).
+  [Remaining divergences](#remaining-divergences).
+- Converging every insert/split interleaving. yorkie-js-sdk#1436 has cases
+  this rule leaves open; they are recorded, not fixed, here.
 
 ## Design
 
@@ -85,44 +92,102 @@ run of newer-ticket *text* children -- the same rule step 04 applies inside one
 node. Element children at that boundary are §7.8's business; crossing them made
 the two rules disagree in the JS SDK and broke eight split-ordering tests.
 
-"The last child" is measured in live content (`atEndOfLiveContent`), not in all
-children, following the JS rule.
+"The last child" is measured in content the editor saw as live
+(`atEndOfLiveContent`), not in all children, following the JS rule.
 
 It runs in `Edit` right after Phase 1, on a **collapsed** range only, not
 inside `FindTreeNodesWithSplitText`: that method also resolves style and
 delete ranges, and an endpoint that walked into a product would change which
 parents `collectBetween` runs between, over nodes the editor never saw.
 
-### Known gap: a trailing tombstone
+### Order-independent gates
 
-`atEndOfLiveContent` skips tombstones, and whether a node is a tombstone when
-the insert arrives depends on delivery order. Take `<p>acb</p>`: d1 inserts
-`r` after `c` and splits right after `c`; d0 inserts `u` between `a` and `c`;
-d2 removes `c`. A replica that applies the removal before the insert sees `a`
-as the end of live content, advances, and carries `u` past `c` into the
-product; the typist, which applied its insert while `c` was live, keeps it in
-the paragraph:
+The port at `89b0b2a8` had three gates whose answer depended on what had
+arrived on the replica, not on what the change knew. Review of
+yorkie-js-sdk#1467 found each, and both SDKs now apply the same three fixes.
+
+**The end of live content counts only known removals.** `atEndOfLiveContent`
+skipped every tombstone after the anchor. Whether a node is a tombstone when an
+insert arrives depends on delivery order. Take `<p>acb</p>`: d1 inserts `r`
+after `c` and splits right after `c`; d0 inserts `u` between `a` and `c`; d2
+removes `c`. A replica that applied the removal before the insert saw `a` as
+the end of live content and carried `u` past `c` into the product, while the
+typist kept it in the paragraph:
 
 ```
 typist:            <doc><p>au</p><p>rb</p></doc>
 removal first:     <doc><p>a</p><p>rub</p></doc>
 ```
 
-The JS PR at `89b0b2a8` diverges in exactly the same way, with the same node
-shapes, and both bases converge (on `<p>au</p><p>rb</p>`). This is open review
-finding (a) on yorkie-js-sdk#1467. The port keeps the rule as JS has it, since
-a Go replica that disagreed with a JS one would diverge on every ordering;
-`TestTreeInsertAtSplitBoundaryPastRemovedChild` records the case as a skipped
-subtest so the fix lands in both SDKs together. Finding (b) -- that
-`orderSameBoundarySplit` does not apply the live-content rule -- is ported as is
-and not separately tested here.
+Now a trailing child counts as gone only when
+`removedAt != nil && TicketKnown(versionVector, removedAt)`. The change's
+version vector and the node's `removedAt` are the same on every replica, so
+the answer no longer depends on arrival order. GC does not change it either:
+a tombstone is purged only once its removal is known everywhere, so every
+change applied after the purge would have counted it as gone anyway.
+`advanceIntoSplitProducts` takes the version vector from `Edit` for this.
+
+**Both run measurements cross only children the split moved.**
+`advanceIntoSplitProducts` and `boundaryInsertRunOf` measure a run at the
+start of a split product. Text typed into the product *after* the split also
+sits there and is also unknown to a concurrent change, but it was never at
+the original boundary. Counting it broke Enter-then-type: d1 presses Enter
+after `a` and types `s` at the start of the new paragraph while d0 types `u`
+after `a`. The replica that applied the split first scanned over `s` and
+carried `u` into the new paragraph; the other kept it on the left
+(`<p>au</p><p>sb</p>`, which `main` produces). `movedBySplit` stops both runs
+at the first child younger than the product. Ticket comparison is stable under
+delivery order and GC alike.
+
+**A redirect only into an adjacent product.** When `orderSameBoundarySplit`
+redirects a split past the boundary run of the next older product, that
+product has to start at our boundary. If the walk stepped over a newer
+product that still holds content past its own run, the next product was split
+off that one at a different boundary, and its leading run has nothing to do
+with ours. With a typist's insert and split after `a` and two concurrent
+splits at the paragraph start, one replica split the typist's product past
+`u` and diverged. The redirect now requires `target == parent` or a
+stepped-over product holding nothing past its run.
+
+### Remaining divergences
+
+A two-replica fuzz of the JS tree (inserts and splits on `<p>ab</p>`, changes
+delivered one at a time in random interleavings, trees compared by node ID)
+still finds divergent runs after these fixes. Seven delta-debugged minima are
+in `TestTreeSplitBoundaryRemainingDivergences` as skipped subtests. Every op in
+each is concurrent with the other replica's, and the Go replicas end in the
+same two states as the JS ones, node IDs included, so these are gaps in the
+shared rule and not port differences.
+
+| Case | Ops (d1 = replica 0) | Diverges in | `main` |
+|------|----------------------|-------------|--------|
+| seed 101 | d1 ins(2,c) ins(3,d) split(3); d2 split(2) | XML | diverges |
+| seed 235 | d1 ins(3,c); d2 split(3); d1 ins(4,d) split(4) | XML | diverges |
+| seed 193 | d1 ins(3,e); d2 ins(3,f) split(3) split(5) | XML | diverges |
+| seed 24 | d1 ins(3,c) ins(4,d) split(5); d2 split(3) | node IDs | diverges |
+| seed 69 | d2 ins(1,f) split(1) ins(3,h); d1 ins(1,i) | XML | diverges |
+| seed 502 | d2 ins(3,g) split(3); d1 ins(3,h); d2 ins(6,i) | XML | diverges |
+| seed 3768 | d2 split(3) ins(3,d) split(3) ins(6,e); d1 split(3) | node IDs | converges |
+
+The first four are not this rule's: they diverge identically on `main`, at
+`89b0b2a8`, and with the same-boundary walk fix of yorkie#2098
+(yorkie-js-sdk#1435) applied on top. That fix ends the §7.8 walk at the
+product holding the right half; neither SDK has it on `main` yet, and these
+cases do not depend on it.
+
+The last three come from `movedBySplit`: without it they converge, and with it
+Enter-then-type diverges. Enter-then-type is the common editing pattern, so the
+filter stays. Seed 3768 is the one case that converges on `main` and diverges
+now, and only in the order of two empty paragraphs; seeds 69 and 502 diverge
+on `main` too.
 
 ### Risks and Mitigation
 
 | Risk | Mitigation |
 |------|------------|
-| A JS replica and a Go/server replica place the same split differently | This port; the five JS cases are translated one-for-one into `tree_boundary_insert_side_test.go` with the converged XML asserted |
-| The trailing-tombstone case above diverges where `main` converged | Documented and kept as a skipped subtest; the fix has to change both SDKs at once |
+| A JS replica and a Go/server replica place the same split differently | This port; the JS cases are translated one-for-one into `tree_boundary_insert_side_test.go` with the converged XML asserted |
+| A gate reads replica-local state and diverges by delivery order | Every gate reads the version vector, tickets or `removedAt`; the trailing-tombstone, Enter-then-type and three-split cases are tested in several delivery orders |
+| The rule leaves some insert/split interleavings divergent, one of which converges on `main` | Recorded as skipped subtests with both replica states, so a later fix changes both SDKs together |
 | An `InsNextID` that did not come from `SplitElement` redirects a split or an insert | `sharesSplitFamilyParent` keeps both walks inside one split family; `insNextWalker` stops a cyclic chain |
 | Splitting a tombstoned sibling makes the product born tombstoned | Both walks stop at a removed sibling, as §7.8 already did |
 
@@ -130,7 +195,9 @@ and not separately tested here.
 
 | Decision | Reason |
 |----------|--------|
-| Port the JS decisions exactly, known gap included | Parity is what convergence across SDKs needs; a Go-only fix is itself a divergence |
+| Port the JS decisions exactly, remaining divergences included | Parity is what convergence across SDKs needs; a Go-only fix is itself a divergence |
+| Count a removal as gone only when the change knew it | A local tombstone depends on delivery order; the version vector and `removedAt` do not |
+| Keep `movedBySplit` despite seed 3768 | Without it Enter-then-type diverges, which is far more common than three concurrent splits around an insert |
 | Cross text children only, in both rules | Element children at that boundary are §7.8's, and text is the only GC-stable measure of the run |
 | Apply the insert-side rule to a collapsed range in `Edit` | A range endpoint moving into a product would widen or shorten what the edit deletes and merges |
 | No split-position measurement change | The JS PR also moves where the split's `TreeChange` position is measured; the Go tree emits no such change, so there is nothing to port |
@@ -140,7 +207,8 @@ and not separately tested here.
 | Alternative | Why not |
 |-------------|---------|
 | Leave Go on §7.8 ticket order | A JS replica on the new rule and a Go/server replica would place the same split differently |
-| Fix the trailing-tombstone gap in Go only | Same reason, and the JS fix is still under review |
+| Fix the trailing-tombstone gap in Go only | Same reason; the fix landed in both SDKs together instead |
+| Count the run by `InsPrevID` instead of tickets | Purge relinks and clears it and `DropSplitLinks` drops it, so the run would depend on GC timing |
 | Resolve inside `FindTreeNodesWithSplitText` for every range | Style and delete ranges resolve through it, and their endpoints must not follow content across a boundary |
 
 ## Tasks
