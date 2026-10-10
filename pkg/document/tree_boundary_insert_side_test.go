@@ -260,3 +260,81 @@ func TestTreeBoundaryRunWithTwoConcurrentStartSplits(t *testing.T) {
 		})
 	}
 }
+
+// TestTreeSplitBoundaryRemainingDivergences records two-replica cases that
+// still diverge with the boundary-insert-side rules: the remaining cases of
+// yorkie-js-sdk#1436. A fuzz of the JS tree found them and delta debugging
+// minimized them; every op is concurrent with the other replica's. The Go
+// and JS replicas end in the same two states, node IDs included, so they are
+// gaps in the shared rule rather than port differences. Each is skipped with
+// the replica states and how it relates to main until the rule covers it.
+func TestTreeSplitBoundaryRemainingDivergences(t *testing.T) {
+	type op struct {
+		replica int
+		fn      func(tree *json.Tree)
+	}
+	const (
+		onMain = "Also diverges on main and with the same-boundary walk fix " +
+			"(yorkie#2098, yorkie-js-sdk#1435)."
+		fromFilter = "Also diverges on main; converged with this rule before " +
+			"movedBySplit, which Enter-then-type needs."
+	)
+	for _, tc := range []struct {
+		name  string
+		ops   []op
+		known string
+	}{
+		{
+			name:  "seed 101",
+			ops:   []op{{0, insertText(2, "c")}, {0, insertText(3, "d")}, {0, splitAt(3)}, {1, splitAt(2)}},
+			known: "<p>ac</p><p></p><p>db</p> vs <p>ac</p><p>d</p><p>b</p>. " + onMain,
+		},
+		{
+			name:  "seed 235",
+			ops:   []op{{0, insertText(3, "c")}, {1, splitAt(3)}, {0, insertText(4, "d")}, {0, splitAt(4)}},
+			known: "<p>abc</p><p></p><p>d</p> vs <p>abc</p><p>d</p><p></p>. " + onMain,
+		},
+		{
+			name:  "seed 193",
+			ops:   []op{{0, insertText(3, "e")}, {1, insertText(3, "f")}, {1, splitAt(3)}, {1, splitAt(5)}},
+			known: "<p>ab</p><p></p><p>fe</p> vs <p>abe</p><p></p><p>f</p>. " + onMain,
+		},
+		{
+			name:  "seed 24",
+			ops:   []op{{0, insertText(3, "c")}, {0, insertText(4, "d")}, {0, splitAt(5)}, {1, splitAt(3)}},
+			known: "Same XML, the two empty paragraphs in a different order. " + onMain,
+		},
+		{
+			name:  "seed 69",
+			ops:   []op{{1, insertText(1, "f")}, {1, splitAt(1)}, {1, insertText(3, "h")}, {0, insertText(1, "i")}},
+			known: "<p></p><p>hfiab</p> vs <p>i</p><p>hfab</p>. " + fromFilter,
+		},
+		{
+			name:  "seed 502",
+			ops:   []op{{1, insertText(3, "g")}, {1, splitAt(3)}, {0, insertText(3, "h")}, {1, insertText(6, "i")}},
+			known: "<p>ab</p><p>gih</p> vs <p>ab</p><p>ghi</p>. " + fromFilter,
+		},
+		{
+			name: "seed 3768",
+			ops: []op{
+				{1, splitAt(3)}, {1, insertText(3, "d")}, {1, splitAt(3)}, {1, insertText(6, "e")}, {0, splitAt(3)},
+			},
+			known: "Same XML, the two empty paragraphs in a different order. Converges on " +
+				"main and converged with this rule before movedBySplit, which " +
+				"Enter-then-type needs.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Skip("KNOWN (yorkie-js-sdk#1436 remaining cases): " + tc.known)
+
+			docs := boundaryReplicas(t, 2, "ab")
+			for _, o := range tc.ops {
+				updateTree(t, docs[o.replica], o.fn)
+			}
+			exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+			assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
+			assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
+		})
+	}
+}
