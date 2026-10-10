@@ -266,8 +266,10 @@ func TestTreeBoundaryRunWithTwoConcurrentStartSplits(t *testing.T) {
 // yorkie-js-sdk#1436. A fuzz of the JS tree found them and delta debugging
 // minimized them; every op is concurrent with the other replica's. The Go
 // and JS replicas end in the same two states, node IDs included, so they are
-// gaps in the shared rule rather than port differences. Each is skipped with
-// the replica states and how it relates to main until the rule covers it.
+// gaps in the shared rule rather than port differences. A case still open
+// carries a `known` note with the replica states and how it relates to main,
+// and is skipped until the rule covers it; one the rule has since covered
+// drops the note and runs.
 func TestTreeSplitBoundaryRemainingDivergences(t *testing.T) {
 	type op struct {
 		replica int
@@ -315,17 +317,20 @@ func TestTreeSplitBoundaryRemainingDivergences(t *testing.T) {
 			known: "<p>ab</p><p>gih</p> vs <p>ab</p><p>ghi</p>. " + fromFilter,
 		},
 		{
+			// Converges now that Phase 1-0 leaves a pure split's anchor
+			// alone: every op here but the last is a split or a type into a
+			// split product, and advancing the splitter's own anchor into a
+			// product opened the last boundary in the wrong one.
 			name: "seed 3768",
 			ops: []op{
 				{1, splitAt(3)}, {1, insertText(3, "d")}, {1, splitAt(3)}, {1, insertText(6, "e")}, {0, splitAt(3)},
 			},
-			known: "Same XML, the two empty paragraphs in a different order. Converges on " +
-				"main and converged with this rule before movedBySplit, which " +
-				"Enter-then-type needs.",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Skip("KNOWN (yorkie-js-sdk#1436 remaining cases): " + tc.known)
+			if tc.known != "" {
+				t.Skip("KNOWN (yorkie-js-sdk#1436 remaining cases): " + tc.known)
+			}
 
 			docs := boundaryReplicas(t, 2, "ab")
 			for _, o := range tc.ops {
