@@ -161,6 +161,12 @@ for the node itself. A *concurrent* removal does not stop it: the replica that
 applied the insert first put the content inside the product too, and the
 delete then tombstones it on both, so advancing is what converges.
 
+`orderSameBoundarySplit`'s liveness gate reads `removedSubtreeKnownTo` too,
+for the same reason and so that the two sides of one boundary judge removal
+alike: a local `IsRemoved` would make the split fall back to `parent` on the
+replica that already holds a concurrent removal and step into the sibling on
+the one that does not, placing the same product in two places.
+
 Because every gate asks what the change knew, a change carrying **no** version
 vector gets the most permissive answer to all of them, while
 `orderSameBoundarySplit` -- the rule this one has to agree with -- switches
@@ -238,7 +244,7 @@ leaves a pure split's anchor alone -- so no case left open here converges on
 | A gate reads replica-local state and diverges by delivery order | Every gate reads the version vector, tickets or `removedAt`; the trailing-tombstone, Enter-then-type and three-split cases are tested in several delivery orders |
 | The rule leaves some insert/split interleavings divergent | Recorded as skipped subtests with both replica states, so a later fix changes both SDKs together; every one left open diverges on `main` as well |
 | An `InsNextID` that did not come from `SplitElement` redirects a split or an insert | `sharesSplitFamilyParent` keeps both walks inside one split family; `insNextWalker` stops a cyclic chain |
-| Splitting a tombstoned sibling makes the product born tombstoned | Both walks stop at a removed sibling, as §7.8 already did |
+| Splitting a sibling the editor saw removed makes the product born tombstoned inside an invisible subtree | Both walks stop at `removedSubtreeKnownTo`, the same test on both sides of the boundary |
 
 ### Design Decisions
 

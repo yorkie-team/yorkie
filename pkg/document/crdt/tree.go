@@ -3326,11 +3326,23 @@ func (t *Tree) orderSameBoundarySplit(
 			break
 		}
 
-		// Splitting a tombstoned sibling would make our product born
-		// tombstoned, which a replica that applied us before the concurrent
-		// split never does. Fall back to splitting parent, as that replica
-		// did, rather than diverge on liveness.
-		if next.IsRemoved() {
+		// Splitting a sibling the editor saw removed would make our product
+		// born tombstoned (SplitElement copies removedAt) inside a subtree
+		// that was not part of the sequence this change was positioned in.
+		// Fall back to splitting parent, as a replica that applied us before
+		// the concurrent split did.
+		//
+		// Judged by the editing change's own vector, not by the local
+		// tombstone, and by the whole ancestor chain rather than next alone --
+		// the same removedSubtreeKnownTo test advanceIntoSplitProducts applies
+		// to the insert side of this boundary. A removal concurrent with this
+		// split lands before it on some replicas and after it on others, so an
+		// IsRemoved test here would fall back on one replica and step into
+		// next on another, placing the same product differently. Stepping in
+		// is also what converges: the replica that applied the split first put
+		// the product there too, and the concurrent delete then tombstones it
+		// on both.
+		if removedSubtreeKnownTo(next, versionVector) {
 			break
 		}
 
