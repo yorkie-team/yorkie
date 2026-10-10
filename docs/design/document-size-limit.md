@@ -128,10 +128,15 @@ node at the range boundary. That growth is bounded by the content already in
 the document, since each position can be deleted only once.
 
 The only client this refuses is one that skipped its own check, or one whose
-pack mixes deletions with growth: the whole pack is refused, and the SDK
-currently retries the same pack. Handling the refusal in the SDKs (stop
-retrying, surface a terminal over-quota state, let the user detach) is a
-follow-up tracked in the task.
+pack mixes deletions with growth: the whole pack is refused. Resending it gets
+the same answer, so both SDKs' realtime sync loops park the document instead
+of retrying it, and keep syncing the client's other documents; an explicit
+sync still reports the refusal. The refused change stays queued, so deleting
+content afterwards does not unpark the document. It syncs again only through
+an explicit sync the server accepts, once the limit was raised or peers shrank
+the document; a parked client does not pull, so it does not notice either by
+itself. The JS SDK can also drop the refused change through its resync; the
+Go client cannot yet.
 
 ### The server-side write paths
 
@@ -174,7 +179,7 @@ projects that need a tighter bound lower `SnapshotInterval`.
 | Snapshots written before the field existed carry no size | Zero means unknown and admits; the next snapshot records it |
 | Compaction shrinks a document while an old size keeps refusing growth | Compaction purges snapshots, so the size goes back to unknown |
 | Server and client disagree on the number, so an honest client is refused | The server compares `Live`, which is at most the client's `Total`; making the accumulator agree with a rebuild is tracked by the rebuild-drift work |
-| A pack mixing deletions with growth is refused whole and the SDK retries it | SDK follow-up: treat `ErrDocumentSizeExceedsLimit` from a push as terminal |
+| A pack mixing deletions with growth is refused whole and the SDK retries it | The SDKs park the document instead of resending it; see above |
 | One more read on the push path | Only for packs that can grow, and only the snapshot's metadata through an index |
 
 ### Design Decisions

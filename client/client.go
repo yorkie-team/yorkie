@@ -633,9 +633,18 @@ func (c *Client) runSyncLoop(ctx context.Context) {
 						continue
 					}
 
+					// A failure holds back this attachment alone: syncInternal
+					// parks a refused document or delays the next attempt, so
+					// the loop goes straight on to the other attachments.
 					if err := c.syncInternal(c.syncCtx, attachment, nil); err != nil {
-						logging.DefaultLogger().Warnf("sync failed: %v", err)
-						gotime.Sleep(c.options.RetrySyncLoopDelay)
+						if isWriteRejected(err) {
+							logging.DefaultLogger().Warnf(
+								"sync of %s parked until an explicit Sync: %v",
+								attachment.resource.Key(), err,
+							)
+						} else {
+							logging.DefaultLogger().Warnf("sync failed: %v", err)
+						}
 					}
 
 				}
@@ -646,8 +655,10 @@ func (c *Client) runSyncLoop(ctx context.Context) {
 
 // syncInternal performs synchronization for the given attachment based on its type.
 // If syncOpts is provided, it will be used for the sync operation; otherwise,
-// the attachment's sync mode will be used.
-func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts *SyncOptions) error {
+// the attachment's sync mode will be used. A nil opts is how the sync loop
+// calls this, and only the loop's failures park or hold off the attachment;
+// Client.Sync always passes its options.
+func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts *SyncOptions) (err error) {
 	// The sync loop works from a snapshot of c.attachments and Client.Sync
 	// looks the attachment up before calling here, so the attachment may have
 	// been detached, removed or deactivated since. lockLiveAttachment re-checks
@@ -656,6 +667,9 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 		return err
 	}
 	defer attachment.syncMu.Unlock()
+	// Recorded before the unlock above, so a concurrent explicit Sync cannot
+	// succeed in between and have its result overwritten by this one.
+	defer func() { attachment.recordSync(err, opts == nil, c.options.RetrySyncLoopDelay) }()
 
 	if attachment.Is(attachable.TypeDocument) {
 		d, ok := attachment.resource.(*document.Document)
@@ -705,6 +719,22 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 	attachment.lastSyncTime = gotime.Now()
 
 	return nil
+}
+
+// isWriteRejected reports whether the server refused a push in a way that
+// resending the same pack cannot change: the document would grow past the
+// project's MaxSizePerDocument. The size gate re-evaluates the pack on every
+// attempt, so the sync loop parks the document instead of retrying it.
+//
+// ErrChangeTooLarge (database.ErrChangeTooLarge, named by its code because the
+// client does not import the server) is listed for parity with the JS SDK and
+// in case a write path ever returns it; today only compaction does.
+func isWriteRejected(err error) bool {
+	switch converter.ErrorCodeOf(err) {
+	case document.ErrDocumentSizeExceedsLimit.Code(), "ErrChangeTooLarge":
+		return true
+	}
+	return false
 }
 
 // AttachResource attaches the given resource to this client.

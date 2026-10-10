@@ -58,8 +58,10 @@ type Options struct {
 	// The default value is 50ms (same as JS SDK).
 	SyncLoopDuration gotime.Duration
 
-	// RetrySyncLoopDelay is the delay of the retry sync loop.
-	// If the sync loop fails, the client waits for the delay to retry the sync loop.
+	// RetrySyncLoopDelay is how long the sync loop holds an attachment off
+	// after its sync failed. The loop keeps syncing the client's other
+	// attachments meanwhile. A push the server refused outright is not
+	// retried at all: the document waits for an explicit Sync.
 	// The default value is 1000ms.
 	RetrySyncLoopDelay gotime.Duration
 
@@ -104,7 +106,8 @@ func WithSyncLoopDuration(duration gotime.Duration) Option {
 	return func(o *Options) { o.SyncLoopDuration = duration }
 }
 
-// WithRetrySyncLoopDelay configures the delay of the retry sync loop.
+// WithRetrySyncLoopDelay configures how long the sync loop holds an
+// attachment off after its sync failed.
 func WithRetrySyncLoopDelay(delay gotime.Duration) Option {
 	return func(o *Options) { o.RetrySyncLoopDelay = delay }
 }

@@ -90,6 +90,21 @@ type Attachment struct {
 	// waits for the readers to exit.
 	changeEventReceived atomic.Bool
 
+	// writeRejected parks a document whose last push from the sync loop the
+	// server refused outright (see isWriteRejected): resending the same pack
+	// gets the same answer, so the loop skips the document until an explicit
+	// Sync goes through. That takes the server changing its mind -- the
+	// limit raised, or peers shrinking the document -- since the refused
+	// change stays queued and a pack holding it is refused whole however much
+	// this client deletes after it.
+	//
+	// retryAt holds an attachment off after any other failed sync of the
+	// loop's, instead of the loop sleeping and holding every other attachment
+	// up with it. Both are guarded by syncMu: recordSync writes them under
+	// the write lock and needSync reads them under the read lock.
+	writeRejected bool
+	retryAt       gotime.Time
+
 	// disableGC is set when the document was attached with
 	// WithDisableGC. The client sets the matching wire field on every
 	// PushPullChanges so the server can skip minVV tracking and omit the
@@ -108,10 +123,34 @@ func (a *Attachment) Is(resourceType attachable.ResourceType) bool {
 	return a.resource.Type() == resourceType
 }
 
+// recordSync records the outcome of a sync; the caller holds syncMu. A success puts the attachment
+// back in the loop. A failure of the loop's own sync parks a refused document
+// or delays the next attempt by retryDelay; a failed explicit Sync changes
+// neither, since its caller already has the error.
+func (a *Attachment) recordSync(err error, fromLoop bool, retryDelay gotime.Duration) {
+	if err == nil {
+		a.writeRejected = false
+		a.retryAt = gotime.Time{}
+		return
+	}
+	if !fromLoop {
+		return
+	}
+	if a.Is(attachable.TypeDocument) && isWriteRejected(err) {
+		a.writeRejected = true
+		return
+	}
+	a.retryAt = gotime.Now().Add(retryDelay)
+}
+
 // needSync determines if the attachment needs sync.
 func (a *Attachment) needSync(heartbeatInterval gotime.Duration) bool {
 	a.syncMu.RLock()
 	defer a.syncMu.RUnlock()
+
+	if a.writeRejected || gotime.Now().Before(a.retryAt) {
+		return false
+	}
 
 	if a.resource.Type() == attachable.TypeDocument {
 		doc, ok := a.resource.(*document.Document)
