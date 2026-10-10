@@ -155,26 +155,20 @@ func TestTreeInsertAtConcurrentSplitBoundary(t *testing.T) {
 // child. The typist put u between a and c, so u belongs before c and in the
 // left paragraph whatever happens to c.
 //
-// advanceIntoSplitProducts gates on atEndOfLiveContent, which skips
-// tombstones, so whether the insert crosses into the split product depends on
-// whether the removal arrived before the insert. Both yorkie-js-sdk#1467 at
-// 89b0b2a8 and this port diverge on the first ordering; the base of each
-// converges on both.
+// advanceIntoSplitProducts gates on atEndOfLiveContent, which counts a
+// trailing child as gone only when the inserting change knew of its removal.
+// Judged by the local tombstone instead, whether u crosses into the split
+// product would depend on whether the removal arrived before the insert, and
+// the first ordering below would diverge.
 func TestTreeInsertAtSplitBoundaryPastRemovedChild(t *testing.T) {
 	// <p>acb</p>: index 2 is between a and c, 3 between c and b.
 	for _, tc := range []struct {
 		name   string
 		orders [][]int
-		known  string // why the case is skipped; empty when it converges
 	}{
 		{
 			name:   "splitter receives the removal before the insert",
 			orders: [][]int{{1, 2}, {2, 0}, {1, 0}},
-			known: "KNOWN (yorkie-js-sdk#1467 review, round 5, finding (a)): atEndOfLiveContent " +
-				"skips tombstones, so the replicas that applied the removal of c first carry u " +
-				"past c into the split product (<p>a</p><p>rub</p>) while the typist keeps it " +
-				"in the paragraph (<p>au</p><p>rb</p>). Kept for parity with the JS rule; " +
-				"converges on main.",
 		},
 		{
 			name:   "splitter receives the insert before the removal",
@@ -182,10 +176,6 @@ func TestTreeInsertAtSplitBoundaryPastRemovedChild(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.known != "" {
-				t.Skip(tc.known)
-			}
-
 			docs := boundaryReplicas(t, 3, "acb")
 			updateTree(t, docs[1], insertText(3, "r"))
 			updateTree(t, docs[1], splitAt(3))
@@ -198,6 +188,75 @@ func TestTreeInsertAtSplitBoundaryPastRemovedChild(t *testing.T) {
 				assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[i]))
 			}
 			assert.Equal(t, "<doc><p>au</p><p>rb</p></doc>", treeXML(t, docs[0]))
+		})
+	}
+}
+
+// TestTreeEnterThenTypeAtConcurrentInsert covers Enter followed by typing at
+// the start of the new paragraph, while a peer types at the point Enter was
+// pressed. The typed s is younger than the split product, so it was never at
+// the old boundary: neither run measurement may cross it, or the replica that
+// applied the split first pulls u into the new paragraph alone.
+func TestTreeEnterThenTypeAtConcurrentInsert(t *testing.T) {
+	t.Run("keeps the concurrent insert in the left paragraph", func(t *testing.T) {
+		docs := boundaryReplicas(t, 2, "ab")
+		updateTree(t, docs[0], insertText(2, "u"))
+		updateTree(t, docs[1], splitAt(2))
+		updateTree(t, docs[1], insertText(4, "s"))
+		exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+		assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
+		assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
+		assert.Equal(t, "<doc><p>au</p><p>sb</p></doc>", treeXML(t, docs[0]))
+	})
+
+	// A third replica removes a so that the left paragraph holds u alone.
+	for _, orders := range [][][]int{
+		{{1, 2}, {0, 2}, {0, 1}},
+		{{2, 1}, {2, 0}, {1, 0}},
+		{{1, 2}, {2, 0}, {1, 0}},
+	} {
+		t.Run(fmt.Sprintf("with a third replica, orders %v", orders), func(t *testing.T) {
+			docs := boundaryReplicas(t, 3, "ab")
+			updateTree(t, docs[0], insertText(2, "u"))
+			updateTree(t, docs[1], splitAt(2))
+			updateTree(t, docs[1], insertText(4, "s"))
+			updateTree(t, docs[2], func(tree *json.Tree) { tree.Edit(1, 2, nil, 0) })
+			exchangeInOrder(t, docs, orders)
+
+			for i := 1; i < len(docs); i++ {
+				assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[i]))
+				assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[i]))
+			}
+			assert.Equal(t, "<doc><p>u</p><p>sb</p></doc>", treeXML(t, docs[0]))
+		})
+	}
+}
+
+// TestTreeBoundaryRunWithTwoConcurrentStartSplits covers a typist's insert
+// and split after a, while two peers split the paragraph at its start. The
+// typist's product is split off at a different boundary from the start
+// splits, so orderSameBoundarySplit must not redirect a start split past its
+// leading u after stepping over a product that still holds b.
+func TestTreeBoundaryRunWithTwoConcurrentStartSplits(t *testing.T) {
+	for _, orders := range [][][]int{
+		{{1, 2}, {0, 2}, {0, 1}},
+		{{2, 1}, {2, 0}, {1, 0}},
+		{{1, 2}, {2, 0}, {1, 0}},
+		{{2, 1}, {0, 2}, {0, 1}},
+	} {
+		t.Run(fmt.Sprintf("converges with orders %v", orders), func(t *testing.T) {
+			docs := boundaryReplicas(t, 3, "ab")
+			updateTree(t, docs[0], insertText(2, "u"))
+			updateTree(t, docs[0], splitAt(2))
+			updateTree(t, docs[1], splitAt(1))
+			updateTree(t, docs[2], splitAt(1))
+			exchangeInOrder(t, docs, orders)
+
+			for i := 1; i < len(docs); i++ {
+				assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[i]))
+				assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[i]))
+			}
 		})
 	}
 }

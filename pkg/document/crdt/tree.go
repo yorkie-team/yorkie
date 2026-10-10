@@ -1916,7 +1916,7 @@ func (t *Tree) Edit(
 		// Both ends, so the range stays collapsed: moving only one would point
 		// the traversal below from the product back at the node it came out
 		// of.
-		fromParent, fromLeft = t.advanceIntoSplitProducts(fromParent, fromLeft, editedAt)
+		fromParent, fromLeft = t.advanceIntoSplitProducts(fromParent, fromLeft, editedAt, versionVector)
 		toParent, toLeft = fromParent, fromLeft
 	}
 
@@ -3308,8 +3308,17 @@ func (t *Tree) orderSameBoundarySplit(
 			// boundary is not next's after all: it is inside next, past that
 			// run, and the products are ordered by content rather than by
 			// ticket.
-			if run := boundaryInsertRunOf(next, versionVector); run > 0 {
-				return next, run
+			//
+			// Only while next still starts at our boundary, though: a
+			// stepped-over product holding content past its own run means
+			// next was split off it at a different boundary, and its leading
+			// run has nothing to do with ours.
+			adjacent := target == parent ||
+				len(target.Index.Children(true)) == boundaryInsertRunOf(target, versionVector)
+			if adjacent {
+				if run := boundaryInsertRunOf(next, versionVector); run > 0 {
+					return next, run
+				}
 			}
 			break
 		}
@@ -3341,6 +3350,11 @@ func (t *Tree) orderSameBoundarySplit(
 // ran GC, and two replicas would place the same split differently for no
 // reason but collection timing.
 //
+// The run also ends at the first child younger than node itself (see
+// movedBySplit): text typed into the product after the split was never at
+// the original boundary, so it is not a boundary insert even when the
+// editing change did not know it.
+//
 // Ported from yorkie-js-sdk#1467; see docs/design/split-boundary-insert-side.md.
 func boundaryInsertRunOf(node *TreeNode, versionVector time.VersionVector) int {
 	run := 0
@@ -3350,6 +3364,9 @@ func boundaryInsertRunOf(node *TreeNode, versionVector time.VersionVector) int {
 		}
 		createdAt := child.Value.id.CreatedAt
 		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			break
+		}
+		if !movedBySplit(node, child.Value) {
 			break
 		}
 		run++
@@ -4243,7 +4260,9 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 // split, where the whole run was still in one node, put it after them. Only a
 // run of newer tickets is crossed, the same rule step 04 applies inside one
 // node, so an insert at the boundary with nothing newer beyond it still stays
-// on the left of it (§7.3).
+// on the left of it (§7.3). Within that run, only children the split moved
+// are crossed (see movedBySplit): text typed into the product afterwards was
+// never next to this anchor.
 //
 // Applied to the anchor of a collapsed (insert) range only; see the note at
 // its call site in Edit, and boundaryInsertRunOf -- this is the same §7.3
@@ -4253,6 +4272,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 func (t *Tree) advanceIntoSplitProducts(
 	parent, left *TreeNode,
 	editedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (*TreeNode, *TreeNode) {
 	var walker insNextWalker
 	walker.visit(parent)
@@ -4269,7 +4289,7 @@ func (t *Tree) advanceIntoSplitProducts(
 		// applied this insert before the split saw no tombstone between the
 		// run and the boundary at all. Counting a trailing tombstone as a
 		// right neighbour would block here the advance that replica makes.
-		if !atEndOfLiveContent(current, leftNode) {
+		if !atEndOfLiveContent(current, leftNode, versionVector) {
 			break
 		}
 
@@ -4294,7 +4314,8 @@ func (t *Tree) advanceIntoSplitProducts(
 		i := 0
 		for i < len(nextChildren) &&
 			nextChildren[i].Value.IsText() &&
-			nextChildren[i].Value.id.CreatedAt.After(editedAt) {
+			nextChildren[i].Value.id.CreatedAt.After(editedAt) &&
+			movedBySplit(next, nextChildren[i].Value) {
 			i++
 		}
 		if i == 0 {
@@ -4312,8 +4333,9 @@ func (t *Tree) advanceIntoSplitProducts(
 }
 
 // atEndOfLiveContent reports whether leftNode is an anchor with no live
-// content after it inside node: either node itself with nothing live under
-// it, or a child of node every one of whose later siblings is a tombstone.
+// content after it inside node, as the editing change saw it: either node
+// itself with nothing live under it, or a child of node every one of whose
+// later siblings the editor saw removed.
 //
 // Tombstones are skipped rather than counted because they are not content
 // the boundary can sit before, and because the two sides of a split boundary
@@ -4321,14 +4343,24 @@ func (t *Tree) advanceIntoSplitProducts(
 // had the whole run in one node, with no tombstone standing between it and
 // the boundary.
 //
+// But only removals known to the editor (versionVector) count as gone. A
+// removal concurrent with the insert arrives before it on some replicas and
+// after it on others, so judging by the local IsRemoved would let the same
+// insert cross into the product on one replica and stay put on another. The
+// known-removal test reads only the change's own vector and the node's
+// removedAt, which every replica holds alike whatever the delivery order.
+// GC does not change the answer either: a tombstone is purged only once its
+// removal is known everywhere, so every change applied after the purge knew
+// of the removal and would have counted the child as gone anyway.
+//
 // An anchor that is not a child of node at all did not come from the step 04
 // scan (the merge-target branch of FindTreeNodesWithSplitText returns before
 // it), so nothing can be concluded about what follows it: not at the end.
-func atEndOfLiveContent(node, leftNode *TreeNode) bool {
+func atEndOfLiveContent(node, leftNode *TreeNode, versionVector time.VersionVector) bool {
 	children := node.Index.Children(true)
 	if leftNode == node {
 		for _, child := range children {
-			if !child.Value.IsRemoved() {
+			if !removedKnownTo(child.Value, versionVector) {
 				return false
 			}
 		}
@@ -4346,12 +4378,32 @@ func atEndOfLiveContent(node, leftNode *TreeNode) bool {
 		return false
 	}
 	for _, child := range children[index+1:] {
-		if !child.Value.IsRemoved() {
+		if !removedKnownTo(child.Value, versionVector) {
 			return false
 		}
 	}
 
 	return true
+}
+
+// removedKnownTo reports whether node's removal is known to the change with
+// versionVector.
+func removedKnownTo(node *TreeNode, versionVector time.VersionVector) bool {
+	return node.removedAt != nil && time.TicketKnown(versionVector, node.removedAt)
+}
+
+// movedBySplit reports whether child of the split product could have been in
+// the original node when the split was applied, rather than inserted into
+// the product afterwards: it is older than the product.
+//
+// The boundary run a split moves is the text that sat at the split point, so
+// a run measured across the product must stop at the first child typed into
+// it later. Otherwise Enter followed by typing at the start of the new
+// paragraph would pull a concurrent insert at the old boundary into that
+// paragraph on the replica that applied the split first, and nowhere else.
+// Ticket comparison is stable under GC and delivery order alike.
+func movedBySplit(product, child *TreeNode) bool {
+	return product.id.CreatedAt.After(child.id.CreatedAt)
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
