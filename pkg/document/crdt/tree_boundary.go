@@ -287,7 +287,7 @@ func (t *Tree) placeSplitBoundary(
 		}
 	}
 
-	tail := t.boundaryTailOf(parent, known)
+	tail := t.boundaryTailOf(parent, seen, known)
 	anchor = tail.rKey
 	nest = boundaryNestOf(seen, anchor, known)
 	if local {
@@ -381,7 +381,7 @@ func boundaryNestOf(parent *TreeNode, anchor boundaryKey, known func(*time.Ticke
 
 // boundaryTailOf walks the split family past the end of parent, collecting
 // the boundaries and text the splitting change did not know, up to R.
-func (t *Tree) boundaryTailOf(parent *TreeNode, known func(*time.Ticket) bool) *boundaryTail {
+func (t *Tree) boundaryTailOf(parent, seen *TreeNode, known func(*time.Ticket) bool) *boundaryTail {
 	tail := &boundaryTail{rKey: boundaryKey{end: true}, last: parent}
 	var walker insNextWalker
 	walker.visit(parent)
@@ -391,6 +391,12 @@ func (t *Tree) boundaryTailOf(parent *TreeNode, known func(*time.Ticket) bool) *
 		// neither R nor a place to open a split. Its tombstone also sits
 		// where its removal left it, which differs between replicas.
 		gone := known(createdAt) && node.removedAt != nil && known(node.removedAt)
+		// The node the change saw as the parent of the position, when a merge
+		// it did not know moved the position out of it: its boundary was
+		// before the position for the change, so it is not R either.
+		if node == seen && node != parent {
+			gone = true
+		}
 		if known(createdAt) && !gone {
 			tail.rKey = boundaryKeyOf(node)
 			break
