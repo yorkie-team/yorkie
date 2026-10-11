@@ -229,3 +229,97 @@ func TestTreeBoundaryFuzz(t *testing.T) {
 		}
 	}
 }
+
+// replayBoundaryScript plays a script of the form the fuzz prints, such as
+// "d1.split(1); d1.undo; d2.split(3)", on n fresh replicas with empty
+// histories, delivers everything, collects garbage, and checks convergence.
+func replayBoundaryScript(t *testing.T, n int, script string) {
+	t.Helper()
+
+	f := &boundaryFuzz{t: t, docs: boundaryReplicas(t, n, "ab"), cursor: make([]int, n)}
+	for _, d := range f.docs {
+		require.NoError(t, d.ClearHistory())
+	}
+	for _, tok := range strings.Split(script, "; ") {
+		var r, a, b int
+		var v string
+		scan := func(format string, args ...any) {
+			_, err := fmt.Sscanf(tok, format, args...)
+			require.NoError(t, err, tok)
+		}
+		switch {
+		case tok == "gc":
+			f.collect()
+		case strings.HasSuffix(tok, ".pull"):
+			scan("d%d.pull", &r)
+			f.pull(r - 1)
+		case strings.HasSuffix(tok, ".undo"):
+			scan("d%d.undo", &r)
+			require.NoError(t, f.docs[r-1].Undo(), tok)
+			f.push(r - 1)
+		case strings.HasSuffix(tok, ".redo"):
+			scan("d%d.redo", &r)
+			require.NoError(t, f.docs[r-1].Redo(), tok)
+			f.push(r - 1)
+		case strings.Contains(tok, ".insert("):
+			scan("d%d.insert(%d,%q)", &r, &a, &v)
+			updateTree(t, f.docs[r-1], insertText(a, v))
+			f.push(r - 1)
+		case strings.Contains(tok, ".split("):
+			scan("d%d.split(%d)", &r, &a)
+			updateTree(t, f.docs[r-1], splitAt(a))
+			f.push(r - 1)
+		case strings.Contains(tok, ".delete("):
+			scan("d%d.delete(%d,%d)", &r, &a, &b)
+			updateTree(t, f.docs[r-1], func(tree *json.Tree) { tree.Edit(a, b, nil, 0) })
+			f.push(r - 1)
+		default:
+			t.Fatalf("unknown step %q", tok)
+		}
+	}
+	for progress := true; progress; {
+		progress = false
+		for r := range f.docs {
+			for f.pull(r) {
+				progress = true
+			}
+		}
+	}
+	f.collect()
+
+	for r := 1; r < n; r++ {
+		require.Equal(t, treeXML(t, f.docs[0]), treeXML(t, f.docs[r]), script)
+		require.Equal(t, liveTreeShape(t, f.docs[0]), liveTreeShape(t, f.docs[r]), script)
+		require.Equal(t, boundaryRecords(t, f.docs[0]), boundaryRecords(t, f.docs[r]), script)
+	}
+}
+
+// TestTreeBoundaryUndoSplit pins cases where undoing a split, which merges its
+// product away, races a peer's split. Each converges on main, and the
+// anchors must not lose that.
+func TestTreeBoundaryUndoSplit(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		replicas int
+		script   string
+	}{{
+		// The peer's split would open inside the product the undo removed.
+		name:     "Enter and undo at the start, peer Enter at the end",
+		replicas: 2,
+		script:   "d1.split(1); d1.undo; d2.split(3)",
+	}, {
+		// The same with nothing for the merge to move.
+		name:     "two Enters at the end, one undone",
+		replicas: 3,
+		script:   "d2.split(3); d1.split(3); d2.undo",
+	}, {
+		// The peer's split nests under the product the undo merged away.
+		name:     "Enter and undo in the middle, peer splits the product",
+		replicas: 2,
+		script:   "d1.split(2); d1.undo; d2.pull; d2.split(4)",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			replayBoundaryScript(t, tc.replicas, tc.script)
+		})
+	}
+}

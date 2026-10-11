@@ -278,23 +278,86 @@ func (t *Tree) placeSplitBoundary(
 
 	// R is in parent: everything before it is concurrent and stays on the
 	// left (§7.3).
+	seen := t.seenParentOf(parent, offset, known)
 	children := childrenOf(parent)
 	for i := offset; i < len(children); i++ {
 		if known(children[i].id.CreatedAt) {
 			anchor := boundaryKeyOf(children[i])
-			return parent, i, anchor, boundaryNestOf(parent, anchor, known), true
+			return parent, i, anchor, boundaryNestOf(seen, anchor, known), true
 		}
 	}
 
 	tail := t.boundaryTailOf(parent, known)
 	anchor = tail.rKey
-	nest = boundaryNestOf(parent, anchor, known)
+	nest = boundaryNestOf(seen, anchor, known)
 	if local {
 		target, off = tail.at(len(tail.toks))
 		return target, off, anchor, nest, true
 	}
 	target, off = tail.at(t.boundaryInsertIndex(tail, anchor, nest, editedAt))
+	target, off = t.liveSplitTarget(tail, parent, target, off)
 	return target, off, anchor, nest, true
+}
+
+// liveSplitTarget keeps a remote split out of a product that has been removed
+// on this replica but that the splitting change did not know: one the
+// change's tail walk passed over as concurrent.
+//
+// A replica that applied the split first opened it while that product was
+// live, and the later removal took only the product. A merge moved the
+// product's children to the end of its target, so the split opens there; a
+// removal with nothing to move (undoing a split at the end of a paragraph)
+// leaves the nearest live node before it in the family as the same place.
+// Splitting the tombstone instead would mint a product born removed, and the
+// paragraph would be lost on this replica only.
+func (t *Tree) liveSplitTarget(tail *boundaryTail, parent, target *TreeNode, off int) (*TreeNode, int) {
+	if target == parent || !target.IsRemoved() {
+		return target, off
+	}
+	if target.mergedInto != nil {
+		if dest := t.resolveMergeTarget(target); dest != target && !dest.IsRemoved() {
+			return dest, len(childrenOf(dest))
+		}
+	}
+	live := parent
+	for _, tk := range tail.toks {
+		if tk.text {
+			continue
+		}
+		if tk.node == target {
+			break
+		}
+		if !tk.node.IsRemoved() {
+			live = tk.node
+		}
+	}
+	if live.IsRemoved() {
+		return target, off
+	}
+	return live, len(childrenOf(live))
+}
+
+// seenParentOf returns the node the editing change saw as the parent of the
+// split position. A merge the change did not know may have moved the children
+// around the position out of the node it split and into the merge target, as
+// undoing a split does; the moved children still name that node in
+// MergedFrom. Nesting is decided from there, so that the replica that applied
+// the merge first records what the one that applied the split first does.
+func (t *Tree) seenParentOf(parent *TreeNode, offset int, known func(*time.Ticket) bool) *TreeNode {
+	children := childrenOf(parent)
+	for _, i := range []int{offset - 1, offset} {
+		if i < 0 || i >= len(children) {
+			continue
+		}
+		c := children[i]
+		if c.MergedFrom == nil || c.MergedAt == nil || known(c.MergedAt) {
+			continue
+		}
+		if src := t.findMergeNode(c.MergedFrom); src != nil && src.Index.Parent != nil {
+			return src
+		}
+	}
+	return parent
 }
 
 // boundaryNestOf returns the key of the closest boundary before parent, as the
@@ -306,6 +369,11 @@ func boundaryNestOf(parent *TreeNode, anchor boundaryKey, known func(*time.Ticke
 	for i := indexOfNode(sibs, parent); i >= 0; i-- {
 		k := sibs[i]
 		if k.IsText() || !known(k.id.CreatedAt) {
+			continue
+		}
+		// A boundary the change saw removed was not there for it to split
+		// inside.
+		if k.removedAt != nil && known(k.removedAt) {
 			continue
 		}
 		if anchorOf(k).equal(anchor) {
