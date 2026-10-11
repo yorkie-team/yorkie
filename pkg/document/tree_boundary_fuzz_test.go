@@ -236,6 +236,19 @@ func TestTreeBoundaryFuzz(t *testing.T) {
 func replayBoundaryScript(t *testing.T, n int, script string) {
 	t.Helper()
 
+	docs := playBoundaryScript(t, n, script)
+	for r := 1; r < n; r++ {
+		require.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[r]), script)
+		require.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[r]), script)
+		require.Equal(t, boundaryRecords(t, docs[0]), boundaryRecords(t, docs[r]), script)
+	}
+}
+
+// playBoundaryScript plays script as replayBoundaryScript does and returns
+// the replicas after everything is delivered and collected.
+func playBoundaryScript(t *testing.T, n int, script string) []*document.Document {
+	t.Helper()
+
 	f := &boundaryFuzz{t: t, docs: boundaryReplicas(t, n, "ab"), cursor: make([]int, n)}
 	for _, d := range f.docs {
 		require.NoError(t, d.ClearHistory())
@@ -250,6 +263,9 @@ func replayBoundaryScript(t *testing.T, n int, script string) {
 		switch {
 		case tok == "gc":
 			f.collect()
+		case strings.HasSuffix(tok, ".reload"):
+			scan("d%d.reload", &r)
+			f.docs[r-1] = reloadFromSnapshot(t, f.docs[r-1])
 		case strings.HasSuffix(tok, ".pull"):
 			scan("d%d.pull", &r)
 			f.pull(r - 1)
@@ -286,12 +302,7 @@ func replayBoundaryScript(t *testing.T, n int, script string) {
 		}
 	}
 	f.collect()
-
-	for r := 1; r < n; r++ {
-		require.Equal(t, treeXML(t, f.docs[0]), treeXML(t, f.docs[r]), script)
-		require.Equal(t, liveTreeShape(t, f.docs[0]), liveTreeShape(t, f.docs[r]), script)
-		require.Equal(t, boundaryRecords(t, f.docs[0]), boundaryRecords(t, f.docs[r]), script)
-	}
+	return f.docs
 }
 
 // TestTreeBoundaryUndoSplit pins cases where undoing a split, which merges its
@@ -345,5 +356,19 @@ func TestTreeBoundaryUndoSplit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			replayBoundaryScript(t, tc.replicas, tc.script)
 		})
+	}
+}
+
+// TestTreeBoundaryMergeTargetSurvivesReload reloads a replica from a snapshot
+// between an undo's merge and a peer's split that carries the merged content
+// on. A replica's later results must not depend on whether it reloaded: the
+// merge forwarding it keeps at runtime has to match what a snapshot rebuilds.
+func TestTreeBoundaryMergeTargetSurvivesReload(t *testing.T) {
+	const prefix = "d1.split(2); d2.pull; d3.pull; d1.undo; d2.split(2); d1.pull; d1.pull"
+	const suffix = `d3.insert(4,"x")`
+	plain := playBoundaryScript(t, 3, prefix+"; "+suffix)
+	reloaded := playBoundaryScript(t, 3, prefix+"; d1.reload; "+suffix)
+	for r := range plain {
+		require.Equal(t, treeXML(t, plain[r]), treeXML(t, reloaded[r]), "d%d", r+1)
 	}
 }

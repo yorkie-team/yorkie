@@ -714,6 +714,37 @@ func (t *Tree) boundaryMergeTarget(target, src *TreeNode, versionVector time.Ver
 	return target
 }
 
+// followMovedMergeChildren repoints the merge forwarding of a merge source
+// whose moved children a split has carried from target into product.
+//
+// rebuildMergeState derives a source's mergedInto from the parent of its first
+// moved child when a snapshot loads. At runtime it was fixed when the merge
+// ran, so once a later split carried every child the merge moved out of
+// target, a replica that reloaded forwarded inserts to product and one that
+// did not forwarded them to target. Following the children here keeps the
+// runtime pointer equal to the one a snapshot rebuilds.
+func (t *Tree) followMovedMergeChildren(target, product *TreeNode) {
+	for _, c := range childrenOf(product) {
+		if c.MergedFrom == nil {
+			continue
+		}
+		src := t.findMergeNode(c.MergedFrom)
+		if src == nil || src.mergedInto == nil || !src.mergedInto.Equal(target.id) {
+			continue
+		}
+		stays := false
+		for _, k := range childrenOf(target) {
+			if k.MergedFrom != nil && k.MergedFrom.Equal(src.id) {
+				stays = true
+				break
+			}
+		}
+		if !stays {
+			src.mergedInto = product.id
+		}
+	}
+}
+
 // boundaryPurgeBarrier is the barrier of a text tombstone that is the last child
 // of its parent: the scan of advanceAcrossBoundaries continues from there into
 // the next split product, so that product's boundary is the next item.

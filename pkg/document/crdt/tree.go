@@ -3698,9 +3698,12 @@ func (t *Tree) split(
 		if err != nil {
 			return diff, err
 		}
-		if placed && target.InsNextID != nil && target.InsNextID != prevNext {
+		if target.InsNextID != nil && target.InsNextID != prevNext {
 			if product := t.findFloorNode(target.InsNextID); product != nil {
-				t.setBoundary(product, anchor, nest)
+				if placed {
+					t.setBoundary(product, anchor, nest)
+				}
+				t.followMovedMergeChildren(target, product)
 			}
 		}
 
