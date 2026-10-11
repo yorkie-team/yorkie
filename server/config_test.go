@@ -139,10 +139,7 @@ func TestNewConfigFromFile(t *testing.T) {
 		// never a value published in the source.
 		assert.Empty(t, conf.Backend.SecretKey)
 		assert.Equal(t, server.DefaultAdminUser, conf.Backend.AdminUser)
-		// The admin password stays unset too: server.New reads
-		// YORKIE_BACKEND_ADMIN_PASSWORD or generates one, never the literal
-		// "admin" published in the source.
-		assert.Empty(t, conf.Backend.AdminPassword)
+		assert.Equal(t, server.DefaultAdminPassword, conf.Backend.AdminPassword)
 		// The booleans are NOT re-seeded: UseDefaultProject gates keyless
 		// requests, so a bare section stays fail-closed rather than silently
 		// turning 401s into requests served against the default project.

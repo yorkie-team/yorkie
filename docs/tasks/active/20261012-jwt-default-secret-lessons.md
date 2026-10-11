@@ -169,12 +169,8 @@ All eight subtests pass after the fix.
   (`secretKeyExistingSecret`, or read back from the Secret), and generating a
   new one is a separate, deliberate "Rotating the key" step ending in
   `rollout restart`.
-- `DefaultAdminPassword` is gone. An unset admin password now resolves the
-  same way the signing key does: `YORKIE_BACKEND_ADMIN_PASSWORD` first, then a
-  generated password logged once at startup. The password only matters while
-  `EnsureDefaultUserAndProject` creates the account, so an existing database
-  keeps the account it has; what changes is that a fresh install no longer
-  ships the credential published here. The chart grew
-  `yorkie.args.adminPasswordExistingSecret`, handed over the environment for
-  the same reason as the key, because the generated-and-logged password is a
-  credential sitting in a log pipeline.
+- The review-loop fixer also removed `DefaultAdminPassword` (generating and
+  logging a password, with `YORKIE_BACKEND_ADMIN_PASSWORD` and a chart
+  `adminPasswordExistingSecret`). The admin-password default removal was
+  reverted by maintainer decision as out of scope for this key-only change;
+  it is tracked separately.

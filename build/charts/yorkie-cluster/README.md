@@ -131,29 +131,6 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
 ```
 
-## Default Admin Password (Recommended)
-
-The first start against an empty database creates the default admin account
-(`admin`), which has full permissions over every project. It used to be created
-with the password `admin`, published here and in Yorkie's source, so every
-install shipped a login anyone could use. The server now generates a password
-instead and logs it once at startup, which is fine for a trial but leaves the
-credential in your log pipeline. For anything else, keep it in a Secret:
-
-```bash
-kubectl create secret generic yorkie-admin-password --namespace yorkie \
-  --from-literal=admin-password="$(openssl rand -base64 24)"
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.adminPasswordExistingSecret=yorkie-admin-password \
-  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
-```
-
-The chart hands it to the pods as `YORKIE_BACKEND_ADMIN_PASSWORD`, never as an
-argument, which `/proc/<pid>/cmdline` and the pprof endpoint would expose. The
-value applies only while the account is being created: on a database that
-already holds it, the account keeps the password it was created with, and it is
-changed from the dashboard or `yorkie login` instead.
-
 ## Install Helm Chart
 
 ### With MongoDB (Included)
