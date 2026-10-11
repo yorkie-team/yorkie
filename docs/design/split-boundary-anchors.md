@@ -141,9 +141,10 @@ converges:
   `preMergeHolder` sends it to the end of the node before the product, where
   a replica that applied the insert first left it. It does so only when the
   product is anchored before that moved child and its ticket is above the
-  merge's. Text typed into the product after it was created may stand in
-  front of the moved child; it is newer than the product, so the insert did
-  not know it, and the moved child still counts as opening the product. The
+  merge's. Children the inserting change did not know may stand in front of
+  the moved child; they stand there on every replica whichever way the
+  insert resolves, so the moved child still counts as opening the product.
+  Whether the change knew them is read from its version vector. The
   ticket order alone is not causality: a split that did not know
   the merge and opened at the end of the merge target is anchored before the
   merged-away node, and the insert joins its paragraph.

@@ -2020,11 +2020,11 @@ func (t *Tree) Edit(
 	var info TreeEditReverseInfo
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	fromParent, fromLeft, diffFrom, err := t.findTreeNodesWithSplitText(from, editedAt, versionVector, BoundaryInsert)
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.findTreeNodesWithSplitText(to, editedAt, versionVector, BoundaryInsert)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, info, err
@@ -4440,7 +4440,14 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	if len(boundary) > 0 {
 		mode = boundary[0]
 	}
+	return t.findTreeNodesWithSplitText(pos, editedAt, nil, mode)
+}
 
+// findTreeNodesWithSplitText is FindTreeNodesWithSplitText for an edit whose
+// change has versionVector. An empty one counts every node as known.
+func (t *Tree) findTreeNodesWithSplitText(
+	pos *TreePos, editedAt *time.Ticket, versionVector time.VersionVector, mode PosBoundary,
+) (*TreeNode, *TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
 	// 01. Find the parent and left sibling nodes of the given position.
 	parentNode, leftNode := t.ToTreeNodes(pos)
@@ -4494,12 +4501,11 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 					!targetChild.Value.MergedFrom.Equal(realParentNode.id) {
 					continue
 				}
-				// Children typed into the merge target after it was
-				// created are not ones the insert knew, and stand where
+				// Children the editing change did not know stand where
 				// they do on every replica whichever side of the moved
 				// child the insert resolved to, so they do not stop the
 				// moved child from opening the product (preMergeHolder).
-				if i == 0 || typedAfter(mergeTarget, targetChildren[:i]) {
+				if i == 0 || allUnknown(versionVector, targetChildren[:i]) {
 					if pred := t.preMergeHolder(mergeTarget, targetChild.Value); pred != nil {
 						return pred, lastChildOrSelf(pred), diff, nil
 					}
@@ -4543,11 +4549,11 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	return realParentNode, leftNode, diff, nil
 }
 
-// typedAfter reports whether every one of children was created after
-// product, so none could have been in the node product was split off from.
-func typedAfter(product *TreeNode, children []*index.Node[*TreeNode]) bool {
+// allUnknown reports whether the change with versionVector knew none of
+// children. An empty version vector knows every node.
+func allUnknown(versionVector time.VersionVector, children []*index.Node[*TreeNode]) bool {
 	for _, c := range children {
-		if movedBySplit(product, c.Value) {
+		if time.TicketKnown(versionVector, c.Value.id.CreatedAt) {
 			return false
 		}
 	}
