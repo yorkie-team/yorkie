@@ -2114,7 +2114,10 @@ func (t *Tree) Edit(
 	// InsertedContentSize does not see them, and they remove nothing, so
 	// RemovedSize does not either.
 	sizeBeforeSplit := t.Root().Len()
-	diffSplit, err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector)
+	diffSplit, err := t.split(
+		fromParent, fromLeft, t.findFloorNode(from.ParentID),
+		splitLevel, editedAt, issueTimeTicket, versionVector,
+	)
 	diff.Add(diffSplit)
 	info.SplitSize = t.Root().Len() - sizeBeforeSplit
 	if err != nil {
@@ -3626,6 +3629,7 @@ func (t *Tree) sharesSplitFamilyParent(node, next *TreeNode) bool {
 func (t *Tree) split(
 	fromParent *TreeNode,
 	fromLeft *TreeNode,
+	declaredParent *TreeNode,
 	splitLevel int,
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
@@ -3684,7 +3688,9 @@ func (t *Tree) split(
 		placed := false
 		if splitCount == 0 {
 			var placedOffset int
-			target, placedOffset, anchor, nest, placed = t.placeSplitBoundary(parent, offset, editedAt, versionVector)
+			target, placedOffset, anchor, nest, placed = t.placeSplitBoundary(
+				parent, declaredParent, offset, editedAt, versionVector,
+			)
 			if placed {
 				offset = placedOffset
 			}

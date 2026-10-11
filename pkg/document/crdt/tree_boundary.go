@@ -265,6 +265,7 @@ func (b *boundaryTail) at(i int) (*TreeNode, int) {
 // (element children), and the caller falls back to orderSameBoundarySplit.
 func (t *Tree) placeSplitBoundary(
 	parent *TreeNode,
+	declaredParent *TreeNode,
 	offset int,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
@@ -279,7 +280,7 @@ func (t *Tree) placeSplitBoundary(
 
 	// R is in parent: everything before it is concurrent and stays on the
 	// left (§7.3).
-	seen := t.seenParentOf(parent, offset, known)
+	seen := seenParentOf(parent, declaredParent, known)
 	children := childrenOf(parent)
 	for i := offset; i < len(children); i++ {
 		if known(children[i].id.CreatedAt) {
@@ -335,26 +336,23 @@ func (t *Tree) liveSplitTarget(tail *boundaryTail, parent, target *TreeNode, off
 }
 
 // seenParentOf returns the node the editing change saw as the parent of the
-// split position. A merge the change did not know may have moved the children
-// around the position out of the node it split and into the merge target, as
-// undoing a split does; the moved children still name that node in
-// MergedFrom. Nesting is decided from there, so that the replica that applied
-// the merge first records what the one that applied the split first does.
-func (t *Tree) seenParentOf(parent *TreeNode, offset int, known func(*time.Ticket) bool) *TreeNode {
-	children := childrenOf(parent)
-	for _, i := range []int{offset - 1, offset} {
-		if i < 0 || i >= len(children) {
-			continue
-		}
-		c := children[i]
-		if c.MergedFrom == nil || c.MergedAt == nil || known(c.MergedAt) {
-			continue
-		}
-		if src := t.findMergeNode(c.MergedFrom); src != nil && src.Index.Parent != nil {
-			return src
-		}
+// split position. When a merge the change did not know has taken that node
+// away, the position now resolves into the merge target, as undoing a split
+// does; the operation still names the node it saw. Nesting is decided from
+// there, and the tail walk passes over it, so that the replica that applied
+// the merge first agrees with the one that applied the split first.
+//
+// The children around the position cannot tell this apart: the end of the
+// merge target and the start of the merged-away node have the same
+// neighbours once the merge has moved the children.
+func seenParentOf(parent, declared *TreeNode, known func(*time.Ticket) bool) *TreeNode {
+	if declared == nil || declared == parent || declared.IsText() || declared.Index.Parent == nil {
+		return parent
 	}
-	return parent
+	if declared.mergedInto == nil || declared.removedAt == nil || known(declared.removedAt) {
+		return parent
+	}
+	return declared
 }
 
 // boundaryNestOf returns the key of the closest boundary before parent, as the
