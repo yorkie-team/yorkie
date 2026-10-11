@@ -387,9 +387,17 @@ func (t *Tree) boundaryTailOf(parent *TreeNode, known func(*time.Ticket) bool) *
 	walker.visit(parent)
 	for node := t.nextBoundaryNode(parent, &walker); node != nil; node = t.nextBoundaryNode(node, &walker) {
 		createdAt := node.id.CreatedAt
-		if known(createdAt) {
+		// A boundary the change saw removed is not in its sequence: it is
+		// neither R nor a place to open a split. Its tombstone also sits
+		// where its removal left it, which differs between replicas.
+		gone := known(createdAt) && node.removedAt != nil && known(node.removedAt)
+		if known(createdAt) && !gone {
 			tail.rKey = boundaryKeyOf(node)
 			break
+		}
+		if gone {
+			// What is left in it went with it.
+			continue
 		}
 		tail.toks = append(tail.toks, boundaryTok{node: node, idx: -1, prev: tail.last, t: createdAt})
 		found := -1

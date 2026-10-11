@@ -329,6 +329,12 @@ func TestTreeBoundaryUndoSplit(t *testing.T) {
 		name:     "Enter and undo at the start, peer types and splits after it",
 		replicas: 3,
 		script:   `d3.split(1); d2.insert(1,"j"); d3.undo; d2.split(2)`,
+	}, {
+		// Redo must not anchor to the product the undo removed: where that
+		// tombstone sits differs between replicas.
+		name:     "two Enters at the end, one undone and redone",
+		replicas: 3,
+		script:   "d2.split(3); d1.split(3); d2.undo; d2.redo",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			replayBoundaryScript(t, tc.replicas, tc.script)
