@@ -61,3 +61,34 @@ decodes without error, which confirms decode cannot catch it.
 
 Lesson: when hardening a wire payload, list every field the apply path
 trusts, not only the one the issue names. A span carries its kind twice.
+
+## Review round 3 (panel)
+
+1. **The span's own identity was still untrusted.** The parent and kind
+   checks cover what the span says about OTHER nodes and about itself, but
+   nothing tied `span.ID` to a node of its own insertion. A text span whose
+   `CreatedAt` names a live ELEMENT slips past `findPiecesOverlapping`
+   (which stops at a non-text floor node), reaches the gap branch, and
+   `putNode` then overwrites the element's `NodeMapByID` entry — the same
+   "change cannot be applied / document cannot be rebuilt" failure as
+   #2168. An element span whose offset falls inside a live text run plants
+   the ID the next honest split of that run mints. `recreateFromSpan` now
+   skips a span whose identity a surviving node already holds, exactly or
+   inside a surviving run of the same insertion. Both of `Restore`'s
+   branches already reach the recreate only for unheld identities, so an
+   honest span never trips it.
+   - Red before the fix: both subtests of
+     `TestTreeRestoreClaimedIdentitySkip`.
+2. **A guard with a vacuous test is an untested guard.** The `Retombstone`
+   half of `TestTreeRestoreKindMismatchSkip` used spans carrying fresh
+   tickets, so no node matched and the assertions held with or without the
+   guard. `TestTreeRetombstoneKindMismatchSkip` now names a live node, and
+   `TestTreeRestoreKindMismatchKeepsTombstone` covers the un-tombstone
+   branch the early `continue` bypasses. Every new test was run against a
+   build with the guards stripped out to confirm it goes red.
+3. **The kind check keys on `node_type`, a free-form wire string** no
+   decoder or proto rule constrains. Tightening that belongs in
+   `api/converter/from_pb.go`, outside this change's files.
+
+Lesson: a guard is only worth the test that fails without it — strip the
+guard and re-run before believing the test covers it.

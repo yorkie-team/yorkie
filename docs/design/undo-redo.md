@@ -643,6 +643,15 @@ an element carrying a value is invisible to the text lookup, so a repeat of
 the span would insert a second node under the same ID. It is skipped rather
 than rejected on decode because stored changes use the same decoder.
 
+A span is skipped for the same reason when the identity it would recreate is
+already held by a surviving node — the ID itself, or an offset inside a
+surviving text run of the same insertion. Nothing on the wire ties a span's ID
+to a purged node of its own insertion, and registering a node under a claimed
+ID overwrites the live registration, which leaves every later change that
+addresses the victim unapplicable. A replica that still holds the node
+resolves the span by un-tombstoning or ignoring it, so the replicas converge
+either way.
+
 | Approach | Pros | Cons |
 |----------|------|------|
 | Node-ID overlap detection | Extend undo op with removed node IDs; reconciliation compares node sets instead of index ranges. Content re-insert preserved (GC-safe). | Significant change to operation model and reconciliation logic. |

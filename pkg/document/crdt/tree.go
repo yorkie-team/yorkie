@@ -1157,7 +1157,9 @@ func (t *Tree) Purge(child GCChild) error {
 
 // Restore re-establishes the nodes described by spans under their ORIGINAL
 // identities (identity-preserving Tree undo): live → skip (idempotent),
-// tombstoned → unremove in place, purged → recreate. Spans must be in
+// tombstoned → unremove in place, purged → recreate. A span whose kind does
+// not agree with itself is skipped outright (see kindAgrees), as it is in
+// Retombstone. Spans must be in
 // parent-before-child order. Returns (untombstoned, recreated); the caller
 // un-registers GC pairs for the un-tombstoned nodes and accounts recreated
 // sizes to Live. Mirrors the JS CRDTTree.restore.
@@ -1284,7 +1286,9 @@ func (t *Tree) isolateTextRange(
 // identity-preserving undo). Live pieces only; idempotent. A piece that
 // straddles a span boundary is split at that boundary so only the in-span range
 // is re-removed (symmetric with Restore's isolate, so undo/redo stay mirror
-// images and segmentation stays convergent). Returns the GC pairs for the newly
+// images and segmentation stays convergent). A span whose kind does not agree
+// with itself is skipped, exactly as Restore skips it, so neither direction
+// acts on what the other ignores. Returns the GC pairs for the newly
 // tombstoned nodes and the live-split overhead. Mirrors the JS
 // CRDTTree.retombstone.
 func (t *Tree) Retombstone(
@@ -1359,28 +1363,53 @@ func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*
 	return pieces
 }
 
+// recreateParent resolves the node a recreated span hangs under, or nil when
+// the span must be left unplaced (B1). Three shapes are unplaceable. The
+// parent is genuinely absent (purged and not part of this restore). The parent
+// is a text node, which cannot hold children. Or the identity being recreated,
+// id, is one a surviving node already holds -- exactly, or inside a surviving
+// text run of the same insertion -- in which case recreating would put a
+// second node under one identity, and putNode overwrites the live
+// registration of the node that holds it, leaving every later change that
+// addresses it unapplicable (#2168).
+//
+// No honest span is any of these: spans come from the wire, and the server
+// stores a change before applying it, so failing here would fail every later
+// rebuild of the document. Each test reads only state that never changes
+// afterwards (node kind, identity ownership), and a replica that does hold the
+// named node resolves the span through Restore's un-tombstone branch instead,
+// so the replicas converge either way.
+func (t *Tree) recreateParent(span *TreeRestoreSpan, id *TreeNodeID) *TreeNode {
+	if span.ParentID == nil {
+		return nil
+	}
+	parent := t.findFloorNode(span.ParentID)
+	if parent == nil || !parent.id.Equal(span.ParentID) || parent.IsText() {
+		return nil
+	}
+
+	if holder := t.findFloorNode(id); holder != nil &&
+		(holder.id.Offset == id.Offset ||
+			(holder.IsText() && holder.id.Offset+holder.Length() > id.Offset)) {
+		return nil
+	}
+
+	return parent
+}
+
 // recreateFromSpan rebuilds a purged node (or purged text sub-range) under its
 // original identity and attaches it via the anchor ladder (floor-lookup +
 // parent-identity check at each rung): (a) same-insertion successor/
 // predecessor piece → exact slot; (b) captured left boundary sibling → after
 // it; (c) captured right boundary sibling → before it; (d) deterministic
 // id-order fallback (first slot whose child id > node id — a pure function of
-// ids, identical on every replica). Parent genuinely absent, or a text node
-// that cannot hold children → skip (B1). The JS CRDTTree.recreateFromSpan
-// must apply the same rule (yorkie-js-sdk#1471).
+// ids, identical on every replica). A span recreateParent refuses is skipped
+// (B1). The JS CRDTTree.recreateFromSpan must apply the same rules
+// (yorkie-js-sdk#1471).
 func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*TreeNode, error) {
-	if span.ParentID == nil {
-		return nil, nil
-	}
-	parent := t.findFloorNode(span.ParentID)
-	if parent == nil || !parent.id.Equal(span.ParentID) {
-		return nil, nil // B1: parent gone; leave the node unplaced.
-	}
-	// No honest replica names a text node as a parent, but spans come from
-	// the wire and the server stores a change before applying it, so failing
-	// here would fail every later rebuild of the document (#2168). Node kind
-	// never changes, so every replica skips the same span and they converge.
-	if parent.IsText() {
+	id := &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset}
+	parent := t.recreateParent(span, id)
+	if parent == nil {
 		return nil, nil
 	}
 
@@ -1390,7 +1419,7 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		encoded := utf16.Encode([]rune(span.Value))
 		relStart := offset - span.ID.Offset
 		val := string(utf16.Decode(encoded[relStart : relStart+length]))
-		node = NewTreeNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset}, span.NodeType, nil, val)
+		node = NewTreeNode(id, span.NodeType, nil, val)
 	} else {
 		var attrs *RHT
 		if span.Attributes != nil {

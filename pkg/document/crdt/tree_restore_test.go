@@ -271,8 +271,7 @@ func TestTreeRestoreTextParentSkip(t *testing.T) {
 // disagrees with its NodeType is skipped. Recreating it would build a node of
 // the wrong kind: a zero-length text node, or an element carrying a Value. The
 // element is not found by the text lookup, so a second copy of the span
-// inserted another node under the same ID. Restore and Retombstone both skip
-// such a span, so undo and redo stay mirror images.
+// inserted another node under the same ID.
 func TestTreeRestoreKindMismatchSkip(t *testing.T) {
 	for _, isText := range []bool{false, true} {
 		ctx := helper.TextChangeContext(helper.TestRoot())
@@ -295,12 +294,126 @@ func TestTreeRestoreKindMismatchSkip(t *testing.T) {
 		assert.Empty(t, untombstoned)
 		assert.Empty(t, recreated, "isText=%v: a mismatched span is skipped", isText)
 		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "isText=%v", isText)
-
-		pairs, _, err := tree.Retombstone(spans, helper.TimeT(ctx))
-		assert.NoError(t, err)
-		assert.Empty(t, pairs, "isText=%v: retombstone skips it too", isText)
-		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "isText=%v", isText)
 	}
+}
+
+// TestTreeRestoreKindMismatchKeepsTombstone covers the other half of Restore's
+// skip: a mismatched span naming a node that is still present as a TOMBSTONE
+// must not revive it either. The guard sits before the un-tombstone branch, so
+// without it the span would resurrect content its kind does not describe.
+func TestTreeRestoreKindMismatchKeepsTombstone(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+
+	_, _, err := tree.EditT(1, 6, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p></p></r>", tree.ToXML())
+
+	// Same identity as the tombstoned text, but typed as an element.
+	span := textSpan(text, p)
+	span.NodeType = "p"
+
+	untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+	assert.NoError(t, err)
+	assert.Empty(t, untombstoned, "a mismatched span revives nothing")
+	assert.Empty(t, recreated)
+	assert.Equal(t, "<r><p></p></r>", tree.ToXML(), "the tombstone stays dead")
+}
+
+// TestTreeRetombstoneKindMismatchSkip pins the Retombstone half of the kind
+// check. The spans name a LIVE node, so Retombstone would find and re-remove
+// it without the guard; a span carrying an identity no node holds would make
+// the assertions pass either way.
+func TestTreeRetombstoneKindMismatchSkip(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		isText   bool
+		nodeType string
+	}{
+		{"text node in an element-flagged span", false, "text"},
+		{"text node typed as an element", true, "p"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := helper.TextChangeContext(helper.TestRoot())
+			tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+			p := tree.Root().Children()[0]
+			text := p.Children()[0]
+
+			span := textSpan(text, p)
+			span.IsText, span.NodeType = tc.isText, tc.nodeType
+
+			pairs, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx))
+			assert.NoError(t, err)
+			assert.Empty(t, pairs, "a mismatched span re-tombstones nothing")
+			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")
+		})
+	}
+}
+
+// TestTreeRestoreClaimedIdentitySkip verifies that a span is skipped when the
+// identity it would recreate is already held by a surviving node. Nothing on
+// the wire ties a span's ID to a purged node of its own insertion, and
+// putNode overwrites the live registration, so recreating under a claimed ID
+// would leave two nodes under one identity and make every later change
+// addressing the victim unapplicable (#2168).
+func TestTreeRestoreClaimedIdentitySkip(t *testing.T) {
+	t.Run("text span naming a live element", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+
+		// findPiecesOverlapping stops at the non-text floor node, so the gap
+		// branch would recreate a text node under <p>'s exact identity.
+		span := &crdt.TreeRestoreSpan{
+			ID:       p.ID(),
+			NodeType: "text",
+			IsText:   true,
+			Length:   1,
+			Value:    "x",
+			ParentID: tree.Root().ID(),
+		}
+
+		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		assert.NoError(t, err)
+		assert.Empty(t, untombstoned)
+		assert.Empty(t, recreated, "a claimed identity is not recreated")
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+		_, holder := tree.NodeMapByID.Floor(p.ID())
+		assert.Same(t, p, holder, "<p> still holds its own identity")
+	})
+
+	t.Run("element span inside a live text run", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+		text := p.Children()[0]
+
+		// Offset 2 falls inside "hello": the id is the one the next honest
+		// split of that run mints, so creating an element there plants a
+		// duplicate that split would collide with.
+		span := &crdt.TreeRestoreSpan{
+			ID:       crdt.NewTreeNodeID(text.ID().CreatedAt, 2),
+			NodeType: "p",
+			ParentID: p.ID(),
+		}
+
+		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		assert.NoError(t, err)
+		assert.Empty(t, untombstoned)
+		assert.Empty(t, recreated, "an id inside a live run is not recreated")
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+		// The honest split that mints that id still works afterwards.
+		_, _, err = tree.EditT(3, 3, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "Z"),
+		}, 0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>heZllo</p></r>", tree.ToXML())
+		assertLengthCacheSound(t, tree, "after split at a would-be duplicate id")
+	})
 }
 
 // TestTreeRestoreRejectsForgedIdentity verifies that TreeEdit.Execute rejects a
