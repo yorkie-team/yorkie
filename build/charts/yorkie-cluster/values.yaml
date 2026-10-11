@@ -31,9 +31,11 @@ yorkie:
     secretKey: ""
     # secretKeyExistingSecret: name of an existing Secret in the namespace
     # that holds the key under `secret-key`. Takes precedence over secretKey.
-    # Pods do not restart when that Secret changes: after rotating it, restart
-    # them all together (kubectl -n <namespace> rollout restart
-    # deployment/<yorkie.name>), and admin users log in again.
+    # Pods do not restart when the key changes, with either setting: the
+    # Deployment carries no hash of it, since a pod annotation is readable
+    # with `get pods` and a hash is enough to search for the key offline.
+    # After rotating it, restart the pods all together (kubectl -n <namespace>
+    # rollout restart deployment/<yorkie.name>), and admin users log in again.
     secretKeyExistingSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are

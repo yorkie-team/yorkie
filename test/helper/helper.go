@@ -85,7 +85,7 @@ var (
 	AdminPassword           = server.DefaultAdminPassword
 	AdminPasswordForSignUp  = AdminPassword + "123!"
 	UseDefaultProject       = true
-	SecretKey               = "yorkie-test-secret-key" // #nosec G101
+	SecretKey               = "yorkie-test-secret-key-0123456789" // #nosec G101
 	EnableWebhookValidation = false
 
 	HousekeepingInterval             = 500 * gotime.Millisecond

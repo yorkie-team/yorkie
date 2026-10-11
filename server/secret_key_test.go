@@ -132,20 +132,20 @@ func TestAdminSecretKey(t *testing.T) {
 
 	t.Run("explicit key is kept test", func(t *testing.T) {
 		conf := testConfig()
-		conf.Backend.SecretKey = "cluster-wide-key"
-		assert.Equal(t, "cluster-wide-key", newServer(t, conf))
+		conf.Backend.SecretKey = "cluster-wide-key-aaaaaaaaaaaaaaaa"
+		assert.Equal(t, "cluster-wide-key-aaaaaaaaaaaaaaaa", newServer(t, conf))
 	})
 
 	t.Run("unset key is read from the environment test", func(t *testing.T) {
-		t.Setenv(secretKeyEnv, "env-cluster-key")
-		assert.Equal(t, "env-cluster-key", newServer(t, testConfig()))
+		t.Setenv(secretKeyEnv, "env-cluster-key-bbbbbbbbbbbbbbbbb")
+		assert.Equal(t, "env-cluster-key-bbbbbbbbbbbbbbbbb", newServer(t, testConfig()))
 	})
 
 	t.Run("explicit key wins over the environment test", func(t *testing.T) {
-		t.Setenv(secretKeyEnv, "env-cluster-key")
+		t.Setenv(secretKeyEnv, "env-cluster-key-bbbbbbbbbbbbbbbbb")
 		conf := testConfig()
-		conf.Backend.SecretKey = "flag-cluster-key"
-		assert.Equal(t, "flag-cluster-key", newServer(t, conf))
+		conf.Backend.SecretKey = "flag-cluster-key-ccccccccccccccc"
+		assert.Equal(t, "flag-cluster-key-ccccccccccccccc", newServer(t, conf))
 	})
 
 	// A key that was meant to be set but came out blank (a whitespace value,
@@ -173,5 +173,51 @@ func TestAdminSecretKey(t *testing.T) {
 
 		t.Setenv(secretKeyEnv, publicSecretKey)
 		assert.ErrorContains(t, buildServer(t, testConfig()), secretKeyEnv)
+	})
+
+	// `kubectl create secret --from-file` keeps the file's trailing newline,
+	// and the published key is no less published for being capitalized.
+	t.Run("variants of the public key are rejected test", func(t *testing.T) {
+		for _, value := range []string{
+			publicSecretKey + "\n",
+			" " + publicSecretKey + " ",
+			"Yorkie-Secret",
+		} {
+			unsetSecretKeyEnv(t)
+			conf := testConfig()
+			conf.Backend.SecretKey = value
+			assert.ErrorContains(t, buildServer(t, conf), publicSecretKey)
+
+			t.Setenv(secretKeyEnv, value)
+			assert.ErrorContains(t, buildServer(t, testConfig()), publicSecretKey)
+		}
+	})
+
+	// HS256 hashes the key into a 256-bit block, and an issued token lets an
+	// attacker try keys offline, so a short key is found without the server
+	// ever seeing an attempt.
+	t.Run("short key is rejected test", func(t *testing.T) {
+		for _, value := range []string{"x", "admin", "0123456789abcdef"} {
+			unsetSecretKeyEnv(t)
+			conf := testConfig()
+			conf.Backend.SecretKey = value
+			assert.ErrorContains(t, buildServer(t, conf), "--backend-secret-key")
+
+			t.Setenv(secretKeyEnv, value)
+			assert.ErrorContains(t, buildServer(t, testConfig()), secretKeyEnv)
+		}
+	})
+
+	// A key handed over in a Secret file carries that file's trailing
+	// newline; trimming keeps a node that reads it matching one that does not.
+	t.Run("surrounding whitespace is trimmed test", func(t *testing.T) {
+		const key = "cluster-wide-key-dddddddddddddddd"
+		t.Setenv(secretKeyEnv, key+"\n")
+		assert.Equal(t, key, newServer(t, testConfig()))
+
+		unsetSecretKeyEnv(t)
+		conf := testConfig()
+		conf.Backend.SecretKey = "  " + key + "\t\n"
+		assert.Equal(t, key, newServer(t, conf))
 	})
 }

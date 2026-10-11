@@ -130,6 +130,12 @@ const publicSecretKey = "yorkie-secret" // #nosec G101
 // bits, the HS256 block the key is hashed into.
 const secretKeyBytes = 32
 
+// secretKeyMinLen is the shortest configured key accepted. RFC 7518 §3.2
+// requires an HMAC-SHA256 key of at least the hash output, 256 bits, and a
+// short key is the one an attacker breaks offline: every admin token carries
+// its own signature, so guessing the key costs no request the server sees.
+const secretKeyMinLen = 32
+
 // ensureSecretKey resolves the admin token signing key: the configured value
 // (flag or config file), then SecretKeyEnv, then a random key. Every way of
 // building a config (CLI flags, config file, NewConfig) reaches here, so an
@@ -145,14 +151,20 @@ const secretKeyBytes = 32
 // without failing anything visibly.
 func ensureSecretKey(conf *backend.Config) error {
 	if conf.SecretKey != "" {
-		return validateSecretKey("--backend-secret-key (Backend.SecretKey)", conf.SecretKey)
+		key, err := validateSecretKey("--backend-secret-key (Backend.SecretKey)", conf.SecretKey)
+		if err != nil {
+			return err
+		}
+		conf.SecretKey = key
+		return nil
 	}
 
 	if value, ok := os.LookupEnv(SecretKeyEnv); ok {
-		if err := validateSecretKey(SecretKeyEnv, value); err != nil {
+		key, err := validateSecretKey(SecretKeyEnv, value)
+		if err != nil {
 			return err
 		}
-		conf.SecretKey = value
+		conf.SecretKey = key
 		return nil
 	}
 
@@ -162,26 +174,40 @@ func ensureSecretKey(conf *backend.Config) error {
 	}
 	conf.SecretKey = base64.RawURLEncoding.EncodeToString(secret)
 
-	logging.DefaultLogger().Warn(
+	logging.DefaultLogger().Error(
 		"backend secret key is empty: signing admin tokens with a random " +
 			"key generated for this process. Tokens are invalidated on " +
-			"restart and rejected by other nodes. Set " + SecretKeyEnv +
+			"restart, and every other replica rejects them, so admin requests " +
+			"behind a load balancer fail on whichever pod did not issue the " +
+			"token. Set " + SecretKeyEnv +
 			" to the same value on every node in production.",
 	)
 	return nil
 }
 
-// validateSecretKey rejects a configured key that is blank or public.
-func validateSecretKey(source, value string) error {
-	if strings.TrimSpace(value) == "" {
-		return fmt.Errorf("%s is set but blank: set a shared random key, "+
+// validateSecretKey normalizes a configured key and rejects it when it is
+// blank, the old public default, or too short to resist an offline search.
+// The surrounding whitespace is dropped before anything else: `kubectl create
+// secret --from-file` keeps the file's trailing newline, so "yorkie-secret\n"
+// has to be read as the public default rather than as a key of its own, and a
+// key that differs between nodes only by a newline has to match.
+func validateSecretKey(source, value string) (string, error) {
+	key := strings.TrimSpace(value)
+	if key == "" {
+		return "", fmt.Errorf("%s is set but blank: set a shared random key, "+
 			"or unset it to generate one per process", source)
 	}
-	if value == publicSecretKey {
-		return fmt.Errorf("%s is the public default %q: anyone can sign "+
+	if strings.EqualFold(key, publicSecretKey) {
+		return "", fmt.Errorf("%s is the public default %q: anyone can sign "+
 			"admin tokens with it, set a random key", source, publicSecretKey)
 	}
-	return nil
+	if len(key) < secretKeyMinLen {
+		return "", fmt.Errorf("%s is %d characters: an admin token signing "+
+			"key must be at least %d, or it can be found by trying keys "+
+			"against an issued token. Generate one with: "+
+			"openssl rand -base64 32", source, len(key), secretKeyMinLen)
+	}
+	return key, nil
 }
 
 // Backend returns the backend for testing purposes.

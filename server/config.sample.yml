@@ -89,6 +89,9 @@ Backend:
   # variable; if that is unset too, a random key is generated at startup:
   # tokens are invalidated on restart and rejected by other nodes. Set the
   # same key on every node of a cluster, e.g. `openssl rand -base64 32`.
+  # A key given here must be at least 32 characters: HS256 hashes it into a
+  # 256-bit block, and a shorter one can be found by trying keys against an
+  # issued token. Surrounding whitespace is trimmed.
   SecretKey: ""
 
   # AdminTokenDuration is the duration of the admin token. (default: 168h0m0s).

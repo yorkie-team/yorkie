@@ -31,11 +31,13 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
-        {{- if not .Values.yorkie.args.secretKeyExistingSecret }}
-        # Roll every replica together when the chart-owned key changes, so
-        # no two pods sign with different keys for longer than a rollout.
-        checksum/backend-secret-key: {{ .Values.yorkie.args.secretKey | sha256sum }}
-        {{- end }}
+        {{- /*
+        No checksum of the signing key here, by design: a pod annotation is
+        readable with `get pods`, which is a far weaker permission than
+        `get secrets`, and a hash of the key is enough to search for it
+        offline. Rotating the key is a `rollout restart` instead; see the
+        chart README.
+        */}}
         {{- with .Values.yorkie.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
