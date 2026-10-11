@@ -195,7 +195,7 @@ diverged.
 Go side done through commit review; not pushed.
 
 - #1436 cases (insert, split, delete, style) converge with GC and snapshot
-  reloads: 0 of 15000 broadened-fuzz runs and 0 of 4000 GC runs diverge
+  reloads: 0 of 9000 broadened-fuzz runs and 0 of 4000 GC runs diverge
   (main: 261-1046 per case).
 - Undo and redo: 222 of 1200 and 460 of 2400 runs do not converge (main
   463 and 896), with 5 and 4 regressions against main, all reproducing on

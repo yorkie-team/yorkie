@@ -956,7 +956,9 @@ func (t *Tree) lowerRepeatedMergeTickets(from, to *TreePos, editedAt *time.Ticke
 }
 
 // addMergeTicket adds tk to the node's merge tickets, kept sorted so that
-// every replica holds and persists the same list.
+// the order does not depend on arrival. The set itself can differ before GC:
+// a replica that purged every moved child before the second merge arrived
+// records none (lowerRepeatedMergeTickets finds no MergedAt to read).
 func (n *TreeNode) addMergeTicket(tk *time.Ticket) {
 	i := 0
 	for ; i < len(n.mergeTickets); i++ {
