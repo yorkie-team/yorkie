@@ -61,7 +61,8 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Uses pre-configured development credentials (clearly marked as dev-only)
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)"
 ```
 
 ### For Production:
@@ -76,6 +77,79 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set mongodb.credentials.clusterAdmin.password="$(openssl rand -base64 32)"
 ```
 
+## Admin Token Signing Key (Required)
+
+Yorkie signs admin (dashboard and CLI) tokens with `--backend-secret-key`.
+Every replica must use the same key, and anyone who knows it can act as any
+user, so the chart refuses to render without one. Either keep the key in a
+Secret you manage (recommended):
+
+```bash
+kubectl create secret generic yorkie-backend-secret-key --namespace yorkie \
+  --from-literal=secret-key="$(openssl rand -base64 32)"
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+```
+
+or pass it as a value and let the chart create the Secret. Generate the key
+once and keep it — in a values file, a secret manager, or at least a shell
+variable for the session — because every later `helm upgrade` has to pass the
+**same** value:
+
+```bash
+SECRET_KEY="$(openssl rand -base64 32)"   # generate once, keep it
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$SECRET_KEY"
+```
+
+Add the same setting to every `helm install` and `helm upgrade` below, including
+the examples in this README: without it the chart refuses to render and the
+command fails before any resource is created. The chart also rejects, at render
+time, a key the server would refuse to start with — shorter than 32 characters,
+or the old public default `yorkie-secret` — so generate one rather than typing a
+passphrase. Both the chart and the server trim surrounding whitespace, so a
+Secret made with `--from-file` works too. Changing the key invalidates every
+admin token issued so far; users log in again.
+
+The `secretKeyExistingSecret` form avoids the keep-it-around problem entirely:
+the key lives in a Secret you own, and the chart never has to be told it again.
+Name that Secret anything but `<yorkie.name>-credentials`, which is the chart's
+own Secret (see [Where the credentials
+live](#where-the-credentials-live)) — the chart rejects that name rather than
+let Helm delete or refuse to adopt a Secret it half-owns. A release can move
+between the two forms either way: the chart's Secret keeps the other keys and
+simply stops carrying `secret-key`.
+
+### Where the credentials live
+
+The chart puts the signing key, the MongoDB connection URI (which carries the
+database password) and `yorkie.args.clusterSecret` in a Secret named
+`<yorkie.name>-credentials`, and the Deployment reads them as the environment
+variables `YORKIE_BACKEND_SECRET_KEY`, `YORKIE_MONGO_CONNECTION_URI` and
+`YORKIE_CLUSTER_SECRET`. None of them is passed as a command-line argument:
+arguments are readable in `/proc/<pid>/cmdline` and through the pprof
+`/debug/pprof/cmdline` endpoint, which this chart enables and serves on the
+profiling port, so an argument would hand every credential to anyone who can
+reach that port. The server reads each of those variables when the matching
+flag is unset, so the same approach works outside Helm.
+
+### Rotating the key
+
+Rotating the key never restarts pods on its own, with either setting: the
+Deployment carries no hash of the key, because a pod annotation is readable
+with `get pods` — a far weaker permission than `get secrets` — and a hash of
+the key is enough to search for it offline. So pods keep the old key until they
+restart, and any that restart on their own pick up the new one, leaving
+replicas disagreeing — which is why rotation is a deliberate two-step, never a
+side effect of an unrelated upgrade. After changing the key, restart all pods
+together (both names default to `yorkie`), and admin users then log in again:
+
+```bash
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)"   # only when rotating
+kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
+```
+
 ## Install Helm Chart
 
 ### With MongoDB (Included)
@@ -88,6 +162,7 @@ Install Yorkie cluster with MongoDB deployed by Percona Operator:
 ```bash
 # Install yorkie cluster with MongoDB
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
   --set mongodb.credentials.databaseAdmin.password="<your-password>" \
   --set mongodb.credentials.userAdmin.password="<your-password>" \
   --set mongodb.credentials.clusterAdmin.password="<your-password>"
@@ -100,6 +175,7 @@ Install Yorkie cluster using an external MongoDB instance:
 ```bash
 # Install yorkie cluster with external MongoDB
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
   --set yorkie.args.dbConnectionUri="mongodb://mongodb.mongodb.svc.cluster.local:27017"
 ```
 
@@ -129,9 +205,34 @@ kubectl delete namespace yorkie
 
 ## Upgrading Chart
 
+Pass the admin token signing key the release already uses — the **same** value
+as the install, not a freshly generated one. A new key here would leave the
+Secret and the running pods disagreeing until something restarts them, one pod
+at a time; see [Rotating the key](#rotating-the-key) for the deliberate path.
+
 ```bash
-helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster
+# Key kept in a Secret you own (nothing to pass):
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+
+# Or key held by the chart — read back the value in use:
+SECRET_KEY="$(kubectl -n yorkie get secret yorkie-credentials \
+  -o jsonpath='{.data.secret-key}' | base64 -d)"
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$SECRET_KEY"
 ```
+
+> [!IMPORTANT]
+> **Upgrading a release installed before the admin token signing key was
+> required.** The key is now mandatory, so an upgrade that passes neither
+> `yorkie.args.secretKey` nor `yorkie.args.secretKeyExistingSecret` fails to
+> render — including `--reuse-values` upgrades of a release that never had one.
+> Pass one of the two, as in [Admin Token Signing
+> Key](#admin-token-signing-key-required), on this and every later upgrade, or
+> keep it in your values file. Such a release used to sign admin tokens with
+> the key published in Yorkie's source, so tokens issued before the upgrade
+> were forgeable by anyone; the server now refuses to start with that key, and
+> every admin user logs in again after the upgrade.
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
 Consult also the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions).

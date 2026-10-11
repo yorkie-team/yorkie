@@ -17,9 +17,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +36,19 @@ import (
 
 var (
 	gracefulTimeout = 10 * time.Second
+)
+
+// Environment variables for the credentials that would otherwise be given as
+// flags. A flag value is visible in /proc/<pid>/cmdline and through the pprof
+// cmdline endpoint, which deployments commonly enable, so a deployment should
+// pass these through the environment instead. See also server.SecretKeyEnv.
+const (
+	// MongoConnectionURIEnv is read when --mongo-connection-uri is unset. The
+	// URI carries the database user's password.
+	MongoConnectionURIEnv = "YORKIE_MONGO_CONNECTION_URI"
+
+	// ClusterSecretEnv is read when --cluster-secret is unset.
+	ClusterSecretEnv = "YORKIE_CLUSTER_SECRET" // #nosec G101
 )
 
 var (
@@ -106,6 +121,27 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// The config only holds a string, so server.New cannot tell a
+			// blank flag from an absent one; check it here. A config-file
+			// `SecretKey: ""` still means unset: config.sample.yml ships it.
+			if cmd.Flags().Changed("backend-secret-key") &&
+				strings.TrimSpace(conf.Backend.SecretKey) == "" {
+				return errors.New("--backend-secret-key is given but blank: " +
+					"set a shared random key, or omit the flag to use " +
+					server.SecretKeyEnv + " or a generated key")
+			}
+
+			// Credentials left unset by the flags are read from the
+			// environment, so a deployment can keep them out of the command
+			// line. A config file carries its own values and replaces all of
+			// this below, as the flags do not apply there either.
+			if mongoConnectionURI == "" {
+				mongoConnectionURI = strings.TrimSpace(os.Getenv(MongoConnectionURIEnv))
+			}
+			if conf.Backend.ClusterSecret == "" {
+				conf.Backend.ClusterSecret = strings.TrimSpace(os.Getenv(ClusterSecretEnv))
+			}
+
 			conf.RPC.ReadHeaderTimeout = rpcReadHeaderTimeout.String()
 			conf.RPC.IdleTimeout = rpcIdleTimeout.String()
 
@@ -388,7 +424,9 @@ func init() {
 		&mongoConnectionURI,
 		"mongo-connection-uri",
 		"",
-		"MongoDB's connection URI",
+		"MongoDB's connection URI. If empty, it is read from "+
+			MongoConnectionURIEnv+", which keeps the database password off "+
+			"the command line.",
 	)
 	cmd.Flags().DurationVar(
 		&mongoConnectionTimeout,
@@ -483,8 +521,14 @@ func init() {
 	cmd.Flags().StringVar(
 		&conf.Backend.SecretKey,
 		"backend-secret-key",
-		server.DefaultSecretKey,
-		"The secret key for signing authentication tokens for admin users.",
+		"",
+		"The secret key for signing authentication tokens for admin users. "+
+			"If empty, it is read from "+server.SecretKeyEnv+", which keeps it "+
+			"off the command line; if that is unset too, a random key is "+
+			"generated at startup, so tokens do not survive a restart. Set the "+
+			"same key on every node of a cluster, at least 32 characters. "+
+			"Given but blank, it is an error; a blank SecretKey in a config "+
+			"file means unset.",
 	)
 
 	cmd.Flags().BoolVar(
@@ -670,7 +714,10 @@ func init() {
 		&conf.Backend.ClusterSecret,
 		"cluster-secret",
 		"",
-		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed; set it in production.",
+		"The shared secret for authenticating cluster RPC calls. If empty, it "+
+			"is read from "+ClusterSecretEnv+", which keeps it off the command "+
+			"line; if that is unset too, all requests are allowed, so set one "+
+			"in production.",
 	)
 	rootCmd.AddCommand(cmd)
 }

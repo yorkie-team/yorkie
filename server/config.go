@@ -94,7 +94,6 @@ const (
 
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
-	DefaultSecretKey     = "yorkie-secret"
 
 	DefaultAdminTokenDuration  = 7 * 24 * time.Hour
 	DefaultGitHubUserURL       = "https://api.github.com/user"
@@ -293,9 +292,6 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.AdminPassword == "" {
 		c.Backend.AdminPassword = DefaultAdminPassword
-	}
-	if c.Backend.SecretKey == "" {
-		c.Backend.SecretKey = DefaultSecretKey
 	}
 	if c.Backend.AdminTokenDuration == "" {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
