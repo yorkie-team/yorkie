@@ -237,7 +237,15 @@ func TestTreeBoundaryFuzz(t *testing.T) {
 func replayBoundaryScript(t *testing.T, n int, script string) {
 	t.Helper()
 
-	docs := playBoundaryScript(t, n, script)
+	replayBoundaryScriptFrom(t, n, "ab", script)
+}
+
+// replayBoundaryScriptFrom is replayBoundaryScript on replicas that start
+// with text in their paragraph.
+func replayBoundaryScriptFrom(t *testing.T, n int, text, script string) {
+	t.Helper()
+
+	docs := playBoundaryScriptFrom(t, n, text, script)
 	for r := 1; r < n; r++ {
 		require.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[r]), script)
 		require.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[r]), script)
@@ -250,7 +258,15 @@ func replayBoundaryScript(t *testing.T, n int, script string) {
 func playBoundaryScript(t *testing.T, n int, script string) []*document.Document {
 	t.Helper()
 
-	f := &boundaryFuzz{t: t, docs: boundaryReplicas(t, n, "ab"), cursor: make([]int, n)}
+	return playBoundaryScriptFrom(t, n, "ab", script)
+}
+
+// playBoundaryScriptFrom is playBoundaryScript on replicas that start with
+// text in their paragraph.
+func playBoundaryScriptFrom(t *testing.T, n int, text, script string) []*document.Document {
+	t.Helper()
+
+	f := &boundaryFuzz{t: t, docs: boundaryReplicas(t, n, text), cursor: make([]int, n)}
 	for _, d := range f.docs {
 		require.NoError(t, d.ClearHistory())
 	}
@@ -434,6 +450,18 @@ func TestTreeBoundaryRepeatedMerge(t *testing.T) {
 			replayBoundaryScript(t, 3, script)
 		})
 	}
+}
+
+// TestTreeBoundaryInsertForwardedPastTypedText has a replica type at the start
+// of a paragraph whose first moved child a merge carried in, before a peer's
+// insert that targets the merged-away node arrives. The typed text is newer
+// than the paragraph, so the insert never knew it: it must not keep the
+// moved child from opening the paragraph (preMergeHolder), or the insert
+// lands after the typed text on that replica only.
+func TestTreeBoundaryInsertForwardedPastTypedText(t *testing.T) {
+	replayBoundaryScriptFrom(t, 3, "abcd", "d2.split(2); d3.pull; d3.delete(5,7); d1.pull; "+
+		"d3.delete(1,2); d2.delete(2,6); d1.split(1); d3.pull; d3.pull; d3.delete(1,3); "+
+		`d1.insert(3,"m"); d3.split(1); d3.insert(3,"r")`)
 }
 
 // TestTreeBoundarySplitAfterKnownRemoval has a split whose position is in

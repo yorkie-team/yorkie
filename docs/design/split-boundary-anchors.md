@@ -141,7 +141,10 @@ converges:
   `preMergeHolder` sends it to the end of the node before the product, where
   a replica that applied the insert first left it. It does so only when the
   product is anchored before that moved child and its ticket is above the
-  merge's. The ticket order alone is not causality: a split that did not know
+  merge's. Text typed into the product after it was created may stand in
+  front of the moved child; it is newer than the product, so the insert did
+  not know it, and the moved child still counts as opening the product. The
+  ticket order alone is not causality: a split that did not know
   the merge and opened at the end of the merge target is anchored before the
   merged-away node, and the insert joins its paragraph.
 - **A split that missed a merge opens in front of the merged-away node.**

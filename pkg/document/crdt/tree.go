@@ -4494,10 +4494,17 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 					!targetChild.Value.MergedFrom.Equal(realParentNode.id) {
 					continue
 				}
-				if i == 0 {
+				// Children typed into the merge target after it was
+				// created are not ones the insert knew, and stand where
+				// they do on every replica whichever side of the moved
+				// child the insert resolved to, so they do not stop the
+				// moved child from opening the product (preMergeHolder).
+				if i == 0 || typedAfter(mergeTarget, targetChildren[:i]) {
 					if pred := t.preMergeHolder(mergeTarget, targetChild.Value); pred != nil {
 						return pred, lastChildOrSelf(pred), diff, nil
 					}
+				}
+				if i == 0 {
 					return mergeTarget, mergeTarget, diff, nil
 				}
 				return mergeTarget, targetChildren[i-1].Value, diff, nil
@@ -4534,6 +4541,17 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	}
 
 	return realParentNode, leftNode, diff, nil
+}
+
+// typedAfter reports whether every one of children was created after
+// product, so none could have been in the node product was split off from.
+func typedAfter(product *TreeNode, children []*index.Node[*TreeNode]) bool {
+	for _, c := range children {
+		if movedBySplit(product, c.Value) {
+			return false
+		}
+	}
+	return true
 }
 
 // movedBySplit reports whether child of the split product could have been in
