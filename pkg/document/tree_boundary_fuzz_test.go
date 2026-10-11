@@ -18,6 +18,7 @@ package document_test
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -432,4 +433,35 @@ func TestTreeBoundaryRepeatedMerge(t *testing.T) {
 // only the parent the operation names says where the peer was.
 func TestTreeBoundarySeenParentFromOperation(t *testing.T) {
 	replayBoundaryScript(t, 3, "d2.split(1); d2.undo; d1.pull; d1.split(3)")
+}
+
+// TestTreeBoundaryKnownDivergences records cases that still diverge, as they
+// do on main, because telling them apart needs causal knowledge the tree does
+// not keep. Each is skipped with what it would take.
+func TestTreeBoundaryKnownDivergences(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		script string
+		needs  string
+	}{{
+		name:   "split with a peer's concurrent split and undo, then typing",
+		script: `d1.split(1); d2.split(1); d3.pull; d1.undo; d3.insert(3,"x")`,
+		needs: "The tree, the records and the ticket order match the case in " +
+			"TestTreeBoundaryUndoRacesSplitAndInsert, but the text belongs on the " +
+			"other side. Only whether the split's change knew the merge tells them " +
+			"apart, and no replica keeps that.",
+	}, {
+		name:   "two Backspaces at one join, Enter knowing only the later one",
+		script: "d1.split(2); d2.pull; d3.pull; d2.delete(2,4); d1.delete(2,4); d3.pull; d3.split(2)",
+		needs: "Repeated merges keep the smaller ticket, which here is the merge the " +
+			"Enter did not know. Knowing it saw the other one needs every merge " +
+			"ticket of the node.",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") == "" {
+				t.Skip(tc.needs)
+			}
+			replayBoundaryScript(t, 3, tc.script)
+		})
+	}
 }
