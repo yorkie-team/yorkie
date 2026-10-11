@@ -162,6 +162,10 @@ diverged.
 - [x] Run-to-run nondeterminism found while re-measuring (GC purged a
       product before its child): `relinkSubtreeAnchors`. Two identical runs
       now give identical results.
+- [x] Review of the range: merge forwarding repointed when a split carries
+      merged children (`followMovedMergeChildren`, reload-consistency test);
+      the seen parent read from the operation's declared parent. A
+      moved-from-boundary-as-R attempt was mixed and dropped.
 
 ### Task 6: PR
 
@@ -176,10 +180,11 @@ Go side done through commit review; not pushed.
 - #1436 cases (insert, split, delete, style) converge with GC and snapshot
   reloads: 0 of 15000 broadened-fuzz runs and 0 of 4000 GC runs diverge
   (main: 261-1046 per case).
-- Undo and redo: 237 of 1200 and 501 of 2400 runs do not converge (main
-  463 and 896), with 3 and 5 regressions against main. Boundary records
-  differ in 12 and 39 runs that converge otherwise.
-- Merge fuzz: fewer divergences than main, 4/0/6/3 regressions.
+- Undo and redo: 223 of 1200 and 480 of 2400 runs do not converge (main
+  463 and 896), with 6 and 10 regressions against main. With snapshot
+  reloads, 666 of 3600 (main 1339), 14 regressions. Boundary records
+  differ in 11 and 34 runs that converge otherwise.
+- Merge fuzz: fewer divergences than main, 5/0/6/4 regressions.
 - Protocol: `JSONElement.Tree.boundaries` and `TreeBoundary`; operations
   and `TreeNode` unchanged. Op semantics change, so the server and SDKs
   must ship together; no version gate.
