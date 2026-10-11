@@ -146,13 +146,15 @@ type TreeNode struct {
 	InsPrevID *TreeNodeID
 	InsNextID *TreeNodeID
 
-	// BoundaryAnchor and BoundaryNest record, for the product of a level-0
-	// split of an all-text node, the key of the item its boundary is anchored
-	// in front of ("END" at the end of the family) and the key of the
-	// same-anchor boundary it nests under. Empty on any other node. See
+	// BoundaryAnchor, BoundaryAtEnd and BoundaryNest record, for the product
+	// of a level-0 split of an all-text node, the item its boundary is
+	// anchored in front of (a node, or the end of the split family when
+	// BoundaryAtEnd is set) and the same-anchor boundary it nests under. All
+	// three are zero on any other node. See
 	// docs/design/split-boundary-anchors.md.
-	BoundaryAnchor string
-	BoundaryNest   string
+	BoundaryAnchor *TreeNodeID
+	BoundaryAtEnd  bool
+	BoundaryNest   *TreeNodeID
 
 	// Value is optional. If the value is not empty, it means that the node is a
 	// text node.
@@ -692,6 +694,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
 	clone.BoundaryAnchor = n.BoundaryAnchor
+	clone.BoundaryAtEnd = n.BoundaryAtEnd
 	clone.BoundaryNest = n.BoundaryNest
 	clone.mergedInto = n.mergedInto
 	clone.MergedFrom = n.MergedFrom
@@ -1012,6 +1015,11 @@ type Tree struct {
 	// otherwise never be registered for GC. Edit, Style and RemoveStyle
 	// drain this buffer into the GC pairs they return.
 	pendingGCPairs []GCPair
+
+	// anchoredBefore indexes split products by the ID of the node their
+	// boundary is anchored in front of, so that purging a node relinks only
+	// the products anchored before it. See setBoundary.
+	anchoredBefore map[string]map[*TreeNode]struct{}
 }
 
 // NewTree creates a new instance of Tree.
@@ -1044,6 +1052,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	// target merged-away parents (§1.1 redirect, §6.2 propagation,
 	// §7.1 split skip).
 	tree.rebuildMergeState()
+	tree.rebuildBoundaryIndex()
 
 	return tree
 }
@@ -1139,6 +1148,7 @@ func (t *Tree) Purge(child GCChild) error {
 	}
 
 	t.relinkAnchors(node)
+	t.unindexBoundaries(node)
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err
 	}
@@ -3653,7 +3663,7 @@ func (t *Tree) split(
 		// §7.8 Same-Boundary Ordering: a concurrent split of the same
 		// boundary may already have taken the right half; order against it.
 		var target *TreeNode
-		var anchor, nest string
+		var anchor, nest boundaryKey
 		placed := false
 		if splitCount == 0 {
 			var placedOffset int
@@ -3673,8 +3683,7 @@ func (t *Tree) split(
 		}
 		if placed && target.InsNextID != nil && target.InsNextID != prevNext {
 			if product := t.findFloorNode(target.InsNextID); product != nil {
-				product.BoundaryAnchor = anchor
-				product.BoundaryNest = nest
+				t.setBoundary(product, anchor, nest)
 			}
 		}
 

@@ -35,7 +35,37 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
-const boundaryEnd = "END"
+// boundaryKey names an item of a split family's sequence: a node, or the end
+// of the family. The zero key names nothing, which is what a node without a
+// recorded boundary holds.
+type boundaryKey struct {
+	id  *TreeNodeID
+	end bool
+}
+
+func (k boundaryKey) isZero() bool {
+	return k.id == nil && !k.end
+}
+
+func (k boundaryKey) equal(other boundaryKey) bool {
+	if k.end || other.end {
+		return k.end == other.end
+	}
+	if k.id == nil || other.id == nil {
+		return k.id == nil && other.id == nil
+	}
+	return k.id.Equal(other.id)
+}
+
+// anchorOf returns the item n's boundary is anchored in front of.
+func anchorOf(n *TreeNode) boundaryKey {
+	return boundaryKey{id: n.BoundaryAnchor, end: n.BoundaryAtEnd}
+}
+
+// nestOf returns the boundary n's boundary nests under.
+func nestOf(n *TreeNode) boundaryKey {
+	return boundaryKey{id: n.BoundaryNest}
+}
 
 func hasElementChild(node *TreeNode) bool {
 	for _, c := range node.Index.Children(true) {
@@ -64,11 +94,11 @@ func indexOfNode(nodes []*TreeNode, node *TreeNode) int {
 	return -1
 }
 
-func boundaryKeyOf(n *TreeNode) string {
+func boundaryKeyOf(n *TreeNode) boundaryKey {
 	if n == nil {
-		return boundaryEnd
+		return boundaryKey{end: true}
 	}
-	return n.id.toIDString()
+	return boundaryKey{id: n.id}
 }
 
 // nextBoundaryNode returns the element that follows node in the document as a
@@ -182,7 +212,7 @@ type boundaryTail struct {
 	// nil when R is a boundary or the end of the family.
 	rNode *TreeNode
 	rIdx  int
-	rKey  string
+	rKey  boundaryKey
 	// last is the last product walked, where the sequence ends if R is a
 	// boundary or the end.
 	last *TreeNode
@@ -214,9 +244,9 @@ func (t *Tree) placeSplitBoundary(
 	offset int,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (target *TreeNode, off int, anchor, nest string, ok bool) {
+) (target *TreeNode, off int, anchor, nest boundaryKey, ok bool) {
 	if parent.Index.Parent == nil || hasElementChild(parent) {
-		return nil, 0, "", "", false
+		return nil, 0, boundaryKey{}, boundaryKey{}, false
 	}
 	local := len(versionVector) == 0
 	known := func(tk *time.Ticket) bool {
@@ -247,25 +277,25 @@ func (t *Tree) placeSplitBoundary(
 // boundaryNestOf returns the key of the closest boundary before parent, as the
 // splitting change saw it, that is anchored before the same item: emissions
 // anchored before that item run contiguously up to it, so a split at parent
-// is inside that boundary's group. It returns "" when there is none.
-func boundaryNestOf(parent *TreeNode, anchor string, known func(*time.Ticket) bool) string {
+// is inside that boundary's group. It returns the zero key when there is none.
+func boundaryNestOf(parent *TreeNode, anchor boundaryKey, known func(*time.Ticket) bool) boundaryKey {
 	sibs := childrenOf(parent.Index.Parent.Value)
 	for i := indexOfNode(sibs, parent); i >= 0; i-- {
 		k := sibs[i]
 		if k.IsText() || !known(k.id.CreatedAt) {
 			continue
 		}
-		if k.BoundaryAnchor == anchor {
+		if anchorOf(k).equal(anchor) {
 			return boundaryKeyOf(k)
 		}
 	}
-	return ""
+	return boundaryKey{}
 }
 
 // boundaryTailOf walks the split family past the end of parent, collecting
 // the boundaries and text the splitting change did not know, up to R.
 func (t *Tree) boundaryTailOf(parent *TreeNode, known func(*time.Ticket) bool) *boundaryTail {
-	tail := &boundaryTail{rKey: boundaryEnd, last: parent}
+	tail := &boundaryTail{rKey: boundaryKey{end: true}, last: parent}
 	var walker insNextWalker
 	walker.visit(parent)
 	for node := t.nextBoundaryNode(parent, &walker); node != nil; node = t.nextBoundaryNode(node, &walker) {
@@ -305,9 +335,9 @@ func (t *Tree) boundaryTailOf(parent *TreeNode, known func(*time.Ticket) bool) *
 // split opens: in front of the first item whose emission belongs to an older
 // sibling boundary, else in front of the first item of an outer level's
 // boundary, else before R.
-func (t *Tree) boundaryInsertIndex(tail *boundaryTail, anchor, nest string, editedAt *time.Ticket) int {
+func (t *Tree) boundaryInsertIndex(tail *boundaryTail, anchor, nest boundaryKey, editedAt *time.Ticket) int {
 	isSibling := func(m *TreeNode) bool {
-		return m.BoundaryAnchor == anchor && m.BoundaryNest == nest
+		return anchorOf(m).equal(anchor) && nestOf(m).equal(nest)
 	}
 	for i := range tail.toks {
 		owner := t.boundaryRootAt(tail, i, isSibling)
@@ -316,28 +346,28 @@ func (t *Tree) boundaryInsertIndex(tail *boundaryTail, anchor, nest string, edit
 		}
 	}
 
-	if nest == "" {
+	if nest.isZero() {
 		return len(tail.toks)
 	}
 	nestNode := t.nodeByKey(nest)
 	if nestNode == nil {
 		return len(tail.toks)
 	}
-	var levels []string
+	var levels []boundaryKey
 	cur := nestNode
 	for guard := 0; cur != nil && guard < 64; guard++ {
-		levels = append(levels, cur.BoundaryNest)
-		if cur.BoundaryNest == "" {
+		levels = append(levels, nestOf(cur))
+		if nestOf(cur).isZero() {
 			break
 		}
-		cur = t.nodeByKey(cur.BoundaryNest)
+		cur = t.nodeByKey(nestOf(cur))
 	}
 	outer := func(m *TreeNode) bool {
-		if m.BoundaryAnchor != anchor {
+		if !anchorOf(m).equal(anchor) {
 			return false
 		}
 		for _, l := range levels {
-			if m.BoundaryNest == l {
+			if nestOf(m).equal(l) {
 				return true
 			}
 		}
@@ -371,11 +401,11 @@ func (t *Tree) boundaryRootAt(tail *boundaryTail, i int, match func(*TreeNode) b
 		if match(m) {
 			return m
 		}
-		up := m.BoundaryNest
-		if up == "" {
-			up = m.BoundaryAnchor
+		up := nestOf(m)
+		if up.isZero() {
+			up = anchorOf(m)
 		}
-		if up == "" || up == boundaryEnd {
+		if up.isZero() || up.end {
 			return nil
 		}
 		n := t.nodeByKey(up)
@@ -391,15 +421,74 @@ func (t *Tree) boundaryRootAt(tail *boundaryTail, i int, match func(*TreeNode) b
 	return nil
 }
 
-// nodeByKey finds the node a boundary key names.
-func (t *Tree) nodeByKey(key string) *TreeNode {
-	var found *TreeNode
-	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
-		if found == nil && node.Value.id.toIDString() == key {
-			found = node.Value
+// nodeByKey finds the node a boundary key names, or nil for the end or a node
+// this replica no longer holds.
+func (t *Tree) nodeByKey(key boundaryKey) *TreeNode {
+	if key.id == nil {
+		return nil
+	}
+	if id, node := t.NodeMapByID.Floor(key.id); node != nil && id.Equal(key.id) {
+		return node
+	}
+	return nil
+}
+
+// setBoundary records anchor and nest on product and keeps anchoredBefore in
+// step with it.
+func (t *Tree) setBoundary(product *TreeNode, anchor, nest boundaryKey) {
+	t.unindexBoundary(product)
+	product.BoundaryAnchor, product.BoundaryAtEnd = anchor.id, anchor.end
+	product.BoundaryNest = nest.id
+	t.indexBoundary(product)
+}
+
+func (t *Tree) indexBoundary(product *TreeNode) {
+	if product.BoundaryAnchor == nil {
+		return
+	}
+	if t.anchoredBefore == nil {
+		t.anchoredBefore = make(map[string]map[*TreeNode]struct{})
+	}
+	key := product.BoundaryAnchor.toIDString()
+	set := t.anchoredBefore[key]
+	if set == nil {
+		set = make(map[*TreeNode]struct{})
+		t.anchoredBefore[key] = set
+	}
+	set[product] = struct{}{}
+}
+
+func (t *Tree) unindexBoundary(product *TreeNode) {
+	if product.BoundaryAnchor == nil || t.anchoredBefore == nil {
+		return
+	}
+	key := product.BoundaryAnchor.toIDString()
+	if set := t.anchoredBefore[key]; set != nil {
+		delete(set, product)
+		if len(set) == 0 {
+			delete(t.anchoredBefore, key)
 		}
+	}
+}
+
+// unindexBoundaries drops the products in the subtree of node from
+// anchoredBefore, as node is purged.
+func (t *Tree) unindexBoundaries(node *TreeNode) {
+	if len(t.anchoredBefore) == 0 || node.IsText() {
+		return
+	}
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		t.unindexBoundary(n.Value)
 	})
-	return found
+}
+
+// rebuildBoundaryIndex fills anchoredBefore from the products' records, after
+// a tree is built from a snapshot or a copy.
+func (t *Tree) rebuildBoundaryIndex() {
+	t.anchoredBefore = nil
+	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+		t.indexBoundary(n.Value)
+	})
 }
 
 // relinkAnchors moves every boundary anchored before node to the item that
@@ -408,21 +497,26 @@ func (t *Tree) relinkAnchors(node *TreeNode) {
 	if !node.IsText() || node.Index.Parent == nil {
 		return
 	}
-	key := boundaryKeyOf(node)
+	set := t.anchoredBefore[node.id.toIDString()]
+	if len(set) == 0 {
+		return
+	}
 	siblings := childrenOf(node.Index.Parent.Value)
 	i := indexOfNode(siblings, node)
-	var next string
+	var next boundaryKey
 	if i >= 0 && i+1 < len(siblings) {
 		next = boundaryKeyOf(siblings[i+1])
 	} else {
 		var walker insNextWalker
 		next = boundaryKeyOf(t.nextBoundaryNode(node.Index.Parent.Value, &walker))
 	}
-	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
-		if n.Value.BoundaryAnchor == key {
-			n.Value.BoundaryAnchor = next
-		}
-	})
+	products := make([]*TreeNode, 0, len(set))
+	for p := range set {
+		products = append(products, p)
+	}
+	for _, p := range products {
+		t.setBoundary(p, next, nestOf(p))
+	}
 }
 
 // boundaryPurgeBarrier is the barrier of a text tombstone that is the last child
