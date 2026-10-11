@@ -257,5 +257,5 @@ func TestTreeSameBoundarySplitUnderServerGC(t *testing.T) {
 	assert.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[1]))
 	assert.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[3]))
 	assert.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[2]),
-		"yorkie#2099: converges under the flat rules")
+		"yorkie#2099: converges with the boundary anchors")
 }

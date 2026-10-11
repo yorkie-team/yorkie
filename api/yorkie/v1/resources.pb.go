@@ -1585,10 +1585,10 @@ func (x *TreeNode) GetMergedAt() *TimeTicket {
 	return nil
 }
 
-// TreeBoundary records, for the product of a level-0 split of an all-text
-// node, the node its boundary is anchored in front of and the same-anchor
-// boundary it nests under. Later splits read it, so it persists for the life
-// of the product. It lives on the tree rather than on TreeNode so that
+// TreeBoundary records, for the product of the innermost level of a split of
+// an all-text node, the node its boundary is anchored in front of and the
+// same-anchor boundary it nests under. Later splits read it, so it persists
+// for the life of the product. It lives on the tree rather than on TreeNode so that
 // operation content, which carries TreeNodes, cannot carry one. See
 // docs/design/split-boundary-anchors.md for details.
 type TreeBoundary struct {

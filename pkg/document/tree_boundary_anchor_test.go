@@ -34,7 +34,7 @@ func paragraphs(tree *crdt.Tree) []*crdt.TreeNode {
 	return tree.Root().Children(true)
 }
 
-// TestTreeBoundaryAnchorRecord checks what a level-0 split of a text paragraph
+// TestTreeBoundaryAnchorRecord checks what a split of a text paragraph
 // records on its product: the node its boundary sits in front of, or the end
 // of the family, and no nesting when no other boundary shares the anchor.
 func TestTreeBoundaryAnchorRecord(t *testing.T) {

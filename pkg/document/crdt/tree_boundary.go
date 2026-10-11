@@ -27,7 +27,8 @@ package crdt
 // emission (the boundaries anchored before it and its group, everything newer
 // than it); a split made inside the group of such a boundary nests under it.
 //
-// The rules cover level-0 splits of a node whose children are all text.
+// The rules cover the innermost level of a split, the one that divides the
+// node holding the position, when that node's children are all text.
 // Anything else falls back to orderSameBoundarySplit.
 
 import (

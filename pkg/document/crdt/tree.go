@@ -147,10 +147,10 @@ type TreeNode struct {
 	InsNextID *TreeNodeID
 
 	// BoundaryAnchor, BoundaryAtEnd and BoundaryNest record, for the product
-	// of a level-0 split of an all-text node, the item its boundary is
-	// anchored in front of (a node, or the end of the split family when
-	// BoundaryAtEnd is set) and the same-anchor boundary it nests under. All
-	// three are zero on any other node. See
+	// of the innermost level of a split of an all-text node, the item its
+	// boundary is anchored in front of (a node, or the end of the split
+	// family when BoundaryAtEnd is set) and the same-anchor boundary it nests
+	// under. All three are zero on any other node. See
 	// docs/design/split-boundary-anchors.md.
 	BoundaryAnchor *TreeNodeID
 	BoundaryAtEnd  bool
