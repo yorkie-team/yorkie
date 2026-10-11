@@ -180,9 +180,13 @@ diverged.
 - [x] Repeated merges keep every merge ticket (`mergeTickets`, persisted as
       `TreeMerge`), chosen over raising `removedAt` (lost XML content) and
       a purge-time relink (depended on GC map order). The second known case
-      passes. Its review found a moved-tombstone record split
-      (`firstMovedChild` skip) and an insert forwarding fault (`typedAfter`);
-      both pinned with tests that fail with the fix turned off.
+      passes. Its review found a moved-tombstone record split and an insert
+      forwarding fault, each pinned with a test that fails without its fix.
+- [x] Independent verification (five lenses, two stalled; judge
+      re-ran every finding): the `firstMovedChild` skip read a tombstone an
+      undo can revive, so it went; `typedAfter` became a version-vector
+      check (`allUnknown`). Two forwarding cases that converge on main stay
+      in `TestTreeBoundaryKnownDivergences`. Wrong claims corrected.
 
 ### Task 6: PR
 
@@ -200,8 +204,8 @@ Go side done through commit review; not pushed.
 - Undo and redo: 222 of 1200 and 460 of 2400 runs do not converge (main
   463 and 896), with 5 and 4 regressions against main, all reproducing on
   the same script. With snapshot reloads (reloaded replicas only pull),
-  509 of 3600 (main 1066), 5 regressions. Boundary records differ in 11
-  and 25 runs that converge otherwise; 29 of 3000 in the Backspace-heavy
+  509 of 3600 (main 1066), 5 regressions. Boundary records differ in 14
+  and 25 runs that converge otherwise; 28 of 3000 in the Backspace-heavy
   fuzz (66 before keeping every merge ticket). The twelve-order
   undo/split/insert set converges in all twelve (main none).
 - Merge fuzz: fewer divergences than main, 4/0/5/4 regressions.
