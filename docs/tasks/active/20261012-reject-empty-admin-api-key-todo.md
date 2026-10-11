@@ -9,11 +9,13 @@ Fixes #2165 (and the closed duplicate #2161).
 `AdminServiceInterceptor.authenticate` rejects an empty `API-Key` param
 only when `UseDefaultProject` is off. `UseDefaultProject` defaults to true,
 and `projects.ProjectFromSecretKey(ctx, be, "")` returns the default project
-without checking any credential. So on a stock deployment
-`Authorization: API-Key ` (empty, ASCII whitespace, or U+00A0, which
-net/http does not trim but `strings.TrimSpace` does) authenticates as the
-default project for every project-scoped AdminService method:
-`RemoveDocumentByAdmin`, `UpdateDocument`, `CreateSchema`, and so on.
+without checking any credential. So on a stock deployment a key that
+`strings.TrimSpace` empties authenticates as the default project for every
+project-scoped AdminService method: `RemoveDocumentByAdmin`,
+`UpdateDocument`, `CreateSchema`, and so on. Over HTTP/1.1, an empty or
+ASCII-whitespace key was already refused, because net/http trims the
+header value to `API-Key` and the scheme check rejects it; a key of U+00A0,
+which net/http does not trim, reached the fallback.
 
 The fallback came from #1475, which assumed admin callers would reach the
 default project with an empty secret key. No caller does that today:
