@@ -243,7 +243,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pack, err := fromChangePack(req.Msg.ChangePack, false)
+	pack, err := fromPushedChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1603,7 +1603,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, err := fromChangePack(req.Msg.ChangePack, false)
+	pack, refusedFrom, err := fromLeavingChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1612,11 +1612,16 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	// Authorized on the pack as the client sent it, changes included, so a
+	// refused pack is not judged as a read-only leave.
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.DetachDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
+	}
+	if refusedFrom >= 0 {
+		pack.Changes = pack.Changes[:refusedFrom]
 	}
 
 	project := projects.From(ctx)
@@ -1710,7 +1715,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pack, err := fromChangePack(req.Msg.ChangePack, false)
+	pack, err := fromPushedChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1808,7 +1813,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, err := fromChangePack(req.Msg.ChangePack, true)
+	pack, refusedFrom, err := fromLeavingChangePack(ctx, req.Msg.ClientId, req.Msg.ChangePack, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1817,11 +1822,16 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
+	// Authorized on the pack as the client sent it, changes included, so a
+	// refused pack is not judged as a read-only leave.
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.RemoveDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
+	}
+	if refusedFrom >= 0 {
+		pack.Changes = pack.Changes[:refusedFrom]
 	}
 
 	project := projects.From(ctx)
@@ -2158,4 +2168,83 @@ func (s *yorkieServer) unwatchDoc(
 	)
 
 	return nil
+}
+
+// fromPushedChangePack decodes a pack a client pushes through the push
+// boundary (converter.FromPushedChangePack). A pack refused for its element
+// payload is logged with the client and document it came from: the client
+// keeps resending the same change, so this is how an operator finds it.
+// IsRemoved is set by removes, as in fromChangePack.
+func fromPushedChangePack(
+	ctx context.Context,
+	clientID string,
+	pbPack *api.ChangePack,
+	removes bool,
+) (*change.Pack, error) {
+	pack, err := converter.FromPushedChangePack(pbPack)
+	if isRefusedPayload(err) {
+		logging.From(ctx).Warnf(
+			"refuse pushed pack of client %s for document %s: %v",
+			clientID, pbPack.GetDocumentKey(), err,
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	pack.IsRemoved = removes
+	return pack, nil
+}
+
+// fromLeavingChangePack is fromPushedChangePack for Detach and Remove. A pack
+// refused for its element payload does not refuse the leave: the client would
+// otherwise hold a change it can neither push nor leave behind, and could
+// never detach. The pack is decoded leniently instead, and the index of the
+// first refused change is returned alongside it -- -1 when the boundary took
+// the whole pack.
+//
+// The caller authorizes the pack as sent and only then truncates it there, so
+// the changes the client queued before the refused one still reach the
+// document: they are legitimate, and a leave is the client's last chance to
+// push them. Nothing from the refused change on is kept -- judging it is the
+// point, and a gap in the middle of the pack would fail the clientSeq
+// continuity packs.PushPull requires anyway. A detach or remove over the size
+// limit drops its changes the same way (packs.PushPull).
+func fromLeavingChangePack(
+	ctx context.Context,
+	clientID string,
+	pbPack *api.ChangePack,
+	removes bool,
+) (*change.Pack, int, error) {
+	pack, err := fromPushedChangePack(ctx, clientID, pbPack, removes)
+	if err == nil || !isRefusedPayload(err) {
+		return pack, -1, err
+	}
+
+	pack, err = fromChangePack(pbPack, removes)
+	if err != nil {
+		return nil, -1, err
+	}
+
+	refusedFrom := len(pack.Changes)
+	for i, pbChange := range pbPack.GetChanges() {
+		if i >= len(pack.Changes) {
+			break
+		}
+		if err := converter.ValidatePushedChange(pbChange); err != nil {
+			refusedFrom = i
+			break
+		}
+	}
+	logging.From(ctx).Warnf(
+		"discarding %d of %d changes from a detach or remove of client %s for document %s",
+		len(pack.Changes)-refusedFrom, len(pack.Changes), clientID, pbPack.GetDocumentKey(),
+	)
+	return pack, refusedFrom, nil
+}
+
+// isRefusedPayload reports whether err is the push boundary refusing an
+// element payload, as opposed to a pack that does not decode at all.
+func isRefusedPayload(err error) bool {
+	return stderrors.Is(err, converter.ErrInvalidElementTicket) ||
+		stderrors.Is(err, converter.ErrRefusedMember)
 }
