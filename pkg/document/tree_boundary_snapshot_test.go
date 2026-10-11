@@ -62,7 +62,7 @@ func reloadFromSnapshot(t *testing.T, doc *document.Document) *document.Document
 	restored := document.New(doc.Key())
 	restored.SetActor(doc.ActorID())
 	require.NoError(t, restored.ApplyChangePack(change.NewPack(
-		restored.Key(), change.InitialCheckpoint, nil, doc.VersionVector(), bytes,
+		restored.Key(), change.NewCheckpoint(0, doc.Checkpoint().ClientSeq), nil, doc.VersionVector(), bytes,
 	)))
 	require.Equal(t, treeShape(t, doc), treeShape(t, restored))
 	return restored
