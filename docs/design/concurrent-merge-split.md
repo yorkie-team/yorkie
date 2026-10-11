@@ -450,6 +450,10 @@ attributes, losing any styling applied before the split.
 
 ### §7.3 SplitElement: Boundary Insert Migration
 
+> For a level-0 split of a node whose children are all text, the boundary
+> anchors of [split-boundary-anchors.md](split-boundary-anchors.md) decide
+> this instead. The rule below still applies to every other split.
+
 After partitioning children into left/right, any consecutive run of
 concurrent inserts (children whose `CreatedAt` is unknown to the
 splitter's version vector) at the start of the right partition is
@@ -536,6 +540,10 @@ concurrent one. This preserves clone/root consistency while still
 advancing past genuine concurrent siblings from other actors.
 
 ### §7.8 Split: Same-Boundary Ordering
+
+> For a level-0 split of a node whose children are all text, the boundary
+> anchors of [split-boundary-anchors.md](split-boundary-anchors.md) decide
+> this instead. The rule below still applies to every other split.
 
 `SplitElement` places its product directly after the node it splits.
 When a concurrent split of the same node at the same boundary has
