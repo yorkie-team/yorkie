@@ -435,9 +435,10 @@ func TestTreeBoundarySeenParentFromOperation(t *testing.T) {
 	replayBoundaryScript(t, 3, "d2.split(1); d2.undo; d1.pull; d1.split(3)")
 }
 
-// TestTreeBoundaryKnownDivergences records cases that still diverge, as they
-// do on main, because telling them apart needs causal knowledge the tree does
-// not keep. Each is skipped with what it would take.
+// TestTreeBoundaryKnownDivergences records cases that still diverge. The
+// first diverges on main too. The second converged before
+// unknownMergeBoundaryAt and converges in XML on main; here the boundary
+// records part. Each is skipped with what it would take.
 func TestTreeBoundaryKnownDivergences(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -453,9 +454,10 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 	}, {
 		name:   "two Backspaces at one join, Enter knowing only the later one",
 		script: "d1.split(2); d2.pull; d3.pull; d2.delete(2,4); d1.delete(2,4); d3.pull; d3.split(2)",
-		needs: "Repeated merges keep the smaller ticket, which here is the merge the " +
-			"Enter did not know. Knowing it saw the other one needs every merge " +
-			"ticket of the node.",
+		needs: "unknownMergeBoundaryAt reads the moved text's MergedAt, and repeated " +
+			"merges keep the smaller ticket, which here is the merge the Enter did " +
+			"not know, so it anchors before the merged-away node on replicas that " +
+			"applied both merges first.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") == "" {
