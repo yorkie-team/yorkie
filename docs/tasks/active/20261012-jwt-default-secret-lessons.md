@@ -174,3 +174,18 @@ All eight subtests pass after the fix.
   `adminPasswordExistingSecret`). The admin-password default removal was
   reverted by maintainer decision as out of scope for this key-only change;
   it is tracked separately.
+- Moving one secret out of `args` left the two beside it there. The chart
+  enables pprof and serves it on the profiling port, so
+  `/debug/pprof/cmdline` hands out the whole argument vector — which still
+  carried the MongoDB admin password inside the connection URI and
+  `--cluster-secret`. The server now reads `YORKIE_MONGO_CONNECTION_URI` and
+  `YORKIE_CLUSTER_SECRET` when the matching flag is unset, and the chart
+  keeps all three credentials in one Secret and passes them as environment
+  variables. `$(VAR)` interpolation in `args` would not have helped: the
+  kubelet expands it before exec, so the value lands in `cmdline` anyway.
+- The chart's Secret was named `<yorkie.name>-backend-secret-key`, exactly the
+  name the README told operators to create for `secretKeyExistingSecret`.
+  Moving a release between the two forms then had Helm delete the operator's
+  Secret, or refuse to adopt it for lack of ownership metadata. The
+  chart-owned Secret is now `<yorkie.name>-credentials`, and pointing
+  `secretKeyExistingSecret` at that name fails the render with the reason.

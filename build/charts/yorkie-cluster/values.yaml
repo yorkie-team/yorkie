@@ -31,6 +31,11 @@ yorkie:
     secretKey: ""
     # secretKeyExistingSecret: name of an existing Secret in the namespace
     # that holds the key under `secret-key`. Takes precedence over secretKey.
+    # It must not be <yorkie.name>-credentials, the Secret this chart owns:
+    # the chart keeps the key, the MongoDB connection URI and clusterSecret
+    # there and hands them to the container as environment variables, so that
+    # no credential is passed as an argument, where /proc/<pid>/cmdline and
+    # the pprof cmdline endpoint would expose it.
     # Pods do not restart when the key changes, with either setting: the
     # Deployment carries no hash of it, since a pod annotation is readable
     # with `get pods` and a hash is enough to search for the key offline.

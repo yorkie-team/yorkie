@@ -113,6 +113,25 @@ admin token issued so far; users log in again.
 
 The `secretKeyExistingSecret` form avoids the keep-it-around problem entirely:
 the key lives in a Secret you own, and the chart never has to be told it again.
+Name that Secret anything but `<yorkie.name>-credentials`, which is the chart's
+own Secret (see [Where the credentials
+live](#where-the-credentials-live)) — the chart rejects that name rather than
+let Helm delete or refuse to adopt a Secret it half-owns. A release can move
+between the two forms either way: the chart's Secret keeps the other keys and
+simply stops carrying `secret-key`.
+
+### Where the credentials live
+
+The chart puts the signing key, the MongoDB connection URI (which carries the
+database password) and `yorkie.args.clusterSecret` in a Secret named
+`<yorkie.name>-credentials`, and the Deployment reads them as the environment
+variables `YORKIE_BACKEND_SECRET_KEY`, `YORKIE_MONGO_CONNECTION_URI` and
+`YORKIE_CLUSTER_SECRET`. None of them is passed as a command-line argument:
+arguments are readable in `/proc/<pid>/cmdline` and through the pprof
+`/debug/pprof/cmdline` endpoint, which this chart enables and serves on the
+profiling port, so an argument would hand every credential to anyone who can
+reach that port. The server reads each of those variables when the matching
+flag is unset, so the same approach works outside Helm.
 
 ### Rotating the key
 
@@ -197,7 +216,7 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
 
 # Or key held by the chart — read back the value in use:
-SECRET_KEY="$(kubectl -n yorkie get secret yorkie-backend-secret-key \
+SECRET_KEY="$(kubectl -n yorkie get secret yorkie-credentials \
   -o jsonpath='{.data.secret-key}' | base64 -d)"
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKey="$SECRET_KEY"

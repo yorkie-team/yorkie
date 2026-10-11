@@ -75,21 +75,29 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
-          # Read by the server when --backend-secret-key is not given. Kept
-          # out of args, which show up in /proc/<pid>/cmdline and pprof.
+          # The credentials are read from the environment rather than given as
+          # args: an arg shows up in /proc/<pid>/cmdline and in the pprof
+          # `/debug/pprof/cmdline` endpoint, which is enabled below and served
+          # on the profiling port.
           - name: YORKIE_BACKEND_SECRET_KEY
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.yorkie.args.secretKeyExistingSecret | default (printf "%s-backend-secret-key" .Values.yorkie.name) }}
+                name: {{ .Values.yorkie.args.secretKeyExistingSecret | default (printf "%s-credentials" .Values.yorkie.name) }}
                 key: secret-key
+          - name: YORKIE_MONGO_CONNECTION_URI
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.name }}-credentials
+                key: mongo-connection-uri
+          {{- if .Values.yorkie.args.clusterSecret }}
+          - name: YORKIE_CLUSTER_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.name }}-credentials
+                key: cluster-secret
+          {{- end }}
         args: [
           "server",
-          "--mongo-connection-uri",
-          {{- if .Values.yorkie.args.dbConnectionUri }}
-          "{{ .Values.yorkie.args.dbConnectionUri }}",
-          {{- else }}
-          "mongodb://{{ .Values.mongodb.credentials.databaseAdmin.username }}:{{ .Values.mongodb.credentials.databaseAdmin.password }}@{{ index .Values "yorkie-mongodb" "fullnameOverride" }}-mongos.{{ .Values.yorkie.namespace }}.svc.cluster.local:27017/{{ .Values.yorkie.args.dbName }}?authSource=admin",
-          {{- end }}
           "--mongo-yorkie-database",
           "{{ .Values.yorkie.args.dbName }}",
           "--pprof-enabled",
@@ -102,10 +110,6 @@ spec:
           "--backend-rpc-addr",
           "$(POD_IP):{{ .Values.yorkie.ports.rpcPort }}",
           "--backend-use-default-project={{ .Values.yorkie.args.useDefaultProject }}",
-          {{- if .Values.yorkie.args.clusterSecret }}
-          "--cluster-secret",
-          "{{ .Values.yorkie.args.clusterSecret }}",
-          {{- end }}
           {{- if .Values.yorkie.logLevel }}
           "--log-level",
           "{{ .Values.yorkie.logLevel }}",
