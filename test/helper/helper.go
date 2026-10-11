@@ -85,7 +85,7 @@ var (
 	AdminPassword           = server.DefaultAdminPassword
 	AdminPasswordForSignUp  = AdminPassword + "123!"
 	UseDefaultProject       = true
-	SecretKey               = server.DefaultSecretKey
+	SecretKey               = "yorkie-test-secret-key" // #nosec G101
 	EnableWebhookValidation = false
 
 	HousekeepingInterval             = 500 * gotime.Millisecond
@@ -382,7 +382,7 @@ func TestConfig() *server.Config {
 		}(),
 		Backend: func() *backend.Config {
 			conf := TestBackendConfig()
-			conf.SecretKey = server.DefaultSecretKey
+			conf.SecretKey = SecretKey
 			conf.AdminTokenDuration = server.DefaultAdminTokenDuration.String()
 			conf.GatewayAddr = fmt.Sprintf("localhost:%d", RPCPort+portOffset)
 			conf.RPCAddr = fmt.Sprintf("localhost:%d", RPCPort+portOffset)

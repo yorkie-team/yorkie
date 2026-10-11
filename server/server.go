@@ -21,6 +21,9 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	gosync "sync"
 	"time"
 
@@ -70,6 +73,10 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
+	if err := ensureSecretKey(conf.Backend); err != nil {
+		return nil, err
+	}
+
 	metrics, err := prometheus.NewMetrics()
 	if err != nil {
 		return nil, err
@@ -105,6 +112,37 @@ func New(conf *Config) (*Yorkie, error) {
 		profilingServer: profilingServer,
 		shutdownCh:      make(chan struct{}),
 	}, nil
+}
+
+// secretKeyBytes is the length of a generated admin token signing key: 256
+// bits, the HS256 block the key is hashed into.
+const secretKeyBytes = 32
+
+// ensureSecretKey fills an unset admin token signing key with a random one.
+// Every way of building a config (CLI flags, config file, NewConfig) reaches
+// here, so an unset key can never fall back to a value anyone can read: the
+// interceptor trusts the token's username claim, so whoever knows the key can
+// act as any user. The generated key lives only in this process, so tokens
+// die with it and other nodes reject them. Single-node and local setups only
+// need to log in again after a restart; a cluster must share one key.
+func ensureSecretKey(conf *backend.Config) error {
+	if conf.SecretKey != "" {
+		return nil
+	}
+
+	secret := make([]byte, secretKeyBytes)
+	if _, err := rand.Read(secret); err != nil {
+		return fmt.Errorf("generate backend secret key: %w", err)
+	}
+	conf.SecretKey = base64.RawURLEncoding.EncodeToString(secret)
+
+	logging.DefaultLogger().Warn(
+		"backend secret key is empty: signing admin tokens with a random " +
+			"key generated for this process. Tokens are invalidated on " +
+			"restart and rejected by other nodes. Set --backend-secret-key " +
+			"to the same value on every node in production.",
+	)
+	return nil
 }
 
 // Backend returns the backend for testing purposes.

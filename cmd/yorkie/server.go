@@ -483,8 +483,10 @@ func init() {
 	cmd.Flags().StringVar(
 		&conf.Backend.SecretKey,
 		"backend-secret-key",
-		server.DefaultSecretKey,
-		"The secret key for signing authentication tokens for admin users.",
+		"",
+		"The secret key for signing authentication tokens for admin users. "+
+			"If empty, a random key is generated at startup, so tokens do not "+
+			"survive a restart. Set the same key on every node of a cluster.",
 	)
 
 	cmd.Flags().BoolVar(

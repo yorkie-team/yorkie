@@ -56,4 +56,12 @@ func TestServerCmdFlagDefaults(t *testing.T) {
 		assert.NotNil(t, f)
 		assert.Equal(t, strconv.Itoa(server.DefaultProjectCacheSize), f.DefValue)
 	})
+
+	// An unset key is generated at startup; a public default would let
+	// anyone forge an admin token (#2103).
+	t.Run("backend-secret-key has no default", func(t *testing.T) {
+		f := cmd.Flags().Lookup("backend-secret-key")
+		assert.NotNil(t, f)
+		assert.Empty(t, f.DefValue)
+	})
 }
