@@ -20,15 +20,23 @@ package projects
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lithammer/shortuuid/v4"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/authz"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+)
+
+var (
+	// ErrSecretKeyNotProvided is returned when a project is looked up by an
+	// empty secret key.
+	ErrSecretKeyNotProvided = errors.Unauthenticated("secret key is not provided").WithCode("ErrSecretKeyNotProvided")
 )
 
 // CreateProject creates a project.
@@ -280,14 +288,13 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 }
 
 // ProjectFromSecretKey returns a project from a secret key.
+//
+// NOTE(hackerwins): Unlike GetProjectFromAPIKey, an empty key does not fall
+// back to the default project. The secret key is the whole credential of the
+// admin path, so a missing one must not resolve to any project.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
-	// NOTE(kokodak): If the secretKey is empty, fallback to the default project.
-	if secretKey == "" {
-		info, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
-		if err != nil {
-			return nil, err
-		}
-		return info.ToProject(), nil
+	if strings.TrimSpace(secretKey) == "" {
+		return nil, ErrSecretKeyNotProvided
 	}
 
 	info, err := be.DB.FindProjectInfoBySecretKey(ctx, secretKey)

@@ -315,9 +315,9 @@ func (i *AdminServiceInterceptor) authenticate(
 		//
 		// NOTE(hackerwins): An empty key is rejected whatever UseDefaultProject
 		// says. That setting lets a client without a public key reach the
-		// default project on YorkieService; on AdminService an empty key would
-		// fall back to the default project in ProjectFromSecretKey, granting
-		// its admin methods to a caller with no credential at all.
+		// default project on YorkieService; on AdminService an empty key used
+		// to fall back to the default project, granting its admin methods to
+		// a caller with no credential at all.
 		secretKey := strings.TrimSpace(param)
 		if secretKey == "" {
 			return nil, connect.NewError(connect.CodeUnauthenticated, ErrSecretKeyNotProvided)

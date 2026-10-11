@@ -58,7 +58,12 @@ empty public key there is the intended single-tenant default-project path.
 - Integration tests touching AdminService (TestAdmin, TestAdminMember,
   TestAuthWebhook*, TestDocumentSchema, TestMCP, TestRESTAPI, TestUser,
   ...) pass; `make verify` passes.
-- Left as is: `projects.ProjectFromSecretKey` still falls back to the
-  default project for an empty key. Both callers (admin interceptor, MCP)
-  now reject an empty key first, so the fallback is unreachable; removing
-  it is a possible follow-up.
+- Follow-up from review: `projects.ProjectFromSecretKey` no longer falls
+  back to the default project. An empty or whitespace-only key returns
+  `projects.ErrSecretKeyNotProvided`, so any future caller fails closed.
+  Its only callers are the admin interceptor and the MCP handler, both of
+  which already reject an empty key; YorkieService uses
+  `GetProjectFromAPIKey` (public key) and keeps its fallback. Unit test
+  `TestProjectFromSecretKey`: on the old code the `""` case returned the
+  default project. The `UseDefaultProject` comment in
+  `server/backend/config.go` now says it never waives the secret key.
