@@ -352,6 +352,17 @@ func TestTreeBoundaryUndoSplit(t *testing.T) {
 		name:     "Enter at the end of a product its owner undoes",
 		replicas: 3,
 		script:   "d2.split(1); d1.pull; d2.undo; d1.split(5); d2.split(3)",
+	}, {
+		// Text typed at the start of a paragraph whose Enter is then undone
+		// and redone. The redo's boundary is one the typist never saw, so
+		// the text stays on its left wherever the undo's merge forwards it.
+		name:     "type at the start of a new paragraph, its Enter undone and redone",
+		replicas: 2,
+		script:   `d2.split(1); d1.pull; d1.insert(3,"l"); d2.undo; d2.redo`,
+	}, {
+		name:     "the same with the Enter redone by a third replica",
+		replicas: 3,
+		script:   `d2.split(1); d2.undo; d1.pull; d1.insert(3,"f"); d3.pull; d3.pull; d3.split(1)`,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			replayBoundaryScript(t, tc.replicas, tc.script)

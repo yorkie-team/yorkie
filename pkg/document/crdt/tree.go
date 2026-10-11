@@ -4454,6 +4454,9 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 					continue
 				}
 				if i == 0 {
+					if pred := t.preMergeHolder(mergeTarget, targetChild.Value); pred != nil {
+						return pred, lastChildOrSelf(pred), diff, nil
+					}
 					return mergeTarget, mergeTarget, diff, nil
 				}
 				return mergeTarget, targetChildren[i-1].Value, diff, nil

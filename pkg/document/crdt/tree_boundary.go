@@ -743,6 +743,36 @@ func (t *Tree) followMovedMergeChildren(target, product *TreeNode) {
 	}
 }
 
+// preMergeHolder returns where a leftmost insert into a merged-away node goes
+// when the first child the merge moved now opens product, a node split off
+// after that merge: the end of the node before product in the family.
+//
+// The insert did not know the merge, so it did not know any split made after
+// it either, and text stays on the left of a boundary it did not know. A
+// replica that applied the insert first had it in front of the moved child
+// when the later split ran, and the split left it behind. It returns nil when
+// product was not split off after the merge, or has no live node before it.
+func (t *Tree) preMergeHolder(product, moved *TreeNode) *TreeNode {
+	if product.InsPrevID == nil || moved.MergedAt == nil || !product.id.CreatedAt.After(moved.MergedAt) {
+		return nil
+	}
+	pred := t.findFloorNode(product.InsPrevID)
+	if pred == nil || pred.IsText() || pred.IsRemoved() || pred.Index.Parent == nil {
+		return nil
+	}
+	return pred
+}
+
+// lastChildOrSelf returns the last child of node, tombstones included, or node
+// itself when it has none: the (parent, left) of a position at its end.
+func lastChildOrSelf(node *TreeNode) *TreeNode {
+	children := childrenOf(node)
+	if len(children) == 0 {
+		return node
+	}
+	return children[len(children)-1]
+}
+
 // boundaryPurgeBarrier is the barrier of a text tombstone that is the last child
 // of its parent: the scan of advanceAcrossBoundaries continues from there into
 // the next split product, so that product's boundary is the next item.
