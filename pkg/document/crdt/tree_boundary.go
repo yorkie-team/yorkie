@@ -542,6 +542,38 @@ func (t *Tree) nodeByKey(key boundaryKey) *TreeNode {
 	return nil
 }
 
+// TreeBoundary is the boundary record of one split product, as a snapshot
+// carries it. A nil Anchor means the end of the split family.
+type TreeBoundary struct {
+	Product *TreeNodeID
+	Anchor  *TreeNodeID
+	Nest    *TreeNodeID
+}
+
+// Boundaries returns the boundary records of the tree's split products, in
+// document order.
+func (t *Tree) Boundaries() []TreeBoundary {
+	var out []TreeBoundary
+	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+		if node := n.Value; hasBoundaryRecord(node) {
+			out = append(out, TreeBoundary{Product: node.id, Anchor: node.BoundaryAnchor, Nest: node.BoundaryNest})
+		}
+	})
+	return out
+}
+
+// RestoreBoundaries applies records read from a snapshot. A record naming a
+// node the tree does not hold, or a text node, is ignored.
+func (t *Tree) RestoreBoundaries(boundaries []TreeBoundary) {
+	for _, b := range boundaries {
+		product := t.nodeByKey(boundaryKey{id: b.Product})
+		if product == nil || product.IsText() {
+			continue
+		}
+		t.setBoundary(product, boundaryKey{id: b.Anchor, end: b.Anchor == nil}, boundaryKey{id: b.Nest})
+	}
+}
+
 // setBoundary records anchor and nest on product and keeps anchoredBefore in
 // step with it.
 func (t *Tree) setBoundary(product *TreeNode, anchor, nest boundaryKey) {

@@ -22,75 +22,78 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/yorkie-team/yorkie/api/converter"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// boundaryNodes returns <r><p>a</p><p></p></r> with the second paragraph
-// recorded as a split product anchored before a and nested under the first.
-func boundaryNodes(t *testing.T, ticket func(int64) *time.Ticket) (*crdt.TreeNode, *crdt.TreeNode) {
+// boundaryTree returns <r><p>a</p><p></p><p></p></r>: the second paragraph
+// is a split product anchored before a, and the third is anchored at the end
+// of the family and nested under the second.
+func boundaryTree(t *testing.T) (*crdt.Tree, []*crdt.TreeNode) {
 	t.Helper()
 
+	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
 	root := crdt.NewTreeNode(crdt.NewTreeNodeID(ticket(1), 0), "r", nil)
 	first := crdt.NewTreeNode(crdt.NewTreeNodeID(ticket(2), 0), "p", nil)
 	text := crdt.NewTreeNode(crdt.NewTreeNodeID(ticket(3), 0), "text", nil, "a")
-	product := crdt.NewTreeNode(crdt.NewTreeNodeID(ticket(4), 0), "p", nil)
+	second := crdt.NewTreeNode(crdt.NewTreeNodeID(ticket(4), 0), "p", nil)
+	third := crdt.NewTreeNode(crdt.NewTreeNodeID(ticket(5), 0), "p", nil)
 	require.NoError(t, first.Append(text))
-	require.NoError(t, root.Append(first, product))
-	product.BoundaryAnchor = text.ID()
-	product.BoundaryAtEnd = true
-	product.BoundaryNest = first.ID()
-	return root, product
+	require.NoError(t, root.Append(first, second, third))
+	second.BoundaryAnchor = text.ID()
+	third.BoundaryAtEnd = true
+	third.BoundaryNest = second.ID()
+	return crdt.NewTree(root, ticket(1)), []*crdt.TreeNode{first, text, second, third}
 }
 
-// TestTreeBoundaryRecordSnapshotRoundTrip checks that a snapshot carries the
-// boundary record of a split product, which later splits read for as long as
-// the node lives.
+// TestTreeBoundaryRecordSnapshotRoundTrip checks that a tree snapshot carries
+// the boundary records of its split products, which later splits read for as
+// long as the products live.
 func TestTreeBoundaryRecordSnapshotRoundTrip(t *testing.T) {
-	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
-	root, product := boundaryNodes(t, ticket)
-
-	decoded, err := converter.FromTreeNodes(converter.ToTreeNodes(root))
+	tree, nodes := boundaryTree(t)
+	bytes, err := converter.TreeToBytes(tree)
 	require.NoError(t, err)
-	got := decoded.Index.Children(true)[1].Value
+	decoded, err := converter.BytesToTree(bytes)
+	require.NoError(t, err)
 
-	require.NotNil(t, got.BoundaryAnchor)
-	assert.True(t, got.BoundaryAnchor.Equal(product.BoundaryAnchor))
-	assert.True(t, got.BoundaryAtEnd)
-	require.NotNil(t, got.BoundaryNest)
-	assert.True(t, got.BoundaryNest.Equal(product.BoundaryNest))
-
-	first := decoded.Index.Children(true)[0].Value
-	assert.Nil(t, first.BoundaryAnchor, "a node without a record decodes without one")
-	assert.False(t, first.BoundaryAtEnd)
-	assert.Nil(t, first.BoundaryNest)
+	got := decoded.Boundaries()
+	require.Len(t, got, 2)
+	assert.True(t, got[0].Product.Equal(nodes[2].ID()))
+	require.NotNil(t, got[0].Anchor)
+	assert.True(t, got[0].Anchor.Equal(nodes[1].ID()))
+	assert.Nil(t, got[0].Nest)
+	assert.True(t, got[1].Product.Equal(nodes[3].ID()))
+	assert.Nil(t, got[1].Anchor, "anchored at the end of the family")
+	require.NotNil(t, got[1].Nest)
+	assert.True(t, got[1].Nest.Equal(nodes[2].ID()))
 }
 
-// TestTreeEditContentDropsBoundaryRecord checks that operation content cannot
-// carry a boundary record. Content is freshly created by the editing client,
-// so it is never a split product, and the split rules read the record as
-// trusted state.
-func TestTreeEditContentDropsBoundaryRecord(t *testing.T) {
+// TestTreeBoundaryRecordNamingNoNode checks that a record naming a node the
+// tree does not hold is ignored, and one without a product is rejected.
+func TestTreeBoundaryRecordNamingNoNode(t *testing.T) {
+	tree, _ := boundaryTree(t)
+	pb := converter.ToTreeNodes(tree.Root())
 	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
-	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
-	_, product := boundaryNodes(t, ticket)
-	require.NoError(t, product.Index.Parent.RemoveChild(product.Index))
+	missing := &api.TreeNodeID{CreatedAt: converter.ToTimeTicket(time.NewTicket(99, 0, actor))}
+	elem := func(bs ...*api.TreeBoundary) []byte {
+		bytes, err := proto.Marshal(&api.JSONElement{Body: &api.JSONElement_Tree_{Tree: &api.JSONElement_Tree{
+			Nodes:      pb,
+			CreatedAt:  converter.ToTimeTicket(tree.CreatedAt()),
+			Boundaries: bs,
+		}}})
+		require.NoError(t, err)
+		return bytes
+	}
 
-	pos := crdt.NewTreePos(crdt.NewTreeNodeID(ticket(1), 0), crdt.NewTreeNodeID(ticket(1), 0))
-	pbOps, err := converter.ToOperations([]operations.Operation{
-		operations.NewTreeEdit(ticket(1), pos, pos, []*crdt.TreeNode{product}, 0, ticket(5)),
-	})
+	decoded, err := converter.BytesToTree(elem(&api.TreeBoundary{Product: missing}))
 	require.NoError(t, err)
+	assert.Empty(t, decoded.Boundaries())
 
-	decoded, err := converter.FromOperations(pbOps)
-	require.NoError(t, err)
-	edit, ok := decoded[0].(*operations.TreeEdit)
-	require.True(t, ok)
-	content := edit.Contents()[0]
-	assert.Nil(t, content.BoundaryAnchor)
-	assert.False(t, content.BoundaryAtEnd)
-	assert.Nil(t, content.BoundaryNest)
+	_, err = converter.BytesToTree(elem(&api.TreeBoundary{}))
+	assert.Error(t, err)
 }

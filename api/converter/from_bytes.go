@@ -465,6 +465,32 @@ func fromTextNodeID(
 	), nil
 }
 
+func fromTreeBoundaries(pbBoundaries []*api.TreeBoundary) ([]crdt.TreeBoundary, error) {
+	var boundaries []crdt.TreeBoundary
+	for _, pb := range pbBoundaries {
+		if pb.GetProduct() == nil {
+			return nil, fmt.Errorf("tree boundary has no product")
+		}
+		product, err := fromTreeNodeID(pb.GetProduct())
+		if err != nil {
+			return nil, err
+		}
+		b := crdt.TreeBoundary{Product: product}
+		if pb.GetAnchor() != nil {
+			if b.Anchor, err = fromTreeNodeID(pb.GetAnchor()); err != nil {
+				return nil, err
+			}
+		}
+		if pb.GetNest() != nil {
+			if b.Nest, err = fromTreeNodeID(pb.GetNest()); err != nil {
+				return nil, err
+			}
+		}
+		boundaries = append(boundaries, b)
+	}
+	return boundaries, nil
+}
+
 func fromJSONTree(
 	pbTree *api.JSONElement_Tree,
 ) (*crdt.Tree, error) {
@@ -496,6 +522,11 @@ func fromJSONTree(
 		root,
 		createdAt,
 	)
+	boundaries, err := fromTreeBoundaries(pbTree.Boundaries)
+	if err != nil {
+		return nil, err
+	}
+	tree.RestoreBoundaries(boundaries)
 	tree.SetMovedAt(movedAt)
 	tree.SetRemovedAt(removedAt)
 

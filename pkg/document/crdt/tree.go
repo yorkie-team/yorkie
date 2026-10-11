@@ -722,8 +722,8 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 }
 
 // clearBoundary drops the boundary record. Like the split chain, it describes a
-// node's place in a split family, so a copy that leaves the family or a node a
-// peer sent must not carry it.
+// node's place in a split family, so a copy that leaves the family must not
+// carry it.
 func (n *TreeNode) clearBoundary() {
 	n.BoundaryAnchor = nil
 	n.BoundaryAtEnd = false
@@ -772,7 +772,6 @@ func (n *TreeNode) DropEngineOnlyLinks() {
 	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.InsPrevID = nil
 		node.Value.InsNextID = nil
-		node.Value.clearBoundary()
 		node.Value.MergedFrom = nil
 		node.Value.MergedAt = nil
 		node.Value.mergedInto = nil
@@ -856,9 +855,9 @@ func (n *TreeNode) CloneForReinsert(preTombstoned map[string]struct{}) (*TreeNod
 	// padded lengths, text nodes from their own value.
 	index.TraverseNode(clone.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.removedAt = nil
-		// The receivers of the re-insert drop the boundary record with the
-		// rest of the engine-only links (DropEngineOnlyLinks); drop it here
-		// too so the local copy matches theirs.
+		// Operation content cannot carry a boundary record, so the receivers
+		// of the re-insert get none; drop it here too so the local copy
+		// matches theirs.
 		node.Value.clearBoundary()
 		if node.IsText() {
 			node.VisibleLength = node.Value.Length()

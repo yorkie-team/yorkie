@@ -859,6 +859,16 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        boundaries:
+          additionalProperties: false
+          description: |-
+            boundaries holds the boundary records of the tree's split products.
+             See TreeBoundary.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TreeBoundary'
+            type: object
+          title: boundaries
+          type: array
         createdAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -2230,6 +2240,38 @@ components:
           title: lamport
       title: TimeTicket
       type: object
+    yorkie.v1.TreeBoundary:
+      additionalProperties: false
+      description: |-
+        TreeBoundary records, for the product of a level-0 split of an all-text
+         node, the node its boundary is anchored in front of and the same-anchor
+         boundary it nests under. Later splits read it, so it persists for the life
+         of the product. It lives on the tree rather than on TreeNode so that
+         operation content, which carries TreeNodes, cannot carry one. See
+         docs/design/split-boundary-anchors.md for details.
+      properties:
+        anchor:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: |-
+            anchor is absent when the boundary is anchored at the end of the split
+             family.
+          title: anchor
+          type: object
+        nest:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: nest is absent when the boundary nests under no other.
+          title: nest
+          type: object
+        product:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: product
+          type: object
+      title: TreeBoundary
+      type: object
     yorkie.v1.TreeNode:
       additionalProperties: false
       description: ""
@@ -2238,29 +2280,6 @@ components:
           additionalProperties: false
           description: ""
           title: attributes
-          type: object
-        boundaryAnchor:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
-          additionalProperties: false
-          description: |-
-            boundary_anchor, boundary_at_end and boundary_nest record, for the
-             product of a level-0 split of an all-text node, the node its boundary is
-             anchored in front of (or the end of the split family when
-             boundary_at_end is set) and the same-anchor boundary it nests under.
-             Later splits read them, so they persist for the life of the node. See
-             docs/design/split-boundary-anchors.md for details.
-          title: boundary_anchor
-          type: object
-        boundaryAtEnd:
-          additionalProperties: false
-          description: ""
-          title: boundary_at_end
-          type: boolean
-        boundaryNest:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
-          additionalProperties: false
-          description: ""
-          title: boundary_nest
           type: object
         depth:
           additionalProperties: false

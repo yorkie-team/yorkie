@@ -246,6 +246,9 @@ message JSONElement {
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
     TimeTicket revived_at = 5;
+    // boundaries holds the boundary records of the tree's split products.
+    // See TreeBoundary.
+    repeated TreeBoundary boundaries = 6;
   }
 
   oneof body {
@@ -308,15 +311,21 @@ message TreeNode {
   // the merge-time causal boundary for SplitElement. See
   // docs/design/concurrent-merge-split.md for details.
   TimeTicket merged_at = 10;
-  // boundary_anchor, boundary_at_end and boundary_nest record, for the
-  // product of a level-0 split of an all-text node, the node its boundary is
-  // anchored in front of (or the end of the split family when
-  // boundary_at_end is set) and the same-anchor boundary it nests under.
-  // Later splits read them, so they persist for the life of the node. See
-  // docs/design/split-boundary-anchors.md for details.
-  TreeNodeID boundary_anchor = 11;
-  bool boundary_at_end = 12;
-  TreeNodeID boundary_nest = 13;
+}
+
+// TreeBoundary records, for the product of a level-0 split of an all-text
+// node, the node its boundary is anchored in front of and the same-anchor
+// boundary it nests under. Later splits read it, so it persists for the life
+// of the product. It lives on the tree rather than on TreeNode so that
+// operation content, which carries TreeNodes, cannot carry one. See
+// docs/design/split-boundary-anchors.md for details.
+message TreeBoundary {
+  TreeNodeID product = 1;
+  // anchor is absent when the boundary is anchored at the end of the split
+  // family.
+  TreeNodeID anchor = 2;
+  // nest is absent when the boundary nests under no other.
+  TreeNodeID nest = 3;
 }
 
 message TreeNodes {
