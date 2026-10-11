@@ -170,6 +170,13 @@ diverged.
       them breaks with one snapshot reload in 2-68% of placements. Type A
       (undo/redo of an Enter at a paragraph start with the peer typing
       there) fixed by `preMergeHolder`.
+- [x] Review: preMergeHolder used ticket order as causality. Four
+      directions explored in separate worktrees and re-measured
+      independently (two reverts, a persisted causal record, a stateless
+      record fix); the stateless one adopted. Its double-Backspace record
+      regression found in follow-up and fixed by keeping the smaller ticket
+      of repeated merges. Declared-parent rule pinned; two cases needing
+      causal knowledge recorded as skipped tests.
 
 ### Task 6: PR
 
@@ -184,12 +191,13 @@ Go side done through commit review; not pushed.
 - #1436 cases (insert, split, delete, style) converge with GC and snapshot
   reloads: 0 of 15000 broadened-fuzz runs and 0 of 4000 GC runs diverge
   (main: 261-1046 per case).
-- Undo and redo: 223 of 1200 and 468 of 2400 runs do not converge (main
+- Undo and redo: 222 of 1200 and 465 of 2400 runs do not converge (main
   463 and 896), with 5 and 6 regressions against main, all reproducing on
-  the same script. With snapshot reloads, 656 of 3600 (main 1339), 10
-  regressions. Boundary records differ in 9 and 33 runs that converge
-  otherwise.
-- Merge fuzz: fewer divergences than main, 4/0/6/4 regressions.
+  the same script. With snapshot reloads (reloaded replicas only pull),
+  513 of 3600 (main 1066), 7 regressions. Boundary records differ in 15
+  and 25 runs that converge otherwise. The twelve-order undo/split/insert
+  set converges in all twelve (main none).
+- Merge fuzz: fewer divergences than main, 6/0/5/3 regressions.
 - Protocol: `JSONElement.Tree.boundaries` and `TreeBoundary`; operations
   and `TreeNode` unchanged. Op semantics change, so the server and SDKs
   must ship together; no version gate.
