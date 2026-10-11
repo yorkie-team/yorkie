@@ -20,7 +20,9 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Leave a restore span with a text parent unplaced (2026-10-12) | [20261012-restore-span-text-parent-todo.md](./active/20261012-restore-span-text-parent-todo.md) | [20261012-restore-span-text-parent-lessons.md](./active/20261012-restore-span-text-parent-lessons.md) |
 | Reject a keyless API-Key on the admin path (2026-10-12) | [20261012-reject-empty-admin-api-key-todo.md](./active/20261012-reject-empty-admin-api-key-todo.md) | [20261012-reject-empty-admin-api-key-lessons.md](./active/20261012-reject-empty-admin-api-key-lessons.md) |
+| Stop Signing Admin Tokens with a Public Default Key (2026-10-12) | [20261012-jwt-default-secret-todo.md](./active/20261012-jwt-default-secret-todo.md) | [20261012-jwt-default-secret-lessons.md](./active/20261012-jwt-default-secret-lessons.md) |
 | Stop the sync loop retrying a push the server will never accept (2026-10-10) | [20261010-park-rejected-writes-todo.md](./active/20261010-park-rejected-writes-todo.md) | [20261010-park-rejected-writes-lessons.md](./active/20261010-park-rejected-writes-lessons.md) |
 | Watch stream heartbeat and SDK idle timeout (2026-10-08) | [20261008-watch-stream-heartbeat-todo.md](./active/20261008-watch-stream-heartbeat-todo.md) | [20261008-watch-stream-heartbeat-lessons.md](./active/20261008-watch-stream-heartbeat-lessons.md) |
 | Skip auto revisions when only presence changed since last snapshot (2026-10-08) | [20261008-skip-auto-revision-presence-only-todo.md](./active/20261008-skip-auto-revision-presence-only-todo.md) | [20261008-skip-auto-revision-presence-only-lessons.md](./active/20261008-skip-auto-revision-presence-only-lessons.md) |
