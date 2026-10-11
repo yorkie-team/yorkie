@@ -135,7 +135,9 @@ func TestNewConfigFromFile(t *testing.T) {
 		// filled with the default credentials and cache settings.
 		conf, err := server.NewConfigFromFile(file.Name())
 		assert.NoError(t, err)
-		assert.Equal(t, server.DefaultSecretKey, conf.Backend.SecretKey)
+		// The signing key stays unset: server.New generates a random one,
+		// never a value published in the source.
+		assert.Empty(t, conf.Backend.SecretKey)
 		assert.Equal(t, server.DefaultAdminUser, conf.Backend.AdminUser)
 		assert.Equal(t, server.DefaultAdminPassword, conf.Backend.AdminPassword)
 		// The booleans are NOT re-seeded: UseDefaultProject gates keyless

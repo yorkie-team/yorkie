@@ -23,6 +23,25 @@ yorkie:
     # nodes call each other through it (--backend-gateway-addr).
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
+    # Key for signing admin (dashboard and CLI) tokens. Required: set one of
+    # the two below. Every replica must share it, and anyone who knows it
+    # can act as any user, so keep it out of version control where possible.
+    # Generate with: openssl rand -base64 32
+    # secretKey: the key itself; the chart stores it in a Secret.
+    secretKey: ""
+    # secretKeyExistingSecret: name of an existing Secret in the namespace
+    # that holds the key under `secret-key`. Takes precedence over secretKey.
+    # It must not be <yorkie.name>-credentials, the Secret this chart owns:
+    # the chart keeps the key, the MongoDB connection URI and clusterSecret
+    # there and hands them to the container as environment variables, so that
+    # no credential is passed as an argument, where /proc/<pid>/cmdline and
+    # the pprof cmdline endpoint would expose it.
+    # Pods do not restart when the key changes, with either setting: the
+    # Deployment carries no hash of it, since a pod annotation is readable
+    # with `get pods` and a hash is enough to search for the key offline.
+    # After rotating it, restart the pods all together (kubectl -n <namespace>
+    # rollout restart deployment/<yorkie.name>), and admin users log in again.
+    secretKeyExistingSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated. See docs/design/project-stats-long-retention.md.
