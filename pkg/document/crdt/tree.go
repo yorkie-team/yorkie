@@ -156,6 +156,13 @@ type TreeNode struct {
 	BoundaryAtEnd  bool
 	BoundaryNest   *TreeNodeID
 
+	// mergeTickets holds, on a node that more than one merge removed
+	// concurrently, the ticket of every such merge. The moved children keep
+	// only the smallest in MergedAt; whether a change knew the node was merged
+	// away needs all of them. Persisted on the tree (TreeMerge), not here, for
+	// the same reason as the boundary records.
+	mergeTickets []*time.Ticket
+
 	// Value is optional. If the value is not empty, it means that the node is a
 	// text node.
 	Value string
@@ -725,6 +732,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.BoundaryAnchor = n.BoundaryAnchor
 	clone.BoundaryAtEnd = n.BoundaryAtEnd
 	clone.BoundaryNest = n.BoundaryNest
+	clone.mergeTickets = n.mergeTickets
 	clone.mergedInto = n.mergedInto
 	clone.MergedFrom = n.MergedFrom
 	clone.MergedAt = n.MergedAt
@@ -750,13 +758,14 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
-// clearBoundary drops the boundary record. Like the split chain, it describes a
-// node's place in a split family, so a copy that leaves the family must not
-// carry it.
+// clearBoundary drops the boundary record and the merge tickets. Like the
+// split chain, they describe a node's place in a split family, so a copy that
+// leaves the family must not carry them.
 func (n *TreeNode) clearBoundary() {
 	n.BoundaryAnchor = nil
 	n.BoundaryAtEnd = false
 	n.BoundaryNest = nil
+	n.mergeTickets = nil
 }
 
 // DropSplitLinks clears the split-sibling links and the boundary records on

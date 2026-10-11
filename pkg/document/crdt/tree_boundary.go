@@ -83,7 +83,7 @@ func hasElementChild(node *TreeNode, versionVector time.VersionVector) bool {
 		if c.Value.IsText() {
 			continue
 		}
-		if c.Value.removedAt != nil && time.TicketKnown(versionVector, c.Value.removedAt) {
+		if knewRemovalOf(c.Value, func(tk *time.Ticket) bool { return time.TicketKnown(versionVector, tk) }) {
 			continue
 		}
 		return true
@@ -353,13 +353,15 @@ func (t *Tree) liveSplitTarget(tail *boundaryTail, parent, target *TreeNode, off
 // unknownMergeBoundaryAt returns the merged-away node whose boundary stood
 // in front of children[i] for the splitting change, or nil.
 //
-// children[i] opens the run a merge moved out of src, and the change did not
-// know that merge: for it, src was still a paragraph after the split
+// children[i] opens the run a merge moved out of src, and the change knew no
+// merge that removed src: for it, src was still a paragraph after the split
 // position, so src is R. A replica that applied the split first anchored it
 // there through the tail walk, and the merge then moved src's children into
-// its product. Reading only the moved child's MergedFrom and MergedAt, which
-// every replica holds alike, the replica that applied the merge first records
-// the same anchor and splits in front of the same run.
+// its product. The inputs are the moved children's MergedFrom, the first
+// moved child, and every merge ticket of src (knewMergeOf), tested against
+// the change's version vector; every merge the change knew has arrived
+// wherever it is applied, so the replica that applied the merge first
+// records the same anchor and splits in front of the same run.
 //
 // It does not apply when src is the node the change saw as the parent of the
 // position (seenParentOf): then the position was inside src, not before it.
@@ -370,17 +372,28 @@ func (t *Tree) unknownMergeBoundaryAt(
 	if seen != parent {
 		return nil
 	}
-	if c.MergedFrom == nil || c.MergedAt == nil || known(c.MergedAt) {
+	if c.MergedFrom == nil || c.MergedAt == nil {
 		return nil
 	}
 	if !known(c.MergedFrom.CreatedAt) || c.MergedFrom.Equal(seen.id) {
 		return nil
 	}
-	if i > 0 && children[i-1].MergedFrom != nil && children[i-1].MergedFrom.Equal(c.MergedFrom) {
-		return nil
-	}
 	src := t.findMergeNode(c.MergedFrom)
 	if src == nil || !hasBoundaryRecord(src) {
+		return nil
+	}
+	if knewMergeOf(src, c, known) {
+		return nil
+	}
+	// c must open the run: a split the change knew may have divided src's
+	// content, and then the position was inside src for it, not before it.
+	first := t.firstMovedChild(src, known)
+	j := i
+	for j < len(children) && children[j] != first && children[j].MergedFrom != nil &&
+		children[j].MergedFrom.Equal(src.id) && children[j].removedAt != nil && known(children[j].removedAt) {
+		j++
+	}
+	if first == nil || j >= len(children) || children[j] != first {
 		return nil
 	}
 	// The run must sit where the merge put it, in the node before src: a
@@ -399,6 +412,25 @@ func (t *Tree) unknownMergeBoundaryAt(
 	return nil
 }
 
+// firstMovedChild returns the first child, in document order, that a merge
+// moved out of src, leaving out those the change knew were removed: GC purges
+// those on each replica's own schedule, and a purge needs every replica to
+// know the removal, so skipping them reads the same before and after it.
+func (t *Tree) firstMovedChild(src *TreeNode, known func(*time.Ticket) bool) *TreeNode {
+	var first *TreeNode
+	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+		c := n.Value
+		if first != nil || c.MergedFrom == nil || !c.MergedFrom.Equal(src.id) {
+			return
+		}
+		if c.removedAt != nil && known(c.removedAt) {
+			return
+		}
+		first = c
+	})
+	return first
+}
+
 // seenParentOf returns the node the editing change saw as the parent of the
 // split position. When a merge the change did not know has taken that node
 // away, the position now resolves into the merge target, as undoing a split
@@ -413,7 +445,7 @@ func seenParentOf(parent, declared *TreeNode, known func(*time.Ticket) bool) *Tr
 	if declared == nil || declared == parent || declared.IsText() || declared.Index.Parent == nil {
 		return parent
 	}
-	if declared.mergedInto == nil || declared.removedAt == nil || known(declared.removedAt) {
+	if declared.mergedInto == nil || declared.removedAt == nil || knewRemovalOf(declared, known) {
 		return parent
 	}
 	return declared
@@ -432,7 +464,7 @@ func boundaryNestOf(parent *TreeNode, anchor boundaryKey, known func(*time.Ticke
 		}
 		// A boundary the change saw removed was not there for it to split
 		// inside.
-		if k.removedAt != nil && known(k.removedAt) {
+		if knewRemovalOf(k, known) {
 			continue
 		}
 		if anchorOf(k).equal(anchor) {
@@ -453,7 +485,7 @@ func (t *Tree) boundaryTailOf(parent, seen *TreeNode, known func(*time.Ticket) b
 		// A boundary the change saw removed is not in its sequence: it is
 		// neither R nor a place to open a split. Its tombstone also sits
 		// where its removal left it, which differs between replicas.
-		gone := known(createdAt) && node.removedAt != nil && known(node.removedAt)
+		gone := known(createdAt) && knewRemovalOf(node, known)
 		// The node the change saw as the parent of the position, when a merge
 		// it did not know moved the position out of it: its boundary was
 		// before the position for the change, so it is not R either.
@@ -852,9 +884,49 @@ func lastChildOrSelf(node *TreeNode) *TreeNode {
 	return children[len(children)-1]
 }
 
+// knewMergeOf reports whether a change knew that src, whose children a merge
+// moved out (moved is one of them), was merged away: whether it knew any of
+// the merges that removed it.
+//
+// MergedAt alone is not enough when two merges removed src concurrently: it
+// holds the smaller ticket, and a change that knew only the other merge still
+// saw src merged away. Every merge a change knew has arrived wherever the
+// change is applied, so testing all the tickets this replica holds gives the
+// same answer on every replica, whichever merges have arrived besides.
+func knewMergeOf(src, moved *TreeNode, known func(*time.Ticket) bool) bool {
+	if moved.MergedAt != nil && known(moved.MergedAt) {
+		return true
+	}
+	for _, tk := range src.mergeTickets {
+		if known(tk) {
+			return true
+		}
+	}
+	return false
+}
+
+// knewRemovalOf reports whether a change knew n was removed. A node that
+// more than one merge removed concurrently counts as removed for a change
+// that knew any of them: removedAt holds whichever ticket the replica's own
+// order left there, while mergeTickets holds them all.
+func knewRemovalOf(n *TreeNode, known func(*time.Ticket) bool) bool {
+	if n.removedAt == nil {
+		return false
+	}
+	if known(n.removedAt) {
+		return true
+	}
+	for _, tk := range n.mergeTickets {
+		if known(tk) {
+			return true
+		}
+	}
+	return false
+}
+
 // lowerRepeatedMergeTickets keeps the MergedAt of children merged out of a
 // node the same on every replica when two merges remove that node
-// concurrently.
+// concurrently, and records every such merge's ticket on the node.
 //
 // The first merge to arrive moves the children and stamps MergedAt with its
 // ticket. The second finds the node already merged away: its range resolves
@@ -863,7 +935,8 @@ func lastChildOrSelf(node *TreeNode) *TreeNode {
 // first, and every rule that asks whether a change knew the merge read it
 // differently per replica. A range edit whose end names a merged-away node is
 // such a second merge, and keeping the smaller ticket gives every replica the
-// same value once both have arrived.
+// same value once both have arrived. The node keeps the full set
+// (mergeTickets) for knewMergeOf.
 func (t *Tree) lowerRepeatedMergeTickets(from, to *TreePos, editedAt *time.Ticket) {
 	if from.ParentID.Equal(to.ParentID) {
 		return
@@ -872,15 +945,78 @@ func (t *Tree) lowerRepeatedMergeTickets(from, to *TreePos, editedAt *time.Ticke
 	if src == nil || src.mergedInto == nil || len(childrenOf(src)) > 0 {
 		return
 	}
+	var first *time.Ticket
 	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
 		c := n.Value
 		if c.MergedFrom == nil || !c.MergedFrom.Equal(src.id) || c.MergedAt == nil {
 			return
 		}
+		if first == nil {
+			first = c.MergedAt
+		}
 		if editedAt.Compare(c.MergedAt) < 0 {
 			c.MergedAt = editedAt
 		}
 	})
+	if first == nil || first.Compare(editedAt) == 0 {
+		return
+	}
+	src.addMergeTicket(first)
+	src.addMergeTicket(editedAt)
+}
+
+// addMergeTicket adds tk to the node's merge tickets, kept sorted so that
+// every replica holds and persists the same list.
+func (n *TreeNode) addMergeTicket(tk *time.Ticket) {
+	i := 0
+	for ; i < len(n.mergeTickets); i++ {
+		c := tk.Compare(n.mergeTickets[i])
+		if c == 0 {
+			return
+		}
+		if c < 0 {
+			break
+		}
+	}
+	tickets := make([]*time.Ticket, 0, len(n.mergeTickets)+1)
+	tickets = append(tickets, n.mergeTickets[:i]...)
+	tickets = append(tickets, tk)
+	n.mergeTickets = append(tickets, n.mergeTickets[i:]...)
+}
+
+// TreeMerge is the set of merge tickets of a node that more than one merge
+// removed, as a snapshot carries it.
+type TreeMerge struct {
+	Source  *TreeNodeID
+	Tickets []*time.Ticket
+}
+
+// Merges returns the merge tickets of the tree's repeatedly merged nodes, in
+// the post-order of index.Traverse.
+func (t *Tree) Merges() []TreeMerge {
+	var out []TreeMerge
+	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+		if node := n.Value; len(node.mergeTickets) > 0 {
+			out = append(out, TreeMerge{Source: node.id, Tickets: node.mergeTickets})
+		}
+	})
+	return out
+}
+
+// RestoreMerges applies merge tickets read from a snapshot. One naming a node
+// the tree does not hold, or a text node, is ignored.
+func (t *Tree) RestoreMerges(merges []TreeMerge) {
+	for _, m := range merges {
+		src := t.nodeByKey(boundaryKey{id: m.Source})
+		if src == nil || src.IsText() {
+			continue
+		}
+		for _, tk := range m.Tickets {
+			if tk != nil {
+				src.addMergeTicket(tk)
+			}
+		}
+	}
 }
 
 // boundaryPurgeBarrier is the barrier of a text tombstone that is the last child

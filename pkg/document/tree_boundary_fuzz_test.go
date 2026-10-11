@@ -418,12 +418,32 @@ func TestTreeBoundaryMergeTargetSurvivesReload(t *testing.T) {
 }
 
 // TestTreeBoundaryRepeatedMerge has two replicas Backspace at the same join
-// concurrently while a third, which saw only the first Backspace, presses
-// Enter there. Each replica stamps the moved text with the merge it applied
-// first, so whether the Enter knew the merge read differently per replica
-// until repeated merges kept the smaller ticket.
+// concurrently while a third, which saw only one Backspace, presses Enter
+// there. Each replica stamps the moved text with the merge it applied first,
+// so whether the Enter knew the merge read differently per replica until
+// repeated merges kept the smaller ticket. When the Enter knew only the merge
+// with the larger ticket, it still saw the node merged away: the merged-away
+// node keeps every merge ticket for that, and a snapshot carries them.
 func TestTreeBoundaryRepeatedMerge(t *testing.T) {
-	replayBoundaryScript(t, 3, "d1.split(2); d2.pull; d3.pull; d1.delete(2,4); d2.delete(2,4); d3.pull; d3.split(2)")
+	for _, script := range []string{
+		"d1.split(2); d2.pull; d3.pull; d1.delete(2,4); d2.delete(2,4); d3.pull; d3.split(2)",
+		"d1.split(2); d2.pull; d3.pull; d2.delete(2,4); d1.delete(2,4); d3.pull; d3.split(2)",
+		"d1.split(2); d2.pull; d3.pull; d2.delete(2,4); d1.delete(2,4); d3.pull; d1.pull; d1.reload; d3.split(2)",
+	} {
+		t.Run(script, func(t *testing.T) {
+			replayBoundaryScript(t, 3, script)
+		})
+	}
+}
+
+// TestTreeBoundarySplitAfterKnownRemoval has a split whose position is in
+// front of moved children the splitting change knew were deleted. Those
+// tombstones do not stop the run from opening there: the replica that applied
+// the split before the merge anchored it before the merged-away node, and
+// the one that applied the merge first must record the same.
+func TestTreeBoundarySplitAfterKnownRemoval(t *testing.T) {
+	replayBoundaryScript(t, 2, `d1.split(2); d1.insert(4,"x"); d2.pull; d2.pull; `+
+		"d2.delete(2,4); d1.delete(4,5); d1.split(2)")
 }
 
 // TestTreeBoundarySeenParentFromOperation has a peer press Enter at the end of
@@ -435,10 +455,8 @@ func TestTreeBoundarySeenParentFromOperation(t *testing.T) {
 	replayBoundaryScript(t, 3, "d2.split(1); d2.undo; d1.pull; d1.split(3)")
 }
 
-// TestTreeBoundaryKnownDivergences records cases that still diverge. The
-// first diverges on main too. The second converged before
-// unknownMergeBoundaryAt and converges in XML on main; here the boundary
-// records part. Each is skipped with what it would take.
+// TestTreeBoundaryKnownDivergences records cases that still diverge. It
+// diverges on main too. Each is skipped with what it would take.
 func TestTreeBoundaryKnownDivergences(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -451,13 +469,6 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 			"TestTreeBoundaryUndoRacesSplitAndInsert, but the text belongs on the " +
 			"other side. Only whether the split's change knew the merge tells them " +
 			"apart, and no replica keeps that.",
-	}, {
-		name:   "two Backspaces at one join, Enter knowing only the later one",
-		script: "d1.split(2); d2.pull; d3.pull; d2.delete(2,4); d1.delete(2,4); d3.pull; d3.split(2)",
-		needs: "unknownMergeBoundaryAt reads the moved text's MergedAt, and repeated " +
-			"merges keep the smaller ticket, which here is the merge the Enter did " +
-			"not know, so it anchors before the merged-away node on replicas that " +
-			"applied both merges first.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") == "" {

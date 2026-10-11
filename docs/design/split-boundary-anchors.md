@@ -150,7 +150,13 @@ converges:
   `unknownMergeBoundaryAt` anchors the split before that node and opens it in
   front of the run, which stays in the product, so the replica that applied
   the merge first records what the one that applied the split first does.
-  It reads only the moved children's `MergedFrom` and `MergedAt`.
+  The moved child must open the run: when a split the change knew has
+  divided the merged-away node's content, the position was inside that node
+  for the change, not before it. Moved children the change knew were
+  deleted do not count: GC purges them on each replica's own schedule, and
+  the replica that applied the split first never saw them in its walk.
+  Whether the change knew the merge is tested against every merge ticket of
+  the node (see below).
 - **What stays ambiguous.** A product split after the merge by a change that
   knew it, and a concurrent split anchored before the same moved child that the
   merge then moved its content into, leave the same tree, records and ticket
@@ -168,13 +174,18 @@ converges:
   children and stamps `MergedAt`; the second finds the node already merged
   away. A cross-node range edit whose end names such a node lowers the moved
   children's `MergedAt` to the smaller ticket (`lowerRepeatedMergeTickets`),
-  so every replica holds the same value once both merges arrive. When the
-  smaller ticket is the merge a later split did not know, that split still
-  reads as not knowing either; telling it saw the other needs every merge
-  ticket, which the tree does not keep.
+  so every replica holds the same value once both merges arrive. A later
+  split may have known only the merge with the larger ticket, so the node
+  also keeps every merge ticket (`mergeTickets`), and a change knew the node
+  was merged away when it knew any of them (`knewMergeOf`, `knewRemovalOf`).
+  Every merge a change knew has arrived wherever it is applied, so the answer
+  does not depend on which other merges have. Without the list, the Enter of
+  three replicas' concurrent Backspaces anchored before the merged-away node
+  or before the moved text depending on what a replica held when it applied
+  the split.
 
-`TestTreeBoundaryKnownDivergences` records the two cases this leaves, as
-skipped tests that `YORKIE_RUN_KNOWN_DIVERGENCES` runs.
+`TestTreeBoundaryKnownDivergences` records the case this leaves, as a
+skipped test that `YORKIE_RUN_KNOWN_DIVERGENCES` runs.
 
 ### Garbage collection
 
@@ -207,6 +218,7 @@ message JSONElement {
   message Tree {
     ...
     repeated TreeBoundary boundaries = 6;
+    repeated TreeMerge merges = 7;
   }
 }
 
@@ -215,7 +227,16 @@ message TreeBoundary {
   TreeNodeID anchor = 2;  // absent: the end of the split family
   TreeNodeID nest = 3;    // absent: nests under no other boundary
 }
+
+message TreeMerge {
+  TreeNodeID source = 1;           // a node more than one merge removed
+  repeated TimeTicket tickets = 2; // every such merge, in ticket order
+}
 ```
+
+A `TreeMerge` exists only for a node that two or more merges removed
+concurrently, and only while that tombstone lives: GC drops it with the
+node.
 
 `TreeNode` is also the message of operation content, so a record on it
 could arrive from a peer. On the tree, content cannot carry one at all.
@@ -302,9 +323,10 @@ passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 |------|------------|
 | Old clients and servers apply the old rules and ignore `boundaries`, so they disagree with new ones in these concurrent cases. The server builds snapshots with its own rules | Release the server and SDKs together, as for any op-semantics change. Old snapshots load with no records, and their products keep the old rules on every replica alike. No version gate prevents a mixed deployment |
 | A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. Merge fuzz against main: fewer divergences, 6/0/5/3 regressions |
+| Snapshots gain `TreeMerge`, read only by new servers and SDKs | Present only for a node that concurrent merges removed, dropped with it by GC. A snapshot without it loads with the smaller ticket alone, as before it existed |
 | Undo, redo and concurrent splits still regress against main in 0.25–0.42% of the undo fuzz, and boundary records differ in about 1–1.25% | Measured; the shortest cases are pinned |
-| Two known cases (`TestTreeBoundaryKnownDivergences`): a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too); and two concurrent Backspaces at one join with an Enter that knew only the merge whose ticket is larger (boundary records part since `unknownMergeBoundaryAt`; XML converges here and on main) | Keeping, per split product, whether its change knew the merges of the children it carried would settle the first, at the cost of new persisted state. Merge-heavy runs with concurrent Backspaces are being re-measured. The general fix is yorkie-js-sdk#1474 |
-| Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
+| One known case (`TestTreeBoundaryKnownDivergences`): a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too) | Keeping, per split product, whether its change knew the merges of the children it carried would settle it, at the cost of new persisted state. The general fix is yorkie-js-sdk#1474 |
+| Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | Covered for repeated merges by `mergeTickets`. Still open for plain deletes (including the skip in `firstMovedChild`), an empty node merged away twice (no moved child to stamp), and a node one range delete removes while a Backspace merges it. The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
 | Splits outside the scope keep diverging | Unchanged from today; the fallback rules are a superset of main's |
 
 ### Design Decisions

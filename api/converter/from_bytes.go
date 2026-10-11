@@ -465,6 +465,29 @@ func fromTextNodeID(
 	), nil
 }
 
+func fromTreeMerges(pbMerges []*api.TreeMerge) ([]crdt.TreeMerge, error) {
+	var merges []crdt.TreeMerge
+	for _, pb := range pbMerges {
+		if pb.GetSource() == nil {
+			return nil, fmt.Errorf("tree merge has no source")
+		}
+		source, err := fromTreeNodeID(pb.GetSource())
+		if err != nil {
+			return nil, err
+		}
+		m := crdt.TreeMerge{Source: source}
+		for _, pbTicket := range pb.GetTickets() {
+			tk, err := fromRequiredTimeTicket(pbTicket, "tree_merge.tickets")
+			if err != nil {
+				return nil, err
+			}
+			m.Tickets = append(m.Tickets, tk)
+		}
+		merges = append(merges, m)
+	}
+	return merges, nil
+}
+
 func fromTreeBoundaries(pbBoundaries []*api.TreeBoundary) ([]crdt.TreeBoundary, error) {
 	var boundaries []crdt.TreeBoundary
 	for _, pb := range pbBoundaries {
@@ -527,6 +550,11 @@ func fromJSONTree(
 		return nil, err
 	}
 	tree.RestoreBoundaries(boundaries)
+	merges, err := fromTreeMerges(pbTree.Merges)
+	if err != nil {
+		return nil, err
+	}
+	tree.RestoreMerges(merges)
 	tree.SetMovedAt(movedAt)
 	tree.SetRemovedAt(removedAt)
 

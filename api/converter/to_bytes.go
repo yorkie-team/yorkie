@@ -208,8 +208,21 @@ func toTree(tree *crdt.Tree) *api.JSONElement {
 			MovedAt:    ToTimeTicket(tree.MovedAt()),
 			RemovedAt:  ToTimeTicket(tree.RemovedAt()),
 			Boundaries: toTreeBoundaries(tree.Boundaries()),
+			Merges:     toTreeMerges(tree.Merges()),
 		}},
 	}
+}
+
+func toTreeMerges(merges []crdt.TreeMerge) []*api.TreeMerge {
+	var pbMerges []*api.TreeMerge
+	for _, m := range merges {
+		pb := &api.TreeMerge{Source: toTreeNodeID(m.Source)}
+		for _, tk := range m.Tickets {
+			pb.Tickets = append(pb.Tickets, ToTimeTicket(tk))
+		}
+		pbMerges = append(pbMerges, pb)
+	}
+	return pbMerges
 }
 
 func toTreeBoundaries(boundaries []crdt.TreeBoundary) []*api.TreeBoundary {

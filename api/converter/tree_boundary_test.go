@@ -97,3 +97,28 @@ func TestTreeBoundaryRecordNamingNoNode(t *testing.T) {
 	_, err = converter.BytesToTree(elem(&api.TreeBoundary{}))
 	assert.Error(t, err)
 }
+
+// TestTreeMergeTicketsSnapshotRoundTrip checks that a tree snapshot carries
+// the merge tickets of a node that two merges removed, which later splits
+// read to tell whether they knew the node was merged away, and drops one
+// naming no node.
+func TestTreeMergeTicketsSnapshotRoundTrip(t *testing.T) {
+	tree, nodes := boundaryTree(t)
+	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2}
+	tickets := []*time.Ticket{time.NewTicket(7, 0, actor), time.NewTicket(9, 0, actor)}
+	tree.RestoreMerges([]crdt.TreeMerge{
+		{Source: nodes[3].ID(), Tickets: []*time.Ticket{tickets[1], tickets[0]}},
+		{Source: crdt.NewTreeNodeID(time.NewTicket(99, 0, actor), 0), Tickets: tickets},
+	})
+	bytes, err := converter.TreeToBytes(tree)
+	require.NoError(t, err)
+	decoded, err := converter.BytesToTree(bytes)
+	require.NoError(t, err)
+
+	got := decoded.Merges()
+	require.Len(t, got, 1)
+	assert.True(t, got[0].Source.Equal(nodes[3].ID()))
+	require.Len(t, got[0].Tickets, 2)
+	assert.Equal(t, 0, got[0].Tickets[0].Compare(tickets[0]), "sorted")
+	assert.Equal(t, 0, got[0].Tickets[1].Compare(tickets[1]))
+}
