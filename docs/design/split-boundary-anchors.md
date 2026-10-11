@@ -262,8 +262,14 @@ with regressions against main in parentheses:
 | insert+split | 267 / 590 | 154 / 353 (0/0) | 195 / 498 (1/2) | 0 / 0 |
 | +delete | 157 / 357 | 99 / 215 (0/0) | 112 / 290 (2/4) | 0 / 0 |
 | +style | 130 / 328 | 69 / 139 (0/0) | 92 / 275 (0/0) | 0 / 0 |
-| merge | 973 / 1272 | 958 / 1258 (2/0) | 955 / 1258 (0/0) | 825 / 1131 (6/0) |
-| all | 677 / 968 | 654 / 936 (0/0) | 657 / 949 (1/1) | 518 / 764 (5/3) |
+| merge | 973 / 1272 | 958 / 1258 (2/0) | 955 / 1258 (0/0) | 823 / 1130 (4/0) |
+| all | 677 / 968 | 654 / 936 (0/0) | 657 / 949 (1/1) | 518 / 764 (5/4) |
+
+This fuzz compares tombstones too. One of the four three-replica `all`
+regressions (seed 322) differs only in the order of a live character and a
+deleted one that a merge moved next to it. Its minimized script orders them
+differently on main as well; main's run of the full seed happens not to
+reach it.
 
 GC, snapshot and undo. Cells are runs that did not converge, with
 regressions against main in parentheses:
@@ -273,8 +279,10 @@ regressions against main in parentheses:
 | GC every 3 steps | 2000 | 1046 | 848 (1) | 872 (7) | 0 |
 | + snapshot reload every 7 | 2000 | 1045 | 846 (1) | 868 (7) | 0 |
 | Undo and redo, seeds 1–600 | 1200 | 463 | 427 (2) | 405 (3) | 222 (5) |
-| Undo and redo, seeds 601–1800 | 2400 | 896 | 828 (4) | 827 (6) | 465 (6) |
-| Undo and redo with snapshot reloads, seeds 1–1800 | 3600 | 1066 | – | – | 513 (7) |
+| Undo and redo, seeds 601–1800 | 2400 | 896 | 828 (4) | 827 (6) | 460 (4) |
+| Undo and redo with snapshot reloads, seeds 1–1800 | 3600 | 1066 | – | – | 509 (5) |
+| Backspace-heavy, three replicas | 3000 | 491 | – | – | 241 (21) |
+| + snapshot reloads | 3000 | 498 | – | – | 242 (20) |
 
 In the reload runs a reloaded replica only pulls afterwards: a reload bumps
 the replica's Lamport clock, and letting it issue more edits would change
@@ -284,10 +292,12 @@ split and a third replica's typing in every delivery order with and
 without a ticket bump, converges in all twelve (main: none).
 
 The undo rules above were developed on seeds 1–600 and checked on seeds
-601–1800, which were held out: 5 of 1200 (0.42%) and 6 of 2400 (0.25%)
-regress. In those runs, 15 (1.25%) and 25 (1.04%) runs converge in XML and
+601–1800, which were held out: 5 of 1200 (0.42%) and 4 of 2400 (0.17%)
+regress. In those runs, 11 (0.92%) and 25 (1.04%) runs converge in XML and
 node identity but end with different boundary records. A later concurrent
-split at the same place could then diverge.
+split at the same place could then diverge. In the Backspace-heavy runs,
+which press Backspace at joins concurrently, 29 runs end with different
+records; before every merge ticket was kept (`mergeTickets`) it was 66.
 At runtime main keeps merge forwarding where the merge put it, while its
 snapshots rebuild it from where the children are. This design follows
 split-moved children at runtime too, which some regressions against main's
@@ -297,7 +307,8 @@ runtime behaviour follow from.
 
 A regression is a run that converges on main and does not here. The
 verdict reads XML first, then live node identity; boundary records are left
-out of the count. The 11 regressions in the two undo runs without reloads:
+out of the count. The 11 regressions in the two undo runs without reloads,
+as measured at 3a0e81e2 (9 now):
 
 - **All are real divergence.** 7 differ in XML, which users see: text lands
   in different paragraphs. 4 differ only in which node holds an empty
@@ -325,9 +336,9 @@ passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 | Risk | Mitigation |
 |------|------------|
 | Old clients and servers apply the old rules and ignore `boundaries`, so they disagree with new ones in these concurrent cases. The server builds snapshots with its own rules | Release the server and SDKs together, as for any op-semantics change. Old snapshots load with no records, and their products keep the old rules on every replica alike. No version gate prevents a mixed deployment |
-| A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. Merge fuzz against main: fewer divergences, 6/0/5/3 regressions |
+| A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. Merge fuzz against main: fewer divergences, 4/0/5/4 regressions |
 | Snapshots gain `TreeMerge`, read only by new servers and SDKs | Present only for a node that concurrent merges removed, dropped with it by GC. A snapshot without it loads with the smaller ticket alone, as before it existed |
-| Undo, redo and concurrent splits still regress against main in 0.25–0.42% of the undo fuzz, and boundary records differ in about 1–1.25% | Measured; the shortest cases are pinned |
+| Undo, redo and concurrent splits still regress against main in 0.17–0.42% of the undo fuzz, and boundary records differ in about 0.9–1.04% | Measured; the shortest cases are pinned |
 | One known case (`TestTreeBoundaryKnownDivergences`): a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too) | Keeping, per split product, whether its change knew the merges of the children it carried would settle it, at the cost of new persisted state. The general fix is yorkie-js-sdk#1474 |
 | Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | Covered for repeated merges by `mergeTickets`. Still open for plain deletes (including the skip in `firstMovedChild`), an empty node merged away twice (no moved child to stamp), and a node one range delete removes while a Backspace merges it. The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
 | Splits outside the scope keep diverging | Unchanged from today; the fallback rules are a superset of main's |

@@ -177,6 +177,12 @@ diverged.
       regression found in follow-up and fixed by keeping the smaller ticket
       of repeated merges. Declared-parent rule pinned; two cases needing
       causal knowledge recorded as skipped tests.
+- [x] Repeated merges keep every merge ticket (`mergeTickets`, persisted as
+      `TreeMerge`), chosen over raising `removedAt` (lost XML content) and
+      a purge-time relink (depended on GC map order). The second known case
+      passes. Its review found a moved-tombstone record split
+      (`firstMovedChild` skip) and an insert forwarding fault (`typedAfter`);
+      both pinned with tests that fail with the fix turned off.
 
 ### Task 6: PR
 
@@ -191,14 +197,15 @@ Go side done through commit review; not pushed.
 - #1436 cases (insert, split, delete, style) converge with GC and snapshot
   reloads: 0 of 15000 broadened-fuzz runs and 0 of 4000 GC runs diverge
   (main: 261-1046 per case).
-- Undo and redo: 222 of 1200 and 465 of 2400 runs do not converge (main
-  463 and 896), with 5 and 6 regressions against main, all reproducing on
+- Undo and redo: 222 of 1200 and 460 of 2400 runs do not converge (main
+  463 and 896), with 5 and 4 regressions against main, all reproducing on
   the same script. With snapshot reloads (reloaded replicas only pull),
-  513 of 3600 (main 1066), 7 regressions. Boundary records differ in 15
-  and 25 runs that converge otherwise. The twelve-order undo/split/insert
-  set converges in all twelve (main none).
-- Merge fuzz: fewer divergences than main, 6/0/5/3 regressions.
-- Protocol: `JSONElement.Tree.boundaries` and `TreeBoundary`; operations
-  and `TreeNode` unchanged. Op semantics change, so the server and SDKs
-  must ship together; no version gate.
+  509 of 3600 (main 1066), 5 regressions. Boundary records differ in 11
+  and 25 runs that converge otherwise; 29 of 3000 in the Backspace-heavy
+  fuzz (66 before keeping every merge ticket). The twelve-order
+  undo/split/insert set converges in all twelve (main none).
+- Merge fuzz: fewer divergences than main, 4/0/5/4 regressions.
+- Protocol: `JSONElement.Tree.boundaries` and `merges` (`TreeBoundary`,
+  `TreeMerge`); operations and `TreeNode` unchanged. Op semantics change,
+  so the server and SDKs must ship together; no version gate.
 - Open: JS mirror, integration suites in CI, PR.

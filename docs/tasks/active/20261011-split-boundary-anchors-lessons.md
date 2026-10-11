@@ -35,3 +35,16 @@
 - When local rules keep accumulating to patch one interaction (here undo
   as merge), stop and ask whether the model needs that interaction built
   in (yorkie-js-sdk#1474).
+- A pinned test has to fail with the fix turned off. Both new tests first
+  passed without their fix: one divergence was only in tombstone order,
+  which the replay's post-GC live comparison cannot see, and the other was
+  guarded by a different line than assumed. Keep the inserted text live
+  so the divergence shows in XML, and toggle the exact line under test.
+- A fuzz regression against main is not necessarily new. Seed 322's
+  minimized script diverges on main and HEAD alike; main's full run just
+  did not reach it. Replay the minimized script on every baseline before
+  calling it a regression.
+- Every input to a placement must be readable through the change's version
+  vector. A single LWW field (MergedAt, removedAt) holds whichever of
+  several concurrent tickets a replica's order left there, so testing it
+  against a version vector depends on arrival order; keep the set.
