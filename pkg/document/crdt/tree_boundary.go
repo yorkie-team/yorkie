@@ -269,9 +269,9 @@ func (t *Tree) placeSplitBoundary(
 	offset int,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (target *TreeNode, off int, anchor, nest boundaryKey, ok bool) {
+) (target *TreeNode, off int, anchor, nest boundaryKey, keepFrom *TreeNodeID, ok bool) {
 	if parent.Index.Parent == nil || hasElementChild(parent, versionVector) {
-		return nil, 0, boundaryKey{}, boundaryKey{}, false
+		return nil, 0, boundaryKey{}, boundaryKey{}, nil, false
 	}
 	local := len(versionVector) == 0
 	known := func(tk *time.Ticket) bool {
@@ -282,10 +282,25 @@ func (t *Tree) placeSplitBoundary(
 	// left (§7.3).
 	seen := seenParentOf(parent, declaredParent, known)
 	children := childrenOf(parent)
-	for i := offset; i < len(children); i++ {
+	// The RGA skip of FindTreeNodesWithSplitText moved the position past
+	// newer concurrent text. Text that sits behind a boundary the change saw
+	// was not in front of the position for it, so the run a merge it did not
+	// know moved in is looked for from where the skip started.
+	start := offset
+	for start > 0 && !known(children[start-1].id.CreatedAt) && children[start-1].id.CreatedAt.After(editedAt) {
+		start--
+	}
+	for i := start; i < len(children); i++ {
+		if src := t.unknownMergeBoundaryAt(parent, children, i, seen, known); src != nil {
+			anchor := boundaryKeyOf(src)
+			return parent, i, anchor, boundaryNestOf(seen, anchor, known), src.id, true
+		}
+		if i < offset {
+			continue
+		}
 		if known(children[i].id.CreatedAt) {
 			anchor := boundaryKeyOf(children[i])
-			return parent, i, anchor, boundaryNestOf(seen, anchor, known), true
+			return parent, i, anchor, boundaryNestOf(seen, anchor, known), nil, true
 		}
 	}
 
@@ -294,11 +309,11 @@ func (t *Tree) placeSplitBoundary(
 	nest = boundaryNestOf(seen, anchor, known)
 	if local {
 		target, off = tail.at(len(tail.toks))
-		return target, off, anchor, nest, true
+		return target, off, anchor, nest, nil, true
 	}
 	target, off = tail.at(t.boundaryInsertIndex(tail, anchor, nest, editedAt))
 	target, off = t.liveSplitTarget(tail, parent, target, off)
-	return target, off, anchor, nest, true
+	return target, off, anchor, nest, nil, true
 }
 
 // liveSplitTarget keeps a remote split out of a product that has been removed
@@ -333,6 +348,55 @@ func (t *Tree) liveSplitTarget(tail *boundaryTail, parent, target *TreeNode, off
 		return target, off
 	}
 	return live, len(childrenOf(live))
+}
+
+// unknownMergeBoundaryAt returns the merged-away node whose boundary stood
+// in front of children[i] for the splitting change, or nil.
+//
+// children[i] opens the run a merge moved out of src, and the change did not
+// know that merge: for it, src was still a paragraph after the split
+// position, so src is R. A replica that applied the split first anchored it
+// there through the tail walk, and the merge then moved src's children into
+// its product. Reading only the moved child's MergedFrom and MergedAt, which
+// every replica holds alike, the replica that applied the merge first records
+// the same anchor and splits in front of the same run.
+//
+// It does not apply when src is the node the change saw as the parent of the
+// position (seenParentOf): then the position was inside src, not before it.
+func (t *Tree) unknownMergeBoundaryAt(
+	parent *TreeNode, children []*TreeNode, i int, seen *TreeNode, known func(*time.Ticket) bool,
+) *TreeNode {
+	c := children[i]
+	if seen != parent {
+		return nil
+	}
+	if c.MergedFrom == nil || c.MergedAt == nil || known(c.MergedAt) {
+		return nil
+	}
+	if !known(c.MergedFrom.CreatedAt) || c.MergedFrom.Equal(seen.id) {
+		return nil
+	}
+	if i > 0 && children[i-1].MergedFrom != nil && children[i-1].MergedFrom.Equal(c.MergedFrom) {
+		return nil
+	}
+	src := t.findMergeNode(c.MergedFrom)
+	if src == nil || !hasBoundaryRecord(src) {
+		return nil
+	}
+	// The run must sit where the merge put it, in the node before src: a
+	// later split may have carried it on into a product of its own, and a
+	// position in that product was after src's boundary for the change.
+	if src.mergedInto == nil || !src.mergedInto.Equal(seen.id) {
+		return nil
+	}
+	var walker insNextWalker
+	walker.visit(seen)
+	for node := t.nextBoundaryNode(seen, &walker); node != nil; node = t.nextBoundaryNode(node, &walker) {
+		if node == src {
+			return src
+		}
+	}
+	return nil
 }
 
 // seenParentOf returns the node the editing change saw as the parent of the
@@ -752,8 +816,23 @@ func (t *Tree) followMovedMergeChildren(target, product *TreeNode) {
 // replica that applied the insert first had it in front of the moved child
 // when the later split ran, and the split left it behind. It returns nil when
 // product was not split off after the merge, or has no live node before it.
+//
+// Only a product anchored before the moved child opened at the moved run. One
+// anchored before the merged-away node, or anything else, was split by a
+// change that did not know the merge and opened in front of that node: the
+// merge joined the node's content, and the insert with it, to that product
+// (unknownMergeBoundaryAt gives every replica that record). The ticket order
+// is a necessary condition for the split to have known the merge, not a
+// sufficient one, and no state the replicas share tells the two apart when
+// the anchor is the moved child as well; see the design document.
 func (t *Tree) preMergeHolder(product, moved *TreeNode) *TreeNode {
-	if product.InsPrevID == nil || moved.MergedAt == nil || !product.id.CreatedAt.After(moved.MergedAt) {
+	if product.InsPrevID == nil || moved.MergedAt == nil || moved.MergedFrom == nil {
+		return nil
+	}
+	if !anchorOf(product).equal(boundaryKeyOf(moved)) {
+		return nil
+	}
+	if !product.id.CreatedAt.After(moved.MergedAt) {
 		return nil
 	}
 	pred := t.findFloorNode(product.InsPrevID)

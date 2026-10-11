@@ -316,6 +316,19 @@ func (n *TreeNode) Split(
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) (resource.DataSize, error) {
+	return n.split(tree, offset, issueTimeTicket, versionVector, nil)
+}
+
+// split is Split with keepFrom: the merge source whose moved run opens the
+// right partition and stays there, rather than migrating left as concurrent
+// boundary text (see unknownMergeBoundaryAt).
+func (n *TreeNode) split(
+	tree *Tree,
+	offset int,
+	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
+	keepFrom *TreeNodeID,
+) (resource.DataSize, error) {
 	var split *TreeNode
 	var err error
 	var diff resource.DataSize
@@ -326,7 +339,7 @@ func (n *TreeNode) Split(
 			return diff, err
 		}
 	} else {
-		split, diff, err = n.SplitElement(offset, issueTimeTicket, versionVector)
+		split, diff, err = n.splitElement(offset, issueTimeTicket, versionVector, keepFrom)
 		if err != nil {
 			return diff, err
 		}
@@ -479,6 +492,15 @@ func (n *TreeNode) SplitElement(
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) (*TreeNode, resource.DataSize, error) {
+	return n.splitElement(offset, issueTimeTicket, versionVector, nil)
+}
+
+func (n *TreeNode) splitElement(
+	offset int,
+	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
+	keepFrom *TreeNodeID,
+) (*TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
 
 	prvSize := n.DataSize()
@@ -566,6 +588,13 @@ func (n *TreeNode) SplitElement(
 				// siblings have deterministic IDs and act as normal
 				// boundary markers.
 				if child.Value.InsPrevID != nil && !child.Value.IsText() {
+					remaining = append(remaining, child)
+					continue
+				}
+				// The run a merge the change did not know moved in sat
+				// behind that merge source's boundary for it.
+				if keepFrom != nil && child.Value.MergedFrom != nil && child.Value.MergedFrom.Equal(keepFrom) {
+					boundaryReached = true
 					remaining = append(remaining, child)
 					continue
 				}
@@ -3685,10 +3714,11 @@ func (t *Tree) split(
 		// boundary may already have taken the right half; order against it.
 		var target *TreeNode
 		var anchor, nest boundaryKey
+		var keepFrom *TreeNodeID
 		placed := false
 		if splitCount == 0 {
 			var placedOffset int
-			target, placedOffset, anchor, nest, placed = t.placeSplitBoundary(
+			target, placedOffset, anchor, nest, keepFrom, placed = t.placeSplitBoundary(
 				parent, declaredParent, offset, editedAt, versionVector,
 			)
 			if placed {
@@ -3699,7 +3729,7 @@ func (t *Tree) split(
 			target, offset = t.orderSameBoundarySplit(parent, offset, editedAt, versionVector)
 		}
 		prevNext := target.InsNextID
-		splitDiff, err := target.Split(t, offset, issueTimeTicket, versionVector)
+		splitDiff, err := target.split(t, offset, issueTimeTicket, versionVector, keepFrom)
 		diff.Add(splitDiff)
 		if err != nil {
 			return diff, err

@@ -139,7 +139,23 @@ converges:
   merge put that node's first child. If a later split has carried that child
   into a new product, the insert did not know that split either, so
   `preMergeHolder` sends it to the end of the node before the product, where
-  a replica that applied the insert first left it.
+  a replica that applied the insert first left it. It does so only when the
+  product is anchored before that moved child and its ticket is above the
+  merge's. The ticket order alone is not causality: a split that did not know
+  the merge and opened at the end of the merge target is anchored before the
+  merged-away node, and the insert joins its paragraph.
+- **A split that missed a merge opens in front of the merged-away node.**
+  When the split position is followed by the run a merge the change did not
+  know moved into that node, the change saw the merged-away node there.
+  `unknownMergeBoundaryAt` anchors the split before that node and opens it in
+  front of the run, which stays in the product, so the replica that applied
+  the merge first records what the one that applied the split first does.
+  It reads only the moved children's `MergedFrom` and `MergedAt`.
+- **What stays ambiguous.** A product split after the merge by a change that
+  knew it, and a concurrent split anchored before the same moved child that the
+  merge then moved its content into, leave the same tree, records and ticket
+  order. Only the splitting change's version vector tells them apart, and the
+  tree does not keep it. `preMergeHolder` treats both as post-merge.
 - **Merge forwarding follows the moved children.** A snapshot rebuilds a
   merge source's `mergedInto` from the parent of its first moved child.
   When a split carries every child a merge moved out of a node into a

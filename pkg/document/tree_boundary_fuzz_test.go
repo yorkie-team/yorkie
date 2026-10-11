@@ -370,6 +370,38 @@ func TestTreeBoundaryUndoSplit(t *testing.T) {
 	}
 }
 
+// TestTreeBoundaryUndoRacesSplitAndInsert pins an undo racing a peer's Enter
+// at the end of the paragraph it merges into and a third replica typing at the
+// start of the paragraph it merges away, in every order, with and without the
+// Enter's ticket above the undo's. The Enter did not know the undo, so its
+// boundary is in front of the merged-away paragraph and the typed text joins
+// its paragraph: whether text stays left of the boundary is decided by what
+// the boundary was anchored to, not by comparing the two tickets.
+func TestTreeBoundaryUndoRacesSplitAndInsert(t *testing.T) {
+	const (
+		prefix = "d1.split(1); d2.pull; d3.pull"
+		bump   = `d2.insert(1,"q"); d2.delete(1,2); d2.insert(1,"q"); d2.delete(1,2)`
+		undo   = "d1.undo"
+		split  = "d2.split(1)"
+		insert = `d3.insert(3,"x")`
+	)
+	for _, order := range [][]string{
+		{undo, split, insert}, {undo, insert, split}, {split, undo, insert},
+		{split, insert, undo}, {insert, undo, split}, {insert, split, undo},
+	} {
+		for _, pre := range []string{prefix, prefix + "; " + bump} {
+			script := pre + "; " + strings.Join(order, "; ")
+			t.Run(script, func(t *testing.T) {
+				docs := playBoundaryScript(t, 3, script)
+				for _, d := range docs {
+					require.Equal(t, "<doc><p></p><p>xab</p></doc>", treeXML(t, d), script)
+				}
+				replayBoundaryScript(t, 3, script)
+			})
+		}
+	}
+}
+
 // TestTreeBoundaryMergeTargetSurvivesReload reloads a replica from a snapshot
 // between an undo's merge and a peer's split that carries the merged content
 // on. A replica's later results must not depend on whether it reloaded: the
