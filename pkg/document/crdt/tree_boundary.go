@@ -387,13 +387,7 @@ func (t *Tree) unknownMergeBoundaryAt(
 	}
 	// c must open the run: a split the change knew may have divided src's
 	// content, and then the position was inside src for it, not before it.
-	first := t.firstMovedChild(src, known)
-	j := i
-	for j < len(children) && children[j] != first && children[j].MergedFrom != nil &&
-		children[j].MergedFrom.Equal(src.id) && children[j].removedAt != nil && known(children[j].removedAt) {
-		j++
-	}
-	if first == nil || j >= len(children) || children[j] != first {
+	if t.firstMovedChild(src) != c {
 		return nil
 	}
 	// The run must sit where the merge put it, in the node before src: a
@@ -413,20 +407,16 @@ func (t *Tree) unknownMergeBoundaryAt(
 }
 
 // firstMovedChild returns the first child, in document order, that a merge
-// moved out of src, leaving out those the change knew were removed: GC purges
-// those on each replica's own schedule, and a purge needs every replica to
-// know the removal, so skipping them reads the same before and after it.
-func (t *Tree) firstMovedChild(src *TreeNode, known func(*time.Ticket) bool) *TreeNode {
+// moved out of src. Tombstones count: whether a moved child is still live
+// depends on what a replica has applied (an undo can revive it), which the
+// splitting change's version vector does not settle.
+func (t *Tree) firstMovedChild(src *TreeNode) *TreeNode {
 	var first *TreeNode
 	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
 		c := n.Value
-		if first != nil || c.MergedFrom == nil || !c.MergedFrom.Equal(src.id) {
-			return
+		if first == nil && c.MergedFrom != nil && c.MergedFrom.Equal(src.id) {
+			first = c
 		}
-		if c.removedAt != nil && known(c.removedAt) {
-			return
-		}
-		first = c
 	})
 	return first
 }

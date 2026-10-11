@@ -155,10 +155,9 @@ converges:
   the merge first records what the one that applied the split first does.
   The moved child must open the run: when a split the change knew has
   divided the merged-away node's content, the position was inside that node
-  for the change, not before it. Moved children the change knew were
-  deleted do not count: GC purges them on each replica's own schedule, and
-  the replica that applied the split first never saw them in its walk.
-  Whether the change knew the merge is tested against every merge ticket of
+  for the change, not before it. Tombstones count as moved children: an
+  undo can revive one, so whether it is still deleted depends on what a
+  replica has applied, not on the splitting change. Whether the change knew the merge is tested against every merge ticket of
   the node (see below).
 - **What stays ambiguous.** A product split after the merge by a change that
   knew it, and a concurrent split anchored before the same moved child that the
@@ -340,7 +339,7 @@ passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 | Snapshots gain `TreeMerge`, read only by new servers and SDKs | Present only for a node that concurrent merges removed, dropped with it by GC. A snapshot without it loads with the smaller ticket alone, as before it existed |
 | Undo, redo and concurrent splits still regress against main in 0.17–0.42% of the undo fuzz, and boundary records differ in about 0.9–1.04% | Measured; the shortest cases are pinned |
 | One known case (`TestTreeBoundaryKnownDivergences`): a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too) | Keeping, per split product, whether its change knew the merges of the children it carried would settle it, at the cost of new persisted state. The general fix is yorkie-js-sdk#1474 |
-| Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | Covered for repeated merges by `mergeTickets`. Still open for plain deletes (including the skip in `firstMovedChild`), an empty node merged away twice (no moved child to stamp), and a node one range delete removes while a Backspace merges it. The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
+| Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | Covered for repeated merges by `mergeTickets`. Still open for plain deletes, an empty node merged away twice (no moved child to stamp), and a node one range delete removes while a Backspace merges it. The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
 | Splits outside the scope keep diverging | Unchanged from today; the fallback rules are a superset of main's |
 
 ### Design Decisions

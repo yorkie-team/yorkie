@@ -465,13 +465,29 @@ func TestTreeBoundaryInsertForwardedPastTypedText(t *testing.T) {
 }
 
 // TestTreeBoundarySplitAfterKnownRemoval has a split whose position is in
-// front of moved children the splitting change knew were deleted. Those
-// tombstones do not stop the run from opening there: the replica that applied
-// the split before the merge anchored it before the merged-away node, and
-// the one that applied the merge first must record the same.
+// front of moved children the splitting change knew were deleted. The first
+// moved child opens the run even as a tombstone: the replica that applied the
+// split before the merge anchored it before the merged-away node, and the
+// one that applied the merge first must record the same.
 func TestTreeBoundarySplitAfterKnownRemoval(t *testing.T) {
 	replayBoundaryScript(t, 2, `d1.split(2); d1.insert(4,"x"); d2.pull; d2.pull; `+
 		"d2.delete(2,4); d1.delete(4,5); d1.split(2)")
+}
+
+// TestTreeBoundaryMovedChildRevivedByUndo has a split whose change knew a
+// moved child was deleted, while the delete's author undoes it. Whether the
+// child is still a tombstone depends on whether the undo arrived first, so
+// it must not decide where the split is anchored.
+func TestTreeBoundaryMovedChildRevivedByUndo(t *testing.T) {
+	replayBoundaryScript(t, 3, "d1.split(2); d2.pull; d1.delete(4,5); d2.pull; d3.pull; "+
+		"d3.delete(2,4); d2.split(2); d1.undo")
+}
+
+// TestTreeBoundaryRemovalKnownThroughMergeTicket has a node removed by two
+// merges, and a change that knew only the one whose ticket removedAt does
+// not hold. It still knew the node was removed (knewRemovalOf).
+func TestTreeBoundaryRemovalKnownThroughMergeTicket(t *testing.T) {
+	replayBoundaryScript(t, 2, "d2.split(1); d2.split(1); d1.pull; d2.delete(3,5); d2.split(5); d1.delete(1,3)")
 }
 
 // TestTreeBoundarySeenParentFromOperation has a peer press Enter at the end of
