@@ -637,6 +637,11 @@ unplaced and the restore still succeeds. No honest replica names a text
 parent, but spans arrive from the wire and the server stores a change before
 applying it, so an error there would fail every later rebuild of the document
 (#2168). Node kind never changes, so every replica skips the same span.
+Restore and retombstone likewise skip a span whose `IsText` flag disagrees
+with its `NodeType`. Such a span would recreate a node of the wrong kind, and
+an element carrying a value is invisible to the text lookup, so a repeat of
+the span would insert a second node under the same ID. It is skipped rather
+than rejected on decode because stored changes use the same decoder.
 
 | Approach | Pros | Cons |
 |----------|------|------|

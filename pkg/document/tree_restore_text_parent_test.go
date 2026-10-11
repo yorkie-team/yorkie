@@ -35,12 +35,13 @@ import (
 
 // TestRestoreSpanUnderTextParentStaysApplicable covers #2168. A TreeEdit
 // restore span names its node's parent by ID, and the ID can name a text
-// node. No honest replica produces such a span, but any client with write
-// access can send one, and the server stores a pushed change before it
-// applies it. The change must therefore apply, both on a replica that pulls
-// it and on the server rebuilding the document from its stored changes, and
-// it must leave the tree as it was: the span's node is left unplaced, as it
-// is when its parent is missing.
+// node; its IsText flag can also disagree with its NodeType. No honest
+// replica produces such a span, but any client with write access can send
+// one, and the server stores a pushed change before it applies it. The
+// change must therefore apply, both on a replica that pulls it and on the
+// server rebuilding the document from its stored changes, and it must leave
+// the tree as it was: the span's node is left unplaced, as it is when its
+// parent is missing.
 func TestRestoreSpanUnderTextParentStaysApplicable(t *testing.T) {
 	newReplica := func(t *testing.T, hexActor string) *document.Document {
 		doc := document.New(helper.TestKey(t))
@@ -61,10 +62,9 @@ func TestRestoreSpanUnderTextParentStaysApplicable(t *testing.T) {
 	// round trip a push takes.
 	craft := func(
 		t *testing.T, sender *document.Document,
-		span func(executedAt *time.Ticket, textID *crdt.TreeNodeID) *crdt.TreeRestoreSpan,
+		spans func(executedAt *time.Ticket, p *crdt.TreeNode) []*crdt.TreeRestoreSpan,
 	) *change.Pack {
-		tree := sender.Root().GetTree("tree")
-		textID := tree.Root().Children()[0].Children()[0].ID()
+		p := sender.Root().GetTree("tree").Root().Children()[0]
 
 		update(t, sender, func(root *json.Object) {
 			root.GetTree("tree").Edit(1, 1, &json.TreeNode{Type: "text", Value: "x"}, 0)
@@ -80,7 +80,7 @@ func TestRestoreSpanUnderTextParentStaysApplicable(t *testing.T) {
 		// insertion is gone, so Restore falls through to recreateFromSpan.
 		crafted := operations.NewRestoreTreeEdit(
 			valid.ParentCreatedAt(), valid.FromPos(), valid.ToPos(), valid.ExecutedAt(),
-			[]*crdt.TreeRestoreSpan{span(valid.ExecutedAt(), textID)},
+			spans(valid.ExecutedAt(), p),
 			crdt.RestoreModeRestore, nil,
 		)
 		pack.Changes[len(pack.Changes)-1] = change.New(
@@ -94,23 +94,47 @@ func TestRestoreSpanUnderTextParentStaysApplicable(t *testing.T) {
 		return decoded
 	}
 
-	spans := map[string]func(*time.Ticket, *crdt.TreeNodeID) *crdt.TreeRestoreSpan{
-		"element span": func(at *time.Ticket, textID *crdt.TreeNodeID) *crdt.TreeRestoreSpan {
-			return &crdt.TreeRestoreSpan{
+	// Every case is a shape no honest replica produces: a parent that is a
+	// text node (#2168), or an IsText flag that disagrees with NodeType. The
+	// second of those used to recreate a node of the wrong kind; applied
+	// twice, the element carrying a Value was inserted twice under one ID.
+	spans := map[string]func(*time.Ticket, *crdt.TreeNode) []*crdt.TreeRestoreSpan{
+		"element span under a text parent": func(at *time.Ticket, p *crdt.TreeNode) []*crdt.TreeRestoreSpan {
+			return []*crdt.TreeRestoreSpan{{
 				ID:       crdt.NewTreeNodeID(at, 0),
 				NodeType: "p",
-				ParentID: textID,
-			}
+				ParentID: p.Children()[0].ID(),
+			}}
 		},
-		"text span": func(at *time.Ticket, textID *crdt.TreeNodeID) *crdt.TreeRestoreSpan {
-			return &crdt.TreeRestoreSpan{
+		"text span under a text parent": func(at *time.Ticket, p *crdt.TreeNode) []*crdt.TreeRestoreSpan {
+			return []*crdt.TreeRestoreSpan{{
 				ID:       crdt.NewTreeNodeID(at, 0),
 				NodeType: "text",
 				IsText:   true,
 				Length:   1,
 				Value:    "x",
-				ParentID: textID,
+				ParentID: p.Children()[0].ID(),
+			}}
+		},
+		"element span typed as text": func(at *time.Ticket, p *crdt.TreeNode) []*crdt.TreeRestoreSpan {
+			return []*crdt.TreeRestoreSpan{{
+				ID:       crdt.NewTreeNodeID(at, 0),
+				NodeType: "text",
+				ParentID: p.ID(),
+			}}
+		},
+		"text span typed as an element, twice": func(at *time.Ticket, p *crdt.TreeNode) []*crdt.TreeRestoreSpan {
+			span := func() *crdt.TreeRestoreSpan {
+				return &crdt.TreeRestoreSpan{
+					ID:       crdt.NewTreeNodeID(at, 0),
+					NodeType: "p",
+					IsText:   true,
+					Length:   1,
+					Value:    "x",
+					ParentID: p.ID(),
+				}
 			}
+			return []*crdt.TreeRestoreSpan{span(), span()}
 		},
 	}
 
@@ -153,7 +177,7 @@ func TestRestoreSpanUnderTextParentStaysApplicable(t *testing.T) {
 		assert.Equal(t, "<r><p></p></r>", sender.Root().GetTree("tree").ToXML())
 	})
 
-	for name, span := range spans {
+	for name, spans := range spans {
 		t.Run(name, func(t *testing.T) {
 			sender := newReplica(t, "000000000000000000000001")
 			update(t, sender, func(root *json.Object) {
@@ -167,7 +191,7 @@ func TestRestoreSpanUnderTextParentStaysApplicable(t *testing.T) {
 			pack.VersionVector.Set(receiver.ActorID(), 0)
 			require.NoError(t, receiver.ApplyChangePack(pack))
 
-			crafted := craft(t, sender, span)
+			crafted := craft(t, sender, spans)
 
 			// A replica that pulls the change.
 			pack = &change.Pack{

@@ -56,6 +56,10 @@ Every Go replica that pulls the change fails the same way.
 - `make verify` green. `go test -tags integration ./test/integration/...
   -run 'TestHistoryTree|TestTree'` green against local MongoDB.
 - `docs/design/undo-redo.md` states the parent rule.
+- Review round 1 added a second rule: `Restore` and `Retombstone` skip a
+  span whose `IsText` disagrees with `NodeType`. Apply time, because stored
+  changes and pulls go through the same strict decoder. See lessons.
 - JS mirror (yorkie-js-sdk#1471): in `CRDTTree.recreateFromSpan`, return
   `undefined` when the resolved parent `isText`, right after the existing
-  parent-missing check.
+  parent-missing check; and in `restore`/`retombstone`, skip a span whose
+  `isText` disagrees with `nodeType === DefaultTextType`.

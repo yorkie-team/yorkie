@@ -267,6 +267,42 @@ func TestTreeRestoreTextParentSkip(t *testing.T) {
 	}
 }
 
+// TestTreeRestoreKindMismatchSkip verifies that a span whose IsText flag
+// disagrees with its NodeType is skipped. Recreating it would build a node of
+// the wrong kind: a zero-length text node, or an element carrying a Value. The
+// element is not found by the text lookup, so a second copy of the span
+// inserted another node under the same ID. Restore and Retombstone both skip
+// such a span, so undo and redo stay mirror images.
+func TestTreeRestoreKindMismatchSkip(t *testing.T) {
+	for _, isText := range []bool{false, true} {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+
+		span := &crdt.TreeRestoreSpan{
+			ID:       crdt.NewTreeNodeID(helper.TimeT(ctx), 0),
+			NodeType: "text",
+			IsText:   isText,
+			ParentID: p.ID(),
+		}
+		if isText {
+			span.NodeType, span.Length, span.Value = "p", 1, "x"
+		}
+
+		spans := []*crdt.TreeRestoreSpan{span, span}
+		untombstoned, recreated, _, _, err := tree.Restore(spans)
+		assert.NoError(t, err, "isText=%v", isText)
+		assert.Empty(t, untombstoned)
+		assert.Empty(t, recreated, "isText=%v: a mismatched span is skipped", isText)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "isText=%v", isText)
+
+		pairs, _, err := tree.Retombstone(spans, helper.TimeT(ctx))
+		assert.NoError(t, err)
+		assert.Empty(t, pairs, "isText=%v: retombstone skips it too", isText)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "isText=%v", isText)
+	}
+}
+
 // TestTreeRestoreRejectsForgedIdentity verifies that TreeEdit.Execute rejects a
 // restore span whose node identity the acting change could not causally have
 // observed. Execute materializes spans into authoritative server state, so

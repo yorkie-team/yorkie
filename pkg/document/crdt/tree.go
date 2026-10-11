@@ -974,6 +974,18 @@ type TreeRestoreSpan struct {
 	RightSiblingID *TreeNodeID
 }
 
+// kindAgrees reports whether the span's IsText flag matches its NodeType, as
+// it always does on a span an honest replica captured. A span that disagrees
+// would recreate a node of the wrong kind -- an element carrying a Value is
+// then invisible to the text lookup, so the same span applied again inserts a
+// second node under one ID. Decoding cannot reject it: stored changes go
+// through the same decoder and must stay loadable, so Restore and Retombstone
+// skip it instead. The kind is part of the span itself, so every replica
+// skips it alike (#2168).
+func (s *TreeRestoreSpan) kindAgrees() bool {
+	return s.IsText == (s.NodeType == index.TextNodeType)
+}
+
 // Tree represents the tree of CRDT. It has doubly linked list structure and
 // index tree structure.
 type Tree struct {
@@ -1163,6 +1175,9 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 	}()
 
 	for _, span := range spans {
+		if !span.kindAgrees() {
+			continue
+		}
 		if !span.IsText {
 			node := t.findFloorNode(span.ID)
 			if node != nil && node.id.Equal(span.ID) {
@@ -1278,6 +1293,9 @@ func (t *Tree) Retombstone(
 	var pairs []GCPair
 	var diff resource.DataSize
 	for _, span := range spans {
+		if !span.kindAgrees() {
+			continue
+		}
 		start := span.ID.Offset
 		length := max(span.Length, 1)
 		end := start + length
@@ -1348,8 +1366,8 @@ func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*
 // it; (c) captured right boundary sibling → before it; (d) deterministic
 // id-order fallback (first slot whose child id > node id — a pure function of
 // ids, identical on every replica). Parent genuinely absent, or a text node
-// that cannot hold children → skip (B1). Mirrors the JS
-// CRDTTree.recreateFromSpan.
+// that cannot hold children → skip (B1). The JS CRDTTree.recreateFromSpan
+// must apply the same rule (yorkie-js-sdk#1471).
 func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*TreeNode, error) {
 	if span.ParentID == nil {
 		return nil, nil
