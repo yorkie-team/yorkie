@@ -312,10 +312,17 @@ func (i *AdminServiceInterceptor) authenticate(
 		}
 	case strings.EqualFold(scheme, types.AuthSchemeAPIKey):
 		// If the scheme is API-Key, verify the secret key and retrieve the project.
-		if strings.TrimSpace(param) == "" && !i.backend.Config.UseDefaultProject {
+		//
+		// NOTE(hackerwins): An empty key is rejected whatever UseDefaultProject
+		// says. That setting lets a client without a public key reach the
+		// default project on YorkieService; on AdminService an empty key would
+		// fall back to the default project in ProjectFromSecretKey, granting
+		// its admin methods to a caller with no credential at all.
+		secretKey := strings.TrimSpace(param)
+		if secretKey == "" {
 			return nil, connect.NewError(connect.CodeUnauthenticated, ErrSecretKeyNotProvided)
 		}
-		project, err := projects.ProjectFromSecretKey(ctx, i.backend, strings.TrimSpace(param))
+		project, err := projects.ProjectFromSecretKey(ctx, i.backend, secretKey)
 		if err == nil {
 			ctx = projects.With(ctx, project)
 			return ctx, nil
