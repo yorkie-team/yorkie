@@ -524,23 +524,36 @@ func (t *Tree) rebuildBoundaryIndex() {
 
 // relinkAnchors moves every boundary anchored before node to the item that
 // follows it in the sequence, as node is purged.
+//
+// Element products are relinked as well as text. One GC pass can purge a
+// text node and the product after it, and it visits its pairs in map order:
+// relinking only text would leave an anchor naming the purged product when
+// the text went first, and the end of the family when the product went
+// first. Relinking both makes the two orders meet. The purged product's own
+// children go with it, so the item after it is the next boundary.
 func (t *Tree) relinkAnchors(node *TreeNode) {
-	if !node.IsText() || node.Index.Parent == nil {
+	if node.Index.Parent == nil {
 		return
 	}
 	set := t.anchoredBefore[node.id.toIDString()]
 	if len(set) == 0 {
 		return
 	}
-	siblings := childrenOf(node.Index.Parent.Value)
-	i := indexOfNode(siblings, node)
+
+	var walker insNextWalker
 	var next boundaryKey
-	if i >= 0 && i+1 < len(siblings) {
-		next = boundaryKeyOf(siblings[i+1])
+	if node.IsText() {
+		siblings := childrenOf(node.Index.Parent.Value)
+		if i := indexOfNode(siblings, node); i >= 0 && i+1 < len(siblings) {
+			next = boundaryKeyOf(siblings[i+1])
+		} else {
+			next = boundaryKeyOf(t.nextBoundaryNode(node.Index.Parent.Value, &walker))
+		}
 	} else {
-		var walker insNextWalker
-		next = boundaryKeyOf(t.nextBoundaryNode(node.Index.Parent.Value, &walker))
+		walker.visit(node)
+		next = boundaryKeyOf(t.nextBoundaryNode(node, &walker))
 	}
+
 	products := make([]*TreeNode, 0, len(set))
 	for p := range set {
 		products = append(products, p)

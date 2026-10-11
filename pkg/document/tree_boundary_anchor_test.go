@@ -140,3 +140,23 @@ func TestTreeBoundaryElementTombstoneGC(t *testing.T) {
 		}
 	}
 }
+
+// TestTreeBoundaryAnchorRelinkPurgeOrder purges, in one GC pass, the text a
+// boundary is anchored before and the product that follows it. GC visits its
+// pairs in map order, so the anchor has to end up in the same place whichever
+// goes first: here at the end of the family, since both are gone.
+func TestTreeBoundaryAnchorRelinkPurgeOrder(t *testing.T) {
+	for range 100 {
+		docs := boundaryReplicas(t, 1, "ab")
+		updateTree(t, docs[0], splitAt(2)) // <p>a</p><p>b</p>: anchored before b
+		updateTree(t, docs[0], splitAt(5)) // <p>a</p><p>b</p><p></p>: at the end
+		updateTree(t, docs[0], func(tree *json.Tree) { tree.Edit(6, 8, nil, 0) })
+		updateTree(t, docs[0], func(tree *json.Tree) { tree.Edit(4, 5, nil, 0) })
+		require.Positive(t, docs[0].GarbageCollect(helper.MaxVersionVector(docs[0].ActorID())))
+
+		ps := paragraphs(treeCRDT(t, docs[0]))
+		require.Len(t, ps, 2)
+		require.Nil(t, ps[1].BoundaryAnchor, "the anchor must not name a purged node")
+		require.True(t, ps[1].BoundaryAtEnd)
+	}
+}
