@@ -51,3 +51,42 @@ func TestDropSplitLinksClearsBoundaryIndex(t *testing.T) {
 	tree.relinkAnchors(text)
 	assert.False(t, hasBoundaryRecord(product), "a purge must not bring the record back")
 }
+
+// TestRelinkPurgedSubtreeOrder purges a removed product and its removed text
+// child in both orders. A boundary anchored before the child must end up at
+// the next boundary either way: GC visits its pairs in map order, and a child
+// reached after its detached parent would otherwise relink to the end.
+func TestRelinkPurgedSubtreeOrder(t *testing.T) {
+	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+
+	for _, childFirst := range []bool{true, false} {
+		root := NewTreeNode(NewTreeNodeID(ticket(1), 0), "r", nil)
+		head := NewTreeNode(NewTreeNodeID(ticket(2), 0), "p", nil)
+		product := NewTreeNode(NewTreeNodeID(ticket(3), 0), "p", nil)
+		child := NewTreeNode(NewTreeNodeID(ticket(4), 0), "text", nil, "x")
+		next := NewTreeNode(NewTreeNodeID(ticket(5), 0), "p", nil)
+		anchored := NewTreeNode(NewTreeNodeID(ticket(6), 0), "p", nil)
+		require.NoError(t, product.Append(child))
+		require.NoError(t, root.Append(head, product, next, anchored))
+		head.InsNextID, product.InsPrevID = product.id, head.id
+		product.InsNextID, next.InsPrevID = next.id, product.id
+		product.BoundaryAtEnd = true
+		next.BoundaryAtEnd = true
+		anchored.BoundaryAnchor = child.id
+		tree := NewTree(root, ticket(1))
+
+		child.SetRemovedAt(ticket(7))
+		product.SetRemovedAt(ticket(7))
+		order := []*TreeNode{product, child}
+		if childFirst {
+			order = []*TreeNode{child, product}
+		}
+		for _, n := range order {
+			require.NoError(t, tree.Purge(n))
+		}
+
+		require.NotNil(t, anchored.BoundaryAnchor, "child first: %v", childFirst)
+		assert.True(t, anchored.BoundaryAnchor.Equal(next.id), "child first: %v", childFirst)
+	}
+}

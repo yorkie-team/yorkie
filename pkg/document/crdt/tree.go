@@ -1162,7 +1162,7 @@ func (t *Tree) Purge(child GCChild) error {
 		return nil
 	}
 
-	t.relinkAnchors(node)
+	t.relinkSubtreeAnchors(node)
 	t.unindexBoundaries(node)
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err

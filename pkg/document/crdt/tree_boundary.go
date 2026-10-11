@@ -632,6 +632,21 @@ func (t *Tree) rebuildBoundaryIndex() {
 	})
 }
 
+// relinkSubtreeAnchors relinks the anchors before every node of the subtree
+// that node's purge detaches, descendants first, while the subtree is still in
+// the tree. GC visits its pairs in map order and can reach a child after its
+// purged parent, when the detached child no longer has a next item to relink
+// to; relinking the whole subtree here gives the order a child-first pass
+// would, whichever order GC takes.
+func (t *Tree) relinkSubtreeAnchors(node *TreeNode) {
+	if len(t.anchoredBefore) > 0 && !node.IsText() {
+		for _, child := range childrenOf(node) {
+			t.relinkSubtreeAnchors(child)
+		}
+	}
+	t.relinkAnchors(node)
+}
+
 // relinkAnchors moves every boundary anchored before node to the item that
 // follows it in the sequence, as node is purged.
 //
