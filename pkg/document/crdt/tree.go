@@ -1347,8 +1347,9 @@ func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*
 // predecessor piece → exact slot; (b) captured left boundary sibling → after
 // it; (c) captured right boundary sibling → before it; (d) deterministic
 // id-order fallback (first slot whose child id > node id — a pure function of
-// ids, identical on every replica). Parent genuinely absent → skip (B1).
-// Mirrors the JS CRDTTree.recreateFromSpan.
+// ids, identical on every replica). Parent genuinely absent, or a text node
+// that cannot hold children → skip (B1). Mirrors the JS
+// CRDTTree.recreateFromSpan.
 func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*TreeNode, error) {
 	if span.ParentID == nil {
 		return nil, nil
@@ -1356,6 +1357,13 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 	parent := t.findFloorNode(span.ParentID)
 	if parent == nil || !parent.id.Equal(span.ParentID) {
 		return nil, nil // B1: parent gone; leave the node unplaced.
+	}
+	// No honest replica names a text node as a parent, but spans come from
+	// the wire and the server stores a change before applying it, so failing
+	// here would fail every later rebuild of the document (#2168). Node kind
+	// never changes, so every replica skips the same span and they converge.
+	if parent.IsText() {
+		return nil, nil
 	}
 
 	var node *TreeNode

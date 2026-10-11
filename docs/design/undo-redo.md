@@ -631,6 +631,13 @@ primary reverse for merge- and split-free edits; the copy-based options below
 were written before it and remain relevant only to the edits that still fall
 back to copying.
 
+A recreated node is placed under the parent its span names. When that parent
+is gone, or is a text node that cannot hold children, the node is left
+unplaced and the restore still succeeds. No honest replica names a text
+parent, but spans arrive from the wire and the server stores a change before
+applying it, so an error there would fail every later rebuild of the document
+(#2168). Node kind never changes, so every replica skips the same span.
+
 | Approach | Pros | Cons |
 |----------|------|------|
 | Node-ID overlap detection | Extend undo op with removed node IDs; reconciliation compares node sets instead of index ranges. Content re-insert preserved (GC-safe). | Significant change to operation model and reconciliation logic. |

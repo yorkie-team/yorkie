@@ -239,6 +239,34 @@ func TestTreeRestoreParentGoneSkip(t *testing.T) {
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")
 }
 
+// TestTreeRestoreTextParentSkip verifies that a span whose parent ID names a
+// text node is skipped like a missing parent (B1) instead of failing the
+// restore (#2168). A text node cannot hold children, and node kind never
+// changes, so every replica skips the same span and they converge.
+func TestTreeRestoreTextParentSkip(t *testing.T) {
+	for _, isText := range []bool{false, true} {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		text := tree.Root().Children()[0].Children()[0]
+
+		span := &crdt.TreeRestoreSpan{
+			ID:       crdt.NewTreeNodeID(helper.TimeT(ctx), 0),
+			NodeType: "p",
+			IsText:   isText,
+			ParentID: text.ID(),
+		}
+		if isText {
+			span.NodeType, span.Length, span.Value = "text", 1, "x"
+		}
+
+		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		assert.NoError(t, err, "isText=%v", isText)
+		assert.Empty(t, untombstoned)
+		assert.Empty(t, recreated, "a node under a text parent is skipped")
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")
+	}
+}
+
 // TestTreeRestoreRejectsForgedIdentity verifies that TreeEdit.Execute rejects a
 // restore span whose node identity the acting change could not causally have
 // observed. Execute materializes spans into authoritative server state, so
