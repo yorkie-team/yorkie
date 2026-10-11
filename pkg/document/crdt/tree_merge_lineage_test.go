@@ -133,7 +133,7 @@ func TestMergeNodesRejectsForgedSource(t *testing.T) {
 	// An ordinary merge of p2 into p1 moves the child that carries the forged
 	// lineage; the child keeps it, because MergedFrom is stamped only on a
 	// first move.
-	require.NoError(t, f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket()))
+	require.NoError(t, f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket(), nil))
 
 	assert.Nil(t, f.p3.mergedInto,
 		"an ordinary merge must not plant a forwarding pointer on an unrelated node")

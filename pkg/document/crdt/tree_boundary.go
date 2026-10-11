@@ -627,6 +627,31 @@ func (t *Tree) relinkAnchors(node *TreeNode) {
 	}
 }
 
+// boundaryMergeTarget returns where a merge moves the children of src, an
+// anchored split product, when the merge names target. Removing a boundary
+// joins its content to the boundary before it in the sequence. If products
+// the merging change did not know have opened between target and src, the
+// one nearest to src is that boundary: a replica that applied the merge
+// before those splits moved the content into target, and those splits then
+// carried it on into their products.
+func (t *Tree) boundaryMergeTarget(target, src *TreeNode, versionVector time.VersionVector) *TreeNode {
+	if len(versionVector) == 0 || !hasBoundaryRecord(src) || src == target {
+		return target
+	}
+	dest := target
+	var walker insNextWalker
+	walker.visit(target)
+	for node := t.nextBoundaryNode(target, &walker); node != nil; node = t.nextBoundaryNode(node, &walker) {
+		if node == src {
+			return dest
+		}
+		if !node.IsRemoved() && !time.TicketKnown(versionVector, node.id.CreatedAt) {
+			dest = node
+		}
+	}
+	return target
+}
+
 // boundaryPurgeBarrier is the barrier of a text tombstone that is the last child
 // of its parent: the scan of advanceAcrossBoundaries continues from there into
 // the next split product, so that product's boundary is the next item.

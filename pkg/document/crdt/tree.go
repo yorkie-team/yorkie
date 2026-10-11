@@ -2089,7 +2089,7 @@ func (t *Tree) Edit(
 
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	if err := t.mergeNodes(
-		fromParent, toBeMovedToFromParents, editedAt,
+		fromParent, toBeMovedToFromParents, editedAt, versionVector,
 	); err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
@@ -2774,8 +2774,9 @@ func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
 	editedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) error {
-	dest := t.resolveMergeTarget(fromParent)
+	target := t.resolveMergeTarget(fromParent)
 
 	for _, node := range toBeMovedToFromParents {
 		// A moved child must have a source parent to record; skip
@@ -2785,6 +2786,7 @@ func (t *Tree) mergeNodes(
 		if node.Index.Parent == nil {
 			continue
 		}
+		dest := t.boundaryMergeTarget(target, node.Index.Parent.Value, versionVector)
 		// Record source parent and merge ticket on the moved child.
 		// Both fields are persisted; MergedAt must be stored explicitly
 		// because source.removedAt can be overwritten by later concurrent
