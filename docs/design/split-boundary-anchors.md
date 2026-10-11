@@ -114,11 +114,13 @@ converges:
   tombstone sits wherever its removal left it, which differs between
   replicas. The same holds for nesting, which skips boundaries the change
   saw removed.
-- **A merge the change did not know may have moved the position.**
-  `seenParentOf` reads `MergedFrom` on the children around the position to
-  find the node the change saw as the parent. Nesting is decided from
+- **A merge the change did not know may have moved the position.** The
+  operation names the parent it saw. When a merge the change did not know
+  has taken that node away, `seenParentOf` uses it: nesting is decided from
   there, and the tail walk passes over that node, whose boundary was behind
-  the position for the change.
+  the position for the change. The children around the position cannot tell
+  this case apart, because the end of the merge target and the start of the
+  merged-away node have the same neighbours once the merge has moved them.
 - **A split must not open inside a removed product it did not know.** It
   would mint a product born removed, and the paragraph would be lost on one
   replica. `liveSplitTarget` opens it at the end of the nearest live node
@@ -132,6 +134,11 @@ converges:
   splits put the content in the named node, and the splits then carried it
   on into their products. **This changes what a merge produces** in that
   concurrent case.
+- **Merge forwarding follows the moved children.** A snapshot rebuilds a
+  merge source's `mergedInto` from the parent of its first moved child.
+  When a split carries every child a merge moved out of a node into a
+  product, `followMovedMergeChildren` repoints the runtime pointer the same
+  way, so a replica's results do not depend on whether it reloaded.
 
 ### Garbage collection
 
@@ -195,8 +202,8 @@ with regressions against main in parentheses:
 | insert+split | 267 / 590 | 154 / 353 (0/0) | 195 / 498 (1/2) | 0 / 0 |
 | +delete | 157 / 357 | 99 / 215 (0/0) | 112 / 290 (2/4) | 0 / 0 |
 | +style | 130 / 328 | 69 / 139 (0/0) | 92 / 275 (0/0) | 0 / 0 |
-| merge | 973 / 1272 | 958 / 1258 (2/0) | 955 / 1258 (0/0) | 848 / 1145 (4/0) |
-| all | 677 / 968 | 654 / 936 (0/0) | 657 / 949 (1/1) | 540 / 785 (6/3) |
+| merge | 973 / 1272 | 958 / 1258 (2/0) | 955 / 1258 (0/0) | 831 / 1133 (5/0) |
+| all | 677 / 968 | 654 / 936 (0/0) | 657 / 949 (1/1) | 520 / 766 (6/4) |
 
 GC, snapshot and undo. Cells are runs that did not converge, with
 regressions against main in parentheses:
@@ -205,13 +212,20 @@ regressions against main in parentheses:
 |---|---:|---:|---:|---:|---:|
 | GC every 3 steps | 2000 | 1046 | 848 (1) | 872 (7) | 0 |
 | + snapshot reload every 7 | 2000 | 1045 | 846 (1) | 868 (7) | 0 |
-| Undo and redo, seeds 1–600 | 1200 | 463 | 427 (2) | 405 (3) | 237 (3) |
-| Undo and redo, seeds 601–1800 | 2400 | 896 | 828 (4) | 827 (6) | 501 (5) |
+| Undo and redo, seeds 1–600 | 1200 | 463 | 427 (2) | 405 (3) | 223 (6) |
+| Undo and redo, seeds 601–1800 | 2400 | 896 | 828 (4) | 827 (6) | 480 (10) |
+| Undo and redo with snapshot reloads, seeds 1–1800 | 3600 | 1339 | – | – | 666 (14) |
 
 The undo rules above were developed on seeds 1–600. Seeds 601–1800 were
-held out, and the regression rate on them matches. In those runs, 12 and 39
+held out, and the regression rate on them matches. In those runs, 11 and 34
 runs converge in XML and node identity but end with different boundary
 records. A later concurrent split at the same place could then diverge.
+At runtime main keeps merge forwarding where the merge put it, while its
+snapshots rebuild it from where the children are. This design follows the
+children at runtime too, so a replica's result does not depend on whether
+it reloaded. Matching the snapshot side raised the regressions against main
+in the reload runs from 9 to 14, and lowered the runs that do not converge
+from 705 to 666.
 
 `TestTreeBoundaryFuzz` replays 300 seeds on two and three replicas with GC
 and snapshot reloads. main fails 332 of those 600 runs, and this design
@@ -222,8 +236,8 @@ passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 | Risk | Mitigation |
 |------|------------|
 | Old clients and servers apply the old rules and ignore `boundaries`, so they disagree with new ones in these concurrent cases. The server builds snapshots with its own rules | Release the server and SDKs together, as for any op-semantics change. Old snapshots load with no records, and their products keep the old rules on every replica alike. No version gate prevents a mixed deployment |
-| A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. It removes more merge divergences against main than it adds (merge fuzz: 127–186 runs fixed, 4/0/6/3 regressions) |
-| Undo, redo and concurrent splits still regress against main in 0.2–0.3% of the undo fuzz, and boundary records differ in 1–2% | Measured and pinned. The general fix is yorkie-js-sdk#1474: merges modelled as removing a boundary from the sequence |
+| A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. It removes more merge divergences against main than it adds (merge fuzz: 5/0/6/4 regressions against main) |
+| Undo, redo and concurrent splits still regress against main in 0.4–0.5% of the undo fuzz, and boundary records differ in 1–1.5%. One known case: a peer splits at the end of a paragraph an undo merged the next one back into; the merge-first replica anchors before the moved text, the other before the merged-away boundary | Measured and pinned. The general fix is yorkie-js-sdk#1474: merges modelled as removing a boundary from the sequence |
 | Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
 | Splits outside the scope keep diverging | Unchanged from today; the fallback rules are a superset of main's |
 
@@ -242,6 +256,7 @@ passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 | Alternative | Why not |
 |-------------|---------|
 | The split family as one RGA sequence, with products as markers ordered by ticket | No wire change, and fewer rules. But concurrent text can move to the line after an Enter, and the prototype still diverged on nested splits, OpInfo and undo (undo fuzz: 80 and 181 regressions against main) |
+| Inferring the parent a split saw from the neighbours' `MergedFrom` | The end of a merge target and the start of a merged-away node share neighbours; the operation's declared parent does not |
 | Records as three fields on `TreeNode` | Operation content shares the message, so four paths had to strip them, and an anchor with the end flag was representable |
 | YATA/Fugue-style left and right origins on every node | Same wire cost as the records, and a larger change |
 | Full flattening of the tree into block markers | A new Tree CRDT |

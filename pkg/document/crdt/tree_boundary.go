@@ -550,7 +550,7 @@ type TreeBoundary struct {
 }
 
 // Boundaries returns the boundary records of the tree's split products, in
-// document order.
+// the post-order of index.Traverse, which is the same on every replica.
 func (t *Tree) Boundaries() []TreeBoundary {
 	var out []TreeBoundary
 	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
