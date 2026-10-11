@@ -2122,6 +2122,8 @@ func (t *Tree) Edit(
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
+	t.lowerRepeatedMergeTickets(from, to, editedAt)
+
 	// §6.2: Propagate deletes to children moved by prior merges. The declared
 	// positions are passed through because the skip is keyed on them; what the
 	// propagation tombstones stays out of the reverse info, as it does in JS.

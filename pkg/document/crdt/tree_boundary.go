@@ -852,6 +852,37 @@ func lastChildOrSelf(node *TreeNode) *TreeNode {
 	return children[len(children)-1]
 }
 
+// lowerRepeatedMergeTickets keeps the MergedAt of children merged out of a
+// node the same on every replica when two merges remove that node
+// concurrently.
+//
+// The first merge to arrive moves the children and stamps MergedAt with its
+// ticket. The second finds the node already merged away: its range resolves
+// around the moved children and never reaches the node, so it records
+// nothing. The ticket a replica held depended on which merge it applied
+// first, and every rule that asks whether a change knew the merge read it
+// differently per replica. A range edit whose end names a merged-away node is
+// such a second merge, and keeping the smaller ticket gives every replica the
+// same value once both have arrived.
+func (t *Tree) lowerRepeatedMergeTickets(from, to *TreePos, editedAt *time.Ticket) {
+	if from.ParentID.Equal(to.ParentID) {
+		return
+	}
+	src := t.findMergeNode(to.ParentID)
+	if src == nil || src.mergedInto == nil || len(childrenOf(src)) > 0 {
+		return
+	}
+	index.Traverse(t.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+		c := n.Value
+		if c.MergedFrom == nil || !c.MergedFrom.Equal(src.id) || c.MergedAt == nil {
+			return
+		}
+		if editedAt.Compare(c.MergedAt) < 0 {
+			c.MergedAt = editedAt
+		}
+	})
+}
+
 // boundaryPurgeBarrier is the barrier of a text tombstone that is the last child
 // of its parent: the scan of advanceAcrossBoundaries continues from there into
 // the next split product, so that product's boundary is the next item.

@@ -415,3 +415,12 @@ func TestTreeBoundaryMergeTargetSurvivesReload(t *testing.T) {
 		require.Equal(t, treeXML(t, plain[r]), treeXML(t, reloaded[r]), "d%d", r+1)
 	}
 }
+
+// TestTreeBoundaryRepeatedMerge has two replicas Backspace at the same join
+// concurrently while a third, which saw only the first Backspace, presses
+// Enter there. Each replica stamps the moved text with the merge it applied
+// first, so whether the Enter knew the merge read differently per replica
+// until repeated merges kept the smaller ticket.
+func TestTreeBoundaryRepeatedMerge(t *testing.T) {
+	replayBoundaryScript(t, 3, "d1.split(2); d2.pull; d3.pull; d1.delete(2,4); d2.delete(2,4); d3.pull; d3.split(2)")
+}
