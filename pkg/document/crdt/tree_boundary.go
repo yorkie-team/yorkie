@@ -304,20 +304,16 @@ func (t *Tree) placeSplitBoundary(
 // change's tail walk passed over as concurrent.
 //
 // A replica that applied the split first opened it while that product was
-// live, and the later removal took only the product. A merge moved the
-// product's children to the end of its target, so the split opens there; a
-// removal with nothing to move (undoing a split at the end of a paragraph)
-// leaves the nearest live node before it in the family as the same place.
+// live, and the later removal took only the product, so the split opens at the
+// end of the nearest live node before it in the family. That holds whether a
+// merge moved the product's content (undoing a split) or there was none: the
+// merge target is not used, because later splits may have carried the moved
+// content on past it.
 // Splitting the tombstone instead would mint a product born removed, and the
 // paragraph would be lost on this replica only.
 func (t *Tree) liveSplitTarget(tail *boundaryTail, parent, target *TreeNode, off int) (*TreeNode, int) {
 	if target == parent || !target.IsRemoved() {
 		return target, off
-	}
-	if target.mergedInto != nil {
-		if dest := t.resolveMergeTarget(target); dest != target && !dest.IsRemoved() {
-			return dest, len(childrenOf(dest))
-		}
 	}
 	live := parent
 	for _, tk := range tail.toks {

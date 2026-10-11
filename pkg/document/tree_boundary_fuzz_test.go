@@ -317,6 +317,12 @@ func TestTreeBoundaryUndoSplit(t *testing.T) {
 		name:     "Enter and undo in the middle, peer splits the product",
 		replicas: 2,
 		script:   "d1.split(2); d1.undo; d2.pull; d2.split(4)",
+	}, {
+		// The undo's merge target is not where the content is any more: a
+		// second Enter carried it on.
+		name:     "Enter, undo, Enter again at the start, peer Enter at the end",
+		replicas: 2,
+		script:   "d2.split(3); d1.split(1); d1.undo; d1.split(1)",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			replayBoundaryScript(t, tc.replicas, tc.script)
