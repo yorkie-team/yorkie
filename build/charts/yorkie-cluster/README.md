@@ -61,7 +61,8 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Uses pre-configured development credentials (clearly marked as dev-only)
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)"
 ```
 
 ### For Production:
@@ -75,6 +76,30 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set mongodb.credentials.userAdmin.password="$(openssl rand -base64 32)" \
   --set mongodb.credentials.clusterAdmin.password="$(openssl rand -base64 32)"
 ```
+
+## Admin Token Signing Key (Required)
+
+Yorkie signs admin (dashboard and CLI) tokens with `--backend-secret-key`.
+Every replica must use the same key, and anyone who knows it can act as any
+user, so the chart refuses to render without one. Either keep the key in a
+Secret you manage (recommended):
+
+```bash
+kubectl create secret generic yorkie-backend-secret-key --namespace yorkie \
+  --from-literal=secret-key="$(openssl rand -base64 32)"
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+```
+
+or pass it as a value and let the chart create the Secret:
+
+```bash
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)"
+```
+
+Add the same setting to every `helm install` example below. Changing the key
+invalidates every admin token issued so far; users log in again.
 
 ## Install Helm Chart
 

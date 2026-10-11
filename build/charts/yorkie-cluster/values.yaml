@@ -23,6 +23,15 @@ yorkie:
     # nodes call each other through it (--backend-gateway-addr).
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
+    # Key for signing admin (dashboard and CLI) tokens. Required: set one of
+    # the two below. Every replica must share it, and anyone who knows it
+    # can act as any user, so keep it out of version control where possible.
+    # Generate with: openssl rand -base64 32
+    # secretKey: the key itself; the chart stores it in a Secret.
+    secretKey: ""
+    # secretKeyExistingSecret: name of an existing Secret in the namespace
+    # that holds the key under `secret-key`. Takes precedence over secretKey.
+    secretKeyExistingSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated. See docs/design/project-stats-long-retention.md.
