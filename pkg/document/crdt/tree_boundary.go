@@ -67,13 +67,32 @@ func nestOf(n *TreeNode) boundaryKey {
 	return boundaryKey{id: n.BoundaryNest}
 }
 
-func hasElementChild(node *TreeNode) bool {
+// hasElementChild reports whether node holds an element child as the editing
+// change saw it: an element whose removal that change knew is not counted.
+//
+// Element tombstones must not count by themselves. GC purges them on each
+// replica's own schedule, so a test of the local child list would switch a
+// paragraph between these rules and orderSameBoundarySplit depending on when
+// each replica collected. Reading the removal through versionVector instead
+// gives the same answer before and after the purge: a node is purged only
+// once every replica knows its removal, so every change applied after the
+// purge knew it too. A local edit (empty versionVector) knows every removal.
+func hasElementChild(node *TreeNode, versionVector time.VersionVector) bool {
 	for _, c := range node.Index.Children(true) {
-		if !c.Value.IsText() {
-			return true
+		if c.Value.IsText() {
+			continue
 		}
+		if c.Value.removedAt != nil && time.TicketKnown(versionVector, c.Value.removedAt) {
+			continue
+		}
+		return true
 	}
 	return false
+}
+
+// hasBoundaryRecord reports whether node is the product of an anchored split.
+func hasBoundaryRecord(node *TreeNode) bool {
+	return node.BoundaryAnchor != nil || node.BoundaryAtEnd
 }
 
 func childrenOf(node *TreeNode) []*TreeNode {
@@ -114,7 +133,11 @@ func (t *Tree) nextBoundaryNode(node *TreeNode, walker *insNextWalker) *TreeNode
 	if !t.sharesSplitFamilyParent(node, next) {
 		return nil
 	}
-	if hasElementChild(next) {
+	// Only products the anchor rules made are part of the sequence. Whether
+	// a product holds element children changes as they are removed and
+	// purged, and this walk also runs during GC, where no change says which
+	// removals count; the record does not change.
+	if !hasBoundaryRecord(next) {
 		return nil
 	}
 	return next
@@ -130,7 +153,7 @@ func (t *Tree) advanceAcrossBoundaries(
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
 ) (*TreeNode, *TreeNode) {
-	if len(versionVector) == 0 || hasElementChild(parent) {
+	if len(versionVector) == 0 || hasElementChild(parent, versionVector) {
 		return parent, left
 	}
 	var walker insNextWalker
@@ -245,7 +268,7 @@ func (t *Tree) placeSplitBoundary(
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
 ) (target *TreeNode, off int, anchor, nest boundaryKey, ok bool) {
-	if parent.Index.Parent == nil || hasElementChild(parent) {
+	if parent.Index.Parent == nil || hasElementChild(parent, versionVector) {
 		return nil, 0, boundaryKey{}, boundaryKey{}, false
 	}
 	local := len(versionVector) == 0
@@ -353,14 +376,17 @@ func (t *Tree) boundaryInsertIndex(tail *boundaryTail, anchor, nest boundaryKey,
 	if nestNode == nil {
 		return len(tail.toks)
 	}
+	// The nest chain can be as long as the document (every Enter at the end
+	// of the last paragraph nests under the one before), so it is bounded by
+	// the nodes it visits, not by a fixed depth that would cut the outer
+	// levels off.
 	var levels []boundaryKey
-	cur := nestNode
-	for guard := 0; cur != nil && guard < 64; guard++ {
+	var visited nodeSet
+	for cur := nestNode; cur != nil && visited.visit(cur); cur = t.nodeByKey(nestOf(cur)) {
 		levels = append(levels, nestOf(cur))
 		if nestOf(cur).isZero() {
 			break
 		}
-		cur = t.nodeByKey(nestOf(cur))
 	}
 	outer := func(m *TreeNode) bool {
 		if !anchorOf(m).equal(anchor) {
@@ -384,7 +410,10 @@ func (t *Tree) boundaryInsertIndex(tail *boundaryTail, anchor, nest boundaryKey,
 // boundaryRootAt returns the boundary whose emission tail.toks[i] is part of,
 // at the level where match says a boundary counts, or nil.
 func (t *Tree) boundaryRootAt(tail *boundaryTail, i int, match func(*TreeNode) bool) *TreeNode {
-	for guard := 0; guard < 256; guard++ {
+	// Each step moves to a boundary token; visiting one twice means the
+	// records loop, so stop rather than spin.
+	var visited nodeSet
+	for {
 		tk := tail.toks[i]
 		if tk.text {
 			j := i - 1
@@ -398,6 +427,9 @@ func (t *Tree) boundaryRootAt(tail *boundaryTail, i int, match func(*TreeNode) b
 			continue
 		}
 		m := tk.node
+		if !visited.visit(m) {
+			return nil
+		}
 		if match(m) {
 			return m
 		}
@@ -418,7 +450,6 @@ func (t *Tree) boundaryRootAt(tail *boundaryTail, i int, match func(*TreeNode) b
 		}
 		i = k
 	}
-	return nil
 }
 
 // nodeByKey finds the node a boundary key names, or nil for the end or a node

@@ -17,6 +17,7 @@
 package document_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -88,4 +90,53 @@ func TestTreeBoundaryAnchorRelinkOnPurge(t *testing.T) {
 	require.Len(t, ps, 2)
 	assert.Nil(t, ps[1].BoundaryAnchor)
 	assert.True(t, ps[1].BoundaryAtEnd)
+}
+
+// TestTreeBoundaryElementTombstoneGC runs the yorkie-js-sdk#1436 shapes on a
+// paragraph that once held an inline element, removed before the concurrent
+// ops. Whether a replica has purged that element's tombstone must not decide
+// which split rules apply, so every collector choice converges alike.
+func TestTreeBoundaryElementTombstoneGC(t *testing.T) {
+	type op struct {
+		replica int
+		fn      func(tree *json.Tree)
+	}
+	cases := [][]op{
+		{{0, insertText(2, "e")}, {0, splitAt(2)}, {1, splitAt(2)}},
+		{{0, insertText(2, "c")}, {0, insertText(3, "d")}, {0, splitAt(3)}, {1, splitAt(2)}},
+		{{0, insertText(3, "c")}, {1, splitAt(3)}, {0, insertText(4, "d")}, {0, splitAt(4)}},
+		{{0, insertText(3, "e")}, {1, insertText(3, "f")}, {1, splitAt(3)}, {1, splitAt(5)}},
+		{{0, insertText(3, "c")}, {0, insertText(4, "d")}, {0, splitAt(5)}, {1, splitAt(3)}},
+		{{1, insertText(1, "f")}, {1, splitAt(1)}, {1, insertText(3, "h")}, {0, insertText(1, "i")}},
+		{{1, insertText(3, "g")}, {1, splitAt(3)}, {0, insertText(3, "h")}, {1, insertText(6, "i")}},
+		{{1, splitAt(3)}, {1, insertText(3, "d")}, {1, splitAt(3)}, {1, insertText(6, "e")}, {0, splitAt(3)}},
+		{{1, splitAt(1)}, {0, splitAt(1)}, {1, splitAt(4)}, {1, insertText(1, "f")}, {1, insertText(2, "g")}},
+	}
+	for ci, ops := range cases {
+		for _, collector := range []int{-1, 0, 1} {
+			t.Run(fmt.Sprintf("case %d, collector %d", ci, collector), func(t *testing.T) {
+				docs := boundaryReplicas(t, 2, "ab")
+				// <p>ab<i></i></p>, then the <i> is removed and both sync.
+				updateTree(t, docs[0], func(tree *json.Tree) {
+					tree.Edit(3, 3, &json.TreeNode{Type: "i"}, 0)
+				})
+				exchangeInOrder(t, docs, [][]int{nil, {0}})
+				updateTree(t, docs[1], func(tree *json.Tree) { tree.Edit(3, 5, nil, 0) })
+				exchangeInOrder(t, docs, [][]int{{1}, nil})
+				exchangeInOrder(t, docs, [][]int{nil, nil})
+				if collector >= 0 {
+					minVV := time.MinVersionVector(docs[0].VersionVector(), docs[1].VersionVector())
+					require.Positive(t, docs[collector].GarbageCollect(minVV))
+				}
+
+				for _, o := range ops {
+					updateTree(t, docs[o.replica], o.fn)
+				}
+				exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+				assert.Equal(t, treeXML(t, docs[0]), treeXML(t, docs[1]))
+				assert.Equal(t, liveTreeShape(t, docs[0]), liveTreeShape(t, docs[1]))
+			})
+		}
+	}
 }
