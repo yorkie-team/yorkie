@@ -79,6 +79,10 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
+	if err := ensureAdminPassword(conf.Backend); err != nil {
+		return nil, err
+	}
+
 	metrics, err := prometheus.NewMetrics()
 	if err != nil {
 		return nil, err
@@ -181,6 +185,63 @@ func ensureSecretKey(conf *backend.Config) error {
 			"behind a load balancer fail on whichever pod did not issue the " +
 			"token. Set " + SecretKeyEnv +
 			" to the same value on every node in production.",
+	)
+	return nil
+}
+
+// AdminPasswordEnv is the environment variable the password of the default
+// admin account is read from when --backend-admin-password and the config file
+// leave it unset. Like SecretKeyEnv, it keeps the value off the command line,
+// where anyone who can read /proc or the pprof cmdline endpoint would see it.
+const AdminPasswordEnv = "YORKIE_BACKEND_ADMIN_PASSWORD" // #nosec G101
+
+// adminPasswordBytes is the length of a generated admin password, in bytes of
+// entropy before base64 encoding.
+const adminPasswordBytes = 24
+
+// ensureAdminPassword resolves the password of the default admin account:
+// the configured value (flag or config file), then AdminPasswordEnv, then a
+// random password logged once at startup. It used to fall back to the literal
+// "admin", which is published in Yorkie's source and its charts: the account
+// has full permissions over every project, so a deployment that never set a
+// password shipped an open door. A generated password closes it without
+// locking anyone out, because the one in use is printed.
+//
+// The password only takes effect when the account is created, on the first
+// start against an empty database (see EnsureDefaultUserAndProject). On a
+// database that already holds the account, the value here is ignored and the
+// account keeps the password it was created with; change it with
+// `yorkie login` and the dashboard, not by restarting with a new value.
+func ensureAdminPassword(conf *backend.Config) error {
+	if conf.AdminPassword != "" {
+		return nil
+	}
+
+	if value, ok := os.LookupEnv(AdminPasswordEnv); ok {
+		password := strings.TrimSpace(value)
+		if password == "" {
+			return fmt.Errorf("%s is set but blank: set a password for the "+
+				"default admin %q, or unset it to generate one",
+				AdminPasswordEnv, conf.AdminUser)
+		}
+		conf.AdminPassword = password
+		return nil
+	}
+
+	secret := make([]byte, adminPasswordBytes)
+	if _, err := rand.Read(secret); err != nil {
+		return fmt.Errorf("generate admin password: %w", err)
+	}
+	conf.AdminPassword = base64.RawURLEncoding.EncodeToString(secret)
+
+	logging.DefaultLogger().Warnf(
+		"no admin password is set: using the generated password %q for the "+
+			"default admin %q. It applies only if the account is created "+
+			"now, on a first start against an empty database; an existing "+
+			"account keeps its own password. Set "+AdminPasswordEnv+" to the "+
+			"same value on every node in production, so the account does not "+
+			"depend on a password found in a log.",
+		conf.AdminPassword, conf.AdminUser,
 	)
 	return nil
 }

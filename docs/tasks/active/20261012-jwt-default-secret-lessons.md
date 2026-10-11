@@ -152,3 +152,29 @@ All eight subtests pass after the fix.
   this change. Also open: `DefaultAdminUser`/`DefaultAdminPassword` are
   still `admin`/`admin`, reaching the same admin takeover from
   `EnsureDefaultUserAndProject` in `server/backend/backend.go`.
+- The chart's render-time guard only checked that the key was non-blank while
+  the server had grown two more rules, so `--set yorkie.args.secretKey=hunter2`
+  installed cleanly and then CrashLoopBackOff'd every pod with an error only
+  visible in the logs. The guard now mirrors `validateSecretKey`: trim, then
+  reject blank, the public default case-insensitively, and anything shorter
+  than 32 characters. The Secret stores the trimmed value, so what the chart
+  validated is what the server reads. A chart-side copy of a server-side rule
+  is duplication worth paying for: the alternative is a failure that surfaces
+  one layer away from the input that caused it.
+- The README told operators to pass `--set yorkie.args.secretKey="$(openssl
+  rand -base64 32)"` on every `helm upgrade`, which mints a new key each time.
+  With the checksum annotation gone, nothing rolls the pods, so the Secret
+  holds key B while the pods hold key A and any pod that restarts alone
+  disagrees with its siblings. Upgrade examples now reuse the key in place
+  (`secretKeyExistingSecret`, or read back from the Secret), and generating a
+  new one is a separate, deliberate "Rotating the key" step ending in
+  `rollout restart`.
+- `DefaultAdminPassword` is gone. An unset admin password now resolves the
+  same way the signing key does: `YORKIE_BACKEND_ADMIN_PASSWORD` first, then a
+  generated password logged once at startup. The password only matters while
+  `EnsureDefaultUserAndProject` creates the account, so an existing database
+  keeps the account it has; what changes is that a fresh install no longer
+  ships the credential published here. The chart grew
+  `yorkie.args.adminPasswordExistingSecret`, handed over the environment for
+  the same reason as the key, because the generated-and-logged password is a
+  credential sitting in a log pipeline.

@@ -489,8 +489,12 @@ func init() {
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminPassword,
 		"backend-admin-password",
-		server.DefaultAdminPassword,
-		"The password of the default admin.",
+		"",
+		"The password of the default admin. If empty, it is read from "+
+			server.AdminPasswordEnv+", which keeps it off the command line; "+
+			"if that is unset too, a password is generated and logged at "+
+			"startup. It applies only when the account is created, on a "+
+			"first start against an empty database.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.SecretKey,

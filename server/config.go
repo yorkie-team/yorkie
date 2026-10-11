@@ -92,8 +92,7 @@ const (
 	DefaultClusterClientPoolSize    = 1
 	DefaultMaxConcurrentClusterRPCs = 5000
 
-	DefaultAdminUser     = "admin"
-	DefaultAdminPassword = "admin"
+	DefaultAdminUser = "admin"
 
 	DefaultAdminTokenDuration  = 7 * 24 * time.Hour
 	DefaultGitHubUserURL       = "https://api.github.com/user"
@@ -290,9 +289,11 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.AdminUser == "" {
 		c.Backend.AdminUser = DefaultAdminUser
 	}
-	if c.Backend.AdminPassword == "" {
-		c.Backend.AdminPassword = DefaultAdminPassword
-	}
+	// AdminPassword is deliberately left empty here: ensureAdminPassword
+	// (server.go) resolves it from AdminPasswordEnv or generates one. It used
+	// to default to the literal "admin", which is published in the source and
+	// in the charts, so every deployment that never set a password shipped an
+	// admin account anyone could log into.
 	if c.Backend.AdminTokenDuration == "" {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}

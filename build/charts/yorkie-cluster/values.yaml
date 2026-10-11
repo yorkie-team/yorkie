@@ -37,6 +37,15 @@ yorkie:
     # After rotating it, restart the pods all together (kubectl -n <namespace>
     # rollout restart deployment/<yorkie.name>), and admin users log in again.
     secretKeyExistingSecret: ""
+    # adminPasswordExistingSecret: name of an existing Secret in the namespace
+    # holding the password of the default admin account under
+    # `admin-password`. The account is created on the first start against an
+    # empty database and has full permissions over every project. Left unset,
+    # each pod generates a password and logs it, so no install ships the
+    # published "admin" password; set this to have a password you chose. Like
+    # the signing key, it is handed over the environment rather than args,
+    # which are readable in /proc/<pid>/cmdline and over pprof.
+    adminPasswordExistingSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated. See docs/design/project-stats-long-retention.md.

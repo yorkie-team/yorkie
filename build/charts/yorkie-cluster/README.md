@@ -91,31 +91,68 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
 ```
 
-or pass it as a value and let the chart create the Secret:
+or pass it as a value and let the chart create the Secret. Generate the key
+once and keep it — in a values file, a secret manager, or at least a shell
+variable for the session — because every later `helm upgrade` has to pass the
+**same** value:
 
 ```bash
+SECRET_KEY="$(openssl rand -base64 32)"   # generate once, keep it
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKey="$(openssl rand -base64 32)"
+  --set yorkie.args.secretKey="$SECRET_KEY"
 ```
 
 Add the same setting to every `helm install` and `helm upgrade` below, including
 the examples in this README: without it the chart refuses to render and the
-command fails before any resource is created. The server rejects a key shorter
-than 32 characters, so generate one rather than typing a passphrase; it trims
-surrounding whitespace, so a Secret made with `--from-file` works too. Changing
-the key invalidates every admin token issued so far; users log in again.
+command fails before any resource is created. The chart also rejects, at render
+time, a key the server would refuse to start with — shorter than 32 characters,
+or the old public default `yorkie-secret` — so generate one rather than typing a
+passphrase. Both the chart and the server trim surrounding whitespace, so a
+Secret made with `--from-file` works too. Changing the key invalidates every
+admin token issued so far; users log in again.
+
+The `secretKeyExistingSecret` form avoids the keep-it-around problem entirely:
+the key lives in a Secret you own, and the chart never has to be told it again.
+
+### Rotating the key
 
 Rotating the key never restarts pods on its own, with either setting: the
 Deployment carries no hash of the key, because a pod annotation is readable
 with `get pods` — a far weaker permission than `get secrets` — and a hash of
 the key is enough to search for it offline. So pods keep the old key until they
 restart, and any that restart on their own pick up the new one, leaving
-replicas disagreeing. After changing the key, restart all pods together (both
-names default to `yorkie`), and admin users then log in again:
+replicas disagreeing — which is why rotation is a deliberate two-step, never a
+side effect of an unrelated upgrade. After changing the key, restart all pods
+together (both names default to `yorkie`), and admin users then log in again:
 
 ```bash
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)"   # only when rotating
 kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
 ```
+
+## Default Admin Password (Recommended)
+
+The first start against an empty database creates the default admin account
+(`admin`), which has full permissions over every project. It used to be created
+with the password `admin`, published here and in Yorkie's source, so every
+install shipped a login anyone could use. The server now generates a password
+instead and logs it once at startup, which is fine for a trial but leaves the
+credential in your log pipeline. For anything else, keep it in a Secret:
+
+```bash
+kubectl create secret generic yorkie-admin-password --namespace yorkie \
+  --from-literal=admin-password="$(openssl rand -base64 24)"
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.adminPasswordExistingSecret=yorkie-admin-password \
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+```
+
+The chart hands it to the pods as `YORKIE_BACKEND_ADMIN_PASSWORD`, never as an
+argument, which `/proc/<pid>/cmdline` and the pprof endpoint would expose. The
+value applies only while the account is being created: on a database that
+already holds it, the account keeps the password it was created with, and it is
+changed from the dashboard or `yorkie login` instead.
 
 ## Install Helm Chart
 
@@ -172,9 +209,21 @@ kubectl delete namespace yorkie
 
 ## Upgrading Chart
 
+Pass the admin token signing key the release already uses — the **same** value
+as the install, not a freshly generated one. A new key here would leave the
+Secret and the running pods disagreeing until something restarts them, one pod
+at a time; see [Rotating the key](#rotating-the-key) for the deliberate path.
+
 ```bash
-helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster \
-  --set yorkie.args.secretKey="$(openssl rand -base64 32)"
+# Key kept in a Secret you own (nothing to pass):
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+
+# Or key held by the chart — read back the value in use:
+SECRET_KEY="$(kubectl -n yorkie get secret yorkie-backend-secret-key \
+  -o jsonpath='{.data.secret-key}' | base64 -d)"
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$SECRET_KEY"
 ```
 
 > [!IMPORTANT]

@@ -221,3 +221,73 @@ func TestAdminSecretKey(t *testing.T) {
 		assert.Equal(t, key, newServer(t, conf))
 	})
 }
+
+// adminPasswordEnv is the environment variable a deployment hands the default
+// admin's password in, so it stays off the process command line.
+const adminPasswordEnv = "YORKIE_BACKEND_ADMIN_PASSWORD" // #nosec G101
+
+// publicAdminPassword is the password the default admin account was created
+// with when none was configured. It is published in the source tree and in
+// the charts, so an unconfigured server must never fall back to it.
+const publicAdminPassword = "admin" // #nosec G101
+
+// unsetAdminPasswordEnv removes adminPasswordEnv for the duration of the
+// test, so the developer's environment cannot leak into it.
+func unsetAdminPasswordEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(adminPasswordEnv, "")
+	require.NoError(t, os.Unsetenv(adminPasswordEnv))
+}
+
+// passwordConfig returns a test config whose admin password is unset.
+func passwordConfig() *server.Config {
+	conf := helper.TestConfig()
+	conf.Backend.AdminPassword = ""
+	return conf
+}
+
+func TestAdminPassword(t *testing.T) {
+	// The account has full permissions over every project, so a password
+	// anyone can read in the source is an open door on any deployment that
+	// never set one.
+	t.Run("unset password never resolves to the published default test", func(t *testing.T) {
+		unsetAdminPasswordEnv(t)
+		conf, err := server.NewConfigFromFile("config.sample.yml")
+		require.NoError(t, err)
+		assert.Empty(t, conf.Backend.AdminPassword)
+
+		require.NoError(t, buildServer(t, conf))
+		assert.NotEmpty(t, conf.Backend.AdminPassword)
+		assert.NotEqual(t, publicAdminPassword, conf.Backend.AdminPassword)
+	})
+
+	t.Run("unset password is generated per server test", func(t *testing.T) {
+		unsetAdminPasswordEnv(t)
+		first, second := passwordConfig(), passwordConfig()
+		require.NoError(t, buildServer(t, first))
+		require.NoError(t, buildServer(t, second))
+		assert.NotEqual(t, first.Backend.AdminPassword, second.Backend.AdminPassword)
+	})
+
+	t.Run("password from env is used test", func(t *testing.T) {
+		t.Setenv(adminPasswordEnv, "  shared-admin-password\n")
+		conf := passwordConfig()
+		require.NoError(t, buildServer(t, conf))
+		assert.Equal(t, "shared-admin-password", conf.Backend.AdminPassword)
+	})
+
+	t.Run("configured password is kept test", func(t *testing.T) {
+		unsetAdminPasswordEnv(t)
+		conf := passwordConfig()
+		conf.Backend.AdminPassword = "configured-admin-password"
+		require.NoError(t, buildServer(t, conf))
+		assert.Equal(t, "configured-admin-password", conf.Backend.AdminPassword)
+	})
+
+	// Set but blank means the operator meant to hand one in and lost it;
+	// generating one silently would leave an account nobody can reach.
+	t.Run("blank env password is refused test", func(t *testing.T) {
+		t.Setenv(adminPasswordEnv, "   ")
+		assert.ErrorContains(t, buildServer(t, passwordConfig()), adminPasswordEnv)
+	})
+}

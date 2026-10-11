@@ -82,6 +82,17 @@ spec:
               secretKeyRef:
                 name: {{ .Values.yorkie.args.secretKeyExistingSecret | default (printf "%s-backend-secret-key" .Values.yorkie.name) }}
                 key: secret-key
+          {{- if .Values.yorkie.args.adminPasswordExistingSecret }}
+          # Password of the default admin account, created on the first start
+          # against an empty database. Out of args for the same reason as the
+          # signing key. Unset, the server generates one and logs it, so no
+          # install ships the published "admin" password.
+          - name: YORKIE_BACKEND_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.args.adminPasswordExistingSecret }}
+                key: admin-password
+          {{- end }}
         args: [
           "server",
           "--mongo-connection-uri",

@@ -81,8 +81,15 @@ Backend:
   # Set once on first-run. (default: admin).
   AdminUser: "admin"
 
-  # AdminPassword is the password of the default admin. (default: admin).
-  AdminPassword: "admin"
+  # AdminPassword is the password of the default admin.
+  # If empty, it is read from the YORKIE_BACKEND_ADMIN_PASSWORD environment
+  # variable, which keeps it off the command line; if that is unset too, a
+  # password is generated and logged at startup. There is no default: the
+  # literal "admin" it used to fall back to is published here, so a
+  # deployment that never set one had an admin account anyone could log into.
+  # The value applies only when the account is created, on a first start
+  # against an empty database.
+  AdminPassword: ""
 
   # SecretKey is the secret key for signing authentication tokens.
   # If empty, it is read from the YORKIE_BACKEND_SECRET_KEY environment

@@ -81,8 +81,11 @@ var (
 	MembershipLeaseDuration   = "15s"
 	MembershipRenewalInterval = "5s"
 
-	AdminUser               = server.DefaultAdminUser
-	AdminPassword           = server.DefaultAdminPassword
+	AdminUser = server.DefaultAdminUser
+	// AdminPassword is set explicitly by TestConfig: the server no longer
+	// defaults to a published password, so tests have to name the one they
+	// log in with.
+	AdminPassword           = "admin"
 	AdminPasswordForSignUp  = AdminPassword + "123!"
 	UseDefaultProject       = true
 	SecretKey               = "yorkie-test-secret-key-0123456789" // #nosec G101
@@ -155,7 +158,7 @@ func CreateAdminCli(t assert.TestingT, rpcAddr string) *adminClient.Client {
 	adminCli, err := adminClient.Dial(rpcAddr, adminClient.WithInsecure(true))
 	assert.NoError(t, err)
 
-	_, err = adminCli.LogIn(context.Background(), server.DefaultAdminUser, server.DefaultAdminPassword)
+	_, err = adminCli.LogIn(context.Background(), AdminUser, AdminPassword)
 	assert.NoError(t, err)
 
 	return adminCli
@@ -418,7 +421,7 @@ func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) 
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = adminCli.LogIn(ctx, server.DefaultAdminUser, server.DefaultAdminPassword)
+	_, err = adminCli.LogIn(ctx, AdminUser, AdminPassword)
 	if err != nil {
 		log.Fatal(err)
 	}
