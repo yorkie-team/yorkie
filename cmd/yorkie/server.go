@@ -17,9 +17,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -106,6 +108,16 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// The config only holds a string, so server.New cannot tell a
+			// blank flag from an absent one; check it here. A config-file
+			// `SecretKey: ""` still means unset: config.sample.yml ships it.
+			if cmd.Flags().Changed("backend-secret-key") &&
+				strings.TrimSpace(conf.Backend.SecretKey) == "" {
+				return errors.New("--backend-secret-key is given but blank: " +
+					"set a shared random key, or omit the flag to use " +
+					server.SecretKeyEnv + " or a generated key")
+			}
+
 			conf.RPC.ReadHeaderTimeout = rpcReadHeaderTimeout.String()
 			conf.RPC.IdleTimeout = rpcIdleTimeout.String()
 
@@ -488,7 +500,8 @@ func init() {
 			"If empty, it is read from "+server.SecretKeyEnv+", which keeps it "+
 			"off the command line; if that is unset too, a random key is "+
 			"generated at startup, so tokens do not survive a restart. Set the "+
-			"same key on every node of a cluster.",
+			"same key on every node of a cluster. Given but blank, it is an "+
+			"error; a blank SecretKey in a config file means unset.",
 	)
 
 	cmd.Flags().BoolVar(

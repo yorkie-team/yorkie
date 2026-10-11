@@ -17,10 +17,12 @@
 package main
 
 import (
+	"path/filepath"
 	"strconv"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/server"
@@ -64,4 +66,33 @@ func TestServerCmdFlagDefaults(t *testing.T) {
 		assert.NotNil(t, f)
 		assert.Empty(t, f.DefValue)
 	})
+}
+
+// TestServerCmdBlankSecretKey checks that a --backend-secret-key given on the
+// command line but blank stops the server before it starts. Unset, it falls
+// back to the environment or a random key; given blank, the operator meant to
+// share a key, and a per-process one would make replicas reject each other's
+// tokens.
+func TestServerCmdBlankSecretKey(t *testing.T) {
+	cmd := serverCmd(t)
+	t.Cleanup(func() {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if f.Changed {
+				assert.NoError(t, f.Value.Set(f.DefValue))
+				f.Changed = false
+			}
+		})
+	})
+
+	// The --config path does not exist, so a run that gets past the key
+	// check fails on reading it instead of starting a server.
+	missing := filepath.Join(t.TempDir(), "missing.yml")
+	for _, value := range []string{"", "  "} {
+		assert.NoError(t, cmd.ParseFlags([]string{
+			"--config", missing,
+			"--backend-secret-key=" + value,
+		}))
+		err := cmd.RunE(cmd, nil)
+		assert.ErrorContains(t, err, "--backend-secret-key")
+	}
 }

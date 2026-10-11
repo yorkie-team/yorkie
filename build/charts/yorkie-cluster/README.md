@@ -101,6 +101,17 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 Add the same setting to every `helm install` example below. Changing the key
 invalidates every admin token issued so far; users log in again.
 
+With `secretKey`, changing the value and upgrading rolls every pod. With
+`secretKeyExistingSecret`, the chart does not see the Secret's content, so
+updating that Secret restarts nothing: pods keep the old key until they
+restart, and any that restart on their own use the new one, so replicas
+disagree. After rotating the Secret, restart all pods together (both
+default to `yorkie`), and admin users then log in again:
+
+```bash
+kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
+```
+
 ## Install Helm Chart
 
 ### With MongoDB (Included)

@@ -102,3 +102,19 @@ before and after, as a guard):
 ```
 
 All eight subtests pass after the fix.
+
+## CodeRabbit round (PR #2176)
+
+- `--backend-secret-key=""` given explicitly was indistinguishable from an
+  absent flag once it reached `backend.Config`, so it fell through to the
+  env var or a random key. The CLI now checks `Flags().Changed` and refuses
+  a blank value before anything else runs. A config-file `SecretKey: ""`
+  stays "unset", because `config.sample.yml` ships it that way and existing
+  configs copy it.
+- The test drives `RunE` with `--config` pointing at a missing file, so a
+  run that passes the key check fails on the config read instead of
+  starting a server. RED on 07a75eca: the error was "read config file ...
+  no such file or directory", not the key error, for both `""` and `"  "`.
+- An operator-managed Secret can rotate without the chart seeing it, so no
+  checksum can roll the pods. Documented a `rollout restart` in the chart
+  README and values instead of adding a reloader.
