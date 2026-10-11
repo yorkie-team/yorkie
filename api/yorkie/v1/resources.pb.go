@@ -1480,9 +1480,18 @@ type TreeNode struct {
 	// may be overwritten by later LWW tombstones and thus cannot serve as
 	// the merge-time causal boundary for SplitElement. See
 	// docs/design/concurrent-merge-split.md for details.
-	MergedAt      *TimeTicket `protobuf:"bytes,10,opt,name=merged_at,json=mergedAt,proto3" json:"merged_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MergedAt *TimeTicket `protobuf:"bytes,10,opt,name=merged_at,json=mergedAt,proto3" json:"merged_at,omitempty"`
+	// boundary_anchor, boundary_at_end and boundary_nest record, for the
+	// product of a level-0 split of an all-text node, the node its boundary is
+	// anchored in front of (or the end of the split family when
+	// boundary_at_end is set) and the same-anchor boundary it nests under.
+	// Later splits read them, so they persist for the life of the node. See
+	// docs/design/split-boundary-anchors.md for details.
+	BoundaryAnchor *TreeNodeID `protobuf:"bytes,11,opt,name=boundary_anchor,json=boundaryAnchor,proto3" json:"boundary_anchor,omitempty"`
+	BoundaryAtEnd  bool        `protobuf:"varint,12,opt,name=boundary_at_end,json=boundaryAtEnd,proto3" json:"boundary_at_end,omitempty"`
+	BoundaryNest   *TreeNodeID `protobuf:"bytes,13,opt,name=boundary_nest,json=boundaryNest,proto3" json:"boundary_nest,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TreeNode) Reset() {
@@ -1581,6 +1590,27 @@ func (x *TreeNode) GetMergedFrom() *TreeNodeID {
 func (x *TreeNode) GetMergedAt() *TimeTicket {
 	if x != nil {
 		return x.MergedAt
+	}
+	return nil
+}
+
+func (x *TreeNode) GetBoundaryAnchor() *TreeNodeID {
+	if x != nil {
+		return x.BoundaryAnchor
+	}
+	return nil
+}
+
+func (x *TreeNode) GetBoundaryAtEnd() bool {
+	if x != nil {
+		return x.BoundaryAtEnd
+	}
+	return false
+}
+
+func (x *TreeNode) GetBoundaryNest() *TreeNodeID {
+	if x != nil {
+		return x.BoundaryNest
 	}
 	return nil
 }
@@ -5399,7 +5429,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"TextNodeID\x124\n" +
 	"\n" +
 	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x05R\x06offset\"\x9a\x04\n" +
+	"\x06offset\x18\x02 \x01(\x05R\x06offset\"\xbe\x05\n" +
 	"\bTreeNode\x12%\n" +
 	"\x02id\x18\x01 \x01(\v2\x15.yorkie.v1.TreeNodeIDR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
@@ -5415,7 +5445,10 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\vmerged_from\x18\t \x01(\v2\x15.yorkie.v1.TreeNodeIDR\n" +
 	"mergedFrom\x122\n" +
 	"\tmerged_at\x18\n" +
-	" \x01(\v2\x15.yorkie.v1.TimeTicketR\bmergedAt\x1aR\n" +
+	" \x01(\v2\x15.yorkie.v1.TimeTicketR\bmergedAt\x12>\n" +
+	"\x0fboundary_anchor\x18\v \x01(\v2\x15.yorkie.v1.TreeNodeIDR\x0eboundaryAnchor\x12&\n" +
+	"\x0fboundary_at_end\x18\f \x01(\bR\rboundaryAtEnd\x12:\n" +
+	"\rboundary_nest\x18\r \x01(\v2\x15.yorkie.v1.TreeNodeIDR\fboundaryNest\x1aR\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
 	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.NodeAttrR\x05value:\x028\x01\":\n" +
@@ -5822,161 +5855,163 @@ var file_yorkie_v1_resources_proto_depIdxs = []int32{
 	71,  // 47: yorkie.v1.TreeNode.attributes:type_name -> yorkie.v1.TreeNode.AttributesEntry
 	20,  // 48: yorkie.v1.TreeNode.merged_from:type_name -> yorkie.v1.TreeNodeID
 	35,  // 49: yorkie.v1.TreeNode.merged_at:type_name -> yorkie.v1.TimeTicket
-	18,  // 50: yorkie.v1.TreeNodes.content:type_name -> yorkie.v1.TreeNode
-	35,  // 51: yorkie.v1.TreeNodeID.created_at:type_name -> yorkie.v1.TimeTicket
-	20,  // 52: yorkie.v1.TreePos.parent_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 53: yorkie.v1.TreePos.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
-	79,  // 54: yorkie.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	79,  // 55: yorkie.v1.Member.invited_at:type_name -> google.protobuf.Timestamp
-	79,  // 56: yorkie.v1.Project.created_at:type_name -> google.protobuf.Timestamp
-	79,  // 57: yorkie.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
-	80,  // 58: yorkie.v1.UpdatableProjectFields.name:type_name -> google.protobuf.StringValue
-	80,  // 59: yorkie.v1.UpdatableProjectFields.auth_webhook_url:type_name -> google.protobuf.StringValue
-	72,  // 60: yorkie.v1.UpdatableProjectFields.auth_webhook_methods:type_name -> yorkie.v1.UpdatableProjectFields.AuthWebhookMethods
-	81,  // 61: yorkie.v1.UpdatableProjectFields.auth_webhook_max_retries:type_name -> google.protobuf.UInt64Value
-	80,  // 62: yorkie.v1.UpdatableProjectFields.auth_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 63: yorkie.v1.UpdatableProjectFields.auth_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 64: yorkie.v1.UpdatableProjectFields.auth_webhook_request_timeout:type_name -> google.protobuf.StringValue
-	80,  // 65: yorkie.v1.UpdatableProjectFields.event_webhook_url:type_name -> google.protobuf.StringValue
-	73,  // 66: yorkie.v1.UpdatableProjectFields.event_webhook_events:type_name -> yorkie.v1.UpdatableProjectFields.EventWebhookEvents
-	81,  // 67: yorkie.v1.UpdatableProjectFields.event_webhook_max_retries:type_name -> google.protobuf.UInt64Value
-	80,  // 68: yorkie.v1.UpdatableProjectFields.event_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 69: yorkie.v1.UpdatableProjectFields.event_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 70: yorkie.v1.UpdatableProjectFields.event_webhook_request_timeout:type_name -> google.protobuf.StringValue
-	82,  // 71: yorkie.v1.UpdatableProjectFields.snapshot_threshold:type_name -> google.protobuf.Int64Value
-	82,  // 72: yorkie.v1.UpdatableProjectFields.snapshot_interval:type_name -> google.protobuf.Int64Value
-	80,  // 73: yorkie.v1.UpdatableProjectFields.client_deactivate_threshold:type_name -> google.protobuf.StringValue
-	83,  // 74: yorkie.v1.UpdatableProjectFields.max_subscribers_per_document:type_name -> google.protobuf.Int32Value
-	83,  // 75: yorkie.v1.UpdatableProjectFields.max_attachments_per_document:type_name -> google.protobuf.Int32Value
-	83,  // 76: yorkie.v1.UpdatableProjectFields.max_size_per_document:type_name -> google.protobuf.Int32Value
-	84,  // 77: yorkie.v1.UpdatableProjectFields.remove_on_detach:type_name -> google.protobuf.BoolValue
-	84,  // 78: yorkie.v1.UpdatableProjectFields.auto_revision_enabled:type_name -> google.protobuf.BoolValue
-	80,  // 79: yorkie.v1.UpdatableProjectFields.channel_session_ttl:type_name -> google.protobuf.StringValue
-	74,  // 80: yorkie.v1.UpdatableProjectFields.allowed_origins:type_name -> yorkie.v1.UpdatableProjectFields.AllowedOrigins
-	40,  // 81: yorkie.v1.DocumentSummary.document_size:type_name -> yorkie.v1.DocSize
-	75,  // 82: yorkie.v1.DocumentSummary.presences:type_name -> yorkie.v1.DocumentSummary.PresencesEntry
-	79,  // 83: yorkie.v1.DocumentSummary.created_at:type_name -> google.protobuf.Timestamp
-	79,  // 84: yorkie.v1.DocumentSummary.accessed_at:type_name -> google.protobuf.Timestamp
-	79,  // 85: yorkie.v1.DocumentSummary.updated_at:type_name -> google.protobuf.Timestamp
-	3,   // 86: yorkie.v1.PresenceChange.type:type_name -> yorkie.v1.PresenceChange.ChangeType
-	29,  // 87: yorkie.v1.PresenceChange.presence:type_name -> yorkie.v1.Presence
-	76,  // 88: yorkie.v1.Presence.data:type_name -> yorkie.v1.Presence.DataEntry
-	35,  // 89: yorkie.v1.TextNodePos.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 90: yorkie.v1.RestoreSpan.created_at:type_name -> yorkie.v1.TimeTicket
-	77,  // 91: yorkie.v1.RestoreSpan.attributes:type_name -> yorkie.v1.RestoreSpan.AttributesEntry
-	20,  // 92: yorkie.v1.TreeRestoreSpan.id:type_name -> yorkie.v1.TreeNodeID
-	78,  // 93: yorkie.v1.TreeRestoreSpan.attributes:type_name -> yorkie.v1.TreeRestoreSpan.AttributesEntry
-	20,  // 94: yorkie.v1.TreeRestoreSpan.parent_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 95: yorkie.v1.TreeRestoreSpan.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 96: yorkie.v1.TreeRestoreSpan.right_sibling_id:type_name -> yorkie.v1.TreeNodeID
-	2,   // 97: yorkie.v1.DocEvent.type:type_name -> yorkie.v1.DocEventType
-	36,  // 98: yorkie.v1.DocEvent.body:type_name -> yorkie.v1.DocEventBody
-	4,   // 99: yorkie.v1.ChannelEvent.type:type_name -> yorkie.v1.ChannelEvent.Type
-	39,  // 100: yorkie.v1.DocSize.live:type_name -> yorkie.v1.DataSize
-	39,  // 101: yorkie.v1.DocSize.gc:type_name -> yorkie.v1.DataSize
-	43,  // 102: yorkie.v1.Schema.rules:type_name -> yorkie.v1.Rule
-	79,  // 103: yorkie.v1.Schema.created_at:type_name -> google.protobuf.Timestamp
-	42,  // 104: yorkie.v1.Rule.tree_nodes:type_name -> yorkie.v1.TreeNodeRule
-	79,  // 105: yorkie.v1.RevisionSummary.created_at:type_name -> google.protobuf.Timestamp
-	29,  // 106: yorkie.v1.Snapshot.PresencesEntry.value:type_name -> yorkie.v1.Presence
-	35,  // 107: yorkie.v1.Operation.Set.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 108: yorkie.v1.Operation.Set.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 109: yorkie.v1.Operation.Set.executed_at:type_name -> yorkie.v1.TimeTicket
-	0,   // 110: yorkie.v1.Operation.Set.restore_mode:type_name -> yorkie.v1.RestoreMode
-	35,  // 111: yorkie.v1.Operation.Add.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 112: yorkie.v1.Operation.Add.prev_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 113: yorkie.v1.Operation.Add.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 114: yorkie.v1.Operation.Add.executed_at:type_name -> yorkie.v1.TimeTicket
-	0,   // 115: yorkie.v1.Operation.Add.restore_mode:type_name -> yorkie.v1.RestoreMode
-	35,  // 116: yorkie.v1.Operation.Move.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 117: yorkie.v1.Operation.Move.prev_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 118: yorkie.v1.Operation.Move.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 119: yorkie.v1.Operation.Move.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 120: yorkie.v1.Operation.Remove.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 121: yorkie.v1.Operation.Remove.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 122: yorkie.v1.Operation.Remove.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 123: yorkie.v1.Operation.Edit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 124: yorkie.v1.Operation.Edit.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 125: yorkie.v1.Operation.Edit.to:type_name -> yorkie.v1.TextNodePos
-	57,  // 126: yorkie.v1.Operation.Edit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
-	35,  // 127: yorkie.v1.Operation.Edit.executed_at:type_name -> yorkie.v1.TimeTicket
-	58,  // 128: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
-	33,  // 129: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
-	0,   // 130: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	33,  // 131: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
-	35,  // 132: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 133: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 134: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
-	59,  // 135: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
-	35,  // 136: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
-	60,  // 137: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
-	35,  // 138: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 139: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 140: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 141: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 142: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
-	21,  // 143: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
-	61,  // 144: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
-	19,  // 145: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
-	35,  // 146: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 147: yorkie.v1.Operation.TreeEdit.restore_spans:type_name -> yorkie.v1.TreeRestoreSpan
-	0,   // 148: yorkie.v1.Operation.TreeEdit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	34,  // 149: yorkie.v1.Operation.TreeEdit.retombstone_spans:type_name -> yorkie.v1.TreeRestoreSpan
-	35,  // 150: yorkie.v1.Operation.TreeEdit.split_tickets:type_name -> yorkie.v1.TimeTicket
-	35,  // 151: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 152: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
-	21,  // 153: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
-	62,  // 154: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
-	35,  // 155: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
-	63,  // 156: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
-	35,  // 157: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 158: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 159: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 160: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
-	0,   // 161: yorkie.v1.Operation.ArraySet.restore_mode:type_name -> yorkie.v1.RestoreMode
-	35,  // 162: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 163: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 164: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 165: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	13,  // 166: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
-	35,  // 167: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 168: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 169: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 170: yorkie.v1.JSONElement.JSONObject.revived_at:type_name -> yorkie.v1.TimeTicket
-	14,  // 171: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
-	35,  // 172: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 173: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 174: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 175: yorkie.v1.JSONElement.JSONArray.revived_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 176: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
-	35,  // 177: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 178: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 179: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 180: yorkie.v1.JSONElement.Primitive.revived_at:type_name -> yorkie.v1.TimeTicket
-	16,  // 181: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
-	35,  // 182: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 183: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 184: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 185: yorkie.v1.JSONElement.Text.revived_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 186: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
-	35,  // 187: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 188: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 189: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 190: yorkie.v1.JSONElement.Counter.revived_at:type_name -> yorkie.v1.TimeTicket
-	18,  // 191: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
-	35,  // 192: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 193: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 194: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 195: yorkie.v1.JSONElement.Tree.revived_at:type_name -> yorkie.v1.TimeTicket
-	15,  // 196: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	15,  // 197: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	29,  // 198: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
-	15,  // 199: yorkie.v1.TreeRestoreSpan.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	200, // [200:200] is the sub-list for method output_type
-	200, // [200:200] is the sub-list for method input_type
-	200, // [200:200] is the sub-list for extension type_name
-	200, // [200:200] is the sub-list for extension extendee
-	0,   // [0:200] is the sub-list for field type_name
+	20,  // 50: yorkie.v1.TreeNode.boundary_anchor:type_name -> yorkie.v1.TreeNodeID
+	20,  // 51: yorkie.v1.TreeNode.boundary_nest:type_name -> yorkie.v1.TreeNodeID
+	18,  // 52: yorkie.v1.TreeNodes.content:type_name -> yorkie.v1.TreeNode
+	35,  // 53: yorkie.v1.TreeNodeID.created_at:type_name -> yorkie.v1.TimeTicket
+	20,  // 54: yorkie.v1.TreePos.parent_id:type_name -> yorkie.v1.TreeNodeID
+	20,  // 55: yorkie.v1.TreePos.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
+	79,  // 56: yorkie.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	79,  // 57: yorkie.v1.Member.invited_at:type_name -> google.protobuf.Timestamp
+	79,  // 58: yorkie.v1.Project.created_at:type_name -> google.protobuf.Timestamp
+	79,  // 59: yorkie.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
+	80,  // 60: yorkie.v1.UpdatableProjectFields.name:type_name -> google.protobuf.StringValue
+	80,  // 61: yorkie.v1.UpdatableProjectFields.auth_webhook_url:type_name -> google.protobuf.StringValue
+	72,  // 62: yorkie.v1.UpdatableProjectFields.auth_webhook_methods:type_name -> yorkie.v1.UpdatableProjectFields.AuthWebhookMethods
+	81,  // 63: yorkie.v1.UpdatableProjectFields.auth_webhook_max_retries:type_name -> google.protobuf.UInt64Value
+	80,  // 64: yorkie.v1.UpdatableProjectFields.auth_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
+	80,  // 65: yorkie.v1.UpdatableProjectFields.auth_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
+	80,  // 66: yorkie.v1.UpdatableProjectFields.auth_webhook_request_timeout:type_name -> google.protobuf.StringValue
+	80,  // 67: yorkie.v1.UpdatableProjectFields.event_webhook_url:type_name -> google.protobuf.StringValue
+	73,  // 68: yorkie.v1.UpdatableProjectFields.event_webhook_events:type_name -> yorkie.v1.UpdatableProjectFields.EventWebhookEvents
+	81,  // 69: yorkie.v1.UpdatableProjectFields.event_webhook_max_retries:type_name -> google.protobuf.UInt64Value
+	80,  // 70: yorkie.v1.UpdatableProjectFields.event_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
+	80,  // 71: yorkie.v1.UpdatableProjectFields.event_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
+	80,  // 72: yorkie.v1.UpdatableProjectFields.event_webhook_request_timeout:type_name -> google.protobuf.StringValue
+	82,  // 73: yorkie.v1.UpdatableProjectFields.snapshot_threshold:type_name -> google.protobuf.Int64Value
+	82,  // 74: yorkie.v1.UpdatableProjectFields.snapshot_interval:type_name -> google.protobuf.Int64Value
+	80,  // 75: yorkie.v1.UpdatableProjectFields.client_deactivate_threshold:type_name -> google.protobuf.StringValue
+	83,  // 76: yorkie.v1.UpdatableProjectFields.max_subscribers_per_document:type_name -> google.protobuf.Int32Value
+	83,  // 77: yorkie.v1.UpdatableProjectFields.max_attachments_per_document:type_name -> google.protobuf.Int32Value
+	83,  // 78: yorkie.v1.UpdatableProjectFields.max_size_per_document:type_name -> google.protobuf.Int32Value
+	84,  // 79: yorkie.v1.UpdatableProjectFields.remove_on_detach:type_name -> google.protobuf.BoolValue
+	84,  // 80: yorkie.v1.UpdatableProjectFields.auto_revision_enabled:type_name -> google.protobuf.BoolValue
+	80,  // 81: yorkie.v1.UpdatableProjectFields.channel_session_ttl:type_name -> google.protobuf.StringValue
+	74,  // 82: yorkie.v1.UpdatableProjectFields.allowed_origins:type_name -> yorkie.v1.UpdatableProjectFields.AllowedOrigins
+	40,  // 83: yorkie.v1.DocumentSummary.document_size:type_name -> yorkie.v1.DocSize
+	75,  // 84: yorkie.v1.DocumentSummary.presences:type_name -> yorkie.v1.DocumentSummary.PresencesEntry
+	79,  // 85: yorkie.v1.DocumentSummary.created_at:type_name -> google.protobuf.Timestamp
+	79,  // 86: yorkie.v1.DocumentSummary.accessed_at:type_name -> google.protobuf.Timestamp
+	79,  // 87: yorkie.v1.DocumentSummary.updated_at:type_name -> google.protobuf.Timestamp
+	3,   // 88: yorkie.v1.PresenceChange.type:type_name -> yorkie.v1.PresenceChange.ChangeType
+	29,  // 89: yorkie.v1.PresenceChange.presence:type_name -> yorkie.v1.Presence
+	76,  // 90: yorkie.v1.Presence.data:type_name -> yorkie.v1.Presence.DataEntry
+	35,  // 91: yorkie.v1.TextNodePos.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 92: yorkie.v1.RestoreSpan.created_at:type_name -> yorkie.v1.TimeTicket
+	77,  // 93: yorkie.v1.RestoreSpan.attributes:type_name -> yorkie.v1.RestoreSpan.AttributesEntry
+	20,  // 94: yorkie.v1.TreeRestoreSpan.id:type_name -> yorkie.v1.TreeNodeID
+	78,  // 95: yorkie.v1.TreeRestoreSpan.attributes:type_name -> yorkie.v1.TreeRestoreSpan.AttributesEntry
+	20,  // 96: yorkie.v1.TreeRestoreSpan.parent_id:type_name -> yorkie.v1.TreeNodeID
+	20,  // 97: yorkie.v1.TreeRestoreSpan.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
+	20,  // 98: yorkie.v1.TreeRestoreSpan.right_sibling_id:type_name -> yorkie.v1.TreeNodeID
+	2,   // 99: yorkie.v1.DocEvent.type:type_name -> yorkie.v1.DocEventType
+	36,  // 100: yorkie.v1.DocEvent.body:type_name -> yorkie.v1.DocEventBody
+	4,   // 101: yorkie.v1.ChannelEvent.type:type_name -> yorkie.v1.ChannelEvent.Type
+	39,  // 102: yorkie.v1.DocSize.live:type_name -> yorkie.v1.DataSize
+	39,  // 103: yorkie.v1.DocSize.gc:type_name -> yorkie.v1.DataSize
+	43,  // 104: yorkie.v1.Schema.rules:type_name -> yorkie.v1.Rule
+	79,  // 105: yorkie.v1.Schema.created_at:type_name -> google.protobuf.Timestamp
+	42,  // 106: yorkie.v1.Rule.tree_nodes:type_name -> yorkie.v1.TreeNodeRule
+	79,  // 107: yorkie.v1.RevisionSummary.created_at:type_name -> google.protobuf.Timestamp
+	29,  // 108: yorkie.v1.Snapshot.PresencesEntry.value:type_name -> yorkie.v1.Presence
+	35,  // 109: yorkie.v1.Operation.Set.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 110: yorkie.v1.Operation.Set.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 111: yorkie.v1.Operation.Set.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 112: yorkie.v1.Operation.Set.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 113: yorkie.v1.Operation.Add.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 114: yorkie.v1.Operation.Add.prev_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 115: yorkie.v1.Operation.Add.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 116: yorkie.v1.Operation.Add.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 117: yorkie.v1.Operation.Add.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 118: yorkie.v1.Operation.Move.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 119: yorkie.v1.Operation.Move.prev_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 120: yorkie.v1.Operation.Move.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 121: yorkie.v1.Operation.Move.executed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 122: yorkie.v1.Operation.Remove.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 123: yorkie.v1.Operation.Remove.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 124: yorkie.v1.Operation.Remove.executed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 125: yorkie.v1.Operation.Edit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 126: yorkie.v1.Operation.Edit.from:type_name -> yorkie.v1.TextNodePos
+	32,  // 127: yorkie.v1.Operation.Edit.to:type_name -> yorkie.v1.TextNodePos
+	57,  // 128: yorkie.v1.Operation.Edit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
+	35,  // 129: yorkie.v1.Operation.Edit.executed_at:type_name -> yorkie.v1.TimeTicket
+	58,  // 130: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
+	33,  // 131: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
+	0,   // 132: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
+	33,  // 133: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
+	35,  // 134: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 135: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
+	32,  // 136: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
+	59,  // 137: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
+	35,  // 138: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
+	60,  // 139: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
+	35,  // 140: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 141: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 142: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 143: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	21,  // 144: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
+	21,  // 145: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
+	61,  // 146: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
+	19,  // 147: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
+	35,  // 148: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 149: yorkie.v1.Operation.TreeEdit.restore_spans:type_name -> yorkie.v1.TreeRestoreSpan
+	0,   // 150: yorkie.v1.Operation.TreeEdit.restore_mode:type_name -> yorkie.v1.RestoreMode
+	34,  // 151: yorkie.v1.Operation.TreeEdit.retombstone_spans:type_name -> yorkie.v1.TreeRestoreSpan
+	35,  // 152: yorkie.v1.Operation.TreeEdit.split_tickets:type_name -> yorkie.v1.TimeTicket
+	35,  // 153: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	21,  // 154: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
+	21,  // 155: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
+	62,  // 156: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
+	35,  // 157: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
+	63,  // 158: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
+	35,  // 159: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 160: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 161: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
+	35,  // 162: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 163: yorkie.v1.Operation.ArraySet.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 164: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	35,  // 165: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	35,  // 166: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	35,  // 167: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	13,  // 168: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
+	35,  // 169: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 170: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 171: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 172: yorkie.v1.JSONElement.JSONObject.revived_at:type_name -> yorkie.v1.TimeTicket
+	14,  // 173: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
+	35,  // 174: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 175: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 176: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 177: yorkie.v1.JSONElement.JSONArray.revived_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 178: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
+	35,  // 179: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 180: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 181: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 182: yorkie.v1.JSONElement.Primitive.revived_at:type_name -> yorkie.v1.TimeTicket
+	16,  // 183: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
+	35,  // 184: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 185: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 186: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 187: yorkie.v1.JSONElement.Text.revived_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 188: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
+	35,  // 189: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 190: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 191: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 192: yorkie.v1.JSONElement.Counter.revived_at:type_name -> yorkie.v1.TimeTicket
+	18,  // 193: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
+	35,  // 194: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 195: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 196: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
+	35,  // 197: yorkie.v1.JSONElement.Tree.revived_at:type_name -> yorkie.v1.TimeTicket
+	15,  // 198: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	15,  // 199: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	29,  // 200: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
+	15,  // 201: yorkie.v1.TreeRestoreSpan.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	202, // [202:202] is the sub-list for method output_type
+	202, // [202:202] is the sub-list for method input_type
+	202, // [202:202] is the sub-list for extension type_name
+	202, // [202:202] is the sub-list for extension extendee
+	0,   // [0:202] is the sub-list for field type_name
 }
 
 func init() { file_yorkie_v1_resources_proto_init() }

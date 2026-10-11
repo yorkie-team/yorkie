@@ -366,6 +366,14 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 		pbNode.MergedAt = ToTimeTicket(treeNode.MergedAt)
 	}
 
+	if treeNode.BoundaryAnchor != nil {
+		pbNode.BoundaryAnchor = toTreeNodeID(treeNode.BoundaryAnchor)
+	}
+	pbNode.BoundaryAtEnd = treeNode.BoundaryAtEnd
+	if treeNode.BoundaryNest != nil {
+		pbNode.BoundaryNest = toTreeNodeID(treeNode.BoundaryNest)
+	}
+
 	return pbNode
 }
 

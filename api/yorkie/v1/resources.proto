@@ -308,6 +308,15 @@ message TreeNode {
   // the merge-time causal boundary for SplitElement. See
   // docs/design/concurrent-merge-split.md for details.
   TimeTicket merged_at = 10;
+  // boundary_anchor, boundary_at_end and boundary_nest record, for the
+  // product of a level-0 split of an all-text node, the node its boundary is
+  // anchored in front of (or the end of the split family when
+  // boundary_at_end is set) and the same-anchor boundary it nests under.
+  // Later splits read them, so they persist for the life of the node. See
+  // docs/design/split-boundary-anchors.md for details.
+  TreeNodeID boundary_anchor = 11;
+  bool boundary_at_end = 12;
+  TreeNodeID boundary_nest = 13;
 }
 
 message TreeNodes {

@@ -2597,6 +2597,29 @@ components:
           description: ""
           title: attributes
           type: object
+        boundaryAnchor:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: |-
+            boundary_anchor, boundary_at_end and boundary_nest record, for the
+             product of a level-0 split of an all-text node, the node its boundary is
+             anchored in front of (or the end of the split family when
+             boundary_at_end is set) and the same-anchor boundary it nests under.
+             Later splits read them, so they persist for the life of the node. See
+             docs/design/split-boundary-anchors.md for details.
+          title: boundary_anchor
+          type: object
+        boundaryAtEnd:
+          additionalProperties: false
+          description: ""
+          title: boundary_at_end
+          type: boolean
+        boundaryNest:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: boundary_nest
+          type: object
         depth:
           additionalProperties: false
           description: ""

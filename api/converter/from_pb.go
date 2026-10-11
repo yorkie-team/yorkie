@@ -1143,6 +1143,20 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 		}
 	}
 
+	if pbNode.GetBoundaryAnchor() != nil {
+		node.BoundaryAnchor, err = fromTreeNodeID(pbNode.GetBoundaryAnchor())
+		if err != nil {
+			return nil, err
+		}
+	}
+	node.BoundaryAtEnd = pbNode.GetBoundaryAtEnd()
+	if pbNode.GetBoundaryNest() != nil {
+		node.BoundaryNest, err = fromTreeNodeID(pbNode.GetBoundaryNest())
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 	if err != nil {
 		return nil, err

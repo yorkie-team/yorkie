@@ -721,8 +721,17 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
-// DropSplitLinks clears the split-sibling links on this node and every one of
-// its descendants.
+// clearBoundary drops the boundary record. Like the split chain, it describes a
+// node's place in a split family, so a copy that leaves the family or a node a
+// peer sent must not carry it.
+func (n *TreeNode) clearBoundary() {
+	n.BoundaryAnchor = nil
+	n.BoundaryAtEnd = false
+	n.BoundaryNest = nil
+}
+
+// DropSplitLinks clears the split-sibling links and the boundary records on
+// this node and every one of its descendants.
 //
 // InsPrevID/InsNextID name positions in a split chain and only SplitElement
 // may create them. A node arriving as operation content is freshly created by
@@ -743,6 +752,7 @@ func (n *TreeNode) DropSplitLinks() {
 	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.InsPrevID = nil
 		node.Value.InsNextID = nil
+		node.Value.clearBoundary()
 	})
 }
 
@@ -762,6 +772,7 @@ func (n *TreeNode) DropEngineOnlyLinks() {
 	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.InsPrevID = nil
 		node.Value.InsNextID = nil
+		node.Value.clearBoundary()
 		node.Value.MergedFrom = nil
 		node.Value.MergedAt = nil
 		node.Value.mergedInto = nil
@@ -813,6 +824,7 @@ func (n *TreeNode) ReissueIDs(issueTimeTicket func() *time.Ticket) {
 		value.id = NewTreeNodeID(issueTimeTicket(), 0)
 		value.InsPrevID = nil
 		value.InsNextID = nil
+		value.clearBoundary()
 		value.MergedFrom = nil
 		value.MergedAt = nil
 		value.mergedInto = nil
@@ -844,6 +856,10 @@ func (n *TreeNode) CloneForReinsert(preTombstoned map[string]struct{}) (*TreeNod
 	// padded lengths, text nodes from their own value.
 	index.TraverseNode(clone.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.removedAt = nil
+		// The receivers of the re-insert drop the boundary record with the
+		// rest of the engine-only links (DropEngineOnlyLinks); drop it here
+		// too so the local copy matches theirs.
+		node.Value.clearBoundary()
 		if node.IsText() {
 			node.VisibleLength = node.Value.Length()
 			node.TotalLength = node.Value.Length()
