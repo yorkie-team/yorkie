@@ -3,11 +3,11 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans
 > to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Concurrent text inserts and paragraph splits of a level-0 text
-paragraph converge (yorkie-js-sdk#1436). The split boundary records the item
+**Goal:** Concurrent text inserts and paragraph splits of a text paragraph
+converge (yorkie-js-sdk#1436). The split boundary records the item
 it is anchored in front of, and snapshots persist that record.
 
-**Architecture:** A level-0 split of an all-text node records
+**Architecture:** The innermost level of a split of an all-text node records
 `BoundaryAnchor` (the first item after its position that its creator knew,
 or the end of the family) and `BoundaryNest` (the same-anchor boundary it
 was made inside). Splits are placed and inserts are resolved against those
@@ -65,15 +65,15 @@ snapshot `TreeNode`. Operations do not change.
   `pkg/document/gc_tree_same_boundary_split_test.go`,
   `pkg/document/crdt/tree_holds_known_child_test.go` (from the prototype)
 
-- [ ] Apply the prototype patch on `origin/main`.
-- [ ] Remove `flatRules` and `flatNoBarrier`, and the `else` branch of
+- [x] Apply the prototype patch on `origin/main`.
+- [x] Remove `flatRules` and `flatNoBarrier`, and the `else` branch of
       Phase 1-0 in `Edit`. Delete `advanceIntoSplitProducts`, which only
       that branch called.
-- [ ] Replace "Experiment" commentary with the rule it implements. Point
+- [x] Replace "Experiment" commentary with the rule it implements. Point
       references to `split-boundary-insert-side.md` at
       `split-boundary-anchors.md`.
-- [ ] `go test ./pkg/document/... ./api/converter/...` passes.
-- [ ] Commit, then run the code review and fix what it finds.
+- [x] `go test ./pkg/document/... ./api/converter/...` passes.
+- [x] Commit, then run the code review and fix what it finds.
 
 ### Task 2: Typed anchors with indexed lookup
 
@@ -85,16 +85,16 @@ snapshot `TreeNode`. Operations do not change.
 - Produces: `TreeNode.BoundaryAnchor *TreeNodeID`,
   `TreeNode.BoundaryAtEnd bool`, `TreeNode.BoundaryNest *TreeNodeID`.
 
-- [ ] Write a failing test: a product anchored before a text node whose
+- [x] Write a failing test: a product anchored before a text node whose
       tombstone is purged gets relinked to the next item. Also check that
       the lookup goes through the ID map rather than a traversal.
-- [ ] Replace string keys with `*TreeNodeID` plus the end flag. Look nodes
+- [x] Replace string keys with `*TreeNodeID` plus the end flag. Look nodes
       up by exact ID through `NodeMapByID`. Keep a reverse index from
       anchor ID to products so that `relinkAnchors` touches only those.
-- [ ] Re-run the Task 1 suites and the fuzz harnesses from the brief
+- [x] Re-run the Task 1 suites and the fuzz harnesses from the brief
       (`tree_1436_fuzz_test.go`, `tree_1436_fuzz2_test.go`). They must give
       the same per-seed result as before the change.
-- [ ] Commit, then run the code review and fix what it finds.
+- [x] Commit, then run the code review and fix what it finds.
 
 ### Task 3: Persist anchors in snapshots
 
@@ -105,27 +105,29 @@ snapshot `TreeNode`. Operations do not change.
 - Test: `api/converter/converter_tree_restore_test.go`,
   `pkg/document/tree_boundary_snapshot_test.go`
 
-- [ ] Write a failing test: replay the minimal snapshot-reload divergence
+- [x] Write a failing test: replay the minimal snapshot-reload divergence
       from the brief. Reloading one replica mid-run must leave both
       converged.
-- [ ] Add `boundary_anchor`, `boundary_at_end` and `boundary_nest` to
+- [x] Add `boundary_anchor`, `boundary_at_end` and `boundary_nest` to
+      (later moved off `TreeNode` into `JSONElement.Tree.boundaries` as
+      `TreeBoundary`, so operation content cannot carry them; see Task 7)
       `TreeNode`, and run `make proto`.
-- [ ] Write them in snapshots and read them back. Strip them when tree
+- [x] Write them in snapshots and read them back. Strip them when tree
       nodes are decoded as operation contents.
-- [ ] Test that a snapshot without the fields loads with no anchors.
-- [ ] Commit, then run the code review and fix what it finds.
+- [x] Test that a snapshot without the fields loads with no anchors.
+- [x] Commit, then run the code review and fix what it finds.
 
 ### Task 4: Regression tests from the fuzz
 
 **Files:**
 - Create: `pkg/document/tree_boundary_fuzz_test.go`
 
-- [ ] Port the oracle-free convergence fuzz as a deterministic test:
+- [x] Port the oracle-free convergence fuzz as a deterministic test:
       mulberry32 seeds 1–300, 2 and 3 replicas, insert/split/delete, with
       GC and snapshot reload. Keep it under 10 s in `go test`.
-- [ ] Add the issue's three minima and the seeds the brief names (101,
+- [x] Add the issue's three minima and the seeds the brief names (101,
       235, 193, 24, 69, 502, 3768) as table cases.
-- [ ] Commit, then run the code review and fix what it finds.
+- [x] Commit, then run the code review and fix what it finds.
 
 ### Task 5: Design doc and integration suites
 
@@ -134,11 +136,32 @@ snapshot `TreeNode`. Operations do not change.
 - Modify: `docs/design/README.md`, `docs/design/concurrent-merge-split.md`
   (§7.3, §7.8 point to the new doc), `docs/tasks/README.md`
 
-- [ ] Write the design from the brief: problem, the anchor rule, fallback
+- [x] Write the design from the brief: problem, the anchor rule, fallback
       scope, persistence, mixed-version risk, measurements.
 - [ ] Run `test/integration` tree suites and `test/complex` tree suites.
-- [ ] Run `GOTOOLCHAIN=go1.26.0 make lint`.
-- [ ] Commit, then run the code review and fix what it finds.
+      Not run locally: localhost:27017 is an ssh tunnel to an unknown
+      remote MongoDB. CI runs them.
+- [x] Run `GOTOOLCHAIN=go1.26.0 make lint`.
+- [x] Commit, then run the code review and fix what it finds.
+
+### Task 7: Undo and redo (added after the final review)
+
+The final review found undo of a split, which merges its product away,
+racing a peer's split: 82 of 1200 undo-fuzz runs that converge on main
+diverged.
+
+- [x] Seed-based undo fuzz on main and the branch, literal-script ddmin of
+      the regressions, one cause per commit, each pinned in
+      `TestTreeBoundaryUndoSplit` (RED before, GREEN after).
+- [x] `liveSplitTarget`, `seenParentOf`, nesting skips removed boundaries,
+      `boundaryMergeTarget` (changes what a concurrent merge produces), the
+      tail walk passes over removed boundaries and the seen parent.
+- [x] Held-out seeds 601-1800: regression rate matches the tuned seeds.
+- [x] Records moved to `JSONElement.Tree.boundaries`; per-seed results
+      unchanged.
+- [x] Run-to-run nondeterminism found while re-measuring (GC purged a
+      product before its child): `relinkSubtreeAnchors`. Two identical runs
+      now give identical results.
 
 ### Task 6: PR
 
@@ -148,4 +171,16 @@ snapshot `TreeNode`. Operations do not change.
 
 ## Review
 
-(filled in at the end)
+Go side done through commit review; not pushed.
+
+- #1436 cases (insert, split, delete, style) converge with GC and snapshot
+  reloads: 0 of 15000 broadened-fuzz runs and 0 of 4000 GC runs diverge
+  (main: 261-1046 per case).
+- Undo and redo: 237 of 1200 and 501 of 2400 runs do not converge (main
+  463 and 896), with 3 and 5 regressions against main. Boundary records
+  differ in 12 and 39 runs that converge otherwise.
+- Merge fuzz: fewer divergences than main, 4/0/6/3 regressions.
+- Protocol: `JSONElement.Tree.boundaries` and `TreeBoundary`; operations
+  and `TreeNode` unchanged. Op semantics change, so the server and SDKs
+  must ship together; no version gate.
+- Open: JS mirror, integration suites in CI, PR.
