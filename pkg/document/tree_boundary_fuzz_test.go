@@ -424,3 +424,12 @@ func TestTreeBoundaryMergeTargetSurvivesReload(t *testing.T) {
 func TestTreeBoundaryRepeatedMerge(t *testing.T) {
 	replayBoundaryScript(t, 3, "d1.split(2); d2.pull; d3.pull; d1.delete(2,4); d2.delete(2,4); d3.pull; d3.split(2)")
 }
+
+// TestTreeBoundarySeenParentFromOperation has a peer press Enter at the end of
+// a paragraph whose own Enter was undone meanwhile. On a replica that applied
+// the undo first, the merge has moved the text, and the end of the paragraph
+// the peer saw has the same neighbours as the start of the merged-back one;
+// only the parent the operation names says where the peer was.
+func TestTreeBoundarySeenParentFromOperation(t *testing.T) {
+	replayBoundaryScript(t, 3, "d2.split(1); d2.undo; d1.pull; d1.split(3)")
+}

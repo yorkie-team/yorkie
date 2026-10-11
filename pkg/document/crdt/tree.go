@@ -2146,7 +2146,7 @@ func (t *Tree) Edit(
 	// RemovedSize does not either.
 	sizeBeforeSplit := t.Root().Len()
 	diffSplit, err := t.split(
-		fromParent, fromLeft, t.findFloorNode(from.ParentID),
+		fromParent, fromLeft, t.findMergeNode(from.ParentID),
 		splitLevel, editedAt, issueTimeTicket, versionVector,
 	)
 	diff.Add(diffSplit)
