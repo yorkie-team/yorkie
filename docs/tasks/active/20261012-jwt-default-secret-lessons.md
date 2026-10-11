@@ -58,5 +58,47 @@ file in git.
 
 `TokenManager.Verify` checks only against the local key. `admin/client.go`
 sets `x-shard-key` only on `RemoveDocumentByAdmin` (hashed by document), so
-`LogIn` and the next `ListProjects` can land on different pods. A per-process random key is therefore only correct for a single node,
-which is what the server warning says.
+`LogIn` and the next `ListProjects` can land on different pods. A
+per-process random key is therefore only correct for a single node, which
+is what the server warning says.
+
+## Self-review round 1
+
+Findings from the coordinator's review of fe44f347..2ff92984, and what
+changed:
+
+- A. The chart passed the key as `--backend-secret-key
+  $(YORKIE_BACKEND_SECRET_KEY)`. Kubernetes expands that into argv, so the
+  key showed in `/proc/<pid>/cmdline` and the pprof cmdline endpoint (the
+  exposure #2083/#2148 track). The CLI had no env convention (only the MCP
+  helper reads `YORKIE_SECRET_KEY`, a project key), so `server.New` now
+  reads `YORKIE_BACKEND_SECRET_KEY` when the flag and config file leave the
+  key empty, and the chart sets only the env var. It sits in `server.New`,
+  not the CLI, so a config file that omits the key gets it too; flag and
+  file values win.
+- B. A blank key slipped through as "unset" and each pod generated its own.
+  Decision: refuse, not generate. A blank configured value or a
+  present-but-blank env var means the operator meant to share a key; a
+  per-process fallback turns that mistake into intermittent login failures
+  instead of a pod that will not start. The chart also fails to render on a
+  blank `secretKey`; it cannot see inside an existing Secret, so the server
+  check covers that case.
+- C. The pod template now carries `checksum/backend-secret-key` when the
+  chart owns the Secret, so a key change rolls every replica.
+- D. An explicit `"yorkie-secret"` was still accepted. Decision: refuse at
+  startup. It is the value the issue is about, a warning in a log nobody
+  reads leaves the hole open, and no repo in the workspace passes it
+  explicitly (grep over 03_projects), so nothing legitimate breaks.
+- E. Wrapped two lines over 80 columns in the task files.
+
+RED for A, B, D on fe44f347..2ff92984 (the explicit-wins subtest passes
+before and after, as a guard):
+
+```text
+--- FAIL: TestAdminSecretKey/unset_key_is_read_from_the_environment_test
+--- FAIL: TestAdminSecretKey/blank_key_is_rejected_test
+--- FAIL: TestAdminSecretKey/blank_key_in_the_environment_is_rejected_test
+--- FAIL: TestAdminSecretKey/public_key_is_rejected_test
+```
+
+All eight subtests pass after the fix.

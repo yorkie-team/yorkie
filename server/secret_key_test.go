@@ -17,6 +17,7 @@
 package server_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -34,6 +35,18 @@ import (
 // signed with it must never be accepted.
 const publicSecretKey = "yorkie-secret" // #nosec G101
 
+// secretKeyEnv is the environment variable a deployment hands the key in,
+// so it stays off the process command line.
+const secretKeyEnv = "YORKIE_BACKEND_SECRET_KEY" // #nosec G101
+
+// unsetSecretKeyEnv removes secretKeyEnv for the duration of the test, so the
+// developer's environment cannot leak into it.
+func unsetSecretKeyEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(secretKeyEnv, "")
+	require.NoError(t, os.Unsetenv(secretKeyEnv))
+}
+
 // testConfig returns a test config whose admin token signing key is unset.
 func testConfig() *server.Config {
 	conf := helper.TestConfig()
@@ -41,9 +54,8 @@ func testConfig() *server.Config {
 	return conf
 }
 
-// newServer builds a server from conf without starting it and returns the
-// admin token signing key it resolved.
-func newServer(t *testing.T, conf *server.Config) string {
+// buildServer builds a server from conf without starting it.
+func buildServer(t *testing.T, conf *server.Config) error {
 	t.Helper()
 
 	// Keep the test off the network: the sample config names a MongoDB,
@@ -52,11 +64,20 @@ func newServer(t *testing.T, conf *server.Config) string {
 	conf.Kafka = nil
 	conf.StarRocks = nil
 	svr, err := server.New(conf)
-	require.NoError(t, err)
+	if err != nil {
+		return err
+	}
 	// The server never starts, so Shutdown fails to deregister a node that
 	// was never registered; it still releases the backend.
 	t.Cleanup(func() { _ = svr.Shutdown(true) })
+	return nil
+}
 
+// newServer builds a server from conf without starting it and returns the
+// admin token signing key it resolved.
+func newServer(t *testing.T, conf *server.Config) string {
+	t.Helper()
+	require.NoError(t, buildServer(t, conf))
 	return conf.Backend.SecretKey
 }
 
@@ -78,6 +99,7 @@ func forgeToken(t *testing.T, key, username string) string {
 
 func TestAdminSecretKey(t *testing.T) {
 	t.Run("unset key never resolves to a public key test", func(t *testing.T) {
+		unsetSecretKeyEnv(t)
 		conf, err := server.NewConfigFromFile("config.sample.yml")
 		require.NoError(t, err)
 		assert.Empty(t, conf.Backend.SecretKey)
@@ -100,6 +122,7 @@ func TestAdminSecretKey(t *testing.T) {
 	})
 
 	t.Run("unset key is generated per server test", func(t *testing.T) {
+		unsetSecretKeyEnv(t)
 		first := newServer(t, testConfig())
 		second := newServer(t, testConfig())
 		assert.NotEmpty(t, first)
@@ -111,5 +134,44 @@ func TestAdminSecretKey(t *testing.T) {
 		conf := testConfig()
 		conf.Backend.SecretKey = "cluster-wide-key"
 		assert.Equal(t, "cluster-wide-key", newServer(t, conf))
+	})
+
+	t.Run("unset key is read from the environment test", func(t *testing.T) {
+		t.Setenv(secretKeyEnv, "env-cluster-key")
+		assert.Equal(t, "env-cluster-key", newServer(t, testConfig()))
+	})
+
+	t.Run("explicit key wins over the environment test", func(t *testing.T) {
+		t.Setenv(secretKeyEnv, "env-cluster-key")
+		conf := testConfig()
+		conf.Backend.SecretKey = "flag-cluster-key"
+		assert.Equal(t, "flag-cluster-key", newServer(t, conf))
+	})
+
+	// A key that was meant to be set but came out blank (a whitespace value,
+	// an empty Secret) must not fall back to a per-process key: replicas
+	// would then reject each other's tokens.
+	t.Run("blank key is rejected test", func(t *testing.T) {
+		unsetSecretKeyEnv(t)
+		conf := testConfig()
+		conf.Backend.SecretKey = " \t\n"
+		assert.ErrorContains(t, buildServer(t, conf), "--backend-secret-key")
+	})
+
+	t.Run("blank key in the environment is rejected test", func(t *testing.T) {
+		for _, value := range []string{"", "  "} {
+			t.Setenv(secretKeyEnv, value)
+			assert.ErrorContains(t, buildServer(t, testConfig()), secretKeyEnv)
+		}
+	})
+
+	t.Run("public key is rejected test", func(t *testing.T) {
+		unsetSecretKeyEnv(t)
+		conf := testConfig()
+		conf.Backend.SecretKey = publicSecretKey
+		assert.ErrorContains(t, buildServer(t, conf), "--backend-secret-key")
+
+		t.Setenv(secretKeyEnv, publicSecretKey)
+		assert.ErrorContains(t, buildServer(t, testConfig()), secretKeyEnv)
 	})
 }

@@ -485,8 +485,10 @@ func init() {
 		"backend-secret-key",
 		"",
 		"The secret key for signing authentication tokens for admin users. "+
-			"If empty, a random key is generated at startup, so tokens do not "+
-			"survive a restart. Set the same key on every node of a cluster.",
+			"If empty, it is read from "+server.SecretKeyEnv+", which keeps it "+
+			"off the command line; if that is unset too, a random key is "+
+			"generated at startup, so tokens do not survive a restart. Set the "+
+			"same key on every node of a cluster.",
 	)
 
 	cmd.Flags().BoolVar(

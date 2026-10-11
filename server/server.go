@@ -24,6 +24,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"strings"
 	gosync "sync"
 	"time"
 
@@ -114,19 +116,43 @@ func New(conf *Config) (*Yorkie, error) {
 	}, nil
 }
 
+// SecretKeyEnv is the environment variable the admin token signing key is
+// read from when --backend-secret-key and the config file leave it unset.
+// Deployments should use it: a flag value is visible in the process command
+// line, to anyone who can read /proc or the pprof cmdline endpoint.
+const SecretKeyEnv = "YORKIE_BACKEND_SECRET_KEY" // #nosec G101
+
+// publicSecretKey is the key Yorkie used to fall back to when none was set.
+// It is published in the source history, so it is refused like a blank one.
+const publicSecretKey = "yorkie-secret" // #nosec G101
+
 // secretKeyBytes is the length of a generated admin token signing key: 256
 // bits, the HS256 block the key is hashed into.
 const secretKeyBytes = 32
 
-// ensureSecretKey fills an unset admin token signing key with a random one.
-// Every way of building a config (CLI flags, config file, NewConfig) reaches
-// here, so an unset key can never fall back to a value anyone can read: the
-// interceptor trusts the token's username claim, so whoever knows the key can
-// act as any user. The generated key lives only in this process, so tokens
-// die with it and other nodes reject them. Single-node and local setups only
-// need to log in again after a restart; a cluster must share one key.
+// ensureSecretKey resolves the admin token signing key: the configured value
+// (flag or config file), then SecretKeyEnv, then a random key. Every way of
+// building a config (CLI flags, config file, NewConfig) reaches here, so an
+// unset key can never fall back to a value anyone can read: the interceptor
+// trusts the token's username claim, so whoever knows the key can act as any
+// user. The generated key lives only in this process, so tokens die with it
+// and other nodes reject them. Single-node and local setups only need to log
+// in again after a restart; a cluster must share one key.
+//
+// A key that is set but blank, or set to the old public default, is an error
+// rather than a reason to generate one: the operator meant to share a key,
+// and a per-process key would make replicas reject each other's tokens
+// without failing anything visibly.
 func ensureSecretKey(conf *backend.Config) error {
 	if conf.SecretKey != "" {
+		return validateSecretKey("--backend-secret-key (Backend.SecretKey)", conf.SecretKey)
+	}
+
+	if value, ok := os.LookupEnv(SecretKeyEnv); ok {
+		if err := validateSecretKey(SecretKeyEnv, value); err != nil {
+			return err
+		}
+		conf.SecretKey = value
 		return nil
 	}
 
@@ -139,9 +165,22 @@ func ensureSecretKey(conf *backend.Config) error {
 	logging.DefaultLogger().Warn(
 		"backend secret key is empty: signing admin tokens with a random " +
 			"key generated for this process. Tokens are invalidated on " +
-			"restart and rejected by other nodes. Set --backend-secret-key " +
-			"to the same value on every node in production.",
+			"restart and rejected by other nodes. Set " + SecretKeyEnv +
+			" to the same value on every node in production.",
 	)
+	return nil
+}
+
+// validateSecretKey rejects a configured key that is blank or public.
+func validateSecretKey(source, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s is set but blank: set a shared random key, "+
+			"or unset it to generate one per process", source)
+	}
+	if value == publicSecretKey {
+		return fmt.Errorf("%s is the public default %q: anyone can sign "+
+			"admin tokens with it, set a random key", source, publicSecretKey)
+	}
 	return nil
 }
 

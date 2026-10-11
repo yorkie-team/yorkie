@@ -2,13 +2,13 @@
 
 # Stop Signing Admin Tokens with a Public Default Key
 
-**Goal:** Issue #2103. When `Backend.SecretKey` is empty, `ensureBackendDefaultValue`
-and the `--backend-secret-key` flag fall back to `DefaultSecretKey =
-"yorkie-secret"`, a constant anyone can read on GitHub. The admin JWT is HS256
-signed with that key, and the interceptor trusts the `username` claim, so
-anyone who can reach AdminService can forge a token for `admin`. The
-`yorkie-cluster` Helm chart passes no `--backend-secret-key`, so a chart
-deployment signs with the public key.
+**Goal:** Issue #2103. When `Backend.SecretKey` is empty,
+`ensureBackendDefaultValue` and the `--backend-secret-key` flag fall back to
+`DefaultSecretKey = "yorkie-secret"`, a constant anyone can read on GitHub.
+The admin JWT is HS256 signed with that key, and the interceptor trusts the
+`username` claim, so anyone who can reach AdminService can forge a token for
+`admin`. The `yorkie-cluster` Helm chart passes no `--backend-secret-key`, so
+a chart deployment signs with the public key.
 
 ## Constraints
 
@@ -51,6 +51,12 @@ deployment signs with the public key.
 - Helm: `helm lint` passes with a key; `helm template` fails with the
   message when neither value is set, creates the Secret in value mode and
   references the named Secret in existing-secret mode.
+
+Self-review round 1 (see lessons): the key moves to
+`YORKIE_BACKEND_SECRET_KEY` in the chart, blank and public keys are refused
+at startup, and the chart rolls pods on a key change. Re-verified: 8
+`TestAdminSecretKey` subtests, `make verify`, the integration run and the
+four chart render modes.
 
 Rollout note: every admin token issued before this change was signed with
 `"yorkie-secret"` and stops verifying once a real key is set, so dashboard

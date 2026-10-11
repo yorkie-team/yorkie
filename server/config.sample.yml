@@ -85,9 +85,10 @@ Backend:
   AdminPassword: "admin"
 
   # SecretKey is the secret key for signing authentication tokens.
-  # If empty, a random key is generated at startup: tokens are invalidated on
-  # restart and rejected by other nodes. Set the same key on every node of a
-  # cluster, e.g. one generated with `openssl rand -base64 32`.
+  # If empty, it is read from the YORKIE_BACKEND_SECRET_KEY environment
+  # variable; if that is unset too, a random key is generated at startup:
+  # tokens are invalidated on restart and rejected by other nodes. Set the
+  # same key on every node of a cluster, e.g. `openssl rand -base64 32`.
   SecretKey: ""
 
   # AdminTokenDuration is the duration of the admin token. (default: 168h0m0s).
