@@ -1780,14 +1780,12 @@ func toTreePos(treePos *index.TreePos[*TreeNode]) *TreePos {
 			// That sibling is always an element: FindTreePos resolves a boundary
 			// between two texts to the end of the left one, so a text reached at
 			// offset 0 never has a text right before it.
-			idx, err := parent.FindOffset(node)
-			if err != nil {
-				return nil, err
-			}
-			if idx == 0 {
-				leftNode = parent.Value
-			} else {
-				leftNode = parent.Children()[idx-1].Value
+			leftNode = parent.Value
+			for _, child := range parent.Children() {
+				if child == node {
+					break
+				}
+				leftNode = child.Value
 			}
 		} else {
 			leftNode = node.Value

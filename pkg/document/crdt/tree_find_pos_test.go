@@ -69,9 +69,9 @@ func TestTreeEditAtElementTextBoundary(t *testing.T) {
 		// Deleting " w" splits " world" into a tombstoned head and a live
 		// "orld" whose InsPrev is that head. The insert still anchors on <b>,
 		// before the tombstone, exactly as it does when the tombstone is a
-		// separate node (the case above) and as Text does for its own
-		// tombstones: which kind of tombstone sits there is not visible to
-		// the user, so it must not change where the edit lands.
+		// separate node (the case above): which kind of tombstone sits there
+		// is not visible to the user, so it must not change where the edit
+		// lands.
 		tree, ctx := newBoldHelloWorldTree(t)
 		editT(t, tree, ctx, 8, 10, nil)
 		require.Equal(t, `<r><p><b>hello</b>orld</p></r>`, tree.ToXML())
