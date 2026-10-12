@@ -125,3 +125,9 @@ the MCP endpoint, so the rotation broke those integrations silently.
 - The dashboard (separate repository) still sets the key from `GetProject`; it
   needs the same fallback (send the session cookie and `x-yorkie-project` when
   the key is empty) before member-role users see their documents there again.
+  The same holds for any other client that authenticates project-scoped calls
+  with a key read from `GetProject`. Nothing in this repository can carry that
+  change, so it is announced instead: `CHANGELOG.md` marks the wire contract
+  breaking and states the fallback, and `docs/design/admin-credentials.md`
+  records the two credentials and the per-procedure roles they are checked
+  against.
