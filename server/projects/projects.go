@@ -337,6 +337,12 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 // NOTE(hackerwins): Unlike GetProjectFromAPIKey, an empty key does not fall
 // back to the default project. The secret key is the whole credential of the
 // admin path, so a missing one must not resolve to any project.
+//
+// The key carries no user, so this lookup has no role to check and the caller
+// gets the project's full authority. That authority is not bound to a
+// membership: it outlives a member's demotion or removal, and redactForRole
+// only stops the key from reaching new members. RotateProjectKeys is what
+// revokes a key already copied.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
 	if strings.TrimSpace(secretKey) == "" {
 		return nil, ErrSecretKeyNotProvided

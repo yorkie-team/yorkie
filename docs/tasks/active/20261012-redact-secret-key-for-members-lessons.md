@@ -50,6 +50,25 @@ the credential was the problem.
 Hiding the key stops a member from obtaining it now; it does not invalidate a
 key read before this change. `RotateProjectKeys` is the remedy.
 
+The same gap has a second shape that outlives the deployment: the secret key
+names no user, so the per-method role table in the interceptor cannot apply to
+it, and nothing in the membership path narrows it. An admin who legitimately
+read the key and is later demoted to Member, or removed from the project
+outright, keeps the project's whole authority through the API-Key scheme. Role
+changes are not revocation for this credential; only rotation is.
+
+Two things follow, one for operators and one for the code:
+
+- On upgrading to this change, rotate the keys of every project that has ever
+  had a member below Admin. Until then the redaction protects only members who
+  had not already read the key.
+- Rotating on demotion and on removal belongs in the membership path
+  (`server/members/members.go`, `server/rpc/admin_server.go`'s
+  `UpdateMemberRole` and `RemoveMember`), not in the lookups this task
+  touched — the lookups have no way to tell that a role just changed. It needs
+  a decision this task did not make: rotation invalidates the key for every
+  other holder too, so it cannot be silent.
+
 ## `IsAtLeast` fails open, so the gate validates the role first
 
 `MemberRole.IsAtLeast` compares ranks out of a map (`Owner:1, Admin:2,
