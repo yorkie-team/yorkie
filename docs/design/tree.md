@@ -108,6 +108,8 @@ The `index` is the coordinate system used by users for local editing. This `inde
 
 Next, the obtained `IndexTree.TreePos` is transformed into the logical coordinate system of the distributed tree, represented by `CRDTTree.TreePos`. To achieve this, the given physical position, `IndexTree.TreePos`, is used to find the parent node and left sibling node. Then, a `CRDTTree.TreePos` is created using the unique IDs of the parent node and left sibling node, which are `CRDTTree.TreeNodeID`. This coordinate system is used in subsequent `Tree.Edit` and `Tree.Style` operations.
 
+A left sibling means "after it", so a text reached at offset 0 cannot anchor on itself — the edit would land after the whole text. It anchors on what precedes the text instead: the parent when the text is the first visible child, otherwise the previous visible sibling. That sibling is always an element, because `IndexTree` resolves a boundary between two texts to the end of the left one. The resulting `CRDTTree.TreePos` is what goes on the wire, so every SDK must resolve a local index the same way (Go `toTreePos`, JS `CRDTTreePos.fromTreePos`).
+
 In the case of remote editing, where the local coordinate system is received from the user in local editing, there is no need for Step 1 since changes are pulled from the server using `ChangePack` to synchronize the changes. Refer to the [document-editing](document-editing.md) for more details.
 
 **Tree.Edit Logic**
