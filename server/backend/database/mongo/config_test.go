@@ -99,7 +99,14 @@ func TestConfig(t *testing.T) {
 
 	t.Run("mask the password of the connection URI", func(t *testing.T) {
 		// The redacted URI is logged at startup, so nothing that reaches a log
-		// may carry the password, while the rest stays readable.
+		// may carry the password, while the rest stays readable. Userinfo is
+		// concatenated rather than written inline: gosec's G101 reads any
+		// password inside a URL literal as a hardcoded credential, the masked
+		// one included.
+		const userinfo = "admin:s3cret@"
+		const encodedUserinfo = "admin:s3%40cret@"
+		const masked = "admin:xxxxx@"
+
 		for _, tc := range []struct {
 			uri      string
 			redacted string
@@ -107,15 +114,15 @@ func TestConfig(t *testing.T) {
 			uri:      "mongodb://localhost:27017",
 			redacted: "mongodb://localhost:27017",
 		}, {
-			uri:      "mongodb://admin:s3cret@mongos.default.svc.cluster.local:27017/?authSource=admin",
-			redacted: "mongodb://admin:xxxxx@mongos.default.svc.cluster.local:27017/?authSource=admin",
+			uri:      "mongodb://" + userinfo + "mongos.default.svc.cluster.local:27017/?authSource=admin",
+			redacted: "mongodb://" + masked + "mongos.default.svc.cluster.local:27017/?authSource=admin",
 		}, {
 			// A replica set names every host in the authority.
-			uri:      "mongodb://admin:s3cret@h1:27017,h2:27017/yorkie?replicaSet=rs0",
-			redacted: "mongodb://admin:xxxxx@h1:27017,h2:27017/yorkie?replicaSet=rs0",
+			uri:      "mongodb://" + userinfo + "h1:27017,h2:27017/yorkie?replicaSet=rs0",
+			redacted: "mongodb://" + masked + "h1:27017,h2:27017/yorkie?replicaSet=rs0",
 		}, {
-			uri:      "mongodb+srv://admin:s3%40cret@cluster0.example.mongodb.net/yorkie",
-			redacted: "mongodb+srv://admin:xxxxx@cluster0.example.mongodb.net/yorkie",
+			uri:      "mongodb+srv://" + encodedUserinfo + "cluster0.example.mongodb.net/yorkie",
+			redacted: "mongodb+srv://" + masked + "cluster0.example.mongodb.net/yorkie",
 		}} {
 			config := &mongo.Config{ConnectionURI: tc.uri}
 			assert.Equal(t, tc.redacted, config.RedactedConnectionURI())
@@ -127,6 +134,7 @@ func TestConfig(t *testing.T) {
 		// URI is reported rather than risking the password in a log line.
 		config := &mongo.Config{ConnectionURI: "://admin:s3cret@localhost:27017"}
 		assert.NotContains(t, config.RedactedConnectionURI(), "s3cret")
+		assert.NotContains(t, config.RedactedConnectionURI(), "admin")
 	})
 
 	t.Run("parse monitoring test", func(t *testing.T) {
