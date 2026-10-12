@@ -61,6 +61,13 @@
   whole set per insertion: linear-looking code, quadratic on an entry
   whose length the sender picks. Added `addMergeTickets`, which sorts
   the input once and merges the two runs.
+- A peer-controlled list has as many axes as it has dimensions. Fixing
+  the cost per entry left the cost per *number of entries*: the payload
+  is free to repeat one source, and one `addMergeTickets` call per entry
+  copies that node's whole set again each time. `RestoreMerges` now
+  groups by node and applies each group once, and the test bounds bytes
+  allocated (1.6 GB before, under 32 MiB after, for 20000 entries)
+  rather than time, since the copy is what the shape costs.
 - A known divergence recorded as a skipped test records nothing CI can
   read. `TestTreeBoundaryKnownDivergences` now runs in the unit lane and
   pins the tree each replica ends with, so any movement in those cases

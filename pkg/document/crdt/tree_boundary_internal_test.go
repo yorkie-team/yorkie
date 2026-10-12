@@ -17,6 +17,7 @@
 package crdt
 
 import (
+	"runtime"
 	"testing"
 	gotime "time"
 
@@ -155,4 +156,39 @@ func TestRestoreMergesAddsTicketsAtOnce(t *testing.T) {
 	}
 	require.Len(t, tree.Merges(), 1)
 	assert.Equal(t, src.mergeTickets, tree.Merges()[0].Tickets)
+}
+
+// TestRestoreMergesRepeatedSourceStaysLinear sends many entries that all name
+// the same node, the other axis a peer controls: nothing stops a payload from
+// repeating one source, and adding an entry at a time would copy the node's
+// whole set per entry, so the set grows quadratically with the entry count.
+// The bound is on bytes allocated rather than on time, since what the shape
+// costs is the repeated copy of the set.
+func TestRestoreMergesRepeatedSourceStaysLinear(t *testing.T) {
+	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+
+	root := NewTreeNode(NewTreeNodeID(ticket(1), 0), "r", nil)
+	src := NewTreeNode(NewTreeNodeID(ticket(2), 0), "p", nil)
+	require.NoError(t, root.Append(src))
+	tree := NewTree(root, ticket(1))
+
+	const entries = 20000
+	merges := make([]TreeMerge, 0, entries)
+	for i := entries; i > 0; i-- {
+		merges = append(merges, TreeMerge{Source: src.id, Tickets: []*time.Ticket{ticket(int64(i))}})
+	}
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	tree.RestoreMerges(merges)
+	runtime.ReadMemStats(&after)
+
+	// One pass per node costs O(entries); one pass per entry costs about
+	// entries^2/2 pointers, which is 1.6 GB here.
+	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(32<<20))
+	require.Len(t, src.mergeTickets, entries)
+	for i, tk := range src.mergeTickets {
+		assert.Equal(t, int64(i+1), tk.Lamport())
+	}
 }

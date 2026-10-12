@@ -1104,15 +1104,26 @@ func (t *Tree) Merges() []TreeMerge {
 // the tree does not hold, or a text node, is ignored.
 //
 // The list is peer-controlled -- element payloads reach fromJSONTree before
-// anything sanitizes them -- so each entry is added in one pass rather than a
-// ticket at a time, which would be quadratic in the entry's length.
+// anything sanitizes them -- so it is applied in one pass per node rather than
+// one per entry or per ticket. Both of the other shapes are quadratic in a
+// length the sender picks: a ticket at a time copies the whole set per
+// insertion, and an entry at a time does the same for entries that name the
+// same node, which nothing stops a payload from repeating.
 func (t *Tree) RestoreMerges(merges []TreeMerge) {
+	var nodes []*TreeNode
+	tickets := make(map[*TreeNode][]*time.Ticket)
 	for _, m := range merges {
 		src := t.nodeByKey(boundaryKey{id: m.Source})
 		if src == nil || src.IsText() {
 			continue
 		}
-		src.addMergeTickets(m.Tickets)
+		if _, ok := tickets[src]; !ok {
+			nodes = append(nodes, src)
+		}
+		tickets[src] = append(tickets[src], m.Tickets...)
+	}
+	for _, src := range nodes {
+		src.addMergeTickets(tickets[src])
 	}
 }
 
