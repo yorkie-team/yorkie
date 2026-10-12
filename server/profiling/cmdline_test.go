@@ -61,7 +61,7 @@ func plantCredentialArgs(t *testing.T) {
 // get serves path through the given mux, following a single redirect so that
 // a path http.ServeMux cleans (repeated slashes, dot segments) is judged by
 // the handler it ends up at rather than by the redirect.
-func get(t *testing.T, mux *http.ServeMux, path string) (int, string) {
+func get(t *testing.T, mux *http.ServeMux, path string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	for range 2 {
@@ -70,18 +70,29 @@ func get(t *testing.T, mux *http.ServeMux, path string) (int, string) {
 
 		location := rec.Header().Get("Location")
 		if rec.Code < 300 || rec.Code >= 400 || location == "" {
-			return rec.Code, rec.Body.String()
+			return rec
 		}
 		path = location
 	}
 
 	t.Fatalf("%s redirected more than once", path)
-	return 0, ""
+	return nil
+}
+
+// assertRefusal checks the contract refuseCmdline documents: the status, body
+// and headers pprof itself uses for a profile it does not know.
+func assertRefusal(t *testing.T, path string, rec *httptest.ResponseRecorder) {
+	t.Helper()
+
+	assert.Equal(t, http.StatusNotFound, rec.Code, "%s must be refused", path)
+	assert.Equal(t, "Unknown profile\n", rec.Body.String(), "%s refusal body", path)
+	assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"), "%s refusal headers", path)
+	assert.Equal(t, "text/plain; charset=utf-8", rec.Header().Get("Content-Type"), "%s refusal headers", path)
 }
 
 // cmdlinePaths are the ways a caller can ask the profiling mux for the
 // command line: the documented route, the forms http.ServeMux normalizes
-// onto it, and the forms that fall through to the pprof index handler.
+// onto it, and the forms it routes to the pprof index subtree instead.
 var cmdlinePaths = []string{
 	"/debug/pprof/cmdline",
 	"/debug/pprof/cmdline/",
@@ -105,14 +116,69 @@ func TestPprofCmdlineIsRefused(t *testing.T) {
 			mux := NewServer(&Config{Port: 0, PprofEnabled: enabled}, nil).serveMux
 
 			for _, path := range cmdlinePaths {
-				status, body := get(t, mux, path)
-				assert.NotEqual(t, http.StatusOK, status, "%s must not succeed", path)
+				rec := get(t, mux, path)
+				assert.NotEqual(t, http.StatusOK, rec.Code, "%s must not succeed", path)
 				for _, sentinel := range sentinels() {
-					assert.NotContains(t, body, sentinel, "%s disclosed a credential", path)
+					assert.NotContains(t, rec.Body.String(), sentinel, "%s disclosed a credential", path)
 				}
 			}
 		})
 	}
+}
+
+// TestCmdlineGuardRefusesBeforeIndex exercises withoutCmdline on its own. The
+// wrapped handler stands in for pprof.Index, the subtree fallback that sees
+// every cmdline spelling the exact pattern misses; the guard must refuse those
+// without reaching it, and must let every other profile through untouched.
+func TestCmdlineGuardRefusesBeforeIndex(t *testing.T) {
+	for _, tc := range []struct {
+		path    string
+		refused bool
+	}{
+		{path: "/debug/pprof/cmdline", refused: true},
+		{path: "/debug/pprof/cmdline/", refused: true},
+		{path: "/debug/pprof//cmdline", refused: true},
+		{path: "/debug/pprof/heap/../cmdline", refused: true},
+		{path: "/debug/pprof/cmdline/.", refused: true},
+		{path: "/debug/pprof/", refused: false},
+		{path: "/debug/pprof/heap", refused: false},
+		{path: "/debug/pprof/cmdline/extra", refused: false},
+		{path: "/debug/pprof/cmdlines", refused: false},
+	} {
+		reached := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			reached = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		rec := httptest.NewRecorder()
+		withoutCmdline(next).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+
+		if !tc.refused {
+			assert.True(t, reached, "%s must reach the pprof index", tc.path)
+			continue
+		}
+
+		assert.False(t, reached, "%s reached the pprof index", tc.path)
+		assertRefusal(t, tc.path, rec)
+	}
+}
+
+// TestCmdlineGuardIsWiredToIndexSubtree pins the guard onto the mux. A
+// trailing-slash cmdline is routed to the index subtree rather than to the
+// exact cmdline pattern, and pprof marks its own errors with X-Go-Pprof, so a
+// refusal without that header can only have come from withoutCmdline.
+func TestCmdlineGuardIsWiredToIndexSubtree(t *testing.T) {
+	plantCredentialArgs(t)
+	mux := NewServer(&Config{Port: 0, PprofEnabled: true}, nil).serveMux
+
+	const path = httpPrefixPProf + "/" + cmdlineProfile + "/"
+	_, pattern := mux.Handler(httptest.NewRequest(http.MethodGet, path, nil))
+	assert.Equal(t, httpPrefixPProf+"/", pattern, "%s no longer routes to the index subtree", path)
+
+	rec := get(t, mux, path)
+	assertRefusal(t, path, rec)
+	assert.Empty(t, rec.Header().Get("X-Go-Pprof"), "%s was answered by pprof, not by the guard", path)
 }
 
 func TestPprofRoutesSurvive(t *testing.T) {
@@ -131,11 +197,11 @@ func TestPprofRoutesSurvive(t *testing.T) {
 		"/debug/pprof/",
 		"/metrics",
 	} {
-		status, body := get(t, mux, path)
-		assert.Equal(t, http.StatusOK, status, "%s must stay available", path)
-		assert.NotEmpty(t, body, "%s returned an empty body", path)
+		rec := get(t, mux, path)
+		assert.Equal(t, http.StatusOK, rec.Code, "%s must stay available", path)
+		assert.NotEmpty(t, rec.Body.String(), "%s returned an empty body", path)
 		for _, sentinel := range sentinels() {
-			assert.NotContains(t, body, sentinel, "%s disclosed a credential", path)
+			assert.NotContains(t, rec.Body.String(), sentinel, "%s disclosed a credential", path)
 		}
 	}
 }
@@ -145,7 +211,7 @@ func TestMetricsWithoutPprof(t *testing.T) {
 	assert.NoError(t, err)
 	mux := NewServer(&Config{Port: 0, PprofEnabled: false}, metrics).serveMux
 
-	status, body := get(t, mux, "/metrics")
-	assert.Equal(t, http.StatusOK, status)
-	assert.True(t, strings.Contains(body, "# HELP"), "metrics body is not an exposition")
+	rec := get(t, mux, "/metrics")
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.True(t, strings.Contains(rec.Body.String(), "# HELP"), "metrics body is not an exposition")
 }

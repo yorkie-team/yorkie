@@ -46,6 +46,25 @@ broken.
   the stdlib handler and reproducing it here would mean vendoring the whole
   page. The link now answers 404.
 
+## Guard coverage
+
+The first version of the suite went through the mux only, which could not
+tell the `withoutCmdline` guard apart from the stdlib's accidental 404:
+`http.ServeMux` routes every cmdline spelling except a trailing slash onto
+the exact `refuseCmdline` pattern, and `pprof.Index` answers
+`/debug/pprof/cmdline/` with its own `Unknown profile` anyway. Unwiring the
+guard left the suite green. Two tests now pin it:
+
+- `TestCmdlineGuardRefusesBeforeIndex` drives `withoutCmdline` directly with
+  a spy for `pprof.Index`, so the normalization in `isCmdlinePath` is what
+  is under test rather than the mux's routing.
+- `TestCmdlineGuardIsWiredToIndexSubtree` asserts the trailing-slash form is
+  routed to the index subtree and that its refusal carries no `X-Go-Pprof`
+  header — the marker `pprof.serveError` sets and `refuseCmdline` does not.
+
+Both fail against a mux built without the guard, and the second also fails
+if `isCmdlinePath` stops cleaning the path.
+
 ## Self review
 
 Not run: this branch was produced by an autonomous one-shot run with no
