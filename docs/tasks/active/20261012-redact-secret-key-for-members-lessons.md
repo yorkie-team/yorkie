@@ -34,6 +34,23 @@ those procedures role-aware, and it does not invalidate a key a member already
 copied. `RotateProjectKeys` is the remedy for the latter, and the former is
 recorded as a known limitation in both task's lessons files.
 
+## A member loses the project-scoped procedures, read ones included
+
+`admin.Client` resolves the project with `GetProject` and then sends
+`API-Key <project.SecretKey>` for every project-scoped call
+(`admin/client.go:373`, `admin/auth.go:72`). Since #2158 made those procedures
+API-Key-only and #2174 rejects a keyless `API-Key`, a `member` whose key is now
+empty can no longer reach `ListDocuments`, `GetSchemas`, `ListChangeSummaries`
+or `CreateDocument` through that client — not just the destructive ones.
+
+That is the honest cost of this fix: those procedures cannot tell a member from
+an owner, so the only two options were "every member acts as an owner" or "no
+member acts at all". The second is the safe default, and the first was the bug.
+Restoring read access for members means teaching the project-scoped path to
+accept a user credential and check a role, which is a larger design change than
+this issue asked for. No integration test exercised a member through those
+procedures, so CI does not encode the old behavior.
+
 ## Review rounds
 
 Not run: `/self-review` dispatches a reviewer subagent, and this autonomous run

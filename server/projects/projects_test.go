@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/projects"
 )
@@ -45,6 +46,61 @@ func TestProjectFromSecretKey(t *testing.T) {
 			project, err := projects.ProjectFromSecretKey(ctx, be, secretKey)
 			assert.ErrorIs(t, err, projects.ErrSecretKeyNotProvided, "secret key %q", secretKey)
 			assert.Nil(t, project, "secret key %q", secretKey)
+		}
+	})
+}
+
+// The secret key authorizes the project-scoped admin procedures by itself, so
+// a user who may read the project but not act as its admin must not see it.
+func TestSecretKeyVisibility(t *testing.T) {
+	ctx := context.Background()
+	be := newTestBackend(t)
+
+	const (
+		adminID  = types.ID("000000000000000000000001")
+		memberID = types.ID("000000000000000000000002")
+	)
+
+	info, err := be.DB.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, info.SecretKey)
+
+	_, err = be.DB.UpsertMemberInfo(ctx, info.ID, adminID, testOwnerID, database.Admin)
+	assert.NoError(t, err)
+	_, err = be.DB.UpsertMemberInfo(ctx, info.ID, memberID, testOwnerID, database.Member)
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		userID    types.ID
+		role      database.MemberRole
+		secretKey string
+	}{
+		{"owner", testOwnerID, database.Owner, info.SecretKey},
+		{"admin", adminID, database.Admin, info.SecretKey},
+		{"member", memberID, database.Member, ""},
+	}
+
+	t.Run("project and role test", func(t *testing.T) {
+		for _, tc := range tests {
+			project, role, err := projects.ProjectAndRole(ctx, be, tc.userID, info.Name)
+			assert.NoError(t, err, tc.name)
+			assert.Equal(t, tc.role, role, tc.name)
+			assert.Equal(t, tc.secretKey, project.SecretKey, tc.name)
+
+			// Only the secret key is withheld; the rest of the project stays.
+			assert.Equal(t, info.ID, project.ID, tc.name)
+			assert.Equal(t, info.PublicKey, project.PublicKey, tc.name)
+		}
+	})
+
+	t.Run("list projects test", func(t *testing.T) {
+		for _, tc := range tests {
+			list, err := projects.ListProjects(ctx, be, tc.userID)
+			assert.NoError(t, err, tc.name)
+			assert.Len(t, list, 1, tc.name)
+			assert.Equal(t, info.ID, list[0].ID, tc.name)
+			assert.Equal(t, tc.secretKey, list[0].SecretKey, tc.name)
 		}
 	})
 }
