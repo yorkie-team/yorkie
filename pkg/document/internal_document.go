@@ -255,10 +255,17 @@ func (d *InternalDocument) Marshal() string {
 // released, while this document keeps appending local changes and merging
 // remote clocks into d.changeID's version vector in place.
 //
-// Each change is copied shallowly so a later SetActor, which rewrites a
-// buffered change's ID, cannot reach the pack. Its version vector and
-// operations are shared: Context.NextID gives d.changeID its own vector, so
-// nothing writes a buffered change's vector once it is built.
+// Each change is copied shallowly, which is enough for what runs while the
+// pack is in flight: a buffered change's version vector is a map of its own,
+// because Context.NextID hands d.changeID a copy of it, so the remote apply
+// that merges clocks into d.changeID in place never writes a vector the
+// converter is ranging over.
+//
+// The shallow copy does not isolate the pack from SetActor, which rewrites a
+// buffered change's ID and, through the shared operations slice, every
+// operation's executedAt in place. It keeps the pack's change IDs from moving
+// under it; the operations it cannot cover. Nothing has to: SetActor runs at
+// attach, before this document has ever built a pack.
 func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := make([]*change.Change, len(d.localChanges))
 	for i, c := range d.localChanges {
