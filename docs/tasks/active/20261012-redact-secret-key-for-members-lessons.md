@@ -80,11 +80,13 @@ listing, which the call never did before the read-back existed. An unresolved
 role is treated as no role instead — the key is withheld and the rest of the
 project stays visible.
 
-## Known limitation: Istio CORS allow-list
+## A new request header needs the gateway's CORS list too
 
-The Bearer + `x-yorkie-project` path adds a custom request header. The cluster
-chart enumerates the allowed CORS headers for the `/yorkie.v1` route
-(`build/charts/yorkie-cluster/templates/istio/virtual-service.yaml`), and
-`x-yorkie-project` is not among them, so browser callers of that path are
-blocked by preflight in Istio deployments. The chart is outside this change's
-files; it needs a follow-up.
+The Bearer + `x-yorkie-project` path adds a custom request header. The server's
+own CORS allows every header (`server/rpc/server.go`), so local runs and the
+integration suite pass, but the cluster chart enumerates the allowed headers
+for the `/yorkie.v1` route
+(`build/charts/yorkie-cluster/templates/istio/virtual-service.yaml`). Without
+`x-yorkie-project` there, a browser's preflight fails and the dashboard never
+reaches the new path. The header is now in that list. The `/auth` route's list
+is left alone: no `/auth` handler reads the header.
