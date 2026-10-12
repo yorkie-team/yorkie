@@ -19,6 +19,13 @@ authority survives and `URL.Redacted` round-trips it unchanged. `mongodb+srv`
 and a percent-encoded password are fine too. A hand-rolled "cut at the last
 `@`" was not needed.
 
+## gosec flags the redacted URI too
+
+G101 ("Password in URL") matches any `scheme://user:pass@host` string
+literal, so the test's *expected* value `mongodb://admin:xxxxx@…` tripped it
+just as the input did. Building both from a concatenated userinfo constant
+keeps the cases readable without a `//nolint` directive.
+
 ## An unparsable URI has to be dropped, not echoed
 
 The tempting fallback for a URI `url.Parse` rejects is to log it as-is so the

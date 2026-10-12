@@ -34,6 +34,9 @@ reads it. #2176 moved that URI into a Secret precisely so the password needs
 
 ## Verification
 
-- [x] `go test ./server/backend/database/mongo/... ./server/backend/...`
-- [x] `make lint`
+- [x] `go test ./server/... ./cmd/...` — unit lane green.
+- [x] `make verify` — lint, licence headers, `go fix` and unit tests green.
+      gosec's G101 reads a password inside a URL literal as a hardcoded
+      credential, the masked `admin:xxxxx@` included, so the test URIs are
+      concatenated from parts rather than written inline.
 - [ ] Full `make test` / integration lane — left to CI; needs MongoDB.
