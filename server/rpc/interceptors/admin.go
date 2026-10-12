@@ -18,6 +18,7 @@ package interceptors
 
 import (
 	"context"
+	goerrors "errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -48,37 +50,49 @@ var (
 	// ErrSchemeNotAllowed is returned when the authorization scheme is not the
 	// one the requested method expects.
 	ErrSchemeNotAllowed = errors.PermissionDenied("authorization scheme is not allowed for this method")
+
+	// ErrProjectAccessDenied is returned when a session-authenticated user is
+	// not allowed to call a project-scoped method on the named project.
+	ErrProjectAccessDenied = errors.PermissionDenied("project access is not allowed for this method")
 )
 
-// projectScopedMethods is the set of AdminService methods that are
-// authenticated by a project secret key and read the project from the context
-// with projects.From. Every other authenticated method is user-scoped and
-// takes a session token.
+// projectScopedMethods maps each AdminService method that reads the project
+// from the context with projects.From to the least project role a user needs
+// to call it with a session token. Every other authenticated method is
+// user-scoped and takes a session token alone.
+//
+// A project-scoped method is reached in one of two ways. A project secret key
+// (API-Key) carries the whole authority of the project, so the role below does
+// not apply to it. A session token (Bearer) together with the project named in
+// the ProjectNameKey header is checked against the caller's role in that
+// project, so a member can read the project without being handed a key that
+// would let it act as an owner.
 //
 // NOTE(hackerwins): The set lists the project-scoped side on purpose. A method
 // added later is user-scoped until it is listed here, so it cannot silently
-// inherit a scheme it does not read.
-var projectScopedMethods = map[string]struct{}{
-	"/yorkie.v1.AdminService/GetProjectStats":        {},
-	"/yorkie.v1.AdminService/CreateDocument":         {},
-	"/yorkie.v1.AdminService/ListDocuments":          {},
-	"/yorkie.v1.AdminService/GetDocument":            {},
-	"/yorkie.v1.AdminService/GetDocuments":           {},
-	"/yorkie.v1.AdminService/SearchDocuments":        {},
-	"/yorkie.v1.AdminService/UpdateDocument":         {},
-	"/yorkie.v1.AdminService/RemoveDocumentByAdmin":  {},
-	"/yorkie.v1.AdminService/CompactDocumentByAdmin": {},
-	"/yorkie.v1.AdminService/GetSnapshotMeta":        {},
-	"/yorkie.v1.AdminService/ListChanges":            {},
-	"/yorkie.v1.AdminService/CreateSchema":           {},
-	"/yorkie.v1.AdminService/ListSchemas":            {},
-	"/yorkie.v1.AdminService/GetSchema":              {},
-	"/yorkie.v1.AdminService/GetSchemas":             {},
-	"/yorkie.v1.AdminService/RemoveSchema":           {},
-	"/yorkie.v1.AdminService/ListChannels":           {},
-	"/yorkie.v1.AdminService/GetChannels":            {},
-	"/yorkie.v1.AdminService/BroadcastByAdmin":       {},
-	"/yorkie.v1.AdminService/RevalidateAccess":       {},
+// inherit a scheme it does not read. Methods that change the project's
+// documents, schemas or sessions require Admin; only reads are open to Member.
+var projectScopedMethods = map[string]database.MemberRole{
+	"/yorkie.v1.AdminService/GetProjectStats":        database.Member,
+	"/yorkie.v1.AdminService/CreateDocument":         database.Admin,
+	"/yorkie.v1.AdminService/ListDocuments":          database.Member,
+	"/yorkie.v1.AdminService/GetDocument":            database.Member,
+	"/yorkie.v1.AdminService/GetDocuments":           database.Member,
+	"/yorkie.v1.AdminService/SearchDocuments":        database.Member,
+	"/yorkie.v1.AdminService/UpdateDocument":         database.Admin,
+	"/yorkie.v1.AdminService/RemoveDocumentByAdmin":  database.Admin,
+	"/yorkie.v1.AdminService/CompactDocumentByAdmin": database.Admin,
+	"/yorkie.v1.AdminService/GetSnapshotMeta":        database.Member,
+	"/yorkie.v1.AdminService/ListChanges":            database.Member,
+	"/yorkie.v1.AdminService/CreateSchema":           database.Admin,
+	"/yorkie.v1.AdminService/ListSchemas":            database.Member,
+	"/yorkie.v1.AdminService/GetSchema":              database.Member,
+	"/yorkie.v1.AdminService/GetSchemas":             database.Member,
+	"/yorkie.v1.AdminService/RemoveSchema":           database.Admin,
+	"/yorkie.v1.AdminService/ListChannels":           database.Member,
+	"/yorkie.v1.AdminService/GetChannels":            database.Member,
+	"/yorkie.v1.AdminService/BroadcastByAdmin":       database.Admin,
+	"/yorkie.v1.AdminService/RevalidateAccess":       database.Admin,
 }
 
 // schemeAgnosticMethods is the set of authenticated AdminService methods that
@@ -115,9 +129,11 @@ func isSchemeAgnostic(method string) bool {
 }
 
 // isSchemeAllowed reports whether the given scheme populates the scope the
-// given method reads. A scheme this does not recognize is left to the
-// credential verification below, which rejects it as unauthenticated.
-func isSchemeAllowed(method, scheme string) bool {
+// given method reads. A Bearer token populates the project scope only together
+// with a project name, so hasProjectName says whether one was sent. A scheme
+// this does not recognize is left to the credential verification below, which
+// rejects it as unauthenticated.
+func isSchemeAllowed(method, scheme string, hasProjectName bool) bool {
 	if isSchemeAgnostic(method) {
 		return true
 	}
@@ -126,7 +142,7 @@ func isSchemeAllowed(method, scheme string) bool {
 		return isProjectScoped(method)
 	}
 	if strings.EqualFold(scheme, types.AuthSchemeBearer) {
-		return !isProjectScoped(method)
+		return !isProjectScoped(method) || hasProjectName
 	}
 
 	return true
@@ -289,13 +305,16 @@ func (i *AdminServiceInterceptor) authenticate(
 	}
 	scheme := parts[0]
 	param := parts[1]
+	projectName := strings.TrimSpace(header.Get(types.ProjectNameKey))
 
 	// NOTE(hackerwins): Each scheme populates only one of the two scopes:
 	// Bearer puts the user into the context, API-Key puts the project. A method
 	// reads one of them, so the scheme that does not match the method is
 	// rejected here, before the handler reads a scope that was never set. A
-	// method that reads neither scope keeps accepting both schemes.
-	if !isSchemeAllowed(procedure, scheme) {
+	// method that reads neither scope keeps accepting both schemes. A Bearer
+	// token reaches a project-scoped method only with a project name, and the
+	// user's role in that project is checked below.
+	if !isSchemeAllowed(procedure, scheme, projectName != "") {
 		return nil, connect.NewError(connect.CodePermissionDenied, ErrSchemeNotAllowed)
 	}
 
@@ -307,6 +326,9 @@ func (i *AdminServiceInterceptor) authenticate(
 			user, err := users.GetUserByName(ctx, i.backend, claims.Username)
 			if err == nil {
 				ctx = users.With(ctx, user)
+				if isProjectScoped(procedure) {
+					return i.authorizeProject(ctx, procedure, user.ID, projectName)
+				}
 				return ctx, nil
 			}
 		}
@@ -330,4 +352,34 @@ func (i *AdminServiceInterceptor) authenticate(
 	}
 
 	return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
+}
+
+// authorizeProject puts the named project into the context of a
+// session-authenticated request when the user's role in that project is at
+// least the one the method requires.
+//
+// NOTE(hackerwins): A project the user cannot see and one that does not exist
+// answer the same way, so the header cannot be used to probe project names.
+// The role is validated before the comparison because MemberRole.IsAtLeast
+// ranks a role it does not recognize above Owner; an unknown role fails closed.
+func (i *AdminServiceInterceptor) authorizeProject(
+	ctx context.Context,
+	procedure string,
+	userID types.ID,
+	projectName string,
+) (context.Context, error) {
+	project, role, err := projects.ProjectAndRole(ctx, i.backend, userID, projectName)
+	if err != nil {
+		if goerrors.Is(err, database.ErrProjectNotFound) || goerrors.Is(err, database.ErrMemberNotFound) {
+			return nil, connect.NewError(connect.CodePermissionDenied, ErrProjectAccessDenied)
+		}
+		return nil, err
+	}
+
+	required := projectScopedMethods[procedure]
+	if role.Validate() != nil || !role.IsAtLeast(required) {
+		return nil, connect.NewError(connect.CodePermissionDenied, ErrProjectAccessDenied)
+	}
+
+	return projects.With(ctx, project), nil
 }

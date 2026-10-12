@@ -55,26 +55,53 @@ so every present and future caller of these two functions is covered:
       half of that chain is now closed.
 - [x] `make lint`, `go test ./server/projects/... ./api/types/...`.
 
+## Session path for members
+
+Hiding the key alone left a `member` with no credential for the project-scoped
+procedures at all: `admin.Client` sent `API-Key <project.SecretKey>`
+(`admin/auth.go`), the key was now empty, and #2174 rejects a keyless
+`API-Key`. Read-only calls such as `ListDocuments` broke for members along with
+the destructive ones, and the dashboard's document pages with them. The review
+panel upheld this twice, so it is fixed here instead of deferred.
+
+The project-scoped procedures now accept a second credential: a session token
+(`Bearer`) together with the project named in the `x-yorkie-project` header
+(`types.ProjectNameKey`). The interceptor resolves the user's role in that
+project and checks it against a per-method minimum:
+
+- `projectScopedMethods` (`server/rpc/interceptors/admin.go`) now maps each
+  method to the least role it needs over a session. Reads are `Member`;
+  anything that changes documents, schemas or sessions is `Admin`
+  (`CreateDocument`, `UpdateDocument`, `RemoveDocumentByAdmin`,
+  `CompactDocumentByAdmin`, `CreateSchema`, `RemoveSchema`,
+  `BroadcastByAdmin`, `RevalidateAccess`).
+- `Bearer` without the header is still `ErrSchemeNotAllowed`. A project the
+  user cannot see and one that does not exist both answer
+  `ErrProjectAccessDenied`, so the header cannot probe project names. An
+  unknown role fails closed, as in `redactForRole`.
+- The `API-Key` path is unchanged: the key is the project's own credential and
+  carries its full authority, which is why only `Admin` and above may read it.
+- `admin.AuthInterceptor` sends `API-Key` when the project it holds has a key
+  and falls back to `Bearer` plus `x-yorkie-project` when it does not.
+
+## Steps (session path)
+
+- [x] `types.ProjectNameKey` header constant.
+- [x] Interceptor: role table, `Bearer` + project name on project-scoped
+      methods, `authorizeProject`.
+- [x] `admin/auth.go`: fall back to the session when the key is empty.
+- [x] Unit tests: owner/admin/member/stranger over a read and a write method,
+      unknown project, missing header, invalid token, no key in a member's
+      context.
+- [x] Integration test: a member lists the project's documents through
+      `admin.Client` and is denied `RemoveDocument` and `CreateDocument`.
+      Red on the previous head (`ListDocuments` returned nothing), green now.
+- [x] `make lint`, unit tests, integration suite.
+
 ## Out of scope
 
-Adding user-role checks to the API-Key-scoped procedures themselves. They have
-no user in context by construction; that is a separate design change. Keys
-already read by a member are not invalidated — `RotateProjectKeys` exists for
-that and remains the remedy.
-
-## Known limitation: a member cannot drive the project-scoped admin client
-
-`admin.Client` resolves the project with `GetProject` and then authenticates
-every project-scoped call with `API-Key <project.SecretKey>`
-(`admin/client.go:339`, `admin/auth.go:72`). With the key redacted, a `member`
-sends an empty key and the server rejects it, so `ListDocuments`, `GetSchemas`,
-`ListChangeSummaries` and `CreateDocument` stop working for that user through
-the SDK and CLI — the read ones included.
-
-This is the intended consequence, not a regression to patch here. Those
-procedures cannot distinguish a member from an owner, so leaving the key
-readable would keep granting owner authority to members, which is the bug this
-change closes. Restoring member read access requires teaching the
-project-scoped path to accept a user credential and check a role — a change to
-`admin/auth.go`, `admin/client.go` and the server's API-Key interceptor that
-belongs to its own issue.
+Keys already read by a member are not invalidated; `RotateProjectKeys` remains
+the remedy. The dashboard (separate repository) still sets the key from
+`GetProject`; it needs the same fallback (send the session cookie and
+`x-yorkie-project` when the key is empty) before member-role users see their
+documents there again.

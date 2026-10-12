@@ -35,6 +35,12 @@ const UserAgentKey = "x-yorkie-user-agent"
 // APIKeyKey is the key of the api key header.
 const APIKeyKey = "x-api-key"
 
+// ProjectNameKey is the key of the header that names the project a
+// session-authenticated request acts on. A project-scoped AdminService method
+// reached with a Bearer token reads its project from this header instead of
+// from a secret key.
+const ProjectNameKey = "x-yorkie-project"
+
 // ShardKey is the key of the shard header.
 const ShardKey = "x-shard-key"
 

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	gotime "time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/users"
 )
 
 const (
@@ -79,6 +82,12 @@ func TestProjectScopedMethods(t *testing.T) {
 		}
 	})
 
+	t.Run("every project scoped method requires a known role test", func(t *testing.T) {
+		for procedure, role := range projectScopedMethods {
+			assert.NoError(t, role.Validate(), "%s requires an unknown role", procedure)
+		}
+	})
+
 	t.Run("no method is both unauthenticated and project scoped test", func(t *testing.T) {
 		for _, procedure := range adminProcedures(t) {
 			if !isRequiredAuth(procedure) {
@@ -103,22 +112,30 @@ func TestProjectScopedMethods(t *testing.T) {
 
 func TestIsSchemeAllowed(t *testing.T) {
 	t.Run("scheme must match the scope the method reads test", func(t *testing.T) {
-		assert.True(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeBearer))
-		assert.False(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeAPIKey))
-		assert.True(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeAPIKey))
-		assert.False(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeBearer))
+		assert.True(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeBearer, false))
+		assert.False(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeAPIKey, false))
+		assert.True(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeAPIKey, false))
+		assert.False(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeBearer, false))
+	})
+
+	// A session token names its project in a header, so it populates the
+	// project scope only when that header is present.
+	t.Run("bearer reaches a project scoped method with a project name test", func(t *testing.T) {
+		assert.True(t, isSchemeAllowed(projectScopedProcedure, types.AuthSchemeBearer, true))
+		assert.True(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeBearer, true))
+		assert.False(t, isSchemeAllowed(userScopedProcedure, types.AuthSchemeAPIKey, true))
 	})
 
 	// GetServerVersion reads neither scope and answered to both schemes before
 	// the gate existed, so neither credential may be turned away here.
 	t.Run("a method reading no scope keeps both schemes test", func(t *testing.T) {
-		assert.True(t, isSchemeAllowed(schemeAgnosticProcedure, types.AuthSchemeAPIKey))
-		assert.True(t, isSchemeAllowed(schemeAgnosticProcedure, types.AuthSchemeBearer))
+		assert.True(t, isSchemeAllowed(schemeAgnosticProcedure, types.AuthSchemeAPIKey, false))
+		assert.True(t, isSchemeAllowed(schemeAgnosticProcedure, types.AuthSchemeBearer, false))
 	})
 
 	t.Run("an unknown scheme is left to credential verification test", func(t *testing.T) {
-		assert.True(t, isSchemeAllowed(userScopedProcedure, "Basic"))
-		assert.True(t, isSchemeAllowed(projectScopedProcedure, "Basic"))
+		assert.True(t, isSchemeAllowed(userScopedProcedure, "Basic", false))
+		assert.True(t, isSchemeAllowed(projectScopedProcedure, "Basic", false))
 	})
 }
 
@@ -223,5 +240,110 @@ func TestAdminServiceAuthenticateAPIKey(t *testing.T) {
 				assert.ErrorIs(t, err, ErrSecretKeyNotProvided, "%s key with UseDefaultProject=%v", name, useDefaultProject)
 			}
 		}
+	})
+}
+
+func TestAdminServiceAuthenticateBearerWithProject(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		readProcedure  = "/yorkie.v1.AdminService/ListDocuments"
+		writeProcedure = "/yorkie.v1.AdminService/RemoveDocumentByAdmin"
+	)
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+	owner, _, err := db.EnsureDefaultUserAndProject(ctx, "owner", "owner-password")
+	assert.NoError(t, err)
+	project, err := db.CreateProjectInfo(ctx, t.Name(), owner.ID)
+	assert.NoError(t, err)
+
+	tokenManager := auth.NewTokenManager("token-secret", gotime.Hour)
+	interceptor := &AdminServiceInterceptor{
+		backend:      &backend.Backend{Config: &backend.Config{}, DB: db},
+		tokenManager: tokenManager,
+	}
+
+	newUser := func(name string, role database.MemberRole) {
+		info, err := db.CreateUserInfo(ctx, name, "password")
+		assert.NoError(t, err)
+		if role != "" {
+			_, err = db.UpsertMemberInfo(ctx, project.ID, info.ID, owner.ID, role)
+			assert.NoError(t, err)
+		}
+	}
+	newUser("admin", database.Admin)
+	newUser("member", database.Member)
+	newUser("stranger", "")
+
+	bearerHeader := func(username, projectName string) http.Header {
+		token, err := tokenManager.Generate(username)
+		assert.NoError(t, err)
+
+		header := http.Header{}
+		header.Set(types.AuthorizationKey, fmt.Sprintf("%s %s", types.AuthSchemeBearer, token))
+		if projectName != "" {
+			header.Set(types.ProjectNameKey, projectName)
+		}
+		return header
+	}
+
+	t.Run("role decides which project scoped methods a user reaches test", func(t *testing.T) {
+		tests := []struct {
+			username  string
+			procedure string
+			allowed   bool
+		}{
+			{"owner", readProcedure, true},
+			{"owner", writeProcedure, true},
+			{"admin", readProcedure, true},
+			{"admin", writeProcedure, true},
+			{"member", readProcedure, true},
+			{"member", writeProcedure, false},
+			{"stranger", readProcedure, false},
+			{"stranger", writeProcedure, false},
+		}
+
+		for _, tt := range tests {
+			ctx, err := interceptor.authenticate(ctx, tt.procedure, bearerHeader(tt.username, project.Name))
+			if !tt.allowed {
+				assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "%s on %s", tt.username, tt.procedure)
+				assert.ErrorIs(t, err, ErrProjectAccessDenied, "%s on %s", tt.username, tt.procedure)
+				continue
+			}
+
+			assert.NoError(t, err, "%s on %s", tt.username, tt.procedure)
+			assert.Equal(t, project.ID, projects.From(ctx).ID)
+			assert.Equal(t, tt.username, users.From(ctx).Username)
+		}
+	})
+
+	// A member reaches the project through its session, never through the
+	// key, so the project it is handed must not carry the key either.
+	t.Run("member context carries no secret key test", func(t *testing.T) {
+		ctx, err := interceptor.authenticate(ctx, readProcedure, bearerHeader("member", project.Name))
+		assert.NoError(t, err)
+		assert.Empty(t, projects.From(ctx).SecretKey)
+	})
+
+	t.Run("unknown project answers like a forbidden one test", func(t *testing.T) {
+		_, err := interceptor.authenticate(ctx, readProcedure, bearerHeader("owner", "no-such-project"))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		assert.ErrorIs(t, err, ErrProjectAccessDenied)
+	})
+
+	t.Run("bearer without a project name is still rejected test", func(t *testing.T) {
+		_, err := interceptor.authenticate(ctx, readProcedure, bearerHeader("owner", ""))
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		assert.ErrorIs(t, err, ErrSchemeNotAllowed)
+	})
+
+	t.Run("invalid token with a project name is unauthenticated test", func(t *testing.T) {
+		header := http.Header{}
+		header.Set(types.AuthorizationKey, fmt.Sprintf("%s %s", types.AuthSchemeBearer, "not-a-token"))
+		header.Set(types.ProjectNameKey, project.Name)
+
+		_, err := interceptor.authenticate(ctx, readProcedure, header)
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 }

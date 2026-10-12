@@ -26,30 +26,29 @@ already dropped, so the role is not available to the caller. Re-reading it with
 number of projects a user has been invited to. The owned list needs no lookup:
 being in it *is* the owner role.
 
-## Half the escalation chain stays open by design
+## Hiding the credential is not the same as checking the role
 
-The API-Key-scoped procedures still authorize on the key alone. This change
-stops a `member` from *obtaining* the key through the API; it does not make
-those procedures role-aware, and it does not invalidate a key a member already
-copied. `RotateProjectKeys` is the remedy for the latter, and the former is
-recorded as a known limitation in both task's lessons files.
+The first version of this change only hid the key, and recorded "members lose
+the project-scoped procedures, read ones included" as the price. The review
+panel upheld that finding twice. It was right: the procedures could not tell a
+member from an owner because the only credential they accepted carried no
+user, so hiding the key turned "every member acts as an owner" into "no member
+acts at all". Neither is the intended permission model.
 
-## A member loses the project-scoped procedures, read ones included
+The fix was to give those procedures a credential that does carry a user: a
+session token plus the project name in a header. The interceptor checks the
+user's role against a per-method minimum, so a member reads and an admin
+writes. The key keeps its meaning as the project's own full-authority
+credential, which is exactly why only admins may read it.
 
-`admin.Client` resolves the project with `GetProject` and then sends
-`API-Key <project.SecretKey>` for every project-scoped call
-(`admin/client.go:373`, `admin/auth.go:72`). Since #2158 made those procedures
-API-Key-only and #2174 rejects a keyless `API-Key`, a `member` whose key is now
-empty can no longer reach `ListDocuments`, `GetSchemas`, `ListChangeSummaries`
-or `CreateDocument` through that client — not just the destructive ones.
+Takeaway: when a security fix removes access, check whether the access was
+wrong or only the credential was too coarse. Here the reads were legitimate;
+the credential was the problem.
 
-That is the honest cost of this fix: those procedures cannot tell a member from
-an owner, so the only two options were "every member acts as an owner" or "no
-member acts at all". The second is the safe default, and the first was the bug.
-Restoring read access for members means teaching the project-scoped path to
-accept a user credential and check a role, which is a larger design change than
-this issue asked for. No integration test exercised a member through those
-procedures, so CI does not encode the old behavior.
+## A key a member already copied keeps working
+
+Hiding the key stops a member from obtaining it now; it does not invalidate a
+key read before this change. `RotateProjectKeys` is the remedy.
 
 ## `IsAtLeast` fails open, so the gate validates the role first
 
