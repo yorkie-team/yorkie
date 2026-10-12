@@ -18,6 +18,7 @@ package crdt
 
 import (
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,4 +90,69 @@ func TestRelinkPurgedSubtreeOrder(t *testing.T) {
 		require.NotNil(t, anchored.BoundaryAnchor, "child first: %v", childFirst)
 		assert.True(t, anchored.BoundaryAnchor.Equal(next.id), "child first: %v", childFirst)
 	}
+}
+
+// TestPreMergePointStopsOnLoopingFamily points two nodes' InsPrevID at each
+// other and walks the family from one of them. InsPrevID arrives verbatim from
+// client-supplied bytes, so a chain that loops back on itself must stop the
+// walk rather than spin the applying goroutine while it holds the document
+// lock; see insNextWalker.
+func TestPreMergePointStopsOnLoopingFamily(t *testing.T) {
+	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+
+	root := NewTreeNode(NewTreeNodeID(ticket(1), 0), "r", nil)
+	src := NewTreeNode(NewTreeNodeID(ticket(2), 0), "p", nil)
+	moved := NewTreeNode(NewTreeNodeID(ticket(3), 0), "p", nil)
+	pred := NewTreeNode(NewTreeNodeID(ticket(5), 0), "p", nil)
+	product := NewTreeNode(NewTreeNodeID(ticket(6), 0), "p", nil)
+	require.NoError(t, root.Append(src, moved, pred, product))
+
+	moved.MergedAt, moved.MergedFrom = ticket(4), src.id
+	product.InsPrevID, product.BoundaryAnchor = pred.id, moved.id
+	// Both nodes are newer than the merge and nest under the merged-away
+	// node, so neither ends the walk: only the loop guard does.
+	pred.BoundaryNest, product.BoundaryNest = src.id, src.id
+	pred.InsPrevID = product.id
+	tree := NewTree(root, ticket(1))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		holder, left := tree.preMergePoint(product, moved, ticket(7), nil)
+		assert.Nil(t, holder)
+		assert.Nil(t, left)
+	}()
+	select {
+	case <-done:
+	case <-gotime.After(10 * gotime.Second):
+		t.Fatal("preMergePoint did not stop on a looping InsPrevID chain")
+	}
+}
+
+// TestRestoreMergesAddsTicketsAtOnce checks that a snapshot's merge tickets,
+// which a peer controls, come back sorted and deduplicated. RestoreMerges adds
+// each entry in one pass rather than a ticket at a time, which would copy the
+// whole set per ticket and so cost O(k^2) for an entry of length k.
+func TestRestoreMergesAddsTicketsAtOnce(t *testing.T) {
+	actor := time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+
+	root := NewTreeNode(NewTreeNodeID(ticket(1), 0), "r", nil)
+	src := NewTreeNode(NewTreeNodeID(ticket(2), 0), "p", nil)
+	require.NoError(t, root.Append(src))
+	tree := NewTree(root, ticket(1))
+	src.addMergeTicket(ticket(5))
+
+	tree.RestoreMerges([]TreeMerge{{
+		Source:  src.id,
+		Tickets: []*time.Ticket{ticket(9), nil, ticket(3), ticket(5), ticket(9)},
+	}})
+
+	require.Len(t, src.mergeTickets, 3)
+	for i, lamport := range []int64{3, 5, 9} {
+		assert.Equal(t, lamport, src.mergeTickets[i].Lamport())
+	}
+	require.Len(t, tree.Merges(), 1)
+	assert.Equal(t, src.mergeTickets, tree.Merges()[0].Tickets)
 }

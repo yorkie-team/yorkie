@@ -48,3 +48,21 @@
   vector. A single LWW field (MergedAt, removedAt) holds whichever of
   several concurrent tickets a replica's order left there, so testing it
   against a version vector depends on arrival order; keep the set.
+
+## Review round: cycle guards, peer-controlled lists, pinned regressions
+
+- `preMergePoint` walked `InsPrevID` with no `nodeSet`, the one chain
+  walk in the change that did not. The pointer reaches the tree from
+  client bytes, so a chain looping back on itself spun the applying
+  goroutine under the document lock; the test for it hangs for 10s
+  without the guard and passes with it.
+- A list a snapshot carries is a list a peer can send. `RestoreMerges`
+  fed `addMergeTicket` one ticket at a time, and that call copies the
+  whole set per insertion: linear-looking code, quadratic on an entry
+  whose length the sender picks. Added `addMergeTickets`, which sorts
+  the input once and merges the two runs.
+- A known divergence recorded as a skipped test records nothing CI can
+  read. `TestTreeBoundaryKnownDivergences` now runs in the unit lane and
+  pins the tree each replica ends with, so any movement in those cases
+  has to be re-recorded by hand; the env var still replays them as plain
+  convergence checks.

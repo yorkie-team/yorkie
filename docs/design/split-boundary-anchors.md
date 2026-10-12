@@ -341,17 +341,26 @@ as measured at 3a0e81e2 (7 now):
 and snapshot reloads. main fails 332 of those 600 runs, and this design
 passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 
+The regressions are not left to the measurements alone.
+`TestTreeBoundaryKnownDivergences` carries the minimized script of each
+one, including the two that converge on main, and runs in the unit lane
+with the tree every replica ends with recorded per case. A change that
+moves any of them — towards convergence or away from it — fails there and
+has to say so in the record, rather than passing because the case was
+skipped. The scripts can also be replayed as plain convergence checks with
+`YORKIE_RUN_KNOWN_DIVERGENCES` set, which is how each one is read.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
 |------|------------|
 | Old clients and servers apply the old rules and ignore `boundaries`, so they disagree with new ones in these concurrent cases. The server builds snapshots with its own rules | Release the server and SDKs together, as for any op-semantics change. Old snapshots load with no records, and their products keep the old rules on every replica alike. No version gate prevents a mixed deployment |
-| A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. Merge fuzz against main: fewer divergences, 4/0/5/3 regressions |
+| A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. Merge fuzz against main: fewer divergences, 4/0/5/3 regressions. The two regressing scripts that converge on main are pinned in `TestTreeBoundaryKnownDivergences`, so CI fails if either moves |
 | Snapshots gain `TreeMerge`, read only by new servers and SDKs | Present only for a node that concurrent merges removed, dropped with it by GC. A replica that purged the moved children before the second merge arrived records none, so snapshots taken before GC can differ in it. A snapshot without it loads with the smaller ticket alone, as before it existed |
 | Merge forwarding is set by walking the tree once per merge source (`firstMergeHolder`), so runtime and snapshot agree | Measured: 1000 Backspace merges over 2000 paragraphs take 569 ms against 401 ms before. A purge of the first holder's moved tombstone can still move the pointer |
 | A node purged by GC and revived by a peer's undo comes back under its recorded parent even when a merge removed that parent, born removed on one replica only (`recreateFromSpan`) | Diverges on main too: `d1.split(1); d2.pull; d2.delete(3,4); d1.pull; d1.undo; gc; d2.undo`. Recreating it in the merge target fixes that case but breaks another that needs the removal ticket GC discarded, so it is left for a GC-side fix |
-| Undo, redo and concurrent splits still regress against main in 0.13–0.33% of the undo fuzz, and boundary records differ in about 1.04–1.17% | Measured on the undo fuzz. Not every short case is pinned: four-operation two-replica regressions such as `d1.split(3); d1.insert(5,"x"); d1.delete(3,5); d2.split(3)` predate the merge tickets, and a fuzz biased to split, typing and Backspace regresses in about 1% |
-| One known case (`TestTreeBoundaryKnownDivergences`): a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too) | Keeping, per split product, whether its change knew the merges of the children it carried would settle it, at the cost of new persisted state. The general fix is yorkie-js-sdk#1474 |
+| Undo, redo and concurrent splits still regress against main in 0.13–0.33% of the undo fuzz, and boundary records differ in about 1.04–1.17% | Measured on the undo fuzz. The minimized scripts are pinned in `TestTreeBoundaryKnownDivergences`, but not every short case is: four-operation two-replica regressions such as `d1.split(3); d1.insert(5,"x"); d1.delete(3,5); d2.split(3)` predate the merge tickets, and a fuzz biased to split, typing and Backspace regresses in about 1%. Accepting them is a trade for the 1046-to-0 and 1066-to-499 cells above, and it needs a maintainer's call, not CI's |
+| One known case: a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too) | Keeping, per split product, whether its change knew the merges of the children it carried would settle it, at the cost of new persisted state. The general fix is yorkie-js-sdk#1474 |
 | Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | Covered for repeated merges by `mergeTickets`. Still open for plain deletes, an empty node merged away twice (no moved child to stamp), and a node one range delete removes while a Backspace merges it. The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
 | Splits outside the scope keep diverging | Unchanged from today; the fallback rules are a superset of main's |
 

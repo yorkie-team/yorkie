@@ -887,8 +887,16 @@ func (t *Tree) preMergePoint(
 	mergedAt := moved.MergedAt
 	var holder *TreeNode
 	idx := 0
+	// InsPrevID arrives verbatim from client-supplied bytes, so the family
+	// walk is bounded by the nodes it has passed through; see insNextWalker.
+	var walker insNextWalker
+	walker.visit(product)
 	for n := t.familyPrev(product); n != nil; n = t.familyPrev(n) {
 		if n.IsText() || n.Index.Parent == nil {
+			break
+		}
+		// Stop on a chain that loops back on itself; see insNextWalker.
+		if !walker.visit(n) {
 			break
 		}
 		if n.IsRemoved() {
@@ -1034,6 +1042,45 @@ func (n *TreeNode) addMergeTicket(tk *time.Ticket) {
 	n.mergeTickets = append(tickets, n.mergeTickets[i:]...)
 }
 
+// addMergeTickets adds every ticket of tks at once. addMergeTicket copies the
+// whole set per insertion, so adding a list a peer controls one ticket at a
+// time costs a copy per ticket: a snapshot payload carrying k tickets for one
+// node would spend O(k^2) copies before anything validated it. Sorting the
+// input once and merging the two runs keeps that linearithmic.
+func (n *TreeNode) addMergeTickets(tks []*time.Ticket) {
+	sorted := make([]*time.Ticket, 0, len(tks))
+	for _, tk := range tks {
+		if tk != nil {
+			sorted = append(sorted, tk)
+		}
+	}
+	if len(sorted) == 0 {
+		return
+	}
+	slices.SortFunc(sorted, func(a, b *time.Ticket) int { return a.Compare(b) })
+
+	merged := make([]*time.Ticket, 0, len(n.mergeTickets)+len(sorted))
+	i, j := 0, 0
+	for i < len(n.mergeTickets) || j < len(sorted) {
+		var next *time.Ticket
+		switch {
+		case j == len(sorted):
+			next, i = n.mergeTickets[i], i+1
+		case i == len(n.mergeTickets):
+			next, j = sorted[j], j+1
+		case n.mergeTickets[i].Compare(sorted[j]) <= 0:
+			next, i = n.mergeTickets[i], i+1
+		default:
+			next, j = sorted[j], j+1
+		}
+		if len(merged) > 0 && merged[len(merged)-1].Compare(next) == 0 {
+			continue
+		}
+		merged = append(merged, next)
+	}
+	n.mergeTickets = merged
+}
+
 // TreeMerge is the set of merge tickets of a node that more than one merge
 // removed, as a snapshot carries it.
 type TreeMerge struct {
@@ -1055,17 +1102,17 @@ func (t *Tree) Merges() []TreeMerge {
 
 // RestoreMerges applies merge tickets read from a snapshot. One naming a node
 // the tree does not hold, or a text node, is ignored.
+//
+// The list is peer-controlled -- element payloads reach fromJSONTree before
+// anything sanitizes them -- so each entry is added in one pass rather than a
+// ticket at a time, which would be quadratic in the entry's length.
 func (t *Tree) RestoreMerges(merges []TreeMerge) {
 	for _, m := range merges {
 		src := t.nodeByKey(boundaryKey{id: m.Source})
 		if src == nil || src.IsText() {
 			continue
 		}
-		for _, tk := range m.Tickets {
-			if tk != nil {
-				src.addMergeTicket(tk)
-			}
-		}
+		src.addMergeTickets(m.Tickets)
 	}
 }
 

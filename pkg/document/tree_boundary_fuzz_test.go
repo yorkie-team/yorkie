@@ -608,8 +608,13 @@ func TestTreeBoundaryConcurrentMergeKeepsSplitCascade(t *testing.T) {
 	}
 }
 
-// TestTreeBoundaryKnownDivergences records cases that still diverge. The
-// first diverges on main too. Each is skipped with what it would take.
+// TestTreeBoundaryKnownDivergences pins the cases that still diverge, so that
+// a change to any of them fails here instead of passing unnoticed: `xml`
+// records the tree each replica ends with, and `needs` what convergence would
+// take. The first diverges on main too; the two marked "Converges on main"
+// are regressions this design accepts, and pinning them is what keeps them
+// from drifting further. Set YORKIE_RUN_KNOWN_DIVERGENCES to run the
+// convergence check itself and see how each one fails.
 func TestTreeBoundaryKnownDivergences(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -617,6 +622,7 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 		text     string
 		needs    string
 		replicas int
+		xml      []string
 	}{{
 		name:   "split with a peer's concurrent split and undo, then typing",
 		script: `d1.split(1); d2.split(1); d3.pull; d1.undo; d3.insert(3,"x")`,
@@ -624,6 +630,8 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 			"TestTreeBoundaryUndoRacesSplitAndInsert, but the text belongs on the " +
 			"other side. Only whether the split's change knew the merge tells them " +
 			"apart, and no replica keeps that.",
+		xml: []string{"<doc><p>x</p><p>ab</p></doc>", "<doc><p>x</p><p>ab</p></doc>",
+			"<doc><p></p><p>xab</p></doc>"},
 	}, {
 		name:   "two inserts at the start of a merged-away node, then an undo",
 		script: `d1.split(3); d2.pull; d3.pull; d3.insert(5,"n"); d2.insert(5,"o"); d1.delete(3,5); d1.undo`,
@@ -631,6 +639,8 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 		needs: "Both inserts are forwarded to the same fixed point and stamped as moved " +
 			"out of the merged-away node; their order there still follows arrival. " +
 			"The order with d2's insert first diverges without preMergePoint too.",
+		xml: []string{"<doc><p>abon</p><p>cd</p></doc>", "<doc><p>abno</p><p>cd</p></doc>",
+			"<doc><p>abno</p><p>cd</p></doc>"},
 	}, {
 		name:   "split re-made inside a merged-away node, then a range from it",
 		script: "d2.split(1); d1.pull; d2.delete(1,3); d2.split(1); d1.split(3); d1.delete(1,3); d2.pull; d2.delete(5,7)",
@@ -638,6 +648,8 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 		needs: "preMergePoint passes over a product nested in the merged-away node " +
 			"that a change which did not know the merge split off; the records " +
 			"already part here without it. Converges on main.",
+		xml: []string{"<doc><p></p><p>c</p></doc>", "<doc><p></p><p></p><p>c</p></doc>",
+			"<doc><p></p><p></p><p>c</p></doc>"},
 	}, {
 		name: "split arriving before and after a merge, then ranges over it",
 		script: "d1.split(1); d2.split(1); d2.split(3); d1.split(4); d2.undo; d2.pull; " +
@@ -648,6 +660,7 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 			"node (knewRemovalOf), which exposes how a split applied after the merge " +
 			"and one applied before it differ under the toBeMergedNodes skip. " +
 			"Converges on main.",
+		xml: []string{"<doc><p></p><p></p><p></p></doc>", "<doc><p></p><p></p></doc>"},
 	}, {
 		name: "undo and redo of a merge over text typed into a split product",
 		script: `d2.split(5); d1.pull; d2.insert(7,"m"); d2.split(8); d1.delete(5,7); ` +
@@ -656,11 +669,9 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 		replicas: 2,
 		needs: "The prefix before the undo already diverges on main; the redo's merge " +
 			"used to mask it through the one-replica re-delete of the merged-away node.",
+		xml: []string{"<doc><p>abcd</p></doc>", "<doc><p>abcdm</p><p></p></doc>"},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") == "" {
-				t.Skip(tc.needs)
-			}
 			text := tc.text
 			if text == "" {
 				text = "ab"
@@ -669,7 +680,16 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 			if replicas == 0 {
 				replicas = 3
 			}
-			replayBoundaryScriptFrom(t, replicas, text, tc.script)
+			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") != "" {
+				replayBoundaryScriptFrom(t, replicas, text, tc.script)
+				return
+			}
+			docs := playBoundaryScriptFrom(t, replicas, text, tc.script)
+			xml := make([]string, len(docs))
+			for r, d := range docs {
+				xml[r] = treeXML(t, d)
+			}
+			require.Equal(t, tc.xml, xml, tc.needs)
 		})
 	}
 }
