@@ -84,5 +84,16 @@ Applied by a maintainer while resolving the merge conflict with `main`:
   `server/rpc/watch_heartbeat_integration_test.go` now drives the real RPC
   server for the honored, clamped and opted-out cases, asserting both the
   advertised interval and whether a `WatchHeartbeat` actually arrives. The
-  `1s`/`2s` bounds in `test/helper` exist for exactly this, and until now
+  lowered `1s` floor in `test/helper` exists for exactly this, and until now
   only configured the path rather than exercising it.
+
+### Fix round 3
+
+- **A shared test bound is not a local knob.** `test/helper` had also pulled
+  the clamp *ceiling* down to `2s`, which is shared by every integration
+  suite: an SDK client asking for its 20s default would have been clamped to
+  2s and armed a 6s idle watchdog on every watch stream in the repo, a few
+  missed heartbeats away from a teardown and reconnect in tests that have
+  nothing to do with heartbeats. The ceiling is back at the server default
+  and only the floor is lowered, which binds just the streams that ask for
+  less than it -- i.e. this test's own.

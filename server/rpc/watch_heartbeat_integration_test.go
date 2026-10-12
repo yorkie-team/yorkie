@@ -105,7 +105,9 @@ func awaitHeartbeat(stream *connect.ServerStreamForClient[api.WatchResponse]) bo
 // heartbeats at a client that never asked for one and cannot parse them.
 //
 // The server under test is configured with helper.WatchHeartbeatIntervalMin
-// of 1s and ...Max of 2s, so a heartbeat is due well inside a test's lifetime.
+// of 1s, so the intervals asked for below are due well inside a test's
+// lifetime. The maximum is left at the server's own default: lowering it
+// would clamp every other suite's watch streams down with it.
 func TestWatchHeartbeatInterval(t *testing.T) {
 	t.Run("an asked-for interval is advertised and heartbeats", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*gotime.Second)
@@ -140,8 +142,9 @@ func TestWatchHeartbeatInterval(t *testing.T) {
 		assert.Zero(t, init.GetHeartbeatIntervalMs(),
 			"advertising an interval to a stream that gets no heartbeat would arm its watchdog against nothing")
 
-		// Several times the server's maximum passes before the deadline
-		// closes the stream, so a heartbeat would have been sent by now.
+		// Several times the shortest interval the server would ever resolve
+		// passes before the deadline closes the stream, so a heartbeat would
+		// have been sent by now.
 		assert.False(t, awaitHeartbeat(stream), "a stream that did not ask was sent a heartbeat")
 	})
 }
