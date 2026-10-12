@@ -273,7 +273,7 @@ with regressions against main in parentheses:
 | +delete | 157 / 357 | 99 / 215 (0/0) | 112 / 290 (2/4) | 0 / 0 |
 | +style | 130 / 328 | 69 / 139 (0/0) | 92 / 275 (0/0) | 0 / 0 |
 | merge | 973 / 1272 | 958 / 1258 (2/0) | 955 / 1258 (0/0) | 821 / 1130 (4/0) |
-| all | 677 / 968 | 654 / 936 (0/0) | 657 / 949 (1/1) | 518 / 763 (5/3) |
+| all | 677 / 968 | 654 / 936 (0/0) | 657 / 949 (1/1) | 517 / 763 (5/3) |
 
 This fuzz compares tombstones too. One of the three three-replica `all`
 regressions (seed 322) differs only in the order of a live character and a
@@ -289,10 +289,10 @@ regressions against main in parentheses:
 | GC every 3 steps | 2000 | 1046 | 848 (1) | 872 (7) | 0 |
 | + snapshot reload every 7 | 2000 | 1045 | 846 (1) | 868 (7) | 0 |
 | Undo and redo, seeds 1–600 | 1200 | 463 | 427 (2) | 405 (3) | 220 (4) |
-| Undo and redo, seeds 601–1800 | 2400 | 896 | 828 (4) | 827 (6) | 450 (3) |
-| Undo and redo with snapshot reloads, seeds 1–1800 | 3600 | 1066 | – | – | 500 (4) |
-| Backspace-heavy, three replicas | 3000 | 491 | – | – | 240 (22) |
-| + snapshot reloads | 3000 | 498 | – | – | 241 (21) |
+| Undo and redo, seeds 601–1800 | 2400 | 896 | 828 (4) | 827 (6) | 449 (3) |
+| Undo and redo with snapshot reloads, seeds 1–1800 | 3600 | 1066 | – | – | 499 (4) |
+| Backspace-heavy, three replicas | 3000 | 491 | – | – | 234 (22) |
+| + snapshot reloads | 3000 | 498 | – | – | 235 (21) |
 
 In the reload runs a reloaded replica only pulls afterwards: a reload bumps
 the replica's Lamport clock, and letting it issue more edits would change
@@ -306,7 +306,7 @@ The undo rules above were developed on seeds 1–600 and checked on seeds
 regress. In those runs, 14 (1.17%) and 25 (1.04%) runs converge in XML and
 node identity but end with different boundary records. A later concurrent
 split at the same place could then diverge. In the Backspace-heavy runs,
-which press Backspace at joins concurrently, 28 runs end with different
+which press Backspace at joins concurrently, 29 runs end with different
 records; before every merge ticket was kept (`mergeTickets`) it was 66.
 At runtime main keeps merge forwarding where the merge put it, while its
 snapshots rebuild it from where the children are. This design follows
@@ -348,6 +348,8 @@ passes all of them. `TestTreeBoundaryUndoSplit` pins the undo cases.
 | Old clients and servers apply the old rules and ignore `boundaries`, so they disagree with new ones in these concurrent cases. The server builds snapshots with its own rules | Release the server and SDKs together, as for any op-semantics change. Old snapshots load with no records, and their products keep the old rules on every replica alike. No version gate prevents a mixed deployment |
 | A merge now moves an anchored product's content into a concurrent product rather than the node it names | Documented here and in the release note. Merge fuzz against main: fewer divergences, 4/0/5/3 regressions |
 | Snapshots gain `TreeMerge`, read only by new servers and SDKs | Present only for a node that concurrent merges removed, dropped with it by GC. A replica that purged the moved children before the second merge arrived records none, so snapshots taken before GC can differ in it. A snapshot without it loads with the smaller ticket alone, as before it existed |
+| Merge forwarding is set by walking the tree once per merge source (`firstMergeHolder`), so runtime and snapshot agree | Measured: 1000 Backspace merges over 2000 paragraphs take 569 ms against 401 ms before. A purge of the first holder's moved tombstone can still move the pointer |
+| A node purged by GC and revived by a peer's undo comes back under its recorded parent even when a merge removed that parent, born removed on one replica only (`recreateFromSpan`) | Diverges on main too: `d1.split(1); d2.pull; d2.delete(3,4); d1.pull; d1.undo; gc; d2.undo`. Recreating it in the merge target fixes that case but breaks another that needs the removal ticket GC discarded, so it is left for a GC-side fix |
 | Undo, redo and concurrent splits still regress against main in 0.13–0.33% of the undo fuzz, and boundary records differ in about 1.04–1.17% | Measured on the undo fuzz. Not every short case is pinned: four-operation two-replica regressions such as `d1.split(3); d1.insert(5,"x"); d1.delete(3,5); d2.split(3)` predate the merge tickets, and a fuzz biased to split, typing and Backspace regresses in about 1% |
 | One known case (`TestTreeBoundaryKnownDivergences`): a split racing a peer's split and undo with typing, which leaves the same state as a case that needs the text on the other side (diverges on main too) | Keeping, per split product, whether its change knew the merges of the children it carried would settle it, at the cost of new persisted state. The general fix is yorkie-js-sdk#1474 |
 | Two concurrent removals of the same element: `removedAt` keeps the later one, so a change that knew only the first counts the element as present | Covered for repeated merges by `mergeTickets`. Still open for plain deletes, an empty node merged away twice (no moved child to stamp), and a node one range delete removes while a Backspace merges it. The same limitation as the existing `seenGone` check in `appendUnknownSplitSiblings` |
