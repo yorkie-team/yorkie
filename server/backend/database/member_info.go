@@ -51,16 +51,35 @@ func (r MemberRole) Validate() error {
 	}
 }
 
+// memberRoleRanks orders the roles from the most privileged. A role absent
+// from the table carries no permission at all; see IsAtLeast.
+var memberRoleRanks = map[MemberRole]int{
+	Owner:  1,
+	Admin:  2,
+	Member: 3,
+}
+
 // IsAtLeast checks if the role has at least the given role's permission.
-// Role hierarchy: Owner(3) >= Admin(2) >= Member(1)
+// Role hierarchy: Owner >= Admin >= Member.
+//
+// A role outside that hierarchy — an empty or corrupted
+// value read from a membership row, or a requirement that is not one of the
+// constants — answers false on both sides of the comparison, so an
+// authorization gate built on this fails closed. Ranking an unknown role 0
+// instead would read as more privileged than Owner, since the ranks count
+// down from the top.
 func (r MemberRole) IsAtLeast(role MemberRole) bool {
-	rank := map[MemberRole]int{
-		Owner:  1,
-		Admin:  2,
-		Member: 3,
+	rank, ok := memberRoleRanks[r]
+	if !ok {
+		return false
 	}
 
-	return rank[r] <= rank[role]
+	required, ok := memberRoleRanks[role]
+	if !ok {
+		return false
+	}
+
+	return rank <= required
 }
 
 // NewMemberRole parses and validates a role string into MemberRole.
