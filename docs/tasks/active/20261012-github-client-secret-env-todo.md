@@ -26,16 +26,16 @@ it; noted in the PR body instead.
 
 ## Steps
 
-- [ ] `cmd/yorkie/server.go`: add `GitHubClientSecretEnv`
+- [x] `cmd/yorkie/server.go`: add `GitHubClientSecretEnv`
       (`YORKIE_AUTH_GITHUB_CLIENT_SECRET`), read when the flag is unset, the
       way `MongoConnectionURIEnv` and `ClusterSecretEnv` are.
-- [ ] `cmd/yorkie/server_test.go`: extend the credential-env and
+- [x] `cmd/yorkie/server_test.go`: extend the credential-env and
       flag-wins tests to cover it.
-- [ ] `server/config.sample.yml`: note the env var next to
+- [x] `server/config.sample.yml`: note the env var next to
       `GitHubClientSecret`.
-- [ ] Chart: carry `githubClientSecret` in the `<name>-credentials` Secret,
+- [x] Chart: carry `githubClientSecret` in the `<name>-credentials` Secret,
       pass it as the env var, drop the argument.
-- [ ] Chart `values.yaml` + `README.md`: document the new Secret key and env
+- [x] Chart `values.yaml` + `README.md`: document the new Secret key and env
       var alongside the other three.
 
 ## Acceptance
