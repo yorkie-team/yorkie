@@ -26,20 +26,31 @@ import "slices"
 // decode a feature is exactly the build that advertises it.
 //
 // The names are part of the wire contract. Never rename or reuse one; a peer
-// matches on the string. ServerCapabilities is append-only for the same reason,
-// and removing an entry is a breaking change even though no proto field moves.
+// matches on the string. ServerCapabilities is append-only for the same reason
+// once a server has emitted it, and removing an emitted entry is a breaking
+// change even though no proto field moves.
 const (
 	// CapElementRestore means the peer understands RestoreMode on element
 	// operations and the revived_at register on elements, so an undo of a
 	// removal can revive the element already in the tree instead of inserting
 	// a copy of it under ids the document is already indexed by.
 	CapElementRestore = "element-restore"
+
+	// CapPresencePatch means the server folds PresenceChange CHANGE_TYPE_PATCH
+	// into a full put before storing it, so a client may send only the
+	// presence keys that changed. A server without it does not reject a patch
+	// but stores it as an empty presence, so a client that gets a pack without
+	// this capability must stop patching and resend its full presence. See
+	// docs/design/presence-patch.md.
+	CapPresencePatch = "presence-patch"
 )
 
-// ServerCapabilities is what a server advertises on the ChangePack it returns.
-// Append only.
+// ServerCapabilities is what a server advertises on every ChangePack it
+// returns. Append only, and only for what the server honours: the converter
+// does not decode RestoreMode on element operations or revived_at yet, so
+// CapElementRestore is left out until it does.
 var ServerCapabilities = []string{
-	CapElementRestore,
+	CapPresencePatch,
 }
 
 // HasCapability reports whether the given capability list contains name.

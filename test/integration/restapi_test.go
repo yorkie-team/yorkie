@@ -422,6 +422,132 @@ func TestRESTAPI(t *testing.T) {
 			t.Fatal("timeout waiting for admin broadcast")
 		}
 	})
+
+	t.Run("auth scheme mismatch test", func(t *testing.T) {
+		project := helper.CreateProject(t, defaultServer, helper.TestSlugName(t))
+		token := logIn(t)
+
+		// A user-scoped method takes the session token. Answering a secret key
+		// with PermissionDenied is the point: before, the handler read a user
+		// the API-Key branch never put in the context and panicked, so the
+		// caller got a connection reset instead of any response.
+		assertPermissionDenied(
+			t,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetProject", defaultServer.RPCAddr()),
+			fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey),
+			fmt.Sprintf(`{"name": "%s"}`, project.Name),
+		)
+
+		// And the other direction: a project-scoped method takes the secret key.
+		assertPermissionDenied(
+			t,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr()),
+			fmt.Sprintf("%s %s", types.AuthSchemeBearer, token),
+			`{"page_size": 1}`,
+		)
+
+		// The matching scheme still works; post asserts 200.
+		post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr()),
+			`{"page_size": 1}`,
+		)
+
+		// GetServerVersion reads neither scope, so both credentials keep
+		// reaching it rather than being turned away by the scheme gate.
+		versionURL := fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetServerVersion", defaultServer.RPCAddr())
+		post(t, project, versionURL, `{}`)
+		assertOK(t, versionURL, fmt.Sprintf("%s %s", types.AuthSchemeBearer, token), `{}`)
+	})
+
+	t.Run("keyless api key test", func(t *testing.T) {
+		// UseDefaultProject is on for the test server, which lets a client
+		// without a public key reach the default project on YorkieService. It
+		// must not let an admin request without a secret key act on it.
+		// net/http trims only ASCII spaces and tabs off a header value, so a
+		// non-breaking space reaches the server as the whole key.
+		url := fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr())
+		for _, param := range []string{"", " ", "\u00a0", "\u00a0\u00a0", " \u00a0 "} {
+			assertUnauthenticated(t, url, fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, param), `{"page_size": 1}`)
+		}
+	})
+}
+
+// assertOK sends a POST request with the given authorization header and
+// asserts that it is answered with 200.
+func assertOK(t *testing.T, url, authHeader, body string) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(types.AuthorizationKey, authHeader)
+
+	res, err := http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, res.Body.Close()) }()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+}
+
+// logIn logs the default admin in over the REST API and returns its token.
+func logIn(t *testing.T) string {
+	req, err := http.NewRequest(
+		"POST",
+		fmt.Sprintf("http://%s/yorkie.v1.AdminService/LogIn", defaultServer.RPCAddr()),
+		strings.NewReader(fmt.Sprintf(`{"username": "%s", "password": "%s"}`, helper.AdminUser, helper.AdminPassword)),
+	)
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, res.Body.Close()) }()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	body, err := io.ReadAll(res.Body)
+	assert.NoError(t, err)
+
+	var decoded struct {
+		Token string `json:"token"`
+	}
+	assert.NoError(t, gojson.Unmarshal(body, &decoded))
+	assert.NotEmpty(t, decoded.Token)
+	return decoded.Token
+}
+
+// assertPermissionDenied sends a POST request with the given authorization
+// header and asserts that it is answered with a permission_denied error.
+func assertPermissionDenied(t *testing.T, url, authHeader, body string) {
+	assertRejected(t, url, authHeader, body, http.StatusForbidden, "permission_denied")
+}
+
+// assertUnauthenticated sends a POST request with the given authorization
+// header and asserts that it is answered with an unauthenticated error.
+func assertUnauthenticated(t *testing.T, url, authHeader, body string) {
+	assertRejected(t, url, authHeader, body, http.StatusUnauthorized, "unauthenticated")
+}
+
+// assertRejected sends a POST request with the given authorization header and
+// asserts that it is answered with the given status and error code.
+func assertRejected(t *testing.T, url, authHeader, body string, status int, code string) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(body))
+	assert.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(types.AuthorizationKey, authHeader)
+
+	res, err := http.DefaultClient.Do(req)
+	// A reset connection fails here, before the status is read.
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, res.Body.Close()) }()
+	assert.Equal(t, status, res.StatusCode, "authorization %q", authHeader)
+
+	resBody, err := io.ReadAll(res.Body)
+	assert.NoError(t, err)
+
+	var decoded struct {
+		Code string `json:"code"`
+	}
+	assert.NoError(t, gojson.Unmarshal(resBody, &decoded))
+	assert.Equal(t, code, decoded.Code, "authorization %q", authHeader)
 }
 
 // post sends a POST request to the given URL with the given body.

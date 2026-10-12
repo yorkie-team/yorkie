@@ -141,6 +141,15 @@ Follow `fromLeft`'s `InsNextID` chain to find a split sibling whose
 parent is `toParent`, and use that sibling as the `collectBetween`
 from-position.
 
+Skip the narrowing when `toLeft == toParent`, the to position being the
+leftmost child position (offset 0) of `toParent`. Joining two paragraphs
+right after an Enter in the middle of a span names exactly that: from the
+end of the first paragraph to the start of the second. The split sibling in
+`toParent` is then its first child, so the narrowed from-position would lie
+after the to-position, a backwards range that collects nothing and so
+drops the merge. The JS SDK
+has had this guard since yorkie-js-sdk#1237.
+
 Only the `collectBetween` range is narrowed. The original
 `fromParent`/`fromLeft` are preserved for merge, split, and insert
 steps so that content is inserted at the editor's intended position.
@@ -164,6 +173,109 @@ to include split siblings unknown to the editor's version vector.
 These siblings are part of the same logical element and must be
 deleted together. Element-only: text splits use deterministic
 offset-based IDs that `findFloorNode` already resolves.
+
+The walk passes a sibling the editor **knew** only if the editor saw it
+gone: removed by a change the editor knew (merged back into the deleted
+element, for instance), or enclosed whole by this same delete. What lies
+past such a sibling was inside the deleted element or the deleted range
+for the editor too. Any other known sibling ends the walk. The chain is in
+document order: a split product lands directly after the node it was split
+off, or under §7.8 after the same-boundary products ordered ahead of it. So
+an unknown sibling past a known one that the editor did not see removed
+holds content the editor saw inside that sibling, not inside the deleted
+element. Walking on tombstoned content the editor kept: after a split at
+offset 0 and a delete of the empty left piece, the concurrent same-boundary
+product holding the moved text sits right after the editor's own product
+(yorkie-js-sdk#1408), and a concurrent Enter at the start of a known
+sibling the editor did not delete put its moved text past that sibling.
+
+"Saw it gone" reads the sibling's `removedAt`, which keeps only the newest
+tombstone. A split product inherits its source's `removedAt`, so a product
+born tombstoned on this replica (split off an element already deleted here)
+still counts as alive for an editor that did not know that delete.
+
+Two paths outside the walk change what `removedAt` holds, and only one of
+them changes the walk. GC's `Purge` drops the node from `NodeMapByID` and
+relinks the chain around it, so the walk never reads a purged tombstone:
+`findFloorNode` compares `createdAt` exactly and resolves a purged ID to
+nil, and the predecessor already points past it to the same successor the
+walk would have reached by passing the tombstone. The decision is therefore
+the same before and after a purge — a node is purged only once the minimum
+synced version vector covers its `removedAt` (`Root.collect`), so every
+change applied after that knew the delete and read "saw it gone" as true.
+Undo is the path that does change the walk: `Restore` clears the tombstone
+in place, so on a replica holding the undo the walk stops at a sibling it
+would otherwise have passed. See the limitation below.
+
+The cascade still runs only when this edit wins the element's LWW
+(`canDelete`). Cascading on a lost LWW too would make every #1408 shape
+converge, but it tombstones text nobody deleted: a delete that is undone,
+or a merge that turned into a delete, reaches a concurrent split product
+whose content the editor never saw (`tree_split_cascade_regression_test.go`).
+The cost is that some deletes stop short. Mostly this leaves one extra
+empty element on one replica, with text agreeing: in the #1408 shape the
+replica whose own delete won the LWW keeps its own split product, emptied
+because the moved text went to the other side's product, while on the
+other replica that product was born tombstoned. With a third replica in
+the race, a delete that lost the LWW can also leave deleted text on one
+replica; random races hit this rarely.
+
+Known limitations:
+
+- The residue is state divergence, not only a cosmetic extra element: the
+  product is alive on one replica and tombstoned on the other, so the trees
+  differ in shape as well as XML. `main` converged these shapes by deleting
+  the text too. `TestTreeSplitSiblingCascadeResidueConverges` is the skipped
+  reproducer asserting the convergence this rule does not reach; closing it
+  needs the multi-tombstone record described below.
+- `removedAt` keeps only the newest tombstone. When a concurrent delete of
+  a sibling the editor merged back has a newer ticket than the merge, its
+  tombstone is the one kept, the walk stops there as for a sibling the
+  editor did not see removed, and a product split off that sibling
+  concurrently survives on that replica only. Enter, Undo (which merges
+  the split product back) and a delete of both spans, against a concurrent
+  Enter at the same place, is one such case; `main` converges there.
+- A sibling merged back by a change the editor did not know ends the walk.
+  A product split off it concurrently survives on the splitter's own
+  replica in every delivery order, while elsewhere it can be born
+  tombstoned (split off a merged element). Over the six delivery orders of
+  such a three-replica race `main` diverges in three and this rule in all
+  six; joining paragraphs instead of spans behaves the same.
+- "Saw it gone" reads the node's current tombstone, not the editor's own
+  view of it, so a delete concurrent with an undo of a sibling's removal
+  cascades differently on a replica that already holds the undo
+  (`TreeNode.unremove` cleared `removedAt`, the walk stops) than on one
+  that does not (the walk passes), and the difference outlives both changes
+  being applied. Reaching it needs the delete to be concurrent with the
+  undo and to know the delete the undo reverses. Pinning the test to the
+  editor's causal view instead needs the tombstone record to keep every
+  delete rather than the newest, which changes the data model, the snapshot
+  encoding and the JS port along with this rule.
+- The same single slot is why the cascade cannot both converge the #1408
+  residue and keep text: with only the newest tombstone to read, the rule
+  has no way to tell a sibling the editor merged back from one a concurrent
+  delete took, and the two want opposite answers.
+
+**The trade was taken by the maintainers.** It is the one place in this
+document where a change knowingly converges fewer delivery orders than the
+version before it, and convergence is the stated Goal. The shapes it stops
+converging are the three limitations above; the shapes it starts converging
+in text are the #1408 family, which `main` converged by tombstoning text
+nobody deleted. The maintainers took the text over the residue (yorkie#2143).
+Closing the residue without paying either cost is tracked in yorkie#2155;
+until then the skipped `TestTreeSplitSiblingCascadeResidueConverges` and
+`TestTreeSplitProductBornTombstonedConverges` stand as the open half.
+
+**Cross-implementation.** §4.1's stop rule changes *which nodes* a
+`Tree.Edit` tombstones, and only the Go implementation has it; the JS port
+is yorkie-js-sdk#1456. Until it lands, a JS client and the server disagree
+on the cascade for exactly the shapes above: the server's snapshot
+(`server/packs/snapshot.go` rebuilds through this code) then holds a split
+product a JS client applying the same changes locally has tombstoned, and
+the disagreement survives until that client reloads from a snapshot. Unlike
+the §9.6 precedent, this is not a strict narrowing of an already-divergent
+set — the limitations above are shapes `main` and the JS SDK converge — so
+the two halves want to land close together.
 
 ### §4.2 Moved Children Guard
 
@@ -1118,6 +1230,7 @@ set. Until it does, the divergence is the one described above.
 | `skipActorID` in split loop advancement (§7.7) | Same-actor siblings are own split products, not concurrent; advancing past them diverges root from clone |
 | Boundary insert migration in SplitElement (§7.3) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
 | Empty sibling re-parenting in Split (§7.4) | When a concurrent parent split already separated siblings into different parents, a replay split's empty product must follow the existing chain to be deterministic; VV-independent to preserve clone/root consistency |
+| Stop the §4.1 cascade at a known sibling seen alive | Keeps text the deleter never saw inside the deleted element, at the cost of converging fewer delivery orders than before: an unresolved trade, see §4.1 |
 | Narrow collectBetween only, preserve insert point (§3) | Adjusting fromLeft/fromParent for both delete and insert changes the insertion position, diverging from the other replica where §7.3's boundary migration handles placement |
 
 ## Convergence Coverage
@@ -1146,6 +1259,15 @@ reconstructed from the snapshot must match the runtime tree node-for-node.
 | SplitSplit | 321 | 0 |
 | SplitEdit | 145 | 0 |
 | **Total** | **1597** | **0** |
+
+Both tables predate §4.1's stop rule and count the suites as they stand,
+which is not the same as "nothing diverges": neither suite covers the
+shapes §4.1 lists as limitations, and the split × delete matrices in the
+property-based suite `t.Skip` on divergence rather than fail. The
+divergence §4.1 leaves is counted where it is produced —
+`pkg/document/tree_split_sibling_cascade_test.go` (12 of its 40 runs leave
+an extra empty element on one replica) and the skipped
+`TestTreeSplitSiblingCascadeResidueConverges`.
 
 ### Clone/root consistency
 
@@ -1187,3 +1309,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 25 | §9.1 + §9.2 + §9.5 + §9.6 | Style reached set decided by the change's own positions |
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
 | Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
+| Fix 28 | §4.1 | Stop the split-sibling cascade at a known sibling seen alive |

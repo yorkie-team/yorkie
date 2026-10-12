@@ -31,6 +31,13 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
+        {{- /*
+        No checksum of the signing key here, by design: a pod annotation is
+        readable with `get pods`, which is a far weaker permission than
+        `get secrets`, and a hash of the key is enough to search for it
+        offline. Rotating the key is a `rollout restart` instead; see the
+        chart README.
+        */}}
         {{- with .Values.yorkie.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -68,14 +75,40 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
+          # The credentials are read from the environment rather than given as
+          # args: an arg shows up in /proc/<pid>/cmdline and in
+          # `kubectl get pod -o yaml`. The server refuses the pprof
+          # `/debug/pprof/cmdline` endpoint, so that reader is closed, but
+          # pprof is enabled below and the profiling port is unauthenticated.
+          - name: YORKIE_BACKEND_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.args.secretKeyExistingSecret | default (printf "%s-credentials" .Values.yorkie.name) }}
+                key: secret-key
+          - name: YORKIE_MONGO_CONNECTION_URI
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.name }}-credentials
+                key: mongo-connection-uri
+          {{- /*
+          Always set: backend-secret-key.yaml fails the render unless one of
+          clusterSecret and clusterSecretExistingSecret holds a value, so one
+          of the two Secrets below always carries `cluster-secret`.
+          */}}
+          - name: YORKIE_CLUSTER_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ trim (toString (.Values.yorkie.args.clusterSecretExistingSecret | default "")) | default (printf "%s-credentials" .Values.yorkie.name) | quote }}
+                key: cluster-secret
+          {{- if .Values.yorkie.args.githubClientSecret }}
+          - name: YORKIE_AUTH_GITHUB_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.name }}-credentials
+                key: github-client-secret
+          {{- end }}
         args: [
           "server",
-          "--mongo-connection-uri",
-          {{- if .Values.yorkie.args.dbConnectionUri }}
-          "{{ .Values.yorkie.args.dbConnectionUri }}",
-          {{- else }}
-          "mongodb://{{ .Values.mongodb.credentials.databaseAdmin.username }}:{{ .Values.mongodb.credentials.databaseAdmin.password }}@{{ index .Values "yorkie-mongodb" "fullnameOverride" }}-mongos.{{ .Values.yorkie.namespace }}.svc.cluster.local:27017/{{ .Values.yorkie.args.dbName }}?authSource=admin",
-          {{- end }}
           "--mongo-yorkie-database",
           "{{ .Values.yorkie.args.dbName }}",
           "--pprof-enabled",
@@ -88,10 +121,6 @@ spec:
           "--backend-rpc-addr",
           "$(POD_IP):{{ .Values.yorkie.ports.rpcPort }}",
           "--backend-use-default-project={{ .Values.yorkie.args.useDefaultProject }}",
-          {{- if .Values.yorkie.args.clusterSecret }}
-          "--cluster-secret",
-          "{{ .Values.yorkie.args.clusterSecret }}",
-          {{- end }}
           {{- if .Values.yorkie.logLevel }}
           "--log-level",
           "{{ .Values.yorkie.logLevel }}",
@@ -134,10 +163,6 @@ spec:
           {{- if .Values.yorkie.args.githubClientID }}
           "--auth-github-client-id",
           "{{ .Values.yorkie.args.githubClientID }}",
-          {{- end }}
-          {{- if .Values.yorkie.args.githubClientSecret }}
-          "--auth-github-client-secret",
-          "{{ .Values.yorkie.args.githubClientSecret }}",
           {{- end }}
           {{- if .Values.yorkie.args.githubRedirectURL }}
           "--auth-github-redirect-url",

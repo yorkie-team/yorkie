@@ -51,7 +51,7 @@ func attachedClient(t *testing.T) (*Client, *document.Document) {
 
 	cli, err := Dial(httpServer.URL)
 	require.NoError(t, err)
-	cli.status = statusActivated
+	cli.storeStatus(statusActivated)
 
 	attached := document.New(key.Key(t.Name()))
 	attached.SetStatus(document.StatusAttached)

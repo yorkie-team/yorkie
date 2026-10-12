@@ -728,13 +728,23 @@ jobs:
             let region = '';
             try { region = fs.readFileSync('/tmp/review-comment.md', 'utf8').trim(); } catch { /* fall back below */ }
             if (!region) region = `${header}\n\n${bodies.join('\n\n')}`;
-            let body = `${marker}\n${region}${tally}${promptSection}${note}`;
+            // NO MARKER when any lens hit an API/quota outage (`infraError`), for
+            // the same reason as the no-panel path above: that lens never
+            // reviewed, so the marker would swallow every `@claude review` on
+            // this commit until a new push. #2109 sat behind a
+            // POOL_EXHAUSTED panel this way.
+            const infra = panel.some((p) => p && p.infraError);
+            const retry = infra
+              ? '\n\n⚠️ Some lenses could not run (API/quota error). Comment `@claude review` to try again on this commit.'
+              : '';
+            const lead = infra ? '' : `${marker}\n`;
+            let body = `${lead}${region}${tally}${promptSection}${retry}${note}`;
             // GitHub comment hard limit is 65536 chars; trim from the tail if huge.
             // `tally` + `promptSection` are re-appended after the cut, like `note`:
             // a body long enough to truncate is one with many findings, which is
             // exactly when "were these verified?" and the fix prompt matter most.
             // (The triage region self-truncates to a budget, so this is a backstop.)
-            if (body.length > 65000) body = body.slice(0, 64900) + '\n\n… _(truncated)_' + tally + promptSection + note;
+            if (body.length > 65000) body = body.slice(0, 64900) + '\n\n… _(truncated)_' + tally + promptSection + retry + note;
             await publish(body);
 
       # Record this review's cost/reliability into the PR metric ledger and post

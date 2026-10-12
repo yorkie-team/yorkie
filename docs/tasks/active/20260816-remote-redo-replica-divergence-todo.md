@@ -269,15 +269,21 @@ the combination `client.WithPresence` + `Set(..., WithHistory())` +
 
 ### Tasks
 
-- [ ] Decide the fix shape: either make `Initialize` mutate `p.data` in
+- [x] Decide the fix shape: either make `Initialize` mutate `p.data` in
       place (matching `Set`'s pattern) or make `Document.Update` refresh
       `clonePresences` from the just-applied change's presence value
       rather than trusting the pre-call snapshot
+      *Audit 2026-10-05:* `Initialize` now mutates `p.data` in place (#2064,
+      5ee298c8).
 - [ ] Coordinate with #608 in `yorkie-js-sdk` so the fix shape matches
       whatever resolves the upstream TODO
 - [ ] Add `TestDocPresence`/`TestPresencelessDocument`-style coverage for
       `client.WithPresence` followed by a later `Update` that sets an
       unrelated key, asserting the original key survives
+      *Audit 2026-10-05:* `pkg/document/presence_clone_test.go` (#2064)
+      covers `Initialize` writing through the clone at unit level. It does
+      not cover attaching through `client.WithPresence` and then an
+      unrelated-key `Update` that keeps the original key, so this stays open.
 - [ ] Once fixed, restore the `client.WithPresence` + `Set(WithHistory)` +
       `Undo` combination Task 7 skipped, in
       `test/integration/doc_presence_test.go`

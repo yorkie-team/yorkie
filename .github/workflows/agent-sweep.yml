@@ -1,0 +1,83 @@
+# The OUT-OF-RUN safety net for the review→fix loop (scripts/agent/loop-sweep.mjs).
+#
+# Every other net — the panel's `stalled` job, `fix-report`'s no-commit page, the
+# round guard — runs inside the workflow run it watches, so none of them can see
+# a run that was cancelled before it got there. `stalled` is `!cancelled()` on
+# purpose (a superseded run must not page and latch a PR as a fresher round
+# starts), which leaves exactly one gap: the cancelled run that nothing replaced.
+# #2108 sat in `agent:reviewing` for eight hours after a green panel round that
+# way. The same gap swallowed usage-window pages, whose only remedy was a human
+# typing `@claude rerun` after guessing when the window had reopened.
+#
+# So this runs on a clock, reads each open agent-managed PR, and takes at most one
+# bounded action: retry a usage-window page on a backoff, re-run CI once for a PR
+# idle in `agent:reviewing`, or page when that retrigger did not help. Every
+# action is recorded on the PR as a hidden marker the next sweep reads back by
+# author, so the bounds survive between runs.
+name: Agent Loop Sweep
+
+on:
+  schedule:
+    # Every 30 minutes, off the hour to dodge the top-of-hour cron rush. The
+    # thresholds it acts on are 60+ minutes, so a faster clock buys nothing.
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Sweep only this PR number (empty = every open PR)"
+        required: false
+      dry_run:
+        description: "Log the decisions without acting"
+        type: boolean
+        default: false
+
+# One sweep at a time. Two overlapping sweeps could both read "no retrigger yet"
+# and both re-run CI; queueing (not cancelling) lets the second read the first's
+# marker.
+concurrency:
+  group: agent-loop-sweep
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  sweep:
+    # The kill switch every agent workflow honours.
+    if: vars.AGENT_PIPELINE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # the trusted main checkout of scripts/agent
+      pull-requests: write # PR comments, and the state label via set-state reconcile
+      issues: write # delete the usage-window page comments it retries
+      actions: write # re-run the head's CI run, as `@claude rerun` does
+      checks: read # set-state reconcile reads the lens check runs
+    steps:
+      # `ref: main` is implicit for a scheduled run, and stated anyway: this job
+      # holds write tokens and must never run a PR branch's copy of the script.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: scripts/agent
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      # GITHUB_TOKEN, deliberately: `github-actions[bot]` is the one author the
+      # sweep's own markers and the usage-window pages are read back by, and a
+      # re-run requested with it still fires the panel's `workflow_run` (the
+      # mechanism agent-rerun.yml already relies on).
+      - name: Sweep the loop PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ inputs.pr }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(run)
+          [ -n "$PR" ] && args+=(--pr "$PR")
+          [ "$DRY_RUN" = "true" ] && args+=(--dry-run)
+          node scripts/agent/loop-sweep.mjs "${args[@]}"

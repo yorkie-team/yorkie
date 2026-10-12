@@ -200,6 +200,12 @@ func ToPresenceChange(p *presence.Change) *api.PresenceChange {
 		return &api.PresenceChange{
 			Type: api.PresenceChange_CHANGE_TYPE_CLEAR,
 		}
+	case presence.Patch:
+		return &api.PresenceChange{
+			Type:        api.PresenceChange_CHANGE_TYPE_PATCH,
+			Presence:    &api.Presence{Data: p.Presence},
+			RemovedKeys: p.RemovedKeys,
+		}
 	}
 	return &api.PresenceChange{
 		Type: api.PresenceChange_CHANGE_TYPE_UNSPECIFIED,

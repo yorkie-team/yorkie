@@ -205,6 +205,14 @@ export function deferredRecord(finding, lens) {
     ...(stamped && str(finding.lane) ? { lane: str(finding.lane) } : {}),
     ...(stamped && str(finding.novelty?.origin) ? { noveltyOrigin: str(finding.novelty.origin) } : {}),
     ...(stamped && str(finding.surface?.scope) ? { surfaceScope: str(finding.surface.scope) } : {}),
+    // The out-of-diff gate's two facts, primitives only, for the same reason as
+    // the three above: `anchor` is git's answer and `causation` the judge's, and
+    // a reader (or `follow-up-issues.mjs`) decides from both rather than from a
+    // derived "why". `outOfDiffDemoted` is the gate's own boolean, carried so a
+    // record need not re-implement `isIndependentVerdict` to know.
+    ...(stamped && str(finding.outOfDiff?.anchor) ? { anchorScope: clip(finding.outOfDiff.anchor, 20) } : {}),
+    ...(stamped && str(finding.outOfDiff?.causation) ? { causation: clip(finding.outOfDiff.causation, 20) } : {}),
+    ...(stamped && finding.outOfDiff?.demotes === true ? { outOfDiffDemoted: true } : {}),
   };
 }
 

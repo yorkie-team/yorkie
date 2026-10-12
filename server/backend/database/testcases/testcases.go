@@ -2770,3 +2770,229 @@ func RunVersionVectorStableActorTest(t *testing.T, db database.Database, project
 		assert.False(t, ok, "detach must drop the stored stable-actor VV entry")
 	})
 }
+
+// setupCompaction stores three changes, a snapshot at server seq 3 and the
+// client's version vector, and returns the document as stored with the
+// client's actor.
+func setupCompaction(
+	t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) (*database.DocInfo, time.ActorID) {
+	ctx := context.Background()
+	docKey := helper.TestKey(t)
+
+	clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+	assert.NoError(t, err)
+	docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
+	assert.NoError(t, err)
+	refKey := docInfo.RefKey()
+	assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
+	assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+	bytesID, err := clientInfo.ID.Bytes()
+	assert.NoError(t, err)
+	actorID, err := time.ActorIDFromBytes(bytesID)
+	assert.NoError(t, err)
+	doc := document.New(docKey)
+	doc.SetActor(actorID)
+	for idx := range 3 {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("k", idx)
+			return nil
+		}))
+	}
+	pack := doc.CreateChangePack()
+	_, _, err = db.CreateChangeInfos(ctx, refKey, pack.Checkpoint, toChangeInfos(t, refKey, pack.Changes), false)
+	assert.NoError(t, err)
+
+	ack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(3), nil, doc.VersionVector(), nil)
+	assert.NoError(t, doc.ApplyChangePack(ack))
+	assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocumentForTest()))
+	_, err = db.UpdateMinVersionVector(ctx, clientInfo, refKey, doc.VersionVector())
+	assert.NoError(t, err)
+
+	docInfo, err = db.FindDocInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), docInfo.ServerSeq)
+	return docInfo, actorID
+}
+
+// compactedChanges returns the single change compaction would store for the
+// document setupCompaction builds.
+func compactedChanges(t *testing.T, docInfo *database.DocInfo) []*change.Change {
+	compacted := document.New(docInfo.Key)
+	assert.NoError(t, compacted.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetInteger("k", 2)
+		return nil
+	}))
+	return compacted.CreateChangePack().Changes
+}
+
+// RunCompactChangeInfosTest runs the CompactChangeInfos tests for the given db.
+func RunCompactChangeInfosTest(t *testing.T, db database.Database, projectID types.ID) {
+	setup := func(t *testing.T) (*database.DocInfo, time.ActorID) {
+		return setupCompaction(t, db, projectID)
+	}
+
+	// assertIntact checks that the document still holds what setup stored.
+	assertIntact := func(t *testing.T, docInfo *database.DocInfo, actorID time.ActorID) {
+		ctx := context.Background()
+		refKey := docInfo.RefKey()
+
+		loaded, err := db.FindDocInfoByRefKey(ctx, refKey)
+		assert.NoError(t, err)
+		assert.Equal(t, docInfo.ServerSeq, loaded.ServerSeq)
+		assert.Equal(t, docInfo.Epoch, loaded.Epoch)
+
+		infos, err := db.FindChangeInfosBetweenServerSeqs(ctx, refKey, 1, docInfo.ServerSeq)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 3)
+
+		snapshot, err := db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), snapshot.ServerSeq)
+
+		minVV, err := db.GetMinVersionVector(ctx, refKey, time.NewVersionVector())
+		assert.NoError(t, err)
+		_, ok := minVV.Get(actorID)
+		assert.True(t, ok, "the version vector must survive a refused compaction")
+	}
+
+	t.Run("stale server seq keeps the document test", func(t *testing.T) {
+		ctx := context.Background()
+		docInfo, actorID := setup(t)
+
+		// Compact against a server seq the document has already moved past, as
+		// a compaction that read the document before a concurrent push would.
+		err := db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq-1, compactedChanges(t, docInfo))
+		assert.ErrorIs(t, err, database.ErrConflictOnUpdate)
+		assertIntact(t, docInfo, actorID)
+	})
+
+	t.Run("missing document test", func(t *testing.T) {
+		ctx := context.Background()
+		docInfo, actorID := setup(t)
+
+		missing := docInfo.DeepCopy()
+		missing.ID = dummyClientID
+		err := db.CompactChangeInfos(ctx, missing, missing.ServerSeq, compactedChanges(t, missing))
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+		assertIntact(t, docInfo, actorID)
+	})
+
+	t.Run("compaction replaces the history test", func(t *testing.T) {
+		ctx := context.Background()
+		docInfo, actorID := setup(t)
+		refKey := docInfo.RefKey()
+
+		changes := compactedChanges(t, docInfo)
+		assert.NoError(t, db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq, changes))
+
+		loaded, err := db.FindDocInfoByRefKey(ctx, refKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), loaded.ServerSeq)
+		assert.Equal(t, docInfo.Epoch+1, loaded.Epoch)
+
+		infos, err := db.FindChangeInfosBetweenServerSeqs(ctx, refKey, 1, docInfo.ServerSeq)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 1)
+		assert.Equal(t, int64(1), infos[0].ServerSeq)
+		assert.Equal(t, types.ID(changes[0].ID().ActorID().String()), infos[0].ActorID)
+
+		snapshot, err := db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), snapshot.ServerSeq)
+
+		minVV, err := db.GetMinVersionVector(ctx, refKey, time.NewVersionVector())
+		assert.NoError(t, err)
+		_, ok := minVV.Get(actorID)
+		assert.False(t, ok)
+
+		// A second compaction that read the document before the first one
+		// committed is refused and leaves the compacted change alone.
+		err = db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq, compactedChanges(t, docInfo))
+		assert.ErrorIs(t, err, database.ErrConflictOnUpdate)
+		reloaded, err := db.FindDocInfoByRefKey(ctx, refKey)
+		assert.NoError(t, err)
+		assert.Equal(t, loaded.ServerSeq, reloaded.ServerSeq)
+		assert.Equal(t, loaded.Epoch, reloaded.Epoch)
+		infos, err = db.FindChangeInfosBetweenServerSeqs(ctx, refKey, 1, docInfo.ServerSeq)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 1)
+	})
+}
+
+// RunCompactChangeInfosAcrossNodesTest runs a compaction on one node against a
+// push from another node that still caches the pre-compaction document. The
+// two must not interleave into a document whose server seq disagrees with its
+// changes: the compaction commits, and the push is refused.
+func RunCompactChangeInfosAcrossNodesTest(
+	t *testing.T,
+	nodeA database.Database,
+	nodeB database.Database,
+	projectID types.ID,
+) {
+	t.Run("push from a stale node after compaction test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. nodeA stores the document and keeps it at server seq 3 in its
+		// cache.
+		docInfo, actorID := setupCompaction(t, nodeA, projectID)
+		refKey := docInfo.RefKey()
+
+		// 02. nodeB compacts it.
+		changes := compactedChanges(t, docInfo)
+		assert.NoError(t, nodeB.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq, changes))
+
+		// 03. nodeA pushes on top of the server seq it cached.
+		doc := document.New(docInfo.Key)
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("late", 1)
+			return nil
+		}))
+		pack := doc.CreateChangePack()
+		_, _, err := nodeA.CreateChangeInfos(
+			ctx, refKey, pack.Checkpoint, toChangeInfos(t, refKey, pack.Changes), false,
+		)
+		assert.ErrorIs(t, err, database.ErrConflictOnUpdate)
+
+		// 04. The document is the compacted one.
+		loaded, err := nodeB.FindDocInfoByRefKey(ctx, refKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), loaded.ServerSeq)
+		assert.Equal(t, docInfo.Epoch+1, loaded.Epoch)
+		infos, err := nodeB.FindChangeInfosBetweenServerSeqs(ctx, refKey, 1, loaded.ServerSeq)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 1)
+		assert.Equal(t, types.ID(changes[0].ID().ActorID().String()), infos[0].ActorID)
+	})
+}
+
+// RunSnapshotLiveSizeTest runs the tests for the live size a snapshot records,
+// which the push path reads to enforce MaxSizePerDocument.
+func RunSnapshotLiveSizeTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("snapshot records the live size test", func(t *testing.T) {
+		ctx := context.Background()
+		docInfo, _ := setupCompaction(t, db, projectID)
+		refKey := docInfo.RefKey()
+
+		// setupCompaction stores a snapshot of {"k": 2} at server seq 3.
+		info, err := db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), info.ServerSeq)
+		assert.Positive(t, info.LiveSize)
+
+		withBody, err := db.FindSnapshotInfo(ctx, refKey, info.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, info.LiveSize, withBody.LiveSize)
+
+		// Compaction purges the snapshots, so the size is unknown again rather
+		// than the pre-compaction one.
+		assert.NoError(t, db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq, compactedChanges(t, docInfo)))
+		info, err = db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), info.LiveSize)
+	})
+}

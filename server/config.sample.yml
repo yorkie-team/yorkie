@@ -22,7 +22,9 @@ RPC:
     # GitHubClientID is GitHub OAuth Client ID.
     GitHubClientID: ""
 
-    # GitHubClientSecret is GitHub OAuth Client Secret.
+    # GitHubClientSecret is GitHub OAuth Client Secret. Outside a config file
+    # it can be given as YORKIE_AUTH_GITHUB_CLIENT_SECRET instead of
+    # --auth-github-client-secret, which keeps it out of /proc/<pid>/cmdline.
     GitHubClientSecret: ""
 
     # GitHubRedirectURL is GitHub OAuth callback URL.
@@ -49,6 +51,9 @@ Profiling:
   Port: 8081
 
   # PprofEnabled is whether to enable the pprof `/debug/pprof` endpoint.
+  # `/debug/pprof/cmdline` is never served, enabled or not: it writes the
+  # process arguments, so it would hand any credential passed as a flag to
+  # whoever can reach this port, which is not authenticated. It answers 404.
   PprofEnabled: false
 
 # Membership is the configuration for the membership of the cluster.
@@ -85,6 +90,13 @@ Backend:
   AdminPassword: "admin"
 
   # SecretKey is the secret key for signing authentication tokens.
+  # If empty, it is read from the YORKIE_BACKEND_SECRET_KEY environment
+  # variable; if that is unset too, a random key is generated at startup:
+  # tokens are invalidated on restart and rejected by other nodes. Set the
+  # same key on every node of a cluster, e.g. `openssl rand -base64 32`.
+  # A key given here must be at least 32 characters: HS256 hashes it into a
+  # 256-bit block, and a shorter one can be found by trying keys against an
+  # issued token. Surrounding whitespace is trimmed.
   SecretKey: ""
 
   # AdminTokenDuration is the duration of the admin token. (default: 168h0m0s).
@@ -101,6 +113,10 @@ Backend:
   # SnapshotCacheSize is the cache size of the snapshot.
   SnapshotCacheSize: 1000
 
+  # PresenceBaseCacheSize is the number of (document, client) presences kept
+  # to fold presence patches.
+  PresenceBaseCacheSize: 10000
+
   # AuthWebhookCacheSize is the cache size of the authorization webhook.
   AuthWebhookCacheSize: 5000
 
@@ -112,6 +128,16 @@ Backend:
   # It must be at least 100ms; use AuthWebhookCacheDisabled to turn caching off.
   AuthWebhookCacheTTL: "10s"
 
+  # WatchHeartbeatInterval is the interval at which the server sends a heartbeat
+  # on an idle Watch stream, so a client can tell a live stream from a half-open
+  # one. The interval is advertised to the client in the stream's initialization
+  # response, and "0s" sends none, which keeps the client from applying an idle
+  # timeout. It defaults to "0s" because a client older than the heartbeat ends
+  # its watch on a response it cannot classify; turn it on -- "20s" is a good
+  # starting point -- once the clients of this server understand it.
+  # (default: 0s).
+  WatchHeartbeatInterval: "0s"
+
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
   Hostname: ""
@@ -120,7 +146,8 @@ Backend:
   GatewayAddr: "localhost:8080"
 
   # ClusterSecret is the shared secret for authenticating inter-node
-  # cluster RPCs. If empty, all requests are allowed.
+  # cluster RPCs. If empty, all requests are allowed: ClusterService is
+  # served on the public RPC port, so set it in production.
   ClusterSecret: ""
 
 # Mongo is the MongoDB configuration (Optional).

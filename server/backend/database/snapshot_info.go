@@ -50,6 +50,12 @@ type SnapshotInfo struct {
 	// (in the snapshot_bodies collection) instead of inline.
 	HasExternalBody bool `bson:"has_external_body"`
 
+	// LiveSize is the live size (data and metadata, without garbage) of the
+	// document at ServerSeq, in bytes. The push path reads it to enforce
+	// MaxSizePerDocument. Zero means unknown: snapshots written before the
+	// field existed carry none.
+	LiveSize int64 `bson:"live_size"`
+
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt gotime.Time `bson:"created_at"`
 }
@@ -69,6 +75,7 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 		VersionVector:   i.VersionVector,
 		Snapshot:        i.Snapshot,
 		HasExternalBody: i.HasExternalBody,
+		LiveSize:        i.LiveSize,
 		CreatedAt:       i.CreatedAt,
 	}
 }

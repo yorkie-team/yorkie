@@ -138,13 +138,15 @@ Key details:
 
 ### Helm Chart (build/charts/yorkie-cluster)
 
-Pass `clusterSecret` in `values.yaml`. If set, the value is passed as `--cluster-secret` in the Deployment args. If empty, the flag is omitted and all ClusterService requests are allowed.
+Set `clusterSecret` in `values.yaml`, or `clusterSecretExistingSecret` to read it from a Secret created out of band (key `cluster-secret`), which takes precedence. The Deployment hands it to the server as the `YORKIE_CLUSTER_SECRET` environment variable, never as `--cluster-secret` in the args, where `/proc/<pid>/cmdline` and the pprof cmdline endpoint would expose it. One of the two is required: if both are empty the chart fails the render, since this chart publishes ClusterService through the ingress gateway and a server without the secret allows every request. The chart cannot read a Secret it does not create, so `clusterSecretExistingSecret` is checked only for being set; a blank value stored there still leaves the server open, and only its startup warning says so.
 
 ```yaml
 yorkie:
   args:
     # Generate with: openssl rand -base64 24
-    clusterSecret: "<value>"
+    clusterSecret: ""
+    # Or: a Secret holding the value under `cluster-secret`
+    clusterSecretExistingSecret: "yorkie-cluster-secret"
 ```
 
 ### Wiring
@@ -167,6 +169,8 @@ cluster.WithClusterSecret(b.Config.ClusterSecret)
 
 When running a single Yorkie server (no cluster), `ClusterSecret` is empty by default. The interceptor allows all requests when the secret is empty, maintaining backward compatibility with existing deployments.
 
+Because an empty secret leaves ClusterService open on the public RPC port, `Yorkie.Start` logs a warning when `ClusterSecret` is empty. It does not refuse to start, so single-node and local setups keep working with the default.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -174,7 +178,7 @@ When running a single Yorkie server (no cluster), `ClusterSecret` is empty by de
 | Secret transmitted in plaintext over h2c | Acceptable within VPC. If cross-VPC communication is needed, enable TLS with `--cluster-secure` (already exists) |
 | Secret leaked in logs or error messages | Never log the secret value. Error messages say "invalid cluster secret", not the actual value |
 | All nodes must share the same secret | Single config value in Helm values.yaml, deployed uniformly via ArgoCD |
-| Empty secret allows all requests | Backward compatible. Operators must set a secret in production to enable authentication |
+| Empty secret allows all requests | Backward compatible. Operators must set a secret in production to enable authentication; the server logs a warning at startup while it is empty |
 
 ### Design Decisions
 

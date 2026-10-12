@@ -146,12 +146,23 @@ message WatchResponse {
   oneof body {
     WatchInitialization initialization = 1;
     WatchEvent event = 2;
+    WatchHeartbeat heartbeat = 3;
   }
 }
 
 message WatchInitialization {
   repeated ResourceInit resource_inits = 1;
+
+  // heartbeat_interval_ms is the interval, in milliseconds, at which the
+  // server sends a WatchHeartbeat on this stream while it is idle. 0 means
+  // the server sends none, so the client must not apply an idle timeout.
+  int64 heartbeat_interval_ms = 2;
 }
+
+// WatchHeartbeat is sent on an idle Watch stream so a client can tell a live
+// stream from a half-open one. It carries no payload: its arrival is the
+// signal.
+message WatchHeartbeat {}
 
 message ResourceInit {
   oneof init {

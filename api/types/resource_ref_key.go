@@ -18,6 +18,7 @@ package types
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
@@ -31,6 +32,31 @@ type ClientRefKey struct {
 // String returns the string representation of the given ClientRefKey.
 func (r ClientRefKey) String() string {
 	return fmt.Sprintf("Client (%s.%s)", r.ProjectID, r.ClientID)
+}
+
+// CacheKey returns the wire form of the given ClientRefKey, used to name the
+// client in a cluster cache invalidation. Unlike String, it round-trips
+// through ParseClientRefKey.
+func (r ClientRefKey) CacheKey() string {
+	return fmt.Sprintf("%s/%s", r.ProjectID, r.ClientID)
+}
+
+// ParseClientRefKey parses the wire form produced by ClientRefKey.CacheKey.
+func ParseClientRefKey(cacheKey string) (ClientRefKey, error) {
+	projectID, clientID, found := strings.Cut(cacheKey, "/")
+	if !found {
+		return ClientRefKey{}, fmt.Errorf("parse client ref key %q: no separator", cacheKey)
+	}
+
+	refKey := ClientRefKey{ProjectID: ID(projectID), ClientID: ID(clientID)}
+	if err := refKey.ProjectID.Validate(); err != nil {
+		return ClientRefKey{}, fmt.Errorf("parse client ref key %q: %w", cacheKey, err)
+	}
+	if err := refKey.ClientID.Validate(); err != nil {
+		return ClientRefKey{}, fmt.Errorf("parse client ref key %q: %w", cacheKey, err)
+	}
+
+	return refKey, nil
 }
 
 // DocRefKey represents an identifier used to reference a document.

@@ -101,7 +101,10 @@ func List(
 	return summaries, nil
 }
 
-// Get returns a revision by its ID with full snapshot data.
+// Get returns a revision by its ID with full snapshot data. The ID alone names
+// a revision in any project, so callers acting on behalf of a client must use
+// GetForDoc instead and let the document they were authorized against bound
+// what the ID can reach.
 func Get(
 	ctx context.Context,
 	be *backend.Backend,
@@ -115,27 +118,71 @@ func Get(
 	return revision.ToTypesRevisionSummary(), nil
 }
 
-// Restore restores a document to a specific revision.
+// GetForDoc returns a revision by its ID with full snapshot data, after binding
+// it to the given document. A revision that belongs elsewhere is reported as
+// not found, so the ID cannot be used to probe for revisions of documents the
+// caller has no access to.
+func GetForDoc(
+	ctx context.Context,
+	be *backend.Backend,
+	docRefKey types.DocRefKey,
+	revisionID types.ID,
+) (*types.RevisionSummary, error) {
+	revision, err := findForDoc(ctx, be, docRefKey, revisionID)
+	if err != nil {
+		return nil, err
+	}
+
+	return revision.ToTypesRevisionSummary(), nil
+}
+
+// findForDoc returns the revision with the given ID only when it belongs to the
+// given document.
+func findForDoc(
+	ctx context.Context,
+	be *backend.Backend,
+	docRefKey types.DocRefKey,
+	revisionID types.ID,
+) (*database.RevisionInfo, error) {
+	revision, err := be.DB.FindRevisionInfoByID(ctx, revisionID)
+	if err != nil {
+		return nil, fmt.Errorf("find revision by id: %w", err)
+	}
+
+	if revision.ProjectID != docRefKey.ProjectID || revision.DocID != docRefKey.DocID {
+		return nil, fmt.Errorf("find revision %s of %s: %w", revisionID, docRefKey, database.ErrRevisionNotFound)
+	}
+
+	return revision, nil
+}
+
+// Restore restores the given document to a specific revision.
 // It loads the revision snapshot and applies it as a new change through the normal CRDT merge process.
 // The restoration is performed using InitialActorID to avoid conflicts with client checkpoints.
+//
+// docRefKey names the document to restore, and the revision must belong to it.
+// The revision ID cannot select the document on its own: callers authorize the
+// write — and take the document lock — against a document key they resolved
+// themselves, so a revision pointing elsewhere would write past both.
 func Restore(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
+	docRefKey types.DocRefKey,
 	revisionID types.ID,
 ) error {
-	// Find the revision
-	revision, err := be.DB.FindRevisionInfoByID(ctx, revisionID)
+	if docRefKey.ProjectID != project.ID {
+		return fmt.Errorf("restore revision of %s: %w", docRefKey, database.ErrDocumentNotFound)
+	}
+
+	// Find the revision, bound to the document being restored
+	revision, err := findForDoc(ctx, be, docRefKey, revisionID)
 	if err != nil {
 		return err
 	}
 
-	if revision.ProjectID != project.ID {
-		return fmt.Errorf("restore revision of %s: %w", revisionID, database.ErrRevisionNotFound)
-	}
-
 	// Find the document info
-	docKey := types.DocRefKey{ProjectID: revision.ProjectID, DocID: revision.DocID}
+	docKey := docRefKey
 	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
 	if err != nil {
 		return err
@@ -179,6 +226,18 @@ func Restore(
 		return err
 	}
 
+	// The restored root is known in full here, so measure it against the
+	// project quota directly. The snapshot-based push gate only knows the
+	// document is over quota and would refuse the restore, including one that
+	// brings the document back under the limit.
+	if err := packs.CheckLiveSize(
+		docInfo.Key,
+		doc.DocSize(),
+		project.MaxSizePerDocument,
+	); err != nil {
+		return err
+	}
+
 	// Apply the change through the normal push/pull flow using temporary client info
 	if _, err := packs.PushPull(
 		ctx,
@@ -191,6 +250,7 @@ func Restore(
 			Mode:            types.SyncModePushOnly,
 			Status:          document.StatusAttached,
 			DisablePresence: docInfo.DisablePresence,
+			SizeChecked:     true,
 		},
 	); err != nil {
 		return fmt.Errorf("push pull: %w", err)

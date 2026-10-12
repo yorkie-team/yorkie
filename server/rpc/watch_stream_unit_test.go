@@ -48,6 +48,7 @@ func runStreamMergedEvents(docSubs []docSub, channelSubs []channelSub) <-chan er
 			nil,
 			docSubs,
 			channelSubs,
+			0,
 		)
 	}()
 
@@ -167,6 +168,7 @@ func TestStreamMergedEventsDeliversQueuedEvents(t *testing.T) {
 			nil,
 			nil,
 			[]channelSub{cs},
+			0,
 		)
 	}()
 
@@ -327,7 +329,7 @@ func TestStreamsDeliverNothingAfterRevalidationClose(t *testing.T) {
 					t.Fatal("an event was sent after the stream was closed")
 					return nil
 				},
-				nil, nil, []channelSub{cs},
+				nil, nil, []channelSub{cs}, 0,
 			)
 			assert.ErrorIs(t, err, revoked)
 		}

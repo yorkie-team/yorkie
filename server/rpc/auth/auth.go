@@ -33,17 +33,39 @@ import (
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
 func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
+	// A removal usually carries no change at all, so it is checked on its own:
+	// without it, removing the document would be reported as a read.
 	verb := types.Read
-	if pack.HasChanges() {
+	if pack.HasChanges() || pack.IsRemoved {
 		verb = types.ReadWrite
 	}
+
+	// A presence update is a change too, and the SDKs send one with every
+	// attach and detach, so the verb alone cannot tell it from an edit.
+	// PresenceOnly lets the webhook allow presence while rejecting edits.
+	presenceOnly := pack.HasChanges() && pack.OperationsLen() == 0 && !pack.IsRemoved
 
 	// NOTE(hackerwins): In the future, methods such as bulk PushPull can be
 	// added, so we declare it as an array.
 	return []types.AccessAttribute{{
-		Key:  pack.DocumentKey.String(),
-		Verb: verb,
+		Key:          pack.DocumentKey.String(),
+		Verb:         verb,
+		PresenceOnly: &presenceOnly,
 	}}
+}
+
+// WritesDocument reports whether the given attributes ask for a write of the
+// document itself: a ReadWrite that is not presence only. An access verified
+// with attributes for which it is false was approved as a read or as a
+// presence write, so a document write it leads to must be asked for again.
+func WritesDocument(attrs []types.AccessAttribute) bool {
+	for _, attr := range attrs {
+		presenceOnly := attr.PresenceOnly != nil && *attr.PresenceOnly
+		if attr.Verb == types.ReadWrite && !presenceOnly {
+			return true
+		}
+	}
+	return false
 }
 
 // VerifyAccess verifies the given access.

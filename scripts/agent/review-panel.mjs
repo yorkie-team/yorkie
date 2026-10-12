@@ -52,6 +52,15 @@ import { renderScopeNote, serializeReviewState } from "./review-state.mjs";
 import { CITATION } from "./citation.mjs";
 import { findingLocation, noveltyOf, baseResolves, DEMOTING_ORIGINS } from "./novelty.mjs";
 import { surfaceOfFinding, freezeResolves, DEMOTING_SCOPES } from "./review-surface.mjs";
+import {
+  anchorOfFinding,
+  buildCausationPrompt,
+  CAUSATION_JUDGE_MAX_TURNS,
+  CAUSATION_SCHEMA,
+  outOfDiffDemotes,
+  outOfDiffRecord,
+  prDiff,
+} from "./out-of-diff.mjs";
 // The finding identity key, which used to be a private `const` here. Its own
 // docblock warned that "a second copy of this expression could drift looser than
 // the merge it is supposed to agree with", and there was already a second copy —
@@ -769,6 +778,12 @@ export function clusterCounts(findings) {
  * line the fixer wrote to satisfy a finding became new reviewable surface that
  * minted the next one. Same lane, because the consequence is identical: reported,
  * not gating, not handed to the fixer.
+ *
+ * `out-of-diff.mjs` added a fourth — "did this change touch this code, and if not,
+ * did it cause the defect anyway?" — after the standstills on #2100, #2111 and
+ * #2112, every one a finding on code the PR never changed that the adjudicator
+ * upheld until the PR paged. Same lane again, and the follow-up issue the panel
+ * files is what keeps "not here" from becoming "never".
  */
 export const LANES = ["blocking", "backlog", "discarded"];
 /** Lanes `laneCounts` tallies. `discarded` is filtered out before it is reached. */
@@ -788,7 +803,7 @@ const COUNTED_LANES = new Set(["blocking", "backlog"]);
  * requires git to have affirmatively placed the code before the base, so nothing
  * here can lose a finding that the current gate would have kept.
  */
-export function routeFinding(finding, { verdict = null, novelty = null, surface = null } = {}) {
+export function routeFinding(finding, { verdict = null, novelty = null, surface = null, outOfDiff = null } = {}) {
   if (isDroppingVerdict(verdict, { claimType: claimTypeOf(finding) })) return "discarded";
   // ONLY `relocated` — a line this change added, carrying code that already
   // existed. Notably NOT `pre-existing`: a finding about code the change did not
@@ -815,6 +830,20 @@ export function routeFinding(finding, { verdict = null, novelty = null, surface 
   ) {
     return "backlog";
   }
+  // THE OUT-OF-DIFF GATE. Git placed the finding outside the PR's diff AND an
+  // independent judge, holding the diff, answered the revert test `independent`
+  // with grounded citations. See `out-of-diff.mjs` for why it takes both.
+  //
+  // NO CRITICAL CARVE-OUT, unlike the surface gate, and the asymmetry is
+  // deliberate. The surface gate's carve-out argues that merging would SHIP a
+  // critical defect a fix round wrote. A finding that passes the revert test is
+  // already on `main` whether or not this PR merges: blocking the PR does not
+  // keep the defect out of the product, it only holds unrelated work hostage to
+  // it — #2108's security lens raised two critical IDORs on the revision RPCs
+  // that "predate the delta", and the fixer rewrote the revision API inside a
+  // document-size PR to clear them. A critical one still gets the follow-up
+  // issue, which says so in its title.
+  if (outOfDiffDemotes(outOfDiff)) return "backlog";
   return "blocking";
 }
 
@@ -832,7 +861,7 @@ export function routeFinding(finding, { verdict = null, novelty = null, surface 
  * That is what lets the summary report a refuted or pre-existing finding instead
  * of silently vanishing it.
  */
-export function annotateFindings(findings, verdictsByIndex, noveltiesByIndex, surfacesByIndex) {
+export function annotateFindings(findings, verdictsByIndex, noveltiesByIndex, surfacesByIndex, outOfDiffByIndex) {
   // Only stamp per-finding verifier outcomes when a verdicts array was actually
   // supplied: both production call sites pass one, index-aligned, where a null
   // entry for a BLOCKING finding means the verification session threw (see
@@ -845,9 +874,14 @@ export function annotateFindings(findings, verdictsByIndex, noveltiesByIndex, su
     const verdict = verdictsByIndex?.[i] ?? null;
     const novelty = noveltiesByIndex?.[i] ?? null;
     const surface = surfacesByIndex?.[i] ?? null;
-    const lane = routeFinding(f, { verdict, novelty, surface });
+    const outOfDiff = outOfDiffByIndex?.[i] ?? null;
+    const lane = routeFinding(f, { verdict, novelty, surface, outOfDiff });
     const out = { ...f, lane };
     if (novelty) out.novelty = novelty;
+    // Stamped whenever the gate looked, including a judge that answered `caused`:
+    // a check body read later must be able to tell "judged and kept" from "never
+    // judged", and the deferred record and the follow-up issue read it.
+    if (outOfDiff) out.outOfDiff = outOfDiff;
     // Stamped whenever the gate had an opinion, INCLUDING `in-scope` and
     // `unknown`. The demotion sections key off it, and "the surface gate ran and
     // kept this finding" has to be distinguishable from "the gate never ran" when
@@ -1579,10 +1613,13 @@ export const LENS_CLOSING_INSTRUCTION = [
   "one, and set `file` to the file that line is in. Cite the site the defect is",
   "AT, which is not always a line the diff changed — an out-of-diff bypassing",
   "call site is the right answer when that is where the problem lives. The panel",
-  "uses the pair to ask git how the line got there, purely to spot code this",
-  "change RELOCATED rather than wrote. A finding on code the change did not add",
-  "is never set aside for that reason, so cite the true location; omitting it is",
-  "safe and only costs precision.",
+  "uses the pair to ask git how the line got there and whether it is inside this",
+  "change's diff. A finding on code the change did not touch is never set aside",
+  "for that reason alone: it keeps blocking unless an independent check finds the",
+  "change did not cause it, in which case it is filed as a follow-up instead. So",
+  "cite the true location, and in `evidence` say HOW this change causes or",
+  "exposes the defect when the location is outside the diff. Omitting the",
+  "location is safe and only costs precision.",
   "Set `claimType`. `presence` = something is THERE that should not be (a wrong",
   "condition, a missing-guard crash, an injectable path). `absence` = something",
   "is NOT there that should be (no test covers this, no validation on this input,",
@@ -2539,6 +2576,104 @@ export function verifierFailureCounts(failures) {
   return out;
 }
 
+/**
+ * How many causation-judge sessions one lens may open per round, fresh and
+ * carried-forward together. Each is a short read-only session (the judge reads
+ * the diff it is handed and the code it cites), and in the rounds that motivated
+ * the gate a lens raised one to three out-of-diff blockers. Over the cap a
+ * finding is recorded `not-judged` and KEEPS gating — the cap bounds spend, it
+ * never demotes.
+ */
+export const MAX_CAUSATION_JUDGES_PER_LENS = 4;
+
+/**
+ * The out-of-diff pass over one list of findings. Returns an array index-aligned
+ * with `findings`: an `outOfDiffRecord` for every blocking finding git placed
+ * outside the diff, `null` for everything else.
+ *
+ * Pure plumbing with the two effects INJECTED (`anchorFor`, `judge`), for the
+ * reason `adjudicateRebuttals` injects its session: the decisions worth pinning
+ * are wiring — an in-diff finding is never judged, a finding another gate already
+ * routed is never judged, an errored judge keeps, the cap keeps — and those are
+ * exactly where a fail-open would hide.
+ *
+ * Only findings that would otherwise GATE are judged: a refuted or already
+ * demoted finding changes no outcome, so a session spent on it is waste.
+ * `inherit[i]`, when set, is the record a carried-forward finding's fresh twin
+ * already earned this round — the same reuse `planPriorVerifications` applies
+ * to verdicts, so one defect never buys two judgements.
+ */
+export async function outOfDiffPass(
+  findings,
+  { verdicts = [], novelties = [], surfaces = [], anchorFor, judge, budget = { left: MAX_CAUSATION_JUDGES_PER_LENS }, inherit = [] } = {},
+) {
+  const list = Array.isArray(findings) ? findings : [];
+  if (typeof anchorFor !== "function") return list.map(() => null);
+  const anchors = await Promise.all(list.map(async (f, i) => {
+    if (!f || !BLOCKING.has(normalizeSeverity(f.severity))) return null;
+    const lane = routeFinding(f, {
+      verdict: verdicts?.[i] ?? null,
+      novelty: novelties?.[i] ?? null,
+      surface: surfaces?.[i] ?? null,
+    });
+    if (lane !== "blocking") return null;
+    // The twin was placed on REAL lines this round; the carried copy's own anchor
+    // can only be file-level, so a twin judged out of the diff in a touched file
+    // must win here or the carried copy would re-arm the cluster.
+    const twin = inherit?.[i];
+    if (twin && twin.anchor === "outside-diff") return { inherited: twin };
+    try {
+      return await anchorFor(f);
+    } catch {
+      return null; // a broken probe is `unknown`, and `unknown` keeps gating
+    }
+  }));
+  return Promise.all(list.map(async (f, i) => {
+    const a = anchors[i];
+    if (a?.inherited) return a.inherited;
+    if (!a || a.anchor !== "outside-diff") return null;
+    if (typeof judge !== "function") return outOfDiffRecord(a, null, { skipped: "no-judge" });
+    // Decrement BEFORE the await, so concurrent findings cannot all read the
+    // same remaining budget and overspend it together.
+    if (!(budget.left > 0)) return outOfDiffRecord(a, null, { skipped: "cap" });
+    budget.left--;
+    try {
+      return outOfDiffRecord(a, await judge(f));
+    } catch {
+      return outOfDiffRecord(a, null, { errored: true });
+    }
+  }));
+}
+
+/**
+ * Ask an independent session whether this change CAUSED a defect git placed
+ * outside its diff. A sibling of `verifyFinding` and `adjudicateFinding`, not a
+ * mode of either, and it differs from the verifier in the one way the question
+ * demands: it is handed the diff. The verifier is kept away from the diff so it
+ * cannot inherit the lens's misreadings of WHAT the code does; the revert test
+ * asks what the CHANGE did, which cannot be answered without seeing it. It is not
+ * handed the author's rebuttal, so the dispute channel stays off this path.
+ */
+async function judgeCausation(finding, { diff, repo, model, sessionLog, lensId }) {
+  return withRetry(() => askStructured({
+    systemPrompt:
+      "You are an independent judge of causation. You did not write this code, raise this " +
+      "finding, or write the change. Decide only whether the change caused the defect, by the " +
+      "revert test, checking every claim against the repository. Answering `independent` takes " +
+      "the finding off the merge gate, so give it only with high confidence and cited locations. " +
+      "When in doubt, answer `unresolved`.",
+    prompt: buildCausationPrompt(finding, { diff }),
+    model,
+    repo,
+    schema: CAUSATION_SCHEMA,
+    sessionLog,
+    maxTurns: CAUSATION_JUDGE_MAX_TURNS,
+    allowedTools: REVIEW_TOOLS,
+    label: "review",
+    logMeta: { lens: lensId, role: "causation-judge" },
+  }));
+}
+
 async function verifyFinding(finding, { rubric, repo, model, sessionLog, lensId }) {
   const claimType = claimTypeOf(finding);
   // Retried, unlike before — detection samples have always had this (see the
@@ -2645,12 +2780,33 @@ async function main() {
   // Say out loud when the gate is off. Inert is SAFE (every finding keeps
   // gating) but it looks identical in the output to "nothing was relocated", so
   // a misconfigured base would otherwise be invisible for as long as it lasted.
+  const baseOk = !!baseSha && (await baseResolves(repo, baseSha));
   if (!baseSha) {
     console.log("novelty gate: OFF (no --base-sha) — every finding routes as before");
-  } else if (!(await baseResolves(repo, baseSha))) {
+  } else if (!baseOk) {
     console.log(`novelty gate: OFF — --base-sha ${baseSha} does not resolve in ${repo}`);
   } else {
     console.log(`novelty gate: on, base ${baseSha}`);
+  }
+
+  // THE OUT-OF-DIFF GATE (out-of-diff.mjs). Same base as novelty, and OFF in the
+  // same cases, said out loud for the same reason: inert is safe (every finding
+  // keeps gating) but looks identical to "nothing was out of the diff". The diff
+  // the judge reads is the WHOLE PR's, read from git once, because `--diff-file`
+  // is narrowed to the delta on an incremental round and "did this change cause
+  // it" is a question about the whole change. No readable diff → no judge → no
+  // demotion: the anchors are still stamped, so the record shows what was seen.
+  const judgeDiff = baseOk ? await prDiff({ repo, baseSha }) : null;
+  const anchorCache = new Map();
+  const anchorFor = baseOk
+    ? (fileOnly) => (f) => anchorOfFinding(f, { repo, baseSha, cache: anchorCache, fileOnly })
+    : null;
+  if (!baseOk) {
+    console.log("out-of-diff gate: OFF (no usable --base-sha) — every finding routes as before");
+  } else if (!judgeDiff) {
+    console.log("out-of-diff gate: anchors only — the PR diff could not be read, so nothing is judged or demoted");
+  } else {
+    console.log(`out-of-diff gate: on, base ${baseSha}, judge diff ${judgeDiff.length} chars`);
   }
 
   // THE SURFACE GATE. `--frozen-sha` is the head as it stood when the fixer was
@@ -2981,7 +3137,19 @@ async function main() {
       noveltiesFor(detected),
       surfacesFor(detected),
     ]);
-    const annotatedFresh = annotateFindings(detected, verdicts, novelties, surfaces);
+    // After the other gates, not beside them: it reads their answers to skip
+    // findings already refuted or demoted, so it never buys a session that cannot
+    // change an outcome. One budget for the lens's fresh AND carried passes.
+    const judgeBudget = { left: MAX_CAUSATION_JUDGES_PER_LENS };
+    const judge = judgeDiff
+      ? (f) => judgeCausation(f, { diff: judgeDiff, repo, model: lens.model, sessionLog, lensId: lens.id })
+      : null;
+    const outOfDiffs = await outOfDiffPass(detected, {
+      verdicts, novelties, surfaces,
+      anchorFor: anchorFor ? anchorFor(false) : null,
+      judge, budget: judgeBudget,
+    });
+    const annotatedFresh = annotateFindings(detected, verdicts, novelties, surfaces, outOfDiffs);
     const kept = keepUnrefuted(annotatedFresh);
 
     // Part 2: re-check this lens's blocking findings from the PREVIOUS round
@@ -3018,8 +3186,23 @@ async function main() {
     // of the PR's life — a permanent fail-open produced by nothing but line drift.
     // The fresh pass probes real lines, so anything genuinely out of scope is
     // demoted there, on evidence, and nothing is lost by leaving it alone here.
+    // THE OUT-OF-DIFF GATE IS THE EXCEPTION, and only at FILE level. A carried
+    // finding's line is stale, but "the PR's diff never touched this file" does not
+    // depend on a line, so `anchorFor(true)` answers only that and leaves every
+    // touched-file finding `unknown` (still gating). It has to run here, not only
+    // on the fresh pass: `mergeCluster` keeps a cluster gating if ANY member gates,
+    // so a fresh re-find demoted out of the diff would be re-armed by its own
+    // carried-forward twin every round — the exact standstill this gate is for.
+    // A carried finding whose fresh twin was already judged inherits that
+    // judgement rather than buying a second one.
+    const priorOutOfDiffs = await outOfDiffPass(priorForLens, {
+      verdicts: priorVerdicts,
+      anchorFor: anchorFor ? anchorFor(true) : null,
+      judge, budget: judgeBudget,
+      inherit: reuseIdx.map((j) => (j >= 0 ? outOfDiffs[j] ?? null : null)),
+    });
     const priorKept = keepUnrefuted(
-      annotateFindings(priorForLens, priorVerdicts, null),
+      annotateFindings(priorForLens, priorVerdicts, null, null, priorOutOfDiffs),
     );
     // Merge fresh + still-open prior findings. Two passes, narrow then loose:
     // `dedupeFindings` collapses byte-identical summaries, then `clusterFindings`

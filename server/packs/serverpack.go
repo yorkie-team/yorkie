@@ -133,12 +133,13 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	pbPack := &api.ChangePack{
-		DocumentKey: p.DocumentKey.String(),
-		Checkpoint:  converter.ToCheckpoint(p.Checkpoint),
-		Changes:     pbChanges,
-		Snapshot:    p.Snapshot,
-		Epoch:       p.Epoch,
-		IsRemoved:   p.IsRemoved,
+		DocumentKey:  p.DocumentKey.String(),
+		Checkpoint:   converter.ToCheckpoint(p.Checkpoint),
+		Changes:      pbChanges,
+		Snapshot:     p.Snapshot,
+		Epoch:        p.Epoch,
+		IsRemoved:    p.IsRemoved,
+		Capabilities: api.ServerCapabilities,
 	}
 
 	pbVersionVector, err := converter.ToVersionVector(p.VersionVector)

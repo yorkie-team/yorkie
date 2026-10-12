@@ -27,6 +27,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	gotime "time"
 
@@ -84,7 +85,7 @@ var (
 	AdminPassword           = server.DefaultAdminPassword
 	AdminPasswordForSignUp  = AdminPassword + "123!"
 	UseDefaultProject       = true
-	SecretKey               = server.DefaultSecretKey
+	SecretKey               = "yorkie-test-secret-key-0123456789" // #nosec G101
 	EnableWebhookValidation = false
 
 	HousekeepingInterval             = 500 * gotime.Millisecond
@@ -96,6 +97,12 @@ var (
 	ChannelSessionCountCacheTTL   = "10s"
 	ChannelSessionCountCacheSize  = 100
 
+	// WatchHeartbeatInterval turns the heartbeat on for the integration lane,
+	// which ships off by default, and keeps it firing well inside a test's
+	// lifetime so the heartbeat path is exercised rather than merely
+	// configured.
+	WatchHeartbeatInterval = "2s"
+
 	ClusterRPCTimeout        = "10s"
 	ClusterClientTimeout     = "30s"
 	ClusterClientPoolSize    = 1
@@ -106,6 +113,7 @@ var (
 	SnapshotInterval          = int64(10)
 	SnapshotThreshold         = int64(10)
 	SnapshotCacheSize         = 10
+	PresenceBaseCacheSize     = 100
 	AuthWebhookSize           = 100
 	AuthWebhookCacheTTL       = 10 * gotime.Second
 	EventWebhookSize          = 100
@@ -334,6 +342,7 @@ func TestBackendConfig() *backend.Config {
 		UseDefaultProject:             UseDefaultProject,
 		SecretKey:                     SecretKey,
 		SnapshotCacheSize:             SnapshotCacheSize,
+		PresenceBaseCacheSize:         PresenceBaseCacheSize,
 		AuthWebhookCacheSize:          AuthWebhookSize,
 		AuthWebhookCacheTTL:           AuthWebhookCacheTTL.String(),
 		EnableWebhookValidation:       EnableWebhookValidation,
@@ -343,6 +352,7 @@ func TestBackendConfig() *backend.Config {
 		ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
 		ChannelSessionCountCacheTTL:   ChannelSessionCountCacheTTL,
 		ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
+		WatchHeartbeatInterval:        WatchHeartbeatInterval,
 		ClusterRPCTimeout:             ClusterRPCTimeout,
 		ClusterClientTimeout:          ClusterClientTimeout,
 		ClusterClientPoolSize:         ClusterClientPoolSize,
@@ -372,7 +382,7 @@ func TestConfig() *server.Config {
 		}(),
 		Backend: func() *backend.Config {
 			conf := TestBackendConfig()
-			conf.SecretKey = server.DefaultSecretKey
+			conf.SecretKey = SecretKey
 			conf.AdminTokenDuration = server.DefaultAdminTokenDuration.String()
 			conf.GatewayAddr = fmt.Sprintf("localhost:%d", RPCPort+portOffset)
 			conf.RPCAddr = fmt.Sprintf("localhost:%d", RPCPort+portOffset)
@@ -432,21 +442,63 @@ func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) 
 	return y
 }
 
-// TestKey returns a new instance of resource key for testing.
-func TestKey(t testing.TB, prefix ...int) key.Key {
+// testRuns tracks the test run each test name was last seen in, so names
+// stay unique when `go test -count=N` runs the same test again against the
+// same database.
+var testRuns = struct {
+	sync.Mutex
+	last map[string]testing.TB
+	runs map[string]int
+}{
+	last: make(map[string]testing.TB),
+	runs: make(map[string]int),
+}
+
+// testRunName returns t.Name() and a suffix that carries the run number from
+// the second run of the same test in this process on, empty before that.
+// Every call with the same t returns the same pair, so documents a test opens
+// by name still meet. Callers append the suffix after any truncation.
+func testRunName(t testing.TB) (string, string) {
+	testRuns.Lock()
+	defer testRuns.Unlock()
+
 	name := t.Name()
+	if last, ok := testRuns.last[name]; ok && last != t {
+		testRuns.runs[name]++
+	}
+	testRuns.last[name] = t
+
+	if run := testRuns.runs[name]; run > 0 {
+		return name, fmt.Sprintf("-run%d", run)
+	}
+	return name, ""
+}
+
+// TestRunSuffix returns the suffix that keeps names of this run of the test
+// apart from those of its earlier runs under `go test -count=N`: empty on the
+// first run, "-runN" after. See testRunName.
+func TestRunSuffix(t testing.TB) string {
+	_, suffix := testRunName(t)
+	return suffix
+}
+
+// TestKey returns a new instance of resource key for testing. The key is
+// unique to each run of the test; see testRunName.
+func TestKey(t testing.TB, prefix ...int) key.Key {
+	name, suffix := testRunName(t)
 
 	if len(prefix) > 0 {
 		name = fmt.Sprintf("%d-%s", prefix[0], name)
 	}
 
-	if err := key.Key(name).Validate(); err == nil {
-		return key.Key(name)
+	if err := key.Key(name + suffix).Validate(); err == nil {
+		return key.Key(name + suffix)
 	}
 
 	if len(name) > 100 {
 		name = name[:100]
 	}
+	name += suffix
 
 	sb := strings.Builder{}
 	for _, c := range name {
@@ -464,21 +516,23 @@ func TestKey(t testing.TB, prefix ...int) key.Key {
 	return key.Key(sb.String())
 }
 
-// TestSlugName returns a new instance of slug name for testing.
+// TestSlugName returns a new instance of slug name for testing. The name is
+// unique to each run of the test; see testRunName.
 func TestSlugName(t testing.TB) string {
-	name := t.Name()
-	if err := validation.Validate(name, []any{
+	name, suffix := testRunName(t)
+	if err := validation.Validate(name+suffix, []any{
 		"required",
 		"min=4",
 		"max=30",
 		"slug",
 	}); err == nil {
-		return name
+		return name + suffix
 	}
 
-	if len(name) > 35 {
-		name = name[len(name)-30:]
+	if limit := 30 - len(suffix); len(name) > limit {
+		name = name[len(name)-limit:]
 	}
+	name += suffix
 
 	sb := strings.Builder{}
 	for _, c := range name {
@@ -621,6 +675,22 @@ func FindDocInfosWithID(
 	}
 
 	return infos, nil
+}
+
+// CountChangesWithDocID counts the change records stored for the given docID,
+// reading the database directly rather than through a server's caches.
+func CountChangesWithDocID(databaseName string, docID types.ID) (int64, error) {
+	ctx := context.Background()
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = cli.Disconnect(ctx) }()
+
+	return cli.Database(databaseName).Collection(mongo.ColChanges).CountDocuments(
+		ctx,
+		bson.M{"doc_id": docID},
+	)
 }
 
 // CreateDummyClientWithID creates a new dummy document with the given ID and key.

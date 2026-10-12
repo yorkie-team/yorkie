@@ -248,6 +248,13 @@ const (
 	PresenceChange_CHANGE_TYPE_PUT         PresenceChange_ChangeType = 1
 	PresenceChange_CHANGE_TYPE_DELETE      PresenceChange_ChangeType = 2
 	PresenceChange_CHANGE_TYPE_CLEAR       PresenceChange_ChangeType = 3
+	// CHANGE_TYPE_PATCH carries only the top-level keys that changed since
+	// the sender's previous presence: set entries in presence, deleted keys
+	// in removed_keys. Clients send it only to a server that advertises the
+	// "presence-patch" capability on ChangePack. The server folds it into
+	// a CHANGE_TYPE_PUT of the full presence before storing, so it never
+	// appears in a pulled change.
+	PresenceChange_CHANGE_TYPE_PATCH PresenceChange_ChangeType = 4
 )
 
 // Enum value maps for PresenceChange_ChangeType.
@@ -257,12 +264,14 @@ var (
 		1: "CHANGE_TYPE_PUT",
 		2: "CHANGE_TYPE_DELETE",
 		3: "CHANGE_TYPE_CLEAR",
+		4: "CHANGE_TYPE_PATCH",
 	}
 	PresenceChange_ChangeType_value = map[string]int32{
 		"CHANGE_TYPE_UNSPECIFIED": 0,
 		"CHANGE_TYPE_PUT":         1,
 		"CHANGE_TYPE_DELETE":      2,
 		"CHANGE_TYPE_CLEAR":       3,
+		"CHANGE_TYPE_PATCH":       4,
 	}
 )
 
@@ -2525,9 +2534,12 @@ func (x *DocumentSummary) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 type PresenceChange struct {
-	state         protoimpl.MessageState    `protogen:"open.v1"`
-	Type          PresenceChange_ChangeType `protobuf:"varint,1,opt,name=type,proto3,enum=yorkie.v1.PresenceChange_ChangeType" json:"type,omitempty"`
-	Presence      *Presence                 `protobuf:"bytes,2,opt,name=presence,proto3" json:"presence,omitempty"`
+	state    protoimpl.MessageState    `protogen:"open.v1"`
+	Type     PresenceChange_ChangeType `protobuf:"varint,1,opt,name=type,proto3,enum=yorkie.v1.PresenceChange_ChangeType" json:"type,omitempty"`
+	Presence *Presence                 `protobuf:"bytes,2,opt,name=presence,proto3" json:"presence,omitempty"`
+	// removed_keys lists the top-level keys a CHANGE_TYPE_PATCH deletes. Unused
+	// by the other change types.
+	RemovedKeys   []string `protobuf:"bytes,3,rep,name=removed_keys,json=removedKeys,proto3" json:"removed_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2572,6 +2584,13 @@ func (x *PresenceChange) GetType() PresenceChange_ChangeType {
 func (x *PresenceChange) GetPresence() *Presence {
 	if x != nil {
 		return x.Presence
+	}
+	return nil
+}
+
+func (x *PresenceChange) GetRemovedKeys() []string {
+	if x != nil {
+		return x.RemovedKeys
 	}
 	return nil
 }
@@ -5511,16 +5530,18 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1aQ\n" +
 	"\x0ePresencesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\xea\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\xa5\x02\n" +
 	"\x0ePresenceChange\x128\n" +
 	"\x04type\x18\x01 \x01(\x0e2$.yorkie.v1.PresenceChange.ChangeTypeR\x04type\x12/\n" +
-	"\bpresence\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\bpresence\"m\n" +
+	"\bpresence\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\bpresence\x12!\n" +
+	"\fremoved_keys\x18\x03 \x03(\tR\vremovedKeys\"\x84\x01\n" +
 	"\n" +
 	"ChangeType\x12\x1b\n" +
 	"\x17CHANGE_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fCHANGE_TYPE_PUT\x10\x01\x12\x16\n" +
 	"\x12CHANGE_TYPE_DELETE\x10\x02\x12\x15\n" +
-	"\x11CHANGE_TYPE_CLEAR\x10\x03\"v\n" +
+	"\x11CHANGE_TYPE_CLEAR\x10\x03\x12\x15\n" +
+	"\x11CHANGE_TYPE_PATCH\x10\x04\"v\n" +
 	"\bPresence\x121\n" +
 	"\x04data\x18\x01 \x03(\v2\x1d.yorkie.v1.Presence.DataEntryR\x04data\x1a7\n" +
 	"\tDataEntry\x12\x10\n" +

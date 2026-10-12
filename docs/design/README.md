@@ -12,6 +12,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [DocPresence](doc-presence.md): Data structure for presence in document
 - [Presence](presence.md): Dedicated presence for real-time user tracking
 - [Presenceless Document Option](disable-presence.md): Document-scoped `disable_presence` that permanently turns off presence storage and propagation for documents that never use it
+- [Presence Patch](presence-patch.md): Clients send only the changed top-level presence keys; the server folds them into a full put before storing, so every pulled presence change stays a put
 
 ### CRDT
 
@@ -24,6 +25,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
+- [Pre-Attach Ticket Re-issue](pre-attach-ticket-reissue.md): Re-issue the tickets a document minted before its first attach to the client's actor, so pre-attach elements get a unique `createdAt`
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Identity of Inserted Tree Content](tree-content-identity.md): One ticket per inserted node, and what still lets two nodes share an ID
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations
@@ -49,9 +51,10 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them
+- [Auth Webhook Presence-Only Packs](auth-webhook-presence-only.md): `presenceOnly` on change-pack attributes, so a webhook can allow presence while rejecting edits and removals
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
-- [Document Size Limit](document-size-limit.md): Proposal for a server-side backstop on `MaxSizePerDocument`, which is enforced only on the client today
+- [Document Size Limit](document-size-limit.md): Server-side backstop on `MaxSizePerDocument`: a lagging gate on the snapshot's live size that refuses only growth
 - [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 - [Project Stats Cache](project-stats-cache.md): Asynchronously refreshed cache for `ClientsCount` and `DocumentsCount` to keep `GetProjectStats` fast at large scale
 - [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md): Daily HLL rollups that make the warehouse-backed `GetProjectStats` metrics independent of event volume

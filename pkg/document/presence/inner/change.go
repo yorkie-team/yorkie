@@ -19,7 +19,11 @@
 // all other clients watching the same document.
 package inner
 
-import "github.com/yorkie-team/yorkie/pkg/document/time"
+import (
+	"maps"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
 
 // ChangeType represents the type of presence change.
 type ChangeType string
@@ -30,21 +34,44 @@ const (
 
 	// Clear represents the presence is cleared.
 	Clear ChangeType = "clear"
+
+	// Patch represents that only the listed top-level keys changed: Presence
+	// holds the keys that were set and RemovedKeys the keys that were
+	// deleted. The server folds it into a Put before storing.
+	Patch ChangeType = "patch"
 )
 
 // Change represents the change of presence.
 type Change struct {
 	ChangeType ChangeType
 	Presence   Presence
+
+	// RemovedKeys lists the keys a Patch deletes. Unused by other types.
+	RemovedKeys []string
 }
 
 // Execute applies the change to the given presences map.
 func (c *Change) Execute(actorID time.ActorID, presences *Map) {
-	if c.ChangeType == Clear {
+	switch c.ChangeType {
+	case Clear:
 		presences.Delete(actorID.String())
-	} else {
+	case Patch:
+		presences.Store(actorID.String(), c.ApplyTo(presences.Load(actorID.String())))
+	default:
 		presences.Store(actorID.String(), c.Presence)
 	}
+}
+
+// ApplyTo returns the presence that results from applying this Patch to
+// base. The base is left untouched, and a nil base is treated as empty.
+func (c *Change) ApplyTo(base Presence) Presence {
+	merged := make(Presence, len(base)+len(c.Presence))
+	maps.Copy(merged, base)
+	for _, key := range c.RemovedKeys {
+		delete(merged, key)
+	}
+	maps.Copy(merged, c.Presence)
+	return merged
 }
 
 // IsClear returns true if the change is of type Clear.

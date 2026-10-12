@@ -78,6 +78,14 @@ type InternalDocument struct {
 	// server.
 	localChanges []*change.Change
 
+	// absorbedRemote records that this document has taken state in from the
+	// outside -- a snapshot or a batch of applied changes -- at least once.
+	// neverSynced reads it: a snapshot applied to a still-detached document
+	// with an initial checkpoint leaves the checkpoint and the version vector
+	// looking untouched while the root holds elements this replica never
+	// minted.
+	absorbedRemote bool
+
 	// disableGC, when true, declares that this document does not produce or
 	// consume tombstones (see docs/design/disable-gc-on-attach.md). It is set
 	// by the client on Attach and consumed by ApplyChanges to skip merging
@@ -123,6 +131,9 @@ func NewInternalDocumentFromSnapshot(
 		onlineClients: make(map[string]bool),
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:      change.InitialID().SetClocks(lamport, vector),
+
+		// The root came from a snapshot: never re-issue its tickets.
+		absorbedRemote: true,
 	}, nil
 }
 
@@ -268,13 +279,117 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
+//
+// It rewrites only the change IDs and each operation's executedAt: the root
+// and the tickets an operation carries keep the previous actor. That is what a
+// replica built from the server's state needs, where the root holds other
+// actors' elements. The client attaching a document it edited offline passes
+// WithReissue to Document.SetActorWithOptions instead, which re-issues every
+// ticket the document minted.
 func (d *InternalDocument) SetActor(actor time.ActorID) {
 	for _, c := range d.localChanges {
 		c.SetActor(actor)
 	}
 	d.changeID = d.changeID.SetActor(actor)
+}
 
-	// TODO(hackerwins): We need to update the root object as well.
+// setActorWithReissue sets actor into this document like SetActor and, when the
+// document has never synced, re-issues every ticket it minted under its
+// previous actor -- usually time.InitialActorID -- to the given actor: in the
+// local changes, in the root and in the presences. It reports whether it
+// re-issued anything.
+//
+// Without it, two clients that fill the same key before attaching push values
+// with identical createdAt, and the server cannot tell the two elements apart.
+// See docs/design/pre-attach-ticket-reissue.md.
+//
+// The root is rebuilt by replaying the re-issued local changes on a fresh
+// root, which is what the server builds from them. The document is left
+// untouched when any step fails. It writes nothing in place: the local changes,
+// root, presences and online-client set are all replaced, never mutated, so a
+// DeepCopy sharing the previous ones is unaffected. (SetActor, the fallback,
+// still rewrites the shared changes in place as it always has; no caller deep
+// copies a document that holds local changes.)
+func (d *InternalDocument) setActorWithReissue(actor time.ActorID) (bool, error) {
+	prev := d.changeID.ActorID()
+	if prev == actor || !d.neverSynced() || !d.HasLocalChanges() {
+		d.SetActor(actor)
+		return false, nil
+	}
+
+	changes := make([]*change.Change, 0, len(d.localChanges))
+	for _, c := range d.localChanges {
+		ops, err := converter.ReissueOperations(c.Operations(), prev, actor)
+		if err != nil {
+			return false, err
+		}
+		id := c.ID().SetActor(actor)
+		id = id.SetVersionVector(reissueVersionVector(id.VersionVector(), prev, actor))
+		changes = append(changes, change.New(id, c.Message(), ops, c.PresenceChange()))
+	}
+
+	root := crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
+	presences := presence.NewMap()
+	for _, c := range changes {
+		if _, err := c.Execute(root, presences, operations.OpSourceReplay); err != nil {
+			return false, err
+		}
+	}
+
+	d.localChanges = changes
+	d.root = root
+	d.presences = presences
+	d.onlineClients = reissueOnlineClients(d.onlineClients, prev, actor)
+	changeID := d.changeID.SetActor(actor)
+	d.changeID = changeID.SetVersionVector(
+		reissueVersionVector(changeID.VersionVector(), prev, actor),
+	)
+	return true, nil
+}
+
+// neverSynced reports whether this document has neither sent nor received
+// anything: it has absorbed no snapshot and no applied change, its checkpoint
+// is the initial one, and its version vector names no actor but its own.
+// Every ticket naming its actor was then issued here and is held only by its
+// local changes and the state built from them.
+func (d *InternalDocument) neverSynced() bool {
+	if d.absorbedRemote || d.status != StatusDetached || d.checkpoint != change.InitialCheckpoint {
+		return false
+	}
+	actor := d.changeID.ActorID()
+	for id := range d.changeID.VersionVector() {
+		if id != actor {
+			return false
+		}
+	}
+	return true
+}
+
+// reissueOnlineClients returns a copy of the given online-client set with the
+// actor `from` renamed to `to`.
+func reissueOnlineClients(clients map[string]bool, from, to time.ActorID) map[string]bool {
+	reissued := make(map[string]bool, len(clients))
+	for id := range clients {
+		if id == from.String() {
+			id = to.String()
+		}
+		reissued[id] = true
+	}
+	return reissued
+}
+
+// reissueVersionVector returns a copy of the given vector with the entry of
+// the actor `from` moved to the actor `to`.
+func reissueVersionVector(vector time.VersionVector, from, to time.ActorID) time.VersionVector {
+	reissued := vector.DeepCopy()
+	if from == to {
+		return reissued
+	}
+	if lamport, ok := reissued.Get(from); ok {
+		reissued.Unset(from)
+		reissued.Set(to, max(lamport, reissued.VersionOf(to)))
+	}
+	return reissued
 }
 
 // Lamport returns the Lamport clock of this document.
@@ -325,6 +440,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
+	d.absorbedRemote = true
 
 	// NOTE(chacha912): Documents created from snapshots were experiencing edit
 	// restrictions due to low lamport values.
@@ -373,6 +489,11 @@ func (d *InternalDocument) applyChanges(
 ) ([]DocEvent, []operations.Operation, error) {
 	var events []DocEvent
 	var executedOps []operations.Operation
+	if len(changes) > 0 {
+		// Every caller feeds this changes that came through a pack or from
+		// another replica, so the document is no longer never-synced.
+		d.absorbedRemote = true
+	}
 	for _, c := range changes {
 		var hadPresence, wasOnline bool
 		var prevPresence presence.Data
@@ -552,5 +673,7 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		presences:     d.presences.DeepCopy(),
 		onlineClients: onlineClients,
 		localChanges:  d.localChanges,
+
+		absorbedRemote: d.absorbedRemote,
 	}, nil
 }

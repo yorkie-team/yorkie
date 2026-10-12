@@ -40,7 +40,9 @@ import (
 
 var (
 	// ErrDocumentSizeExceedsLimit is returned when the document size exceeds the limit.
-	ErrDocumentSizeExceedsLimit = errors.ResourceExhausted("document size exceeds the limit")
+	ErrDocumentSizeExceedsLimit = errors.ResourceExhausted(
+		"document size exceeds the limit",
+	).WithCode("ErrDocumentSizeExceedsLimit")
 
 	// ErrSchemaValidationFailed is returned when the document schema validation failed.
 	ErrSchemaValidationFailed = errors.InvalidArgument("schema validation failed").WithCode("ErrSchemaValidationFailed")
@@ -255,15 +257,24 @@ func (d *Document) Update(
 		d.cloneRoot,
 	)
 
+	// NOTE(hackerwins): If the updater fails, we need to discard the clone
+	// to prevent the user from accessing the invalid state. The json proxies
+	// report a rejected argument, such as an index inside a surrogate pair, by
+	// panicking, which skips a plain error check, so the discard is deferred
+	// until the updater has returned normally.
+	updated := false
+	defer func() {
+		if !updated {
+			d.invalidateClone()
+		}
+	}()
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
 		presence.New(ctx, presenceData),
 	); err != nil {
-		// NOTE(hackerwins): If the updater fails, we need to discard the clone
-		// to prevent the user from accessing the invalid state.
-		d.invalidateClone()
 		return err
 	}
+	updated = true
 
 	// Gate any presence emit when the document opted out. We warn once per
 	// document so the silent drop is discoverable without log spam if a
@@ -976,6 +987,74 @@ func (d *Document) SetActor(actor time.ActorID) {
 	defer d.mu.Unlock()
 
 	d.doc.SetActor(actor)
+}
+
+// SetActorOption configures SetActorWithOptions.
+type SetActorOption func(*setActorOptions)
+
+// setActorOptions holds what the SetActorOptions passed to
+// SetActorWithOptions select.
+type setActorOptions struct {
+	// reissue makes SetActorWithOptions re-issue the tickets a never-synced
+	// document minted before. See WithReissue.
+	reissue bool
+}
+
+// WithReissue makes SetActorWithOptions re-issue, to the new actor, every
+// ticket the document minted under its previous actor -- usually
+// time.InitialActorID -- when the document has never synced. A document that
+// has synced falls back to plain SetActor. The client passes it on attach so
+// that elements created before the attach get a createdAt unique to this
+// client. See docs/design/pre-attach-ticket-reissue.md.
+//
+// A re-issue rebuilds the root, so it also drops the clone and the undo/redo
+// stacks: their reverse operations name the tickets that no longer exist. A
+// successful attach clears those stacks anyway (Client.attachDocument), so
+// this only moves that point earlier, to before the RPC.
+//
+// There is no rollback. A re-issued document is a valid detached document
+// whatever the attach does next: a retry under the same client re-issues
+// nothing, and a retry under another client re-issues from this actor to that
+// one. Restoring the previous actor after a failure whose outcome is unknown
+// -- a lost AttachDocument response -- could not tell whether the server
+// already holds the re-issued elements.
+func WithReissue() SetActorOption {
+	return func(o *setActorOptions) {
+		o.reissue = true
+	}
+}
+
+// SetActorWithOptions sets actor into this document like SetActor, configured
+// by the given options. Without options it is SetActor and returns nil. With
+// WithReissue it re-issues a never-synced document's tickets and returns the
+// error that stopped the re-issue, if any; the document is left untouched
+// then.
+//
+// It takes d.mu for writing, unconditionally, for the reasons SetActor does.
+func (d *Document) SetActorWithOptions(actor time.ActorID, opts ...SetActorOption) error {
+	var options setActorOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if !options.reissue {
+		d.doc.SetActor(actor)
+		return nil
+	}
+
+	reissued, err := d.doc.setActorWithReissue(actor)
+	if err != nil {
+		return err
+	}
+	if reissued {
+		d.invalidateClone()
+		d.history.ClearUndo()
+		d.history.ClearRedo()
+	}
+	return nil
 }
 
 // ActorID returns ID of the actor currently editing the document.

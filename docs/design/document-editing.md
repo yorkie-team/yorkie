@@ -115,6 +115,53 @@ doc.subscribe((event) => {
 
 For more details: [Subscribing to Document events](https://yorkie.dev/docs/js-sdk#subscribing-to-document-events)
 
+### Local Index Validity: Surrogate Pairs
+
+Indexes into `Text` and `Tree` count **UTF-16 code units**, which is what the
+JS SDK's strings are measured in. A non-BMP character therefore occupies two
+indexes, and the index between them does not name a character boundary.
+
+Editing or styling at such an index would split a node between the two halves
+of a surrogate pair. Both SDKs measure the same lengths and mint the same node
+IDs for that split, so the document *structure* still converges — but the
+*text* does not. Go holds strings as UTF-8, so a lone half cannot survive
+`utf16.Decode` and becomes U+FFFD; the JS SDK keeps the raw code unit. The two
+replicas then hold different content for the same operation.
+
+So a local index that falls inside a pair is rejected with
+`crdt.ErrInvalidUTF16Index` rather than minting an operation whose result
+depends on which SDK applies it. The check sits where a local index is turned
+into a CRDT position: `Text.CreateRange` for `Text`, and `Tree.FindPos` for
+`Tree`, which every index- and path-based entry point (`Edit`, `EditBulk`,
+`Style`, `RemoveStyle` and their `…ByPath` twins) goes through. A local index
+that is not mid-pair maps to a node offset that is not mid-pair on every
+replica, because node contents are identical everywhere — so no *new*
+operation can carry a mid-pair offset.
+
+This is a local-API rule, not a convergence rule. Remote operations carry
+CRDT positions and never pass through `CreateRange` or `FindPos`, so an
+operation minted by an older client, or by an SDK that has not adopted the
+check, still applies exactly as before.
+
+`Tree` undo/redo stores some reverse ranges as indexes and re-resolves them
+when it runs. Reconciliation against a remote edit can move such an index
+inside a pair: Case 5 (the remote range overlaps the start of the undo range)
+places the range at the start of the remote content without counting that
+content, the same formula the JS SDK uses. These indexes are the document's
+own, so they resolve through `Tree.FindPosUnchecked`, which skips the check.
+Rejecting one would only fail the undo after its history entry has been
+popped. Such an undo splits the pair as it did before the check existed;
+fixing Case 5 itself is a change to both SDKs and is left out of this rule.
+
+A rejected index reaches the caller as a panic from the `json` proxies.
+`Document.Update` discards the clone whenever the updater returns an error
+or panics, so an edit made earlier in the same updater does not survive in
+`Root` or leak into the next change.
+
+Aligning the split forward to the end of the pair instead would change node
+IDs for the same operation, making it a wire-level rule that needs a
+server-first rollout.
+
 ### Risks and Mitigation
 
 Proxy can vary by language or environment. For example, in JS SDK, the Proxy is implemented as [JavaScript Proxy](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy), but in the Go SDK, it is just a struct.

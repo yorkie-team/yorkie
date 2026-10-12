@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -75,6 +76,15 @@ type PushPullOptions struct {
 	// the write and read paths so the response carries an empty presence
 	// map regardless of what any client sends.
 	DisablePresence bool
+
+	// SizeChecked marks a push whose caller has already measured the
+	// resulting document against the project's MaxSizePerDocument with
+	// packs.CheckLiveSize. The server-side repair paths (admin document
+	// update, revision restore) rebuild the whole root, so they know the
+	// exact result; the snapshot-based push gate only knows the document is
+	// over quota and would refuse them, leaving an over-quota document with
+	// no way back under the limit. Never set from a client request.
+	SizeChecked bool
 }
 
 var (
@@ -109,6 +119,10 @@ func PushPull(
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
+	if err := validateChangeActors(ctx, clientInfo, clientInfo.Checkpoint(docKey.DocID), docKey, reqPack); err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
+		return nil, err
+	}
 
 	// 01. Strip presence on the way in when the document opted out. Doing
 	// this before pushPack means no presence-only change ever reaches the
@@ -117,10 +131,30 @@ func PushPull(
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
+	// 01b. Fold presence patches into full puts, so only puts are stored and
+	// every client keeps pulling the full presence. A presence-disabled
+	// document has none left after the strip above.
+	var fold *presenceFold
+	if !opts.DisablePresence {
+		var err error
+		if fold, err = foldPresencePatches(be, clientInfo, docKey, reqPack); err != nil {
+			// A missing base is the expected fallback signal after an
+			// eviction, a restart or a shard move, not a failure.
+			return nil, err
+		}
+	}
+
 	// 02. push the change pack to the database.
 	// ServerSeq checks need a DocInfo snapshot under DocPushKey and must
 	// run after epoch mismatch handling, so they live in pushPack.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
+	statusChange := opts.Status == document.StatusDetached || opts.Status == document.StatusRemoved
+	maxSize := project.MaxSizePerDocument
+	if opts.SizeChecked {
+		maxSize = 0
+	}
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(
+		ctx, be, clientInfo, docKey, reqPack, maxSize, statusChange,
+	)
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
@@ -134,6 +168,10 @@ func PushPull(
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
+
+	// 03b. Keep the client's presence for folding its next patch, keyed to
+	// the checkpoint the pull just recorded.
+	fold.commit(be, clientInfo, docKey.DocID, pushedChanges)
 
 	if logging.Enabled(zap.DebugLevel) {
 		pullLog := strconv.Itoa(resPack.ChangesLen())
@@ -244,18 +282,92 @@ func validateClientSeqContinuity(cpBeforePush change.Checkpoint, reqPack *change
 	return nil
 }
 
-// pushPack pushes the given ChangePack to the database.
+// validateChangeActors refuses a pushed change stamped with an actor the
+// pushing client row does not hold, with the ErrActorMismatch that the Watch
+// path already returns for the same compare (yorkie_server.go Watch, "so a
+// client cannot subscribe under another client's presence identity"). Without
+// it a change stored under another client's actor is applied by every peer,
+// with presence keyed on that actor, while the owner's pull drops it as its own
+// echo (pullChangeInfos, IsOwnActor) and never converges (#2120).
+//
+// What the compare establishes: a peer learns a collaborator's actor off the
+// wire — every pulled change carries it — but not the client_id or client key
+// behind it, since StableActorID is a digest of (project, client key) with no
+// preimage. Stamping a foreign actor is therefore the one identity move a
+// plain collaborator can make, and it is what this refuses. What it does not
+// establish: client_id is not a credential, so a caller that already holds a
+// victim's identifier resolves a clientInfo for which the victim's actor is
+// its own; and two honest sessions of one client key share a stable actor by
+// design, so they are indistinguishable here. Those remain open and need an
+// authenticated client identity, tracked in #2114.
+//
+// Only changes the server would store (clientSeq above the checkpoint) are
+// checked; pushPack drops the others. The initial actor is accepted: it is the
+// documented value of a pre-attach edit in a client that skipped SetActor and
+// of the tickets a declined re-issue leaves behind (see
+// docs/design/pre-attach-ticket-reissue.md), and it is no client's own actor on
+// pull, so a change stamped with it reaches every client and suppresses none.
+// The server's own writers hold it as their session id (IsServerClient), so
+// IsOwnActor accepts them regardless.
+//
+// Only the change ID is refused on, which is what both the pull dedup
+// (ChangeInfo.ActorID) and the presence keying read. An operation's executedAt
+// ticket keeps the actor it was minted under, which a declined re-issue
+// legitimately leaves behind, so a mismatch there is logged instead.
+func validateChangeActors(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	cpBeforePush change.Checkpoint,
+	docKey types.DocRefKey,
+	reqPack *change.Pack,
+) error {
+	foreign := func(actorID time.ActorID) bool {
+		return actorID != time.InitialActorID && !clientInfo.IsOwnActor(types.IDFromActorID(actorID))
+	}
+
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			continue
+		}
+
+		if foreign(cn.ID().ActorID()) {
+			return clients.ErrActorMismatch
+		}
+
+		for _, op := range cn.Operations() {
+			executedAt := op.ExecutedAt()
+			if executedAt == nil || !foreign(executedAt.ActorID()) {
+				continue
+			}
+
+			logging.From(ctx).Warnf(
+				"foreign actor in pushed operation: doc(%s), client(%s), clientSeq(%d), actor(%s)",
+				docKey.DocID, clientInfo.ID, cn.ID().ClientSeq(), executedAt.ActorID(),
+			)
+			break
+		}
+	}
+
+	return nil
+}
+
+// pushPack pushes the given ChangePack to the database. maxSize is the
+// project's MaxSizePerDocument, and statusChange marks a pack that detaches or
+// removes the document, which must always go through.
 func pushPack(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
+	maxSize int,
+	statusChange bool,
 ) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
 	// 01. Filter out changes that are already pushed.
 	var pushables []*database.ChangeInfo
+	var pushableChanges []*change.Change
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
 			logging.From(ctx).Warnf(
@@ -271,6 +383,7 @@ func pushPack(
 		}
 
 		pushables = append(pushables, info)
+		pushableChanges = append(pushableChanges, cn)
 	}
 
 	// 02. Push the changes to the database.
@@ -311,6 +424,23 @@ func pushPack(
 				connect.CodeInvalidArgument,
 				errors.InvalidArgument("checkpoint serverSeq exceeds server state").WithCode("ErrInvalidServerSeq"),
 			)
+		}
+
+		// 04. Enforce MaxSizePerDocument. A detach or remove still goes
+		// through, so a client is never stuck on an over-quota document, but
+		// its changes are discarded when they would grow the document:
+		// otherwise attach, push in the detach pack and re-attach would walk
+		// around the gate.
+		if len(pushables) > 0 {
+			if err := checkDocumentSize(
+				ctx, be, docKey, currentDocInfo.ServerSeq, maxSize, pushableChanges,
+			); err != nil {
+				if !statusChange || !stderrors.Is(err, document.ErrDocumentSizeExceedsLimit) {
+					return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+				}
+				logging.From(ctx).Warnf("discarding %d changes from a detach or remove: %v", len(pushables), err)
+				pushables = nil
+			}
 		}
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
@@ -416,7 +546,16 @@ func pullPack(
 		if err != nil {
 			return nil, err
 		}
-		if resPack.SnapshotLen() == 0 {
+		// Attach the vector only to a reply the client may collect with: one
+		// that carries the changes the vector already accounts for. A snapshot
+		// reply was collected server-side and carries the document's own
+		// vector instead. A push-only reply pulls nothing, so the client has
+		// not applied those remote changes; collecting with it would purge the
+		// tombstones they anchor on and leave every retry of the next full
+		// pull unable to apply them ("node not found"). That pull's reply
+		// carries the vector, after its changes. See
+		// docs/design/garbage-collection.md.
+		if resPack.SnapshotLen() == 0 && opts.Mode != types.SyncModePushOnly {
 			resPack.VersionVector = minVersionVector
 		}
 	}

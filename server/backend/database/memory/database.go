@@ -2125,6 +2125,7 @@ func (d *DB) CreateSnapshotInfo(
 		vv = time.NewVersionVector()
 	}
 
+	liveSize := doc.DocSize().Live
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:              newID(),
 		ProjectID:       docRefKey.ProjectID,
@@ -2134,6 +2135,7 @@ func (d *DB) CreateSnapshotInfo(
 		VersionVector:   vv,
 		Snapshot:        snapshotField,
 		HasExternalBody: hasExternalBody,
+		LiveSize:        int64(liveSize.Total()),
 		CreatedAt:       gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
@@ -2221,6 +2223,7 @@ func (d *DB) FindClosestSnapshotInfo(
 				Lamport:         info.Lamport,
 				VersionVector:   info.VersionVector,
 				HasExternalBody: info.HasExternalBody,
+				LiveSize:        info.LiveSize,
 				CreatedAt:       info.CreatedAt,
 			}
 			if includeSnapshot {

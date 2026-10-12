@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	stderrors "errors"
 	"sync"
 	gotime "time"
 
@@ -79,6 +80,14 @@ var (
 		"unsupported resource descriptor",
 	).WithCode("ErrUnsupportedResource")
 
+	// ErrDocumentKeyMismatch is returned when the change pack of a request
+	// names a document key other than the key of the document the request
+	// targets by ID. The auth webhook is asked about the pack's key, so the
+	// two must name the same document.
+	ErrDocumentKeyMismatch = errors.InvalidArgument(
+		"change pack key does not match the document",
+	).WithCode("ErrDocumentKeyMismatch")
+
 	// ErrSubscriptionsClosed is returned when every subscription behind a
 	// Watch stream has closed itself. That only happens through the
 	// self-prune fallback in pubsub.Subscription.Publish, which is a
@@ -95,6 +104,11 @@ type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
 	watches    *watchRegistry
+
+	// heartbeatInterval is how long a Watch stream may stay idle before it
+	// sends a heartbeat. Parsed once here rather than per stream, so a
+	// malformed value fails at startup instead of mid-request.
+	heartbeatInterval gotime.Duration
 }
 
 // newYorkieServer creates a new instance of yorkieServer
@@ -104,9 +118,10 @@ func newYorkieServer(
 	watches *watchRegistry,
 ) *yorkieServer {
 	return &yorkieServer{
-		backend:    be,
-		watches:    watches,
-		serviceCtx: serviceCtx,
+		backend:           be,
+		watches:           watches,
+		serviceCtx:        serviceCtx,
+		heartbeatInterval: be.Config.ParseWatchHeartbeatInterval(),
 	}
 }
 
@@ -228,7 +243,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -236,9 +251,10 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	attrs := auth.AccessAttributes(pack)
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
-		Attributes: auth.AccessAttributes(pack),
+		Attributes: attrs,
 	}); err != nil {
 		return nil, err
 	}
@@ -258,8 +274,16 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	// 02. Ensure the document exists and is attached to the client. The
-	// disable_presence flag is fixated on first attach via $setOnInsert;
+	// 02. Ensure the document exists and is attached to the client. Creating
+	// the document writes it, and the create fixates disable_presence for
+	// every attach that follows, so an attach that was not approved as a
+	// document write is asked for the write first, the same way a schema
+	// rebind is.
+	if err := s.verifyDocCreation(ctx, project, attrs, pack.DocumentKey); err != nil {
+		return nil, err
+	}
+
+	// The disable_presence flag is fixated on first attach via $setOnInsert;
 	// the persisted value wins for later attaches, so we log a warning
 	// when the requested value disagrees with what came back.
 	docInfo, err := documents.FindOrCreateDocInfo(
@@ -288,6 +312,17 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	// The attach writes the client row — TryAttaching above, then
+	// UpdateClientInfoAfterPushPull below — on this node only, and a row is
+	// cached per node. Without this the peers keep a copy that still says the
+	// document is not attached, and since nothing refills it (the bulk read in
+	// FindAttachedClientInfosByRefKey deliberately no longer caches, as the
+	// rows it reads run outside the client's cache lock) the gates reading it
+	// would reject the client for as long as the entry survives eviction.
+	// Deferred so it also covers the attaching row left behind when a step
+	// between here and the push fails.
+	defer clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
+
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
 	if err != nil {
@@ -310,7 +345,14 @@ func (s *yorkieServer) AttachDocument(
 			return nil, err
 		}
 
+		rebind := false
 		if count == 0 {
+			if rebind, err = s.canRebindSchema(ctx, attrs, pack.DocumentKey, req.Msg.SchemaKey, docInfo.Schema); err != nil {
+				return nil, err
+			}
+		}
+
+		if rebind {
 			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.SchemaKey)
 			if err != nil {
 				return nil, err
@@ -705,17 +747,31 @@ func (s *yorkieServer) Watch(
 	if err := context.Cause(streamCtx); err != nil {
 		return err
 	}
-	if err := stream.Send(&api.WatchResponse{
-		Body: &api.WatchResponse_Initialization{
-			Initialization: &api.WatchInitialization{
-				ResourceInits: resourceInits,
-			},
-		},
-	}); err != nil {
+	if err := s.sendWatchInitialization(stream.Send, resourceInits); err != nil {
 		return err
 	}
 
-	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs)
+	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, s.heartbeatInterval)
+}
+
+// sendWatchInitialization sends the first response of a Watch stream.
+//
+// The heartbeat interval is advertised before the first heartbeat is due, so a
+// client knows what to expect from the moment the stream comes up. A server
+// with heartbeats disabled advertises 0, which tells the client not to apply
+// an idle timeout at all.
+func (s *yorkieServer) sendWatchInitialization(
+	send func(*api.WatchResponse) error,
+	resourceInits []*api.ResourceInit,
+) error {
+	return send(&api.WatchResponse{
+		Body: &api.WatchResponse_Initialization{
+			Initialization: &api.WatchInitialization{
+				ResourceInits:       resourceInits,
+				HeartbeatIntervalMs: s.heartbeatInterval.Milliseconds(),
+			},
+		},
+	})
 }
 
 // admitWatch admits a Watch stream: it registers the stream for later
@@ -964,12 +1020,18 @@ func (s *yorkieServer) subscribeChannel(
 // open and that one resource silently undelivered. Streams carry a single
 // resource today, so the two cases coincide; multiplexing several resources
 // onto one stream will have to report the partial loss on its own.
+//
+// While no event arrives for heartbeatInterval, a heartbeat is sent so the
+// client can tell this stream from a half-open one; every sent response
+// restarts that wait, so a busy stream carries no heartbeats. A zero or
+// negative interval sends none.
 func (s *yorkieServer) streamMergedEvents(
 	ctx context.Context,
 	send func(*api.WatchResponse) error,
 	project *types.Project,
 	docSubs []docSub,
 	channelSubs []channelSub,
+	heartbeatInterval gotime.Duration,
 ) error {
 	merged := make(chan taggedEvent, len(docSubs)+len(channelSubs))
 	done := make(chan struct{})
@@ -1030,12 +1092,35 @@ func (s *yorkieServer) streamMergedEvents(
 		}(cs)
 	}
 
+	// A nil channel blocks forever in a select, which is how a disabled
+	// heartbeat drops out of the loop below without a second branch. Since Go
+	// 1.23 a Reset after the timer has fired cannot deliver the stale value,
+	// so re-arming needs no drain.
+	var heartbeats <-chan gotime.Time
+	resetHeartbeat := func() {}
+	if heartbeatInterval > 0 {
+		timer := gotime.NewTimer(heartbeatInterval)
+		defer timer.Stop()
+		heartbeats = timer.C
+		resetHeartbeat = func() { timer.Reset(heartbeatInterval) }
+	}
+
 	for {
 		select {
 		case <-s.serviceCtx.Done():
 			return context.Canceled
 		case <-ctx.Done():
 			return streamEndCause(ctx)
+		case <-heartbeats:
+			if ctx.Err() != nil {
+				return streamEndCause(ctx)
+			}
+			if err := send(&api.WatchResponse{
+				Body: &api.WatchResponse_Heartbeat{Heartbeat: &api.WatchHeartbeat{}},
+			}); err != nil {
+				return err
+			}
+			resetHeartbeat()
 		case te, ok := <-merged:
 			if !ok {
 				return ErrSubscriptionsClosed
@@ -1067,6 +1152,7 @@ func (s *yorkieServer) streamMergedEvents(
 			if err := send(resp); err != nil {
 				return err
 			}
+			resetHeartbeat()
 		}
 	}
 }
@@ -1430,6 +1516,82 @@ func (s *yorkieServer) Broadcast(
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }
 
+// verifyDocCreation asks the webhook for a document write when the attach
+// would create the document.
+//
+// Creating the document is a write the pack does not show, and it fixates the
+// document's disable_presence for every attach that follows: the attach that
+// inserts the row decides whether the document carries presence at all. An
+// attach whose pack is empty or presence only is approved without a document
+// write, so a webhook that allows those would let any member create documents
+// and pick that flag. The probe reads the document under the predicate
+// FindOrCreateDocInfo inserts on — the project's key, not removed — so a
+// document not found here is one that call creates.
+//
+// The probe costs a read, so it is skipped for an attach already approved as
+// a document write, and when the project does not ask the webhook about
+// attaches: there is no one to ask, and VerifyAccess would return without a
+// call.
+func (s *yorkieServer) verifyDocCreation(
+	ctx context.Context,
+	project *types.Project,
+	attrs []types.AccessAttribute,
+	docKey key.Key,
+) error {
+	if auth.WritesDocument(attrs) || !project.RequireAuth(types.AttachDocument) {
+		return nil
+	}
+
+	if _, err := documents.FindDocInfoByKey(ctx, s.backend, project, docKey); err != nil {
+		if !stderrors.Is(err, database.ErrDocumentNotFound) {
+			return err
+		}
+
+		return auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+			Method:     types.AttachDocument,
+			Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.ReadWrite),
+		})
+	}
+
+	return nil
+}
+
+// canRebindSchema reports whether an attach that finds no client attached
+// rebinds the document's schema to the one the request names.
+//
+// Rebinding writes the document, which the pack does not show: an attach
+// whose pack is empty (a presence-disabled document) or presence only was
+// approved without a document write, and a webhook that allows those would
+// let any member pick the schema later edits are checked against, or drop the
+// binding by asking for none. Such an attach never rebinds without asking.
+// bound was read before the attachment lock was taken, so the persisted
+// binding may have changed since; instead of comparing against it and then
+// writing over a binding it never saw, the attach writes nothing when it names
+// no schema or the schema it read, and is asked for the write before anything
+// else, the schema lookup included, otherwise.
+func (s *yorkieServer) canRebindSchema(
+	ctx context.Context,
+	attrs []types.AccessAttribute,
+	docKey key.Key,
+	requested string,
+	bound string,
+) (bool, error) {
+	if auth.WritesDocument(attrs) {
+		return true, nil
+	}
+	if requested == "" || requested == bound {
+		return false, nil
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.AttachDocument,
+		Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.ReadWrite),
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // DetachDocument detaches the given document to the client.
 func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
@@ -1441,7 +1603,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1502,6 +1664,9 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != pack.DocumentKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	// 04. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
@@ -1512,6 +1677,16 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
+
+	// 05. Drop the client row every node has cached. A detach is routed to the
+	// document's owner node, which refreshes its own entry as it writes; every
+	// other node keeps a copy that still says attached, and nothing else would
+	// ever correct it.
+	//
+	// This sits directly after the write that detached the client, not after
+	// the response is built: the row MongoDB holds has already moved on, so
+	// any step failing in between must not leave the peers' copies behind.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
 
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
@@ -1535,7 +1710,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1581,6 +1756,9 @@ func (s *yorkieServer) PushPullChanges(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != pack.DocumentKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	// 04. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
@@ -1603,6 +1781,22 @@ func (s *yorkieServer) PushPullChanges(
 	}), nil
 }
 
+// fromChangePack decodes the change pack of a request and sets its IsRemoved
+// by the method instead of taking the client's flag: removes says whether the
+// method removes the document, which only RemoveDocument does. Taking the
+// flag as sent would let any pack method remove the document, past a webhook
+// that gates only RemoveDocument, and would let a RemoveDocument without it be
+// asked as a read while it still removes. A server-side removal, such as
+// RemoveOnDetach, sets the flag later, after the webhook has been asked.
+func fromChangePack(pbPack *api.ChangePack, removes bool) (*change.Pack, error) {
+	pack, err := converter.FromChangePack(pbPack)
+	if err != nil {
+		return nil, err
+	}
+	pack.IsRemoved = removes
+	return pack, nil
+}
+
 // RemoveDocument removes the given document.
 func (s *yorkieServer) RemoveDocument(
 	ctx context.Context,
@@ -1614,7 +1808,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	pack, err := fromChangePack(req.Msg.ChangePack, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1656,6 +1850,9 @@ func (s *yorkieServer) RemoveDocument(
 	if err != nil {
 		return nil, err
 	}
+	if docInfo.Key != pack.DocumentKey {
+		return nil, ErrDocumentKeyMismatch
+	}
 
 	// 03. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
@@ -1666,6 +1863,12 @@ func (s *yorkieServer) RemoveDocument(
 	if err != nil {
 		return nil, err
 	}
+
+	// 04. Removing the document detaches the client from it, so the same
+	// cached-row correction the detach path needs applies here, and for the
+	// same reason it sits directly after the write rather than after the
+	// response is built.
+	clients.InvalidateCachedClient(ctx, s.backend, clientInfo.RefKey())
 
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
@@ -1682,6 +1885,11 @@ func (s *yorkieServer) CreateRevision(
 	ctx context.Context,
 	req *connect.Request[api.CreateRevisionRequest],
 ) (*connect.Response[api.CreateRevisionResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
@@ -1692,10 +1900,22 @@ func (s *yorkieServer) CreateRevision(
 		ProjectID: project.ID,
 		DocID:     docID,
 	}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
 
+	// The response carries the snapshot this call builds, so it reads the
+	// document as much as it writes one: it is gated like its siblings, with
+	// the document's key as the attribute the webhook decides on.
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.CreateRevision,
+		Method:     types.CreateRevision,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.ReadWrite),
 	}); err != nil {
+		return nil, err
+	}
+
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1713,6 +1933,40 @@ func (s *yorkieServer) CreateRevision(
 	return connect.NewResponse(&api.CreateRevisionResponse{
 		Revision: converter.ToRevisionSummary(revision),
 	}), nil
+}
+
+// confirmAttachedClient confirms against MongoDB, bypassing this node's client
+// cache, that the client is activated and holds the document attached, or is
+// in the middle of attaching it.
+//
+// The revision RPCs read and overwrite a whole document, and auth.VerifyAccess
+// is a no-op unless the project configures an auth webhook, so the client row
+// is the only thing standing between a request and another client's document.
+// A cached row is not enough for that: it is replaced only by a write this
+// node performed, so a detach or a deactivation another node wrote is
+// invisible to it. Unlike push/pull these calls are not per-sync, so the one
+// read they cost is worth paying.
+//
+// Attaching counts as holding the document, as it does on the detach and
+// remove paths: the row is written before the attach completes, and the
+// client that wrote it is the one asking here. Requiring Attached instead
+// would reject a client mid-attach, which this gate never meant to do.
+func confirmAttachedClient(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	clientID time.ActorID,
+	docID types.ID,
+) error {
+	clientInfo, err := clients.FindActiveClientInfo(ctx, be, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}, true)
+	if err != nil {
+		return err
+	}
+
+	return clientInfo.EnsureDocumentAttachedOrAttaching(docID)
 }
 
 // ListRevisions returns all revisions for the given document.
@@ -1750,10 +2004,7 @@ func (s *yorkieServer) ListRevisions(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
@@ -1797,15 +2048,16 @@ func (s *yorkieServer) GetRevision(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
-	// Get the revision with full snapshot
-	revision, err := revisions.Get(ctx, s.backend, revisionID)
+	// Get the revision with full snapshot. The revision ID arrives verbatim
+	// from the request and names a record of its own, so it has to be bound
+	// back to the document this call was authorized against: without that, any
+	// client holding read access to one document could read the snapshot of
+	// any other, in any project.
+	revision, err := revisions.GetForDoc(ctx, s.backend, docKey, revisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1848,14 +2100,13 @@ func (s *yorkieServer) RestoreRevision(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
+	if err := confirmAttachedClient(ctx, s.backend, project, clientID, docID); err != nil {
 		return nil, err
 	}
 
-	if err := revisions.Restore(ctx, s.backend, project, revisionID); err != nil {
+	// Restore the document this call was authorized against and holds the lock
+	// on, not whichever document the request's revision ID happens to name.
+	if err := revisions.Restore(ctx, s.backend, project, docKey, revisionID); err != nil {
 		return nil, err
 	}
 

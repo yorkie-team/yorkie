@@ -19,6 +19,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 
@@ -28,20 +29,35 @@ import (
 )
 
 // AuthInterceptor is an interceptor for authentication.
+//
+// The token is stored atomically for the same reason as in the client
+// package's AuthInterceptor: SetToken swaps it at runtime -- LogIn hands the
+// client a fresh one -- while requests issued from other goroutines read it,
+// and an unsynchronized swap of a string can hand a reader a torn pointer and
+// length.
 type AuthInterceptor struct {
-	token string
+	token atomic.Pointer[string]
 }
 
 // NewAuthInterceptor creates a new instance of AuthInterceptor.
 func NewAuthInterceptor(token string) *AuthInterceptor {
-	return &AuthInterceptor{
-		token: token,
-	}
+	i := &AuthInterceptor{}
+	i.token.Store(&token)
+	return i
 }
 
 // SetToken sets the token of the client.
 func (i *AuthInterceptor) SetToken(token string) {
-	i.token = token
+	i.token.Store(&token)
+}
+
+// loadToken returns the token currently carried by this interceptor, or the
+// empty token for an interceptor built outside NewAuthInterceptor.
+func (i *AuthInterceptor) loadToken() string {
+	if token := i.token.Load(); token != nil {
+		return *token
+	}
+	return ""
 }
 
 // WrapUnary creates a unary server interceptor for authorization.
@@ -50,7 +66,7 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		ctx context.Context,
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
-		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token)
+		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.loadToken())
 		if projects.HasProject(ctx) {
 			project := projects.From(ctx)
 			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
@@ -71,7 +87,7 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
 
-		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token)
+		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.loadToken())
 		if projects.HasProject(ctx) {
 			project := projects.From(ctx)
 			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)

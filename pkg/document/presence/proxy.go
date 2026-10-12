@@ -37,9 +37,11 @@ type Map = inner.Map
 type Change = inner.Change
 
 const (
-	// Put and Clear are aliases for the corresponding constants in the inner package.
+	// Put, Clear and Patch are aliases for the corresponding constants in the
+	// inner package.
 	Put   = inner.Put
 	Clear = inner.Clear
+	Patch = inner.Patch
 )
 
 // NewData creates a new instance of Data.

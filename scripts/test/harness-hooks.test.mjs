@@ -307,14 +307,7 @@ function wouldLint({ dir }) {
   const r = runHookProbe('pre-commit', {
     dir,
     marker: 'WOULD_LINT',
-    // THE TRUST GUARD IS NOT THE DECISION UNDER TEST HERE. A scratch repo has
-    // no `origin/main`, so `trusted-tree.sh` refuses on every fixture and every
-    // assertion below would measure the guard instead of the staged-Go
-    // decision. It has its own tests further down, with a real upstream ref.
-    env: {
-      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
-      YORKIE_ALLOW_FOREIGN_TREE: '1',
-    },
+    env: { PATH: `${bin}${path.delimiter}${process.env.PATH}` },
   });
   return r.stdout.includes('WOULD_LINT');
 }
@@ -332,10 +325,6 @@ function stubLinter(dir) {
 /**
  * Run one of the git hooks against a scratch repo with its `exec make …` tail
  * replaced by a marker.
- *
- * `trusted-tree.sh` is copied in beside the probe because the hooks source it
- * through `dirname "$0"` — which is what makes it travel with them into the
- * `$GIT_DIR` snapshot, and what makes it have to travel here too.
  */
 function runHookProbe(hook, { dir, marker, env = {} }) {
   const src = readFileSync(path.join(REPO, '.githooks', hook), 'utf8').replace(
@@ -344,10 +333,6 @@ function runHookProbe(hook, { dir, marker, env = {} }) {
   );
   const probe = path.join(dir, `.probe-${hook}`);
   writeFileSync(probe, src);
-  writeFileSync(
-    path.join(dir, 'trusted-tree.sh'),
-    readFileSync(path.join(REPO, '.githooks', 'trusted-tree.sh'), 'utf8'),
-  );
 
   return spawnSync('bash', [probe], {
     cwd: dir,
@@ -420,183 +405,6 @@ test('pre-commit skips a commit that stages no Go at all', () => {
     git('add', 'README.md');
     assert.equal(wouldLint({ dir }), false, 'a docs-only commit must not lint');
   });
-});
-
-/**
- * A scratch repo that looks like a clone: an `origin/main` to compare against,
- * one commit of the local identity's own work on top of it, and — when
- * `foreign` is set — one commit somebody else wrote, which is the shape
- * `gh pr checkout` produces.
- */
-function inReviewedCheckout({ foreign }, body) {
-  return inScratchRepo(({ dir, git }) => {
-    git('commit', '-qm', 'base', '--allow-empty', '--no-verify');
-    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-    git('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
-    if (foreign) {
-      git('-c', 'user.email=someone@else.example', '-c', 'user.name=Someone',
-        'commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
-    }
-    writeFileSync(path.join(dir, 'a.go'), 'package a\n');
-    git('add', 'a.go');
-    return body({ dir, git, bin: stubLinter(dir) });
-  });
-}
-
-test('pre-commit refuses to run a branch it did not write', () => {
-  // THE HOLE THE $GIT_DIR SNAPSHOT DOES NOT CLOSE. Pinning WHICH script runs
-  // says nothing about what it invokes: `make lint` resolves through the
-  // working tree's `Makefile` and its `.golangci.yml`, whose `linters.custom`
-  // can name any loadable plugin. So `gh pr checkout` plus one commit used to
-  // be arbitrary local execution — a surface these hooks introduced, since the
-  // only hook before them checked the shape of a commit message.
-  inReviewedCheckout({ foreign: true }, ({ dir, bin }) => {
-    const r = runHookProbe('pre-commit', {
-      dir,
-      marker: 'WOULD_LINT',
-      env: { PATH: `${bin}${path.delimiter}${process.env.PATH}` },
-    });
-    assert.equal(r.status, 1, `a foreign checkout must refuse: ${r.stdout}${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /WOULD_LINT/, 'the branch\'s Makefile must not be reached');
-    assert.match(r.stderr, /someone@else\.example/, 'the refusal must name whose commits these are');
-    assert.match(r.stderr, /--no-verify|YORKIE_ALLOW_FOREIGN_TREE/, 'a refusal must name its bypass');
-  });
-});
-
-test('pre-commit runs on your own branch', () => {
-  // The other half: the guard is worthless if it also refuses the everyday
-  // case, because then it gets bypassed by reflex and nothing is enforced.
-  inReviewedCheckout({ foreign: false }, ({ dir, bin }) => {
-    const r = runHookProbe('pre-commit', {
-      dir,
-      marker: 'WOULD_LINT',
-      env: { PATH: `${bin}${path.delimiter}${process.env.PATH}` },
-    });
-    assert.match(r.stdout, /WOULD_LINT/, `own work must lint: ${r.stderr}`);
-  });
-});
-
-test('pre-push refuses to run a branch it did not write', () => {
-  // `make verify` is the wider surface of the two: `go test ./...` compiles and
-  // RUNS every `_test.go` in the tree, including the branch's own `TestMain`.
-  // No file list can pin that — running the tree is what the gate is for —
-  // which is why the check is on authorship rather than on a set of paths.
-  inReviewedCheckout({ foreign: true }, ({ dir }) => {
-    const r = runHookProbe('pre-push', { dir, marker: 'WOULD_VERIFY' });
-    assert.equal(r.status, 1, `a foreign checkout must refuse: ${r.stdout}${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /WOULD_VERIFY/, "the branch's tests must not be reached");
-    assert.match(r.stderr, /someone@else\.example/);
-  });
-});
-
-test('the trust guard fails closed when it cannot tell whose work this is', () => {
-  // "I could not answer" and "it is yours" must not share an answer. A scratch
-  // repo with no `origin/main` is the never-fetched clone; the refusal has to
-  // say which one-line fix applies.
-  inScratchRepo(({ dir, git }) => {
-    git('commit', '-qm', 'only', '--allow-empty', '--no-verify');
-    writeFileSync(path.join(dir, 'a.go'), 'package a\n');
-    git('add', 'a.go');
-    const r = runHookProbe('pre-commit', {
-      dir,
-      marker: 'WOULD_LINT',
-      env: { PATH: `${stubLinter(dir)}${path.delimiter}${process.env.PATH}` },
-    });
-    assert.equal(r.status, 1, 'no upstream ref must refuse, not pass');
-    assert.match(r.stderr, /git fetch origin main/);
-  });
-});
-
-test('the trust guard is not satisfied by an author line the branch supplies', () => {
-  // THE BYPASS THIS PINS, and the reason the guard no longer rests on `%aE`.
-  // The author address is a field the branch's own author writes: one
-  // `git config user.email <the reviewer>` before committing and an
-  // authorship check calls a stranger's pull request "your own work". Every
-  // address in this repository's history is public, so the spoof needs no
-  // secret.
-  //
-  // So the fixture IS the attack — a commit authored as the local identity,
-  // FETCHED into this clone rather than created in it, which is the shape
-  // `gh pr checkout` produces. The guard has to refuse it on the evidence
-  // that survives the spoof: HEAD's reflog, which lives in `$GIT_DIR` and
-  // records which commits this git built.
-  const root = mkdtempSync(path.join(tmpdir(), 'trusted-tree-'));
-  try {
-    const upstream = path.join(root, 'upstream');
-    const dir = path.join(root, 'clone');
-    const at = (cwd) => (...args) =>
-      spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', env: fixtureGitEnv(cwd) });
-
-    mkdirSync(upstream);
-    const up = at(upstream);
-    up('init', '-q', '-b', 'main', '.');
-    up('config', 'user.email', 'test@example.com');
-    up('config', 'user.name', 'test');
-    up('config', 'commit.gpgsign', 'false');
-    up('commit', '-qm', 'base', '--allow-empty', '--no-verify');
-    up('checkout', '-qb', 'pr');
-    up('commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
-
-    // Built by fetch rather than `git clone`, because `fixtureGitEnv` pins
-    // GIT_DIR at the directory it is given and a clone has no repository to
-    // pin yet. The resulting refs are the same ones a clone would have.
-    mkdirSync(dir);
-    const git = at(dir);
-    git('init', '-q', '-b', 'main', '.');
-    git('config', 'user.email', 'test@example.com');
-    git('config', 'user.name', 'test');
-    git('config', 'commit.gpgsign', 'false');
-    git('remote', 'add', 'origin', upstream);
-    git('fetch', '-q', 'origin');
-    git('checkout', '-q', '-B', 'main', 'origin/pr');
-
-    // The premise, asserted rather than assumed: an authorship check would
-    // have waved this branch straight through.
-    assert.equal(
-      git('log', '--format=%aE', 'refs/remotes/origin/main..HEAD').stdout.trim(),
-      'test@example.com',
-      'the fixture must carry the local identity as its author, or it tests nothing',
-    );
-
-    const r = runHookProbe('pre-push', { dir, marker: 'WOULD_VERIFY' });
-    assert.equal(r.status, 1, `a spoofed author must still refuse: ${r.stdout}${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /WOULD_VERIFY/, "the branch's tests must not be reached");
-    assert.match(r.stderr, /not created by this clone/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('the trust guard refuses a commit carrying no author address at all', () => {
-  // The cheaper half of the same bypass, needing no address to forge. Git
-  // accepts `--author='A U Thor <>'` and `%aE` prints an empty line for it.
-  // The earlier check filtered the author list with `grep -vFx "$me"`, which
-  // KEPT that blank line (it is not equal to `$me`); the caller's `$(...)`
-  // then stripped it to the empty string, and empty read as "no foreign
-  // commits".
-  inScratchRepo(({ dir, git }) => {
-    git('commit', '-qm', 'base', '--allow-empty', '--no-verify');
-    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-    git('commit', '-qm', 'blank', '--allow-empty', '--no-verify', '--author=A U Thor <>');
-
-    const r = runHookProbe('pre-push', { dir, marker: 'WOULD_VERIFY' });
-    assert.equal(r.status, 1, `an empty author address must refuse: ${r.stdout}${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /WOULD_VERIFY/);
-    assert.match(r.stderr, /no author address/);
-  });
-});
-
-test('both git hooks still consult the trust guard', () => {
-  // Structural, because dropping the two lines is a silent change: the hooks
-  // keep working, they just start running unread branches again.
-  for (const hook of ['pre-commit', 'pre-push']) {
-    const src = readFileSync(path.join(REPO, '.githooks', hook), 'utf8');
-    assert.match(src, /trusted-tree\.sh/, `${hook} no longer sources the trust guard`);
-    const guard = src.indexOf('yorkie_require_own_work');
-    const run = src.search(/^exec make (lint|verify)$/m);
-    assert.ok(guard > 0, `${hook} no longer calls the trust guard`);
-    assert.ok(guard < run, `${hook} runs make before checking whose tree it is`);
-  }
 });
 
 test('a clone path with a space stays one argument, and stays idempotent', () => {
@@ -679,8 +487,8 @@ function inScratchClone(body) {
  *
  * Stubs rather than markers: `make` echoes what it was asked to run, and
  * `golangci-lint` exists so pre-commit's missing-linter refusal is not the
- * answer being measured. The hook and `trusted-tree.sh` are copied side by
- * side, outside the checkout, as `setup.sh` lays them out.
+ * answer being measured. The hook is copied outside the checkout so the
+ * scratch tree carries nothing but what the case planted.
  */
 function runHookIn(hook, dir, env) {
   const bin = path.join(dir, '..', 'probe-bin');
@@ -694,9 +502,7 @@ function runHookIn(hook, dir, env) {
   }
   const hooks = path.join(dir, '..', 'probe-hooks');
   mkdirSync(hooks, { recursive: true });
-  for (const f of [hook, 'trusted-tree.sh']) {
-    writeFileSync(path.join(hooks, f), readFileSync(path.join(REPO, '.githooks', f)));
-  }
+  writeFileSync(path.join(hooks, hook), readFileSync(path.join(REPO, '.githooks', hook)));
   return spawnSync('bash', [path.join(hooks, hook)], {
     cwd: dir,
     encoding: 'utf8',
@@ -710,7 +516,6 @@ function plantSetup({ upstream, clone, at }) {
     '.githooks/commit-msg',
     '.githooks/pre-commit',
     '.githooks/pre-push',
-    '.githooks/trusted-tree.sh',
     'scripts/setup.sh',
     'scripts/direct-run.mjs',
     ...HOOK_WIRING.map(({ script }) => `scripts/hooks/${script}`),
@@ -727,41 +532,52 @@ function plantSetup({ upstream, clone, at }) {
   at(clone)('reset', '-q', '--hard', 'origin/main');
 }
 
-function runSetup(cwd, env) {
-  return spawnSync('bash', [path.join(cwd, 'scripts', 'setup.sh')], {
+function runSetup(cwd, env, args = []) {
+  // `--check` is silent under CI, and the Docs workflow that runs this suite
+  // sets CI; every case here is about a developer's clone.
+  const { CI: _ci, ...local } = env;
+  return spawnSync('bash', [path.join(cwd, 'scripts', 'setup.sh'), ...args], {
     cwd,
     encoding: 'utf8',
-    env,
+    env: local,
   });
 }
 
-test('setup.sh installs git hooks from a snapshot, not from the worktree', () => {
-  // THE PROPERTY, and it is the same one install.mjs exists for. Pointing
-  // `core.hooksPath` at the tracked `.githooks/` makes every hook
-  // branch-controlled: a pull request rewrites `pre-commit`, a reviewer checks
-  // the branch out and commits, and it runs — reaching the branch's Makefile
-  // and Go test code through `make lint` / `make verify`. Run for real in a
-  // scratch clone rather than read out of the script's text.
+/** Wire `clone` the way setup.sh did before 2026-10: a `$GIT_DIR` snapshot. */
+function wireLegacySnapshot({ clone, at }) {
+  const legacy = path.join(clone, '.git', 'githooks');
+  mkdirSync(legacy, { recursive: true });
+  writeFileSync(path.join(legacy, 'pre-commit'), '#!/usr/bin/env bash\nexit 1\n');
+  at(clone)('config', 'core.hooksPath', legacy);
+  return legacy;
+}
+
+/** Where git will look for hooks when run in `cwd`, as an absolute path. */
+function hooksDir(at, cwd) {
+  return path.resolve(cwd, at(cwd)('rev-parse', '--git-path', 'hooks').stdout.trim());
+}
+
+test('setup.sh points core.hooksPath at the tracked .githooks', () => {
+  // The wafflebase model: no snapshot to go stale, and a hook change reaches
+  // the clone on the next checkout. Run for real in a scratch clone rather
+  // than read out of the script's text.
   inScratchClone((ctx) => {
     const { clone, at, env } = ctx;
     plantSetup(ctx);
     const r = runSetup(clone, env);
     assert.equal(r.status, 0, r.stderr);
-    const hooksPath = at(clone)('config', '--get', 'core.hooksPath').stdout.trim();
-    assert.equal(hooksPath, path.join(clone, '.git', 'githooks'));
-    // The sourced helper travels with the hooks, or both gates fail to start.
-    statSync(path.join(hooksPath, 'trusted-tree.sh'));
-    accessSync(path.join(hooksPath, 'pre-push'), constants.X_OK);
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '.githooks');
+    assert.equal(hooksDir(at, clone), path.join(clone, '.githooks'));
+    accessSync(path.join(hooksDir(at, clone), 'pre-push'), constants.X_OK);
     statSync(path.join(clone, '.claude', 'settings.local.json'));
   });
 });
 
-test('setup.sh in a worktree installs into the shared git dir', () => {
-  // `--absolute-git-dir` in a linked worktree is `.git/worktrees/<name>`,
-  // while `core.hooksPath` is shared config. Snapshotting there meant that
-  // removing the worktree deleted the hooks every checkout of the clone was
-  // pointed at — and git runs no hooks at all from a path that does not exist,
-  // so nothing said so.
+test('setup.sh in a worktree wires every worktree to its own .githooks', () => {
+  // `core.hooksPath` is shared config, and relative, so each worktree resolves
+  // it against its own top level. Removing the worktree setup ran in must not
+  // leave the clone without hooks — the failure the old per-worktree snapshot
+  // had.
   inScratchClone((ctx) => {
     const { root, clone, at, env } = ctx;
     plantSetup(ctx);
@@ -770,20 +586,18 @@ test('setup.sh in a worktree installs into the shared git dir', () => {
 
     const r = runSetup(wt, env);
     assert.equal(r.status, 0, r.stderr);
-    const hooksPath = at(clone)('config', '--get', 'core.hooksPath').stdout.trim();
-    assert.doesNotMatch(hooksPath, /worktrees/, 'git hooks snapshotted per worktree');
-    // install.mjs had the same bug for the Claude Code hooks.
+    assert.equal(hooksDir(at, wt), path.join(wt, '.githooks'));
+    // install.mjs snapshots the Claude Code hooks into the common git dir.
     const settings = readFileSync(path.join(wt, '.claude', 'settings.local.json'), 'utf8');
     assert.doesNotMatch(settings, /worktrees/, 'Claude hooks snapshotted per worktree');
 
     at(clone)('worktree', 'remove', '--force', wt);
-    statSync(path.join(hooksPath, 'pre-push')); // still there
+    assert.equal(hooksDir(at, clone), path.join(clone, '.githooks'));
+    statSync(path.join(hooksDir(at, clone), 'pre-push'));
   });
 });
 
-test('pre-push runs on your own branch, and reaches make verify', () => {
-  // The baseline every trust-guard case below is measured against: a clone,
-  // one commit of your own, the real hook, and `make` reached.
+test('pre-push reaches make verify', () => {
   inScratchClone(({ clone, at, env }) => {
     at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
     const r = runHookIn('pre-push', clone, env);
@@ -792,7 +606,7 @@ test('pre-push runs on your own branch, and reaches make verify', () => {
   });
 });
 
-test('pre-commit runs on your own branch, and reaches make lint', () => {
+test('pre-commit reaches make lint', () => {
   inScratchClone(({ clone, at, env }) => {
     at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
     writeFileSync(path.join(clone, 'a.go'), 'package a\n');
@@ -803,131 +617,21 @@ test('pre-commit runs on your own branch, and reaches make lint', () => {
   });
 });
 
-/** Your own commit on top of origin/main, with upstream moved on since. */
-function withDivergedUpstream({ upstream, clone, at }) {
-  at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
-  at(upstream)('commit', '-qm', 'upstream moved', '--allow-empty', '--no-verify');
-}
-
-test('the trust guard accepts your own commits after git pull --rebase', () => {
-  // `git pull --rebase` logs its picks as `pull --rebase ... (pick): ...`, so
-  // an action list that knows only `rebase` refused the everyday way of
-  // staying current — and a guard that refuses the everyday case gets
-  // bypassed by reflex.
-  inScratchClone((ctx) => {
-    const { clone, at, env } = ctx;
-    withDivergedUpstream(ctx);
-    const pulled = at(clone)('pull', '-q', '--rebase', 'origin', 'main');
-    assert.equal(pulled.status, 0, pulled.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 0, r.stderr);
-  });
-});
-
-test('the trust guard accepts your own merge made by git pull', () => {
-  // A pull merge logs `pull ...: Merge made by ...`, which the first-word
-  // match did not know.
-  inScratchClone((ctx) => {
-    const { clone, at, env } = ctx;
-    withDivergedUpstream(ctx);
-    const pulled = at(clone)('pull', '-q', '--no-rebase', '--no-edit', 'origin', 'main');
-    assert.equal(pulled.status, 0, pulled.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 0, r.stderr);
-  });
-});
-
-test('the trust guard accepts your own amended commit', () => {
-  // Every reflog form the header claims to accept needs its own case. awk
-  // splits `commit (amend):` into `commit` and `(amend):`, and a form of
-  // yorkie-js-sdk's copy of this guard refused your own amend for exactly that
-  // reason while its plain-`commit` tests stayed green.
-  inScratchClone(({ clone, at, env }) => {
-    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
-    const amended = at(clone)('commit', '-q', '--amend', '-m', 'mine, amended', '--allow-empty', '--no-verify');
-    assert.equal(amended.status, 0, amended.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 0, r.stderr);
-  });
-});
-
-test('the trust guard accepts a merge you concluded with git commit', () => {
-  // `merge --no-commit` (or a conflicted merge) concluded by `git commit`
-  // logs `commit (merge): ...`.
-  inScratchClone((ctx) => {
-    const { clone, at, env } = ctx;
-    withDivergedUpstream(ctx);
+test('the gates run on a branch carrying commits somebody else wrote', () => {
+  // THE DECISION THIS PINS. A trust guard used to refuse here, and an
+  // agent-loop branch always carries bot commits, so every maintainer commit
+  // and push on one needed an override. The gates now run whatever is
+  // checked out, as `make verify` typed by hand would.
+  inScratchClone(({ upstream, clone, at, env }) => {
+    at(upstream)('checkout', '-qb', 'pr');
+    at(upstream)('-c', 'user.email=bot@example.com', 'commit', '-qm', 'theirs',
+      '--allow-empty', '--no-verify');
     at(clone)('fetch', '-q', 'origin');
-    const merged = at(clone)('merge', '-q', '--no-commit', '--no-ff', 'origin/main');
-    assert.equal(merged.status, 0, merged.stderr);
-    const done = at(clone)('commit', '-q', '--no-edit', '--no-verify');
-    assert.equal(done.status, 0, done.stderr);
-    assert.match(at(clone)('reflog', '-1', '--format=%gs').stdout, /^commit \(merge\):/);
+    at(clone)('checkout', '-qb', 'review', 'origin/pr');
+    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
     const r = runHookIn('pre-push', clone, env);
     assert.equal(r.status, 0, r.stderr);
-  });
-});
-
-/**
- * An upstream `pr` branch with one commit somebody else wrote, fetched.
- *
- * AUTHORED AS THE LOCAL IDENTITY, which is the spoof the reflog exists to
- * survive: a stranger sets `user.email` to yours before committing. With a
- * different address the author check refuses anyway and a reflog that wrongly
- * calls the commit "created" goes unnoticed; with yours, the reflog is the
- * only thing standing between the branch and `make`.
- */
-function withForeignPr({ upstream, clone, at }) {
-  at(upstream)('checkout', '-qb', 'pr');
-  at(upstream)('commit', '-qm', 'theirs', '--allow-empty', '--no-verify');
-  at(upstream)('checkout', '-q', 'main');
-  at(clone)('fetch', '-q', 'origin');
-}
-
-test('the trust guard refuses a rebase that only fast-forwards onto a PR', () => {
-  // `rebase (finish)` names the commit HEAD lands on, which after a rebase
-  // with nothing to replay is somebody else's. Only the steps that write a
-  // commit (pick, reword, ...) are evidence that this clone wrote it.
-  inScratchClone((ctx) => {
-    const { clone, at, env } = ctx;
-    withForeignPr(ctx);
-    const rebased = at(clone)('rebase', '-q', 'origin/pr');
-    assert.equal(rebased.status, 0, rebased.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 1, `a fast-forward onto a PR must refuse: ${r.stdout}`);
-    assert.doesNotMatch(r.stdout, /RAN make/);
-    assert.match(r.stderr, /not created by this clone/);
-  });
-});
-
-test('the trust guard refuses commits reached by cherry-pick --ff', () => {
-  // `cherry-pick --ff` logs `cherry-pick: fast-forward` against the foreign
-  // OID, unchanged — lowercase, so a case-sensitive `Fast-forward` skip missed
-  // it and the `cherry-pick` action counted it as written here.
-  inScratchClone((ctx) => {
-    const { clone, at, env } = ctx;
-    withForeignPr(ctx);
-    const picked = at(clone)('cherry-pick', '--ff', 'origin/pr');
-    assert.equal(picked.status, 0, picked.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 1, `a fast-forwarded pick must refuse: ${r.stdout}`);
-    assert.doesNotMatch(r.stdout, /RAN make/);
-    assert.match(r.stderr, /not created by this clone/);
-  });
-});
-
-test('the trust guard accepts a branch committed in another worktree', () => {
-  // HEAD's reflog is per worktree; the branch's reflog is shared by every
-  // worktree of the clone. A branch written in a worktree and then checked
-  // out in the main checkout is still yours.
-  inScratchClone(({ root, clone, at, env }) => {
-    const wt = path.join(root, 'wt');
-    at(clone)('worktree', 'add', '-q', '-b', 'topic', wt, 'origin/main');
-    at(wt)('commit', '-qm', 'mine in a worktree', '--allow-empty', '--no-verify');
-    at(clone)('worktree', 'remove', wt);
-    at(clone)('checkout', '-q', 'topic');
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /RAN make verify/);
   });
 });
 
@@ -945,24 +649,6 @@ function asStaleFork({ root, upstream, clone, at }) {
   at(clone)('fetch', '-q', 'upstream');
 }
 
-test('the trust guard accepts a fork branch rebased onto upstream/main', () => {
-  // CONTRIBUTING.md has contributors fork: `origin` is their fork, whose
-  // `main` usually lags. Rebasing onto `upstream/main` brings in upstream
-  // commits this clone did not create, and with `origin/main` as the only
-  // trusted base every one of them read as foreign.
-  inScratchClone((ctx) => {
-    const { upstream, clone, at, env } = ctx;
-    at(upstream)('commit', '-qm', 'upstream moved', '--allow-empty', '--no-verify');
-    asStaleFork(ctx);
-    at(clone)('checkout', '-qb', 'topic', 'origin/main');
-    at(clone)('commit', '-qm', 'mine', '--allow-empty', '--no-verify');
-    const rebased = at(clone)('rebase', '-q', 'upstream/main');
-    assert.equal(rebased.status, 0, rebased.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 0, r.stderr);
-  });
-});
-
 test('setup.sh compares against upstream/main in a fork', () => {
   // The same stale fork, one layer up: compared against the fork's `main`,
   // current hook sources read as a local edit and setup refused to install
@@ -977,56 +663,111 @@ test('setup.sh compares against upstream/main in a fork', () => {
   });
 });
 
-test("the author check ignores the branch's own .mailmap", () => {
-  // `%aE` applies `.mailmap`, a tracked file the branch supplies, so a branch
-  // could map its author onto yours. Once you rewrite it locally (rebase,
-  // amend) the commits count as created and only the author check is left.
-  inScratchClone(({ upstream, clone, at, env }) => {
-    at(upstream)('checkout', '-qb', 'pr');
-    writeFileSync(path.join(upstream, '.mailmap'), 'test <test@example.com> <someone@else.example>\n');
-    at(upstream)('add', '.mailmap');
-    at(upstream)('-c', 'user.email=someone@else.example', 'commit', '-qm', 'theirs', '--no-verify');
-    at(clone)('fetch', '-q', 'origin');
-    at(clone)('checkout', '-qb', 'review', 'origin/pr');
-    // A local rewrite that keeps the author: now "created here".
-    const rebased = at(clone)('rebase', '-q', '-f', 'origin/main');
-    assert.equal(rebased.status, 0, rebased.stderr);
-    const r = runHookIn('pre-push', clone, env);
-    assert.equal(r.status, 1, `a mailmapped author must refuse: ${r.stdout}`);
-    assert.doesNotMatch(r.stdout, /RAN make/);
-    assert.match(r.stderr, /someone@else\.example/);
-  });
-});
-
-test('setup.sh refuses hook sources that differ from origin/main', () => {
-  // The re-run inside a reviewed branch is the vector the snapshot does not
-  // cover by itself: it would persist that branch's hooks.
+test('setup.sh refuses Claude Code hook sources that differ from origin/main', () => {
+  // The re-run inside a reviewed branch would persist that branch's
+  // `scripts/hooks/*.sh` as the clone's Claude Code hooks. The git hooks are
+  // read live from the worktree, so they are enabled before the refusal and
+  // a change to them is not one.
   inScratchClone((ctx) => {
     const { clone, at, env } = ctx;
     plantSetup(ctx);
     writeFileSync(path.join(clone, '.githooks', 'pre-push'), '#!/usr/bin/env bash\nexit 0\n');
+    assert.equal(runSetup(clone, env).status, 0, 'a .githooks change must not refuse');
+    rmSync(path.join(clone, '.claude'), { recursive: true, force: true });
+
+    writeFileSync(path.join(clone, 'scripts', 'hooks', 'session-prime.sh'), '#!/usr/bin/env bash\n');
+    // A refused run changes nothing — not the wiring, not the legacy copy.
+    const legacy = wireLegacySnapshot(ctx);
     const r = runSetup(clone, env);
     assert.equal(r.status, 1);
     assert.match(r.stderr, /YORKIE_ALLOW_LOCAL_HOOKS=1/);
-    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '');
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), legacy);
+    assert.equal(existsSync(legacy), true, 'a refused run must delete nothing');
+    assert.equal(existsSync(path.join(clone, '.claude', 'settings.local.json')), false);
 
     const forced = runSetup(clone, { ...env, YORKIE_ALLOW_LOCAL_HOOKS: '1' });
     assert.equal(forced.status, 0, forced.stderr);
   });
 });
 
-test('setup.sh refuses an untracked hook it would install', () => {
-  // `git diff` ignores untracked files, but `cp .githooks/*` copies them: a
-  // new `post-checkout` dropped into the worktree became a permanent hook of
-  // the clone without the comparison ever seeing it.
+test('a real git commit on a bot-authored branch runs the hooks and lands', () => {
+  // Through git's own hook dispatch, not `bash <hook>`: setup.sh wires the
+  // clone, and `git commit` has to find `.githooks/pre-commit` by itself.
+  inScratchClone((ctx) => {
+    const { root, upstream, clone, at, env } = ctx;
+    plantSetup(ctx);
+    at(upstream)('-c', 'user.email=bot@example.com', '-c', 'user.name=bot',
+      'commit', '-qm', 'Bot commit', '--allow-empty', '--no-verify');
+    at(clone)('fetch', '-q', 'origin');
+    at(clone)('reset', '-q', '--hard', 'origin/main');
+    assert.equal(runSetup(clone, env).status, 0);
+
+    const bin = path.join(root, 'bin');
+    const marker = path.join(root, 'make-ran');
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, 'make'), `#!/usr/bin/env bash\necho "$*" >> '${marker}'\n`);
+    writeFileSync(path.join(bin, 'golangci-lint'), '#!/usr/bin/env bash\nexit 0\n');
+    chmodSync(path.join(bin, 'make'), 0o755);
+    chmodSync(path.join(bin, 'golangci-lint'), 0o755);
+
+    writeFileSync(path.join(clone, 'a.go'), 'package a\n');
+    at(clone)('add', 'a.go');
+    const r = spawnSync('git', ['-C', clone, 'commit', '-qm', 'Add a'], {
+      encoding: 'utf8',
+      env: { ...env, PATH: `${bin}${path.delimiter}${env.PATH}` },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(marker, 'utf8').trim(), 'lint', 'pre-commit did not reach make');
+    assert.equal(at(clone)('log', '-1', '--format=%s').stdout.trim(), 'Add a');
+  });
+});
+
+test('setup.sh --check names what is wrong, and never fails', () => {
   inScratchClone((ctx) => {
     const { clone, at, env } = ctx;
     plantSetup(ctx);
-    const extra = path.join(clone, '.githooks', 'post-checkout');
-    writeFileSync(extra, '#!/usr/bin/env bash\nexit 0\n');
-    chmodSync(extra, 0o755);
+
+    const unset = runSetup(clone, env, ['--check']);
+    assert.equal(unset.status, 0);
+    assert.match(unset.stderr, /not installed.*unset/);
+
+    wireLegacySnapshot(ctx);
+    const legacy = runSetup(clone, env, ['--check']);
+    assert.equal(legacy.status, 0);
+    assert.match(legacy.stderr, /legacy hook snapshot/);
+    assert.match(legacy.stderr, /trusted-tree guard/);
+    assert.match(legacy.stderr, /bash scripts\/setup\.sh/);
+
+    at(clone)('config', 'core.hooksPath', '.githooks');
+    const ok = runSetup(clone, env, ['--check']);
+    assert.equal(ok.status, 0);
+    assert.equal(ok.stderr, '', 'a correctly wired clone must hear nothing');
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '.githooks');
+  });
+});
+
+test('make lint runs the hook check without letting it fail the target', () => {
+  const mk = readFileSync(path.join(REPO, 'Makefile'), 'utf8');
+  const recipe = mk.slice(mk.search(/^lint:/m)).split(/\n(?!\t)/)[0];
+  assert.match(recipe, /scripts\/setup\.sh --check \|\| true/);
+});
+
+test('setup.sh removes the legacy snapshot only when the clone points at it', () => {
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    const legacy = wireLegacySnapshot(ctx);
     const r = runSetup(clone, env);
-    assert.equal(r.status, 1, `an untracked hook must refuse: ${r.stdout}`);
-    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '');
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(existsSync(legacy), false, 'the legacy snapshot must go');
+    assert.equal(at(clone)('config', '--get', 'core.hooksPath').stdout.trim(), '.githooks');
+  });
+  inScratchClone((ctx) => {
+    const { clone, at, env } = ctx;
+    plantSetup(ctx);
+    const legacy = wireLegacySnapshot(ctx);
+    at(clone)('config', '--unset', 'core.hooksPath');
+    assert.equal(runSetup(clone, env).status, 0);
+    assert.equal(existsSync(legacy), true, 'a directory nothing points at is not ours');
   });
 });

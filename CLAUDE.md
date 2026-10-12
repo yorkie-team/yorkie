@@ -60,6 +60,10 @@ not `\n` inside `"..."`.
   run golangci-lint through `make lint`, not bare, or the tagged files go
   unchecked. For VSCode/gopls to index those files, set
   `gopls.build.buildFlags` per `CONTRIBUTING.md`.
+- Run the gate through `make`, not bare `go`/`golangci-lint`: on a newer
+  local Go minor than `go.mod`'s, the Makefile exports `GOTOOLCHAIN` to
+  that version, without which lint can't read export data and `go fix`
+  finds rewrites CI doesn't. No `GOTOOLCHAIN=` prefix is needed.
 - Apache 2.0 license header required on every Go file.
 - Follow [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md);
   every package needs a package comment (`// Package xxx provides…`).

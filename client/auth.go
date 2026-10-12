@@ -18,6 +18,7 @@ package client
 
 import (
 	"context"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 
@@ -26,22 +27,40 @@ import (
 )
 
 // AuthInterceptor is an interceptor for authentication.
+//
+// The token is swapped at runtime -- the auth-webhook flow hands the client a
+// fresh one through Client.SetToken -- while the interceptors below read it
+// from goroutines that never wrote it: the sync loop and every watch stream
+// reader issue requests of their own. A plain string field is a two-word
+// header, so an unsynchronized swap can hand such a reader a torn pointer and
+// length as readily as a stale token. It is therefore stored atomically; apiKey
+// is fixed at construction and needs no such treatment.
 type AuthInterceptor struct {
 	apiKey string
-	token  string
+	token  atomic.Pointer[string]
 }
 
 // NewAuthInterceptor creates a new instance of AuthInterceptor.
 func NewAuthInterceptor(apiKey, token string) *AuthInterceptor {
-	return &AuthInterceptor{
-		apiKey: apiKey,
-		token:  token,
-	}
+	i := &AuthInterceptor{apiKey: apiKey}
+	i.token.Store(&token)
+	return i
 }
 
 // SetToken sets the token.
 func (i *AuthInterceptor) SetToken(token string) {
-	i.token = token
+	i.token.Store(&token)
+}
+
+// loadToken returns the token currently carried by this interceptor. The zero
+// value of the pointer is nil, which an interceptor built outside
+// NewAuthInterceptor carries, so it reads as the empty token rather than
+// panicking on the header path.
+func (i *AuthInterceptor) loadToken() string {
+	if token := i.token.Load(); token != nil {
+		return *token
+	}
+	return ""
 }
 
 // WrapUnary creates a unary server interceptor for authorization.
@@ -51,7 +70,7 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
 		req.Header().Add(types.APIKeyKey, i.apiKey)
-		req.Header().Add(types.AuthorizationKey, i.token)
+		req.Header().Add(types.AuthorizationKey, i.loadToken())
 		req.Header().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 
 		return next(ctx, req)
@@ -66,7 +85,7 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
 		conn.RequestHeader().Set(types.APIKeyKey, i.apiKey)
-		conn.RequestHeader().Set(types.AuthorizationKey, i.token)
+		conn.RequestHeader().Set(types.AuthorizationKey, i.loadToken())
 		conn.RequestHeader().Set(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 		return conn
 	}
