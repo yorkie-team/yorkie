@@ -22,7 +22,10 @@ RPC:
     # GitHubClientID is GitHub OAuth Client ID.
     GitHubClientID: ""
 
-    # GitHubClientSecret is GitHub OAuth Client Secret.
+    # GitHubClientSecret is GitHub OAuth Client Secret. Outside a config file
+    # it can be given as YORKIE_AUTH_GITHUB_CLIENT_SECRET instead of
+    # --auth-github-client-secret, which keeps it out of /proc/<pid>/cmdline
+    # and the pprof cmdline endpoint.
     GitHubClientSecret: ""
 
     # GitHubRedirectURL is GitHub OAuth callback URL.

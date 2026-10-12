@@ -123,18 +123,19 @@ simply stops carrying `secret-key`.
 ### Where the credentials live
 
 The chart puts the signing key, the MongoDB connection URI (which carries the
-database password) and `yorkie.args.clusterSecret` in a Secret named
-`<yorkie.name>-credentials`, and the Deployment reads them as the environment
-variables `YORKIE_BACKEND_SECRET_KEY`, `YORKIE_MONGO_CONNECTION_URI` and
-`YORKIE_CLUSTER_SECRET`. None of them is passed as a command-line argument:
-arguments are readable in `/proc/<pid>/cmdline` and in
-`kubectl get pod -o yaml`, so an argument would hand every credential to
-anyone who can read a pod or get a shell in the namespace. The server also
-refuses the pprof `/debug/pprof/cmdline` endpoint, which used to publish the
-same arguments to anyone who could reach the profiling port this chart
-enables; it now answers `404 Unknown profile`. The server reads each of those
-variables when the matching flag is unset, so the same approach works outside
-Helm.
+database password), `yorkie.args.clusterSecret` and
+`yorkie.args.githubClientSecret` in a Secret named `<yorkie.name>-credentials`,
+and the Deployment reads them as the environment variables
+`YORKIE_BACKEND_SECRET_KEY`, `YORKIE_MONGO_CONNECTION_URI`,
+`YORKIE_CLUSTER_SECRET` and `YORKIE_AUTH_GITHUB_CLIENT_SECRET`. None of them is
+passed as a command-line argument: arguments are readable in
+`/proc/<pid>/cmdline` and in `kubectl get pod -o yaml`, so an argument would
+hand every credential to anyone who can read a pod or get a shell in the
+namespace. The server also refuses the pprof `/debug/pprof/cmdline` endpoint,
+which used to publish the same arguments to anyone who could reach the
+profiling port this chart enables; it now answers `404 Unknown profile`. The
+server reads each of those variables when the matching flag is unset, so the
+same approach works outside Helm.
 
 ### Rotating the key
 
