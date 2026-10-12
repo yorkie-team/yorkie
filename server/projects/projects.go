@@ -78,9 +78,19 @@ func ListProjects(
 		projectMap[info.ID] = info.ToProject()
 	}
 	for _, info := range memberInfos {
-		if _, exists := projectMap[info.ID]; !exists {
-			projectMap[info.ID] = info.ToProject()
+		if _, exists := projectMap[info.ID]; exists {
+			continue
 		}
+
+		// NOTE(hackerwins): ListProjectInfosByMember drops the membership row,
+		// so the role has to be read back to decide whether this user may see
+		// the project's secret key. The owned list above needs no such lookup:
+		// being in it is the owner role.
+		member, err := be.DB.FindMemberInfo(ctx, info.ID, owner)
+		if err != nil {
+			return nil, err
+		}
+		projectMap[info.ID] = redactForRole(info.ToProject(), member.Role)
 	}
 
 	var projects []*types.Project
@@ -112,7 +122,22 @@ func ProjectAndRole(
 		return nil, "", err
 	}
 
-	return info.ToProject(), role, nil
+	return redactForRole(info.ToProject(), role), role, nil
+}
+
+// redactForRole clears the project's secret key unless the role is at least
+// Admin.
+//
+// The key authenticates the project-scoped admin procedures, which have no
+// user in their context and so authorize on the key alone. Handing it to a
+// member would let that member act with the authority of an owner, so it is
+// stripped before the project leaves the lookup that resolved the role.
+func redactForRole(project *types.Project, role database.MemberRole) *types.Project {
+	if role.IsAtLeast(database.Admin) {
+		return project
+	}
+
+	return project.WithoutSecretKey()
 }
 
 // UpdateProject updates a project.

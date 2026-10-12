@@ -129,6 +129,17 @@ type Project struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// WithoutSecretKey returns a copy of the project with the secret key cleared.
+//
+// The secret key is the whole credential of the project-scoped admin
+// procedures, so it carries the authority of a project admin. A caller that
+// may read the project but not act as its admin must not receive it.
+func (p *Project) WithoutSecretKey() *Project {
+	redacted := *p
+	redacted.SecretKey = ""
+	return &redacted
+}
+
 // RequireAuth returns whether the given method requires authorization.
 // It supports backward compatibility: the new Watch method matches projects
 // configured with "Watch", "WatchDocument", or "WatchChannel". The deprecated
