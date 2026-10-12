@@ -210,7 +210,7 @@ func New(
 
 	dbInfo := "memory"
 	if mongoConf != nil {
-		dbInfo = mongoConf.ConnectionURI
+		dbInfo = mongoConf.RedactedConnectionURI()
 	}
 	logging.DefaultLogger().Infof("backend created: db: %s", dbInfo)
 
