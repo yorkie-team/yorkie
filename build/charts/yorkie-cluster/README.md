@@ -55,30 +55,30 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ## MongoDB Credentials (Required)
 
-⚠️ **SECURITY NOTICE**: This chart requires MongoDB credentials to be provided at installation time. Passwords are NOT hardcoded for security reasons.
-
-### For Development (Minikube):
-
-```bash
-# Uses pre-configured development credentials (clearly marked as dev-only)
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
-  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)"
-```
-
-### For Production:
-
-**Use --set flags (Recommended)**
+When the chart deploys MongoDB (`mongodb.enabled`, the default), it needs the
+passwords of the three MongoDB users it creates:
+`mongodb.credentials.databaseAdmin.password`, `userAdmin.password` and
+`clusterAdmin.password`. None of them has a default, so the chart refuses to
+render while any of them is empty, on Minikube as anywhere else. Generate them
+once and keep them, as with the signing key below, because every later
+`helm upgrade` has to pass the **same** values:
 
 ```bash
-# Generate strong random passwords
+# Generate once, keep them:
+MONGO_DB_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+MONGO_USER_ADMIN_PASSWORD="$(openssl rand -base64 32)"
+MONGO_CLUSTER_ADMIN_PASSWORD="$(openssl rand -base64 32)"
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
   --set yorkie.args.clusterSecret="$(openssl rand -base64 24)" \
-  --set mongodb.credentials.databaseAdmin.password="$(openssl rand -base64 32)" \
-  --set mongodb.credentials.userAdmin.password="$(openssl rand -base64 32)" \
-  --set mongodb.credentials.clusterAdmin.password="$(openssl rand -base64 32)"
+  --set mongodb.credentials.databaseAdmin.password="$MONGO_DB_ADMIN_PASSWORD" \
+  --set mongodb.credentials.userAdmin.password="$MONGO_USER_ADMIN_PASSWORD" \
+  --set mongodb.credentials.clusterAdmin.password="$MONGO_CLUSTER_ADMIN_PASSWORD"
 ```
+
+With an external MongoDB (`mongodb.enabled=false`) the chart creates no users
+and needs none of these; the password goes in `yorkie.args.dbConnectionUri`
+instead.
 
 ## Admin Token Signing Key (Required)
 
@@ -282,13 +282,11 @@ key](#rotating-the-key) for the deliberate path. A new cluster secret makes
 calls between old and new pods fail until the rollout completes.
 
 Pass the MongoDB passwords too, whenever the chart deploys MongoDB
-(`mongodb.enabled`, the default). Unlike the two secrets above, these have
-defaults — `admin`, `useradmin` and `clusteradmin`, published in this chart's
-`values.yaml` — so an upgrade that omits them does not fail to render. It
-rewrites the `mongodb-users` Secret, which is the Percona cluster's
-`secrets.users`, with those public values, handing the database to anyone who
-can reach it. Read them back from the Secret, as below, or keep them in a
-values file:
+(`mongodb.enabled`, the default). Like the two secrets above they have no
+defaults, so an upgrade that omits them fails to render. They are written to
+the `mongodb-users` Secret, which is the Percona cluster's `secrets.users`, so
+pass the values the release already uses rather than new ones. Read them back
+from the Secret, as below, or keep them in a values file:
 
 ```bash
 # Read back the MongoDB passwords the release is using:
@@ -348,6 +346,17 @@ instead.
 > document, so pick a fresh value rather than looking for an old one; the
 > rollout it starts leaves calls between old and new pods failing until it
 > completes.
+
+> [!IMPORTANT]
+> **Upgrading a release installed before the MongoDB passwords were
+> required.** An upgrade that passes none of the three passwords, including a
+> `--reuse-values` upgrade of a release that never set them, now fails to
+> render. Read them back from `mongodb-users` as above and pass them on this and
+> every later upgrade. A release that never set them still uses the defaults
+> this chart used to ship — `admin`, `useradmin` and `clusteradmin`, published
+> in Yorkie's source — so anyone who can reach its database can log in as the
+> admin. Pass generated values instead, then restart the Yorkie Deployment so it
+> picks up the new connection URI.
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
 Consult also the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions).
