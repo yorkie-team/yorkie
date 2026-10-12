@@ -2029,9 +2029,18 @@ func (t *Tree) Edit(
 	deletePairCount := len(pairs)
 
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
-	if err := t.mergeNodes(
+	// A child a forged lineage would have moved under itself is tombstoned
+	// rather than moved, so those pairs are registered even on the error path.
+	stranded, err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, editedAt,
-	); err != nil {
+	)
+	for _, node := range stranded {
+		pairs = append(pairs, GCPair{
+			Parent: t,
+			Child:  node,
+		})
+	}
+	if err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
 
@@ -2161,6 +2170,19 @@ func (t *Tree) Edit(
 	// exactly the contribution JS's post-edit() measurement gives it.
 	var removedSize int
 	for _, node := range toBeRemoveds {
+		removedSize += node.Index.PaddedLength()
+	}
+	// Phase 6's stranded nodes are removed by this edit too, and the loop
+	// above cannot see them: the merge had collected them to MOVE, so they
+	// are in toBeMovedToFromParents, not toBeRemoveds. Tombstoning them in
+	// place drained their bytes out of the removed source they stay under,
+	// so without this second sum the range the edit consumed reads short by
+	// a whole stranded subtree. They are summed on the same post-every-phase
+	// timing and for the same reason the loop above works: tombstoneSubtree
+	// takes the entire subtree, so every stranded node has had its final say
+	// in every other node's aggregate, and it cannot double-count against
+	// toBeRemoveds because the two sets are disjoint (see tombstoneSubtree).
+	for _, node := range stranded {
 		removedSize += node.Index.PaddedLength()
 	}
 	info.RemovedSize = removedSize
@@ -2711,19 +2733,66 @@ func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
 // it — a source with no moved child of its own (e.g. an intermediate that
 // only relayed another source's children) is left unset on both paths,
 // keeping runtime and snapshot consistent.
+//
+// It returns the nodes it had to tombstone in place instead of moving — the
+// stranded subtrees of the cycle guard below, in post-order. The caller books
+// a GC pair for each and counts each toward the size the edit removed; they
+// are returned as nodes rather than as pairs because the pair alone does not
+// carry the length that accounting needs.
 func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
 	editedAt *time.Ticket,
-) error {
+) ([]*TreeNode, error) {
 	dest := t.resolveMergeTarget(fromParent)
 
+	var stranded []*TreeNode
+	// Set once the guard below tombstones a subtree that contains dest. The
+	// destination is resolved once, before the loop, but the list it moves can
+	// hold several merge sources' children, so entries remain after the guard
+	// fires. dest is inside the subtree just tombstoned, so moving those
+	// remaining children there would put live nodes under a tombstone -- the
+	// very #2008 shape the guard exists to prevent. They are stranded too.
+	destTombstoned := false
 	for _, node := range toBeMovedToFromParents {
 		// A moved child must have a source parent to record; skip
 		// otherwise rather than append an untracked node (a node without
 		// MergedFrom is invisible to propagateMergeDeletes and
 		// rebuildMergeState).
 		if node.Index.Parent == nil {
+			continue
+		}
+		// A destination that is the node itself or lies inside it can only
+		// come from a forged lineage: mergedInto is derived from the
+		// MergedFrom an element payload keeps, so a crafted one can aim the
+		// destination's forwarding chain at a child this merge moves, or at
+		// a node inside one. Moving the node there would close a parent cycle
+		// in the index tree, and every later ancestor walk would spin forever.
+		// Leave it where it is, unstamped. The check reads only the tree the
+		// change lands on, so replicas holding the same tree decide alike.
+		//
+		// Left live, it would be stranded instead: Phase 5 has already
+		// tombstoned the source it stays under, and that source's eventual
+		// Purge detaches the subtree without unregistering it from
+		// NodeMapByID or taking it back out of docSize.Live -- the
+		// detached-but-registered shape that sends toTreePos off the top of a
+		// subtree nothing references (#2008). So it is tombstoned where it
+		// stands, with its descendants, exactly as propagateMergeDeletes
+		// tombstones a merge-moved child whose source this edit deletes. The
+		// pair the caller books does both halves: it moves the bytes from Live
+		// to GC, and it is what purges the node once the removal is causally
+		// stable.
+		//
+		// Once that has happened for any entry, dest carries a removedAt of
+		// its own, so every entry still to come is stranded for the same
+		// reason and takes the same treatment.
+		if node == dest || node.Index.IsAncestorOf(dest.Index) {
+			destTombstoned = true
+			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
+			continue
+		}
+		if destTombstoned {
+			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
 			continue
 		}
 		// Record source parent and merge ticket on the moved child.
@@ -2750,7 +2819,7 @@ func (t *Tree) mergeNodes(
 			node.MergedAt = editedAt
 		}
 		if err := dest.Index.MoveChild(node.Index); err != nil {
-			return err
+			return stranded, err
 		}
 		// Point this child's original source at the resolved destination,
 		// path-compressing a transitive source (a prior merge whose children
@@ -2772,7 +2841,27 @@ func (t *Tree) mergeNodes(
 			src.mergedInto = dest.id
 		}
 	}
-	return nil
+	return stranded, nil
+}
+
+// tombstoneSubtree tombstones node and every live node below it with editedAt,
+// returning the nodes it actually tombstoned. A node already removed keeps its
+// own removedAt (LWW is decided elsewhere) and is not reported a second time,
+// so calling this on a partly-tombstoned subtree is safe — which is also what
+// keeps the returned set disjoint from Phase 5's toBeRemoveds, since Phase 5
+// runs first and leaves every node it collected carrying a removedAt.
+func (t *Tree) tombstoneSubtree(node *TreeNode, editedAt *time.Ticket) []*TreeNode {
+	var removed []*TreeNode
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		if n.Value.removedAt != nil {
+			return
+		}
+		if n.Value.remove(editedAt) {
+			removed = append(removed, n.Value)
+		}
+	})
+
+	return removed
 }
 
 // declaredBoundaries returns the elements the edit's own positions named as
