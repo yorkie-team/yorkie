@@ -187,6 +187,11 @@ diverged.
       undo can revive, so it went; `typedAfter` became a version-vector
       check (`allUnknown`). Two forwarding cases that converge on main stay
       in `TestTreeBoundaryKnownDivergences`. Wrong claims corrected.
+- [x] Those two forwarded to the current end of a node. Three directions
+      explored and verified independently (causal end, one fixed point with
+      RGA order, free root-cause); the fixed point (`preMergePoint`) adopted
+      with the judge's nest-record change. Two narrower cases recorded as
+      known divergences.
 
 ### Task 6: PR
 
@@ -201,14 +206,14 @@ Go side done through commit review; not pushed.
 - #1436 cases (insert, split, delete, style) converge with GC and snapshot
   reloads: 0 of 9000 broadened-fuzz runs and 0 of 4000 GC runs diverge
   (main: 261-1046 per case).
-- Undo and redo: 222 of 1200 and 460 of 2400 runs do not converge (main
-  463 and 896), with 5 and 4 regressions against main, all reproducing on
+- Undo and redo: 220 of 1200 and 450 of 2400 runs do not converge (main
+  463 and 896), with 4 and 3 regressions against main, all reproducing on
   the same script. With snapshot reloads (reloaded replicas only pull),
-  509 of 3600 (main 1066), 5 regressions. Boundary records differ in 14
+  500 of 3600 (main 1066), 4 regressions. Boundary records differ in 14
   and 25 runs that converge otherwise; 28 of 3000 in the Backspace-heavy
   fuzz (66 before keeping every merge ticket). The twelve-order
   undo/split/insert set converges in all twelve (main none).
-- Merge fuzz: fewer divergences than main, 4/0/5/4 regressions.
+- Merge fuzz: fewer divergences than main, 4/0/5/3 regressions.
 - Protocol: `JSONElement.Tree.boundaries` and `merges` (`TreeBoundary`,
   `TreeMerge`); operations and `TreeNode` unchanged. Op semantics change,
   so the server and SDKs must ship together; no version gate.
