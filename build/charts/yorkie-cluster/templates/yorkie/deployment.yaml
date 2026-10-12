@@ -89,11 +89,11 @@ spec:
               secretKeyRef:
                 name: {{ .Values.yorkie.name }}-credentials
                 key: mongo-connection-uri
-          {{- if .Values.yorkie.args.clusterSecret }}
+          {{- if or .Values.yorkie.args.clusterSecretExistingSecret .Values.yorkie.args.clusterSecret }}
           - name: YORKIE_CLUSTER_SECRET
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.yorkie.name }}-credentials
+                name: {{ .Values.yorkie.args.clusterSecretExistingSecret | default (printf "%s-credentials" .Values.yorkie.name) }}
                 key: cluster-secret
           {{- end }}
         args: [

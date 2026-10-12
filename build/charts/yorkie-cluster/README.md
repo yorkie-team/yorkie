@@ -126,7 +126,9 @@ The chart puts the signing key, the MongoDB connection URI (which carries the
 database password) and `yorkie.args.clusterSecret` in a Secret named
 `<yorkie.name>-credentials`, and the Deployment reads them as the environment
 variables `YORKIE_BACKEND_SECRET_KEY`, `YORKIE_MONGO_CONNECTION_URI` and
-`YORKIE_CLUSTER_SECRET`. None of them is passed as a command-line argument:
+`YORKIE_CLUSTER_SECRET` (the key and the cluster secret come from your own
+Secret instead when `secretKeyExistingSecret` or `clusterSecretExistingSecret`
+is set). None of them is passed as a command-line argument:
 arguments are readable in `/proc/<pid>/cmdline` and through the pprof
 `/debug/pprof/cmdline` endpoint, which this chart enables and serves on the
 profiling port, so an argument would hand every credential to anyone who can
@@ -149,6 +151,36 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKey="$(openssl rand -base64 32)"   # only when rotating
 kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
 ```
+
+## Cluster RPC Secret (Recommended)
+
+Nodes call each other's ClusterService through the ingress gateway
+(`--backend-gateway-addr`), so the service is reachable from outside the
+cluster. Without a shared secret it accepts every request, including ones that
+read or purge any document. Set one in production, either as a value or, to keep
+it out of the values file, in a Secret you create once:
+
+```bash
+kubectl -n <yorkie.namespace> create secret generic <yorkie.name>-cluster-secret \
+  --from-literal=cluster-secret="$(openssl rand -base64 24)"
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.clusterSecretExistingSecret=<yorkie.name>-cluster-secret
+```
+
+`clusterSecretExistingSecret` takes precedence over `clusterSecret`. It may name
+the same Secret as `secretKeyExistingSecret`, holding both `secret-key` and
+`cluster-secret`, but not `<yorkie.name>-credentials`, for the reason given
+above.
+
+A pod with a secret refuses cluster calls that do not carry it, and a pod
+without one accepts all of them. So during a rollout that turns the secret on,
+calls from old pods to new ones fail; during one that changes it, calls between
+old and new pods fail both ways. Either way they recover once the rollout
+completes. Turning the secret on, or switching between `clusterSecret` and
+`clusterSecretExistingSecret`, changes the pod template and starts a rollout by
+itself. Changing the value inside the same Secret does not, as with the signing
+key: run `kubectl -n <yorkie.namespace> rollout restart
+deployment/<yorkie.name>` afterwards.
 
 ## Install Helm Chart
 

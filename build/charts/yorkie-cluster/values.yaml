@@ -23,6 +23,12 @@ yorkie:
     # nodes call each other through it (--backend-gateway-addr).
     # Generate with: openssl rand -base64 24
     clusterSecret: ""
+    # clusterSecretExistingSecret: name of an existing Secret in the namespace
+    # that holds the cluster secret under `cluster-secret`, so that it stays
+    # out of the values file. Takes precedence over clusterSecret. It may be
+    # the same Secret as secretKeyExistingSecret, but must not be
+    # <yorkie.name>-credentials, the Secret this chart owns.
+    clusterSecretExistingSecret: ""
     # Key for signing admin (dashboard and CLI) tokens. Required: set one of
     # the two below. Every replica must share it, and anyone who knows it
     # can act as any user, so keep it out of version control where possible.

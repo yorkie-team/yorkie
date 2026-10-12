@@ -138,13 +138,15 @@ Key details:
 
 ### Helm Chart (build/charts/yorkie-cluster)
 
-Pass `clusterSecret` in `values.yaml`. If set, the value is passed as `--cluster-secret` in the Deployment args. If empty, the flag is omitted and all ClusterService requests are allowed.
+Set `clusterSecret` in `values.yaml`, or `clusterSecretExistingSecret` to read it from a Secret created out of band (key `cluster-secret`), which takes precedence. The Deployment hands it to the server as the `YORKIE_CLUSTER_SECRET` environment variable, never as `--cluster-secret` in the args, where `/proc/<pid>/cmdline` and the pprof cmdline endpoint would expose it. If both are empty, the variable is omitted and all ClusterService requests are allowed.
 
 ```yaml
 yorkie:
   args:
     # Generate with: openssl rand -base64 24
-    clusterSecret: "<value>"
+    clusterSecret: ""
+    # Or: a Secret holding the value under `cluster-secret`
+    clusterSecretExistingSecret: "yorkie-cluster-secret"
 ```
 
 ### Wiring
