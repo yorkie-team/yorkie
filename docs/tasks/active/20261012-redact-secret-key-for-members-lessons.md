@@ -107,7 +107,7 @@ listing, which the call never did before the read-back existed. An unresolved
 role is treated as no role instead — the key is withheld and the rest of the
 project stays visible.
 
-## Two red CI runs on this branch were environmental, not the change
+## The red CI runs on this branch were environmental, not the change
 
 Worth recording so the same reds are not re-diagnosed as a defect:
 
@@ -115,6 +115,18 @@ Worth recording so the same reds are not re-diagnosed as a defect:
   compiled: `go install github.com/bufbuild/buf/cmd/buf@v1.28.1` failed to
   read a module zip from `proxy.golang.org` with `stream error ...
   INTERNAL_ERROR; received from peer`. A proxy read, not a lane result.
+- Run on `0a11155a` died the same way, one tool later: `go install
+  github.com/sudorandom/protoc-gen-connect-openapi@v0.5.5` could not verify
+  `github.com/swaggest/refl@v1.3.0` because reading
+  `https://sum.golang.org/tile/8/0/x077/610` hit `stream error ...
+  INTERNAL_ERROR; received from peer`. Same HTTP/2 read failure against a
+  Go module service, this time the checksum database rather than the proxy.
+
+  Two of the three reds are `make tools` losing an HTTP/2 stream mid-download.
+  The target installs seven pinned tools serially with no retry, so any one
+  flaky read fails the whole job; a retry wrapper in `Makefile` would absorb
+  it, but the Makefile is outside this PR's diff, so the change is not made
+  here.
 - Run 38244366271 (`276f7a3a`) failed
   `TestAuthWebhookPresenceOnly/a_reader_attaching_alone_keeps_the_bound_schema`
   on `client epoch(1) != document epoch(0): epoch mismatch` at
