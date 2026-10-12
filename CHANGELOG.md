@@ -7,6 +7,15 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Let a Watch stream ask for the heartbeat interval it wants, through
+  `WatchRequest.heartbeat_interval_ms`, and serve heartbeats only to the
+  streams that asked. The server clamps the request to
+  `--backend-watch-heartbeat-interval-min` / `-max` and advertises the
+  effective value. The Go client gains `WithWatchHeartbeatInterval`,
+  defaulting to 20s, with `client.NoWatchHeartbeat` to opt out.
+
 ### Changed
 
 - **Breaking for API clients.** Stop returning the project's secret key to
@@ -39,6 +48,15 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   arguments, disclosing any credential passed as a flag to whoever could reach
   the unauthenticated profiling port. It now answers `404 Unknown profile`;
   every other pprof route and `/metrics` are unchanged.
+- Heartbeats are now on by default, which is safe because they are opt-in per
+  stream: a client older than the heartbeat does not ask for one and so is
+  never sent one.
+
+### Deprecated
+
+- `--backend-watch-heartbeat-interval` / `WatchHeartbeatInterval` is ignored
+  and logs a warning at startup. Use `--backend-watch-heartbeat-interval-min`
+  / `-max`; a `0s` maximum turns heartbeats off.
 
 ## [v0.7.24] - 2026-10-06
 

@@ -231,6 +231,16 @@ func (r *Yorkie) Start() error {
 		)
 	}
 
+	if r.conf.Backend.WatchHeartbeatInterval != "" {
+		logging.DefaultLogger().Warnf(
+			"WatchHeartbeatInterval (%q) is deprecated and ignored: each client "+
+				"asks for its own heartbeat interval within "+
+				"WatchHeartbeatIntervalMin/Max. Set WatchHeartbeatIntervalMax "+
+				"to 0s to turn heartbeats off.",
+			r.conf.Backend.WatchHeartbeatInterval,
+		)
+	}
+
 	if err := r.RegisterHousekeepingTasks(r.backend); err != nil {
 		return err
 	}

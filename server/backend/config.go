@@ -24,6 +24,20 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
+const (
+	// DefaultWatchHeartbeatIntervalMin is the shortest heartbeat interval a
+	// client can obtain. It is well under the idle timeout of a typical proxy
+	// or load balancer, so a client sitting behind one can still ask for an
+	// interval that keeps its stream from being reaped, while a client asking
+	// for a far shorter one is held here.
+	DefaultWatchHeartbeatIntervalMin = 5 * time.Second
+
+	// DefaultWatchHeartbeatIntervalMax is the longest heartbeat interval a
+	// client can obtain. Beyond a minute a heartbeat tells a client little it
+	// would not learn as quickly from its own traffic.
+	DefaultWatchHeartbeatIntervalMax = 60 * time.Second
+)
+
 // Config is the configuration for creating a Backend instance.
 type Config struct {
 	// AdminUser is the name of the default admin user who has full permissions.
@@ -79,14 +93,30 @@ type Config struct {
 	// Default is "10s".
 	ChannelSessionCleanupInterval string `yaml:"ChannelSessionCleanupInterval"`
 
-	// WatchHeartbeatInterval is the interval at which the server sends a
-	// heartbeat on an idle Watch stream, so a client can tell a live stream
-	// from a half-open one. The interval is advertised to the client in the
-	// stream's initialization response. "0s" sends none, which keeps a client
-	// from applying an idle timeout, and is the default: a client that
-	// predates the heartbeat treats the response it cannot classify as
-	// terminal, so heartbeats are opt-in rather than something a server
-	// upgrade turns on under old clients.
+	// WatchHeartbeatIntervalMin is the shortest heartbeat interval the server
+	// will serve on an idle Watch stream. A client asking for less is clamped
+	// up to it, which is what stops one client from asking for a 1s heartbeat
+	// and multiplying the load a hosted server carries. Default is "5s".
+	WatchHeartbeatIntervalMin string `yaml:"WatchHeartbeatIntervalMin"`
+
+	// WatchHeartbeatIntervalMax is the longest heartbeat interval the server
+	// will serve, and doubles as the server-wide kill switch: "0s" means the
+	// server serves no heartbeat however short an interval a client asks for.
+	// Default is "60s".
+	//
+	// Heartbeats are safe to leave on by default because they are opt-in per
+	// stream: only a WatchRequest carrying a non-zero heartbeat_interval_ms
+	// gets them, and a client old enough to mistake a WatchHeartbeat for a
+	// terminal response is also old enough not to ask for one.
+	WatchHeartbeatIntervalMax string `yaml:"WatchHeartbeatIntervalMax"`
+
+	// WatchHeartbeatInterval is deprecated and ignored. It was the single
+	// server-wide interval from before heartbeats were opt-in per stream. Any
+	// value it held, "0s" included, would now either keep the heartbeat from
+	// clients that asked for it or force it on clients that did not -- and a
+	// client older than the heartbeat ends its watch on the first one -- so the
+	// server reads neither. Use WatchHeartbeatIntervalMin/Max instead, with a
+	// zero maximum to turn heartbeats off. Setting it only logs a warning.
 	WatchHeartbeatInterval string `yaml:"WatchHeartbeatInterval"`
 
 	// ChannelSessionCountCacheSize is the cache size of the session count.
@@ -181,14 +211,49 @@ func (c *Config) Validate() error {
 			)
 		}
 	}
-	if c.WatchHeartbeatInterval != "" {
-		if _, err := time.ParseDuration(c.WatchHeartbeatInterval); err != nil {
+	var heartbeatMin, heartbeatMax time.Duration
+	if c.WatchHeartbeatIntervalMin != "" {
+		parsed, err := time.ParseDuration(c.WatchHeartbeatIntervalMin)
+		if err != nil {
 			return fmt.Errorf(
-				`invalid argument "%s" for "--backend-watch-heartbeat-interval" flag: %w`,
-				c.WatchHeartbeatInterval,
+				`invalid argument "%s" for "--backend-watch-heartbeat-interval-min" flag: %w`,
+				c.WatchHeartbeatIntervalMin,
 				err,
 			)
 		}
+		if parsed < 0 {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--backend-watch-heartbeat-interval-min" flag: must not be negative`,
+				c.WatchHeartbeatIntervalMin,
+			)
+		}
+		heartbeatMin = parsed
+	}
+	if c.WatchHeartbeatIntervalMax != "" {
+		parsed, err := time.ParseDuration(c.WatchHeartbeatIntervalMax)
+		if err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--backend-watch-heartbeat-interval-max" flag: %w`,
+				c.WatchHeartbeatIntervalMax,
+				err,
+			)
+		}
+		if parsed < 0 {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--backend-watch-heartbeat-interval-max" flag: must not be negative`,
+				c.WatchHeartbeatIntervalMax,
+			)
+		}
+		heartbeatMax = parsed
+	}
+	// A maximum of zero is the kill switch, not a bound, so it is the one case
+	// where a maximum below the minimum is meaningful.
+	if heartbeatMax > 0 && heartbeatMin > heartbeatMax {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--backend-watch-heartbeat-interval-min" flag: must not exceed the maximum "%s"`,
+			c.WatchHeartbeatIntervalMin,
+			c.WatchHeartbeatIntervalMax,
+		)
 	}
 	if c.ClusterRPCTimeout != "" {
 		if _, err := time.ParseDuration(c.ClusterRPCTimeout); err != nil {
@@ -273,19 +338,45 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 	return result
 }
 
-// ParseWatchHeartbeatInterval returns the interval at which the server sends
-// a heartbeat on an idle Watch stream. Zero disables the heartbeat.
-func (c *Config) ParseWatchHeartbeatInterval() time.Duration {
-	// An unset interval is no heartbeat, the same as "0s". A backend built
-	// without going through ensureBackendDefaultValue -- an embedded server,
-	// a test -- must not exit the process over an option it never set.
-	if c.WatchHeartbeatInterval == "" {
-		return 0
+// WatchHeartbeatPolicy bounds the heartbeat interval a Watch stream may ask
+// for. A zero Max disables the heartbeat server-wide.
+type WatchHeartbeatPolicy struct {
+	Min time.Duration
+	Max time.Duration
+}
+
+// ParseWatchHeartbeatPolicy returns the heartbeat policy this server applies
+// to an idle Watch stream: a client names the interval it wants on its
+// WatchRequest and the server clamps it into [Min, Max]. The deprecated
+// WatchHeartbeatInterval is not read.
+func (c *Config) ParseWatchHeartbeatPolicy() WatchHeartbeatPolicy {
+	return WatchHeartbeatPolicy{
+		Min: c.parseHeartbeatBound(
+			c.WatchHeartbeatIntervalMin,
+			DefaultWatchHeartbeatIntervalMin,
+			"min",
+		),
+		Max: c.parseHeartbeatBound(
+			c.WatchHeartbeatIntervalMax,
+			DefaultWatchHeartbeatIntervalMax,
+			"max",
+		),
+	}
+}
+
+// parseHeartbeatBound parses one heartbeat bound, falling back to the given
+// default when it is unset. A backend built without going through
+// ensureBackendDefaultValue -- an embedded server, a test -- must still get
+// the documented bounds rather than a zero that would read as the kill
+// switch.
+func (c *Config) parseHeartbeatBound(value string, fallback time.Duration, name string) time.Duration {
+	if value == "" {
+		return fallback
 	}
 
-	result, err := time.ParseDuration(c.WatchHeartbeatInterval)
+	result, err := time.ParseDuration(value)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse watch heartbeat interval: %v\n", err)
+		fmt.Fprintf(os.Stderr, "parse watch heartbeat interval %s: %v\n", name, err)
 		os.Exit(1)
 	}
 

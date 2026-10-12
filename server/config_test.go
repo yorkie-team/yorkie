@@ -93,6 +93,20 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	}
 }
 
+// TestSampleConfigLeavesHeartbeatToTheClient checks the shipped sample config
+// serves the default heartbeat bounds and does not carry the deprecated
+// WatchHeartbeatInterval, so a deployment started from it heartbeats every
+// stream that asks and logs no deprecation warning.
+func TestSampleConfigLeavesHeartbeatToTheClient(t *testing.T) {
+	conf, err := server.NewConfigFromFile("config.sample.yml")
+	assert.NoError(t, err)
+
+	assert.Empty(t, conf.Backend.WatchHeartbeatInterval)
+	policy := conf.Backend.ParseWatchHeartbeatPolicy()
+	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMin, policy.Min)
+	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMax, policy.Max)
+}
+
 func TestNewConfigFromFile(t *testing.T) {
 	t.Run("fail read config file test", func(t *testing.T) {
 		conf := server.NewConfig()

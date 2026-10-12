@@ -128,15 +128,18 @@ Backend:
   # It must be at least 100ms; use AuthWebhookCacheDisabled to turn caching off.
   AuthWebhookCacheTTL: "10s"
 
-  # WatchHeartbeatInterval is the interval at which the server sends a heartbeat
-  # on an idle Watch stream, so a client can tell a live stream from a half-open
-  # one. The interval is advertised to the client in the stream's initialization
-  # response, and "0s" sends none, which keeps the client from applying an idle
-  # timeout. It defaults to "0s" because a client older than the heartbeat ends
-  # its watch on a response it cannot classify; turn it on -- "20s" is a good
-  # starting point -- once the clients of this server understand it.
-  # (default: 0s).
-  WatchHeartbeatInterval: "0s"
+  # WatchHeartbeatIntervalMin is the shortest heartbeat interval the server
+  # serves on an idle Watch stream. Each client asks for its own interval on its
+  # Watch request, and the server clamps it into [min, max] and advertises the
+  # result in the stream's initialization response; the client then treats a
+  # stream silent for three intervals as dead. A client that asks for none --
+  # which includes every client older than the heartbeat -- is sent none, so
+  # heartbeats are safe to leave on (default: 5s).
+  WatchHeartbeatIntervalMin: "5s"
+
+  # WatchHeartbeatIntervalMax is the longest heartbeat interval the server
+  # serves. "0s" turns heartbeats off server-wide (default: 60s).
+  WatchHeartbeatIntervalMax: "60s"
 
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).

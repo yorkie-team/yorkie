@@ -82,7 +82,25 @@ type Options struct {
 	// The client sends a heartbeat to the server to refresh the presence TTL.
 	// The default value is 30 seconds.
 	ChannelHeartbeatInterval gotime.Duration
+
+	// WatchHeartbeatInterval is the interval at which this client asks the
+	// server to send a heartbeat on an idle Watch stream, so the client can
+	// tell a live stream from a half-open one. The server clamps the request
+	// to its own bounds and the client sizes its idle timeout against the
+	// value the server reports back, not this one.
+	//
+	// The default value is 20 seconds: short enough to notice a half-open
+	// stream in well under a minute, long enough to stay below the idle
+	// timeout of a typical proxy or load balancer. Set it to
+	// NoWatchHeartbeat to ask for no heartbeats and leave the stream without
+	// an idle timeout.
+	WatchHeartbeatInterval gotime.Duration
 }
+
+// NoWatchHeartbeat opts a client out of Watch heartbeats. It is distinct from
+// the zero value, which selects the default interval, because a duration
+// option cannot otherwise tell "unset" from "off".
+const NoWatchHeartbeat gotime.Duration = -1
 
 // WithAPIKey configures the API key of the client.
 func WithAPIKey(apiKey string) Option {
@@ -134,6 +152,13 @@ func WithRejectedPushRetryDelay(delay gotime.Duration) Option {
 // WithChannelHeartbeatInterval configures the interval of the channel heartbeat.
 func WithChannelHeartbeatInterval(interval gotime.Duration) Option {
 	return func(o *Options) { o.ChannelHeartbeatInterval = interval }
+}
+
+// WithWatchHeartbeatInterval configures the interval this client asks the
+// server to heartbeat its idle Watch streams at. Pass NoWatchHeartbeat to ask
+// for none.
+func WithWatchHeartbeatInterval(interval gotime.Duration) Option {
+	return func(o *Options) { o.WatchHeartbeatInterval = interval }
 }
 
 // DeactivateOption configures DeactivateOptions.

@@ -18,6 +18,7 @@ package backend_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -137,6 +138,58 @@ func TestConfig(t *testing.T) {
 
 		conf.ClusterClientTimeout = "1m"
 		assert.Equal(t, "1m0s", conf.ParseClusterClientTimeout().String())
+	})
+
+	t.Run("validate watch heartbeat bounds test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.WatchHeartbeatIntervalMin = "5s"
+		conf.WatchHeartbeatIntervalMax = "45s"
+		assert.NoError(t, conf.Validate())
+
+		// A minimum above the maximum has no interval to clamp into, so it is
+		// caught at startup rather than silently resolved at request time.
+		inverted := conf
+		inverted.WatchHeartbeatIntervalMin = "90s"
+		assert.Error(t, inverted.Validate())
+
+		// Except against the kill switch, where a zero maximum is "off", not
+		// a bound the minimum could exceed.
+		off := conf
+		off.WatchHeartbeatIntervalMax = "0s"
+		assert.NoError(t, off.Validate())
+
+		negative := conf
+		negative.WatchHeartbeatIntervalMin = "-1s"
+		assert.Error(t, negative.Validate())
+
+		malformed := conf
+		malformed.WatchHeartbeatIntervalMax = "s"
+		assert.Error(t, malformed.Validate())
+	})
+
+	t.Run("parse watch heartbeat policy test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		// An unset pair gets the documented defaults, not a zero that would
+		// read as the kill switch.
+		policy := conf.ParseWatchHeartbeatPolicy()
+		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMin, policy.Min)
+		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMax, policy.Max)
+
+		conf.WatchHeartbeatIntervalMin = "10s"
+		conf.WatchHeartbeatIntervalMax = "45s"
+		policy = conf.ParseWatchHeartbeatPolicy()
+		assert.Equal(t, 10*time.Second, policy.Min)
+		assert.Equal(t, 45*time.Second, policy.Max)
+
+		// The deprecated single interval is ignored whatever it holds: "0s"
+		// is what every config copied from the old sample carries, and a
+		// non-zero value would reach clients that never asked.
+		want := backend.WatchHeartbeatPolicy{Min: 10 * time.Second, Max: 45 * time.Second}
+		for _, deprecated := range []string{"0s", "25s", "not-a-duration"} {
+			conf.WatchHeartbeatInterval = deprecated
+			assert.NoError(t, conf.Validate())
+			assert.Equal(t, want, conf.ParseWatchHeartbeatPolicy())
+		}
 	})
 
 	t.Run("ClusterClientPoolSize field test", func(t *testing.T) {

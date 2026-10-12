@@ -52,6 +52,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [Admin API Credentials](admin-credentials.md): The two credentials of the project-scoped `AdminService` procedures — the project secret key and a session token plus `x-yorkie-project` — and the role each carries
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them
+- [Watch Heartbeat](watch-heartbeat.md): Per-stream opt-in to the idle Watch heartbeat, so a server can run with it on without cutting off older clients
 - [Auth Webhook Presence-Only Packs](auth-webhook-presence-only.md): `presenceOnly` on change-pack attributes, so a webhook can allow presence while rejecting edits and removals
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit

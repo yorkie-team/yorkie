@@ -98,7 +98,13 @@ func (c *Context) NextID() ID {
 		return id
 	}
 
-	return c.nextID
+	// NOTE(hackerwins): ToChange hands c.nextID to the change that is buffered
+	// as a local change, while the document keeps the returned ID and merges
+	// remote clocks into its version vector in place (ID.SyncClocks,
+	// ID.SetClocks). Sharing the map would let a remote apply before the push
+	// inflate the buffered change's vector past what its author knew, and
+	// receivers would then treat concurrent elements as causally earlier.
+	return c.nextID.DeepCopy()
 }
 
 // ToChange creates a new change of this context.
