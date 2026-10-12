@@ -107,6 +107,24 @@ listing, which the call never did before the read-back existed. An unresolved
 role is treated as no role instead — the key is withheld and the rest of the
 project stays visible.
 
+## Two red CI runs on this branch were environmental, not the change
+
+Worth recording so the same reds are not re-diagnosed as a defect:
+
+- Run 38247661727 (`7c48e88e`) died in `make tools`, before any code was
+  compiled: `go install github.com/bufbuild/buf/cmd/buf@v1.28.1` failed to
+  read a module zip from `proxy.golang.org` with `stream error ...
+  INTERNAL_ERROR; received from peer`. A proxy read, not a lane result.
+- Run 38244366271 (`276f7a3a`) failed
+  `TestAuthWebhookPresenceOnly/a_reader_attaching_alone_keeps_the_bound_schema`
+  on `client epoch(1) != document epoch(0): epoch mismatch` at
+  `test/integration/auth_webhook_test.go:1037`. The document's `Epoch` is
+  bumped by compaction (`server/backend/database/doc_info.go:61`), and the run
+  logs housekeeping compactions interleaved with that subtest, so the writer's
+  persisted epoch went stale between its detach and its re-attach. Nothing in
+  this branch touches attach, epochs or compaction, and the same suite was
+  green on `6adbeb3a` one commit earlier.
+
 ## A new request header needs the gateway's CORS list too
 
 The Bearer + `x-yorkie-project` path adds a custom request header. The server's
