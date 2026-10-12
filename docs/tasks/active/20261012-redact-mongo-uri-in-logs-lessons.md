@@ -26,6 +26,18 @@ literal, so the test's *expected* value `mongodb://admin:xxxxx@…` tripped it
 just as the input did. Building both from a concatenated userinfo constant
 keeps the cases readable without a `//nolint` directive.
 
+## `URL.Redacted` covers the userinfo password and nothing else
+
+`Redacted` masks `u.User`'s password and re-emits `RawQuery` verbatim, but a
+MongoDB connection string carries credentials in the option string too:
+`tlsCertificateKeyFilePassword` (and its legacy alias
+`sslClientCertificateKeyPassword`), `proxyPassword`, and
+`authMechanismProperties`, which holds the AWS session token and the OIDC
+access token. The option string is scrubbed before `Redacted` runs. Names are
+matched case-insensitively and on a substring (`password`, `token`, `secret`,
+`credential`) so an alias or a later addition is masked by default; the
+options that name no secret in their name need an explicit entry.
+
 ## An unparsable URI has to be dropped, not echoed
 
 The tempting fallback for a URI `url.Parse` rejects is to log it as-is so the

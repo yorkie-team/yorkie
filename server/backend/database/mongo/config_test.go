@@ -129,6 +129,51 @@ func TestConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("mask the credential-bearing options of the connection URI", func(t *testing.T) {
+		// The userinfo password is not the only credential a MongoDB
+		// connection string carries: several options hold one in the option
+		// string, and those reach the same log line. Names and values are
+		// concatenated rather than written inline, because gosec's G101 reads
+		// a credential-looking literal as a hardcoded credential.
+		const value = "s3cret"
+		const mask = "xxxxx"
+		const prefix = "mongodb://h1:27017/yorkie?"
+
+		for _, tc := range []struct {
+			uri      string
+			redacted string
+		}{{
+			// The client key passphrase.
+			uri:      prefix + "tlsCertificateKeyFilePassword=" + value + "&replicaSet=rs0",
+			redacted: prefix + "tlsCertificateKeyFilePassword=" + mask + "&replicaSet=rs0",
+		}, {
+			// The legacy alias of the option above.
+			uri:      prefix + "sslClientCertificateKeyPassword=" + value,
+			redacted: prefix + "sslClientCertificateKeyPassword=" + mask,
+		}, {
+			// The SOCKS5 proxy password.
+			uri:      prefix + "proxyPassword=" + value + "&proxyHost=proxy.example",
+			redacted: prefix + "proxyPassword=" + mask + "&proxyHost=proxy.example",
+		}, {
+			// The AWS session token, which names no secret in the option name.
+			uri:      prefix + "authMechanismProperties=AWS_SESSION_TOKEN:" + value,
+			redacted: prefix + "authMechanismProperties=" + mask,
+		}, {
+			// Option names are case-insensitive in the connection string, so
+			// an unusual spelling must not slip the mask.
+			uri:      prefix + "TLSCERTIFICATEKEYFILEPASSWORD=" + value,
+			redacted: prefix + "TLSCERTIFICATEKEYFILEPASSWORD=" + mask,
+		}, {
+			// An option carrying no credential stays readable.
+			uri:      prefix + "authSource=admin&replicaSet=rs0",
+			redacted: prefix + "authSource=admin&replicaSet=rs0",
+		}} {
+			config := &mongo.Config{ConnectionURI: tc.uri}
+			assert.Equal(t, tc.redacted, config.RedactedConnectionURI())
+			assert.NotContains(t, config.RedactedConnectionURI(), value)
+		}
+	})
+
 	t.Run("drop a connection URI that does not parse", func(t *testing.T) {
 		// The userinfo of an unparsable URI cannot be located, so none of the
 		// URI is reported rather than risking the password in a log line.

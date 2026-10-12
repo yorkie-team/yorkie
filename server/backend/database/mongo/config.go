@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -133,17 +134,90 @@ func (c *Config) Validate() error {
 // stripped, so none of it is reported.
 const unparsableConnectionURI = "(unparsable URI)"
 
-// RedactedConnectionURI returns the connection URI with the password of its
-// userinfo masked. The URI carries the database user's password, so logging it
-// verbatim publishes that credential to everyone who can read the server's
-// stdout — a far weaker permission than the one guarding the secret it is
-// deployed in. Scheme, username, hosts and options are kept, since those are
-// what make the line worth logging.
+// redactionMask is what a masked value is replaced with. It matches the mask
+// url.URL.Redacted applies to the userinfo password, so a line carrying both
+// kinds of secret reads consistently.
+const redactionMask = "xxxxx"
+
+// credentialOptionSubstrings match the name of a connection-string option that
+// says outright that its value is a secret. Matching on a substring rather than
+// on an exact name also covers the spellings the MongoDB drivers accept as
+// aliases (for example sslClientCertificateKeyPassword for
+// tlsCertificateKeyFilePassword) and any option added after this was written.
+var credentialOptionSubstrings = []string{"password", "passwd", "token", "secret", "credential"}
+
+// credentialOptionNames are the options whose value carries a secret without
+// saying so in the name: authMechanismProperties holds, among others, the
+// AWS_SESSION_TOKEN and the OIDC access token.
+var credentialOptionNames = map[string]bool{
+	"authmechanismproperties": true,
+}
+
+// isCredentialOption reports whether the named connection-string option carries
+// a secret. Option names are compared case-insensitively, as the MongoDB
+// connection-string spec treats them.
+func isCredentialOption(name string) bool {
+	lowered := strings.ToLower(name)
+	if credentialOptionNames[lowered] {
+		return true
+	}
+
+	for _, substring := range credentialOptionSubstrings {
+		if strings.Contains(lowered, substring) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// redactQueryCredentials masks the value of every credential-bearing option in
+// rawQuery, leaving the order and the spelling of the rest untouched so the
+// logged option string still reads like the configured one.
+func redactQueryCredentials(rawQuery string) string {
+	if rawQuery == "" {
+		return rawQuery
+	}
+
+	options := strings.Split(rawQuery, "&")
+	for i, option := range options {
+		name, _, hasValue := strings.Cut(option, "=")
+		if !hasValue {
+			continue
+		}
+
+		decoded, err := url.QueryUnescape(name)
+		if err != nil {
+			// An option whose name does not decode cannot be matched against
+			// the lists above, so it is masked rather than trusted.
+			options[i] = name + "=" + redactionMask
+			continue
+		}
+
+		if isCredentialOption(decoded) {
+			options[i] = name + "=" + redactionMask
+		}
+	}
+
+	return strings.Join(options, "&")
+}
+
+// RedactedConnectionURI returns the connection URI with every credential it
+// carries masked: the password of its userinfo and the value of any
+// credential-bearing connection-string option, such as
+// tlsCertificateKeyFilePassword, proxyPassword or authMechanismProperties. The
+// URI carries the database user's password, so logging it verbatim publishes
+// that credential to everyone who can read the server's stdout — a far weaker
+// permission than the one guarding the secret it is deployed in. Scheme,
+// username, hosts and the remaining options are kept, since those are what make
+// the line worth logging.
 func (c *Config) RedactedConnectionURI() string {
 	parsed, err := url.Parse(c.ConnectionURI)
 	if err != nil {
 		return unparsableConnectionURI
 	}
+
+	parsed.RawQuery = redactQueryCredentials(parsed.RawQuery)
 
 	return parsed.Redacted()
 }
