@@ -60,3 +60,14 @@ post-every-phase timing. Counting each exactly once holds because
 `tombstoneSubtree` takes the whole subtree (so every stranded node has had
 its final say in every other node's aggregate) and skips anything already
 carrying a `removedAt` (so the two sets are disjoint — Phase 5 runs first).
+
+Round 4 (the guard's own aftermath): `dest` is resolved once, before the loop
+in `mergeNodes`, but `collectBetween` fills `toBeMovedToFromParents` from
+every merge source in the range, so entries remain after the guard fires on
+one of them. When the guard strands a node that *contains* `dest`,
+`tombstoneSubtree` tombstones `dest` too — and the loop then kept moving the
+remaining children under it with `MoveChild`, re-creating the exact
+live-under-tombstone shape (#2008) the guard was added to prevent, and
+inflating the stranded-size sum round 3 added. Fixed with a `destTombstoned`
+latch: once the guard has fired on a subtree containing `dest`, every entry
+still to come is stranded the same way instead of moved.

@@ -2747,6 +2747,13 @@ func (t *Tree) mergeNodes(
 	dest := t.resolveMergeTarget(fromParent)
 
 	var stranded []*TreeNode
+	// Set once the guard below tombstones a subtree that contains dest. The
+	// destination is resolved once, before the loop, but the list it moves can
+	// hold several merge sources' children, so entries remain after the guard
+	// fires. dest is inside the subtree just tombstoned, so moving those
+	// remaining children there would put live nodes under a tombstone -- the
+	// very #2008 shape the guard exists to prevent. They are stranded too.
+	destTombstoned := false
 	for _, node := range toBeMovedToFromParents {
 		// A moved child must have a source parent to record; skip
 		// otherwise rather than append an untracked node (a node without
@@ -2775,7 +2782,16 @@ func (t *Tree) mergeNodes(
 		// pair the caller books does both halves: it moves the bytes from Live
 		// to GC, and it is what purges the node once the removal is causally
 		// stable.
+		//
+		// Once that has happened for any entry, dest carries a removedAt of
+		// its own, so every entry still to come is stranded for the same
+		// reason and takes the same treatment.
 		if node == dest || node.Index.IsAncestorOf(dest.Index) {
+			destTombstoned = true
+			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
+			continue
+		}
+		if destTombstoned {
 			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
 			continue
 		}

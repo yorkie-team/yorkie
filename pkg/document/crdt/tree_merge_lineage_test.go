@@ -145,6 +145,73 @@ func TestMergeNodesRejectsForgedSource(t *testing.T) {
 		"the merge itself still moves the child")
 }
 
+// TestMergeNodesStrandsLaterChildrenOfATombstonedDest pins that the cycle
+// guard does not leave the rest of the merge list moving into a destination it
+// has just tombstoned.
+//
+// The destination is resolved once, before the loop, but collectBetween fills
+// the move list from every merge source in the range, so entries remain after
+// the guard fires on one of them. Tombstoning a subtree that contains dest
+// tombstones dest as well, and a later entry moved under it would be live
+// under a tombstone -- the detached-but-registered shape of #2008 that the
+// guard exists to prevent.
+func TestMergeNodesStrandsLaterChildrenOfATombstonedDest(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	nextTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+
+	// <r><a/><b><c><d>e</d></c></b><q>y</q></r>, with e carrying MergedFrom = a
+	// as an element payload may, so a forwards to d.
+	root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+	a := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "a", nil)
+	b := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "b", nil)
+	c := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "c", nil)
+	d := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "d", nil)
+	e := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "e")
+	q := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "q", nil)
+	y := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "y")
+	require.NoError(t, root.Append(a, b, q))
+	require.NoError(t, b.Append(c))
+	require.NoError(t, c.Append(d))
+	require.NoError(t, d.Append(e))
+	require.NoError(t, q.Append(y))
+	a.remove(nextTicket())
+	e.MergedFrom = a.id
+	e.MergedAt = nextTicket()
+
+	// Re-read exactly as the converter re-reads an element payload.
+	tree := NewTree(root, nextTicket())
+	require.NotNil(t, a.mergedInto)
+	require.True(t, a.mergedInto.Equal(d.id))
+
+	// c is stranded by the guard (it contains the destination d); y, collected
+	// from the second source q, comes after it in the same list.
+	editedAt := nextTicket()
+	stranded, err := tree.mergeNodes(a, []*TreeNode{c, y}, editedAt)
+	require.NoError(t, err)
+
+	assert.Same(t, q.Index, y.Index.Parent,
+		"a child must not move under a destination the guard just tombstoned")
+	assert.Nil(t, y.MergedFrom, "a stranded child is not stamped as moved")
+	assert.Nil(t, q.mergedInto,
+		"no child of q moved, so neither runtime nor rebuild points it")
+
+	strandedSet := map[*TreeNode]bool{}
+	for _, node := range stranded {
+		strandedSet[node] = true
+	}
+	for _, node := range []*TreeNode{c, d, e, y} {
+		assert.True(t, node.IsRemoved(),
+			"a child the merge refused to move must not stay live under a tombstone")
+		assert.True(t, strandedSet[node],
+			"every node tombstoned here must be returned for its GC pair")
+	}
+}
+
 // TestMergeNodesRefusesCycleFromForgedLineage pins that a forged merge lineage
 // cannot steer a merge into one of the nodes it moves.
 //
