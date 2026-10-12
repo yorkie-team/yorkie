@@ -139,23 +139,24 @@ mongodb:
   # Enable/disable MongoDB deployment
   enabled: true
 
-  # MongoDB user credentials
+  # MongoDB user credentials. The three passwords have no defaults: the chart
+  # refuses to render while mongodb.enabled is true and any of them is blank,
+  # and refuses the defaults it used to publish here -- "admin", "useradmin"
+  # and "clusteradmin" -- since those are readable in Yorkie's source.
+  # Generate them (see README.md) and pass the same values on every upgrade.
   credentials:
     # Database admin user (used by Yorkie application)
     databaseAdmin:
       username: admin
-      # Default password - CHANGE THIS for production!
-      password: "admin"
+      password: ""
     # User admin (used for user management)
     userAdmin:
       username: useradmin
-      # Default password - CHANGE THIS for production!
-      password: "useradmin"
+      password: ""
     # Cluster admin user (used for sharding setup)
     clusterAdmin:
       username: clusteradmin
-      # Default password - CHANGE THIS for production!
-      password: "clusteradmin"
+      password: ""
 
   # Configuration for sharding setup
   setup:

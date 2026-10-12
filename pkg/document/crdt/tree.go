@@ -1770,12 +1770,27 @@ func toTreePos(treePos *index.TreePos[*TreeNode]) *TreePos {
 	var leftNode *TreeNode
 
 	if node.IsText() {
-		if node.Parent.FirstChild() == node && offset == 0 {
-			leftNode = node.Parent.Value
+		parent := node.Parent
+		if offset == 0 {
+			// A text at offset 0 cannot anchor on itself: a left sibling means
+			// "after it", so the edit would land after the whole text. Anchor on
+			// what precedes the text instead -- the parent when the text is the
+			// first visible child, otherwise the previous visible sibling.
+			//
+			// That sibling is always an element: FindTreePos resolves a boundary
+			// between two texts to the end of the left one, so a text reached at
+			// offset 0 never has a text right before it.
+			leftNode = parent.Value
+			for _, child := range parent.Children() {
+				if child == node {
+					break
+				}
+				leftNode = child.Value
+			}
 		} else {
 			leftNode = node.Value
 		}
-		node = node.Parent
+		node = parent
 	} else {
 		if offset == 0 {
 			leftNode = node.Value

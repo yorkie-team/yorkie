@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 80
+Total archived tasks: 81
 
-## 2026/10 (20 tasks)
+## 2026/10 (21 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Resolve the index before a text that follows an element (2026-10-12) | [20261012-tree-findpos-element-text-boundary-todo.md](./2026/10/20261012-tree-findpos-element-text-boundary-todo.md) | [20261012-tree-findpos-element-text-boundary-lessons.md](./2026/10/20261012-tree-findpos-element-text-boundary-lessons.md) |
 | Refuse a merge that would move a node under itself (2026-10-12) | [20261012-merge-lineage-cycle-todo.md](./2026/10/20261012-merge-lineage-cycle-todo.md) | [20261012-merge-lineage-cycle-lessons.md](./2026/10/20261012-merge-lineage-cycle-lessons.md) |
 | Remove the trusted-tree guard and the git-hook snapshot (2026-10-09) | [20261009-remove-trusted-tree-guard-todo.md](./2026/10/20261009-remove-trusted-tree-guard-todo.md) | [20261009-remove-trusted-tree-guard-lessons.md](./2026/10/20261009-remove-trusted-tree-guard-lessons.md) |
 | Stop the split-sibling cascade at a sibling the editor saw alive (2026-10-06) | [20261006-split-sibling-cascade-stop-todo.md](./2026/10/20261006-split-sibling-cascade-stop-todo.md) | [20261006-split-sibling-cascade-stop-lessons.md](./2026/10/20261006-split-sibling-cascade-stop-lessons.md) |
