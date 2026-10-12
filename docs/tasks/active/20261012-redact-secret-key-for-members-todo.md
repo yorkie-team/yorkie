@@ -98,45 +98,30 @@ project and checks it against a per-method minimum:
       Red on the previous head (`ListDocuments` returned nothing), green now.
 - [x] `make lint`, unit tests, integration suite.
 
-## Revoke the key with the role
+## Bound the key's authority, leave revocation explicit
 
-The key names no user, so an admin who read it kept the project's authority
-after being demoted or removed. Membership changes now replace it.
+The key names no user, so an admin who read it keeps the project's authority
+after being demoted or removed. Rotating it automatically on membership changes
+was tried and dropped: the same key signs the event webhook and authenticates
+the MCP endpoint, so the rotation broke those integrations silently.
 
-- [x] `projects.CanReadSecretKey`: the one rule for who may read the key, used
-      by the redaction and the revocation.
-- [x] `projects.RotateSecretKey`: replace the secret key, keep the public key.
-- [x] `members.Remove` / `members.UpdateRole`: rotate when a user goes from a
-      role that may read the key to one that may not; report it.
-- [x] `RemoveMember` / `UpdateMemberRole` handlers: broadcast the project cache
-      invalidation when the key was rotated.
+- [x] `projects.CanReadSecretKey`: the one rule for who may read the key.
 - [x] Interceptor: the key ranks as `Admin` against `projectScopedMethods`.
-- [x] Unit tests: demote, remove, keep, promote, member removal; the key path
-      refused a method above Admin. Integration test: a demoted admin's copied
-      key returns Unauthenticated, the public key is unchanged. Both red
-      without the rotation.
+- [x] Unit test: the key reaches every current entry and is refused a method
+      above Admin.
+- [x] Membership changes do not rotate the key; the release note tells owners
+      to run `RotateProjectKeys` after demoting or removing an admin.
 
 ## Out of scope
 
-A key copied before this change by a user who is still a member is not
-detected; rotate the keys of projects that have ever had a member on upgrade.
-
-The secret key has three meanings and the rotation revokes all of them at once:
-it is the admin credential, the HMAC key the event webhook is signed with
-(`server/packs/pushpull.go`) and the only credential the MCP endpoint accepts
-(`server/rpc/mcp/handler.go`). A membership change therefore also breaks every
-external webhook receiver and MCP or CI client configured with the old key, and
-a member can no longer configure MCP at all. `RotateSecretKey` logs a warning
-naming those holders so the break can be traced, but it does not prevent it.
-Either remedy lands outside the files this change may touch:
-
-- Drop the implicit rotation and leave revocation to `RotateProjectKeys`, which
-  an owner runs deliberately. Reaches `server/members/members.go` and
-  `server/rpc/admin_server.go`.
-- Give the webhook its own signing secret and MCP a user-bearing scheme, after
-  which the admin credential can be revoked alone and automatically. Reaches
+- Automatic revocation. It needs the key's other meanings split off first: a
+  webhook signing secret of its own and a user-bearing scheme for MCP. Reaches
   `server/packs/pushpull.go`, `server/rpc/mcp/handler.go` and the project
   schema.
-The dashboard (separate repository) still sets the key from `GetProject`; it
-needs the same fallback (send the session cookie and `x-yorkie-project` when
-the key is empty) before member-role users see their documents there again.
+- Members and MCP: the MCP endpoint accepts only the secret key, so a member,
+  who no longer receives it, cannot configure MCP until MCP accepts a session.
+- A key copied before this change, or by an admin later demoted or removed,
+  keeps working until the owner rotates the project's keys.
+- The dashboard (separate repository) still sets the key from `GetProject`; it
+  needs the same fallback (send the session cookie and `x-yorkie-project` when
+  the key is empty) before member-role users see their documents there again.

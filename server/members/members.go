@@ -23,7 +23,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/projects"
 )
 
 // List returns all members of a project.
@@ -53,99 +52,51 @@ func List(
 	return members, nil
 }
 
-// Remove removes a user from a project. It reports whether the project's
-// secret key was rotated because the removed user could read it.
+// Remove removes a user from a project.
 func Remove(
 	ctx context.Context,
 	be *backend.Backend,
 	projectID types.ID,
 	username string,
-) (bool, error) {
+) error {
 	// Find the user by username
 	userInfo, err := be.DB.FindUserInfoByName(ctx, username)
 	if err != nil {
-		return false, err
-	}
-
-	prev, err := be.DB.FindMemberInfo(ctx, projectID, userInfo.ID)
-	if err != nil {
-		return false, err
+		return err
 	}
 
 	// Delete the member
-	if err := be.DB.DeleteMemberInfo(ctx, projectID, userInfo.ID); err != nil {
-		return false, err
-	}
-
-	return revokeSecretKey(ctx, be, projectID, prev.Role, "")
+	return be.DB.DeleteMemberInfo(ctx, projectID, userInfo.ID)
 }
 
-// UpdateRole updates the role of a project member. It reports whether the
-// project's secret key was rotated because the member lost the role that let
-// it read the key.
+// UpdateRole updates the role of a project member.
 func UpdateRole(
 	ctx context.Context,
 	be *backend.Backend,
 	projectID types.ID,
 	username string,
 	role string,
-) (*types.Member, bool, error) {
+) (*types.Member, error) {
 	memberRole, err := database.NewMemberRole(role)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	// Find the user by username
 	userInfo, err := be.DB.FindUserInfoByName(ctx, username)
 	if err != nil {
-		return nil, false, err
-	}
-
-	prev, err := be.DB.FindMemberInfo(ctx, projectID, userInfo.ID)
-	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	// Update the role
 	memberInfo, err := be.DB.UpdateMemberRole(ctx, projectID, userInfo.ID, memberRole)
 	if err != nil {
-		return nil, false, err
-	}
-
-	rotated, err := revokeSecretKey(ctx, be, projectID, prev.Role, memberRole)
-	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	// Convert to Member and add username
 	member := memberInfo.ToMember()
 	member.Username = userInfo.Username
 
-	return member, rotated, nil
-}
-
-// revokeSecretKey rotates the project's secret key when a user goes from a
-// role that may read it to one that may not. An empty next role means the
-// user left the project.
-//
-// NOTE(hackerwins): The secret key carries no user, so the role a user held
-// when reading it is not checked when the key is used. Without the rotation, an
-// admin who is demoted or removed would keep the project's full authority for
-// as long as it kept a copy of the key.
-func revokeSecretKey(
-	ctx context.Context,
-	be *backend.Backend,
-	projectID types.ID,
-	prev database.MemberRole,
-	next database.MemberRole,
-) (bool, error) {
-	if !projects.CanReadSecretKey(prev) || projects.CanReadSecretKey(next) {
-		return false, nil
-	}
-
-	if _, err := projects.RotateSecretKey(ctx, be, projectID); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return member, nil
 }

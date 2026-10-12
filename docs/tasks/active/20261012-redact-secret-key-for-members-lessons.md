@@ -45,82 +45,40 @@ Takeaway: when a security fix removes access, check whether the access was
 wrong or only the credential was too coarse. Here the reads were legitimate;
 the credential was the problem.
 
-## Role changes are revocation only if the key follows them
+## Revocation is the owner's call because the key has three meanings
 
-The secret key names no user, so the role a user held when reading it is never
-checked when the key is used. Hiding the key from members closed one way to get
-it, but an admin who read it legitimately and was later demoted or removed kept
-the project's whole authority. The review panel upheld this twice.
+The key names no user, so an admin who read it keeps the project's authority
+after being demoted or removed. A round of this change closed that by replacing
+the secret key on every such membership change. The next review round upheld
+two blockers against it, and they were right: the secret key is not only the
+admin credential.
 
-The key now follows the roles that may read it:
+- `server/packs/pushpull.go` signs the event webhook with it, and the external
+  receiver verifies the HMAC with its own copy.
+- `server/rpc/mcp/handler.go` accepts it as the MCP endpoint's only credential,
+  so every MCP client and CI integration is configured with it.
 
-- `members.Remove` and `members.UpdateRole` replace the secret key when a user
-  goes from a role that may read it (Admin and above) to one that may not, or
-  leaves the project. `projects.CanReadSecretKey` is the single rule both this
-  and the redaction use.
-- Only the secret key is replaced (`projects.RotateSecretKey`). The public key
-  identifies the project to SDK clients and carries no admin authority, so
-  rotating it as `RotateProjectKeys` does would break every client for no
-  security gain.
-- The handlers broadcast a project cache invalidation, as `RotateProjectKeys`
-  does, so the old key stops authenticating on other nodes too.
-- The interceptor ranks the key as `Admin` against the per-method table, so the
-  table covers both schemes. Today every entry is Member or Admin, so nothing
-  changes; a method added later at Owner is refused to the key.
+An automatic rotation therefore revoked three things for a membership change
+two of them had nothing to do with, and broke them where no one was looking.
+The maintainer chose to drop it: membership changes leave the keys alone, and
+`RotateProjectKeys`, which an owner runs deliberately at a moment the webhook
+receiver and MCP clients can be rolled with it, stays the one way to revoke.
+The release note tells owners to rotate after demoting or removing an admin.
 
-The cost is real and goes in the release note: demoting or removing an admin
-replaces the key for every other holder too, including servers that call the
-admin API with it or verify event webhook signatures with it. A member removed
-leaves the key alone, since members can no longer read it.
+What stays from that round: `projects.CanReadSecretKey` is the single rule for
+who may read the key, and the interceptor ranks the key as `Admin` against
+`projectScopedMethods`, so one table covers both schemes and a method added
+later above Admin is refused to the key.
 
-A key read before this change by a user who is still below Admin is not
-detected. Rotating the keys of projects that have ever had a member is the one
-operator step on upgrade.
+The way to make revocation automatic is to stop overloading the key: a webhook
+signing secret of its own and a user-bearing scheme for MCP (the `Bearer` +
+`x-yorkie-project` path this change already built). Then the admin credential
+has one set of holders and a role change can revoke it. That is a separate
+change; it reaches the webhook, MCP and the project schema.
 
-## One credential with three meanings cannot be revoked quietly
-
-The cost above is larger than a release note, and it is the part of this change
-to revisit first. The secret key is not only the admin credential:
-
-- `server/packs/pushpull.go:246` signs the event webhook with it, and the
-  external receiver verifies the HMAC with its own copy
-  (`test/integration/event_webhook_test.go:103`).
-- `server/rpc/mcp/handler.go:147` accepts it as the single `API-Key`
-  credential, so every MCP client and CI integration is configured with it.
-
-So the rotation revokes three things at once, for a membership change two of
-them have nothing to do with, and it breaks them where no one is looking: the
-receiver starts rejecting signatures, the client starts returning Unauthorized,
-and neither failure names the role change that caused it. The redaction has a
-matching edge — a member cannot read the key, so a member cannot configure MCP
-at all, because MCP accepts no other credential.
-
-`RotateSecretKey` logs a warning naming those holders, which makes the break
-traceable but does not prevent it. There are two ways out, and both land outside
-the files this change may touch:
-
-- Drop the implicit rotation. `members.Remove` and `members.UpdateRole` would
-  leave both keys alone and only record that the departing user may still hold a
-  copy, leaving `RotateProjectKeys` — which an owner already runs deliberately,
-  at a moment when the webhook receiver and the MCP clients can be rolled with
-  it — as the one way to revoke. The residual gap is then the pre-existing one:
-  the copy keeps working until that rotation. This is the smaller change, and it
-  reaches `server/members/members.go` and `server/rpc/admin_server.go`.
-- Stop overloading one value: give the webhook its own signing secret and MCP a
-  user-bearing scheme (the `Bearer` + `x-yorkie-project` path this branch
-  already built for the project-scoped procedures). Then the admin credential
-  has one set of holders and a role change can revoke it automatically, which is
-  what the rotation wanted to do. That reaches `server/packs/pushpull.go`,
-  `server/rpc/mcp/handler.go` and the project schema.
-
-The second subsumes the first and is the one to build; until it exists the
-rotation is an outage with an authorization edit for a trigger, which is the
-known limitation this change carries.
-
-Takeaway: before revoking a credential, enumerate who holds it. A key with
-three meanings has three sets of holders, and only one of them is the user the
-revocation was aimed at — automating the revocation automates an outage for the
-other two.
+Takeaway: before revoking a credential, enumerate who holds it. Automating the
+revocation of a key with three meanings automates an outage for the holders the
+revocation was not aimed at.
 
 ## `IsAtLeast` fails open, so the gate validates the role first
 

@@ -344,13 +344,12 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 // admin path, so a missing one must not resolve to any project.
 //
 // The key carries no user, so this lookup has no role to check. The key stands
-// in for Admin: only Admin and above may read it (redactForRole), and it is
-// replaced when a user who could read it is demoted below Admin or removed
-// (RotateSecretKey). A copy taken before either rule existed keeps working
-// until the project's keys are rotated.
-//
-// The same key is the event webhook's HMAC key and the MCP endpoint's only
-// credential, so replacing it cuts those off too; see RotateSecretKey.
+// in for Admin: only Admin and above may read it (redactForRole), and the
+// interceptor checks it against the per-method table at that rank. A copy
+// outlives the role it was read under, so demoting or removing an admin does
+// not revoke it; RotateProjectKeys does. Rotation is left to the owner because
+// the same key also signs the event webhook and authenticates the MCP
+// endpoint, and replacing it cuts those off.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
 	if strings.TrimSpace(secretKey) == "" {
 		return nil, ErrSecretKeyNotProvided
@@ -362,52 +361,6 @@ func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey st
 	}
 
 	return info.ToProject(), nil
-}
-
-// RotateSecretKey replaces the project's secret key and keeps its public key.
-//
-// It revokes the key a user could read before losing the role that allowed it.
-// The key carries no user, so a copy outlives the membership it was read
-// under; replacing it is the only way to take that authority back. The public
-// key identifies the project to SDK clients and grants none of the admin
-// authority, so it stays and those clients keep working.
-//
-// WARNING: the secret key is not only the admin credential. It is also the
-// HMAC key the event webhook is signed with (server/packs/pushpull.go) and the
-// only credential the MCP endpoint accepts (server/rpc/mcp/handler.go), so
-// every external webhook receiver and MCP or CI integration configured with the
-// old key breaks here: the receiver starts rejecting signatures and the client
-// starts returning Unauthorized, neither of them naming the cause. The call is
-// logged at warn level for that reason, so the break can be traced back to the
-// rotation that caused it. Splitting those meanings apart — a webhook signing
-// secret and an MCP credential of their own — would let the admin credential be
-// revoked alone; that reaches both files above and the project schema.
-//
-// The caller is responsible for authorization and for invalidating the project
-// cache on other nodes.
-func RotateSecretKey(
-	ctx context.Context,
-	be *backend.Backend,
-	id types.ID,
-) (*types.Project, error) {
-	info, err := be.DB.FindProjectInfoByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	rotated, _, err := be.DB.RotateProjectKeys(ctx, id, info.PublicKey, shortuuid.New())
-	if err != nil {
-		return nil, err
-	}
-
-	logging.DefaultLogger().Warnf(
-		"project %s: secret key replaced; every holder of the old key must be "+
-			"reconfigured, including the event webhook receiver verifying its "+
-			"HMAC signature and any MCP or CI client authenticating with it",
-		id,
-	)
-
-	return rotated.ToProject(), nil
 }
 
 // RotateProjectKeys rotates the API keys of the project.

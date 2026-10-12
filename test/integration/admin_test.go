@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"sync"
 	"testing"
@@ -34,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -574,56 +572,5 @@ func TestAdminMember(t *testing.T) {
 		docs, err = adminCli.ListDocuments(ctx, projectName, "", 10, true, false)
 		assert.NoError(t, err)
 		assert.Len(t, docs, 1)
-	})
-
-	t.Run("demoted admin's copied secret key stops working test", func(t *testing.T) {
-		// 01. Owner creates a project and makes a user its admin.
-		projectName := newSlug("prj")
-		_, err := adminCli.CreateProject(ctx, projectName)
-		assert.NoError(t, err)
-		token, err := adminCli.CreateInvite(
-			ctx,
-			projectName,
-			"admin",
-			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
-		)
-		assert.NoError(t, err)
-
-		username, password := newUser(t)
-		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
-		assert.NoError(t, err)
-		defer func() { userCli.Close() }()
-		_, err = userCli.LogIn(ctx, username, password)
-		assert.NoError(t, err)
-		_, err = userCli.AcceptInvite(ctx, token)
-		assert.NoError(t, err)
-
-		// 02. As an admin, the user reads the secret key and it works.
-		copied, err := userCli.GetProject(ctx, projectName)
-		assert.NoError(t, err)
-		assert.NotEmpty(t, copied.SecretKey)
-
-		listWithKey := func(secretKey string) error {
-			cli := v1connect.NewAdminServiceClient(http.DefaultClient, "http://"+defaultServer.RPCAddr())
-			req := connect.NewRequest(&api.ListDocumentsRequest{PageSize: 10})
-			req.Header().Set(types.AuthorizationKey, fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, secretKey))
-			_, err := cli.ListDocuments(ctx, req)
-			return err
-		}
-		assert.NoError(t, listWithKey(copied.SecretKey))
-
-		// 03. Owner demotes the user to member.
-		_, err = adminCli.UpdateMemberRole(ctx, projectName, username, "member")
-		assert.NoError(t, err)
-
-		// 04. The copied key no longer authenticates, while the public key
-		//     SDK clients use is unchanged.
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(listWithKey(copied.SecretKey)))
-
-		current, err := adminCli.GetProject(ctx, projectName)
-		assert.NoError(t, err)
-		assert.NotEqual(t, copied.SecretKey, current.SecretKey)
-		assert.Equal(t, copied.PublicKey, current.PublicKey)
-		assert.NoError(t, listWithKey(current.SecretKey))
 	})
 }
