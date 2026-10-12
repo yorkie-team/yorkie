@@ -59,9 +59,12 @@ When the chart deploys MongoDB (`mongodb.enabled`, the default), it needs the
 passwords of the three MongoDB users it creates:
 `mongodb.credentials.databaseAdmin.password`, `userAdmin.password` and
 `clusterAdmin.password`. None of them has a default, so the chart refuses to
-render while any of them is empty, on Minikube as anywhere else. Generate them
-once and keep them, as with the signing key below, because every later
-`helm upgrade` has to pass the **same** values:
+render while any of them is blank, on Minikube as anywhere else. It also
+refuses the three defaults it used to publish in its own `values.yaml` —
+`admin`, `useradmin` and `clusteradmin` — since passing one of those back is
+the same as having no password at all. Generate them once and keep them, as
+with the signing key below, because every later `helm upgrade` has to pass the
+**same** values:
 
 ```bash
 # Generate once, keep them:
@@ -78,7 +81,9 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 
 With an external MongoDB (`mongodb.enabled=false`) the chart creates no users
 and needs none of these; the password goes in `yorkie.args.dbConnectionUri`
-instead.
+instead, which is then required — the chart has no credentials of its own to
+build a URI from, and refuses to render rather than hand the server one with
+an empty password.
 
 ## Admin Token Signing Key (Required)
 
@@ -355,8 +360,9 @@ instead.
 > every later upgrade. A release that never set them still uses the defaults
 > this chart used to ship — `admin`, `useradmin` and `clusteradmin`, published
 > in Yorkie's source — so anyone who can reach its database can log in as the
-> admin. Pass generated values instead, then restart the Yorkie Deployment so it
-> picks up the new connection URI.
+> admin. Reading those back and passing them in fails to render too, on purpose:
+> rotate instead. Change each user's password in MongoDB, pass the new values,
+> then restart the Yorkie Deployment so it picks up the new connection URI.
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
 Consult also the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions).

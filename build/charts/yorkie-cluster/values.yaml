@@ -140,7 +140,9 @@ mongodb:
   enabled: true
 
   # MongoDB user credentials. The three passwords have no defaults: the chart
-  # refuses to render while mongodb.enabled is true and any of them is empty.
+  # refuses to render while mongodb.enabled is true and any of them is blank,
+  # and refuses the defaults it used to publish here -- "admin", "useradmin"
+  # and "clusteradmin" -- since those are readable in Yorkie's source.
   # Generate them (see README.md) and pass the same values on every upgrade.
   credentials:
     # Database admin user (used by Yorkie application)
