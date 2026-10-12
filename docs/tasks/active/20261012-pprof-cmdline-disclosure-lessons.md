@@ -65,6 +65,28 @@ guard left the suite green. Two tests now pin it:
 Both fail against a mux built without the guard, and the second also fails
 if `isCmdlinePath` stops cleaning the path.
 
+## CI note: the integration failure is not this branch's
+
+The `test` lane on `66d4ce64` failed in
+`TestAuthWebhookPresenceOnly/a reader attaching alone keeps the bound schema`
+(`test/integration/auth_webhook_test.go`, which arrived with #2129). Nothing
+on this branch reaches it:
+
+- The only code this branch changes is the profiling mux; `cmd/yorkie` and
+  `server/server.go` take comment edits alone.
+- `server/profiling`'s tests plant sentinels in `os.Args`, but a Go test
+  binary is per package, so that mutation cannot be observed from the
+  `test/integration` process.
+- The same lane passed on the two preceding commits of this branch
+  (`291d0c57`, `c02f7c52`). The delta from the last green run to the red one
+  is `server/profiling/cmdline_test.go` and this file.
+
+The subtest turns an attachment limit on so that each attach reaches the
+schema rebind, which makes it sensitive to when a detach is reflected in the
+attachment count — the shape of a timing flake rather than of a verdict on
+this change. Diagnosing it means touching an integration test this branch
+does not own, so it is left for a maintainer.
+
 ## Self review
 
 Not run: this branch was produced by an autonomous one-shot run with no
