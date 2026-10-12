@@ -39,9 +39,9 @@ var (
 )
 
 // Environment variables for the credentials that would otherwise be given as
-// flags. A flag value is visible in /proc/<pid>/cmdline and through the pprof
-// cmdline endpoint, which deployments commonly enable, so a deployment should
-// pass these through the environment instead. See also server.SecretKeyEnv.
+// flags. A flag value is visible to anyone who can read /proc/<pid>/cmdline
+// or list the process table, so a deployment should pass these through the
+// environment instead. See also server.SecretKeyEnv.
 const (
 	// MongoConnectionURIEnv is read when --mongo-connection-uri is unset. The
 	// URI carries the database user's password.
