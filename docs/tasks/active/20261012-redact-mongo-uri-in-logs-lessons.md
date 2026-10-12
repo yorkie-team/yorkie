@@ -44,3 +44,19 @@ The tempting fallback for a URI `url.Parse` rejects is to log it as-is so the
 operator can see what is wrong. That is exactly the case where the password
 cannot be located, so it is exactly the case where echoing it leaks. The
 fallback reports only that the URI did not parse.
+
+## A test that copies a server timeout inherits a deadline it does not want
+
+The integration lane failed in `TestClient_RotateProjectKeys` after exactly
+5.00s — the `ConnectionTimeout` that `setupTestWithDummyData` copied from the
+server default, not any assertion in the test. 5s is right for a server that
+should fail fast at startup instead of hanging; a test binary dials a cold
+database — connect, ping, then `ensureIndexes` over every collection — while
+`go test ./...` drives the same mongod from the other packages under `-race`,
+and that overruns 5s on load alone. `require.NoError` then reports a slow
+database as a failed test. The package's dial budget is now 30s, so an
+unreachable database still fails the test, only later.
+
+`test/helper`'s `MongoConnectionTimeout` and the dials in `server/authz`,
+`test/complex` and `test/integration` carry the same 5s and the same latent
+sensitivity; none of them failed, and they are outside this change.
