@@ -49,6 +49,10 @@ const (
 
 	// ClusterSecretEnv is read when --cluster-secret is unset.
 	ClusterSecretEnv = "YORKIE_CLUSTER_SECRET" // #nosec G101
+
+	// GitHubClientSecretEnv is read when --auth-github-client-secret is unset.
+	// The secret lets its holder complete the OAuth exchange as this server.
+	GitHubClientSecretEnv = "YORKIE_AUTH_GITHUB_CLIENT_SECRET" // #nosec G101
 )
 
 var (
@@ -140,6 +144,9 @@ func newServerCmd() *cobra.Command {
 			}
 			if conf.Backend.ClusterSecret == "" {
 				conf.Backend.ClusterSecret = strings.TrimSpace(os.Getenv(ClusterSecretEnv))
+			}
+			if authGitHubClientSecret == "" {
+				authGitHubClientSecret = strings.TrimSpace(os.Getenv(GitHubClientSecretEnv))
 			}
 
 			conf.RPC.ReadHeaderTimeout = rpcReadHeaderTimeout.String()
@@ -351,7 +358,8 @@ func init() {
 		&authGitHubClientSecret,
 		"auth-github-client-secret",
 		"",
-		"GitHub OAuth Client Secret",
+		"GitHub OAuth Client Secret. If empty, it is read from "+
+			GitHubClientSecretEnv+", which keeps it off the command line.",
 	)
 	cmd.Flags().StringVar(
 		&authGitHubRedirectURL,
