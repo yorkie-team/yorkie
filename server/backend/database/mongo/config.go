@@ -18,7 +18,9 @@ package mongo
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -125,6 +127,214 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// unparsableConnectionURI stands in for a connection URI whose shape this file
+// cannot make out. The userinfo of such a URI cannot be located and therefore
+// cannot be stripped, so none of it is reported.
+const unparsableConnectionURI = "(unparsable URI)"
+
+// redactionMask is what a masked value is replaced with. It matches the mask
+// url.URL.Redacted applies to the userinfo password, so a line carrying both
+// kinds of secret reads consistently.
+const redactionMask = "xxxxx"
+
+// credentialOptionSubstrings match the name of a connection-string option that
+// says outright that its value is a secret. Matching on a substring rather than
+// on an exact name also covers the spellings the MongoDB drivers accept as
+// aliases (for example sslClientCertificateKeyPassword for
+// tlsCertificateKeyFilePassword) and any option added after this was written.
+var credentialOptionSubstrings = []string{"password", "passwd", "token", "secret", "credential"}
+
+// credentialOptionNames are the options whose value carries a secret without
+// saying so in the name: authMechanismProperties holds, among others, the
+// AWS_SESSION_TOKEN and the OIDC access token.
+var credentialOptionNames = map[string]bool{
+	"authmechanismproperties": true,
+}
+
+// isCredentialOption reports whether the named connection-string option carries
+// a secret. Option names are compared case-insensitively, as the MongoDB
+// connection-string spec treats them.
+func isCredentialOption(name string) bool {
+	lowered := strings.ToLower(name)
+	if credentialOptionNames[lowered] {
+		return true
+	}
+
+	for _, substring := range credentialOptionSubstrings {
+		if strings.Contains(lowered, substring) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// optionDelimiters are the characters that open an option string or separate
+// one option from the next. '?' opens it and '&' separates, while ';' is the
+// legacy separator the MongoDB drivers still accept. Splitting on all three
+// finds every option without having to know where the authority ends, which an
+// unescaped character in the password can otherwise hide.
+const optionDelimiters = "?&;"
+
+// redactOption masks the value of option when its name says the value is a
+// secret, leaving the spelling of the name untouched so the logged option
+// string still reads like the configured one.
+func redactOption(option string) string {
+	name, _, hasValue := strings.Cut(option, "=")
+	if !hasValue {
+		return option
+	}
+
+	decoded, err := url.QueryUnescape(name)
+	if err != nil {
+		// An option whose name does not decode cannot be matched against the
+		// lists above, so it is masked rather than trusted.
+		return name + "=" + redactionMask
+	}
+
+	if isCredentialOption(decoded) {
+		return name + "=" + redactionMask
+	}
+
+	return option
+}
+
+// redactOptions masks the value of every credential-bearing option in s,
+// keeping the order and the delimiters so the logged URI still reads like the
+// configured one.
+func redactOptions(s string) string {
+	var redacted strings.Builder
+	for {
+		i := strings.IndexAny(s, optionDelimiters)
+		if i < 0 {
+			redacted.WriteString(redactOption(s))
+			return redacted.String()
+		}
+
+		redacted.WriteString(redactOption(s[:i]))
+		redacted.WriteByte(s[i])
+		s = s[i+1:]
+	}
+}
+
+// hostListChars are the characters a host list is spelled with: a host name or
+// address, an optional port, the ',' between the hosts of a replica set, the
+// '[' and ']' of an IPv6 literal and the '%' of a percent-encoded unix-socket
+// path. Anything else means the segment is not a host list.
+const hostListChars = ".-_:,[]%"
+
+// isHostList reports whether s, the segment that follows a candidate '@', is
+// spelled like the host list of a connection URI. It is how an '@' that closes
+// the userinfo is told from one that merely sits in an option value.
+func isHostList(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune(hostListChars, r):
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+// cutUserinfo splits rest, the connection URI after its scheme, into its
+// userinfo and what follows. The split is made on the raw string rather than
+// through net/url, because net/url cuts the fragment and the query off before
+// it looks for the authority: in mongodb://user:pa#ss@host:27017 an unescaped
+// '#' in the password leaves it reading "user:pa" as the host and
+// "ss@host:27017" as the fragment, so there is no userinfo left for
+// URL.Redacted to mask and the password is echoed in full.
+//
+// Candidates are tried from the right, as the connection-string spec has the
+// last '@' close the userinfo. One whose userinfo would span a '/' is skipped,
+// since a '/' ends the authority and so puts that '@' in the path or in the
+// option string.
+func cutUserinfo(rest string) (string, string, bool) {
+	for at := strings.LastIndex(rest, "@"); at >= 0; at = strings.LastIndex(rest[:at], "@") {
+		if strings.Contains(rest[:at], "/") {
+			continue
+		}
+
+		if isHostList(hostList(rest[at+1:])) {
+			return rest[:at], rest[at+1:], true
+		}
+	}
+
+	return "", rest, false
+}
+
+// hostList returns the leading segment of s that holds the hosts: the
+// authority ends at the first '/', '?' or '#' that follows it.
+func hostList(s string) string {
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		return s[:i]
+	}
+
+	return s
+}
+
+// maskUserinfo masks the password of userinfo, keeping the username so the
+// line still says which user the server connects as. The first ':' is read as
+// the separator, so an unescaped ':' in the username masks more than the
+// password rather than less.
+func maskUserinfo(userinfo string) string {
+	username, _, hasPassword := strings.Cut(userinfo, ":")
+	if !hasPassword {
+		return userinfo
+	}
+
+	return username + ":" + redactionMask
+}
+
+// isControl reports whether r is an ASCII control character. Such a character
+// has no place in a connection URI, and one that reached a log line could forge
+// a line of its own.
+func isControl(r rune) bool {
+	return r < ' ' || r == 0x7f
+}
+
+// RedactedConnectionURI returns the connection URI with every credential it
+// carries masked: the password of its userinfo and the value of any
+// credential-bearing connection-string option, such as
+// tlsCertificateKeyFilePassword, proxyPassword or authMechanismProperties. The
+// URI carries the database user's password, so logging it verbatim publishes
+// that credential to everyone who can read the server's stdout — a far weaker
+// permission than the one guarding the secret it is deployed in. Scheme,
+// username, hosts and the remaining options are kept, since those are what make
+// the line worth logging.
+//
+// A URI whose credentials cannot be located is reported as unparsable instead
+// of in part: masking too much costs a log line, masking too little publishes
+// the password.
+func (c *Config) RedactedConnectionURI() string {
+	scheme, rest, hasScheme := strings.Cut(c.ConnectionURI, "://")
+	if !hasScheme || scheme == "" ||
+		strings.ContainsAny(scheme, "/?#@") ||
+		strings.ContainsFunc(c.ConnectionURI, isControl) {
+		return unparsableConnectionURI
+	}
+
+	if userinfo, remainder, ok := cutUserinfo(rest); ok {
+		return scheme + "://" + maskUserinfo(userinfo) + "@" + redactOptions(remainder)
+	}
+
+	redacted := redactOptions(rest)
+	if strings.Contains(redacted, "@") {
+		// An '@' that closes no userinfo this can locate and belongs to no
+		// option masked above: the URI may still carry a password, spelled in
+		// a way this cannot find, so none of it is reported.
+		return unparsableConnectionURI
+	}
+
+	return scheme + "://" + redacted
 }
 
 // ParseConnectionTimeout returns connection timeout duration.

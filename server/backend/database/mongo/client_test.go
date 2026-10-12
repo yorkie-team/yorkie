@@ -40,6 +40,16 @@ const (
 	dummyProjectID = types.ID("000000000000000000000000")
 	projectOneID   = types.ID("000000000000000000000001")
 	projectTwoID   = types.ID("000000000000000000000002")
+
+	// testDialTimeout is the budget setupTestWithDummyData gives mongo.Dial to
+	// connect, ping and build the indexes of a database it is the first to
+	// open. The server default is 5s, which suits a process that should fail
+	// fast at startup rather than hang; a test binary instead dials while the
+	// rest of the suite drives the same mongod under -race, where a cold dial
+	// overruns 5s on load alone and require.NoError reports a slow database as
+	// a failed test. A database that is genuinely unreachable still fails the
+	// test, only later.
+	testDialTimeout = "30s"
 )
 
 // setupTestWithDummyData dials a mongo.Client for the test and closes it when
@@ -49,10 +59,10 @@ const (
 // since the shared testcases name their documents and users after the test.
 func setupTestWithDummyData(t *testing.T) *mongo.Client {
 	config := &mongo.Config{
-		ConnectionTimeout:  "5s",
+		ConnectionTimeout:  testDialTimeout,
 		ConnectionURI:      "mongodb://localhost:27017",
 		YorkieDatabase:     helper.TestDBName() + helper.TestRunSuffix(t),
-		PingTimeout:        "5s",
+		PingTimeout:        testDialTimeout,
 		CacheStatsInterval: helper.MongoCacheStatsInterval,
 		ProjectCacheSize:   helper.MongoProjectCacheSize,
 		ProjectCacheTTL:    helper.MongoProjectCacheTTL,

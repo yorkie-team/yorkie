@@ -24,8 +24,7 @@ RPC:
 
     # GitHubClientSecret is GitHub OAuth Client Secret. Outside a config file
     # it can be given as YORKIE_AUTH_GITHUB_CLIENT_SECRET instead of
-    # --auth-github-client-secret, which keeps it out of /proc/<pid>/cmdline
-    # and the pprof cmdline endpoint.
+    # --auth-github-client-secret, which keeps it out of /proc/<pid>/cmdline.
     GitHubClientSecret: ""
 
     # GitHubRedirectURL is GitHub OAuth callback URL.
@@ -52,6 +51,9 @@ Profiling:
   Port: 8081
 
   # PprofEnabled is whether to enable the pprof `/debug/pprof` endpoint.
+  # `/debug/pprof/cmdline` is never served, enabled or not: it writes the
+  # process arguments, so it would hand any credential passed as a flag to
+  # whoever can reach this port, which is not authenticated. It answers 404.
   PprofEnabled: false
 
 # Membership is the configuration for the membership of the cluster.
