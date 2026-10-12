@@ -174,7 +174,11 @@ func Dial(conf *Config) (*Client, error) {
 	}
 	cacheManager.RegisterCache(vectorCache)
 
-	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
+	logging.DefaultLogger().Infof(
+		"MongoDB connected, URI: %s, DB: %s",
+		conf.RedactedConnectionURI(),
+		conf.YorkieDatabase,
+	)
 
 	yorkieClient := &Client{
 		config:   conf,
