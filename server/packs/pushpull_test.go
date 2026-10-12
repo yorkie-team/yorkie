@@ -1263,6 +1263,96 @@ func TestPacks(t *testing.T) {
 		assert.Greater(t, recoveredInfo.ServerSeq, baselineServerSeq,
 			"the recovered client's change must advance server_seq on the new epoch")
 	})
+
+	t.Run("push-only reply carries no min version vector", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectInfo, err := testBackend.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		assert.NoError(t, err)
+		project := projectInfo.ToProject()
+
+		activateResp, err := testClient.ActivateClient(
+			ctx,
+			connect.NewRequest(&api.ActivateClientRequest{
+				ClientKey: helper.TestKey(t).String(),
+			}),
+		)
+		assert.NoError(t, err)
+
+		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+		attachResp, err := testClient.AttachDocument(
+			ctx,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: helper.TestKey(t).String(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{
+						{Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID}},
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		actorID, err := time.ActorIDFromBytes(clientID)
+		assert.NoError(t, err)
+
+		docID := types.ID(attachResp.Msg.DocumentId)
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		clientRefKey := types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}
+		pbVector := &api.VersionVector{Vector: map[string]int64{actorID.StringBase64(): 2}}
+
+		// 01. A push-only sync. Its reply acks the push and must carry no
+		// version vector: the client has pulled none of the remote changes
+		// that vector accounts for, so collecting with it would purge the
+		// tombstones they anchor on.
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, clientRefKey)
+		assert.NoError(t, err)
+		pushOnlyPack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey: helper.TestKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 1, ClientSeq: 2},
+			Changes: []*api.Change{
+				{Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: clientID, VersionVector: pbVector}},
+			},
+			VersionVector: pbVector,
+		})
+		assert.NoError(t, err)
+
+		resPack, err := packs.PushPull(
+			ctx, testBackend, project, clientInfo, docRefKey, pushOnlyPack,
+			packs.PushPullOptions{Mode: types.SyncModePushOnly, Status: document.StatusAttached},
+		)
+		assert.NoError(t, err)
+		assert.Empty(t, resPack.VersionVector)
+
+		// 02. The push-only sync still recorded the client's own vector, so
+		// the minimum the server keeps covers the change it just pushed.
+		minVV, err := testBackend.DB.GetMinVersionVector(ctx, docRefKey, pushOnlyPack.VersionVector)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), minVV.VersionOf(actorID))
+
+		// 03. The next full pull does carry the vector, after the changes it
+		// accounts for.
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, clientRefKey)
+		assert.NoError(t, err)
+		pullOnlyPack, err := converter.FromChangePack(&api.ChangePack{
+			DocumentKey:   helper.TestKey(t).String(),
+			Checkpoint:    &api.Checkpoint{ServerSeq: 1, ClientSeq: 2},
+			VersionVector: pbVector,
+		})
+		assert.NoError(t, err)
+
+		resPack, err = packs.PushPull(
+			ctx, testBackend, project, clientInfo, docRefKey, pullOnlyPack,
+			packs.PushPullOptions{Mode: types.SyncModePushPull, Status: document.StatusAttached},
+		)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, resPack.VersionVector)
+	})
 }
 
 // assertRejectedPushPullUnchanged reloads DocInfo/ClientInfo after a rejected
