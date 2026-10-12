@@ -460,6 +460,18 @@ func TestRESTAPI(t *testing.T) {
 		post(t, project, versionURL, `{}`)
 		assertOK(t, versionURL, fmt.Sprintf("%s %s", types.AuthSchemeBearer, token), `{}`)
 	})
+
+	t.Run("keyless api key test", func(t *testing.T) {
+		// UseDefaultProject is on for the test server, which lets a client
+		// without a public key reach the default project on YorkieService. It
+		// must not let an admin request without a secret key act on it.
+		// net/http trims only ASCII spaces and tabs off a header value, so a
+		// non-breaking space reaches the server as the whole key.
+		url := fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr())
+		for _, param := range []string{"", " ", "\u00a0", "\u00a0\u00a0", " \u00a0 "} {
+			assertUnauthenticated(t, url, fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, param), `{"page_size": 1}`)
+		}
+	})
 }
 
 // assertOK sends a POST request with the given authorization header and
@@ -505,6 +517,18 @@ func logIn(t *testing.T) string {
 // assertPermissionDenied sends a POST request with the given authorization
 // header and asserts that it is answered with a permission_denied error.
 func assertPermissionDenied(t *testing.T, url, authHeader, body string) {
+	assertRejected(t, url, authHeader, body, http.StatusForbidden, "permission_denied")
+}
+
+// assertUnauthenticated sends a POST request with the given authorization
+// header and asserts that it is answered with an unauthenticated error.
+func assertUnauthenticated(t *testing.T, url, authHeader, body string) {
+	assertRejected(t, url, authHeader, body, http.StatusUnauthorized, "unauthenticated")
+}
+
+// assertRejected sends a POST request with the given authorization header and
+// asserts that it is answered with the given status and error code.
+func assertRejected(t *testing.T, url, authHeader, body string, status int, code string) {
 	req, err := http.NewRequest("POST", url, strings.NewReader(body))
 	assert.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -514,7 +538,7 @@ func assertPermissionDenied(t *testing.T, url, authHeader, body string) {
 	// A reset connection fails here, before the status is read.
 	assert.NoError(t, err)
 	defer func() { assert.NoError(t, res.Body.Close()) }()
-	assert.Equal(t, http.StatusForbidden, res.StatusCode)
+	assert.Equal(t, status, res.StatusCode, "authorization %q", authHeader)
 
 	resBody, err := io.ReadAll(res.Body)
 	assert.NoError(t, err)
@@ -523,7 +547,7 @@ func assertPermissionDenied(t *testing.T, url, authHeader, body string) {
 		Code string `json:"code"`
 	}
 	assert.NoError(t, gojson.Unmarshal(resBody, &decoded))
-	assert.Equal(t, "permission_denied", decoded.Code)
+	assert.Equal(t, code, decoded.Code, "authorization %q", authHeader)
 }
 
 // post sends a POST request to the given URL with the given body.

@@ -42,6 +42,10 @@ type Config struct {
 	// UseDefaultProject is whether to use the default project. Even if public
 	// key is not provided from the client, the default project will be used. If
 	// we are using server as single-tenant mode, this should be set to true.
+	//
+	// It applies only to the client public key on YorkieService. It never
+	// waives the project secret key on AdminService or MCP, where a request
+	// without one is rejected whatever this says.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.

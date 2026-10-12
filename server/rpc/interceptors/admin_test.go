@@ -27,6 +27,10 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
+	"github.com/yorkie-team/yorkie/server/projects"
 )
 
 const (
@@ -161,5 +165,63 @@ func TestAdminServiceAuthenticateScheme(t *testing.T) {
 
 		_, err := interceptor.authenticate(context.Background(), projectScopedProcedure, header)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	})
+}
+
+func TestAdminServiceAuthenticateAPIKey(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+	_, defaultProject, err := db.EnsureDefaultUserAndProject(ctx, "admin", "admin-password")
+	assert.NoError(t, err)
+
+	newInterceptor := func(useDefaultProject bool) *AdminServiceInterceptor {
+		return &AdminServiceInterceptor{backend: &backend.Backend{
+			Config: &backend.Config{UseDefaultProject: useDefaultProject},
+			DB:     db,
+		}}
+	}
+	apiKeyHeader := func(param string) http.Header {
+		header := http.Header{}
+		header.Set(types.AuthorizationKey, fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, param))
+		return header
+	}
+
+	t.Run("secret key authenticates as its project test", func(t *testing.T) {
+		for _, useDefaultProject := range []bool{true, false} {
+			interceptor := newInterceptor(useDefaultProject)
+
+			ctx, err := interceptor.authenticate(ctx, projectScopedProcedure, apiKeyHeader(defaultProject.SecretKey))
+			assert.NoError(t, err)
+			assert.Equal(t, database.DefaultProjectID, projects.From(ctx).ID)
+		}
+	})
+
+	// UseDefaultProject lets a client without a public key reach the default
+	// project on YorkieService. It must not let an admin request without a
+	// secret key act on that project, whatever the setting.
+	t.Run("keyless api key is rejected even with the default project test", func(t *testing.T) {
+		params := map[string]string{
+			"empty":               "",
+			"whitespace only":     " \t ",
+			"non-breaking space":  "\u00a0",
+			"mixed whitespace":    " \u00a0\t",
+			"double non-breaking": "\u00a0\u00a0",
+		}
+
+		for _, useDefaultProject := range []bool{true, false} {
+			interceptor := newInterceptor(useDefaultProject)
+			for name, param := range params {
+				_, err := interceptor.authenticate(ctx, projectScopedProcedure, apiKeyHeader(param))
+				assert.Equal(
+					t,
+					connect.CodeUnauthenticated,
+					connect.CodeOf(err),
+					"%s key with UseDefaultProject=%v", name, useDefaultProject,
+				)
+				assert.ErrorIs(t, err, ErrSecretKeyNotProvided, "%s key with UseDefaultProject=%v", name, useDefaultProject)
+			}
+		}
 	})
 }
