@@ -246,6 +246,12 @@ message JSONElement {
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
     TimeTicket revived_at = 5;
+    // boundaries holds the boundary records of the tree's split products.
+    // See TreeBoundary.
+    repeated TreeBoundary boundaries = 6;
+    // merges holds the merge tickets of nodes that more than one merge
+    // removed concurrently. See TreeMerge.
+    repeated TreeMerge merges = 7;
   }
 
   oneof body {
@@ -308,6 +314,32 @@ message TreeNode {
   // the merge-time causal boundary for SplitElement. See
   // docs/design/concurrent-merge-split.md for details.
   TimeTicket merged_at = 10;
+}
+
+// TreeBoundary records, for the product of the innermost level of a split of
+// an all-text node, the node its boundary is anchored in front of and the
+// same-anchor boundary it nests under. Later splits read it, so it persists
+// for the life of the product. It lives on the tree rather than on TreeNode so that
+// operation content, which carries TreeNodes, cannot carry one. See
+// docs/design/split-boundary-anchors.md for details.
+message TreeBoundary {
+  TreeNodeID product = 1;
+  // anchor is absent when the boundary is anchored at the end of the split
+  // family.
+  TreeNodeID anchor = 2;
+  // nest is absent when the boundary nests under no other.
+  TreeNodeID nest = 3;
+}
+
+// TreeMerge records every merge that removed one node, when more than one
+// did so concurrently. The children the merges moved keep only the smallest
+// ticket in merged_at; whether a later split knew the node was merged away
+// needs all of them. Like TreeBoundary it lives on the tree so that operation
+// content cannot carry it.
+message TreeMerge {
+  TreeNodeID source = 1;
+  // tickets is sorted in ticket order.
+  repeated TimeTicket tickets = 2;
 }
 
 message TreeNodes {

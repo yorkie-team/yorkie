@@ -859,12 +859,32 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        boundaries:
+          additionalProperties: false
+          description: |-
+            boundaries holds the boundary records of the tree's split products.
+             See TreeBoundary.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TreeBoundary'
+            type: object
+          title: boundaries
+          type: array
         createdAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
           description: ""
           title: created_at
           type: object
+        merges:
+          additionalProperties: false
+          description: |-
+            merges holds the merge tickets of nodes that more than one merge
+             removed concurrently. See TreeMerge.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TreeMerge'
+            type: object
+          title: merges
+          type: array
         movedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -2229,6 +2249,63 @@ components:
           - type: number
           title: lamport
       title: TimeTicket
+      type: object
+    yorkie.v1.TreeBoundary:
+      additionalProperties: false
+      description: |-
+        TreeBoundary records, for the product of the innermost level of a split of
+         an all-text node, the node its boundary is anchored in front of and the
+         same-anchor boundary it nests under. Later splits read it, so it persists
+         for the life of the product. It lives on the tree rather than on TreeNode so that
+         operation content, which carries TreeNodes, cannot carry one. See
+         docs/design/split-boundary-anchors.md for details.
+      properties:
+        anchor:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: |-
+            anchor is absent when the boundary is anchored at the end of the split
+             family.
+          title: anchor
+          type: object
+        nest:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: nest is absent when the boundary nests under no other.
+          title: nest
+          type: object
+        product:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: product
+          type: object
+      title: TreeBoundary
+      type: object
+    yorkie.v1.TreeMerge:
+      additionalProperties: false
+      description: |-
+        TreeMerge records every merge that removed one node, when more than one
+         did so concurrently. The children the merges moved keep only the smallest
+         ticket in merged_at; whether a later split knew the node was merged away
+         needs all of them. Like TreeBoundary it lives on the tree so that operation
+         content cannot carry it.
+      properties:
+        source:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: source
+          type: object
+        tickets:
+          additionalProperties: false
+          description: tickets is sorted in ticket order.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+            type: object
+          title: tickets
+          type: array
+      title: TreeMerge
       type: object
     yorkie.v1.TreeNode:
       additionalProperties: false

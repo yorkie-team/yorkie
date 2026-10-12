@@ -16,8 +16,8 @@
 
 package crdt
 
-// DropSplitLinksInElement strips the split-sibling links from every tree
-// reachable from elem.
+// DropSplitLinksInElement strips the split-sibling links and the boundary
+// records from every tree reachable from elem.
 //
 // A Set/Add/SetByIndex payload carries a whole element rather than a position
 // in the document, and the wire format carries InsPrevID/InsNextID on every
@@ -44,6 +44,10 @@ func DropSplitLinksInElement(elem Element) {
 		if root := e.Root(); root != nil {
 			root.DropSplitLinks()
 		}
+		// DropSplitLinks cleared every boundary record, so the index of them
+		// goes too; a stale entry would let a purge relink a product and give
+		// it a record back.
+		e.anchoredBefore = nil
 	case *Object:
 		for _, node := range e.RHTNodes() {
 			DropSplitLinksInElement(node.Element())

@@ -203,12 +203,41 @@ func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 func toTree(tree *crdt.Tree) *api.JSONElement {
 	return &api.JSONElement{
 		Body: &api.JSONElement_Tree_{Tree: &api.JSONElement_Tree{
-			Nodes:     ToTreeNodes(tree.Root()),
-			CreatedAt: ToTimeTicket(tree.CreatedAt()),
-			MovedAt:   ToTimeTicket(tree.MovedAt()),
-			RemovedAt: ToTimeTicket(tree.RemovedAt()),
+			Nodes:      ToTreeNodes(tree.Root()),
+			CreatedAt:  ToTimeTicket(tree.CreatedAt()),
+			MovedAt:    ToTimeTicket(tree.MovedAt()),
+			RemovedAt:  ToTimeTicket(tree.RemovedAt()),
+			Boundaries: toTreeBoundaries(tree.Boundaries()),
+			Merges:     toTreeMerges(tree.Merges()),
 		}},
 	}
+}
+
+func toTreeMerges(merges []crdt.TreeMerge) []*api.TreeMerge {
+	var pbMerges []*api.TreeMerge
+	for _, m := range merges {
+		pb := &api.TreeMerge{Source: toTreeNodeID(m.Source)}
+		for _, tk := range m.Tickets {
+			pb.Tickets = append(pb.Tickets, ToTimeTicket(tk))
+		}
+		pbMerges = append(pbMerges, pb)
+	}
+	return pbMerges
+}
+
+func toTreeBoundaries(boundaries []crdt.TreeBoundary) []*api.TreeBoundary {
+	var pbBoundaries []*api.TreeBoundary
+	for _, b := range boundaries {
+		pb := &api.TreeBoundary{Product: toTreeNodeID(b.Product)}
+		if b.Anchor != nil {
+			pb.Anchor = toTreeNodeID(b.Anchor)
+		}
+		if b.Nest != nil {
+			pb.Nest = toTreeNodeID(b.Nest)
+		}
+		pbBoundaries = append(pbBoundaries, pb)
+	}
+	return pbBoundaries
 }
 
 func toRHTNodes(rhtNodes []*crdt.ElementRHTNode) ([]*api.RHTNode, error) {

@@ -146,6 +146,23 @@ type TreeNode struct {
 	InsPrevID *TreeNodeID
 	InsNextID *TreeNodeID
 
+	// BoundaryAnchor, BoundaryAtEnd and BoundaryNest record, for the product
+	// of the innermost level of a split of an all-text node, the item its
+	// boundary is anchored in front of (a node, or the end of the split
+	// family when BoundaryAtEnd is set) and the same-anchor boundary it nests
+	// under. All three are zero on any other node. See
+	// docs/design/split-boundary-anchors.md.
+	BoundaryAnchor *TreeNodeID
+	BoundaryAtEnd  bool
+	BoundaryNest   *TreeNodeID
+
+	// mergeTickets holds, on a node that more than one merge removed
+	// concurrently, the ticket of every such merge. The moved children keep
+	// only the smallest in MergedAt; whether a change knew the node was merged
+	// away needs all of them. Persisted on the tree (TreeMerge), not here, for
+	// the same reason as the boundary records.
+	mergeTickets []*time.Ticket
+
 	// Value is optional. If the value is not empty, it means that the node is a
 	// text node.
 	Value string
@@ -306,6 +323,19 @@ func (n *TreeNode) Split(
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) (resource.DataSize, error) {
+	return n.split(tree, offset, issueTimeTicket, versionVector, nil)
+}
+
+// split is Split with keepFrom: the merge source whose moved run opens the
+// right partition and stays there, rather than migrating left as concurrent
+// boundary text (see unknownMergeBoundaryAt).
+func (n *TreeNode) split(
+	tree *Tree,
+	offset int,
+	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
+	keepFrom *TreeNodeID,
+) (resource.DataSize, error) {
 	var split *TreeNode
 	var err error
 	var diff resource.DataSize
@@ -316,7 +346,7 @@ func (n *TreeNode) Split(
 			return diff, err
 		}
 	} else {
-		split, diff, err = n.SplitElement(offset, issueTimeTicket, versionVector)
+		split, diff, err = n.splitElement(offset, issueTimeTicket, versionVector, keepFrom)
 		if err != nil {
 			return diff, err
 		}
@@ -469,6 +499,15 @@ func (n *TreeNode) SplitElement(
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) (*TreeNode, resource.DataSize, error) {
+	return n.splitElement(offset, issueTimeTicket, versionVector, nil)
+}
+
+func (n *TreeNode) splitElement(
+	offset int,
+	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
+	keepFrom *TreeNodeID,
+) (*TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
 
 	prvSize := n.DataSize()
@@ -556,6 +595,13 @@ func (n *TreeNode) SplitElement(
 				// siblings have deterministic IDs and act as normal
 				// boundary markers.
 				if child.Value.InsPrevID != nil && !child.Value.IsText() {
+					remaining = append(remaining, child)
+					continue
+				}
+				// The run a merge the change did not know moved in sat
+				// behind that merge source's boundary for it.
+				if keepFrom != nil && child.Value.MergedFrom != nil && child.Value.MergedFrom.Equal(keepFrom) {
+					boundaryReached = true
 					remaining = append(remaining, child)
 					continue
 				}
@@ -683,6 +729,10 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.removedAt = n.removedAt
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
+	clone.BoundaryAnchor = n.BoundaryAnchor
+	clone.BoundaryAtEnd = n.BoundaryAtEnd
+	clone.BoundaryNest = n.BoundaryNest
+	clone.mergeTickets = n.mergeTickets
 	clone.mergedInto = n.mergedInto
 	clone.MergedFrom = n.MergedFrom
 	clone.MergedAt = n.MergedAt
@@ -708,8 +758,18 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	return clone, nil
 }
 
-// DropSplitLinks clears the split-sibling links on this node and every one of
-// its descendants.
+// clearBoundary drops the boundary record and the merge tickets. Like the
+// split chain, they describe a node's place in a split family, so a copy that
+// leaves the family must not carry them.
+func (n *TreeNode) clearBoundary() {
+	n.BoundaryAnchor = nil
+	n.BoundaryAtEnd = false
+	n.BoundaryNest = nil
+	n.mergeTickets = nil
+}
+
+// DropSplitLinks clears the split-sibling links and the boundary records on
+// this node and every one of its descendants.
 //
 // InsPrevID/InsNextID name positions in a split chain and only SplitElement
 // may create them. A node arriving as operation content is freshly created by
@@ -730,6 +790,7 @@ func (n *TreeNode) DropSplitLinks() {
 	index.TraverseNode(n.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.InsPrevID = nil
 		node.Value.InsNextID = nil
+		node.Value.clearBoundary()
 	})
 }
 
@@ -800,6 +861,7 @@ func (n *TreeNode) ReissueIDs(issueTimeTicket func() *time.Ticket) {
 		value.id = NewTreeNodeID(issueTimeTicket(), 0)
 		value.InsPrevID = nil
 		value.InsNextID = nil
+		value.clearBoundary()
 		value.MergedFrom = nil
 		value.MergedAt = nil
 		value.mergedInto = nil
@@ -831,6 +893,10 @@ func (n *TreeNode) CloneForReinsert(preTombstoned map[string]struct{}) (*TreeNod
 	// padded lengths, text nodes from their own value.
 	index.TraverseNode(clone.Index, func(node *index.Node[*TreeNode], _ int) {
 		node.Value.removedAt = nil
+		// Operation content cannot carry a boundary record, so the receivers
+		// of the re-insert get none; drop it here too so the local copy
+		// matches theirs.
+		node.Value.clearBoundary()
 		if node.IsText() {
 			node.VisibleLength = node.Value.Length()
 			node.TotalLength = node.Value.Length()
@@ -1002,6 +1068,24 @@ type Tree struct {
 	// otherwise never be registered for GC. Edit, Style and RemoveStyle
 	// drain this buffer into the GC pairs they return.
 	pendingGCPairs []GCPair
+
+	// anchoredBefore indexes split products by the ID of the node their
+	// boundary is anchored in front of, so that purging a node relinks only
+	// the products anchored before it. See setBoundary.
+	anchoredBefore map[string]map[*TreeNode]struct{}
+
+	// preMergeFwd is set by findTreeNodesWithSplitText when it resolves a
+	// position through preMergePoint, and read by Edit right after resolving
+	// its from position. It is transient: nothing outside one Edit reads it.
+	preMergeFwd *preMergeForward
+}
+
+// preMergeForward records that a leftmost position in the merged-away node src
+// resolved to the fixed point in holder (preMergePoint).
+type preMergeForward struct {
+	src      *TreeNode
+	holder   *TreeNode
+	mergedAt *time.Ticket
 }
 
 // NewTree creates a new instance of Tree.
@@ -1034,6 +1118,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	// target merged-away parents (§1.1 redirect, §6.2 propagation,
 	// §7.1 split skip).
 	tree.rebuildMergeState()
+	tree.rebuildBoundaryIndex()
 
 	return tree
 }
@@ -1105,6 +1190,10 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 		return nil
 	}
 
+	if barrier, ok := t.boundaryPurgeBarrier(node); ok {
+		return barrier
+	}
+
 	next := node.Index.Parent.NextSiblingOf(node.Index)
 	if next == nil {
 		return nil
@@ -1124,6 +1213,8 @@ func (t *Tree) Purge(child GCChild) error {
 		return nil
 	}
 
+	t.relinkSubtreeAnchors(node)
+	t.unindexBoundaries(node)
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err
 	}
@@ -1942,17 +2033,38 @@ func (t *Tree) Edit(
 	var info TreeEditReverseInfo
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	t.preMergeFwd = nil
+	fromParent, fromLeft, diffFrom, err := t.findTreeNodesWithSplitText(from, editedAt, versionVector, BoundaryInsert)
+	fromPreMerge := t.preMergeFwd
+	t.preMergeFwd = nil
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.findTreeNodesWithSplitText(to, editedAt, versionVector, BoundaryInsert)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, info, err
 	}
 
 	diff.Add(diffFrom, diffTo)
+
+	// Phase 1-0: Continue the step 04 RGA scan across the boundaries of a
+	// split family (§7.3), but only for the anchor of a pure insert -- a
+	// collapsed range with contents and no split, where the two endpoints
+	// resolved to the same place.
+	//
+	// A range endpoint must not move that way. The endpoints decide which
+	// parents the traversal below runs between: toParent feeds the Phase 3
+	// narrowing and both feed collectBetween, so an endpoint that walked into
+	// a split product would widen or shorten what this edit deletes and
+	// merges, over nodes the editor never saw. Phase 2's
+	// advancePastUnknownSplitSiblings is the rule that moves range endpoints
+	// past split products, and it stays the only one. styleTargets resolves
+	// its range through FindTreeNodesWithSplitText and is likewise untouched.
+	if fromParent == toParent && fromLeft == toLeft && len(contents) > 0 && splitLevel == 0 {
+		fromParent, fromLeft = t.advanceAcrossBoundaries(fromParent, fromLeft, editedAt, versionVector)
+		toParent, toLeft = fromParent, fromLeft
+	}
 
 	// Phase 2: Split Sibling Advance — advance past concurrent split
 	// products linked via InsNextID that the editor could not have seen.
@@ -2032,17 +2144,14 @@ func (t *Tree) Edit(
 	// A child a forged lineage would have moved under itself is tombstoned
 	// rather than moved, so those pairs are registered even on the error path.
 	stranded, err := t.mergeNodes(
-		fromParent, toBeMovedToFromParents, editedAt,
+		fromParent, toBeMovedToFromParents, editedAt, versionVector,
 	)
-	for _, node := range stranded {
-		pairs = append(pairs, GCPair{
-			Parent: t,
-			Child:  node,
-		})
-	}
+	pairs = append(pairs, t.gcPairsOf(stranded)...)
 	if err != nil {
 		return append(pairs, t.drainPendingGCPairs()...), diff, info, err
 	}
+
+	t.lowerRepeatedMergeTickets(from, to, editedAt)
 
 	// §6.2: Propagate deletes to children moved by prior merges. The declared
 	// positions are passed through because the skip is keyed on them; what the
@@ -2065,7 +2174,10 @@ func (t *Tree) Edit(
 	// InsertedContentSize does not see them, and they remove nothing, so
 	// RemovedSize does not either.
 	sizeBeforeSplit := t.Root().Len()
-	diffSplit, err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector)
+	diffSplit, err := t.split(
+		fromParent, fromLeft, t.findMergeNode(from.ParentID),
+		splitLevel, editedAt, issueTimeTicket, versionVector,
+	)
 	diff.Add(diffSplit)
 	info.SplitSize = t.Root().Len() - sizeBeforeSplit
 	if err != nil {
@@ -2089,6 +2201,13 @@ func (t *Tree) Edit(
 	var insertedSpans []*TreeRestoreSpan
 	if len(contents) != 0 {
 		intendedParent, intendedMergedAt := t.intendedMergeParent(from, fromParent)
+		// Content placed at the fixed point of a merged-away node is stamped
+		// as moved out of it, as the merge stamped it on a replica that
+		// applied the insert first, and the forwarding follows it there.
+		if fromPreMerge != nil && fromPreMerge.holder == fromParent && splitLevel == 0 {
+			intendedParent, intendedMergedAt = fromPreMerge.src, fromPreMerge.mergedAt
+			fromPreMerge.src.mergedInto = fromParent.id
+		}
 
 		leftInChildren := fromLeft
 
@@ -2725,8 +2844,8 @@ func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
 //     original source P across later merges. The redirect boundary in
 //     FindTreeNodesWithSplitText then still resolves (first child with
 //     MergedFrom == P), and every source's mergedInto is (re)pointed at the
-//     resolved destination — deriving it from each moved child's MergedFrom
-//     exactly as rebuildMergeState does, so runtime and snapshot agree.
+//     parent of the first child naming it as MergedFrom — derived exactly
+//     as rebuildMergeState derives it, so runtime and snapshot agree.
 //
 // mergedInto is set solely from moved children (never from the merge-source
 // list directly), so it is set only when rebuildMergeState can reconstruct
@@ -2743,17 +2862,19 @@ func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
 	editedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) ([]*TreeNode, error) {
-	dest := t.resolveMergeTarget(fromParent)
+	target := t.resolveMergeTarget(fromParent)
 
+	var srcs []*TreeNode
+	lastDest := make(map[*TreeNode]*TreeNode)
 	var stranded []*TreeNode
-	// Set once the guard below tombstones a subtree that contains dest. The
-	// destination is resolved once, before the loop, but the list it moves can
-	// hold several merge sources' children, so entries remain after the guard
-	// fires. dest is inside the subtree just tombstoned, so moving those
-	// remaining children there would put live nodes under a tombstone -- the
-	// very #2008 shape the guard exists to prevent. They are stranded too.
-	destTombstoned := false
+	// The nodes the guard below tombstoned. Each child's destination is
+	// resolved on its own (boundaryMergeTarget), so a child whose destination
+	// is inside a subtree the guard already tombstoned would put a live node
+	// under a tombstone -- the very #2008 shape the guard exists to prevent.
+	// It is stranded too.
+	guarded := make(map[*TreeNode]struct{})
 	for _, node := range toBeMovedToFromParents {
 		// A moved child must have a source parent to record; skip
 		// otherwise rather than append an untracked node (a node without
@@ -2762,6 +2883,7 @@ func (t *Tree) mergeNodes(
 		if node.Index.Parent == nil {
 			continue
 		}
+		dest := t.boundaryMergeTarget(target, node.Index.Parent.Value, versionVector)
 		// A destination that is the node itself or lies inside it can only
 		// come from a forged lineage: mergedInto is derived from the
 		// MergedFrom an element payload keeps, so a crafted one can aim the
@@ -2783,16 +2905,14 @@ func (t *Tree) mergeNodes(
 		// to GC, and it is what purges the node once the removal is causally
 		// stable.
 		//
-		// Once that has happened for any entry, dest carries a removedAt of
-		// its own, so every entry still to come is stranded for the same
-		// reason and takes the same treatment.
-		if node == dest || node.Index.IsAncestorOf(dest.Index) {
-			destTombstoned = true
-			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
-			continue
-		}
-		if destTombstoned {
-			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
+		// A later child whose destination lies in a subtree tombstoned here
+		// is stranded for the same reason and takes the same treatment.
+		if _, ok := guarded[dest]; ok || node == dest || node.Index.IsAncestorOf(dest.Index) {
+			removed := t.tombstoneSubtree(node, editedAt)
+			for _, n := range removed {
+				guarded[n] = struct{}{}
+			}
+			stranded = append(stranded, removed...)
 			continue
 		}
 		// Record source parent and merge ticket on the moved child.
@@ -2821,27 +2941,44 @@ func (t *Tree) mergeNodes(
 		if err := dest.Index.MoveChild(node.Index); err != nil {
 			return stranded, err
 		}
-		// Point this child's original source at the resolved destination,
-		// path-compressing a transitive source (a prior merge whose children
-		// were just relocated again) from the now-removed intermediate to the
-		// final target. Deriving mergedInto from a *moved* child — one that
-		// had a parent above — mirrors rebuildMergeState, which likewise skips
-		// parentless children, so runtime and snapshot agree. (A parentless
-		// child, detached by a concurrent split cascade, is continue'd above
-		// and must not repoint its source here.)
-		//
-		// Resolved through findMergeNode for the same reason rebuildMergeState
-		// resolves it there: MergedFrom is stamped here only when the node
-		// carries none, so a node that arrived on an element payload with one
-		// already set keeps the client's value, and this is where that value is
-		// read again long after the decode that first saw it. Left to a plain
+		// Collect this child's original source; its forwarding pointer is
+		// set once every child has moved, below. Resolved through
+		// findMergeNode for the same reason rebuildMergeState resolves it
+		// there: MergedFrom is stamped here only when the node carries none,
+		// so a node that arrived on an element payload with one already set
+		// keeps the client's value, and this is where that value is read
+		// again long after the decode that first saw it. Left to a plain
 		// floor lookup, a made-up offset would plant the forwarding pointer on
-		// whatever node happens to sit below it.
+		// whatever node happens to sit below it. A parentless child, detached
+		// by a concurrent split cascade, is continue'd above and must not
+		// repoint its source here, as rebuildMergeState skips it too.
 		if src := t.findMergeNode(node.MergedFrom); src != nil {
-			src.mergedInto = dest.id
+			if _, ok := lastDest[src]; !ok {
+				srcs = append(srcs, src)
+			}
+			lastDest[src] = dest
 		}
 	}
+
+	// Point each source at the holder rebuildMergeState derives for it: the
+	// parent of the first child, in document order, that names it as
+	// MergedFrom. Pointing it at whichever holder a child moved into last
+	// made the pointer follow carried content anywhere it was moved, even off
+	// the source's family to the root, and left a replica that reloaded the
+	// same tree from a snapshot with a different pointer.
+	for _, src := range srcs {
+		src.mergedInto = t.firstMergeHolder(src, lastDest[src]).id
+	}
 	return stranded, nil
+}
+
+// gcPairsOf returns a GC pair under the tree for each of nodes.
+func (t *Tree) gcPairsOf(nodes []*TreeNode) []GCPair {
+	pairs := make([]GCPair, 0, len(nodes))
+	for _, node := range nodes {
+		pairs = append(pairs, GCPair{Parent: t, Child: node})
+	}
+	return pairs
 }
 
 // tombstoneSubtree tombstones node and every live node below it with editedAt,
@@ -2862,6 +2999,33 @@ func (t *Tree) tombstoneSubtree(node *TreeNode, editedAt *time.Ticket) []*TreeNo
 	})
 
 	return removed
+}
+
+// firstMergeHolder returns the parent of the first child, in the order
+// rebuildMergeState visits them, that names src as its merge source, so the
+// forwarding pointer a merge leaves at runtime is the one a snapshot of the
+// same tree rebuilds. It returns fallback when no such child is found.
+//
+// It walks the whole tree, as rebuildMergeState does; mergeNodes calls it
+// once per merge source, not once per moved child.
+func (t *Tree) firstMergeHolder(src, fallback *TreeNode) *TreeNode {
+	var holder *TreeNode
+	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
+		if holder != nil {
+			return
+		}
+		child := node.Value
+		if child.MergedFrom == nil || node.Parent == nil || node.Parent.Value.IsText() {
+			return
+		}
+		if t.findMergeNode(child.MergedFrom) == src {
+			holder = node.Parent.Value
+		}
+	})
+	if holder == nil {
+		return fallback
+	}
+	return holder
 }
 
 // declaredBoundaries returns the elements the edit's own positions named as
@@ -3118,7 +3282,14 @@ func (t *Tree) collectBetween(
 			creationKnown := time.TicketKnown(versionVector, node.id.CreatedAt)
 
 			// NOTE(sigmaith): Determine if existing tombstone was already causally known.
-			tombstoneKnown := node.removedAt != nil && time.TicketKnown(versionVector, node.removedAt)
+			// A node that concurrent merges removed counts as removed for a
+			// change that knew any of them (knewRemovalOf): removedAt holds
+			// whichever ticket won LWW on this replica, so reading it alone
+			// lets the same change re-delete the node, and cascade into the
+			// children and split siblings it merged out, on one replica only.
+			tombstoneKnown := knewRemovalOf(node, func(tk *time.Ticket) bool {
+				return time.TicketKnown(versionVector, tk)
+			})
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
@@ -3237,13 +3408,19 @@ type advanceOpts struct {
 // and — until DropSplitLinks strips it — operation contents), so a chain that
 // loops back on itself would spin the applying goroutine forever while it
 // holds the document lock. Every chain walk runs through one of these.
-type insNextWalker struct {
+type insNextWalker = nodeSet
+
+// nodeSet records the nodes a walk has already passed through, so a walk over
+// pointers a peer controls stays bounded by the number of distinct nodes it
+// can reach. Both the InsNextID chain walks (see insNextWalker) and the
+// parent/child descent in holdsKnownChild use one.
+type nodeSet struct {
 	seen map[*TreeNode]struct{}
 }
 
 // visit records node and reports whether this walk had not already passed
-// through it. A false result means the chain is cyclic; stop following it.
-func (w *insNextWalker) visit(node *TreeNode) bool {
+// through it. A false result means the walk has looped; stop following it.
+func (w *nodeSet) visit(node *TreeNode) bool {
 	if w.seen == nil {
 		w.seen = make(map[*TreeNode]struct{}, 4)
 	}
@@ -3371,6 +3548,18 @@ func (t *Tree) emptyRunReachesActor(
 // ticket and split the last of them at its start. The right half lives in
 // that sibling on this replica, so it moves into our product exactly as it
 // would have moved out of parent on a replica that applied us first.
+//
+// The walk ends at the first sibling that holds a child the editor knew. The
+// same-boundary products sit in the chain as a run of empty nodes that ends
+// at the one holding the right half (yorkie#2030 orders every newer product
+// in front of it), so a sibling further down the chain was split off *that*
+// node at an offset past its children -- a different, later boundary that
+// the replica applying us first resolves by position, after the right half.
+// Walking on to it would put our product after that later boundary here and
+// before it there (yorkie-js-sdk#1433). A child the editor knew was in parent
+// when the concurrent split moved it, so it marks the right half; a child it
+// did not know may have been typed into an empty product afterwards, and a
+// split after that text is still a same-boundary split to us.
 func (t *Tree) orderSameBoundarySplit(
 	parent *TreeNode,
 	offset int,
@@ -3386,6 +3575,12 @@ func (t *Tree) orderSameBoundarySplit(
 	target := parent
 	var walker insNextWalker
 	walker.visit(target)
+	// One descent budget for the whole chain walk, not one per step: a node
+	// already descended into held nothing known (a hit returns immediately and
+	// ends the walk), so re-descending it can only repeat work. Sharing it
+	// bounds the walk at one visit per reachable node instead of one subtree
+	// per chain step. See holdsKnownChild.
+	var descended nodeSet
 	for target.InsNextID != nil {
 		next := t.findFloorNode(target.InsNextID)
 		if next == nil || next.IsText() || next.Index.Parent == nil {
@@ -3423,16 +3618,177 @@ func (t *Tree) orderSameBoundarySplit(
 			break
 		}
 		if !createdAt.After(editedAt) {
+			// The ticket order keeps our product in front of next, so the two
+			// boundaries would coincide -- unless next begins with inserts
+			// made at that boundary concurrently with us. §7.3 keeps such an
+			// insert on the left of a split boundary, and a replica that
+			// applied us first put it at the end of what we split. So our
+			// boundary is not next's after all: it is inside next, past that
+			// run, and the products are ordered by content rather than by
+			// ticket.
+			//
+			// Only while next still starts at our boundary, though: a
+			// stepped-over product holding content past its own run means
+			// next was split off it at a different boundary, and its leading
+			// run has nothing to do with ours.
+			adjacent := target == parent ||
+				len(target.Index.Children(true)) == boundaryInsertRunOf(target, versionVector)
+			if adjacent {
+				if run := boundaryInsertRunOf(next, versionVector); run > 0 {
+					return next, run
+				}
+			}
 			break
 		}
 
 		target = next
+
+		// next holds the right half: whatever follows it in the chain was
+		// split off at a boundary to the right of ours. Tombstones count --
+		// SplitElement partitions Children(true), so a child removed in the
+		// meantime still marks where that later boundary was, and counting it
+		// keeps the answer the same whether this replica has applied that
+		// removal yet or not -- and so do deeper descendants, which is where a
+		// multi-level split puts it. See holdsKnownChild for what GC does to
+		// that answer.
+		if t.holdsKnownChild(next, versionVector, &descended) {
+			break
+		}
 	}
 
 	if target == parent {
 		return parent, offset
 	}
-	return target, 0
+
+	// Same reason at the other end of the comparison: a newer product we
+	// step over may itself begin with a concurrent boundary insert, which
+	// belongs on our left too.
+	return target, boundaryInsertRunOf(target, versionVector)
+}
+
+// boundaryInsertRunOf counts the children at the start of node that were
+// inserted concurrently with the editing change -- the run §7.3 migrates to
+// the left of a split boundary. Text split siblings carry their original's
+// ticket and so end the run by being known.
+//
+// Only text children are counted: an element at the start of a product is
+// §7.8's business. Telling an element insert from an element split product would
+// need InsPrevID, which Purge relinks and clears and DropSplitLinks drops on
+// a copy -- so a run measured through it would depend on when each replica
+// ran GC, and two replicas would place the same split differently for no
+// reason but collection timing.
+//
+// The run also ends at the first child younger than node itself (see
+// movedBySplit): text typed into the product after the split was never at
+// the original boundary, so it is not a boundary insert even when the
+// editing change did not know it.
+//
+// Ported from yorkie-js-sdk#1467; see docs/design/split-boundary-anchors.md.
+func boundaryInsertRunOf(node *TreeNode, versionVector time.VersionVector) int {
+	run := 0
+	for _, child := range node.Index.Children(true) {
+		if !child.Value.IsText() {
+			break
+		}
+		createdAt := child.Value.id.CreatedAt
+		if l, ok := versionVector.Get(createdAt.ActorID()); ok && l >= createdAt.Lamport() {
+			break
+		}
+		if !movedBySplit(node, child.Value) {
+			break
+		}
+		run++
+	}
+
+	return run
+}
+
+// holdsKnownChild reports whether any descendant of node, tombstones
+// included, was created within versionVector -- content the editor had seen,
+// as opposed to content a peer inserted concurrently.
+//
+// It descends because a multi-level split hides the marker one level down. A
+// text split keeps the original createdAt, so at a flat <p>text</p> the right
+// half's text child is known by itself; but an element split product is
+// minted with a fresh ticket, so the outer right-half product of a
+// <p><span>..</span></p> split has a single unknown <span> child, and only
+// below it sits the text the editor knew. A node with no known content
+// anywhere below it is an empty same-boundary product, or one a peer has
+// typed into since.
+//
+// Tombstones count, so GC can change the answer: Purge unlinks a node, and a
+// replica that collected one reads false where a replica that did not reads
+// true. For a removal the editor had not seen, that cannot happen. A replica
+// collects only with a pull reply's min version vector, after applying the
+// reply (InternalDocument.ApplyChangePack), and the server records a client's
+// vector only after storing the changes pushed with it (packs.PushPull), so a
+// min that covers the removal arrives with this split. (yorkie#2110 is a race
+// in that ordering, and it affects every tombstone-anchored operation, not
+// only this one.) A removal the editor had seen can be collected before the
+// split arrives, and the collecting replica may then place the split
+// differently. That is a known GC sensitivity in the same class as §7.4's
+// re-parenting, the §7.5 advance and the §7.8 entry gate, which read
+// tombstones on main as well. It is tracked across both SDKs as yorkie#2099;
+// see §7.8 in docs/design/concurrent-merge-split.md.
+//
+// A child relocated by a merge keeps its createdAt and counts like any other.
+// Skipping merge-moved children was tried in both forms (MergedFrom presence,
+// and MergedAt scoped to the editor's vector). Both diverged on more scripts
+// than they fixed, and yorkie-js-sdk#1435 does not skip them either.
+//
+// The descent keeps its own stack instead of recursing, and takes the caller's
+// node set so one chain walk visits each node at most once (see
+// orderSameBoundarySplit) however the parent/child pointers are shaped.
+func (t *Tree) holdsKnownChild(
+	node *TreeNode,
+	versionVector time.VersionVector,
+	descended *nodeSet,
+) bool {
+	// A nil node has nothing below it. The §7.8 walk never passes one (it
+	// breaks on a nil findFloorNode result), but the helper is cheap to keep
+	// total rather than leaving the next caller to discover the precondition.
+	if node == nil {
+		return false
+	}
+
+	// An empty vector reads as "knows everything" (time.TicketKnown), which
+	// would make every child a marker. The §7.8 entry gate returns before that
+	// can reach here; keep the helper honest on its own terms anyway.
+	if len(versionVector) == 0 {
+		return false
+	}
+
+	stack := []*TreeNode{node}
+	entry := true
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		// Children are physical pointers index.MoveChild will relocate without
+		// an ancestor check, so the descent cannot assume it is acyclic.
+		//
+		// The entry node is scanned even when an earlier chain step already
+		// descended through it. The shared set bounds the descent; it must
+		// never answer a chain step out of the cache, because what that step
+		// proved was "nothing known below this subtree", which is not the
+		// question asked of a node reached as a chain sibling. Only the deeper
+		// descent, which is asking that same question again, is cached.
+		if !descended.visit(current) && !entry {
+			continue
+		}
+		entry = false
+
+		for _, child := range current.Children(true) {
+			if time.TicketKnown(versionVector, child.id.CreatedAt) {
+				return true
+			}
+			if !child.IsText() {
+				stack = append(stack, child)
+			}
+		}
+	}
+
+	return false
 }
 
 // sharesSplitFamilyParent reports whether next sits under node's parent, or
@@ -3470,6 +3826,7 @@ func (t *Tree) sharesSplitFamilyParent(node, next *TreeNode) bool {
 func (t *Tree) split(
 	fromParent *TreeNode,
 	fromLeft *TreeNode,
+	declaredParent *TreeNode,
 	splitLevel int,
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
@@ -3523,11 +3880,35 @@ func (t *Tree) split(
 		}
 		// §7.8 Same-Boundary Ordering: a concurrent split of the same
 		// boundary may already have taken the right half; order against it.
-		target, offset := t.orderSameBoundarySplit(parent, offset, editedAt, versionVector)
-		splitDiff, err := target.Split(t, offset, issueTimeTicket, versionVector)
+		var target *TreeNode
+		var anchor, nest boundaryKey
+		var keepFrom *TreeNodeID
+		placed := false
+		if splitCount == 0 {
+			var placedOffset int
+			target, placedOffset, anchor, nest, keepFrom, placed = t.placeSplitBoundary(
+				parent, declaredParent, offset, editedAt, versionVector,
+			)
+			if placed {
+				offset = placedOffset
+			}
+		}
+		if !placed {
+			target, offset = t.orderSameBoundarySplit(parent, offset, editedAt, versionVector)
+		}
+		prevNext := target.InsNextID
+		splitDiff, err := target.split(t, offset, issueTimeTicket, versionVector, keepFrom)
 		diff.Add(splitDiff)
 		if err != nil {
 			return diff, err
+		}
+		if target.InsNextID != nil && target.InsNextID != prevNext {
+			if product := t.findFloorNode(target.InsNextID); product != nil {
+				if placed {
+					t.setBoundary(product, anchor, nest)
+				}
+				t.followMovedMergeChildren(target, product)
+			}
 		}
 
 		// Ascend from parent, not from target. A §7.8 retarget reorders our
@@ -4216,7 +4597,14 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	if len(boundary) > 0 {
 		mode = boundary[0]
 	}
+	return t.findTreeNodesWithSplitText(pos, editedAt, nil, mode)
+}
 
+// findTreeNodesWithSplitText is FindTreeNodesWithSplitText for an edit whose
+// change has versionVector. An empty one counts every node as known.
+func (t *Tree) findTreeNodesWithSplitText(
+	pos *TreePos, editedAt *time.Ticket, versionVector time.VersionVector, mode PosBoundary,
+) (*TreeNode, *TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
 	// 01. Find the parent and left sibling nodes of the given position.
 	parentNode, leftNode := t.ToTreeNodes(pos)
@@ -4270,6 +4658,16 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 					!targetChild.Value.MergedFrom.Equal(realParentNode.id) {
 					continue
 				}
+				// Children the editing change did not know stand where
+				// they do on every replica whichever side of the moved
+				// child the insert resolved to, so they do not stop the
+				// moved child from opening the product (preMergeHolder).
+				if i == 0 || allUnknown(versionVector, targetChildren[:i]) {
+					if holder, left := t.preMergePoint(mergeTarget, targetChild.Value, editedAt, versionVector); holder != nil {
+						t.preMergeFwd = &preMergeForward{src: realParentNode, holder: holder, mergedAt: targetChild.Value.MergedAt}
+						return holder, left, diff, nil
+					}
+				}
 				if i == 0 {
 					return mergeTarget, mergeTarget, diff, nil
 				}
@@ -4307,6 +4705,31 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	}
 
 	return realParentNode, leftNode, diff, nil
+}
+
+// allUnknown reports whether the change with versionVector knew none of
+// children. An empty version vector knows every node.
+func allUnknown(versionVector time.VersionVector, children []*index.Node[*TreeNode]) bool {
+	for _, c := range children {
+		if time.TicketKnown(versionVector, c.Value.id.CreatedAt) {
+			return false
+		}
+	}
+	return true
+}
+
+// movedBySplit reports whether child of the split product could have been in
+// the original node when the split was applied, rather than inserted into
+// the product afterwards: it is older than the product.
+//
+// The boundary run a split moves is the text that sat at the split point, so
+// a run measured across the product must stop at the first child typed into
+// it later. Otherwise Enter followed by typing at the start of the new
+// paragraph would pull a concurrent insert at the old boundary into that
+// paragraph on the replica that applied the split first, and nowhere else.
+// Ticket comparison is stable under GC and delivery order alike.
+func movedBySplit(product, child *TreeNode) bool {
+	return product.id.CreatedAt.After(child.id.CreatedAt)
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
