@@ -14,6 +14,13 @@
 
 ## Self Review
 
+- Round 3 (docs): making a value required at render time invalidates every
+  documented command that omits it, including the ones in the same README.
+  The install examples (Minikube dev, with MongoDB, with external MongoDB) and
+  the upgrade examples still passed only the signing key, and the upgrade
+  section carried a pre-existing-release warning for the signing key but none
+  for the cluster secret. Fixed by adding the cluster secret to all five
+  examples and a matching `[!IMPORTANT]` callout for `--reuse-values` upgrades.
 - Round 2 (security): offering a safer way to configure a credential does not
   change the default — the chart still rendered with no cluster secret, and an
   operator who never reads the value comment gets the open service either way.

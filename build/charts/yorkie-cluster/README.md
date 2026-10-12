@@ -62,7 +62,8 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 ```bash
 # Uses pre-configured development credentials (clearly marked as dev-only)
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKey="$(openssl rand -base64 32)"
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
+  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)"
 ```
 
 ### For Production:
@@ -169,6 +170,10 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.clusterSecretExistingSecret=<yorkie.name>-cluster-secret
 ```
 
+As with the signing key, one of the two settings has to be present on every
+`helm install` and `helm upgrade`, including the examples below: without one the
+chart refuses to render and the command fails before any resource is created.
+
 `clusterSecretExistingSecret` takes precedence over `clusterSecret`. It may name
 the same Secret as `secretKeyExistingSecret`, holding both `secret-key` and
 `cluster-secret`, but not `<yorkie.name>-credentials`, for the reason given
@@ -200,6 +205,7 @@ Install Yorkie cluster with MongoDB deployed by Percona Operator:
 # Install yorkie cluster with MongoDB
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
+  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)" \
   --set mongodb.credentials.databaseAdmin.password="<your-password>" \
   --set mongodb.credentials.userAdmin.password="<your-password>" \
   --set mongodb.credentials.clusterAdmin.password="<your-password>"
@@ -213,8 +219,13 @@ Install Yorkie cluster using an external MongoDB instance:
 # Install yorkie cluster with external MongoDB
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
   --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
+  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)" \
   --set yorkie.args.dbConnectionUri="mongodb://mongodb.mongodb.svc.cluster.local:27017"
 ```
+
+Both examples generate the two secrets inline, which is fine for a first
+install but leaves nothing to pass to the next `helm upgrade`. Keep the
+generated values, or use the existing-Secret forms described above.
 
 _See [configuration](#configuration) below for custom installation_
 
@@ -242,21 +253,27 @@ kubectl delete namespace yorkie
 
 ## Upgrading Chart
 
-Pass the admin token signing key the release already uses — the **same** value
-as the install, not a freshly generated one. A new key here would leave the
-Secret and the running pods disagreeing until something restarts them, one pod
-at a time; see [Rotating the key](#rotating-the-key) for the deliberate path.
+Pass the admin token signing key and the cluster RPC secret the release already
+uses — the **same** values as the install, not freshly generated ones. A new
+signing key here would leave the Secret and the running pods disagreeing until
+something restarts them, one pod at a time; see [Rotating the
+key](#rotating-the-key) for the deliberate path. A new cluster secret makes
+calls between old and new pods fail until the rollout completes.
 
 ```bash
-# Key kept in a Secret you own (nothing to pass):
+# Secrets kept in Secrets you own (nothing to pass but their names):
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key \
+  --set yorkie.args.clusterSecretExistingSecret=yorkie-cluster-secret
 
-# Or key held by the chart — read back the value in use:
+# Or held by the chart — read back the values in use:
 SECRET_KEY="$(kubectl -n yorkie get secret yorkie-credentials \
   -o jsonpath='{.data.secret-key}' | base64 -d)"
+CLUSTER_SECRET="$(kubectl -n yorkie get secret yorkie-credentials \
+  -o jsonpath='{.data.cluster-secret}' | base64 -d)"
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKey="$SECRET_KEY"
+  --set yorkie.args.secretKey="$SECRET_KEY" \
+  --set yorkie.args.clusterSecret="$CLUSTER_SECRET"
 ```
 
 > [!IMPORTANT]
@@ -270,6 +287,19 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 > the key published in Yorkie's source, so tokens issued before the upgrade
 > were forgeable by anyone; the server now refuses to start with that key, and
 > every admin user logs in again after the upgrade.
+
+> [!IMPORTANT]
+> **Upgrading a release installed before the cluster RPC secret was required.**
+> The secret is now mandatory too, so an upgrade that passes neither
+> `yorkie.args.clusterSecret` nor `yorkie.args.clusterSecretExistingSecret`
+> fails to render — again including `--reuse-values` upgrades of a release that
+> never had one. Pass one of the two, as in [Cluster RPC
+> Secret](#cluster-rpc-secret-required), on this and every later upgrade, or
+> keep it in your values file. Such a release accepted every ClusterService
+> call from outside the cluster, including ones that read or purge any
+> document, so pick a fresh value rather than looking for an old one; the
+> rollout it starts leaves calls between old and new pods failing until it
+> completes.
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
 Consult also the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions).
