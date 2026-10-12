@@ -18,6 +18,7 @@ package backend_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -137,6 +138,59 @@ func TestConfig(t *testing.T) {
 
 		conf.ClusterClientTimeout = "1m"
 		assert.Equal(t, "1m0s", conf.ParseClusterClientTimeout().String())
+	})
+
+	t.Run("validate watch heartbeat bounds test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.WatchHeartbeatIntervalMin = "5s"
+		conf.WatchHeartbeatIntervalMax = "45s"
+		assert.NoError(t, conf.Validate())
+
+		// A minimum above the maximum has no interval to clamp into, so it is
+		// caught at startup rather than silently resolved at request time.
+		inverted := conf
+		inverted.WatchHeartbeatIntervalMin = "90s"
+		assert.Error(t, inverted.Validate())
+
+		// Except against the kill switch, where a zero maximum is "off", not
+		// a bound the minimum could exceed.
+		off := conf
+		off.WatchHeartbeatIntervalMax = "0s"
+		assert.NoError(t, off.Validate())
+
+		negative := conf
+		negative.WatchHeartbeatIntervalMin = "-1s"
+		assert.Error(t, negative.Validate())
+
+		malformed := conf
+		malformed.WatchHeartbeatIntervalMax = "s"
+		assert.Error(t, malformed.Validate())
+	})
+
+	t.Run("parse watch heartbeat bounds test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		// An unset pair gets the documented defaults, not a zero that would
+		// read as the kill switch.
+		lower, upper := conf.ParseWatchHeartbeatBounds()
+		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMin, lower)
+		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMax, upper)
+
+		conf.WatchHeartbeatIntervalMin = "10s"
+		conf.WatchHeartbeatIntervalMax = "45s"
+		lower, upper = conf.ParseWatchHeartbeatBounds()
+		assert.Equal(t, 10*time.Second, lower)
+		assert.Equal(t, 45*time.Second, upper)
+
+		// The deprecated flag survives only as an off switch.
+		conf.WatchHeartbeatInterval = "0s"
+		lower, upper = conf.ParseWatchHeartbeatBounds()
+		assert.Zero(t, lower)
+		assert.Zero(t, upper)
+
+		conf.WatchHeartbeatInterval = "25s"
+		lower, upper = conf.ParseWatchHeartbeatBounds()
+		assert.Equal(t, 10*time.Second, lower)
+		assert.Equal(t, 45*time.Second, upper)
 	})
 
 	t.Run("ClusterClientPoolSize field test", func(t *testing.T) {

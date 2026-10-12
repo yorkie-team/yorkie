@@ -7,6 +7,27 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Let a Watch stream ask for the heartbeat interval it wants, through
+  `WatchRequest.heartbeat_interval_ms`, and serve heartbeats only to the
+  streams that asked. The server clamps the request to
+  `--backend-watch-heartbeat-interval-min` / `-max` and advertises the
+  effective value. The Go client gains `WithWatchHeartbeatInterval`,
+  defaulting to 20s, with `client.NoWatchHeartbeat` to opt out.
+
+### Changed
+
+- Heartbeats are now on by default, which is safe because they are opt-in per
+  stream: a client older than the heartbeat does not ask for one and so is
+  never sent one.
+
+### Deprecated
+
+- `--backend-watch-heartbeat-interval` is deprecated. It is honored only for
+  its on/off intent: an explicit `0s` still disables the heartbeat
+  server-wide.
+
 ## [v0.7.24] - 2026-10-06
 
 ### Added

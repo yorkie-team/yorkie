@@ -53,13 +53,18 @@ type watchIdleServer struct {
 	rejectCall int32
 
 	calls atomic.Int32
+	// requestedMs records the heartbeat interval the last Watch request asked
+	// for, which is what the server would clamp and honor.
+	requestedMs atomic.Int64
 }
 
 func (s *watchIdleServer) Watch(
 	ctx context.Context,
-	_ *connect.Request[api.WatchRequest],
+	req *connect.Request[api.WatchRequest],
 	stream *connect.ServerStream[api.WatchResponse],
 ) error {
+	s.requestedMs.Store(req.Msg.HeartbeatIntervalMs)
+
 	if s.calls.Add(1) == s.rejectCall {
 		return connect.NewError(connect.CodeUnavailable, errors.New("watch rejected"))
 	}
@@ -110,6 +115,59 @@ func newWatchIdleServer(intervalMs int64, rejectCall int32) *watchIdleServer {
 		intervalMs:      intervalMs,
 		rejectCall:      rejectCall,
 	}
+}
+
+// TestWatchRequestCarriesHeartbeatInterval pins that the client asks for the
+// heartbeat it wants. The server heartbeats only the streams that ask, so a
+// client that sent nothing here would silently get no heartbeat and leave its
+// idle watchdog disarmed -- the very failure the request field exists to fix.
+func TestWatchRequestCarriesHeartbeatInterval(t *testing.T) {
+	requested := func(t *testing.T, opts ...client.Option) int64 {
+		t.Helper()
+
+		srv := newWatchIdleServer(100, 0)
+		mux := http.NewServeMux()
+		mux.Handle(v1connect.NewYorkieServiceHandler(srv))
+		httpServer := httptest.NewServer(mux)
+		t.Cleanup(func() {
+			select {
+			case <-srv.release:
+			default:
+				close(srv.release)
+			}
+			httpServer.Close()
+		})
+
+		cli, err := client.Dial(httpServer.URL, opts...)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(context.Background()))
+
+		doc := document.New(key.Key("watch-heartbeat-request"))
+		assert.NoError(t, cli.Attach(context.Background(), doc, client.WithRealtimeSync()))
+		_, _, err = cli.WatchStream(doc)
+		assert.NoError(t, err)
+
+		assert.Eventually(t, func() bool {
+			return srv.calls.Load() >= 1
+		}, 10*gotime.Second, 20*gotime.Millisecond, "the client never opened a watch stream")
+
+		return srv.requestedMs.Load()
+	}
+
+	t.Run("an unconfigured client asks for the default", func(t *testing.T) {
+		assert.Equal(t, int64(20_000), requested(t))
+	})
+
+	t.Run("a configured interval is what is asked for", func(t *testing.T) {
+		assert.Equal(t, int64(7_000),
+			requested(t, client.WithWatchHeartbeatInterval(7*gotime.Second)))
+	})
+
+	t.Run("opting out asks for nothing", func(t *testing.T) {
+		// Which is byte for byte what a client older than the field sends,
+		// and the server answers both the same way.
+		assert.Zero(t, requested(t, client.WithWatchHeartbeatInterval(client.NoWatchHeartbeat)))
+	})
 }
 
 // TestWatchStreamIdleTimeout pins the client's idle watchdog end to end: a

@@ -366,14 +366,14 @@ func (c *Config) ParseWatchHeartbeatBounds() (time.Duration, time.Duration) {
 	}
 
 	return c.parseHeartbeatBound(
-		c.WatchHeartbeatIntervalMin,
-		DefaultWatchHeartbeatIntervalMin,
-		"min",
-	), c.parseHeartbeatBound(
-		c.WatchHeartbeatIntervalMax,
-		DefaultWatchHeartbeatIntervalMax,
-		"max",
-	)
+			c.WatchHeartbeatIntervalMin,
+			DefaultWatchHeartbeatIntervalMin,
+			"min",
+		), c.parseHeartbeatBound(
+			c.WatchHeartbeatIntervalMax,
+			DefaultWatchHeartbeatIntervalMax,
+			"max",
+		)
 }
 
 // parseHeartbeatBound parses one heartbeat bound, falling back to the given

@@ -97,11 +97,13 @@ var (
 	ChannelSessionCountCacheTTL   = "10s"
 	ChannelSessionCountCacheSize  = 100
 
-	// WatchHeartbeatInterval turns the heartbeat on for the integration lane,
-	// which ships off by default, and keeps it firing well inside a test's
-	// lifetime so the heartbeat path is exercised rather than merely
-	// configured.
-	WatchHeartbeatInterval = "2s"
+	// WatchHeartbeatIntervalMin and WatchHeartbeatIntervalMax keep the
+	// heartbeat firing well inside a test's lifetime so the heartbeat path is
+	// exercised rather than merely configured. The maximum is what does it:
+	// the client asks for its own default, far longer than a test runs, and
+	// the server clamps it down to this.
+	WatchHeartbeatIntervalMin = "1s"
+	WatchHeartbeatIntervalMax = "2s"
 
 	ClusterRPCTimeout        = "10s"
 	ClusterClientTimeout     = "30s"
@@ -352,7 +354,8 @@ func TestBackendConfig() *backend.Config {
 		ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
 		ChannelSessionCountCacheTTL:   ChannelSessionCountCacheTTL,
 		ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
-		WatchHeartbeatInterval:        WatchHeartbeatInterval,
+		WatchHeartbeatIntervalMin:     WatchHeartbeatIntervalMin,
+		WatchHeartbeatIntervalMax:     WatchHeartbeatIntervalMax,
 		ClusterRPCTimeout:             ClusterRPCTimeout,
 		ClusterClientTimeout:          ClusterClientTimeout,
 		ClusterClientPoolSize:         ClusterClientPoolSize,
