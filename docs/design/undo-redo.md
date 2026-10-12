@@ -652,6 +652,31 @@ addresses the victim unapplicable. A replica that still holds the node
 resolves the span by un-tombstoning or ignoring it, so the replicas converge
 either way.
 
+Restore and retombstone skip a third shape: a span whose own identity offset
+is negative (#2180). An offset is an index into its insertion, so no honest
+span carries one, and the claim check above does not catch it — that check
+probes through `findFloorNode`, which keeps a floor only when it shares the
+probe's `createdAt`, and every node of the insertion sits at a non-negative
+offset, so the floor for a negative one lands on an earlier insertion and is
+discarded as nil. The check then reads "no surviving node holds this ID" and
+lets the recreate through, registering a live node below the insertion's whole
+offset range. The offset is not floored to 0: flooring an *identity* (unlike a
+left anchor, which resolves by position) would aim the span at a different,
+real node. Like the two rules above, the skip is a pure function of the span,
+so every replica carrying the rule drops the same span.
+
+Unlike them, this rule is so far apply-time only in Go. The change itself is
+still accepted, persisted and fanned out, and the JS SDK has no counterpart
+yet, so a replica without the rule still acts on a span this one drops. Two
+pieces remain: a wire rejection in `fromTreeRestoreSpans` (beside the existing
+`Length < 0` rejection) paired with a stored-path repair in
+`NormalizeStoredOperations`, so a span persisted before the check cannot make
+its document unloadable; and the JS mirror in `CRDTTree.restore` /
+`CRDTTree.retombstone`, as `kindAgrees` has. Until both land, the two SDKs
+converge only on documents that never carry a negative-offset span — which no
+honest producer emits, so the divergence is reachable from crafted input
+alone.
+
 | Approach | Pros | Cons |
 |----------|------|------|
 | Node-ID overlap detection | Extend undo op with removed node IDs; reconciliation compares node sets instead of index ranges. Content re-insert preserved (GC-safe). | Significant change to operation model and reconciliation logic. |

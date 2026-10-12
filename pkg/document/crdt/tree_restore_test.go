@@ -326,9 +326,9 @@ func TestTreeRestoreKindMismatchKeepsTombstone(t *testing.T) {
 // offset is negative is skipped. An offset is an index into its insertion, so
 // no honest span carries one; the decoder passes it through because the same
 // decoder reads stored changes, and recreateParent's claim check does not
-// catch it — the floor probe for a negative offset lands on an unrelated
-// earlier insertion, where the exact-offset test is false and the text
-// interval test holds for every honest node. Without the guard the span is
+// catch it — its floor probe lands on an unrelated earlier insertion, whose
+// createdAt differs, so findFloorNode discards it and the check reads "no
+// surviving node holds this id". Without the guard the span is
 // recreated and registered below the insertion's whole offset range (#2180).
 func TestTreeRestoreNegativeOffsetSkip(t *testing.T) {
 	for _, isText := range []bool{false, true} {

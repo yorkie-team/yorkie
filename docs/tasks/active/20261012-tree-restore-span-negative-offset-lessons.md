@@ -20,16 +20,24 @@ while a bad offset is a semantic claim about identity that the CRDT layer is the
 only one able to adjudicate. Same file, same struct, different layer — the
 distinction is memory safety versus convergence.
 
-## A guard can be vacuously true rather than absent
+## A guard can answer "clean" rather than be absent
 
 The interesting part of the bug is not that no check exists — `recreateParent`
-does probe for a node already holding the id. It is that with a negative offset
-the probe lands on an unrelated earlier insertion, where `holder.id.Offset ==
-id.Offset` is false and `holder.id.Offset + holder.Length() > id.Offset` is true
-for *every* text node, because every honest offset exceeds `-1`. The check runs,
-answers, and means nothing. Worth remembering when auditing: an input outside a
-predicate's assumed domain can make it return a confident wrong answer, which is
-harder to spot in review than a missing call.
+does probe for a node already holding the id. It is what the probe returns.
+`findFloorNode` keeps a floor only when it shares the probe's `createdAt`, and
+every node of an insertion sits at a non-negative offset, so the floor for a
+negative one can only land on an *earlier* insertion, is discarded, and comes
+back nil. "No surviving node holds this id" is a true answer to the question as
+asked and the wrong answer to the question that matters. Worth remembering when
+auditing: an input outside a predicate's assumed domain does not necessarily
+make the predicate fail — it can make it report the all-clear.
+
+The first write-up of this lesson got the mechanism wrong, claiming the probe
+returned an earlier insertion's node and that the interval test was then
+vacuously true. Reading `findFloorNode`'s `CreatedAt.Compare(...) != 0 → nil`
+rather than reasoning from the ordering alone would have caught it. The bug and
+the fix are unchanged either way, which is exactly why the error survived a
+round: a rationale that lands on the right remedy is not thereby verified.
 
 ## An apply-time skip is half a fix for crafted input
 
@@ -50,3 +58,17 @@ the closest precedent, and `Length < 0` is rejected on a restore span already).
 "This decoder serves two paths" is a reason to pair a rejection with a repair,
 not a reason to skip instead. Both files sit outside this change's diff, so the
 ingress half is recorded as its own checklist item rather than folded in here.
+
+Round 2 (design-fit and security lenses) reached the same conclusion from two
+directions: the layer, and the Go-vs-JS divergence the apply-time half opens.
+Neither half is reachable from `pkg/document/crdt` — `fromTreeRestoreSpans` and
+`NormalizeStoredOperations` are in `api/converter`, and the mirror is in another
+repository. The one option that *was* in reach, raising the skip to an error out
+of `Restore`/`Retombstone`, would reject the change at `Execute` and so stop the
+persist-and-fan-out — but at the cost the skip was chosen to avoid: a document
+already holding such a span would fail every later rebuild, with its repair
+(`NormalizeStoredOperations`) sitting on the far side of the same boundary. A
+fix that converts one defect into another is not a fix. What belongs here
+instead is the write-up: the rule, and what it leaves open, now sit in
+`docs/design/undo-redo.md` beside the sibling skip rules rather than in a code
+comment and this file alone.

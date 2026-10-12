@@ -989,12 +989,13 @@ func (s *TreeRestoreSpan) kindAgrees() bool {
 // offsetAddressable reports whether the span's own identity offset is one a
 // node of that insertion could have occupied: an offset is an index into the
 // insertion, so an honest span never carries a negative one. A crafted one
-// slips past recreateParent's claim check rather than failing it -- the floor
-// probe for a negative offset lands on some earlier insertion's node, where
-// the exact-offset test is false and the text-interval test is true for every
-// honest node, so the check answers about a node that is not the one being
-// recreated -- and Restore would then register a live node under an id below
-// the whole insertion's range, straddling another node's identity.
+// slips past recreateParent's claim check rather than failing it: the check
+// probes through findFloorNode, which keeps a floor only when it shares the
+// probe's createdAt. Every node of the insertion sits at a non-negative
+// offset, so the floor for a negative one can only land on an earlier
+// insertion's node, whose createdAt differs -- findFloorNode returns nil, the
+// check reads "no surviving node holds this id", and Restore then registers a
+// live node under an id below the whole insertion's offset range.
 //
 // Never floored to zero: flooring an IDENTITY (unlike a left anchor, which
 // resolves by position) would aim the span at a different, real node. The
@@ -1007,7 +1008,9 @@ func (s *TreeRestoreSpan) kindAgrees() bool {
 // rule acts on what this one drops. The ingress half belongs at the wire
 // boundary (fromTreeRestoreSpans, where a negative span Length is already
 // rejected), paired with a stored-path repair in NormalizeStoredOperations so
-// a span written before that check cannot make its document unloadable.
+// a span written before that check cannot make its document unloadable. Both
+// files sit outside this change; the rule and what it still leaves open are
+// written up in docs/design/undo-redo.md beside the sibling skip rules.
 func (s *TreeRestoreSpan) offsetAddressable() bool {
 	return s.ID.Offset >= 0
 }

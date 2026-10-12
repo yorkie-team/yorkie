@@ -34,11 +34,12 @@ No honest producer can emit one: a span's id is copied off a real node, and a
 node's offset is a non-negative index into its insertion. So a negative offset
 only ever arrives from crafted input.
 
-Consequence. `recreateParent`'s claim check (`tree.go:1391`) asks whether a
-surviving node already holds the id. With a negative offset the floor probe
-lands on some *earlier* insertion's node, whose offset is never `-1` and whose
-text interval test is vacuously satisfied, so the check does not speak to the
-identity being recreated at all. The span is then recreated and registered
+Consequence. `recreateParent`'s claim check asks whether a surviving node
+already holds the id, probing through `findFloorNode`, which keeps a floor
+only when it shares the probe's `createdAt`. Every node of the insertion sits
+at a non-negative offset, so the floor for a negative one lands on an *earlier*
+insertion's node, whose `createdAt` differs — `findFloorNode` returns nil and
+the check reads "no surviving node holds this id". The span is then recreated and registered
 under an id no node of that insertion ever occupied, below the whole
 insertion's offset range — the straddling registration the companion finding on
 `tree.go:1391` describes.
@@ -75,6 +76,9 @@ offset.
 - [x] Unit tests: element span, text span, retombstone, and a check that the
       tree is untouched and `NodeMapByID` gains no entry
 - [x] `make lint` + `go test ./pkg/document/...`
+- [x] Record the rule — and the two halves it leaves open — in
+      `docs/design/undo-redo.md`, beside the sibling skip rules (text parent,
+      kind mismatch, claimed identity) it joins
 - [ ] **Ingress rejection at the wire boundary, in `api/converter`.** The skip
       above changes only what this replica does; the change is still accepted,
       persisted and fanned out, so the crafted span reaches every peer. Reject
