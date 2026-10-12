@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/authz"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -86,11 +87,24 @@ func ListProjects(
 		// so the role has to be read back to decide whether this user may see
 		// the project's secret key. The owned list above needs no such lookup:
 		// being in it is the owner role.
+		//
+		// The read-back can fail on its own — ListProjectInfosByMember reads the
+		// membership rows and the projects in two separate queries, so a
+		// membership revoked in between leaves a project whose row is already
+		// gone. That must not fail the whole listing, which before this lookup
+		// always returned; an unresolved role is treated as no role, which
+		// redacts the key and leaves the rest of the project visible.
+		var role database.MemberRole
 		member, err := be.DB.FindMemberInfo(ctx, info.ID, owner)
 		if err != nil {
-			return nil, err
+			logging.DefaultLogger().Warnf(
+				"list projects: resolve member role of %s for %s: %v",
+				info.ID, owner, err,
+			)
+		} else {
+			role = member.Role
 		}
-		projectMap[info.ID] = redactForRole(info.ToProject(), member.Role)
+		projectMap[info.ID] = redactForRole(info.ToProject(), role)
 	}
 
 	var projects []*types.Project

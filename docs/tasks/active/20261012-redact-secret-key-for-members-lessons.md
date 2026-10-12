@@ -68,3 +68,23 @@ Not run: `/self-review` dispatches a reviewer subagent, and this autonomous run
 is granted no tool that can launch one. The branch's review is CI, `@claude
 review` and a human on the PR. Recording the skip rather than letting it read
 as a clean round.
+
+## The role read-back must not be able to fail the listing
+
+`ListProjects` resolves each member project's role with a second query
+(`FindMemberInfo`) because `ListProjectInfosByMember` drops the membership row.
+That read can fail on its own: the member rows and the projects are fetched by
+two separate queries, so a membership revoked in between leaves a project whose
+row is already gone. Returning the error would turn a routine race into a failed
+listing, which the call never did before the read-back existed. An unresolved
+role is treated as no role instead — the key is withheld and the rest of the
+project stays visible.
+
+## Known limitation: Istio CORS allow-list
+
+The Bearer + `x-yorkie-project` path adds a custom request header. The cluster
+chart enumerates the allowed CORS headers for the `/yorkie.v1` route
+(`build/charts/yorkie-cluster/templates/istio/virtual-service.yaml`), and
+`x-yorkie-project` is not among them, so browser callers of that path are
+blocked by preflight in Istio deployments. The chart is outside this change's
+files; it needs a follow-up.

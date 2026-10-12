@@ -23,7 +23,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/projects"
 )
 
@@ -103,4 +105,32 @@ func TestSecretKeyVisibility(t *testing.T) {
 			assert.Equal(t, tc.secretKey, list[0].SecretKey, tc.name)
 		}
 	})
+
+	// The role read-back is a second query, so it can fail on its own: a
+	// membership revoked between the two reads leaves a project whose row is
+	// already gone. Listing kept working before the read-back existed and must
+	// keep working now, with the key withheld rather than handed out.
+	t.Run("unresolved member role test", func(t *testing.T) {
+		be := &backend.Backend{DB: failingMemberDB{be.DB}, Lockers: sync.New()}
+
+		list, err := projects.ListProjects(ctx, be, memberID)
+		assert.NoError(t, err)
+		assert.Len(t, list, 1)
+		assert.Equal(t, info.ID, list[0].ID)
+		assert.Empty(t, list[0].SecretKey)
+	})
+}
+
+// failingMemberDB fails every membership read, leaving the rest of the database
+// intact.
+type failingMemberDB struct {
+	database.Database
+}
+
+func (d failingMemberDB) FindMemberInfo(
+	_ context.Context,
+	_ types.ID,
+	_ types.ID,
+) (*database.MemberInfo, error) {
+	return nil, database.ErrMemberNotFound
 }
