@@ -71,3 +71,14 @@ live-under-tombstone shape (#2008) the guard was added to prevent, and
 inflating the stranded-size sum round 3 added. Fixed with a `destTombstoned`
 latch: once the guard has fired on a subtree containing `dest`, every entry
 still to come is stranded the same way instead of moved.
+
+## Cross-SDK parity
+
+The JS panel fixed the same #2008 hole differently (refuse the forwarding,
+fall back to `fromParent`, and bound every `mergedInto` reader), so the two
+PRs were both "ready" while producing different trees from one change. Its
+containment bound also rests on a false premise: honest concurrent deletes
+leave a `mergedInto` inside its source's subtree (#2190). JS was reset to
+this branch's behaviour. On a mirror pair, compare both heads on one fixture
+before trusting either ready label.
+

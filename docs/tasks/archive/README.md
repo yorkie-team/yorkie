@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 79
+Total archived tasks: 80
 
-## 2026/10 (19 tasks)
+## 2026/10 (20 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Refuse a merge that would move a node under itself (2026-10-12) | [20261012-merge-lineage-cycle-todo.md](./2026/10/20261012-merge-lineage-cycle-todo.md) | [20261012-merge-lineage-cycle-lessons.md](./2026/10/20261012-merge-lineage-cycle-lessons.md) |
 | Remove the trusted-tree guard and the git-hook snapshot (2026-10-09) | [20261009-remove-trusted-tree-guard-todo.md](./2026/10/20261009-remove-trusted-tree-guard-todo.md) | [20261009-remove-trusted-tree-guard-lessons.md](./2026/10/20261009-remove-trusted-tree-guard-lessons.md) |
 | Stop the split-sibling cascade at a sibling the editor saw alive (2026-10-06) | [20261006-split-sibling-cascade-stop-todo.md](./2026/10/20261006-split-sibling-cascade-stop-todo.md) | [20261006-split-sibling-cascade-stop-lessons.md](./2026/10/20261006-split-sibling-cascade-stop-lessons.md) |
 | Decide Document Removal by Method, Not by the Pack Flag (2026-10-06) | [20261006-server-decided-is-removed-todo.md](./2026/10/20261006-server-decided-is-removed-todo.md) | [20261006-server-decided-is-removed-lessons.md](./2026/10/20261006-server-decided-is-removed-lessons.md) |

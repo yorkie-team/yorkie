@@ -24,10 +24,15 @@ an element payload that names an ancestor of the merge's own children.
 - **Decode time cannot decide it.** Whether the lineage forms a cycle
   depends on the document the change lands on.
 - **Push-time rejection would not help stored changes**, the same as #2168.
-- **Apply time, deterministic skip.** In `mergeNodes`, leave a child in
-  place when the destination is the child itself or one of its descendants.
-  The check reads only the tree every replica holds when it applies the same
-  change, so all replicas skip the same child and converge.
+- **Apply time, deterministic refusal.** In `mergeNodes`, do not move a
+  child whose destination is the child itself or one of its descendants.
+  Tombstone it in place with its subtree instead, book a GC pair for each
+  node, and count them in `RemovedSize`; every later child of the same
+  merge is stranded the same way, since the destination now sits inside a
+  tombstone. Leaving the child live under the source this edit tombstoned
+  would be the detached-but-registered state of #2008 once that source is
+  purged. The check reads only the tree every replica holds when it applies
+  the same change, so all replicas decide alike.
 - **No new error from `index.MoveChild`.** An error there would hard-fail
   the change, which bricks the document the way #2119 describes. The skip in
   the only caller that can be steered is enough; `Split`'s `MoveChildBefore`
@@ -48,3 +53,18 @@ an element payload that names an ancestor of the merge's own children.
 - [x] Open PRs and link them (#2186, js-sdk#1478)
 
 ## Review
+
+Self review plus four panel rounds (see lessons). The JS mirror,
+yorkie-js-sdk#1478, was brought back to this exact behaviour after its own
+panel took a different design; a probe on shared fixtures printed identical
+parent, tombstones, GC pair order, removed size and XML on both SDKs.
+
+## Out of scope
+
+- Go accepts a live element as a merge source, so an undo can make the
+  server erase merged text that JS clients keep: #2189.
+- Concurrent multi-level deletes diverge by arrival order in both SDKs:
+  #2190.
+- #2187 reworks `mergeNodes` with per-child destinations and still hangs on
+  this PR's test without the guard; the guard has to move with it.
+
