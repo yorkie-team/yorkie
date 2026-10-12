@@ -61,3 +61,20 @@ Adding user-role checks to the API-Key-scoped procedures themselves. They have
 no user in context by construction; that is a separate design change. Keys
 already read by a member are not invalidated — `RotateProjectKeys` exists for
 that and remains the remedy.
+
+## Known limitation: a member cannot drive the project-scoped admin client
+
+`admin.Client` resolves the project with `GetProject` and then authenticates
+every project-scoped call with `API-Key <project.SecretKey>`
+(`admin/client.go:339`, `admin/auth.go:72`). With the key redacted, a `member`
+sends an empty key and the server rejects it, so `ListDocuments`, `GetSchemas`,
+`ListChangeSummaries` and `CreateDocument` stop working for that user through
+the SDK and CLI — the read ones included.
+
+This is the intended consequence, not a regression to patch here. Those
+procedures cannot distinguish a member from an owner, so leaving the key
+readable would keep granting owner authority to members, which is the bug this
+change closes. Restoring member read access requires teaching the
+project-scoped path to accept a user credential and check a role — a change to
+`admin/auth.go`, `admin/client.go` and the server's API-Key interceptor that
+belongs to its own issue.
