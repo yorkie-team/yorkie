@@ -14,6 +14,17 @@
 
 ## Self Review
 
+- Round 4 (docs/security): "all five examples" was counted from the install
+  sections alone — the signing-key section's own two installs and its rotation
+  upgrade still omitted the cluster secret. When a value becomes required,
+  grep the whole file for the command name rather than fixing the sections the
+  change happened to touch. Separately, teaching operators to re-pass the two
+  secrets on upgrade made the omission of `mongodb.credentials.*.password`
+  worse, not better: those have defaults (`admin`/`useradmin`/`clusteradmin`,
+  published in `values.yaml`), so an upgrade without them silently rewrites
+  `mongodb-users` — the Percona `secrets.users` Secret — with public values. A
+  documented upgrade command has to carry every value whose default is unsafe,
+  not just the ones that fail the render when missing.
 - Round 3 (docs): making a value required at render time invalidates every
   documented command that omits it, including the ones in the same README.
   The install examples (Minikube dev, with MongoDB, with external MongoDB) and

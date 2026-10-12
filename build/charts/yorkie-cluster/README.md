@@ -73,6 +73,8 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 ```bash
 # Generate strong random passwords
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
+  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)" \
   --set mongodb.credentials.databaseAdmin.password="$(openssl rand -base64 32)" \
   --set mongodb.credentials.userAdmin.password="$(openssl rand -base64 32)" \
   --set mongodb.credentials.clusterAdmin.password="$(openssl rand -base64 32)"
@@ -89,7 +91,8 @@ Secret you manage (recommended):
 kubectl create secret generic yorkie-backend-secret-key --namespace yorkie \
   --from-literal=secret-key="$(openssl rand -base64 32)"
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key
+  --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key \
+  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)"
 ```
 
 or pass it as a value and let the chart create the Secret. Generate the key
@@ -100,7 +103,8 @@ variable for the session — because every later `helm upgrade` has to pass the
 ```bash
 SECRET_KEY="$(openssl rand -base64 32)"   # generate once, keep it
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKey="$SECRET_KEY"
+  --set yorkie.args.secretKey="$SECRET_KEY" \
+  --set yorkie.args.clusterSecret="$(openssl rand -base64 24)"
 ```
 
 Add the same setting to every `helm install` and `helm upgrade` below, including
@@ -149,9 +153,19 @@ together (both names default to `yorkie`), and admin users then log in again:
 
 ```bash
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.secretKey="$(openssl rand -base64 32)"   # only when rotating
+  --set yorkie.args.secretKey="$(openssl rand -base64 32)" \
+  --set yorkie.args.clusterSecret="$CLUSTER_SECRET" \
+  --set mongodb.credentials.databaseAdmin.password="$MONGO_DB_ADMIN_PASSWORD" \
+  --set mongodb.credentials.userAdmin.password="$MONGO_USER_ADMIN_PASSWORD" \
+  --set mongodb.credentials.clusterAdmin.password="$MONGO_CLUSTER_ADMIN_PASSWORD"
 kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
 ```
+
+Only `secretKey` is new here; every other value is the one the release already
+uses, re-passed because an upgrade that omits it falls back to the chart's
+default. See [Upgrading Chart](#upgrading-chart) for where to read each of them
+back, and use `clusterSecretExistingSecret` in place of `clusterSecret` if that
+is how the release holds its cluster secret.
 
 ## Cluster RPC Secret (Required)
 
@@ -167,12 +181,16 @@ it out of the values file, in a Secret you create once:
 kubectl -n <yorkie.namespace> create secret generic <yorkie.name>-cluster-secret \
   --from-literal=cluster-secret="$(openssl rand -base64 24)"
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
-  --set yorkie.args.clusterSecretExistingSecret=<yorkie.name>-cluster-secret
+  --set yorkie.args.clusterSecretExistingSecret=<yorkie.name>-cluster-secret \
+  --set yorkie.args.secretKey="$SECRET_KEY"   # plus the other values in use
 ```
 
 As with the signing key, one of the two settings has to be present on every
 `helm install` and `helm upgrade`, including the examples below: without one the
 chart refuses to render and the command fails before any resource is created.
+The upgrade above is shortened to the setting it introduces; a real one also
+re-passes every other value the release holds, as [Upgrading
+Chart](#upgrading-chart) shows.
 
 `clusterSecretExistingSecret` takes precedence over `clusterSecret`. It may name
 the same Secret as `secretKeyExistingSecret`, holding both `secret-key` and
@@ -260,11 +278,30 @@ something restarts them, one pod at a time; see [Rotating the
 key](#rotating-the-key) for the deliberate path. A new cluster secret makes
 calls between old and new pods fail until the rollout completes.
 
+Pass the MongoDB passwords too, whenever the chart deploys MongoDB
+(`mongodb.enabled`, the default). Unlike the two secrets above, these have
+defaults — `admin`, `useradmin` and `clusteradmin`, published in this chart's
+`values.yaml` — so an upgrade that omits them does not fail to render. It
+rewrites the `mongodb-users` Secret, which is the Percona cluster's
+`secrets.users`, with those public values, handing the database to anyone who
+can reach it. Read them back from the Secret, as below, or keep them in a
+values file:
+
 ```bash
+# Read back the MongoDB passwords the release is using:
+ns=yorkie; sec=mongodb-users
+read_pw() { kubectl -n "$ns" get secret "$sec" -o jsonpath="{.data.$1}" | base64 -d; }
+MONGO_DB_ADMIN_PASSWORD="$(read_pw MONGODB_DATABASE_ADMIN_PASSWORD)"
+MONGO_USER_ADMIN_PASSWORD="$(read_pw MONGODB_USER_ADMIN_PASSWORD)"
+MONGO_CLUSTER_ADMIN_PASSWORD="$(read_pw MONGODB_CLUSTER_ADMIN_PASSWORD)"
+
 # Secrets kept in Secrets you own (nothing to pass but their names):
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKeyExistingSecret=yorkie-backend-secret-key \
-  --set yorkie.args.clusterSecretExistingSecret=yorkie-cluster-secret
+  --set yorkie.args.clusterSecretExistingSecret=yorkie-cluster-secret \
+  --set mongodb.credentials.databaseAdmin.password="$MONGO_DB_ADMIN_PASSWORD" \
+  --set mongodb.credentials.userAdmin.password="$MONGO_USER_ADMIN_PASSWORD" \
+  --set mongodb.credentials.clusterAdmin.password="$MONGO_CLUSTER_ADMIN_PASSWORD"
 
 # Or held by the chart — read back the values in use:
 SECRET_KEY="$(kubectl -n yorkie get secret yorkie-credentials \
@@ -273,8 +310,16 @@ CLUSTER_SECRET="$(kubectl -n yorkie get secret yorkie-credentials \
   -o jsonpath='{.data.cluster-secret}' | base64 -d)"
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set yorkie.args.secretKey="$SECRET_KEY" \
-  --set yorkie.args.clusterSecret="$CLUSTER_SECRET"
+  --set yorkie.args.clusterSecret="$CLUSTER_SECRET" \
+  --set mongodb.credentials.databaseAdmin.password="$MONGO_DB_ADMIN_PASSWORD" \
+  --set mongodb.credentials.userAdmin.password="$MONGO_USER_ADMIN_PASSWORD" \
+  --set mongodb.credentials.clusterAdmin.password="$MONGO_CLUSTER_ADMIN_PASSWORD"
 ```
+
+Drop the three `mongodb.credentials.*` flags when the release points at an
+external MongoDB (`mongodb.enabled=false`): the chart renders no
+`mongodb-users` Secret then, and the connection URI carries the password
+instead.
 
 > [!IMPORTANT]
 > **Upgrading a release installed before the admin token signing key was
