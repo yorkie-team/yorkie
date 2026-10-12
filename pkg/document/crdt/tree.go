@@ -3192,7 +3192,14 @@ func (t *Tree) collectBetween(
 			creationKnown := time.TicketKnown(versionVector, node.id.CreatedAt)
 
 			// NOTE(sigmaith): Determine if existing tombstone was already causally known.
-			tombstoneKnown := node.removedAt != nil && time.TicketKnown(versionVector, node.removedAt)
+			// A node that concurrent merges removed counts as removed for a
+			// change that knew any of them (knewRemovalOf): removedAt holds
+			// whichever ticket won LWW on this replica, so reading it alone
+			// lets the same change re-delete the node, and cascade into the
+			// children and split siblings it merged out, on one replica only.
+			tombstoneKnown := knewRemovalOf(node, func(tk *time.Ticket) bool {
+				return time.TicketKnown(versionVector, tk)
+			})
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.

@@ -500,30 +500,6 @@ func TestTreeBoundaryForwardedToFixedPoint(t *testing.T) {
 	}
 }
 
-// TestTreeBoundaryMergedIntoFollowsFirstHolder has text a merge moved out of
-// a node carried off its family, here to the root by a delete from a
-// root-level position. The merged-away node's forwarding pointer is the
-// parent of the first child that names it as MergedFrom, as a snapshot
-// rebuilds it, not wherever a moved child went last, so a later range that
-// names the node does not run past its family.
-func TestTreeBoundaryMergedIntoFollowsFirstHolder(t *testing.T) {
-	for _, tc := range []struct {
-		replicas int
-		text     string
-		script   string
-	}{
-		{2, "abcd", `d1.split(1); d1.insert(3,"m"); d1.undo; d1.undo; d2.insert(1,"n"); d2.pull; ` +
-			"d2.delete(2,4); d2.undo; d2.split(1); d2.split(1); d2.pull; d2.delete(4,6)"},
-		// Diverges on 2b33dc54 as well.
-		{3, "abcd", `d1.split(1); d1.insert(3,"m"); d2.insert(1,"n"); d2.pull; d2.delete(2,4); ` +
-			"d2.undo; d2.split(1); d2.split(1); d2.pull; d2.delete(4,6); d1.undo; d1.undo"},
-	} {
-		t.Run(tc.script, func(t *testing.T) {
-			replayBoundaryScriptFrom(t, tc.replicas, tc.text, tc.script)
-		})
-	}
-}
-
 // TestTreeBoundarySplitAfterKnownRemoval has a split whose position is in
 // front of moved children the splitting change knew were deleted. The first
 // moved child opens the run even as a tombstone: the replica that applied the
@@ -559,14 +535,88 @@ func TestTreeBoundarySeenParentFromOperation(t *testing.T) {
 	replayBoundaryScript(t, 3, "d2.split(1); d2.undo; d1.pull; d1.split(3)")
 }
 
+// TestTreeBoundaryMergedAwayNodeDeletedOnce has a change cover a node a merge
+// removed. A change that knew any merge removing the node reads it as
+// removed (knewRemovalOf), whichever merge's ticket removedAt holds on the
+// replica, so it cannot re-delete the node and tombstone, on one replica
+// only, the children the merge moved out (propagateMergeDeletes) or the
+// split siblings it never saw (appendUnknownSplitSiblings).
+func TestTreeBoundaryMergedAwayNodeDeletedOnce(t *testing.T) {
+	for _, tc := range []struct {
+		replicas int
+		text     string
+		script   string
+	}{
+		{2, "ab", `d2.split(1); d1.pull; d2.insert(3,"m"); d1.delete(1,3); d2.split(4); ` +
+			"d2.delete(1,3); d1.split(1); d1.delete(1,3); d1.split(1)"},
+		{2, "ab", `d2.split(1); d1.pull; d2.insert(3,"m"); d1.delete(1,3); d2.split(4); ` +
+			"d2.delete(1,3); d1.split(1); d1.delete(1,3); d2.undo; d2.redo; d1.undo"},
+		{2, "ab", `d2.split(1); d1.pull; d2.insert(3,"m"); d1.delete(3,4); d1.delete(1,3); ` +
+			"d2.split(4); d2.delete(1,3); d1.split(1); d1.pull; d1.delete(2,4)"},
+		// Diverges on 2b33dc54 as well.
+		{2, "a", `d2.split(1); d1.pull; d2.insert(3,"m"); d1.delete(1,3); d2.split(4); ` +
+			"d2.delete(1,3); d1.split(1); d1.pull; d1.delete(2,4)"},
+	} {
+		t.Run(tc.script, func(t *testing.T) {
+			replayBoundaryScriptFrom(t, tc.replicas, tc.text, tc.script)
+		})
+	}
+}
+
+// TestTreeBoundaryMergedIntoFollowsFirstHolder has text a merge moved out of
+// a node carried off its family, here to the root by a delete from a
+// root-level position. The merged-away node's forwarding pointer is the
+// parent of the first child that names it as MergedFrom, as a snapshot
+// rebuilds it, not wherever a moved child went last, so a later range that
+// names the node does not run past its family.
+func TestTreeBoundaryMergedIntoFollowsFirstHolder(t *testing.T) {
+	for _, tc := range []struct {
+		replicas int
+		text     string
+		script   string
+	}{
+		{2, "abcd", `d1.split(1); d1.insert(3,"m"); d1.undo; d1.undo; d2.insert(1,"n"); d2.pull; ` +
+			"d2.delete(2,4); d2.undo; d2.split(1); d2.split(1); d2.pull; d2.delete(4,6)"},
+		// Diverges on 2b33dc54 as well.
+		{3, "abcd", `d1.split(1); d1.insert(3,"m"); d2.insert(1,"n"); d2.pull; d2.delete(2,4); ` +
+			"d2.undo; d2.split(1); d2.split(1); d2.pull; d2.delete(4,6); d1.undo; d1.undo"},
+	} {
+		t.Run(tc.script, func(t *testing.T) {
+			replayBoundaryScriptFrom(t, tc.replicas, tc.text, tc.script)
+		})
+	}
+}
+
+// TestTreeBoundaryConcurrentMergeKeepsSplitCascade has a delete reach a
+// node that a merge it did not know already emptied on one replica and not
+// yet on the other. The split-sibling cascade and merge propagation must
+// not read that replica-local merge state, or the replica that applied the
+// merge first keeps split siblings and moved content the other one drops.
+func TestTreeBoundaryConcurrentMergeKeepsSplitCascade(t *testing.T) {
+	for _, tc := range []struct {
+		text   string
+		script string
+	}{
+		{"a", "d1.split(1); d2.split(1); d2.split(3); d1.split(4); d2.undo; d2.pull; " +
+			"d1.delete(1,3); d2.delete(3,7)"},
+		{"a", `d1.split(1); d2.split(1); d1.insert(3,"m"); d2.split(3); d1.split(4); ` +
+			"d2.undo; d2.pull; d1.delete(1,3); d2.delete(3,7)"},
+	} {
+		t.Run(tc.script, func(t *testing.T) {
+			replayBoundaryScriptFrom(t, 2, tc.text, tc.script)
+		})
+	}
+}
+
 // TestTreeBoundaryKnownDivergences records cases that still diverge. The
 // first diverges on main too. Each is skipped with what it would take.
 func TestTreeBoundaryKnownDivergences(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		script string
-		text   string
-		needs  string
+		name     string
+		script   string
+		text     string
+		needs    string
+		replicas int
 	}{{
 		name:   "split with a peer's concurrent split and undo, then typing",
 		script: `d1.split(1); d2.split(1); d3.pull; d1.undo; d3.insert(3,"x")`,
@@ -588,6 +638,24 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 		needs: "preMergePoint passes over a product nested in the merged-away node " +
 			"that a change which did not know the merge split off; the records " +
 			"already part here without it. Converges on main.",
+	}, {
+		name: "split arriving before and after a merge, then ranges over it",
+		script: "d1.split(1); d2.split(1); d2.split(3); d1.split(4); d2.undo; d2.pull; " +
+			"d1.delete(1,3); d2.delete(3,5); d2.delete(3,7)",
+		text:     "abcd",
+		replicas: 2,
+		needs: "A change that knew its merge no longer re-deletes the merged-away " +
+			"node (knewRemovalOf), which exposes how a split applied after the merge " +
+			"and one applied before it differ under the toBeMergedNodes skip. " +
+			"Converges on main.",
+	}, {
+		name: "undo and redo of a merge over text typed into a split product",
+		script: `d2.split(5); d1.pull; d2.insert(7,"m"); d2.split(8); d1.delete(5,7); ` +
+			"d2.delete(5,7); d1.undo; d1.redo",
+		text:     "abcd",
+		replicas: 2,
+		needs: "The prefix before the undo already diverges on main; the redo's merge " +
+			"used to mask it through the one-replica re-delete of the merged-away node.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") == "" {
@@ -597,7 +665,11 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 			if text == "" {
 				text = "ab"
 			}
-			replayBoundaryScriptFrom(t, 3, text, tc.script)
+			replicas := tc.replicas
+			if replicas == 0 {
+				replicas = 3
+			}
+			replayBoundaryScriptFrom(t, replicas, text, tc.script)
 		})
 	}
 }
