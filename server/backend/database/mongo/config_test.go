@@ -97,6 +97,38 @@ func TestConfig(t *testing.T) {
 		assert.ErrorIs(t, err, cache.ErrInvalidTTL)
 	})
 
+	t.Run("mask the password of the connection URI", func(t *testing.T) {
+		// The redacted URI is logged at startup, so nothing that reaches a log
+		// may carry the password, while the rest stays readable.
+		for _, tc := range []struct {
+			uri      string
+			redacted string
+		}{{
+			uri:      "mongodb://localhost:27017",
+			redacted: "mongodb://localhost:27017",
+		}, {
+			uri:      "mongodb://admin:s3cret@mongos.default.svc.cluster.local:27017/?authSource=admin",
+			redacted: "mongodb://admin:xxxxx@mongos.default.svc.cluster.local:27017/?authSource=admin",
+		}, {
+			// A replica set names every host in the authority.
+			uri:      "mongodb://admin:s3cret@h1:27017,h2:27017/yorkie?replicaSet=rs0",
+			redacted: "mongodb://admin:xxxxx@h1:27017,h2:27017/yorkie?replicaSet=rs0",
+		}, {
+			uri:      "mongodb+srv://admin:s3%40cret@cluster0.example.mongodb.net/yorkie",
+			redacted: "mongodb+srv://admin:xxxxx@cluster0.example.mongodb.net/yorkie",
+		}} {
+			config := &mongo.Config{ConnectionURI: tc.uri}
+			assert.Equal(t, tc.redacted, config.RedactedConnectionURI())
+		}
+	})
+
+	t.Run("drop a connection URI that does not parse", func(t *testing.T) {
+		// The userinfo of an unparsable URI cannot be located, so none of the
+		// URI is reported rather than risking the password in a log line.
+		config := &mongo.Config{ConnectionURI: "://admin:s3cret@localhost:27017"}
+		assert.NotContains(t, config.RedactedConnectionURI(), "s3cret")
+	})
+
 	t.Run("parse monitoring test", func(t *testing.T) {
 		config := &mongo.Config{
 			MonitoringEnabled:            true,

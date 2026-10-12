@@ -18,6 +18,7 @@ package mongo
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -125,6 +126,26 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// unparsableConnectionURI stands in for a connection URI that net/url cannot
+// parse. The userinfo of such a URI cannot be located and therefore cannot be
+// stripped, so none of it is reported.
+const unparsableConnectionURI = "(unparsable URI)"
+
+// RedactedConnectionURI returns the connection URI with the password of its
+// userinfo masked. The URI carries the database user's password, so logging it
+// verbatim publishes that credential to everyone who can read the server's
+// stdout — a far weaker permission than the one guarding the secret it is
+// deployed in. Scheme, username, hosts and options are kept, since those are
+// what make the line worth logging.
+func (c *Config) RedactedConnectionURI() string {
+	parsed, err := url.Parse(c.ConnectionURI)
+	if err != nil {
+		return unparsableConnectionURI
+	}
+
+	return parsed.Redacted()
 }
 
 // ParseConnectionTimeout returns connection timeout duration.
