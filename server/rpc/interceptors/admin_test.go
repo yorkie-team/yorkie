@@ -347,3 +347,22 @@ func TestAdminServiceAuthenticateBearerWithProject(t *testing.T) {
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 }
+
+func TestIsSecretKeyAllowed(t *testing.T) {
+	t.Run("secret key reaches every method an admin reaches test", func(t *testing.T) {
+		for procedure, required := range projectScopedMethods {
+			assert.Equal(t, secretKeyRole.IsAtLeast(required), isSecretKeyAllowed(procedure), procedure)
+			assert.True(t, isSecretKeyAllowed(procedure), procedure)
+		}
+	})
+
+	// A method added later at Owner must be refused to the key by the table,
+	// not granted to it because the key path never looked.
+	t.Run("secret key is refused a method above admin test", func(t *testing.T) {
+		const ownerOnly = "/yorkie.v1.AdminService/OwnerOnlyForTest"
+		projectScopedMethods[ownerOnly] = database.Owner
+		t.Cleanup(func() { delete(projectScopedMethods, ownerOnly) })
+
+		assert.False(t, isSecretKeyAllowed(ownerOnly))
+	})
+}

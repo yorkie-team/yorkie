@@ -55,8 +55,9 @@ UPDATE (2026-10-12, issue #2160): the leak half of that chain is closed.
 role is at least `Admin`, so a `member` no longer obtains the key through the
 API. The project-scoped procedures also accept a session token with an
 `x-yorkie-project` header now, checked against the user's role per method, so
-members keep their read access without the key. A key a member already copied
-keeps working until `RotateProjectKeys` replaces it.
+members keep their read access without the key. Demoting or removing an admin
+replaces the secret key, so a copy does not outlive the role that read it. A key
+copied before #2160 keeps working until the project's keys are rotated.
 
 That chain predates this change and is untouched by it. Before the scheme
 check, these procedures already accepted `API-Key` on the same unchecked path,

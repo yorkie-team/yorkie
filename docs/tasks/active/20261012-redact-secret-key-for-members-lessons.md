@@ -45,43 +45,37 @@ Takeaway: when a security fix removes access, check whether the access was
 wrong or only the credential was too coarse. Here the reads were legitimate;
 the credential was the problem.
 
-## A key a member already copied keeps working
+## Role changes are revocation only if the key follows them
 
-Hiding the key stops a member from obtaining it now; it does not invalidate a
-key read before this change. `RotateProjectKeys` is the remedy.
+The secret key names no user, so the role a user held when reading it is never
+checked when the key is used. Hiding the key from members closed one way to get
+it, but an admin who read it legitimately and was later demoted or removed kept
+the project's whole authority. The review panel upheld this twice.
 
-The same gap has a second shape that outlives the deployment: the secret key
-names no user, so the per-method role table in the interceptor cannot apply to
-it, and nothing in the membership path narrows it. An admin who legitimately
-read the key and is later demoted to Member, or removed from the project
-outright, keeps the project's whole authority through the API-Key scheme. Role
-changes are not revocation for this credential; only rotation is.
+The key now follows the roles that may read it:
 
-A third shape sits in the same place, smaller than revocation. The API-Key
-branch of `isSchemeAllowed` skips `projectScopedMethods` entirely: it asks only
-whether the method is *in* the table, never what role the entry names. So the
-table states what a session reaches and says nothing about the key, and a
-project-scoped method added later at Owner would be granted to the key by the
-absence of a check rather than refused by one. Ranking the key as a role —
-`Admin`, the authority it is meant to carry — and running it through the same
-comparison would change nothing today, since every entry is Member or Admin,
-but would leave one table covering both schemes.
+- `members.Remove` and `members.UpdateRole` replace the secret key when a user
+  goes from a role that may read it (Admin and above) to one that may not, or
+  leaves the project. `projects.CanReadSecretKey` is the single rule both this
+  and the redaction use.
+- Only the secret key is replaced (`projects.RotateSecretKey`). The public key
+  identifies the project to SDK clients and carries no admin authority, so
+  rotating it as `RotateProjectKeys` does would break every client for no
+  security gain.
+- The handlers broadcast a project cache invalidation, as `RotateProjectKeys`
+  does, so the old key stops authenticating on other nodes too.
+- The interceptor ranks the key as `Admin` against the per-method table, so the
+  table covers both schemes. Today every entry is Member or Admin, so nothing
+  changes; a method added later at Owner is refused to the key.
 
-Three things follow, two for the code and one for operators:
+The cost is real and goes in the release note: demoting or removing an admin
+replaces the key for every other holder too, including servers that call the
+admin API with it or verify event webhook signatures with it. A member removed
+leaves the key alone, since members can no longer read it.
 
-- On upgrading to this change, rotate the keys of every project that has ever
-  had a member below Admin. Until then the redaction protects only members who
-  had not already read the key.
-- Rotating on demotion and on removal belongs in the membership path
-  (`server/members/members.go`, `server/rpc/admin_server.go`'s
-  `UpdateMemberRole` and `RemoveMember`), not in the lookups this task
-  touched — the lookups have no way to tell that a role just changed. It needs
-  a decision this task did not make: rotation invalidates the key for every
-  other holder too, so it cannot be silent.
-- Ranking the key against the per-method table belongs in
-  `server/rpc/interceptors/admin.go`, which this round could not reach: the
-  scope the fix rounds are held to is narrower than the branch's own diff, so
-  the file is read-only here even though the gap is in it.
+A key read before this change by a user who is still below Admin is not
+detected. Rotating the keys of projects that have ever had a member is the one
+operator step on upgrade.
 
 ## `IsAtLeast` fails open, so the gate validates the role first
 

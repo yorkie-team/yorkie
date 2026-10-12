@@ -83,9 +83,10 @@ func TestMembers(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. Update role.
-		updated, err := members.UpdateRole(ctx, be, projectID, username, database.Admin.String())
+		updated, rotated, err := members.UpdateRole(ctx, be, projectID, username, database.Admin.String())
 		assert.NoError(t, err)
 		assert.Equal(t, database.Admin.String(), updated.Role)
+		assert.False(t, rotated)
 	})
 
 	t.Run("Remove test", func(t *testing.T) {
@@ -103,7 +104,9 @@ func TestMembers(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. Remove.
-		assert.NoError(t, members.Remove(ctx, be, projectID, username))
+		rotated, err := members.Remove(ctx, be, projectID, username)
+		assert.NoError(t, err)
+		assert.False(t, rotated)
 
 		// 03. Verify removed.
 		list, err := members.List(ctx, be, projectID)
@@ -124,8 +127,58 @@ func TestMembers(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. UpdateRole with invalid role.
-		_, err = members.UpdateRole(ctx, be, projectID, username, "invalid-role")
+		_, _, err = members.UpdateRole(ctx, be, projectID, username, "invalid-role")
 		assert.Equal(t, errors.ErrCodeInvalidArgument, errors.StatusOf(err))
 		assert.Equal(t, database.ErrInvalidMemberRole.Code(), errors.ErrorInfoOf(err).Code)
+	})
+
+	// The secret key carries no user, so a copy outlives the membership it was
+	// read under. Losing the role that could read it must replace the key, and
+	// only the secret key: the public key identifies the project to SDK clients.
+	t.Run("secret key follows the roles that can read it test", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			from    database.MemberRole
+			to      database.MemberRole // empty means the member is removed
+			rotated bool
+		}{
+			{"admin demoted to member", database.Admin, database.Member, true},
+			{"admin removed", database.Admin, "", true},
+			{"admin kept as admin", database.Admin, database.Admin, false},
+			{"member promoted to admin", database.Member, database.Admin, false},
+			{"member removed", database.Member, "", false},
+		}
+
+		for i, tc := range tests {
+			project, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d", t.Name(), i), invitedBy)
+			assert.NoError(t, err)
+
+			username := fmt.Sprintf("%s-u%d", t.Name(), i)
+			user, err := db.CreateUserInfo(ctx, username, "pw")
+			assert.NoError(t, err)
+			_, err = db.UpsertMemberInfo(ctx, project.ID, user.ID, invitedBy, tc.from)
+			assert.NoError(t, err)
+
+			var rotated bool
+			if tc.to == "" {
+				rotated, err = members.Remove(ctx, be, project.ID, username)
+			} else {
+				_, rotated, err = members.UpdateRole(ctx, be, project.ID, username, tc.to.String())
+			}
+			assert.NoError(t, err, tc.name)
+			assert.Equal(t, tc.rotated, rotated, tc.name)
+
+			after, err := db.FindProjectInfoByID(ctx, project.ID)
+			assert.NoError(t, err)
+			assert.Equal(t, project.PublicKey, after.PublicKey, tc.name)
+			if !tc.rotated {
+				assert.Equal(t, project.SecretKey, after.SecretKey, tc.name)
+				continue
+			}
+
+			assert.NotEqual(t, project.SecretKey, after.SecretKey, tc.name)
+			_, err = db.FindProjectInfoBySecretKey(ctx, project.SecretKey)
+			assert.ErrorIs(t, err, database.ErrProjectNotFound, tc.name)
+		}
 	})
 }

@@ -98,10 +98,28 @@ project and checks it against a per-method minimum:
       Red on the previous head (`ListDocuments` returned nothing), green now.
 - [x] `make lint`, unit tests, integration suite.
 
+## Revoke the key with the role
+
+The key names no user, so an admin who read it kept the project's authority
+after being demoted or removed. Membership changes now replace it.
+
+- [x] `projects.CanReadSecretKey`: the one rule for who may read the key, used
+      by the redaction and the revocation.
+- [x] `projects.RotateSecretKey`: replace the secret key, keep the public key.
+- [x] `members.Remove` / `members.UpdateRole`: rotate when a user goes from a
+      role that may read the key to one that may not; report it.
+- [x] `RemoveMember` / `UpdateMemberRole` handlers: broadcast the project cache
+      invalidation when the key was rotated.
+- [x] Interceptor: the key ranks as `Admin` against `projectScopedMethods`.
+- [x] Unit tests: demote, remove, keep, promote, member removal; the key path
+      refused a method above Admin. Integration test: a demoted admin's copied
+      key returns Unauthenticated, the public key is unchanged. Both red
+      without the rotation.
+
 ## Out of scope
 
-Keys already read by a member are not invalidated; `RotateProjectKeys` remains
-the remedy. The dashboard (separate repository) still sets the key from
-`GetProject`; it needs the same fallback (send the session cookie and
-`x-yorkie-project` when the key is empty) before member-role users see their
-documents there again.
+A key copied before this change by a user who is still a member is not
+detected; rotate the keys of projects that have ever had a member on upgrade.
+The dashboard (separate repository) still sets the key from `GetProject`; it
+needs the same fallback (send the session cookie and `x-yorkie-project` when
+the key is empty) before member-role users see their documents there again.

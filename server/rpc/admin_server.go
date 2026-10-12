@@ -312,13 +312,17 @@ func (s *adminServer) RemoveMember(
 		return nil, err
 	}
 
-	if err := members.Remove(
+	rotated, err := members.Remove(
 		ctx,
 		s.backend,
 		project.ID,
 		req.Msg.Username,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
+	}
+	if rotated {
+		s.invalidateProjectCache(ctx, project.ID)
 	}
 
 	return connect.NewResponse(&api.RemoveMemberResponse{}), nil
@@ -379,7 +383,7 @@ func (s *adminServer) UpdateMemberRole(
 		return nil, err
 	}
 
-	member, err := members.UpdateRole(
+	member, rotated, err := members.UpdateRole(
 		ctx,
 		s.backend,
 		project.ID,
@@ -388,6 +392,9 @@ func (s *adminServer) UpdateMemberRole(
 	)
 	if err != nil {
 		return nil, err
+	}
+	if rotated {
+		s.invalidateProjectCache(ctx, project.ID)
 	}
 
 	return connect.NewResponse(&api.UpdateMemberRoleResponse{
@@ -1185,13 +1192,7 @@ func (s *adminServer) RotateProjectKeys(
 		return nil, err
 	}
 
-	if err := s.backend.BroadcastCacheInvalidation(
-		ctx,
-		types.CacheTypeProject,
-		prev.ID.String(),
-	); err != nil {
-		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
-	}
+	s.invalidateProjectCache(ctx, prev.ID)
 
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{
@@ -1316,4 +1317,16 @@ func (s *adminServer) RestoreRevisionByAdmin(
 	}
 
 	return connect.NewResponse(&api.RestoreRevisionByAdminResponse{}), nil
+}
+
+// invalidateProjectCache tells the other nodes to drop the cached project, so
+// a key that was just replaced stops authenticating there too.
+func (s *adminServer) invalidateProjectCache(ctx context.Context, id types.ID) {
+	if err := s.backend.BroadcastCacheInvalidation(
+		ctx,
+		types.CacheTypeProject,
+		id.String(),
+	); err != nil {
+		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
+	}
 }

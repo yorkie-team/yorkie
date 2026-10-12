@@ -95,6 +95,18 @@ var projectScopedMethods = map[string]database.MemberRole{
 	"/yorkie.v1.AdminService/RevalidateAccess":       database.Admin,
 }
 
+// secretKeyRole is the project role a secret key stands in for. Only Admin and
+// above may read the key, so it carries no more than Admin's authority, and the
+// per-method table applies to it as it does to a session of that role.
+const secretKeyRole = database.Admin
+
+// isSecretKeyAllowed reports whether a project secret key may call the given
+// project-scoped method. The key names no user, so its role is secretKeyRole.
+func isSecretKeyAllowed(method string) bool {
+	required, ok := projectScopedMethods[method]
+	return !ok || secretKeyRole.IsAtLeast(required)
+}
+
 // schemeAgnosticMethods is the set of authenticated AdminService methods that
 // read neither scope. They answer the same way whichever credential is
 // presented, so both schemes stay valid for them and only the credential
@@ -346,6 +358,9 @@ func (i *AdminServiceInterceptor) authenticate(
 		}
 		project, err := projects.ProjectFromSecretKey(ctx, i.backend, secretKey)
 		if err == nil {
+			if !isSecretKeyAllowed(procedure) {
+				return nil, connect.NewError(connect.CodePermissionDenied, ErrProjectAccessDenied)
+			}
 			ctx = projects.With(ctx, project)
 			return ctx, nil
 		}

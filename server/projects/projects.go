@@ -139,21 +139,26 @@ func ProjectAndRole(
 	return redactForRole(info.ToProject(), role), role, nil
 }
 
-// redactForRole clears the project's secret key unless the role is a known
-// role of at least Admin.
+// CanReadSecretKey reports whether a user holding the given role in a project
+// may read the project's secret key: a known role of at least Admin.
 //
 // The key authenticates the project-scoped admin procedures, which have no
 // user in their context and so authorize on the key alone. Handing it to a
-// member would let that member act with the authority of an owner, so it is
-// stripped before the project leaves the lookup that resolved the role.
+// member would let that member act with the authority of an owner.
 //
 // NOTE(hackerwins): the role is validated before the comparison because
 // MemberRole.IsAtLeast ranks a role it does not recognize as 0, which compares
 // as more privileged than Owner. Without the guard an empty or corrupted role
 // string would read as "at least Admin" and hand the key out, so this gate
 // fails closed instead.
+func CanReadSecretKey(role database.MemberRole) bool {
+	return role.Validate() == nil && role.IsAtLeast(database.Admin)
+}
+
+// redactForRole clears the project's secret key unless the role may read it,
+// before the project leaves the lookup that resolved the role.
 func redactForRole(project *types.Project, role database.MemberRole) *types.Project {
-	if err := role.Validate(); err == nil && role.IsAtLeast(database.Admin) {
+	if CanReadSecretKey(role) {
 		return project
 	}
 
@@ -338,11 +343,11 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 // back to the default project. The secret key is the whole credential of the
 // admin path, so a missing one must not resolve to any project.
 //
-// The key carries no user, so this lookup has no role to check and the caller
-// gets the project's full authority. That authority is not bound to a
-// membership: it outlives a member's demotion or removal, and redactForRole
-// only stops the key from reaching new members. RotateProjectKeys is what
-// revokes a key already copied.
+// The key carries no user, so this lookup has no role to check. The key stands
+// in for Admin: only Admin and above may read it (redactForRole), and it is
+// replaced when a user who could read it is demoted below Admin or removed
+// (RotateSecretKey). A copy taken before either rule existed keeps working
+// until the project's keys are rotated.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
 	if strings.TrimSpace(secretKey) == "" {
 		return nil, ErrSecretKeyNotProvided
@@ -354,6 +359,34 @@ func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey st
 	}
 
 	return info.ToProject(), nil
+}
+
+// RotateSecretKey replaces the project's secret key and keeps its public key.
+//
+// It revokes the key a user could read before losing the role that allowed it.
+// The key carries no user, so a copy outlives the membership it was read
+// under; replacing it is the only way to take that authority back. The public
+// key identifies the project to SDK clients and grants none of the admin
+// authority, so it stays and those clients keep working.
+//
+// The caller is responsible for authorization and for invalidating the project
+// cache on other nodes.
+func RotateSecretKey(
+	ctx context.Context,
+	be *backend.Backend,
+	id types.ID,
+) (*types.Project, error) {
+	info, err := be.DB.FindProjectInfoByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	rotated, _, err := be.DB.RotateProjectKeys(ctx, id, info.PublicKey, shortuuid.New())
+	if err != nil {
+		return nil, err
+	}
+
+	return rotated.ToProject(), nil
 }
 
 // RotateProjectKeys rotates the API keys of the project.
