@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Stop serving the pprof `/debug/pprof/cmdline` endpoint. It wrote the process
+  arguments, disclosing any credential passed as a flag to whoever could reach
+  the unauthenticated profiling port. It now answers `404 Unknown profile`;
+  every other pprof route and `/metrics` are unchanged.
+
 ## [v0.7.24] - 2026-10-06
 
 ### Added

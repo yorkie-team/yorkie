@@ -135,12 +135,13 @@ and the Deployment reads them as the environment variables
 `YORKIE_CLUSTER_SECRET` and `YORKIE_AUTH_GITHUB_CLIENT_SECRET` (the key and the
 cluster secret come from your own Secret instead when `secretKeyExistingSecret`
 or `clusterSecretExistingSecret` is set). None of them is passed as a
-command-line argument:
-arguments are readable in `/proc/<pid>/cmdline` and through the pprof
-`/debug/pprof/cmdline` endpoint, which this chart enables and serves on the
-profiling port, so an argument would hand every credential to anyone who can
-reach that port. The server reads each of those variables when the matching
-flag is unset, so the same approach works outside Helm.
+command-line argument: arguments are readable in `/proc/<pid>/cmdline` and in
+`kubectl get pod -o yaml`, so an argument would hand every credential to anyone
+who can read a pod or get a shell in the namespace. The server also refuses the
+pprof `/debug/pprof/cmdline` endpoint, which used to publish the same arguments
+to anyone who could reach the profiling port this chart enables; it now answers
+`404 Unknown profile`. The server reads each of those variables when the
+matching flag is unset, so the same approach works outside Helm.
 
 ### Rotating the key
 
