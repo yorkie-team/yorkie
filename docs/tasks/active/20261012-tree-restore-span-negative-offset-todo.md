@@ -3,7 +3,9 @@
 **Created**: 2026-10-12
 
 Follow-up filed from the review of #2175 (issue #2180). The finding is about
-decode/apply code that PR did not touch, so it was deferred to its own change.
+decode/apply code that #2175 did not touch, so it was deferred out of that PR
+and into this one. The fix lands here: the checklist below is the work of this
+change, not of a change still to come.
 
 ## Problem
 
@@ -64,6 +66,15 @@ negative-offset nodes to match).
 - [x] Unit tests: element span, text span, retombstone, and a check that the
       tree is untouched and `NodeMapByID` gains no entry
 - [x] `make lint` + `go test ./pkg/document/...`
+- [ ] **JS mirror in `yorkie-js-sdk`, as the sibling `kindAgrees` rule has
+      (yorkie-js-sdk#1471).** The skip changes what an applied operation does,
+      so a JS replica without it recreates a node the Go replica drops and the
+      two states diverge. In `CRDTTree.restore` and `CRDTTree.retombstone`,
+      skip a span whose `id.offset` is negative, in the same `continue` that
+      already skips a span whose `isText` disagrees with its `nodeType`.
+      Until that lands, the two SDKs converge only on documents that never
+      carry a negative-offset span — which no honest producer emits, so the
+      divergence is reachable from crafted input alone.
 
 ## Out of scope
 
