@@ -2,7 +2,7 @@
 
 # Refuse a merge that would move a node under itself
 
-Fixes yorkie#2172. The JS half mirrors it in yorkie-js-sdk.
+Fixes #2172. The JS half is yorkie-team/yorkie-js-sdk#1478.
 
 ## Problem
 
@@ -45,6 +45,6 @@ an element payload that names an ancestor of the merge's own children.
 - [x] `make verify`
 - [x] Self review (1 round, no blocking findings)
 - [x] JS mirror in yorkie-js-sdk with the same test
-- [ ] Open PRs and link them
+- [x] Open PRs and link them (#2186, js-sdk#1478)
 
 ## Review
