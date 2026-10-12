@@ -138,9 +138,11 @@ snapshot `TreeNode`. Operations do not change.
 
 - [x] Write the design from the brief: problem, the anchor rule, fallback
       scope, persistence, mixed-version risk, measurements.
-- [ ] Run `test/integration` tree suites and `test/complex` tree suites.
-      Not run locally: localhost:27017 is an ssh tunnel to an unknown
-      remote MongoDB. CI runs them.
+- [x] Run the integration suite (`go test -tags integration -race ./...`)
+      against a local `mongo:8` container on port 27018 (localhost:27017 is
+      an ssh tunnel to a remote MongoDB): all packages pass at 5fc38810,
+      `test/integration` included.
+- [ ] `test/complex` needs the sharded MongoDB stack; CI runs it.
 - [x] Run `GOTOOLCHAIN=go1.26.0 make lint`.
 - [x] Commit, then run the code review and fix what it finds.
 
