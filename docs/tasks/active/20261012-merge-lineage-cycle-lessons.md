@@ -28,3 +28,17 @@ gets no mergedInto), clearer guard comment. Not changed here:
   Pre-existing and separate from this fix; tracked as a follow-up issue.
 - A skipped child stays live under a tombstoned parent. Honest merges reach
   the same shape already, so this adds no new state.
+
+Round 2 (external review): the round-1 note above was wrong on its second
+half. The source a skipped child stays under is tombstoned by Phase 5 of the
+same edit, and a live node under a tombstone is not a shape an honest merge
+leaves: when that source becomes collectable, `Tree.Purge` detaches the
+subtree with `RemoveChild` but unregisters only the source itself, so every
+node below it stays in `NodeMapByID` and stays charged to `docSize.Live` —
+the detached-but-registered state behind #2008. Fixed by tombstoning the
+skipped child in place, with its descendants, and booking a GC pair for each
+(`tombstoneSubtree`), mirroring what `propagateMergeDeletes` does for a
+merge-moved child whose source this edit deletes. The pair is what both
+un-charges Live and gets the node purged. `mergeNodes` now returns those
+pairs, and `Edit` appends them after `deletePairCount`, so they also count
+against `SpansComplete` as every post-delete pair does.

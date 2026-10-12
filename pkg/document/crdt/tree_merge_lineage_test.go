@@ -135,7 +135,9 @@ func TestMergeNodesRejectsForgedSource(t *testing.T) {
 	// An ordinary merge of p2 into p1 moves the child that carries the forged
 	// lineage; the child keeps it, because MergedFrom is stamped only on a
 	// first move.
-	require.NoError(t, f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket()))
+	pairs, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
+	require.NoError(t, err)
+	assert.Empty(t, pairs, "an ordinary merge tombstones nothing")
 
 	assert.Nil(t, f.p3.mergedInto,
 		"an ordinary merge must not plant a forwarding pointer on an unrelated node")
@@ -202,18 +204,24 @@ func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
 			require.True(t, a.mergedInto.Equal(dest.id),
 				"the forged lineage points a at a node inside b")
 
-			done := make(chan error, 1)
+			type editResult struct {
+				pairs []GCPair
+				err   error
+			}
+			done := make(chan editResult, 1)
 			go func() {
-				_, _, _, err := tree.Edit(
+				pairs, _, _, err := tree.Edit(
 					NewTreePos(a.id, x.id), NewTreePos(b.id, b.id),
 					nil, 0, nextTicket(), nextTicket, nil, false,
 				)
-				done <- err
+				done <- editResult{pairs: pairs, err: err}
 			}()
 
+			var pairs []GCPair
 			select {
-			case err := <-done:
-				require.NoError(t, err)
+			case res := <-done:
+				require.NoError(t, res.err)
+				pairs = res.pairs
 			case <-gotime.After(3 * gotime.Second):
 				t.Fatal("the merge closed a parent cycle and the edit never returned")
 			}
@@ -225,6 +233,22 @@ func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
 			assert.Nil(t, b.mergedInto,
 				"no moved child names b, so neither runtime nor rebuild points it")
 			assert.Equal(t, "<r></r>", tree.ToXML())
+
+			// The skipped child stays under b, which this edit tombstoned, so
+			// leaving it live would hand b's Purge a subtree it detaches
+			// without unregistering or un-charging it (#2008). It is
+			// tombstoned in place instead, with its descendants, and every one
+			// of them is booked as a GC pair so the purge reaches it.
+			booked := map[*TreeNode]bool{}
+			for _, pair := range pairs {
+				booked[pair.Child.(*TreeNode)] = true
+			}
+			for _, node := range []*TreeNode{c, d, e} {
+				assert.True(t, node.IsRemoved(),
+					"a child the merge refused to move must not stay live under a tombstone")
+				assert.True(t, booked[node],
+					"every node tombstoned here needs a GC pair to be purged and un-charged")
+			}
 		})
 	}
 }
