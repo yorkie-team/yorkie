@@ -174,6 +174,69 @@ func TestConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("mask a password spelled with an unescaped delimiter", func(t *testing.T) {
+		// A password is supposed to be percent-encoded, but one that is not
+		// still reaches the log line. net/url cuts the fragment and the query
+		// off before it looks for the authority, so an unescaped '#' or '?' in
+		// the password leaves it with no userinfo to mask at all; the userinfo
+		// is therefore located on the raw URI. Values are concatenated rather
+		// than written inline, because gosec's G101 reads a URL literal
+		// carrying a password as a hardcoded credential.
+		const value = "s3cret"
+		const masked = "admin:xxxxx@"
+
+		for _, tc := range []struct {
+			uri      string
+			redacted string
+		}{{
+			// '#' would otherwise open a fragment that swallows the host.
+			uri:      "mongodb://admin:" + value + "#x" + "@h1:27017",
+			redacted: "mongodb://" + masked + "h1:27017",
+		}, {
+			// '?' would otherwise open the option string.
+			uri:      "mongodb://admin:" + value + "?x" + "@h1:27017/yorkie",
+			redacted: "mongodb://" + masked + "h1:27017/yorkie",
+		}, {
+			// The last '@' closes the userinfo, so an '@' inside the password
+			// does not end it early.
+			uri:      "mongodb://admin:" + value + "@x" + "@h1:27017",
+			redacted: "mongodb://" + masked + "h1:27017",
+		}, {
+			// An '@' in an option value closes no userinfo.
+			uri: "mongodb://admin:" + value + "@h1:27017/yorkie" +
+				"?tlsCertificateKeyFilePassword=" + value + "@x",
+			redacted: "mongodb://" + masked + "h1:27017/yorkie" +
+				"?tlsCertificateKeyFilePassword=xxxxx",
+		}, {
+			// ';' is the legacy option separator, which the drivers accept.
+			uri: "mongodb://h1:27017/yorkie?replicaSet=rs0" +
+				";tlsCertificateKeyFilePassword=" + value,
+			redacted: "mongodb://h1:27017/yorkie?replicaSet=rs0" +
+				";tlsCertificateKeyFilePassword=xxxxx",
+		}} {
+			config := &mongo.Config{ConnectionURI: tc.uri}
+			assert.Equal(t, tc.redacted, config.RedactedConnectionURI())
+			assert.NotContains(t, config.RedactedConnectionURI(), value)
+		}
+	})
+
+	t.Run("drop a connection URI whose credentials cannot be located", func(t *testing.T) {
+		// Nothing of a URI this cannot take apart is reported: masking too
+		// much costs a log line, masking too little publishes the password.
+		const value = "s3cret"
+
+		for _, uri := range []string{
+			// A scheme-opaque URI has no authority to look in.
+			"mongodb:admin:" + value + "@h1:27017",
+			// An unescaped '/' in the password puts the '@' that closes the
+			// userinfo after a character that ends the authority.
+			"mongodb://admin:" + value + "/x" + "@h1:27017",
+		} {
+			config := &mongo.Config{ConnectionURI: uri}
+			assert.Equal(t, "(unparsable URI)", config.RedactedConnectionURI())
+		}
+	})
+
 	t.Run("drop a connection URI that does not parse", func(t *testing.T) {
 		// The userinfo of an unparsable URI cannot be located, so none of the
 		// URI is reported rather than risking the password in a log line.

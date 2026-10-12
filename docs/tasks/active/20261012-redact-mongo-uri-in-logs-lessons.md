@@ -11,13 +11,20 @@ password the moment the Secret defined what "weak" meant: `kubectl logs` is
 granted far more widely. When a value is promoted to a secret, the work is
 not done until every sink that already carries it is audited.
 
-## `net/url` handles MongoDB URIs, including the multi-host form
+## `net/url` cannot be trusted to find the userinfo of a secret
 
-`mongodb://u:p@h1:27017,h2:27017/db?replicaSet=rs0` parses: `url.Parse`
-validates only the text after the *last* colon as a port, so the comma-joined
-authority survives and `URL.Redacted` round-trips it unchanged. `mongodb+srv`
-and a percent-encoded password are fine too. A hand-rolled "cut at the last
-`@`" was not needed.
+`url.Parse` handles the shapes a correct MongoDB URI takes — the comma-joined
+multi-host authority, `mongodb+srv`, a percent-encoded password — but a
+password is only *supposed* to be percent-encoded, and the one that is not is
+the case redaction exists for. `url.Parse` cuts the fragment and then the
+query off the whole URI before it looks for the authority, so
+`mongodb://user:pa#ss@h1:27017` parses as host `user:pa` (`pa` is a valid
+optional port) with fragment `ss@h1:27017` and *no* userinfo at all;
+`URL.Redacted` then has nothing to mask and echoes the password in full. The
+userinfo is now cut from the raw string: candidate `@`s from the right, the
+first one whose following segment is spelled like a host list and whose
+prefix spans no `/`. A parser that is lenient about where a delimiter may
+appear is the wrong tool for deciding which half of a string is the secret.
 
 ## gosec flags the redacted URI too
 
@@ -40,10 +47,12 @@ options that name no secret in their name need an explicit entry.
 
 ## An unparsable URI has to be dropped, not echoed
 
-The tempting fallback for a URI `url.Parse` rejects is to log it as-is so the
-operator can see what is wrong. That is exactly the case where the password
-cannot be located, so it is exactly the case where echoing it leaks. The
-fallback reports only that the URI did not parse.
+The tempting fallback for a URI the redaction cannot take apart is to log it
+as-is so the operator can see what is wrong. That is exactly the case where
+the password cannot be located, so it is exactly the case where echoing it
+leaks. The fallback reports only that the URI did not parse, and it now also
+covers a scheme-opaque URI and one left holding an `@` that closes no
+userinfo the cut could find.
 
 ## A test that copies a server timeout inherits a deadline it does not want
 
