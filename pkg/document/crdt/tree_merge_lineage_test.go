@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 // mergeLineageFixture builds <r><p1></p1><p2>cd</p2><p3></p3></r>, the shape
@@ -339,5 +340,64 @@ func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
 			assert.Equal(t, bSize, bPadding+strandedSize,
 				"and that range is b's padding plus the subtree it stranded")
 		})
+	}
+}
+
+// TestStrandedMergeKeepsSnapshotPointers pins that a merge the cycle guard
+// strands leaves the forwarding pointers a snapshot of the same tree rebuilds.
+// mergeNodes resolves each child's destination on its own, and a stranded
+// child is left out of the sources it repoints, so firstMergeHolder and
+// rebuildMergeState read the same tree and agree.
+func TestStrandedMergeKeepsSnapshotPointers(t *testing.T) {
+	for _, carrierIsText := range []bool{false, true} {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+		a := NewTreeNode(NewTreeNodeID(next(), 0), "a", nil)
+		x := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "x")
+		b := NewTreeNode(NewTreeNodeID(next(), 0), "b", nil)
+		c := NewTreeNode(NewTreeNodeID(next(), 0), "c", nil)
+		d := NewTreeNode(NewTreeNodeID(next(), 0), "d", nil)
+		e := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "e")
+		require.NoError(t, root.Append(a, b))
+		require.NoError(t, a.Append(x))
+		require.NoError(t, b.Append(c))
+		require.NoError(t, c.Append(d))
+		require.NoError(t, d.Append(e))
+		a.remove(next())
+		carrier := d
+		if carrierIsText {
+			carrier = e
+		}
+		carrier.MergedFrom = a.id
+		carrier.MergedAt = next()
+		tree := NewTree(root, next())
+
+		_, _, _, err = tree.Edit(
+			NewTreePos(a.id, x.id), NewTreePos(b.id, b.id),
+			nil, 0, next(), next, nil, false,
+		)
+		require.NoError(t, err)
+
+		pointers := func() map[string]string {
+			out := make(map[string]string)
+			index.Traverse(tree.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+				if n.Value.mergedInto != nil {
+					out[n.Value.id.toIDString()] = n.Value.mergedInto.toIDString()
+				}
+			})
+			return out
+		}
+		runtime := pointers()
+		index.Traverse(tree.IndexTree, func(n *index.Node[*TreeNode], _ int) {
+			n.Value.mergedInto = nil
+		})
+		tree.rebuildMergeState()
+		assert.Equal(t, pointers(), runtime)
 	}
 }
