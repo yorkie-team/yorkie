@@ -255,6 +255,9 @@ func New(opts ...Option) (*Client, error) {
 	if options.ChannelHeartbeatInterval == 0 {
 		options.ChannelHeartbeatInterval = 30 * gotime.Second
 	}
+	if options.WatchHeartbeatInterval == 0 {
+		options.WatchHeartbeatInterval = defaultWatchHeartbeatInterval
+	}
 
 	conn := &http.Client{}
 	if options.CertFile != "" {
@@ -1491,6 +1494,7 @@ func (c *Client) openChannelWatch(
 					},
 				},
 			}},
+			HeartbeatIntervalMs: c.watchHeartbeatIntervalMs(),
 		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
 		cancel()
@@ -1745,7 +1749,24 @@ func stopWatchPipeline(attachment *Attachment) {
 	})
 }
 
+// watchHeartbeatIntervalMs is the heartbeat interval to put on a WatchRequest,
+// in milliseconds. NoWatchHeartbeat, and any other non-positive interval,
+// sends 0: the request then asks for no heartbeats, which is also what a
+// server older than the field sees from any client.
+func (c *Client) watchHeartbeatIntervalMs() int64 {
+	if c.options.WatchHeartbeatInterval <= 0 {
+		return 0
+	}
+
+	return c.options.WatchHeartbeatInterval.Milliseconds()
+}
+
 const (
+	// defaultWatchHeartbeatInterval is the heartbeat interval a client asks
+	// for when it configures none. It is within the bounds this repo's server
+	// defaults to, so an unconfigured client gets exactly what it asks for.
+	defaultWatchHeartbeatInterval = 20 * gotime.Second
+
 	// watchIdleTimeoutFactor multiplies the heartbeat interval the server
 	// advertises to get how long a silent stream is given before it is treated
 	// as half-open. More than one interval, so a single late or dropped
@@ -1852,6 +1873,7 @@ func (c *Client) runWatchLoop(ctx context.Context, attachment *Attachment, d *do
 					},
 				},
 			}},
+			HeartbeatIntervalMs: c.watchHeartbeatIntervalMs(),
 		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
