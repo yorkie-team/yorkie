@@ -135,9 +135,9 @@ func TestMergeNodesRejectsForgedSource(t *testing.T) {
 	// An ordinary merge of p2 into p1 moves the child that carries the forged
 	// lineage; the child keeps it, because MergedFrom is stamped only on a
 	// first move.
-	pairs, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
+	stranded, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
 	require.NoError(t, err)
-	assert.Empty(t, pairs, "an ordinary merge tombstones nothing")
+	assert.Empty(t, stranded, "an ordinary merge tombstones nothing")
 
 	assert.Nil(t, f.p3.mergedInto,
 		"an ordinary merge must not plant a forwarding pointer on an unrelated node")
@@ -204,24 +204,35 @@ func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
 			require.True(t, a.mergedInto.Equal(dest.id),
 				"the forged lineage points a at a node inside b")
 
+			// Measured before the edit: b is the range this edit consumes,
+			// and all of it is live, so RemovedSize has to come back as b's
+			// pre-edit length. strandedSize is the part of it the guard
+			// refuses to move and tombstones in place instead; bPadding is
+			// the only part of b left in toBeRemoveds' own accounting.
+			bSize := b.Index.PaddedLength()
+			strandedSize := c.Index.PaddedLength()
+			bPadding := bSize - strandedSize
+
 			type editResult struct {
 				pairs []GCPair
+				info  TreeEditReverseInfo
 				err   error
 			}
 			done := make(chan editResult, 1)
 			go func() {
-				pairs, _, _, err := tree.Edit(
+				pairs, _, info, err := tree.Edit(
 					NewTreePos(a.id, x.id), NewTreePos(b.id, b.id),
 					nil, 0, nextTicket(), nextTicket, nil, false,
 				)
-				done <- editResult{pairs: pairs, err: err}
+				done <- editResult{pairs: pairs, info: info, err: err}
 			}()
 
 			var pairs []GCPair
+			var info TreeEditReverseInfo
 			select {
 			case res := <-done:
 				require.NoError(t, res.err)
-				pairs = res.pairs
+				pairs, info = res.pairs, res.info
 			case <-gotime.After(3 * gotime.Second):
 				t.Fatal("the merge closed a parent cycle and the edit never returned")
 			}
@@ -249,6 +260,17 @@ func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
 				assert.True(t, booked[node],
 					"every node tombstoned here needs a GC pair to be purged and un-charged")
 			}
+
+			// The stranded subtree is not in toBeRemoveds -- the merge had
+			// collected it to move -- yet tombstoning it in place drained its
+			// bytes out of b, the removed source it stays under. Summed over
+			// toBeRemoveds alone, RemovedSize would lose them entirely and
+			// report only b's own padding, handing undo/redo reconciliation a
+			// range short by the whole subtree.
+			assert.Equal(t, bSize, info.RemovedSize,
+				"the range the edit consumed is all of b, stranded subtree included")
+			assert.Equal(t, bSize, bPadding+strandedSize,
+				"and that range is b's padding plus the subtree it stranded")
 		})
 	}
 }
