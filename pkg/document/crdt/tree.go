@@ -2726,6 +2726,17 @@ func (t *Tree) mergeNodes(
 		if node.Index.Parent == nil {
 			continue
 		}
+		// A destination that is the node itself or lies inside it can only
+		// come from a forged lineage: mergedInto is derived from the
+		// MergedFrom an element payload keeps, so a crafted one can aim the
+		// destination's forwarding chain at a child this merge moves, or at
+		// a node inside one. Moving the node there would close a parent cycle
+		// in the index tree, and every later ancestor walk would spin forever.
+		// Leave it where it is, unstamped. The check reads only the tree the
+		// change lands on, so replicas holding the same tree decide alike.
+		if node == dest || node.Index.IsAncestorOf(dest.Index) {
+			continue
+		}
 		// Record source parent and merge ticket on the moved child.
 		// Both fields are persisted; MergedAt must be stored explicitly
 		// because source.removedAt can be overwritten by later concurrent

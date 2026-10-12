@@ -17,6 +17,8 @@
 package crdt
 
 import (
+	gotime "time"
+
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -139,4 +141,90 @@ func TestMergeNodesRejectsForgedSource(t *testing.T) {
 		"an ordinary merge must not plant a forwarding pointer on an unrelated node")
 	assert.Same(t, f.p1, f.text.Index.Parent.Value,
 		"the merge itself still moves the child")
+}
+
+// TestMergeNodesRefusesCycleFromForgedLineage pins that a forged merge lineage
+// cannot steer a merge into one of the nodes it moves.
+//
+// The tree is <r><a>x</a><b><c><d>e</d></c></b></r> with a tombstoned and one
+// node carrying MergedFrom = a, as an element payload may; rebuildMergeState
+// then points a at that node's parent. A merge of b into a resolves its
+// destination through that pointer, so it lands on c, the child it moves, or
+// on d inside it. Moving c there would close a parent cycle in the index tree,
+// and every later ancestor walk would spin forever under the document lock.
+func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
+	tests := []struct {
+		name string
+		// carrier picks the node that carries the forged MergedFrom; its
+		// parent becomes the merge destination.
+		carrier func(c, d, e *TreeNode) (carrier, dest *TreeNode)
+	}{
+		{
+			name:    "destination is the moved node",
+			carrier: func(c, d, _ *TreeNode) (*TreeNode, *TreeNode) { return d, c },
+		},
+		{
+			name:    "destination inside the moved node",
+			carrier: func(_, d, e *TreeNode) (*TreeNode, *TreeNode) { return e, d },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actor, err := time.ActorIDFromHex("000000000000000000000001")
+			require.NoError(t, err)
+			lamport := int64(0)
+			nextTicket := func() *time.Ticket {
+				lamport++
+				return time.NewTicket(lamport, 0, actor)
+			}
+
+			root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+			a := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "a", nil)
+			x := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "x")
+			b := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "b", nil)
+			c := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "c", nil)
+			d := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "d", nil)
+			e := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "e")
+			require.NoError(t, root.Append(a, b))
+			require.NoError(t, a.Append(x))
+			require.NoError(t, b.Append(c))
+			require.NoError(t, c.Append(d))
+			require.NoError(t, d.Append(e))
+			a.remove(nextTicket())
+			carrier, dest := tc.carrier(c, d, e)
+			carrier.MergedFrom = a.id
+			carrier.MergedAt = nextTicket()
+
+			// Re-read exactly as the converter re-reads an element payload.
+			tree := NewTree(root, nextTicket())
+			require.NotNil(t, a.mergedInto)
+			require.True(t, a.mergedInto.Equal(dest.id),
+				"the forged lineage points a at a node inside b")
+
+			done := make(chan error, 1)
+			go func() {
+				_, _, _, err := tree.Edit(
+					NewTreePos(a.id, x.id), NewTreePos(b.id, b.id),
+					nil, 0, nextTicket(), nextTicket, nil, false,
+				)
+				done <- err
+			}()
+
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-gotime.After(3 * gotime.Second):
+				t.Fatal("the merge closed a parent cycle and the edit never returned")
+			}
+
+			assert.Same(t, b.Index, c.Index.Parent,
+				"c stays where it was instead of moving under itself")
+			assert.Same(t, c.Index, d.Index.Parent)
+			assert.Nil(t, c.MergedFrom, "a skipped child is not stamped as moved")
+			assert.Nil(t, b.mergedInto,
+				"no moved child names b, so neither runtime nor rebuild points it")
+			assert.Equal(t, "<r></r>", tree.ToXML())
+		})
+	}
 }
