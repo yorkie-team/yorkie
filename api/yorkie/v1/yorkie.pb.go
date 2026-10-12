@@ -521,9 +521,17 @@ type WatchRequest struct {
 	// the server subscribes the client under it so watch peer ids and
 	// watched/unwatched events match the presence CRDT keying. Old SDKs omit it
 	// and the server falls back to client_id (the session id).
-	ActorId       string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ActorId string `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	// heartbeat_interval_ms is the interval, in milliseconds, at which this
+	// stream asks the server to send a WatchHeartbeat while it is idle. 0, which
+	// is also what an SDK older than the heartbeat leaves here, asks for none:
+	// such a stream gets no WatchHeartbeat bodies at all, so the heartbeat can
+	// never reach a client that would not recognize it. The server clamps the
+	// request to its own bounds and reports the value it settled on in
+	// WatchInitialization.heartbeat_interval_ms.
+	HeartbeatIntervalMs int64 `protobuf:"varint,4,opt,name=heartbeat_interval_ms,json=heartbeatIntervalMs,proto3" json:"heartbeat_interval_ms,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *WatchRequest) Reset() {
@@ -575,6 +583,13 @@ func (x *WatchRequest) GetActorId() string {
 		return x.ActorId
 	}
 	return ""
+}
+
+func (x *WatchRequest) GetHeartbeatIntervalMs() int64 {
+	if x != nil {
+		return x.HeartbeatIntervalMs
+	}
+	return 0
 }
 
 type ResourceDescriptor struct {
@@ -2941,11 +2956,12 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x16remove_if_not_attached\x18\x04 \x01(\bR\x13removeIfNotAttached\"P\n" +
 	"\x16DetachDocumentResponse\x126\n" +
 	"\vchange_pack\x18\x02 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
-	"changePack\"\x83\x01\n" +
+	"changePack\"\xb7\x01\n" +
 	"\fWatchRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12;\n" +
 	"\tresources\x18\x02 \x03(\v2\x1d.yorkie.v1.ResourceDescriptorR\tresources\x12\x19\n" +
-	"\bactor_id\x18\x03 \x01(\tR\aactorId\"\x97\x01\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x122\n" +
+	"\x15heartbeat_interval_ms\x18\x04 \x01(\x03R\x13heartbeatIntervalMs\"\x97\x01\n" +
 	"\x12ResourceDescriptor\x12;\n" +
 	"\bdocument\x18\x01 \x01(\v2\x1d.yorkie.v1.DocumentDescriptorH\x00R\bdocument\x128\n" +
 	"\achannel\x18\x02 \x01(\v2\x1c.yorkie.v1.ChannelDescriptorH\x00R\achannelB\n" +

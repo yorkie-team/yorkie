@@ -74,17 +74,22 @@ const (
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000
 
-	// DefaultWatchHeartbeatInterval is zero: the heartbeat stays off until an
-	// operator turns it on. A heartbeat is a new case on the Watch stream's
-	// response oneof, and a client older than it has no case for it: this
-	// repo's own Go client answers an unrecognized body with
-	// ErrUnsupportedWatchResponseType, which its reader loop treats as
-	// terminal and retires the watch pipeline on. Sending heartbeats by
-	// default would therefore break every client that predates them a few
-	// seconds after a server upgrade. Operators turn it on once their clients
-	// understand it; a suggested value is 20s, short enough that a client
-	// notices a half-open stream in well under a minute and long enough to
-	// stay below the idle timeout of a typical proxy or load balancer.
+	// DefaultWatchHeartbeatIntervalMin and DefaultWatchHeartbeatIntervalMax
+	// bound the heartbeat interval a Watch stream may ask for. Heartbeats are
+	// on by default because they are opt-in per stream: a heartbeat is a new
+	// case on the Watch response oneof, and a client older than it has no case
+	// for it -- this repo's own Go client answers an unrecognized body with
+	// ErrUnsupportedWatchResponseType and retires its watch pipeline -- but
+	// such a client also leaves heartbeat_interval_ms at 0, which asks for no
+	// heartbeats, so an upgraded server never sends it one.
+	DefaultWatchHeartbeatIntervalMin = backend.DefaultWatchHeartbeatIntervalMin
+	DefaultWatchHeartbeatIntervalMax = backend.DefaultWatchHeartbeatIntervalMax
+
+	// DefaultWatchHeartbeatInterval is the default of the deprecated
+	// single-interval flag. The config field it feeds is left unset unless an
+	// operator passes the flag, so that one who never set it stays
+	// distinguishable from one who set it to "0s" to keep heartbeats off;
+	// only the latter disables them.
 	DefaultWatchHeartbeatInterval = 0 * time.Second
 
 	DefaultClusterRPCTimeout        = 10 * time.Second
@@ -324,8 +329,11 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.ChannelSessionCleanupInterval == "" {
 		c.Backend.ChannelSessionCleanupInterval = DefaultChannelSessionCleanupInterval.String()
 	}
-	if c.Backend.WatchHeartbeatInterval == "" {
-		c.Backend.WatchHeartbeatInterval = DefaultWatchHeartbeatInterval.String()
+	if c.Backend.WatchHeartbeatIntervalMin == "" {
+		c.Backend.WatchHeartbeatIntervalMin = DefaultWatchHeartbeatIntervalMin.String()
+	}
+	if c.Backend.WatchHeartbeatIntervalMax == "" {
+		c.Backend.WatchHeartbeatIntervalMax = DefaultWatchHeartbeatIntervalMax.String()
 	}
 	if c.Backend.ChannelSessionCountCacheTTL == "" {
 		c.Backend.ChannelSessionCountCacheTTL = DefaultChannelSessionCountCacheTTL.String()

@@ -105,10 +105,11 @@ type yorkieServer struct {
 	serviceCtx context.Context
 	watches    *watchRegistry
 
-	// heartbeatInterval is how long a Watch stream may stay idle before it
-	// sends a heartbeat. Parsed once here rather than per stream, so a
+	// heartbeatMin and heartbeatMax bound the heartbeat interval a Watch
+	// stream may ask for. Parsed once here rather than per stream, so a
 	// malformed value fails at startup instead of mid-request.
-	heartbeatInterval gotime.Duration
+	heartbeatMin gotime.Duration
+	heartbeatMax gotime.Duration
 }
 
 // newYorkieServer creates a new instance of yorkieServer
@@ -117,12 +118,39 @@ func newYorkieServer(
 	be *backend.Backend,
 	watches *watchRegistry,
 ) *yorkieServer {
+	heartbeatMin, heartbeatMax := be.Config.ParseWatchHeartbeatBounds()
 	return &yorkieServer{
-		backend:           be,
-		watches:           watches,
-		serviceCtx:        serviceCtx,
-		heartbeatInterval: be.Config.ParseWatchHeartbeatInterval(),
+		backend:      be,
+		watches:      watches,
+		serviceCtx:   serviceCtx,
+		heartbeatMin: heartbeatMin,
+		heartbeatMax: heartbeatMax,
 	}
+}
+
+// resolveHeartbeatInterval returns the heartbeat interval this server will
+// actually use for a stream that asked for requestedMs milliseconds.
+//
+// A request of 0 gets 0: that is both what an SDK older than the heartbeat
+// leaves on the wire and what a newer one sends to opt out, and either way
+// the stream gets no WatchHeartbeat bodies. Anything else is clamped into the
+// server's bounds, so one client cannot set the server's heartbeat load by
+// asking for a very short interval. A zero maximum is the server-wide kill
+// switch and wins over any request.
+func (s *yorkieServer) resolveHeartbeatInterval(requestedMs int64) gotime.Duration {
+	if requestedMs <= 0 || s.heartbeatMax <= 0 {
+		return 0
+	}
+
+	requested := gotime.Duration(requestedMs) * gotime.Millisecond
+	if requested < s.heartbeatMin {
+		return s.heartbeatMin
+	}
+	if requested > s.heartbeatMax {
+		return s.heartbeatMax
+	}
+
+	return requested
 }
 
 // ActivateClient activates the given client.
@@ -747,28 +775,33 @@ func (s *yorkieServer) Watch(
 	if err := context.Cause(streamCtx); err != nil {
 		return err
 	}
-	if err := s.sendWatchInitialization(stream.Send, resourceInits); err != nil {
+	heartbeatInterval := s.resolveHeartbeatInterval(req.Msg.HeartbeatIntervalMs)
+	if err := s.sendWatchInitialization(stream.Send, resourceInits, heartbeatInterval); err != nil {
 		return err
 	}
 
-	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, s.heartbeatInterval)
+	return s.streamMergedEvents(streamCtx, stream.Send, project, docSubs, channelSubs, heartbeatInterval)
 }
 
 // sendWatchInitialization sends the first response of a Watch stream.
 //
-// The heartbeat interval is advertised before the first heartbeat is due, so a
-// client knows what to expect from the moment the stream comes up. A server
-// with heartbeats disabled advertises 0, which tells the client not to apply
-// an idle timeout at all.
+// The effective heartbeat interval -- what the client asked for, clamped to
+// this server's bounds -- is advertised before the first heartbeat is due, so
+// a client knows what to expect from the moment the stream comes up and can
+// size its idle timeout against the value the server settled on rather than
+// the one it requested. A stream that asked for no heartbeats, or a server
+// with them disabled, advertises 0, which tells the client not to apply an
+// idle timeout at all.
 func (s *yorkieServer) sendWatchInitialization(
 	send func(*api.WatchResponse) error,
 	resourceInits []*api.ResourceInit,
+	heartbeatInterval gotime.Duration,
 ) error {
 	return send(&api.WatchResponse{
 		Body: &api.WatchResponse_Initialization{
 			Initialization: &api.WatchInitialization{
 				ResourceInits:       resourceInits,
-				HeartbeatIntervalMs: s.heartbeatInterval.Milliseconds(),
+				HeartbeatIntervalMs: heartbeatInterval.Milliseconds(),
 			},
 		},
 	})

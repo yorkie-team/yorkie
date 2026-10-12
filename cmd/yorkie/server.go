@@ -77,7 +77,9 @@ var (
 	channelSessionCountCacheTTL   time.Duration
 	channelSessionCountCacheSize  int
 
-	watchHeartbeatInterval time.Duration
+	watchHeartbeatInterval    time.Duration
+	watchHeartbeatIntervalMin time.Duration
+	watchHeartbeatIntervalMax time.Duration
 
 	clusterRPCTimeout        time.Duration
 	clusterClientTimeout     time.Duration
@@ -173,7 +175,15 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ChannelSessionCountCacheTTL = channelSessionCountCacheTTL.String()
 			conf.Backend.ChannelSessionCountCacheSize = channelSessionCountCacheSize
 
-			conf.Backend.WatchHeartbeatInterval = watchHeartbeatInterval.String()
+			conf.Backend.WatchHeartbeatIntervalMin = watchHeartbeatIntervalMin.String()
+			conf.Backend.WatchHeartbeatIntervalMax = watchHeartbeatIntervalMax.String()
+			// Only an operator who passed the deprecated flag gets its
+			// behavior. Writing it unconditionally would make every server
+			// look like one that had asked for "0s", silencing the heartbeat
+			// the bounds above are meant to allow.
+			if cmd.Flags().Changed("backend-watch-heartbeat-interval") {
+				conf.Backend.WatchHeartbeatInterval = watchHeartbeatInterval.String()
+			}
 
 			conf.Backend.ClusterRPCTimeout = clusterRPCTimeout.String()
 			conf.Backend.ClusterClientTimeout = clusterClientTimeout.String()
@@ -675,13 +685,37 @@ func init() {
 		"The interval for running cleanup of expired channel sessions.",
 	)
 	cmd.Flags().DurationVar(
+		&watchHeartbeatIntervalMin,
+		"backend-watch-heartbeat-interval-min",
+		server.DefaultWatchHeartbeatIntervalMin,
+		"The shortest heartbeat interval the server will serve on an idle Watch "+
+			"stream. A client asking for less is clamped up to this.",
+	)
+	cmd.Flags().DurationVar(
+		&watchHeartbeatIntervalMax,
+		"backend-watch-heartbeat-interval-max",
+		server.DefaultWatchHeartbeatIntervalMax,
+		"The longest heartbeat interval the server will serve on an idle Watch "+
+			"stream. 0 turns the heartbeat off server-wide, whatever clients ask for.",
+	)
+	cmd.Flags().DurationVar(
 		&watchHeartbeatInterval,
 		"backend-watch-heartbeat-interval",
 		server.DefaultWatchHeartbeatInterval,
-		"The interval at which the server sends a heartbeat on an idle Watch "+
-			"stream. 0, the default, sends none: a client older than the heartbeat "+
-			"ends its watch on a response it cannot classify, so this is opt-in.",
+		"The interval at which the server sends a heartbeat on an idle Watch stream.",
 	)
+	// Clients now name the interval they want on the Watch request, so a
+	// single server-wide interval has nothing left to set. Only "0s" still
+	// carries meaning, as an off switch.
+	if err := cmd.Flags().MarkDeprecated(
+		"backend-watch-heartbeat-interval",
+		"the heartbeat interval is requested per stream by the client; use "+
+			"--backend-watch-heartbeat-interval-min and "+
+			"--backend-watch-heartbeat-interval-max to bound it, or pass 0s here "+
+			"to turn the heartbeat off server-wide",
+	); err != nil {
+		panic(err)
+	}
 	cmd.Flags().DurationVar(
 		&channelSessionCountCacheTTL,
 		"channel-session-count-cache-ttl",
