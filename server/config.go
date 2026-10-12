@@ -85,9 +85,9 @@ const (
 	DefaultWatchHeartbeatIntervalMin = backend.DefaultWatchHeartbeatIntervalMin
 	DefaultWatchHeartbeatIntervalMax = backend.DefaultWatchHeartbeatIntervalMax
 
-	// DefaultWatchHeartbeatInterval is the default of the deprecated
-	// single-interval flag. The config field it feeds is left unset unless an
-	// operator passes the flag, so that one who never set it stays
+	// DefaultWatchHeartbeatInterval is the default of the flag that takes the
+	// choice away from the client. The config field it feeds is left unset
+	// unless an operator passes the flag, so that one who never set it stays
 	// distinguishable from one who set it to "0s" to keep heartbeats off;
 	// only the latter disables them.
 	DefaultWatchHeartbeatInterval = 0 * time.Second

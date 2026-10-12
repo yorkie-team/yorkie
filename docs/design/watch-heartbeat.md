@@ -66,11 +66,17 @@ the heartbeat timer and the `heartbeat_interval_ms` it advertises in
 
 ```go
 func (s *yorkieServer) resolveHeartbeatInterval(requestedMs int64) time.Duration {
-	if requestedMs <= 0 || s.heartbeatMax <= 0 {
+	if s.heartbeat.Max <= 0 {
+		return 0
+	}
+	if s.heartbeat.Forced > 0 {
+		return s.heartbeat.Forced
+	}
+	if requestedMs <= 0 {
 		return 0
 	}
 	requested := time.Duration(requestedMs) * time.Millisecond
-	return min(max(requested, s.heartbeatMin), s.heartbeatMax)
+	return min(max(requested, s.heartbeat.Min), s.heartbeat.Max)
 }
 ```
 
@@ -83,6 +89,16 @@ hosted service needs: it stops a client asking for a 1s heartbeat and
 multiplying the server's load. The maximum doubles as the server-wide kill
 switch, since "the longest interval this server will serve is zero" already
 reads as "no heartbeats".
+
+`--backend-watch-heartbeat-interval` keeps its original name and its original
+power, and is unset by default: an operator who passes it decides for every
+stream, whatever the clients ask for. It is what a server needs when it must
+detect a half-open stream itself rather than leave that to the peer —
+otherwise the peer alone decides whether the server ever writes to the
+stream, and a client that opts out leaves a half-open one undetectable from
+the server's side. Because a forced heartbeat reaches clients too old to
+understand one, it is safe only once every client of that server does, which
+is why it is a deliberate setting rather than a default.
 
 ### Compatibility
 
@@ -100,7 +116,8 @@ No combination breaks, which is what lets the server ship with heartbeats on.
 | Risk | Mitigation |
 |------|------------|
 | A client asks for a very short interval and multiplies server load | The minimum bound clamps it up; the operator sets the floor |
-| An operator who deliberately disabled heartbeats has them re-enabled by an upgrade | The deprecated `--backend-watch-heartbeat-interval`, when explicitly set to `0s`, still disables them |
+| An operator who deliberately disabled heartbeats has them re-enabled by an upgrade | `--backend-watch-heartbeat-interval`, when explicitly set to `0s`, still disables them |
+| A client opts out and the server cannot tell its stream has gone half-open | `--backend-watch-heartbeat-interval` set above `0s` forces one on every stream, overriding the request |
 | A misconfigured `min > max` silently picks one | Rejected by config validation at startup |
 
 ### Design Decisions
@@ -110,7 +127,8 @@ No combination breaks, which is what lets the server ship with heartbeats on.
 | Interval on the request, not a `bool` plus a server interval | One field is both the opt-in and the tuning knob, and an absent field already means "off" |
 | Advertise the effective interval, not the requested one | The client's watchdog must track what the server will really send |
 | Kill switch on the maximum bound | Avoids a third option whose meaning overlaps the other two |
-| Deprecated flag honored for its on/off intent only | Its per-stream meaning cannot survive per-stream opt-in, but an operator's decision to keep heartbeats off must |
+| The single-interval flag kept as an operator override rather than retired | Liveness detection is the server's concern too, so the last word has to stay with the operator; the flag already meant "this interval, on every stream" |
+| The override left unset by default | Its flag default is `0s`, the kill switch, so only a flag the operator actually passed reaches the config |
 
 ## Alternatives Considered
 

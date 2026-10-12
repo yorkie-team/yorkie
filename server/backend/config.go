@@ -110,11 +110,19 @@ type Config struct {
 	// terminal response is also old enough not to ask for one.
 	WatchHeartbeatIntervalMax string `yaml:"WatchHeartbeatIntervalMax"`
 
-	// WatchHeartbeatInterval is deprecated and ignored except for its on/off
-	// intent: "0s" still disables the heartbeat server-wide. Its old meaning,
-	// one interval imposed on every stream, cannot survive the move to
-	// per-stream opt-in, where each client names the interval it wants and the
-	// server only clamps it to the bounds above.
+	// WatchHeartbeatInterval takes the choice away from the client, and is
+	// unset by default so that the client keeps it:
+	//
+	//   - unset: each stream is served the interval it asked for, clamped to
+	//     the bounds above.
+	//   - "0s": the server serves no heartbeat, however short an interval a
+	//     client asks for.
+	//   - anything else: the server serves that interval on every stream,
+	//     whatever the client asked for and regardless of the bounds. This is
+	//     what an operator sets when the server must be able to detect a
+	//     half-open stream itself rather than leave that to the peer; it
+	//     reaches clients too old to understand a WatchHeartbeat, so it is
+	//     only safe once every client of this server does.
 	WatchHeartbeatInterval string `yaml:"WatchHeartbeatInterval"`
 
 	// ChannelSessionCountCacheSize is the cache size of the session count.
@@ -345,35 +353,50 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 	return result
 }
 
-// ParseWatchHeartbeatBounds returns the shortest and longest heartbeat
-// interval the server will serve on an idle Watch stream. A client names the
-// interval it wants on its WatchRequest and the server clamps it to this
-// range. A zero maximum disables the heartbeat server-wide, whatever a client
-// asks for.
-func (c *Config) ParseWatchHeartbeatBounds() (time.Duration, time.Duration) {
-	// The deprecated single-interval option survives only as an off switch:
-	// an operator who set it to "0s" to keep heartbeats away from their old
-	// clients must not have them turned on by an upgrade.
+// WatchHeartbeatPolicy is what a server does with the heartbeat interval a
+// Watch stream asks for: Min and Max bound it, and Forced, when non-zero,
+// replaces it outright so the decision rests with the operator rather than
+// the peer. A zero Max disables the heartbeat server-wide.
+type WatchHeartbeatPolicy struct {
+	Min    time.Duration
+	Max    time.Duration
+	Forced time.Duration
+}
+
+// ParseWatchHeartbeatPolicy returns the heartbeat policy this server applies
+// to an idle Watch stream. A client names the interval it wants on its
+// WatchRequest and the server clamps it into [Min, Max], unless the operator
+// set WatchHeartbeatInterval, which decides for every stream instead.
+func (c *Config) ParseWatchHeartbeatPolicy() WatchHeartbeatPolicy {
+	var forced time.Duration
 	if c.WatchHeartbeatInterval != "" {
-		legacy, err := time.ParseDuration(c.WatchHeartbeatInterval)
+		parsed, err := time.ParseDuration(c.WatchHeartbeatInterval)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "parse watch heartbeat interval: %v\n", err)
 			os.Exit(1)
 		}
-		if legacy == 0 {
-			return 0, 0
+		// "0s" is the kill switch: an operator who set it to keep heartbeats
+		// away from their old clients must not have them turned on by an
+		// upgrade. A zero Max says that to every caller.
+		if parsed == 0 {
+			return WatchHeartbeatPolicy{}
 		}
+		forced = parsed
 	}
 
-	return c.parseHeartbeatBound(
+	return WatchHeartbeatPolicy{
+		Min: c.parseHeartbeatBound(
 			c.WatchHeartbeatIntervalMin,
 			DefaultWatchHeartbeatIntervalMin,
 			"min",
-		), c.parseHeartbeatBound(
+		),
+		Max: c.parseHeartbeatBound(
 			c.WatchHeartbeatIntervalMax,
 			DefaultWatchHeartbeatIntervalMax,
 			"max",
-		)
+		),
+		Forced: forced,
+	}
 }
 
 // parseHeartbeatBound parses one heartbeat bound, falling back to the given

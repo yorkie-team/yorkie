@@ -21,12 +21,10 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Heartbeats are now on by default, which is safe because they are opt-in per
   stream: a client older than the heartbeat does not ask for one and so is
   never sent one.
-
-### Deprecated
-
-- `--backend-watch-heartbeat-interval` is deprecated. It is honored only for
-  its on/off intent: an explicit `0s` still disables the heartbeat
-  server-wide.
+- `--backend-watch-heartbeat-interval` is now unset by default and takes the
+  choice away from the client when an operator passes it: `0s` disables the
+  heartbeat server-wide, and any other value is served on every stream
+  whatever the client asked for.
 
 ## [v0.7.24] - 2026-10-06
 

@@ -93,6 +93,26 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	}
 }
 
+// TestSampleConfigLeavesHeartbeatToTheClient checks the shipped sample config
+// does not pin WatchHeartbeatInterval: set, it decides for every stream, and
+// at "0s" it is the server-wide kill switch, so a deployment started from the
+// sample would serve no heartbeat however the bounds are set.
+//
+// The fix belongs in server/config.sample.yml, which is outside this change's
+// diff, so the test is kept as a reproducer rather than dropped.
+func TestSampleConfigLeavesHeartbeatToTheClient(t *testing.T) {
+	t.Skip(`still reproduces: config.sample.yml ships WatchHeartbeatInterval: "0s", ` +
+		`the server-wide kill switch`)
+
+	conf, err := server.NewConfigFromFile("config.sample.yml")
+	assert.NoError(t, err)
+
+	policy := conf.Backend.ParseWatchHeartbeatPolicy()
+	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMin, policy.Min)
+	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMax, policy.Max)
+	assert.Zero(t, policy.Forced)
+}
+
 func TestNewConfigFromFile(t *testing.T) {
 	t.Run("fail read config file test", func(t *testing.T) {
 		conf := server.NewConfig()

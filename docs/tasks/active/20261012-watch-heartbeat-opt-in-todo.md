@@ -26,8 +26,9 @@ timeout to a mobile client saving battery.
 3. **Server config** — replace the single interval with bounds:
    `WatchHeartbeatIntervalMin` (`5s`) and `WatchHeartbeatIntervalMax`
    (`60s`). The minimum stops a client asking for a 1s heartbeat and
-   multiplying load; `max = 0s` is the server-wide kill switch. Deprecate
-   `--backend-watch-heartbeat-interval`, preserving its on/off intent.
+   multiplying load; `max = 0s` is the server-wide kill switch. Keep
+   `--backend-watch-heartbeat-interval` as the operator's override: unset by
+   default, `0s` off, anything else served on every stream.
 4. **Go SDK** — `WithWatchHeartbeatInterval`, defaulting to `20s`, `0` to
    opt out; sent on both the document and the channel Watch request.
 
@@ -38,7 +39,8 @@ timeout to a mobile client saving battery.
       advertised in `WatchInitialization`.
 - [ ] A request of `0` yields advertised `0` and no heartbeats.
 - [ ] `max = 0s` disables heartbeats regardless of what a client asks.
-- [ ] `--backend-watch-heartbeat-interval` still parses, deprecated.
+- [ ] `--backend-watch-heartbeat-interval` is unset by default, disables the
+      heartbeat at `0s` and forces it on every stream above `0s`.
 - [ ] Go client sends its configured interval; default `20s`.
 - [ ] Unit tests cover the clamp, the opt-out and the kill switch.
 

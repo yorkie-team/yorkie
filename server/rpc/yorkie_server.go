@@ -105,11 +105,10 @@ type yorkieServer struct {
 	serviceCtx context.Context
 	watches    *watchRegistry
 
-	// heartbeatMin and heartbeatMax bound the heartbeat interval a Watch
-	// stream may ask for. Parsed once here rather than per stream, so a
-	// malformed value fails at startup instead of mid-request.
-	heartbeatMin gotime.Duration
-	heartbeatMax gotime.Duration
+	// heartbeat is what this server does with the interval a Watch stream
+	// asks for. Parsed once here rather than per stream, so a malformed value
+	// fails at startup instead of mid-request.
+	heartbeat backend.WatchHeartbeatPolicy
 }
 
 // newYorkieServer creates a new instance of yorkieServer
@@ -118,36 +117,45 @@ func newYorkieServer(
 	be *backend.Backend,
 	watches *watchRegistry,
 ) *yorkieServer {
-	heartbeatMin, heartbeatMax := be.Config.ParseWatchHeartbeatBounds()
 	return &yorkieServer{
-		backend:      be,
-		watches:      watches,
-		serviceCtx:   serviceCtx,
-		heartbeatMin: heartbeatMin,
-		heartbeatMax: heartbeatMax,
+		backend:    be,
+		watches:    watches,
+		serviceCtx: serviceCtx,
+		heartbeat:  be.Config.ParseWatchHeartbeatPolicy(),
 	}
 }
 
 // resolveHeartbeatInterval returns the heartbeat interval this server will
 // actually use for a stream that asked for requestedMs milliseconds.
 //
-// A request of 0 gets 0: that is both what an SDK older than the heartbeat
-// leaves on the wire and what a newer one sends to opt out, and either way
-// the stream gets no WatchHeartbeat bodies. Anything else is clamped into the
-// server's bounds, so one client cannot set the server's heartbeat load by
-// asking for a very short interval. A zero maximum is the server-wide kill
-// switch and wins over any request.
+// A zero maximum is the server-wide kill switch and wins over everything
+// else. Next comes the operator's forced interval, which is served on every
+// stream whatever the peer asked for: without it the peer alone would decide
+// whether the server ever writes to the stream, leaving a server no way to
+// notice a half-open one a client has opted out of heartbeats on.
+//
+// Otherwise the stream gets what it asked for, clamped into the server's
+// bounds so one client cannot set the server's heartbeat load by asking for a
+// very short interval. A request of 0 gets 0: that is both what an SDK older
+// than the heartbeat leaves on the wire and what a newer one sends to opt
+// out, and either way the stream gets no WatchHeartbeat bodies.
 func (s *yorkieServer) resolveHeartbeatInterval(requestedMs int64) gotime.Duration {
-	if requestedMs <= 0 || s.heartbeatMax <= 0 {
+	if s.heartbeat.Max <= 0 {
+		return 0
+	}
+	if s.heartbeat.Forced > 0 {
+		return s.heartbeat.Forced
+	}
+	if requestedMs <= 0 {
 		return 0
 	}
 
 	requested := gotime.Duration(requestedMs) * gotime.Millisecond
-	if requested < s.heartbeatMin {
-		return s.heartbeatMin
+	if requested < s.heartbeat.Min {
+		return s.heartbeat.Min
 	}
-	if requested > s.heartbeatMax {
-		return s.heartbeatMax
+	if requested > s.heartbeat.Max {
+		return s.heartbeat.Max
 	}
 
 	return requested

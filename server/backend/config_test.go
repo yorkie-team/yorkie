@@ -167,30 +167,35 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, malformed.Validate())
 	})
 
-	t.Run("parse watch heartbeat bounds test", func(t *testing.T) {
+	t.Run("parse watch heartbeat policy test", func(t *testing.T) {
 		conf := newValidBackendConf()
 		// An unset pair gets the documented defaults, not a zero that would
-		// read as the kill switch.
-		lower, upper := conf.ParseWatchHeartbeatBounds()
-		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMin, lower)
-		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMax, upper)
+		// read as the kill switch, and leaves the client in charge.
+		policy := conf.ParseWatchHeartbeatPolicy()
+		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMin, policy.Min)
+		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMax, policy.Max)
+		assert.Zero(t, policy.Forced)
 
 		conf.WatchHeartbeatIntervalMin = "10s"
 		conf.WatchHeartbeatIntervalMax = "45s"
-		lower, upper = conf.ParseWatchHeartbeatBounds()
-		assert.Equal(t, 10*time.Second, lower)
-		assert.Equal(t, 45*time.Second, upper)
+		policy = conf.ParseWatchHeartbeatPolicy()
+		assert.Equal(t, 10*time.Second, policy.Min)
+		assert.Equal(t, 45*time.Second, policy.Max)
+		assert.Zero(t, policy.Forced)
 
-		// The deprecated flag survives only as an off switch.
+		// The single-interval option is the off switch at zero...
 		conf.WatchHeartbeatInterval = "0s"
-		lower, upper = conf.ParseWatchHeartbeatBounds()
-		assert.Zero(t, lower)
-		assert.Zero(t, upper)
+		policy = conf.ParseWatchHeartbeatPolicy()
+		assert.Zero(t, policy.Min)
+		assert.Zero(t, policy.Max)
+		assert.Zero(t, policy.Forced)
 
+		// ...and the operator's override above it.
 		conf.WatchHeartbeatInterval = "25s"
-		lower, upper = conf.ParseWatchHeartbeatBounds()
-		assert.Equal(t, 10*time.Second, lower)
-		assert.Equal(t, 45*time.Second, upper)
+		policy = conf.ParseWatchHeartbeatPolicy()
+		assert.Equal(t, 10*time.Second, policy.Min)
+		assert.Equal(t, 45*time.Second, policy.Max)
+		assert.Equal(t, 25*time.Second, policy.Forced)
 	})
 
 	t.Run("ClusterClientPoolSize field test", func(t *testing.T) {
