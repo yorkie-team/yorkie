@@ -996,13 +996,18 @@ func (s *TreeRestoreSpan) kindAgrees() bool {
 // recreated -- and Restore would then register a live node under an id below
 // the whole insertion's range, straddling another node's identity.
 //
-// Skipped rather than rejected at the converter, and never floored to zero.
-// fromTreeRestoreSpans also decodes stored operations, so refusing the value
-// would make a document that already holds one permanently unrebuildable, and
-// flooring an IDENTITY (unlike a left anchor, which resolves by position)
-// would aim the span at a different, real node. The offset is part of the span
-// itself, so Restore and Retombstone skip it alike on every replica -- as they
-// do for a span whose kind disagrees (see kindAgrees).
+// Never floored to zero: flooring an IDENTITY (unlike a left anchor, which
+// resolves by position) would aim the span at a different, real node. The
+// offset is part of the span itself, so Restore and Retombstone skip it alike
+// on every replica carrying this rule -- as they do for a span whose kind
+// disagrees (see kindAgrees).
+//
+// This is the apply-time half only, and it does not reject the change: a
+// crafted span is still persisted and relayed, so a replica without the same
+// rule acts on what this one drops. The ingress half belongs at the wire
+// boundary (fromTreeRestoreSpans, where a negative span Length is already
+// rejected), paired with a stored-path repair in NormalizeStoredOperations so
+// a span written before that check cannot make its document unloadable.
 func (s *TreeRestoreSpan) offsetAddressable() bool {
 	return s.ID.Offset >= 0
 }
