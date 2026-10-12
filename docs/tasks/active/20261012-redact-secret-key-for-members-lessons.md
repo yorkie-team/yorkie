@@ -77,6 +77,37 @@ A key read before this change by a user who is still below Admin is not
 detected. Rotating the keys of projects that have ever had a member is the one
 operator step on upgrade.
 
+## One credential with three meanings cannot be revoked quietly
+
+The cost above is larger than a release note, and it is the part of this change
+to revisit first. The secret key is not only the admin credential:
+
+- `server/packs/pushpull.go:246` signs the event webhook with it, and the
+  external receiver verifies the HMAC with its own copy
+  (`test/integration/event_webhook_test.go:103`).
+- `server/rpc/mcp/handler.go:147` accepts it as the single `API-Key`
+  credential, so every MCP client and CI integration is configured with it.
+
+So the rotation revokes three things at once, for a membership change two of
+them have nothing to do with, and it breaks them where no one is looking: the
+receiver starts rejecting signatures, the client starts returning Unauthorized,
+and neither failure names the role change that caused it. The redaction has a
+matching edge — a member cannot read the key, so a member cannot configure MCP
+at all, because MCP accepts no other credential.
+
+`RotateSecretKey` logs a warning naming those holders, which makes the break
+traceable but does not prevent it. The structural fix is to stop overloading one
+value: give the webhook its own signing secret and MCP a user-bearing scheme
+(the `Bearer` + `x-yorkie-project` path this branch already built for the
+project-scoped procedures), and the admin credential can then be revoked on its
+own. That reaches `server/packs/pushpull.go`, `server/rpc/mcp/handler.go` and
+the project schema, none of which this change touches, so it is recorded here
+rather than attempted.
+
+Takeaway: before revoking a credential, enumerate who holds it. A key with
+three meanings has three sets of holders, and only one of them is the user the
+revocation was aimed at.
+
 ## `IsAtLeast` fails open, so the gate validates the role first
 
 `MemberRole.IsAtLeast` compares ranks out of a map (`Owner:1, Admin:2,
