@@ -89,13 +89,16 @@ spec:
               secretKeyRef:
                 name: {{ .Values.yorkie.name }}-credentials
                 key: mongo-connection-uri
-          {{- if or .Values.yorkie.args.clusterSecretExistingSecret .Values.yorkie.args.clusterSecret }}
+          {{- /*
+          Always set: backend-secret-key.yaml fails the render unless one of
+          clusterSecret and clusterSecretExistingSecret holds a value, so one
+          of the two Secrets below always carries `cluster-secret`.
+          */}}
           - name: YORKIE_CLUSTER_SECRET
             valueFrom:
               secretKeyRef:
-                name: {{ .Values.yorkie.args.clusterSecretExistingSecret | default (printf "%s-credentials" .Values.yorkie.name) }}
+                name: {{ trim (toString (.Values.yorkie.args.clusterSecretExistingSecret | default "")) | default (printf "%s-credentials" .Values.yorkie.name) | quote }}
                 key: cluster-secret
-          {{- end }}
         args: [
           "server",
           "--mongo-yorkie-database",

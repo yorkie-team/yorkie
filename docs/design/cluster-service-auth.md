@@ -138,7 +138,7 @@ Key details:
 
 ### Helm Chart (build/charts/yorkie-cluster)
 
-Set `clusterSecret` in `values.yaml`, or `clusterSecretExistingSecret` to read it from a Secret created out of band (key `cluster-secret`), which takes precedence. The Deployment hands it to the server as the `YORKIE_CLUSTER_SECRET` environment variable, never as `--cluster-secret` in the args, where `/proc/<pid>/cmdline` and the pprof cmdline endpoint would expose it. If both are empty, the variable is omitted and all ClusterService requests are allowed.
+Set `clusterSecret` in `values.yaml`, or `clusterSecretExistingSecret` to read it from a Secret created out of band (key `cluster-secret`), which takes precedence. The Deployment hands it to the server as the `YORKIE_CLUSTER_SECRET` environment variable, never as `--cluster-secret` in the args, where `/proc/<pid>/cmdline` and the pprof cmdline endpoint would expose it. One of the two is required: if both are empty the chart fails the render, since this chart publishes ClusterService through the ingress gateway and a server without the secret allows every request. The chart cannot read a Secret it does not create, so `clusterSecretExistingSecret` is checked only for being set; a blank value stored there still leaves the server open, and only its startup warning says so.
 
 ```yaml
 yorkie:

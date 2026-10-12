@@ -14,6 +14,13 @@
 
 ## Self Review
 
+- Round 2 (security): offering a safer way to configure a credential does not
+  change the default — the chart still rendered with no cluster secret, and an
+  operator who never reads the value comment gets the open service either way.
+  Where the chart already hard-fails on a missing admin key for the same class
+  of exposure, the cluster secret had to become required too. Fixed by failing
+  the render unless one of the two values holds a value, and dropping the
+  `if` around `YORKIE_CLUSTER_SECRET` now that one always does.
 - Round 1 (correctness/docs): no blocking findings. Fixed: the rollout
   paragraph understated a changed secret (calls fail both ways) and said a
   manual restart is always needed (turning it on rolls the Deployment by

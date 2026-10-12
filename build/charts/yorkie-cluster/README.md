@@ -152,12 +152,14 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 kubectl -n <yorkie.namespace> rollout restart deployment/<yorkie.name>
 ```
 
-## Cluster RPC Secret (Recommended)
+## Cluster RPC Secret (Required)
 
 Nodes call each other's ClusterService through the ingress gateway
 (`--backend-gateway-addr`), so the service is reachable from outside the
 cluster. Without a shared secret it accepts every request, including ones that
-read or purge any document. Set one in production, either as a value or, to keep
+read or purge any document. The chart therefore refuses to render unless one of
+`yorkie.args.clusterSecret` and `yorkie.args.clusterSecretExistingSecret` holds
+a value, as it does for the signing key. Set it either as a value or, to keep
 it out of the values file, in a Secret you create once:
 
 ```bash
@@ -170,7 +172,10 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
 `clusterSecretExistingSecret` takes precedence over `clusterSecret`. It may name
 the same Secret as `secretKeyExistingSecret`, holding both `secret-key` and
 `cluster-secret`, but not `<yorkie.name>-credentials`, for the reason given
-above.
+above. The chart cannot read a Secret it does not create, so it checks only
+that the name is set: a Secret holding a blank `cluster-secret` passes the
+render and leaves the server accepting every cluster call, with one warning in
+its startup log. Check the value you stored, not just the render.
 
 A pod with a secret refuses cluster calls that do not carry it, and a pod
 without one accepts all of them. So during a rollout that turns the secret on,

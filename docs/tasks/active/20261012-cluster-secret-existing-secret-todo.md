@@ -28,6 +28,10 @@ ClusterService accepts every request through the ingress gateway.
       unchanged; existing Secret wires the env var; the chart-owned name and
       the shared-Secret case behave as intended
 - [x] Self review, open the PR
+- [x] Make the cluster secret required at render time: fail when neither
+      `clusterSecret` (after trimming) nor `clusterSecretExistingSecret` is
+      set, as the chart already does for the admin signing key, and always
+      wire `YORKIE_CLUSTER_SECRET` once one of them is
 
 ## Review
 
@@ -40,7 +44,14 @@ fails the render. `helm lint` passes.
 Self review, round 1 (correctness/docs): no blocking findings. Fixed the
 rollout paragraph (a changed secret fails calls both ways; turning it on rolls
 the Deployment by itself) and the stale Helm section of
-`docs/design/cluster-service-auth.md`. Known limitation: a blank secret
-(whitespace inline, or empty in the Secret) is trimmed to empty by the server
-and leaves the service open, as before this change; the server warns at
-startup.
+`docs/design/cluster-service-auth.md`.
+
+Round 2 (security): adding a second way to supply the secret still left the
+chart rendering happily with no secret at all, which publishes ClusterService
+through the ingress gateway unauthenticated. The secret is now required at
+render time, like the admin signing key: `backend-secret-key.yaml` fails unless
+`clusterSecretExistingSecret` is set or `clusterSecret` is non-blank after
+trimming, and `deployment.yaml` always wires `YORKIE_CLUSTER_SECRET`. Remaining
+limitation, documented in the chart README: the chart cannot read a Secret it
+does not own, so a blank `cluster-secret` stored in one still leaves the
+service open with only the server's startup warning.
