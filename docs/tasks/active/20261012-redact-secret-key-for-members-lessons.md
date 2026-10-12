@@ -57,7 +57,17 @@ read the key and is later demoted to Member, or removed from the project
 outright, keeps the project's whole authority through the API-Key scheme. Role
 changes are not revocation for this credential; only rotation is.
 
-Two things follow, one for operators and one for the code:
+A third shape sits in the same place, smaller than revocation. The API-Key
+branch of `isSchemeAllowed` skips `projectScopedMethods` entirely: it asks only
+whether the method is *in* the table, never what role the entry names. So the
+table states what a session reaches and says nothing about the key, and a
+project-scoped method added later at Owner would be granted to the key by the
+absence of a check rather than refused by one. Ranking the key as a role —
+`Admin`, the authority it is meant to carry — and running it through the same
+comparison would change nothing today, since every entry is Member or Admin,
+but would leave one table covering both schemes.
+
+Three things follow, two for the code and one for operators:
 
 - On upgrading to this change, rotate the keys of every project that has ever
   had a member below Admin. Until then the redaction protects only members who
@@ -68,6 +78,10 @@ Two things follow, one for operators and one for the code:
   touched — the lookups have no way to tell that a role just changed. It needs
   a decision this task did not make: rotation invalidates the key for every
   other holder too, so it cannot be silent.
+- Ranking the key against the per-method table belongs in
+  `server/rpc/interceptors/admin.go`, which this round could not reach: the
+  scope the fix rounds are held to is narrower than the branch's own diff, so
+  the file is read-only here even though the gap is in it.
 
 ## `IsAtLeast` fails open, so the gate validates the role first
 
