@@ -500,6 +500,30 @@ func TestTreeBoundaryForwardedToFixedPoint(t *testing.T) {
 	}
 }
 
+// TestTreeBoundaryMergedIntoFollowsFirstHolder has text a merge moved out of
+// a node carried off its family, here to the root by a delete from a
+// root-level position. The merged-away node's forwarding pointer is the
+// parent of the first child that names it as MergedFrom, as a snapshot
+// rebuilds it, not wherever a moved child went last, so a later range that
+// names the node does not run past its family.
+func TestTreeBoundaryMergedIntoFollowsFirstHolder(t *testing.T) {
+	for _, tc := range []struct {
+		replicas int
+		text     string
+		script   string
+	}{
+		{2, "abcd", `d1.split(1); d1.insert(3,"m"); d1.undo; d1.undo; d2.insert(1,"n"); d2.pull; ` +
+			"d2.delete(2,4); d2.undo; d2.split(1); d2.split(1); d2.pull; d2.delete(4,6)"},
+		// Diverges on 2b33dc54 as well.
+		{3, "abcd", `d1.split(1); d1.insert(3,"m"); d2.insert(1,"n"); d2.pull; d2.delete(2,4); ` +
+			"d2.undo; d2.split(1); d2.split(1); d2.pull; d2.delete(4,6); d1.undo; d1.undo"},
+	} {
+		t.Run(tc.script, func(t *testing.T) {
+			replayBoundaryScriptFrom(t, tc.replicas, tc.text, tc.script)
+		})
+	}
+}
+
 // TestTreeBoundarySplitAfterKnownRemoval has a split whose position is in
 // front of moved children the splitting change knew were deleted. The first
 // moved child opens the run even as a tombstone: the replica that applied the

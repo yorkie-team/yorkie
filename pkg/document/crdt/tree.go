@@ -2827,8 +2827,8 @@ func (t *Tree) resolveMergeTarget(node *TreeNode) *TreeNode {
 //     original source P across later merges. The redirect boundary in
 //     FindTreeNodesWithSplitText then still resolves (first child with
 //     MergedFrom == P), and every source's mergedInto is (re)pointed at the
-//     resolved destination — deriving it from each moved child's MergedFrom
-//     exactly as rebuildMergeState does, so runtime and snapshot agree.
+//     parent of the first child naming it as MergedFrom — derived exactly
+//     as rebuildMergeState derives it, so runtime and snapshot agree.
 //
 // mergedInto is set solely from moved children (never from the merge-source
 // list directly), so it is set only when rebuildMergeState can reconstruct
@@ -2843,6 +2843,8 @@ func (t *Tree) mergeNodes(
 ) error {
 	target := t.resolveMergeTarget(fromParent)
 
+	var srcs []*TreeNode
+	lastDest := make(map[*TreeNode]*TreeNode)
 	for _, node := range toBeMovedToFromParents {
 		// A moved child must have a source parent to record; skip
 		// otherwise rather than append an untracked node (a node without
@@ -2878,27 +2880,62 @@ func (t *Tree) mergeNodes(
 		if err := dest.Index.MoveChild(node.Index); err != nil {
 			return err
 		}
-		// Point this child's original source at the resolved destination,
-		// path-compressing a transitive source (a prior merge whose children
-		// were just relocated again) from the now-removed intermediate to the
-		// final target. Deriving mergedInto from a *moved* child — one that
-		// had a parent above — mirrors rebuildMergeState, which likewise skips
-		// parentless children, so runtime and snapshot agree. (A parentless
-		// child, detached by a concurrent split cascade, is continue'd above
-		// and must not repoint its source here.)
-		//
-		// Resolved through findMergeNode for the same reason rebuildMergeState
-		// resolves it there: MergedFrom is stamped here only when the node
-		// carries none, so a node that arrived on an element payload with one
-		// already set keeps the client's value, and this is where that value is
-		// read again long after the decode that first saw it. Left to a plain
+		// Collect this child's original source; its forwarding pointer is
+		// set once every child has moved, below. Resolved through
+		// findMergeNode for the same reason rebuildMergeState resolves it
+		// there: MergedFrom is stamped here only when the node carries none,
+		// so a node that arrived on an element payload with one already set
+		// keeps the client's value, and this is where that value is read
+		// again long after the decode that first saw it. Left to a plain
 		// floor lookup, a made-up offset would plant the forwarding pointer on
-		// whatever node happens to sit below it.
+		// whatever node happens to sit below it. A parentless child, detached
+		// by a concurrent split cascade, is continue'd above and must not
+		// repoint its source here, as rebuildMergeState skips it too.
 		if src := t.findMergeNode(node.MergedFrom); src != nil {
-			src.mergedInto = dest.id
+			if _, ok := lastDest[src]; !ok {
+				srcs = append(srcs, src)
+			}
+			lastDest[src] = dest
 		}
 	}
+
+	// Point each source at the holder rebuildMergeState derives for it: the
+	// parent of the first child, in document order, that names it as
+	// MergedFrom. Pointing it at whichever holder a child moved into last
+	// made the pointer follow carried content anywhere it was moved, even off
+	// the source's family to the root, and left a replica that reloaded the
+	// same tree from a snapshot with a different pointer.
+	for _, src := range srcs {
+		src.mergedInto = t.firstMergeHolder(src, lastDest[src]).id
+	}
 	return nil
+}
+
+// firstMergeHolder returns the parent of the first child, in the order
+// rebuildMergeState visits them, that names src as its merge source, so the
+// forwarding pointer a merge leaves at runtime is the one a snapshot of the
+// same tree rebuilds. It returns fallback when no such child is found.
+//
+// It walks the whole tree, as rebuildMergeState does; mergeNodes calls it
+// once per merge source, not once per moved child.
+func (t *Tree) firstMergeHolder(src, fallback *TreeNode) *TreeNode {
+	var holder *TreeNode
+	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
+		if holder != nil {
+			return
+		}
+		child := node.Value
+		if child.MergedFrom == nil || node.Parent == nil || node.Parent.Value.IsText() {
+			return
+		}
+		if t.findMergeNode(child.MergedFrom) == src {
+			holder = node.Parent.Value
+		}
+	})
+	if holder == nil {
+		return fallback
+	}
+	return holder
 }
 
 // declaredBoundaries returns the elements the edit's own positions named as
