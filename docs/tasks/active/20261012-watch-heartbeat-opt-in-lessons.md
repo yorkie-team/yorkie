@@ -72,3 +72,17 @@ Applied by a maintainer while resolving the merge conflict with `main`:
   `WatchHeartbeatIntervalMin`/`Max` and drops the deprecated key; the
   reproducer `TestSampleConfigLeavesHeartbeatToTheClient` is re-enabled and
   passes. Item 1 above is resolved.
+
+### Fix round 2
+
+- **The seam was untested.** `resolveHeartbeatInterval` and
+  `sendWatchInitialization` each had unit coverage, but nothing drove the
+  `Watch` RPC with a `WatchRequest` carrying `heartbeat_interval_ms`, so the
+  handler reading the request field and forwarding one resolved value to both
+  the initialization and the event loop could break with every test green.
+  `TestWatchHeartbeatInterval` in
+  `server/rpc/watch_heartbeat_integration_test.go` now drives the real RPC
+  server for the honored, clamped and opted-out cases, asserting both the
+  advertised interval and whether a `WatchHeartbeat` actually arrives. The
+  `1s`/`2s` bounds in `test/helper` exist for exactly this, and until now
+  only configured the path rather than exercising it.
