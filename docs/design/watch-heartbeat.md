@@ -69,9 +69,6 @@ func (s *yorkieServer) resolveHeartbeatInterval(requestedMs int64) time.Duration
 	if s.heartbeat.Max <= 0 {
 		return 0
 	}
-	if s.heartbeat.Forced > 0 {
-		return s.heartbeat.Forced
-	}
 	if requestedMs <= 0 {
 		return 0
 	}
@@ -90,15 +87,22 @@ multiplying the server's load. The maximum doubles as the server-wide kill
 switch, since "the longest interval this server will serve is zero" already
 reads as "no heartbeats".
 
-`--backend-watch-heartbeat-interval` keeps its original name and its original
-power, and is unset by default: an operator who passes it decides for every
-stream, whatever the clients ask for. It is what a server needs when it must
-detect a half-open stream itself rather than leave that to the peer —
-otherwise the peer alone decides whether the server ever writes to the
-stream, and a client that opts out leaves a half-open one undetectable from
-the server's side. Because a forced heartbeat reaches clients too old to
-understand one, it is safe only once every client of that server does, which
-is why it is a deliberate setting rather than a default.
+`--backend-watch-heartbeat-interval` (and its config key
+`WatchHeartbeatInterval`) is deprecated and ignored; setting it only logs a
+warning at startup. Each of its old meanings would now break something:
+`0s` is what every config copied from the old sample carries, so honoring it
+as a kill switch would keep the heartbeat from clients that asked; a non-zero
+value served on every stream would reach clients that did not ask, and a Go
+client up to v0.7.24 ends its watch on the first `WatchHeartbeat` — the very
+breakage the opt-in exists to avoid.
+
+That leaves a server unable to make a stream that did not opt in carry
+traffic, so it cannot notice that stream going half-open by itself. This is
+not new — before this change the default was `0s`, which left every stream
+that way — and an application-level heartbeat cannot fix it without breaking
+old clients. Detection for those streams belongs to the transport (HTTP/2
+PING), which every client handles below the application; it is a separate
+change.
 
 ### Compatibility
 
@@ -116,8 +120,8 @@ No combination breaks, which is what lets the server ship with heartbeats on.
 | Risk | Mitigation |
 |------|------------|
 | A client asks for a very short interval and multiplies server load | The minimum bound clamps it up; the operator sets the floor |
-| An operator who deliberately disabled heartbeats has them re-enabled by an upgrade | `--backend-watch-heartbeat-interval`, when explicitly set to `0s`, still disables them |
-| A client opts out and the server cannot tell its stream has gone half-open | `--backend-watch-heartbeat-interval` set above `0s` forces one on every stream, overriding the request |
+| An operator who deliberately disabled heartbeats has them re-enabled by an upgrade | Only clients that ask get one, and those understand it; `--backend-watch-heartbeat-interval-max=0s` turns them off. The deprecated flag logs a warning naming that replacement |
+| A client opts out and the server cannot tell its stream has gone half-open | Not solved here, and no worse than before. Left to transport-level keepalive (HTTP/2 PING), which old clients handle |
 | A misconfigured `min > max` silently picks one | Rejected by config validation at startup |
 
 ### Design Decisions
@@ -127,8 +131,7 @@ No combination breaks, which is what lets the server ship with heartbeats on.
 | Interval on the request, not a `bool` plus a server interval | One field is both the opt-in and the tuning knob, and an absent field already means "off" |
 | Advertise the effective interval, not the requested one | The client's watchdog must track what the server will really send |
 | Kill switch on the maximum bound | Avoids a third option whose meaning overlaps the other two |
-| The single-interval flag kept as an operator override rather than retired | Liveness detection is the server's concern too, so the last word has to stay with the operator; the flag already meant "this interval, on every stream" |
-| The override left unset by default | Its flag default is `0s`, the kill switch, so only a flag the operator actually passed reaches the config |
+| The single-interval flag deprecated and ignored, not kept as an override | Forcing a heartbeat on a stream that did not ask reaches old clients and ends their watch; honoring `0s` would silence every deployment started from the old sample |
 
 ## Alternatives Considered
 

@@ -129,22 +129,21 @@ func newYorkieServer(
 // actually use for a stream that asked for requestedMs milliseconds.
 //
 // A zero maximum is the server-wide kill switch and wins over everything
-// else. Next comes the operator's forced interval, which is served on every
-// stream whatever the peer asked for: without it the peer alone would decide
-// whether the server ever writes to the stream, leaving a server no way to
-// notice a half-open one a client has opted out of heartbeats on.
+// else. Otherwise the stream gets what it asked for, clamped into the
+// server's bounds so one client cannot set the server's heartbeat load by
+// asking for a very short interval. A request of 0 gets 0: that is both what
+// an SDK older than the heartbeat leaves on the wire and what a newer one
+// sends to opt out, and either way the stream gets no WatchHeartbeat bodies.
 //
-// Otherwise the stream gets what it asked for, clamped into the server's
-// bounds so one client cannot set the server's heartbeat load by asking for a
-// very short interval. A request of 0 gets 0: that is both what an SDK older
-// than the heartbeat leaves on the wire and what a newer one sends to opt
-// out, and either way the stream gets no WatchHeartbeat bodies.
+// There is deliberately no operator override that serves a stream which did
+// not ask. A WatchHeartbeat is a new case on the response oneof, and a client
+// older than it -- this repo's own Go client up to v0.7.24 -- ends its watch
+// on the first one, which is the breakage the per-stream opt-in exists to
+// avoid. Server-side detection of a half-open stream whose peer did not opt
+// in belongs to the transport (HTTP/2 PING), which every client handles.
 func (s *yorkieServer) resolveHeartbeatInterval(requestedMs int64) gotime.Duration {
 	if s.heartbeat.Max <= 0 {
 		return 0
-	}
-	if s.heartbeat.Forced > 0 {
-		return s.heartbeat.Forced
 	}
 	if requestedMs <= 0 {
 		return 0

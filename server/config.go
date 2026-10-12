@@ -85,11 +85,8 @@ const (
 	DefaultWatchHeartbeatIntervalMin = backend.DefaultWatchHeartbeatIntervalMin
 	DefaultWatchHeartbeatIntervalMax = backend.DefaultWatchHeartbeatIntervalMax
 
-	// DefaultWatchHeartbeatInterval is the default of the flag that takes the
-	// choice away from the client. The config field it feeds is left unset
-	// unless an operator passes the flag, so that one who never set it stays
-	// distinguishable from one who set it to "0s" to keep heartbeats off;
-	// only the latter disables them.
+	// DefaultWatchHeartbeatInterval is the default of the deprecated
+	// --backend-watch-heartbeat-interval flag, which the server ignores.
 	DefaultWatchHeartbeatInterval = 0 * time.Second
 
 	DefaultClusterRPCTimeout        = 10 * time.Second

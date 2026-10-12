@@ -94,23 +94,17 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 }
 
 // TestSampleConfigLeavesHeartbeatToTheClient checks the shipped sample config
-// does not pin WatchHeartbeatInterval: set, it decides for every stream, and
-// at "0s" it is the server-wide kill switch, so a deployment started from the
-// sample would serve no heartbeat however the bounds are set.
-//
-// The fix belongs in server/config.sample.yml, which is outside this change's
-// diff, so the test is kept as a reproducer rather than dropped.
+// serves the default heartbeat bounds and does not carry the deprecated
+// WatchHeartbeatInterval, so a deployment started from it heartbeats every
+// stream that asks and logs no deprecation warning.
 func TestSampleConfigLeavesHeartbeatToTheClient(t *testing.T) {
-	t.Skip(`still reproduces: config.sample.yml ships WatchHeartbeatInterval: "0s", ` +
-		`the server-wide kill switch`)
-
 	conf, err := server.NewConfigFromFile("config.sample.yml")
 	assert.NoError(t, err)
 
+	assert.Empty(t, conf.Backend.WatchHeartbeatInterval)
 	policy := conf.Backend.ParseWatchHeartbeatPolicy()
 	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMin, policy.Min)
 	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMax, policy.Max)
-	assert.Zero(t, policy.Forced)
 }
 
 func TestNewConfigFromFile(t *testing.T) {

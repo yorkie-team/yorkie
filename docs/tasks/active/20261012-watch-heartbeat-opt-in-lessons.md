@@ -19,12 +19,8 @@ it converts "I think this is right" into a checked fact.
 - The kill switch lives on the **maximum** bound rather than a third flag:
   "the longest heartbeat interval this server will serve is zero" already
   reads as "no heartbeats", and it keeps the config to two knobs.
-- `--backend-watch-heartbeat-interval` keeps its original meaning as an
-  operator override, and is unset by default. Per-stream opt-in alone would
-  leave the peer deciding whether the server ever writes to the stream, so a
-  client that opts out makes its own half-open stream undetectable from the
-  server side; the override is how an operator takes that decision back. `0s`
-  remains the server-wide kill switch.
+- `--backend-watch-heartbeat-interval` is deprecated and ignored (see the
+  maintainer round below for why the override was reverted).
 
 ## Review rounds
 
@@ -54,3 +50,25 @@ on the heartbeat:
    the config is load-bearing — without it every server reads as "heartbeats
    off" — and had no test. `TestServerCmdWatchHeartbeatInterval` covers both
    the unset and the passed path.
+
+### Maintainer round (after fix round 1)
+
+Applied by a maintainer while resolving the merge conflict with `main`:
+
+- **Reverted the operator override from fix round 1.** Serving
+  `--backend-watch-heartbeat-interval` on every stream, including streams
+  that sent `0`, reaches Go clients up to v0.7.24, which end their watch on
+  the first `WatchHeartbeat` — exactly what yorkie#2194 exists to prevent. If
+  a deployment set it to `20s`, the opt-in would have no effect. The flag and
+  config key are now deprecated and ignored at every value, with a startup
+  warning.
+- **Security finding (peer decides whether the server writes) — disputed.**
+  It is pre-existing: before this change the default was `0s`, so every
+  stream was already in that state, and an attacker can simply omit the
+  field. An application-level heartbeat cannot cover a stream that did not
+  ask without breaking old clients. Server-side detection belongs to
+  transport-level keepalive (HTTP/2 PING); to be filed as a separate issue.
+- **Sample config fixed.** `server/config.sample.yml` now documents
+  `WatchHeartbeatIntervalMin`/`Max` and drops the deprecated key; the
+  reproducer `TestSampleConfigLeavesHeartbeatToTheClient` is re-enabled and
+  passes. Item 1 above is resolved.

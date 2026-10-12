@@ -82,7 +82,6 @@ func TestResolveHeartbeatInterval(t *testing.T) {
 		s := serverWith(&backend.Config{})
 		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMin, s.heartbeat.Min)
 		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMax, s.heartbeat.Max)
-		assert.Zero(t, s.heartbeat.Forced)
 
 		// An unset field, which is every client older than it.
 		assert.Zero(t, s.resolveHeartbeatInterval(0))
@@ -105,28 +104,18 @@ func TestResolveHeartbeatInterval(t *testing.T) {
 		assert.Zero(t, s.resolveHeartbeatInterval(20_000))
 	})
 
-	t.Run("a zero single interval still turns it off", func(t *testing.T) {
-		// An operator who set "0s" to keep heartbeats away from their old
-		// clients must not have them turned on by a server upgrade.
-		s := serverWith(&backend.Config{WatchHeartbeatInterval: "0s"})
-		assert.Zero(t, s.resolveHeartbeatInterval(20_000))
-	})
+	t.Run("the deprecated single interval is ignored", func(t *testing.T) {
+		// "0s" must not silence clients that asked: it is what every config
+		// copied from the old sample carries.
+		off := serverWith(&backend.Config{WatchHeartbeatInterval: "0s"})
+		assert.Equal(t, 20*gotime.Second, off.resolveHeartbeatInterval(20_000))
 
-	t.Run("a configured interval overrides what the client asks for", func(t *testing.T) {
-		// Without this an operator would have no way to make the server write
-		// to a stream whose peer opted out, and so no way to detect that the
-		// stream had gone half-open.
-		s := serverWith(&backend.Config{WatchHeartbeatInterval: "30s"})
-		assert.Equal(t, 30*gotime.Second, s.resolveHeartbeatInterval(20_000))
-		assert.Equal(t, 30*gotime.Second, s.resolveHeartbeatInterval(0))
-		assert.Equal(t, 30*gotime.Second, s.resolveHeartbeatInterval(-1))
-
-		// Including past the bounds, which only govern what a client may ask.
-		forced := serverWith(&backend.Config{
-			WatchHeartbeatInterval:    "90s",
-			WatchHeartbeatIntervalMax: "30s",
-		})
-		assert.Equal(t, 90*gotime.Second, forced.resolveHeartbeatInterval(0))
+		// A non-zero one must not reach a stream that did not ask: a client
+		// older than the heartbeat ends its watch on the first one.
+		on := serverWith(&backend.Config{WatchHeartbeatInterval: "30s"})
+		assert.Zero(t, on.resolveHeartbeatInterval(0))
+		assert.Zero(t, on.resolveHeartbeatInterval(-1))
+		assert.Equal(t, 20*gotime.Second, on.resolveHeartbeatInterval(20_000))
 	})
 
 	t.Run("configured bounds replace the defaults", func(t *testing.T) {

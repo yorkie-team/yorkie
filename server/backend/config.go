@@ -110,19 +110,13 @@ type Config struct {
 	// terminal response is also old enough not to ask for one.
 	WatchHeartbeatIntervalMax string `yaml:"WatchHeartbeatIntervalMax"`
 
-	// WatchHeartbeatInterval takes the choice away from the client, and is
-	// unset by default so that the client keeps it:
-	//
-	//   - unset: each stream is served the interval it asked for, clamped to
-	//     the bounds above.
-	//   - "0s": the server serves no heartbeat, however short an interval a
-	//     client asks for.
-	//   - anything else: the server serves that interval on every stream,
-	//     whatever the client asked for and regardless of the bounds. This is
-	//     what an operator sets when the server must be able to detect a
-	//     half-open stream itself rather than leave that to the peer; it
-	//     reaches clients too old to understand a WatchHeartbeat, so it is
-	//     only safe once every client of this server does.
+	// WatchHeartbeatInterval is deprecated and ignored. It was the single
+	// server-wide interval from before heartbeats were opt-in per stream. Any
+	// value it held, "0s" included, would now either keep the heartbeat from
+	// clients that asked for it or force it on clients that did not -- and a
+	// client older than the heartbeat ends its watch on the first one -- so the
+	// server reads neither. Use WatchHeartbeatIntervalMin/Max instead, with a
+	// zero maximum to turn heartbeats off. Setting it only logs a warning.
 	WatchHeartbeatInterval string `yaml:"WatchHeartbeatInterval"`
 
 	// ChannelSessionCountCacheSize is the cache size of the session count.
@@ -213,15 +207,6 @@ func (c *Config) Validate() error {
 			return fmt.Errorf(
 				`invalid argument "%s" for "--channel-session-cleanup-interval" flag: %w`,
 				c.ChannelSessionCleanupInterval,
-				err,
-			)
-		}
-	}
-	if c.WatchHeartbeatInterval != "" {
-		if _, err := time.ParseDuration(c.WatchHeartbeatInterval); err != nil {
-			return fmt.Errorf(
-				`invalid argument "%s" for "--backend-watch-heartbeat-interval" flag: %w`,
-				c.WatchHeartbeatInterval,
 				err,
 			)
 		}
@@ -353,37 +338,18 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 	return result
 }
 
-// WatchHeartbeatPolicy is what a server does with the heartbeat interval a
-// Watch stream asks for: Min and Max bound it, and Forced, when non-zero,
-// replaces it outright so the decision rests with the operator rather than
-// the peer. A zero Max disables the heartbeat server-wide.
+// WatchHeartbeatPolicy bounds the heartbeat interval a Watch stream may ask
+// for. A zero Max disables the heartbeat server-wide.
 type WatchHeartbeatPolicy struct {
-	Min    time.Duration
-	Max    time.Duration
-	Forced time.Duration
+	Min time.Duration
+	Max time.Duration
 }
 
 // ParseWatchHeartbeatPolicy returns the heartbeat policy this server applies
-// to an idle Watch stream. A client names the interval it wants on its
-// WatchRequest and the server clamps it into [Min, Max], unless the operator
-// set WatchHeartbeatInterval, which decides for every stream instead.
+// to an idle Watch stream: a client names the interval it wants on its
+// WatchRequest and the server clamps it into [Min, Max]. The deprecated
+// WatchHeartbeatInterval is not read.
 func (c *Config) ParseWatchHeartbeatPolicy() WatchHeartbeatPolicy {
-	var forced time.Duration
-	if c.WatchHeartbeatInterval != "" {
-		parsed, err := time.ParseDuration(c.WatchHeartbeatInterval)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "parse watch heartbeat interval: %v\n", err)
-			os.Exit(1)
-		}
-		// "0s" is the kill switch: an operator who set it to keep heartbeats
-		// away from their old clients must not have them turned on by an
-		// upgrade. A zero Max says that to every caller.
-		if parsed == 0 {
-			return WatchHeartbeatPolicy{}
-		}
-		forced = parsed
-	}
-
 	return WatchHeartbeatPolicy{
 		Min: c.parseHeartbeatBound(
 			c.WatchHeartbeatIntervalMin,
@@ -395,7 +361,6 @@ func (c *Config) ParseWatchHeartbeatPolicy() WatchHeartbeatPolicy {
 			DefaultWatchHeartbeatIntervalMax,
 			"max",
 		),
-		Forced: forced,
 	}
 }
 

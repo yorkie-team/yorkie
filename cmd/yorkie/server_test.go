@@ -78,10 +78,10 @@ func TestServerCmdFlagDefaults(t *testing.T) {
 	})
 }
 
-// TestServerCmdWatchHeartbeatInterval checks that --backend-watch-heartbeat-
-// interval reaches the config only when the operator passed it. Its default is
-// 0s, which is the server-wide kill switch, so a server that writes it
-// unconditionally serves no heartbeat at all however the bounds are set.
+// TestServerCmdWatchHeartbeatInterval checks that the deprecated
+// --backend-watch-heartbeat-interval reaches the config only when the
+// operator passed it. The server ignores the value either way; carrying it
+// only when passed is what lets Start warn that operator and nobody else.
 func TestServerCmdWatchHeartbeatInterval(t *testing.T) {
 	cmd := serverCmd(t)
 	interval := conf.Backend.WatchHeartbeatInterval
@@ -106,8 +106,7 @@ func TestServerCmdWatchHeartbeatInterval(t *testing.T) {
 	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMin.String(), conf.Backend.WatchHeartbeatIntervalMin)
 	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMax.String(), conf.Backend.WatchHeartbeatIntervalMax)
 
-	// Passed, it decides for every stream: an operator keeps both the kill
-	// switch and the override over a client that opted out.
+	// Passed, it is recorded for the deprecation warning.
 	for _, value := range []string{"0s", "20s"} {
 		assert.NoError(t, cmd.ParseFlags([]string{
 			"--config", missing,

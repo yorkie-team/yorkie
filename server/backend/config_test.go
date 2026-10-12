@@ -170,32 +170,26 @@ func TestConfig(t *testing.T) {
 	t.Run("parse watch heartbeat policy test", func(t *testing.T) {
 		conf := newValidBackendConf()
 		// An unset pair gets the documented defaults, not a zero that would
-		// read as the kill switch, and leaves the client in charge.
+		// read as the kill switch.
 		policy := conf.ParseWatchHeartbeatPolicy()
 		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMin, policy.Min)
 		assert.Equal(t, backend.DefaultWatchHeartbeatIntervalMax, policy.Max)
-		assert.Zero(t, policy.Forced)
 
 		conf.WatchHeartbeatIntervalMin = "10s"
 		conf.WatchHeartbeatIntervalMax = "45s"
 		policy = conf.ParseWatchHeartbeatPolicy()
 		assert.Equal(t, 10*time.Second, policy.Min)
 		assert.Equal(t, 45*time.Second, policy.Max)
-		assert.Zero(t, policy.Forced)
 
-		// The single-interval option is the off switch at zero...
-		conf.WatchHeartbeatInterval = "0s"
-		policy = conf.ParseWatchHeartbeatPolicy()
-		assert.Zero(t, policy.Min)
-		assert.Zero(t, policy.Max)
-		assert.Zero(t, policy.Forced)
-
-		// ...and the operator's override above it.
-		conf.WatchHeartbeatInterval = "25s"
-		policy = conf.ParseWatchHeartbeatPolicy()
-		assert.Equal(t, 10*time.Second, policy.Min)
-		assert.Equal(t, 45*time.Second, policy.Max)
-		assert.Equal(t, 25*time.Second, policy.Forced)
+		// The deprecated single interval is ignored whatever it holds: "0s"
+		// is what every config copied from the old sample carries, and a
+		// non-zero value would reach clients that never asked.
+		want := backend.WatchHeartbeatPolicy{Min: 10 * time.Second, Max: 45 * time.Second}
+		for _, deprecated := range []string{"0s", "25s", "not-a-duration"} {
+			conf.WatchHeartbeatInterval = deprecated
+			assert.NoError(t, conf.Validate())
+			assert.Equal(t, want, conf.ParseWatchHeartbeatPolicy())
+		}
 	})
 
 	t.Run("ClusterClientPoolSize field test", func(t *testing.T) {
