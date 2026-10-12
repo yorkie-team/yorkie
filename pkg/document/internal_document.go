@@ -249,28 +249,27 @@ func (d *InternalDocument) Marshal() string {
 
 // CreateChangePack creates pack of the local changes to send to the server.
 //
-// The pack owns its copies of the change slice, of every change's version
-// vector and of the pack-level version vector. Document.CreateChangePack
-// builds it under d.mu and hands it to the sync goroutine, which serializes
-// it with the lock released, while this document keeps appending local
-// changes and mutating version vectors in place.
+// The pack owns its copies of the change slice, of every change and of the
+// pack-level version vector. Document.CreateChangePack builds it under d.mu
+// and hands it to the sync goroutine, which serializes it with the lock
+// released, while this document keeps appending local changes and merging
+// remote clocks into d.changeID's version vector in place.
 //
-// Copying each change matters as much as copying the slice: Context.NextID
-// returns the very ID the Change carries, so a buffered local change's
-// version vector is the same map as d.changeID's, and ID.SyncClocks and
-// ID.SetClocks call VersionVector.Max on it in place while a remote pack is
-// applied. Handing the converter that map would let it range over a map
-// another goroutine is writing -- an unrecoverable "concurrent map read and
-// map write" abort. The copy is shallow apart from the vector: the
-// operations are shared, and nothing mutates them after the change is built.
+// Each change is copied shallowly, which is enough for what runs while the
+// pack is in flight: a buffered change's version vector is a map of its own,
+// because Context.NextID hands d.changeID a copy of it, so the remote apply
+// that merges clocks into d.changeID in place never writes a vector the
+// converter is ranging over.
+//
+// The shallow copy does not isolate the pack from SetActor, which rewrites a
+// buffered change's ID and, through the shared operations slice, every
+// operation's executedAt in place. It keeps the pack's change IDs from moving
+// under it; the operations it cannot cover. Nothing has to: SetActor runs at
+// attach, before this document has ever built a pack.
 func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := make([]*change.Change, len(d.localChanges))
 	for i, c := range d.localChanges {
-		id := c.ID()
-		if vector := id.VersionVector(); vector != nil {
-			id = id.SetVersionVector(vector.DeepCopy())
-		}
-		changes[i] = change.New(id, c.Message(), c.Operations(), c.PresenceChange())
+		changes[i] = change.New(c.ID(), c.Message(), c.Operations(), c.PresenceChange())
 	}
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
