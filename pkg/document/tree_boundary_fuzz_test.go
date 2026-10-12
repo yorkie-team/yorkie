@@ -270,7 +270,7 @@ func playBoundaryScriptFrom(t *testing.T, n int, text, script string) []*documen
 	for _, d := range f.docs {
 		require.NoError(t, d.ClearHistory())
 	}
-	for _, tok := range strings.Split(script, "; ") {
+	for tok := range strings.SplitSeq(script, "; ") {
 		var r, a, b int
 		var v string
 		scan := func(format string, args ...any) {

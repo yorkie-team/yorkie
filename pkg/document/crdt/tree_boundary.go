@@ -32,6 +32,8 @@ package crdt
 // Anything else falls back to orderSameBoundarySplit.
 
 import (
+	"slices"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
@@ -555,12 +557,7 @@ func (t *Tree) boundaryInsertIndex(tail *boundaryTail, anchor, nest boundaryKey,
 		if !anchorOf(m).equal(anchor) {
 			return false
 		}
-		for _, l := range levels {
-			if nestOf(m).equal(l) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(levels, nestOf(m).equal)
 	}
 	for i := range tail.toks {
 		if t.boundaryRootAt(tail, i, outer) != nil {
@@ -958,12 +955,7 @@ func knewMergeOf(src, moved *TreeNode, known func(*time.Ticket) bool) bool {
 	if moved.MergedAt != nil && known(moved.MergedAt) {
 		return true
 	}
-	for _, tk := range src.mergeTickets {
-		if known(tk) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(src.mergeTickets, known)
 }
 
 // knewRemovalOf reports whether a change knew n was removed. A node that
@@ -977,12 +969,7 @@ func knewRemovalOf(n *TreeNode, known func(*time.Ticket) bool) bool {
 	if known(n.removedAt) {
 		return true
 	}
-	for _, tk := range n.mergeTickets {
-		if known(tk) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(n.mergeTickets, known)
 }
 
 // lowerRepeatedMergeTickets keeps the MergedAt of children merged out of a
