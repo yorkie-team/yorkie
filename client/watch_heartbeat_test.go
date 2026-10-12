@@ -31,6 +31,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
@@ -84,6 +85,18 @@ func (s *watchIdleServer) Watch(
 	return nil
 }
 
+// AttachChannel answers a channel attach, so a channel Watch can be opened
+// against this server too.
+func (s *watchIdleServer) AttachChannel(
+	_ context.Context,
+	_ *connect.Request[api.AttachChannelRequest],
+) (*connect.Response[api.AttachChannelResponse], error) {
+	return connect.NewResponse(&api.AttachChannelResponse{
+		SessionId:    "000000000000000000000003",
+		SessionCount: 1,
+	}), nil
+}
+
 // dialWatchIdleServer starts the given server and returns an activated client
 // pointed at it.
 func dialWatchIdleServer(t *testing.T, srv *watchIdleServer) *client.Client {
@@ -118,11 +131,31 @@ func newWatchIdleServer(intervalMs int64, rejectCall int32) *watchIdleServer {
 }
 
 // TestWatchRequestCarriesHeartbeatInterval pins that the client asks for the
-// heartbeat it wants. The server heartbeats only the streams that ask, so a
-// client that sent nothing here would silently get no heartbeat and leave its
-// idle watchdog disarmed -- the very failure the request field exists to fix.
+// heartbeat it wants, on both Watch requests it builds: the document's and
+// the channel's. The server heartbeats only the streams that ask, so a client
+// that sent nothing here would silently get no heartbeat and leave its idle
+// watchdog disarmed -- the very failure the request field exists to fix.
 func TestWatchRequestCarriesHeartbeatInterval(t *testing.T) {
-	requested := func(t *testing.T, opts ...client.Option) int64 {
+	watchDocument := func(t *testing.T, cli *client.Client) {
+		doc := document.New(key.Key("watch-heartbeat-request"))
+		assert.NoError(t, cli.Attach(context.Background(), doc, client.WithRealtimeSync()))
+		_, _, err := cli.WatchStream(doc)
+		assert.NoError(t, err)
+	}
+	watchChannel := func(t *testing.T, cli *client.Client) {
+		ch, err := channel.New(key.Key("watch-heartbeat-request"))
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Attach(context.Background(), ch))
+		_, closeWatch, err := cli.WatchChannel(context.Background(), ch)
+		assert.NoError(t, err)
+		t.Cleanup(closeWatch)
+	}
+
+	requested := func(
+		t *testing.T,
+		watch func(*testing.T, *client.Client),
+		opts ...client.Option,
+	) int64 {
 		t.Helper()
 
 		srv := newWatchIdleServer(100, 0)
@@ -142,10 +175,7 @@ func TestWatchRequestCarriesHeartbeatInterval(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(context.Background()))
 
-		doc := document.New(key.Key("watch-heartbeat-request"))
-		assert.NoError(t, cli.Attach(context.Background(), doc, client.WithRealtimeSync()))
-		_, _, err = cli.WatchStream(doc)
-		assert.NoError(t, err)
+		watch(t, cli)
 
 		assert.Eventually(t, func() bool {
 			return srv.calls.Load() >= 1
@@ -154,20 +184,31 @@ func TestWatchRequestCarriesHeartbeatInterval(t *testing.T) {
 		return srv.requestedMs.Load()
 	}
 
-	t.Run("an unconfigured client asks for the default", func(t *testing.T) {
-		assert.Equal(t, int64(20_000), requested(t))
-	})
+	for _, path := range []struct {
+		name  string
+		watch func(*testing.T, *client.Client)
+	}{
+		{"document", watchDocument},
+		{"channel", watchChannel},
+	} {
+		t.Run(path.name, func(t *testing.T) {
+			t.Run("an unconfigured client asks for the default", func(t *testing.T) {
+				assert.Equal(t, int64(20_000), requested(t, path.watch))
+			})
 
-	t.Run("a configured interval is what is asked for", func(t *testing.T) {
-		assert.Equal(t, int64(7_000),
-			requested(t, client.WithWatchHeartbeatInterval(7*gotime.Second)))
-	})
+			t.Run("a configured interval is what is asked for", func(t *testing.T) {
+				assert.Equal(t, int64(7_000),
+					requested(t, path.watch, client.WithWatchHeartbeatInterval(7*gotime.Second)))
+			})
 
-	t.Run("opting out asks for nothing", func(t *testing.T) {
-		// Which is byte for byte what a client older than the field sends,
-		// and the server answers both the same way.
-		assert.Zero(t, requested(t, client.WithWatchHeartbeatInterval(client.NoWatchHeartbeat)))
-	})
+			t.Run("opting out asks for nothing", func(t *testing.T) {
+				// Which is byte for byte what a client older than the field
+				// sends, and the server answers both the same way.
+				assert.Zero(t, requested(t, path.watch,
+					client.WithWatchHeartbeatInterval(client.NoWatchHeartbeat)))
+			})
+		})
+	}
 }
 
 // TestWatchStreamIdleTimeout pins the client's idle watchdog end to end: a
