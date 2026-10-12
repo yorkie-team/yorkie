@@ -76,9 +76,10 @@ spec:
               fieldRef:
                 fieldPath: status.podIP
           # The credentials are read from the environment rather than given as
-          # args: an arg shows up in /proc/<pid>/cmdline and in the pprof
-          # `/debug/pprof/cmdline` endpoint, which is enabled below and served
-          # on the profiling port.
+          # args: an arg shows up in /proc/<pid>/cmdline and in
+          # `kubectl get pod -o yaml`. The server refuses the pprof
+          # `/debug/pprof/cmdline` endpoint, so that reader is closed, but
+          # pprof is enabled below and the profiling port is unauthenticated.
           - name: YORKIE_BACKEND_SECRET_KEY
             valueFrom:
               secretKeyRef:

@@ -49,6 +49,9 @@ Profiling:
   Port: 8081
 
   # PprofEnabled is whether to enable the pprof `/debug/pprof` endpoint.
+  # `/debug/pprof/cmdline` is never served, enabled or not: it writes the
+  # process arguments, so it would hand any credential passed as a flag to
+  # whoever can reach this port, which is not authenticated. It answers 404.
   PprofEnabled: false
 
 # Membership is the configuration for the membership of the cluster.

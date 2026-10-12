@@ -119,7 +119,8 @@ func New(conf *Config) (*Yorkie, error) {
 // SecretKeyEnv is the environment variable the admin token signing key is
 // read from when --backend-secret-key and the config file leave it unset.
 // Deployments should use it: a flag value is visible in the process command
-// line, to anyone who can read /proc or the pprof cmdline endpoint.
+// line, to anyone who can read /proc or list the process table. The pprof
+// cmdline endpoint no longer publishes it (server/profiling).
 const SecretKeyEnv = "YORKIE_BACKEND_SECRET_KEY" // #nosec G101
 
 // publicSecretKey is the key Yorkie used to fall back to when none was set.
