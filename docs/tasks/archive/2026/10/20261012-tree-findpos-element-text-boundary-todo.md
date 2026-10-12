@@ -38,4 +38,4 @@ replicas still converge because each applies the position it receives.
       style)
 - [x] Record the anchoring rule and the parity requirement in tree.md
 - [x] File the JS half (yorkie-js-sdk#1481)
-- [ ] JS mirror change lands
+- [x] JS mirror change opened (yorkie-js-sdk#1482)
