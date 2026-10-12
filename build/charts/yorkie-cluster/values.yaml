@@ -43,16 +43,21 @@ yorkie:
     # secretKeyExistingSecret: name of an existing Secret in the namespace
     # that holds the key under `secret-key`. Takes precedence over secretKey.
     # It must not be <yorkie.name>-credentials, the Secret this chart owns:
-    # the chart keeps the key, the MongoDB connection URI and clusterSecret
-    # there and hands them to the container as environment variables, so that
-    # no credential is passed as an argument, where /proc/<pid>/cmdline and
-    # the pprof cmdline endpoint would expose it.
+    # the chart keeps the key, the MongoDB connection URI, clusterSecret and
+    # githubClientSecret there and hands them to the container as environment
+    # variables, so that no credential is passed as an argument, where
+    # /proc/<pid>/cmdline and the pprof cmdline endpoint would expose it.
     # Pods do not restart when the key changes, with either setting: the
     # Deployment carries no hash of it, since a pod annotation is readable
     # with `get pods` and a hash is enough to search for the key offline.
     # After rotating it, restart the pods all together (kubectl -n <namespace>
     # rollout restart deployment/<yorkie.name>), and admin users log in again.
     secretKeyExistingSecret: ""
+    # GitHub OAuth client secret, used with githubClientID to log dashboard
+    # and CLI users in. The chart stores it in the same Secret as the other
+    # credentials above and passes it as YORKIE_AUTH_GITHUB_CLIENT_SECRET,
+    # never as an argument.
+    githubClientSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated. See docs/design/project-stats-long-retention.md.

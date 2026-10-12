@@ -546,7 +546,16 @@ func pullPack(
 		if err != nil {
 			return nil, err
 		}
-		if resPack.SnapshotLen() == 0 {
+		// Attach the vector only to a reply the client may collect with: one
+		// that carries the changes the vector already accounts for. A snapshot
+		// reply was collected server-side and carries the document's own
+		// vector instead. A push-only reply pulls nothing, so the client has
+		// not applied those remote changes; collecting with it would purge the
+		// tombstones they anchor on and leave every retry of the next full
+		// pull unable to apply them ("node not found"). That pull's reply
+		// carries the vector, after its changes. See
+		// docs/design/garbage-collection.md.
+		if resPack.SnapshotLen() == 0 && opts.Mode != types.SyncModePushOnly {
 			resPack.VersionVector = minVersionVector
 		}
 	}

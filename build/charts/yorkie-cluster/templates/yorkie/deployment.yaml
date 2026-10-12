@@ -99,6 +99,13 @@ spec:
               secretKeyRef:
                 name: {{ trim (toString (.Values.yorkie.args.clusterSecretExistingSecret | default "")) | default (printf "%s-credentials" .Values.yorkie.name) | quote }}
                 key: cluster-secret
+          {{- if .Values.yorkie.args.githubClientSecret }}
+          - name: YORKIE_AUTH_GITHUB_CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.yorkie.name }}-credentials
+                key: github-client-secret
+          {{- end }}
         args: [
           "server",
           "--mongo-yorkie-database",
@@ -155,10 +162,6 @@ spec:
           {{- if .Values.yorkie.args.githubClientID }}
           "--auth-github-client-id",
           "{{ .Values.yorkie.args.githubClientID }}",
-          {{- end }}
-          {{- if .Values.yorkie.args.githubClientSecret }}
-          "--auth-github-client-secret",
-          "{{ .Values.yorkie.args.githubClientSecret }}",
           {{- end }}
           {{- if .Values.yorkie.args.githubRedirectURL }}
           "--auth-github-redirect-url",
