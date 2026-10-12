@@ -51,6 +51,18 @@ accept a user credential and check a role, which is a larger design change than
 this issue asked for. No integration test exercised a member through those
 procedures, so CI does not encode the old behavior.
 
+## `IsAtLeast` fails open, so the gate validates the role first
+
+`MemberRole.IsAtLeast` compares ranks out of a map (`Owner:1, Admin:2,
+Member:3`, `server/backend/database/member_info.go:56`), and a role missing
+from that map yields the zero rank — which compares as *more* privileged than
+Owner. An empty or corrupted role string would therefore have read as "at
+least Admin" and kept the key. `redactForRole` calls `role.Validate()` before
+the comparison so anything the hierarchy does not recognize is treated as least
+privileged. The fix stays local to this gate: `IsAtLeast` is used elsewhere for
+decisions with different failure modes, and changing its semantics is a
+separate change.
+
 ## Review rounds
 
 Not run: `/self-review` dispatches a reviewer subagent, and this autonomous run

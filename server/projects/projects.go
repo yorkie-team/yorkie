@@ -125,15 +125,21 @@ func ProjectAndRole(
 	return redactForRole(info.ToProject(), role), role, nil
 }
 
-// redactForRole clears the project's secret key unless the role is at least
-// Admin.
+// redactForRole clears the project's secret key unless the role is a known
+// role of at least Admin.
 //
 // The key authenticates the project-scoped admin procedures, which have no
 // user in their context and so authorize on the key alone. Handing it to a
 // member would let that member act with the authority of an owner, so it is
 // stripped before the project leaves the lookup that resolved the role.
+//
+// NOTE(hackerwins): the role is validated before the comparison because
+// MemberRole.IsAtLeast ranks a role it does not recognize as 0, which compares
+// as more privileged than Owner. Without the guard an empty or corrupted role
+// string would read as "at least Admin" and hand the key out, so this gate
+// fails closed instead.
 func redactForRole(project *types.Project, role database.MemberRole) *types.Project {
-	if role.IsAtLeast(database.Admin) {
+	if err := role.Validate(); err == nil && role.IsAtLeast(database.Admin) {
 		return project
 	}
 
