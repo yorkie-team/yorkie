@@ -472,6 +472,34 @@ func TestTreeBoundaryInsertForwardedPastKnownText(t *testing.T) {
 	replayBoundaryScript(t, 2, `d1.split(1); d1.undo; d2.split(1); d2.insert(3,"m"); d2.pull; d2.insert(6,"n")`)
 }
 
+// TestTreeBoundaryForwardedToFixedPoint has later edits name the start of a
+// merged-away node after an earlier edit was forwarded there (preMergePoint).
+// The forwarding target is one fixed point, not the current end of the node
+// before the product, so a delete covers text an insert put there, and an
+// undo's merge removes a product a forwarded split opened there.
+func TestTreeBoundaryForwardedToFixedPoint(t *testing.T) {
+	for _, tc := range []struct {
+		replicas int
+		text     string
+		script   string
+	}{
+		{2, "ab", `d2.split(1); d1.pull; d2.delete(1,3); d1.insert(3,"o"); d1.delete(3,5); d2.split(1); d2.insert(3,"q")`},
+		{3, "ab", `d2.split(1); d1.pull; d2.delete(1,3); d1.insert(3,"o"); d1.delete(3,5); d2.split(1); d2.insert(3,"q")`},
+		{2, "ab", `d1.split(2); d2.pull; d1.delete(2,4); d1.split(2); d2.split(4); d2.undo; d1.insert(4,"m")`},
+		{3, "ab", `d1.split(2); d2.pull; d1.delete(2,4); d1.split(2); d2.split(4); d2.undo; d1.insert(4,"m")`},
+		{2, "ab", `d2.split(1); d2.insert(3,"m"); d1.pull; d2.delete(3,4); d1.delete(1,3); d1.split(1); d1.insert(3,"p")`},
+		{2, "ab", `d2.split(1); d1.pull; d2.delete(1,3); d2.undo; d1.insert(3,"x"); d1.delete(3,5); d2.insert(3,"y")`},
+		// A product the change knew stops the walk unless it was split inside
+		// the merged-away node; reading its anchor instead diverged here.
+		{3, "abcd", `d1.split(3); d2.insert(3,"m"); d3.insert(1,"n"); d1.undo; ` +
+			`d2.split(4); d3.split(4); d3.pull; d3.insert(8,"o")`},
+	} {
+		t.Run(tc.script, func(t *testing.T) {
+			replayBoundaryScriptFrom(t, tc.replicas, tc.text, tc.script)
+		})
+	}
+}
+
 // TestTreeBoundarySplitAfterKnownRemoval has a split whose position is in
 // front of moved children the splitting change knew were deleted. The first
 // moved child opens the run even as a tombstone: the replica that applied the
@@ -508,12 +536,12 @@ func TestTreeBoundarySeenParentFromOperation(t *testing.T) {
 }
 
 // TestTreeBoundaryKnownDivergences records cases that still diverge. The
-// first diverges on main too; the others converge on main. Each is skipped
-// with what it would take.
+// first diverges on main too. Each is skipped with what it would take.
 func TestTreeBoundaryKnownDivergences(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		script string
+		text   string
 		needs  string
 	}{{
 		name:   "split with a peer's concurrent split and undo, then typing",
@@ -523,25 +551,29 @@ func TestTreeBoundaryKnownDivergences(t *testing.T) {
 			"other side. Only whether the split's change knew the merge tells them " +
 			"apart, and no replica keeps that.",
 	}, {
-		name:   "delete of text inserted where a merge left the product's text",
-		script: `d2.split(1); d1.pull; d2.delete(1,3); d1.insert(3,"o"); d1.delete(3,5); d2.split(1); d2.insert(3,"q")`,
-		needs: "The insert of o is forwarded to the end of the node before the product, " +
-			"past q, which it did not know. The delete's range starts at the same " +
-			"merged-away position, but that end is now behind o, so the range is " +
-			"empty on the replica that typed q. The forwarding target has to be a " +
-			"position later edits can name, not the current end of a node.",
+		name:   "two inserts at the start of a merged-away node, then an undo",
+		script: `d1.split(3); d2.pull; d3.pull; d3.insert(5,"n"); d2.insert(5,"o"); d1.delete(3,5); d1.undo`,
+		text:   "abcd",
+		needs: "Both inserts are forwarded to the same fixed point and stamped as moved " +
+			"out of the merged-away node; their order there still follows arrival. " +
+			"The order with d2's insert first diverges without preMergePoint too.",
 	}, {
-		name:   "insert after a peer undoes a split into a re-split paragraph",
-		script: `d1.split(2); d2.pull; d1.delete(2,4); d1.split(2); d2.split(4); d2.undo; d1.insert(4,"m")`,
-		needs: "Comes from forwarding past children the insert did not know: it " +
-			"converges when only a moved first child opens the product. Not yet " +
-			"traced further.",
+		name:   "split re-made inside a merged-away node, then a range from it",
+		script: "d2.split(1); d1.pull; d2.delete(1,3); d2.split(1); d1.split(3); d1.delete(1,3); d2.pull; d2.delete(5,7)",
+		text:   "abc",
+		needs: "preMergePoint passes over a product nested in the merged-away node " +
+			"that a change which did not know the merge split off; the records " +
+			"already part here without it. Converges on main.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			if os.Getenv("YORKIE_RUN_KNOWN_DIVERGENCES") == "" {
 				t.Skip(tc.needs)
 			}
-			replayBoundaryScript(t, 3, tc.script)
+			text := tc.text
+			if text == "" {
+				text = "ab"
+			}
+			replayBoundaryScriptFrom(t, 3, text, tc.script)
 		})
 	}
 }

@@ -137,11 +137,21 @@ converges:
 - **Text stays left of a boundary split off after a merge it missed.** An
   insert at the start of a node a merge took away is forwarded to where the
   merge put that node's first child. If a later split has carried that child
-  into a new product, the insert did not know that split either, so
-  `preMergeHolder` sends it to the end of the node before the product, where
-  a replica that applied the insert first left it. It does so only when the
-  product is anchored before that moved child and its ticket is above the
-  merge's. Children the inserting change did not know may stand in front of
+  into a new product, the insert did not know that split either, so it goes
+  into the node before the product, where a replica that applied the insert
+  first left it (`preMergeHolder`). It does so only when the product is
+  anchored before that moved child and its ticket is above the merge's.
+  Where in that node is one fixed point (`preMergePoint`), not its current
+  end: right after the last child that is not newer than the merge or that
+  the change knew, walking back along the family past the moved run and
+  past products newer than the merge, unless the change knew a product that
+  was not split inside the merged-away node. Children at the point that the
+  change did not know are passed in ticket order, as RGA passes siblings at
+  one left anchor. Content inserted there is stamped as moved out of the
+  merged-away node, as the merge stamped it where it arrived first, so a
+  later edit naming the same start resolves in front of it. With the current
+  end instead, a delete of forwarded text started behind that text, and an
+  undo's merge missed a product a forwarded split had opened. Children the inserting change did not know may stand in front of
   the moved child; they stand there on every replica whichever way the
   insert resolves, so the moved child still counts as opening the product.
   Whether the change knew them is read from its version vector. The

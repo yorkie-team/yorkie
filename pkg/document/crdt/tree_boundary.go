@@ -864,14 +864,85 @@ func (t *Tree) preMergeHolder(product, moved *TreeNode) *TreeNode {
 	return pred
 }
 
-// lastChildOrSelf returns the last child of node, tombstones included, or node
-// itself when it has none: the (parent, left) of a position at its end.
-func lastChildOrSelf(node *TreeNode) *TreeNode {
-	children := childrenOf(node)
-	if len(children) == 0 {
-		return node
+// preMergePoint returns the (parent, left) of a leftmost insert into a
+// merged-away node whose first moved child now opens product
+// (preMergeHolder), as one fixed point in the family followed by an RGA scan.
+//
+// The point is right after the last child, walking back from product along
+// the family, that is not newer than the merge or that the editing change
+// knew: what stood in front of the merged-away node for that change. The moved
+// run itself, and content stamped as moved out of the same node, is skipped.
+// Children newer than the merge that the change did not know -- typed at the
+// junction after it, appended after product split off, or forwarded here by
+// this rule -- are not the point but stand at it, and are passed in ticket
+// order exactly as RGA passes concurrent siblings at one left anchor (step
+// 04). Products newer than the merge that hold no such child are passed over,
+// unless the change knew one that was not split inside the merged-away node
+// (its nest record): then its start is the point. Removed nodes are passed over as their purge would
+// unlink them. Nothing read here depends on what has been appended to the
+// family meanwhile or on GC timing.
+func (t *Tree) preMergePoint(
+	product, moved *TreeNode, editedAt *time.Ticket, versionVector time.VersionVector,
+) (*TreeNode, *TreeNode) {
+	if t.preMergeHolder(product, moved) == nil {
+		return nil, nil
 	}
-	return children[len(children)-1]
+	mergedAt := moved.MergedAt
+	var holder *TreeNode
+	idx := 0
+	for n := t.familyPrev(product); n != nil; n = t.familyPrev(n) {
+		if n.IsText() || n.Index.Parent == nil {
+			break
+		}
+		if n.IsRemoved() {
+			continue
+		}
+		children := childrenOf(n)
+		found := -1
+		for k := len(children) - 1; k >= 0; k-- {
+			c := children[k]
+			if c.MergedFrom != nil && c.MergedFrom.Equal(moved.MergedFrom) {
+				continue
+			}
+			if !c.id.CreatedAt.After(mergedAt) || time.TicketKnown(versionVector, c.id.CreatedAt) {
+				found = k
+				break
+			}
+		}
+		if found >= 0 {
+			holder, idx = n, found+1
+			break
+		}
+		if !n.id.CreatedAt.After(mergedAt) ||
+			(time.TicketKnown(versionVector, n.id.CreatedAt) &&
+				!nestOf(n).equal(boundaryKey{id: moved.MergedFrom})) {
+			holder, idx = n, 0
+			break
+		}
+	}
+	if holder == nil {
+		return nil, nil
+	}
+	children := childrenOf(holder)
+	left := holder
+	if idx > 0 {
+		left = children[idx-1]
+	}
+	for k := idx; k < len(children); k++ {
+		if !children[k].id.CreatedAt.After(editedAt) {
+			break
+		}
+		left = children[k]
+	}
+	return holder, left
+}
+
+// familyPrev returns the node before n in its split family, or nil.
+func (t *Tree) familyPrev(n *TreeNode) *TreeNode {
+	if n.InsPrevID == nil {
+		return nil
+	}
+	return t.findFloorNode(n.InsPrevID)
 }
 
 // knewMergeOf reports whether a change knew that src, whose children a merge

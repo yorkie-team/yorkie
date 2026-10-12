@@ -1073,6 +1073,19 @@ type Tree struct {
 	// boundary is anchored in front of, so that purging a node relinks only
 	// the products anchored before it. See setBoundary.
 	anchoredBefore map[string]map[*TreeNode]struct{}
+
+	// preMergeFwd is set by findTreeNodesWithSplitText when it resolves a
+	// position through preMergePoint, and read by Edit right after resolving
+	// its from position. It is transient: nothing outside one Edit reads it.
+	preMergeFwd *preMergeForward
+}
+
+// preMergeForward records that a leftmost position in the merged-away node src
+// resolved to the fixed point in holder (preMergePoint).
+type preMergeForward struct {
+	src      *TreeNode
+	holder   *TreeNode
+	mergedAt *time.Ticket
 }
 
 // NewTree creates a new instance of Tree.
@@ -2020,7 +2033,10 @@ func (t *Tree) Edit(
 	var info TreeEditReverseInfo
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
+	t.preMergeFwd = nil
 	fromParent, fromLeft, diffFrom, err := t.findTreeNodesWithSplitText(from, editedAt, versionVector, BoundaryInsert)
+	fromPreMerge := t.preMergeFwd
+	t.preMergeFwd = nil
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
@@ -2181,6 +2197,13 @@ func (t *Tree) Edit(
 	var insertedSpans []*TreeRestoreSpan
 	if len(contents) != 0 {
 		intendedParent, intendedMergedAt := t.intendedMergeParent(from, fromParent)
+		// Content placed at the fixed point of a merged-away node is stamped
+		// as moved out of it, as the merge stamped it on a replica that
+		// applied the insert first, and the forwarding follows it there.
+		if fromPreMerge != nil && fromPreMerge.holder == fromParent && splitLevel == 0 {
+			intendedParent, intendedMergedAt = fromPreMerge.src, fromPreMerge.mergedAt
+			fromPreMerge.src.mergedInto = fromParent.id
+		}
 
 		leftInChildren := fromLeft
 
@@ -4506,8 +4529,9 @@ func (t *Tree) findTreeNodesWithSplitText(
 				// child the insert resolved to, so they do not stop the
 				// moved child from opening the product (preMergeHolder).
 				if i == 0 || allUnknown(versionVector, targetChildren[:i]) {
-					if pred := t.preMergeHolder(mergeTarget, targetChild.Value); pred != nil {
-						return pred, lastChildOrSelf(pred), diff, nil
+					if holder, left := t.preMergePoint(mergeTarget, targetChild.Value, editedAt, versionVector); holder != nil {
+						t.preMergeFwd = &preMergeForward{src: realParentNode, holder: holder, mergedAt: targetChild.Value.MergedAt}
+						return holder, left, diff, nil
 					}
 				}
 				if i == 0 {
