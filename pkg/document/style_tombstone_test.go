@@ -201,12 +201,6 @@ func TestLocalStyleLandsOnANodeItAlreadyDeleted(t *testing.T) {
 // A style concurrent with a removal, on both ticket orderings. The only
 // difference between the two cases is which actor's ticket sorts higher,
 // which must not decide whether the replicas agree.
-//
-// The exchange goes over the protobuf converter, not the in-process
-// crossSync: change.ID shares its VersionVector map with the document's
-// changeID, so handing the receiver the sender's live change objects lets
-// SyncClocks mutate the delivered vector, and a causality check then reads
-// the sender's post-sync state instead of what it knew when it edited.
 func TestConcurrentStyleLandsOnTheTombstoneEverywhere(t *testing.T) {
 	for _, tc := range []struct {
 		name      string

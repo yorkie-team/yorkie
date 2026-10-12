@@ -165,9 +165,9 @@ func TestPresenceRollbackOnFailedUpdate(t *testing.T) {
 }
 
 // TestChangePackOwnsVersionVectors covers the version vector each buffered
-// local change carries. Context.NextID hands the document the very ID the
-// change holds, so without a copy the pack the sync goroutine serializes
-// would range over the map a concurrent remote apply is writing in place.
+// local change carries. The pack the sync goroutine serializes shares it, so
+// the document's own vector, which a concurrent remote apply writes in place,
+// must be a different map.
 func TestChangePackOwnsVersionVectors(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000003")
 	require.NoError(t, err)
