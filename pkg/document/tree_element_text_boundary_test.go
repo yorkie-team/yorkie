@@ -112,3 +112,71 @@ func TestTreeElementTextBoundaryUnderConcurrentSplit(t *testing.T) {
 		})
 	}
 }
+
+// The element anchor FindPos picks at the boundary must also hold up when
+// another replica edits that boundary concurrently: removes the element the
+// edit anchored on, or inserts at the same index, so two edits share the
+// anchor and the RGA tie-break orders them.
+func TestTreeElementTextBoundaryUnderConcurrentEdit(t *testing.T) {
+	tests := []struct {
+		name  string
+		other func(tree *json.Tree)
+		want  string
+	}{
+		{
+			name: "the anchor element is removed",
+			other: func(tree *json.Tree) {
+				tree.Edit(1, 8, nil, 0)
+			},
+			want: "<r><p>| world</p></r>",
+		},
+		{
+			name: "another insert at the same boundary",
+			other: func(tree *json.Tree) {
+				tree.Edit(8, 8, &json.TreeNode{Type: "text", Value: "x"}, 0)
+			},
+			want: "<r><p><b>hello</b>x| world</p></r>",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			seed := newActor(t, "000000000000000000000009")
+			require.NoError(t, seed.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("t", json.TreeNode{
+					Type: "r",
+					Children: []json.TreeNode{{
+						Type: "p",
+						Children: []json.TreeNode{
+							{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
+							{Type: "text", Value: " world"},
+						},
+					}},
+				})
+				return nil
+			}))
+			base := grab(t, seed)
+
+			editor := newActor(t, "00000000000000000000000a")
+			other := newActor(t, "00000000000000000000000b")
+			feed(t, editor, base)
+			feed(t, other, base)
+
+			require.NoError(t, editor.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").Edit(8, 8, &json.TreeNode{Type: "text", Value: "|"}, 0)
+				return nil
+			}))
+			require.NoError(t, other.Update(func(root *json.Object, p *presence.Presence) error {
+				tc.other(root.GetTree("t"))
+				return nil
+			}))
+
+			edits, others := grab(t, editor), grab(t, other)
+			feed(t, editor, others)
+			feed(t, other, edits)
+
+			assert.Equal(t, tc.want, editor.Root().GetTree("t").ToXML())
+			assert.Equal(t, tc.want, other.Root().GetTree("t").ToXML())
+		})
+	}
+}
