@@ -50,6 +50,16 @@ project name: `projects.ListProjects` (`server/projects/projects.go:62`) adds
 every project the user is a member of, and `ToProjects` reuses `ToProject`. A
 `member` can therefore read the key and act with the authority of an owner.
 
+UPDATE (2026-10-12, issue #2160): the leak half of that chain is closed.
+`ProjectAndRole` and `ListProjects` now clear `SecretKey` unless the resolved
+role is at least `Admin`, so a `member` no longer obtains the key through the
+API. The project-scoped procedures also accept a session token with an
+`x-yorkie-project` header now, checked against the user's role per method, so
+members keep their read access without the key. A key copied before #2160, or
+by an admin later demoted or removed, keeps working until the owner runs
+`RotateProjectKeys`; rotation is not automatic because the same key also signs
+the event webhook and authenticates MCP.
+
 That chain predates this change and is untouched by it. Before the scheme
 check, these procedures already accepted `API-Key` on the same unchecked path,
 and the `Bearer` alternative was never a working credential for them —

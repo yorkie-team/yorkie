@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/authz"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -78,9 +79,32 @@ func ListProjects(
 		projectMap[info.ID] = info.ToProject()
 	}
 	for _, info := range memberInfos {
-		if _, exists := projectMap[info.ID]; !exists {
-			projectMap[info.ID] = info.ToProject()
+		if _, exists := projectMap[info.ID]; exists {
+			continue
 		}
+
+		// NOTE(hackerwins): ListProjectInfosByMember drops the membership row,
+		// so the role has to be read back to decide whether this user may see
+		// the project's secret key. The owned list above needs no such lookup:
+		// being in it is the owner role.
+		//
+		// The read-back can fail on its own — ListProjectInfosByMember reads the
+		// membership rows and the projects in two separate queries, so a
+		// membership revoked in between leaves a project whose row is already
+		// gone. That must not fail the whole listing, which before this lookup
+		// always returned; an unresolved role is treated as no role, which
+		// redacts the key and leaves the rest of the project visible.
+		var role database.MemberRole
+		member, err := be.DB.FindMemberInfo(ctx, info.ID, owner)
+		if err != nil {
+			logging.DefaultLogger().Warnf(
+				"list projects: resolve member role of %s for %s: %v",
+				info.ID, owner, err,
+			)
+		} else {
+			role = member.Role
+		}
+		projectMap[info.ID] = redactForRole(info.ToProject(), role)
 	}
 
 	var projects []*types.Project
@@ -112,7 +136,33 @@ func ProjectAndRole(
 		return nil, "", err
 	}
 
-	return info.ToProject(), role, nil
+	return redactForRole(info.ToProject(), role), role, nil
+}
+
+// CanReadSecretKey reports whether a user holding the given role in a project
+// may read the project's secret key: a known role of at least Admin.
+//
+// The key authenticates the project-scoped admin procedures, which have no
+// user in their context and so authorize on the key alone. Handing it to a
+// member would let that member act with the authority of an owner.
+//
+// NOTE(hackerwins): the role is validated before the comparison because
+// MemberRole.IsAtLeast ranks a role it does not recognize as 0, which compares
+// as more privileged than Owner. Without the guard an empty or corrupted role
+// string would read as "at least Admin" and hand the key out, so this gate
+// fails closed instead.
+func CanReadSecretKey(role database.MemberRole) bool {
+	return role.Validate() == nil && role.IsAtLeast(database.Admin)
+}
+
+// redactForRole clears the project's secret key unless the role may read it,
+// before the project leaves the lookup that resolved the role.
+func redactForRole(project *types.Project, role database.MemberRole) *types.Project {
+	if CanReadSecretKey(role) {
+		return project
+	}
+
+	return project.WithoutSecretKey()
 }
 
 // UpdateProject updates a project.
@@ -292,6 +342,14 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 // NOTE(hackerwins): Unlike GetProjectFromAPIKey, an empty key does not fall
 // back to the default project. The secret key is the whole credential of the
 // admin path, so a missing one must not resolve to any project.
+//
+// The key carries no user, so this lookup has no role to check. The key stands
+// in for Admin: only Admin and above may read it (redactForRole), and the
+// interceptor checks it against the per-method table at that rank. A copy
+// outlives the role it was read under, so demoting or removing an admin does
+// not revoke it; RotateProjectKeys does. Rotation is left to the owner because
+// the same key also signs the event webhook and authenticates the MCP
+// endpoint, and replacing it cuts those off.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
 	if strings.TrimSpace(secretKey) == "" {
 		return nil, ErrSecretKeyNotProvided

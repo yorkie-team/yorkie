@@ -18,6 +18,32 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- **Breaking for API clients.** Stop returning the project's secret key to
+  users whose project role is below `Admin`. `GetProject` and `ListProjects`
+  answer a `member` with an empty `secret_key`; the key was the whole
+  credential of the project-scoped `AdminService` procedures, so handing it to
+  a member let that member act with the project owner's authority.
+
+  Those procedures now accept a second credential so members keep the reads
+  they are entitled to: a session token (`Authorization: Bearer <token>`)
+  together with the project named in the `x-yorkie-project` header. The
+  caller's role in that project is checked against a per-procedure minimum —
+  reads need `Member`, anything that changes documents, schemas or sessions
+  needs `Admin`.
+
+  **Any client that authenticates project-scoped calls with a key read from
+  `GetProject` must fall back to the session when that key comes back empty**,
+  or its member-role users will start seeing `PermissionDenied`. The Go
+  `admin.Client` does this already; the dashboard, which lives in a separate
+  repository, needs the same change. Proxies must also pass
+  `x-yorkie-project` through. See `docs/design/admin-credentials.md`.
+
+  A key copied before this change keeps working: it is a bearer credential and
+  nothing revokes it implicitly. Owners should run `RotateProjectKeys` after
+  demoting or removing an admin. Rotation is left to the owner because the same
+  key signs the event webhook and authenticates the MCP endpoint, and replacing
+  it cuts those off.
+
 - Stop serving the pprof `/debug/pprof/cmdline` endpoint. It wrote the process
   arguments, disclosing any credential passed as a flag to whoever could reach
   the unauthenticated profiling port. It now answers `404 Unknown profile`;

@@ -19,6 +19,7 @@ package admin
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 
 	"connectrpc.com/connect"
@@ -60,20 +61,34 @@ func (i *AuthInterceptor) loadToken() string {
 	return ""
 }
 
+// setHeaders adds the credential and the user agent to the given header.
+//
+// A project-scoped call authenticates with the project's secret key when the
+// caller was given one. A caller whose project role is below Admin receives the
+// project without its key, so it falls back to its session token and names the
+// project in a header; the server then checks its role in that project.
+func (i *AuthInterceptor) setHeaders(ctx context.Context, header http.Header) {
+	authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.loadToken())
+	if projects.HasProject(ctx) {
+		project := projects.From(ctx)
+		if project.SecretKey != "" {
+			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
+		} else {
+			header.Add(types.ProjectNameKey, project.Name)
+		}
+	}
+
+	header.Add(types.AuthorizationKey, authHeader)
+	header.Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
+}
+
 // WrapUnary creates a unary server interceptor for authorization.
 func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
-		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.loadToken())
-		if projects.HasProject(ctx) {
-			project := projects.From(ctx)
-			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
-		}
-
-		req.Header().Add(types.AuthorizationKey, authHeader)
-		req.Header().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
+		i.setHeaders(ctx, req.Header())
 
 		return next(ctx, req)
 	}
@@ -87,14 +102,7 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
 
-		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.loadToken())
-		if projects.HasProject(ctx) {
-			project := projects.From(ctx)
-			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
-		}
-
-		conn.RequestHeader().Add(types.AuthorizationKey, authHeader)
-		conn.RequestHeader().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
+		i.setHeaders(ctx, conn.RequestHeader())
 
 		return conn
 	}

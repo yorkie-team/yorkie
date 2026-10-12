@@ -523,4 +523,54 @@ func TestAdminMember(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, "owner", owner.Role)
 	})
+
+	t.Run("member reads but cannot change project documents test", func(t *testing.T) {
+		// 01. Owner creates a project with a document in it.
+		projectName := newSlug("prj")
+		_, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+		docKey := helper.TestKey(t)
+		_, err = adminCli.CreateDocument(ctx, projectName, docKey.String(), yson.Object{})
+		assert.NoError(t, err)
+
+		// 02. A user joins the project as a member.
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
+		)
+		assert.NoError(t, err)
+
+		username, password := newUser(t)
+		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		defer func() { userCli.Close() }()
+		_, err = userCli.LogIn(ctx, username, password)
+		assert.NoError(t, err)
+		_, err = userCli.AcceptInvite(ctx, token)
+		assert.NoError(t, err)
+
+		// 03. The member is not handed the secret key.
+		project, err := userCli.GetProject(ctx, projectName)
+		assert.NoError(t, err)
+		assert.Empty(t, project.SecretKey)
+
+		// 04. The member still reads the project's documents with its session.
+		docs, err := userCli.ListDocuments(ctx, projectName, "", 10, true, false)
+		assert.NoError(t, err)
+		assert.Len(t, docs, 1)
+		assert.Equal(t, docKey, docs[0].Key)
+
+		// 05. Changing the project's documents needs at least Admin.
+		err = userCli.RemoveDocument(ctx, projectName, docKey.String(), true)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		_, err = userCli.CreateDocument(ctx, projectName, docKey.String()+"-2", yson.Object{})
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+
+		// 06. The document is untouched.
+		docs, err = adminCli.ListDocuments(ctx, projectName, "", 10, true, false)
+		assert.NoError(t, err)
+		assert.Len(t, docs, 1)
+	})
 }

@@ -50,6 +50,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
+- [Admin API Credentials](admin-credentials.md): The two credentials of the project-scoped `AdminService` procedures — the project secret key and a session token plus `x-yorkie-project` — and the role each carries
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them
 - [Watch Heartbeat](watch-heartbeat.md): Per-stream opt-in to the idle Watch heartbeat, so a server can run with it on without cutting off older clients
 - [Auth Webhook Presence-Only Packs](auth-webhook-presence-only.md): `presenceOnly` on change-pack attributes, so a webhook can allow presence while rejecting edits and removals

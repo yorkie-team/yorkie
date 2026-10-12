@@ -92,6 +92,7 @@ spec:
           - authorization
           - x-api-key
           - x-shard-key
+          - x-yorkie-project
           - connect-protocol-version
           - connect-timeout-ms
         maxAge: 1728s
