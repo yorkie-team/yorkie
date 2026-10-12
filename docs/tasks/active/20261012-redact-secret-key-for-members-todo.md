@@ -127,11 +127,16 @@ it is the admin credential, the HMAC key the event webhook is signed with
 (`server/rpc/mcp/handler.go`). A membership change therefore also breaks every
 external webhook receiver and MCP or CI client configured with the old key, and
 a member can no longer configure MCP at all. `RotateSecretKey` logs a warning
-naming those holders so the break can be traced, but the structural fix is to
-give the webhook its own signing secret and MCP a user-bearing scheme, so the
-admin credential can be revoked alone. That reaches `server/packs/pushpull.go`,
-`server/rpc/mcp/handler.go` and the project schema, none of which this change
-touches.
+naming those holders so the break can be traced, but it does not prevent it.
+Either remedy lands outside the files this change may touch:
+
+- Drop the implicit rotation and leave revocation to `RotateProjectKeys`, which
+  an owner runs deliberately. Reaches `server/members/members.go` and
+  `server/rpc/admin_server.go`.
+- Give the webhook its own signing secret and MCP a user-bearing scheme, after
+  which the admin credential can be revoked alone and automatically. Reaches
+  `server/packs/pushpull.go`, `server/rpc/mcp/handler.go` and the project
+  schema.
 The dashboard (separate repository) still sets the key from `GetProject`; it
 needs the same fallback (send the session cookie and `x-yorkie-project` when
 the key is empty) before member-role users see their documents there again.

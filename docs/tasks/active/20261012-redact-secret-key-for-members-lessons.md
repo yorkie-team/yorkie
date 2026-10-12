@@ -96,17 +96,31 @@ matching edge — a member cannot read the key, so a member cannot configure MCP
 at all, because MCP accepts no other credential.
 
 `RotateSecretKey` logs a warning naming those holders, which makes the break
-traceable but does not prevent it. The structural fix is to stop overloading one
-value: give the webhook its own signing secret and MCP a user-bearing scheme
-(the `Bearer` + `x-yorkie-project` path this branch already built for the
-project-scoped procedures), and the admin credential can then be revoked on its
-own. That reaches `server/packs/pushpull.go`, `server/rpc/mcp/handler.go` and
-the project schema, none of which this change touches, so it is recorded here
-rather than attempted.
+traceable but does not prevent it. There are two ways out, and both land outside
+the files this change may touch:
+
+- Drop the implicit rotation. `members.Remove` and `members.UpdateRole` would
+  leave both keys alone and only record that the departing user may still hold a
+  copy, leaving `RotateProjectKeys` — which an owner already runs deliberately,
+  at a moment when the webhook receiver and the MCP clients can be rolled with
+  it — as the one way to revoke. The residual gap is then the pre-existing one:
+  the copy keeps working until that rotation. This is the smaller change, and it
+  reaches `server/members/members.go` and `server/rpc/admin_server.go`.
+- Stop overloading one value: give the webhook its own signing secret and MCP a
+  user-bearing scheme (the `Bearer` + `x-yorkie-project` path this branch
+  already built for the project-scoped procedures). Then the admin credential
+  has one set of holders and a role change can revoke it automatically, which is
+  what the rotation wanted to do. That reaches `server/packs/pushpull.go`,
+  `server/rpc/mcp/handler.go` and the project schema.
+
+The second subsumes the first and is the one to build; until it exists the
+rotation is an outage with an authorization edit for a trigger, which is the
+known limitation this change carries.
 
 Takeaway: before revoking a credential, enumerate who holds it. A key with
 three meanings has three sets of holders, and only one of them is the user the
-revocation was aimed at.
+revocation was aimed at — automating the revocation automates an outage for the
+other two.
 
 ## `IsAtLeast` fails open, so the gate validates the role first
 
