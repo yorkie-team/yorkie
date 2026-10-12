@@ -66,6 +66,55 @@ func TestServerCmdFlagDefaults(t *testing.T) {
 		assert.NotNil(t, f)
 		assert.Empty(t, f.DefValue)
 	})
+
+	t.Run("watch heartbeat bounds default to their constants", func(t *testing.T) {
+		f := cmd.Flags().Lookup("backend-watch-heartbeat-interval-min")
+		assert.NotNil(t, f)
+		assert.Equal(t, server.DefaultWatchHeartbeatIntervalMin.String(), f.DefValue)
+
+		f = cmd.Flags().Lookup("backend-watch-heartbeat-interval-max")
+		assert.NotNil(t, f)
+		assert.Equal(t, server.DefaultWatchHeartbeatIntervalMax.String(), f.DefValue)
+	})
+}
+
+// TestServerCmdWatchHeartbeatInterval checks that the deprecated
+// --backend-watch-heartbeat-interval reaches the config only when the
+// operator passed it. The server ignores the value either way; carrying it
+// only when passed is what lets Start warn that operator and nobody else.
+func TestServerCmdWatchHeartbeatInterval(t *testing.T) {
+	cmd := serverCmd(t)
+	interval := conf.Backend.WatchHeartbeatInterval
+	t.Cleanup(func() {
+		conf.Backend.WatchHeartbeatInterval = interval
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if f.Changed {
+				assert.NoError(t, f.Value.Set(f.DefValue))
+				f.Changed = false
+			}
+		})
+	})
+
+	// The --config path does not exist, so the run stops right after the
+	// flags are copied into the config, rather than starting a server.
+	missing := filepath.Join(t.TempDir(), "missing.yml")
+
+	conf.Backend.WatchHeartbeatInterval = "unset"
+	assert.NoError(t, cmd.ParseFlags([]string{"--config", missing}))
+	assert.Error(t, cmd.RunE(cmd, nil))
+	assert.Equal(t, "unset", conf.Backend.WatchHeartbeatInterval)
+	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMin.String(), conf.Backend.WatchHeartbeatIntervalMin)
+	assert.Equal(t, server.DefaultWatchHeartbeatIntervalMax.String(), conf.Backend.WatchHeartbeatIntervalMax)
+
+	// Passed, it is recorded for the deprecation warning.
+	for _, value := range []string{"0s", "20s"} {
+		assert.NoError(t, cmd.ParseFlags([]string{
+			"--config", missing,
+			"--backend-watch-heartbeat-interval=" + value,
+		}))
+		assert.Error(t, cmd.RunE(cmd, nil))
+		assert.Equal(t, value, conf.Backend.WatchHeartbeatInterval)
+	}
 }
 
 // TestServerCmdBlankSecretKey checks that a --backend-secret-key given on the

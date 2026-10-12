@@ -125,6 +125,14 @@ message WatchRequest {
   // watched/unwatched events match the presence CRDT keying. Old SDKs omit it
   // and the server falls back to client_id (the session id).
   string actor_id = 3;
+  // heartbeat_interval_ms is the interval, in milliseconds, at which this
+  // stream asks the server to send a WatchHeartbeat while it is idle. 0, which
+  // is also what an SDK older than the heartbeat leaves here, asks for none:
+  // such a stream gets no WatchHeartbeat bodies at all, so the heartbeat can
+  // never reach a client that would not recognize it. The server clamps the
+  // request to its own bounds and reports the value it settled on in
+  // WatchInitialization.heartbeat_interval_ms.
+  int64 heartbeat_interval_ms = 4;
 }
 
 message ResourceDescriptor {

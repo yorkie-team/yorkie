@@ -97,11 +97,16 @@ var (
 	ChannelSessionCountCacheTTL   = "10s"
 	ChannelSessionCountCacheSize  = 100
 
-	// WatchHeartbeatInterval turns the heartbeat on for the integration lane,
-	// which ships off by default, and keeps it firing well inside a test's
-	// lifetime so the heartbeat path is exercised rather than merely
-	// configured.
-	WatchHeartbeatInterval = "2s"
+	// WatchHeartbeatIntervalMin lets a test ask for a heartbeat that fires
+	// well inside its own lifetime, so the heartbeat path is exercised rather
+	// than merely configured. Only the floor is lowered, and it binds just the
+	// streams that ask for less than it: the maximum stays at the server's
+	// default, so an SDK client asking for its own 20s default still gets 20s
+	// and arms a 60s idle watchdog. Clamping every stream down to a couple of
+	// seconds instead would put every watch stream in every suite a few missed
+	// heartbeats away from a teardown and reconnect.
+	WatchHeartbeatIntervalMin = "1s"
+	WatchHeartbeatIntervalMax = server.DefaultWatchHeartbeatIntervalMax.String()
 
 	ClusterRPCTimeout        = "10s"
 	ClusterClientTimeout     = "30s"
@@ -352,7 +357,8 @@ func TestBackendConfig() *backend.Config {
 		ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
 		ChannelSessionCountCacheTTL:   ChannelSessionCountCacheTTL,
 		ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
-		WatchHeartbeatInterval:        WatchHeartbeatInterval,
+		WatchHeartbeatIntervalMin:     WatchHeartbeatIntervalMin,
+		WatchHeartbeatIntervalMax:     WatchHeartbeatIntervalMax,
 		ClusterRPCTimeout:             ClusterRPCTimeout,
 		ClusterClientTimeout:          ClusterClientTimeout,
 		ClusterClientPoolSize:         ClusterClientPoolSize,
