@@ -322,6 +322,65 @@ func TestTreeRestoreKindMismatchKeepsTombstone(t *testing.T) {
 	assert.Equal(t, "<r><p></p></r>", tree.ToXML(), "the tombstone stays dead")
 }
 
+// TestTreeRestoreNegativeOffsetSkip verifies that a span whose OWN identity
+// offset is negative is skipped. An offset is an index into its insertion, so
+// no honest span carries one; the decoder passes it through because the same
+// decoder reads stored changes, and recreateParent's claim check does not
+// catch it — the floor probe for a negative offset lands on an unrelated
+// earlier insertion, where the exact-offset test is false and the text
+// interval test holds for every honest node. Without the guard the span is
+// recreated and registered below the insertion's whole offset range (#2180).
+func TestTreeRestoreNegativeOffsetSkip(t *testing.T) {
+	for _, isText := range []bool{false, true} {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+		text := p.Children()[0]
+
+		// The identity of a real insertion, at an offset it never occupied.
+		negID := crdt.NewTreeNodeID(text.ID().CreatedAt, -1)
+		span := &crdt.TreeRestoreSpan{
+			ID:       negID,
+			NodeType: "p",
+			IsText:   isText,
+			ParentID: p.ID(),
+		}
+		if isText {
+			span.NodeType, span.Length, span.Value = "text", 1, "x"
+		}
+
+		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		assert.NoError(t, err, "isText=%v", isText)
+		assert.Empty(t, untombstoned, "isText=%v", isText)
+		assert.Empty(t, recreated, "isText=%v: a negative-offset span is skipped", isText)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "isText=%v", isText)
+
+		_, holder := tree.NodeMapByID.Floor(negID)
+		assert.True(t, holder == nil || holder.ID().Offset >= 0,
+			"isText=%v: nothing is registered under a negative offset", isText)
+	}
+}
+
+// TestTreeRetombstoneNegativeOffsetSkip pins the Retombstone half of the
+// offset check. The span names a LIVE text run, so without the guard its
+// [-1, 4) range overlaps the run and re-tombstones part of it — a span
+// carrying an identity no node holds would pass either way.
+func TestTreeRetombstoneNegativeOffsetSkip(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	text := p.Children()[0]
+
+	span := textSpan(text, p)
+	span.ID = crdt.NewTreeNodeID(text.ID().CreatedAt, -1)
+
+	pairs, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx))
+	assert.NoError(t, err)
+	assert.Empty(t, pairs, "a negative-offset span re-tombstones nothing")
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "the live run is untouched")
+	assertLengthCacheSound(t, tree, "after a skipped negative-offset retombstone")
+}
+
 // TestTreeRetombstoneKindMismatchSkip pins the Retombstone half of the kind
 // check. The spans name a LIVE node, so Retombstone would find and re-remove
 // it without the guard; a span carrying an identity no node holds would make

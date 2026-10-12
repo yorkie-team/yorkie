@@ -986,6 +986,27 @@ func (s *TreeRestoreSpan) kindAgrees() bool {
 	return s.IsText == (s.NodeType == index.TextNodeType)
 }
 
+// offsetAddressable reports whether the span's own identity offset is one a
+// node of that insertion could have occupied: an offset is an index into the
+// insertion, so an honest span never carries a negative one. A crafted one
+// slips past recreateParent's claim check rather than failing it -- the floor
+// probe for a negative offset lands on some earlier insertion's node, where
+// the exact-offset test is false and the text-interval test is true for every
+// honest node, so the check answers about a node that is not the one being
+// recreated -- and Restore would then register a live node under an id below
+// the whole insertion's range, straddling another node's identity.
+//
+// Skipped rather than rejected at the converter, and never floored to zero.
+// fromTreeRestoreSpans also decodes stored operations, so refusing the value
+// would make a document that already holds one permanently unrebuildable, and
+// flooring an IDENTITY (unlike a left anchor, which resolves by position)
+// would aim the span at a different, real node. The offset is part of the span
+// itself, so Restore and Retombstone skip it alike on every replica -- as they
+// do for a span whose kind disagrees (see kindAgrees).
+func (s *TreeRestoreSpan) offsetAddressable() bool {
+	return s.ID.Offset >= 0
+}
+
 // Tree represents the tree of CRDT. It has doubly linked list structure and
 // index tree structure.
 type Tree struct {
@@ -1158,7 +1179,8 @@ func (t *Tree) Purge(child GCChild) error {
 // Restore re-establishes the nodes described by spans under their ORIGINAL
 // identities (identity-preserving Tree undo): live → skip (idempotent),
 // tombstoned → unremove in place, purged → recreate. A span whose kind does
-// not agree with itself is skipped outright (see kindAgrees), as it is in
+// not agree with itself, or whose identity offset is negative, is skipped
+// outright (see kindAgrees and offsetAddressable), as it is in
 // Retombstone. Spans must be in
 // parent-before-child order. Returns (untombstoned, recreated); the caller
 // un-registers GC pairs for the un-tombstoned nodes and accounts recreated
@@ -1177,7 +1199,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 	}()
 
 	for _, span := range spans {
-		if !span.kindAgrees() {
+		if !span.kindAgrees() || !span.offsetAddressable() {
 			continue
 		}
 		if !span.IsText {
@@ -1287,8 +1309,9 @@ func (t *Tree) isolateTextRange(
 // straddles a span boundary is split at that boundary so only the in-span range
 // is re-removed (symmetric with Restore's isolate, so undo/redo stay mirror
 // images and segmentation stays convergent). A span whose kind does not agree
-// with itself is skipped, exactly as Restore skips it, so neither direction
-// acts on what the other ignores. Returns the GC pairs for the newly
+// with itself, or whose identity offset is negative, is skipped, exactly as
+// Restore skips it, so neither direction acts on what the other ignores.
+// Returns the GC pairs for the newly
 // tombstoned nodes and the live-split overhead. Mirrors the JS
 // CRDTTree.retombstone.
 func (t *Tree) Retombstone(
@@ -1297,7 +1320,7 @@ func (t *Tree) Retombstone(
 	var pairs []GCPair
 	var diff resource.DataSize
 	for _, span := range spans {
-		if !span.kindAgrees() {
+		if !span.kindAgrees() || !span.offsetAddressable() {
 			continue
 		}
 		start := span.ID.Offset
