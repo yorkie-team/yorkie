@@ -315,6 +315,14 @@ merge-target (`fromParent`). Each moved child receives:
 - **`mergedInto`** (runtime cache): set on the source node, pointing
   to the target. Rebuilt from `MergedFrom` on snapshot load.
 
+**A merge source is a tombstone.** Phase 5 removes every merge boundary
+before Phase 6 moves its children, and every *reader* of `mergedInto`
+(§1.1's redirect, §6.2's propagation, `resolveMergeTarget`) acts only on a
+removed node. Both *derivation* paths require it too: `mergeNodes` and
+`rebuildMergeState` set the pointer only when the source a child's
+`MergedFrom` names is removed. See §6.4 for what happens when a restore
+makes a source live again.
+
 Both live and **tombstoned** children are moved, in child order
 (`collectBetween` collects them with `Children(true)`). Moving the
 tombstones preserves the source's full RGA sequence in the target, so
@@ -422,6 +430,33 @@ With the chain flat, `FindTreeNodesWithSplitText`'s §1.1 redirect stays a
 single hop: `P.mergedInto` already points at the live R, and its boundary
 lookup (first child with `MergedFrom == P`) still resolves because P's
 children retained their original `MergedFrom`. No redirect change is needed.
+
+### §6.4 Revive Dissolves the Lineage
+
+An undo of the delete that merged a node away revives it **by identity**
+(`Tree.Restore` → `TreeNode.unremove`). The element is live again, so by
+§6.1 it is no longer a merge source, and both halves of the lineage are
+dropped at that moment (`Tree.dissolveMergeSource`):
+
+- `mergedInto` on the revived element, and
+- `MergedFrom`/`MergedAt` on the children the merge had moved into the
+  target that pointer names.
+
+Both, not just the pointer: `mergedInto` is a runtime cache that
+`rebuildMergeState` re-derives from the stamps, so dropping only the
+pointer would let the next snapshot load resurrect the live element as a
+source. Left undissolved, a later delete of the revived — and by then
+usually empty — element follows the stale pointer and §6.2 tombstones
+content that delete never covered: `<r><p>ab</p></r>` where every other
+replica holds `<r><p>abcd</p></r>` (#2189, the JS half is
+yorkie-js-sdk#1406).
+
+Snapshots written before this held the undissolved stamps, so
+`rebuildMergeState` clears them when the source it reads is live. Merely
+declining to derive the pointer would not be stable over time: once a later
+edit tombstones that source, the same stamps name a removed element and
+another round trip rebuilds the pointer, so a replica loaded from the old
+snapshot would tombstone content an in-memory replica keeps.
 
 ## Phase 7: Split
 
@@ -1310,3 +1345,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
 | Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
 | Fix 28 | §4.1 | Stop the split-sibling cascade at a known sibling seen alive |
+| Fix 29 | §6.4 | Dissolve the merge lineage when a restore revives the source |
