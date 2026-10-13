@@ -375,8 +375,9 @@ func (i *AdminServiceInterceptor) authenticate(
 //
 // NOTE(hackerwins): A project the user cannot see and one that does not exist
 // answer the same way, so the header cannot be used to probe project names.
-// The role is validated before the comparison because MemberRole.IsAtLeast
-// ranks a role it does not recognize above Owner; an unknown role fails closed.
+// An unknown role, and a procedure missing from projectScopedMethods, both
+// fail closed: MemberRole.IsAtLeast answers false for a role outside the
+// hierarchy on either side of the comparison.
 func (i *AdminServiceInterceptor) authorizeProject(
 	ctx context.Context,
 	procedure string,
@@ -392,7 +393,7 @@ func (i *AdminServiceInterceptor) authorizeProject(
 	}
 
 	required := projectScopedMethods[procedure]
-	if role.Validate() != nil || !role.IsAtLeast(required) {
+	if !role.IsAtLeast(required) {
 		return nil, connect.NewError(connect.CodePermissionDenied, ErrProjectAccessDenied)
 	}
 

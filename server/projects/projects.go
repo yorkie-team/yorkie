@@ -146,13 +146,11 @@ func ProjectAndRole(
 // user in their context and so authorize on the key alone. Handing it to a
 // member would let that member act with the authority of an owner.
 //
-// NOTE(hackerwins): the role is validated before the comparison because
-// MemberRole.IsAtLeast ranks a role it does not recognize as 0, which compares
-// as more privileged than Owner. Without the guard an empty or corrupted role
-// string would read as "at least Admin" and hand the key out, so this gate
-// fails closed instead.
+// A role outside the hierarchy — an empty or corrupted value read from a
+// membership row — is not "at least Admin": MemberRole.IsAtLeast answers
+// false for a role it does not recognize, so this gate fails closed.
 func CanReadSecretKey(role database.MemberRole) bool {
-	return role.Validate() == nil && role.IsAtLeast(database.Admin)
+	return role.IsAtLeast(database.Admin)
 }
 
 // redactForRole clears the project's secret key unless the role may read it,
