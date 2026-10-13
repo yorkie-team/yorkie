@@ -52,13 +52,21 @@ The server advertises `presence-patch` in `ChangePack.capabilities` on every
 pack it returns, attach and push-pull alike. A client sends a patch only while
 the last pack it received carried the capability.
 
-An older server does not reject a patch. Its converter has no case for the
-type, so it decodes the change as an empty presence change and stores a nil
-presence for the sender. During a rolling upgrade, a client that learned the
-capability from an upgraded node can have one push land on an old one. The
-reply from that node carries no capabilities, so the SDK must then stop
-patching and send its full presence as a `PUT` right away. That heals the
-presence in one round trip. From this version on, the converter refuses a
+An older server (v0.7.24 or earlier) does not reject a patch, and the result
+is not harmless. Its converter has no case for the type, so it decodes the
+change as a presence change with an empty change type and stores it. When it
+serves the change back, its encoder maps that empty type to
+`CHANGE_TYPE_UNSPECIFIED`, and every JS SDK that pulls it, older readers as
+well as this version, throws `ErrInvalidType` (`unsupported type: 0`) and its
+sync loop stops. Servers must therefore be upgraded before clients, and a
+server must not be rolled back below this version once clients that send
+patches are connected.
+
+During a rolling upgrade, a client that learned the capability from an
+upgraded node can still have one push land on an old one. The reply from that
+node carries no capabilities, so the SDK must then stop patching and send its
+full presence as a `PUT` right away. That stops further patches but does not
+repair the one the old node already stored. From this version on, the converter refuses a
 presence change type it does not define with
 `ErrUnsupportedPresenceChangeType`, so a later type cannot hit the same trap.
 
@@ -140,7 +148,7 @@ counted in the push-pull error metric.
 |------|------------|
 | A stale cached base produces a presence the client does not hold | The base is used only while the client's checkpoint and epoch are exactly the ones it was cached at |
 | An evicted or lost base | `ErrPresenceBaseUnavailable`; the client falls back to a full `PUT` |
-| A new SDK sends a patch to an old server during a rolling upgrade | The old server stores an empty presence; its reply has no capability, and the SDK resends a full `PUT` at once |
+| A new SDK sends a patch to an old server during a rolling upgrade | The old server stores the patch with an empty change type and serves it back as `CHANGE_TYPE_UNSPECIFIED`, which stops the sync loop of every JS reader that pulls it. Upgrade servers first and never roll a server back below this version once such clients are connected; the reply has no capability, so the SDK resends a full `PUT` and sends no further patches |
 | A base kept across a detach | A detach zeroes the client's checkpoint to what a fresh attach seeds, so `commit` drops the entry when the client is no longer attached and never stores one at the initial checkpoint |
 | Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
 | A presence of many tiny keys costing far more memory than its bytes | `presenceSize` counts `presenceEntryOverhead` (64 B) per key as well as the key and value bytes, so the 4 KiB bound also caps a presence at 64 keys and the 40 MiB ceiling holds whatever shape the presence has |
