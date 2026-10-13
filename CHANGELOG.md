@@ -7,14 +7,61 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.25] - 2026-10-13
+
+### Upgrade Notes
+
+- **Shared admin token signing key (#2176).** Yorkie no longer signs admin
+  tokens with the public default `yorkie-secret`. Set the same key, at least 32
+  characters, on every node with `--backend-secret-key` or
+  `YORKIE_BACKEND_SECRET_KEY`. A blank key, a shorter one, or `yorkie-secret`
+  stops startup; with no key at all, each process generates a random one that
+  other nodes reject. The `yorkie-cluster` chart requires
+  `yorkie.args.secretKey` or `yorkie.args.secretKeyExistingSecret`. Tokens
+  signed with the old key stop working, so every dashboard and CLI user must
+  log in again.
+- **Cluster secret required by the chart (#2193).** The `yorkie-cluster` chart
+  refuses to render without `yorkie.args.clusterSecret` or
+  `yorkie.args.clusterSecretExistingSecret`. When a release turns the secret
+  on, cluster RPCs from old pods to new ones are refused until the rollout
+  completes.
+- **MongoDB passwords required by the chart (#2210).** When `mongodb.enabled`
+  is true, `mongodb.credentials.{databaseAdmin,userAdmin,clusterAdmin}.password`
+  must be set, and the old published defaults are rejected. Releases that used
+  those defaults must replace them before upgrading.
+- **Watch heartbeats are per-stream opt-in and on by default (#2209).** The
+  server sends heartbeats only to streams that ask for them, within
+  `--backend-watch-heartbeat-interval-min` (default `5s`) and
+  `--backend-watch-heartbeat-interval-max` (default `60s`; `0s` turns
+  heartbeats off). `--backend-watch-heartbeat-interval` is deprecated and
+  ignored: it is not an off switch, even at `0s`. Clients older than v0.7.25
+  never ask, so they never receive a heartbeat.
+- **No rollback below v0.7.25 once JS 0.7.25 clients connect (#2164).** JS SDK
+  0.7.25 sends presence as patches to a server that advertises
+  `presence-patch`. An older server stores such a patch as an unspecified
+  presence change, and later pulls of that document fail. Roll the server out
+  to every node before publishing or deploying JS SDK 0.7.25, and do not roll
+  it back afterwards.
+- **Members no longer receive the project secret key (#2196).** `GetProject`
+  and `ListProjects` return an empty `secret_key` to roles below `Admin`.
+  Clients must fall back to the session token plus the `x-yorkie-project`
+  header for project-scoped `AdminService` calls, and proxies must pass that
+  header through. Owners should rotate the project keys after demoting or
+  removing an admin.
+
 ### Added
 
 - Let a Watch stream ask for the heartbeat interval it wants, through
   `WatchRequest.heartbeat_interval_ms`, and serve heartbeats only to the
-  streams that asked. The server clamps the request to
-  `--backend-watch-heartbeat-interval-min` / `-max` and advertises the
-  effective value. The Go client gains `WithWatchHeartbeatInterval`,
-  defaulting to 20s, with `client.NoWatchHeartbeat` to opt out.
+  streams that asked. Watch responses gain a heartbeat, and the Go client
+  times out a stream that stays silent past three advertised intervals. The
+  server clamps the request to `--backend-watch-heartbeat-interval-min` /
+  `-max` and advertises the effective value. The Go client gains
+  `WithWatchHeartbeatInterval`, defaulting to 20s, with
+  `client.NoWatchHeartbeat` to opt out. By @yorkie-team-agent[bot] in
+  https://github.com/yorkie-team/yorkie/pull/2163 and
+  https://github.com/yorkie-team/yorkie/pull/2209
+- Fold presence patches into full puts on the server and advertise the `presence-patch` capability by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2164
 
 ### Changed
 
@@ -44,19 +91,48 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   key signs the event webhook and authenticates the MCP endpoint, and replacing
   it cuts those off.
 
+  By @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2196
+
 - Stop serving the pprof `/debug/pprof/cmdline` endpoint. It wrote the process
   arguments, disclosing any credential passed as a flag to whoever could reach
   the unauthenticated profiling port. It now answers `404 Unknown profile`;
-  every other pprof route and `/metrics` are unchanged.
+  every other pprof route and `/metrics` are unchanged. By
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2200
 - Heartbeats are now on by default, which is safe because they are opt-in per
   stream: a client older than the heartbeat does not ask for one and so is
   never sent one.
+- Omit minVersionVector from a push-only PushPull reply, so no client version garbage-collects with a vector it has not pulled by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2195
+- Hold off a refused push instead of resending it every round, and retry only the failing attachment in the Go client by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2173
+- Skip the auto revision when only presence changed since the previous snapshot by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2157
 
 ### Deprecated
 
 - `--backend-watch-heartbeat-interval` / `WatchHeartbeatInterval` is ignored
   and logs a warning at startup. Use `--backend-watch-heartbeat-interval-min`
   / `-max`; a `0s` maximum turns heartbeats off.
+
+### Fixed
+
+- Keep a buffered change's version vector across remote applies by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2212
+- Resolve the index before a text that follows an element by @shjohw12 in https://github.com/yorkie-team/yorkie/pull/2079
+- Refuse a merge that would move a node under itself by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2186
+- Skip Tree restore spans that no honest replica sends by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2175
+- Stop the split-sibling cascade at a sibling the editor saw alive by @easylogic in https://github.com/yorkie-team/yorkie/pull/2143
+- Join paragraphs right after an Enter in the middle of a span by @easylogic in https://github.com/yorkie-team/yorkie/pull/2149
+- Decide document removal by the method, not the pack flag by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2144
+
+### Security
+
+- Stop signing admin tokens with a public default key, and require a shared key of at least 32 characters by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2176
+- Require the MongoDB passwords in the yorkie-cluster chart and percent-encode them in the connection URI by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2210
+- Read the cluster RPC secret from an existing Secret and require one in the yorkie-cluster chart by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2193
+- Guard cluster Compact/Purge keys and warn on empty cluster secret by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2145
+- Keep the GitHub OAuth client secret off the command line by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2198
+- Redact the MongoDB password before logging the URI by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2197
+- Reject a keyless API-Key on the admin path by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2174
+- Reject the admin auth scheme a method does not expect with PermissionDenied, and recover handler panics instead of resetting the connection by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2158
+- Fail closed when a role is outside the role hierarchy by @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2219
+- Reject pushed changes stamped with another client's actor by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2146
 
 ## [v0.7.24] - 2026-10-06
 
