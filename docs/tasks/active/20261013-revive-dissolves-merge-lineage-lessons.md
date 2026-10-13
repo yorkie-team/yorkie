@@ -2,24 +2,36 @@
 
 # Lessons — Dissolve the merge lineage when a merge source is revived
 
-## Why revive has to clear both halves
+## Dissolve the derived half, not the persisted one
 
-Clearing `mergedInto` alone fixes the in-memory replica and nothing else.
-The pointer is a runtime cache: `rebuildMergeState` re-derives it from the
-children's `MergedFrom` on the next snapshot load, so a replica that reloads
-after the revive resurrects the stale source and cascades again. The stamps
-on the moved children are the persisted half of the same fact, and both have
-to go for the two paths to agree.
+The first cut cleared both halves at revive time: the `mergedInto` pointer
+and the `MergedFrom`/`MergedAt` stamps on the children the merge had moved.
+The pointer is a runtime cache, so clearing it is a local statement about
+state that is recomputed anyway; the stamps are persisted CRDT state, and
+clearing them is an edit to history.
 
-## Why old snapshots are cleaned rather than merely ignored
+That edit reaches further than the readers the fix was about.
+`SplitElement`'s §7.1 rule partitions merge-moved children by reading
+`MergedFrom`/`MergedAt` directly, and the §9.4 interloper guard fails open
+on any node carrying a stamp — neither goes through `mergedInto`. Stripping
+the stamps therefore changes how a later concurrent split or style resolves,
+and whether it changes depends on whether the restore arrived before or
+after: two replicas, two answers.
 
-Requiring `removedAt` in `rebuildMergeState` without clearing the stamps
-would be self-inconsistent over time. The source is live at load, so no
-pointer is derived — but when a later edit tombstones that source and the
-document is snapshotted again, the *same* undissolved stamps now name a
-removed element and the pointer comes back. One replica (in memory, stamps
-dissolved at revive) would keep the text while another (loaded from the old
-snapshot) tombstones it. Clearing on load makes the load idempotent.
+The symmetric fix is to make both *derivation* paths judge the same way
+instead: `rebuildMergeState` and `mergeNodes` derive a pointer only onto a
+removed source. A snapshot of a tree whose source was revived then loads to
+exactly what the in-memory replica holds — stamps intact, no pointer — with
+nothing destroyed and no dependence on when the restore was applied.
+
+## A runtime cache is the right place to encode "not a source"
+
+Worth noting why the persisted half looked necessary at first: `mergedInto`
+is not in the snapshot, so "this element stopped being a source" seemed to
+need somewhere durable to live. It does not, because the condition is not a
+new fact — it is `removedAt == nil`, which is already persisted on the
+source itself. Deriving the pointer under that condition carries the whole
+statement, and the derivation runs on every load.
 
 ## The two derivation paths are not symmetric
 

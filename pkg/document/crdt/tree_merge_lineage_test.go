@@ -122,23 +122,94 @@ func TestRebuildMergeStateRejectsForgedSource(t *testing.T) {
 			"the lineage an element payload legitimately carries still rebuilds")
 	})
 
-	// A snapshot written before #2189 can name a LIVE element: the source was
-	// revived by an undo and nothing dissolved the lineage it stopped having.
-	// Rebuilding the pointer there is what makes a later delete of that element
-	// cascade §6.2 over children the merge moved out of it before the revive.
+	// The source an undo revived is live, and the stamps on the children the
+	// merge moved outlive the revive. Rebuilding the pointer onto a live
+	// element is what makes a later delete of it cascade §6.2 over those
+	// children; declining is what makes a snapshot reload hold exactly what
+	// the in-memory replica holds after the revive (#2189).
 	t.Run("live source", func(t *testing.T) {
 		f := newMergeLineageFixture(t)
+		mergedAt := f.nextTicket()
 		f.text.MergedFrom = f.p3.id
-		f.text.MergedAt = f.nextTicket()
+		f.text.MergedAt = mergedAt
 
 		NewTree(f.tree.Root(), f.nextTicket())
 
 		assert.Nil(t, f.p3.mergedInto,
 			"a live element is not a merge source")
-		assert.Nil(t, f.text.MergedFrom,
-			"the stale stamps are dropped, so a reload cannot derive it again")
-		assert.Nil(t, f.text.MergedAt)
+		// The stamps are persisted CRDT state that §7.1's split partitioning
+		// and §9.4's interloper guard read directly: a decode that erased them
+		// would partition a later concurrent split differently from a replica
+		// that never reloaded.
+		require.NotNil(t, f.text.MergedFrom,
+			"declining to derive the pointer must not destroy the merge record")
+		assert.True(t, f.text.MergedFrom.Equal(f.p3.id))
+		assert.Same(t, mergedAt, f.text.MergedAt)
 	})
+}
+
+// TestRestoreDissolvesMergeSourcePointer pins the revive half of #2189: the
+// element a restore revives stops being a merge source, and nothing but the
+// runtime pointer is dropped to make that so.
+func TestRestoreDissolvesMergeSourcePointer(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	// p3 as a genuine merge source: Phase 5 tombstoned it, Phase 6 moved the
+	// child now sitting under p2 and stamped it.
+	f.p3.remove(f.nextTicket())
+	mergedAt := f.nextTicket()
+	f.text.MergedFrom = f.p3.id
+	f.text.MergedAt = mergedAt
+	tree := NewTree(f.tree.Root(), f.nextTicket())
+	require.NotNil(t, f.p3.mergedInto, "the source carries the lineage as a tombstone")
+
+	untombstoned, recreated, _, _, err := tree.Restore([]*TreeRestoreSpan{{
+		ID:       f.p3.id,
+		NodeType: "p",
+		Length:   1,
+	}})
+	require.NoError(t, err)
+	require.Empty(t, recreated, "the tombstone is revived in place, not recreated")
+	require.Len(t, untombstoned, 1)
+	require.Same(t, f.p3, untombstoned[0])
+
+	assert.False(t, f.p3.IsRemoved())
+	assert.Nil(t, f.p3.mergedInto,
+		"a live element is nobody's merge source, so a later delete cannot cascade §6.2")
+	require.NotNil(t, f.text.MergedFrom,
+		"the merge that moved the child still happened; only the pointer is dropped")
+	assert.True(t, f.text.MergedFrom.Equal(f.p3.id))
+	assert.Same(t, mergedAt, f.text.MergedAt)
+
+	// A reload derives the same state the revive left behind, without the
+	// restore being replayed: declining on a live source is the snapshot-side
+	// half of the dissolution.
+	NewTree(tree.Root(), f.nextTicket())
+	assert.Nil(t, f.p3.mergedInto,
+		"a snapshot reload must not resurrect the revived element as a source")
+}
+
+// TestMergeNodesRejectsLiveSource pins the same contract at the operation
+// boundary that rebuildMergeState holds at the decode boundary: an exactly
+// named but LIVE source gets no forwarding pointer.
+//
+// MergedFrom rides on an element payload (Set/Add/ArraySet), so a client can
+// name a live element it was never merged into; an honest merge cannot reach
+// here with one, because Phase 5 tombstones every merge boundary before Phase
+// 6 moves its children. Planting the pointer is the #2189 state: the next
+// delete of that live element tombstones the named children.
+func TestMergeNodesRejectsLiveSource(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	f.text.MergedFrom = f.p3.id // exact ID, and p3 is live
+	f.text.MergedAt = f.nextTicket()
+
+	stranded, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
+	require.NoError(t, err)
+	assert.Empty(t, stranded, "an ordinary merge tombstones nothing")
+
+	assert.Nil(t, f.p3.mergedInto,
+		"a live element named by MergedFrom must not become a merge source")
+	assert.Same(t, f.p1, f.text.Index.Parent.Value,
+		"the merge itself still moves the child")
 }
 
 // TestMergeNodesRejectsForgedSource pins that the check holds for the whole

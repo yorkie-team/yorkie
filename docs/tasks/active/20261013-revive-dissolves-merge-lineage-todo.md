@@ -41,38 +41,40 @@ dissolve what it makes stale.
 
 1. `TreeNode.unremove` clears `mergedInto`: a revived element is live, so it
    is no longer a source.
-2. `Tree.Restore` calls a new `Tree.dissolveMergeSource` before reviving an
-   element, clearing `MergedFrom`/`MergedAt` on the children the merge moved
-   into the target `mergedInto` names. Without this, a snapshot round trip
-   re-derives the pointer from the surviving stamps.
+2. `Tree.Restore` revives through `unremove`, so the pointer is dropped
+   there; nothing else is written. The `MergedFrom`/`MergedAt` stamps on the
+   moved children stay — they are persisted CRDT state recording a merge
+   that did happen, and §7.1's split partitioning and §9.4's interloper
+   guard read them without going through `mergedInto`.
 3. `rebuildMergeState` requires `src.removedAt != nil` before deriving
-   `mergedInto`, and clears the stale stamps when the source is live. Old
-   snapshots already hold undissolved stamps; clearing them on load is what
-   keeps a snapshot-loaded replica agreeing with an in-memory one (the
-   in-memory one dissolved at revive time) and what keeps the next snapshot
-   written clean.
+   `mergedInto`, and leaves the stamps alone otherwise. Deriving from the
+   same evidence under the same rule is what makes a snapshot-loaded replica
+   agree with an in-memory one that revived the source: stamps intact, no
+   pointer, on both.
 4. `mergeNodes` requires the source it recovers from a moved child's
    `MergedFrom` to be removed before pointing its `mergedInto` at the
    destination. Honest merges always tombstone the source in Phase 5, so
    this only refuses a crafted `MergedFrom` naming a live element.
 
-Match the JS fix exactly (it clears the pointer and the stamps on revive and
-requires `removedAt` on both derivation paths), so the two ports stay
-identical.
+Like the JS fix, require `removedAt` on both derivation paths so the two
+ports agree on what a merge source is.
 
 ## Out of scope
 
 - No proto change: `MergedFrom`/`MergedAt` stay as they are.
-- Old snapshots are cleaned on load only; nothing rewrites stored changes.
-- `declaredBoundaries` and the §7.1 split skip read `MergedFrom` directly;
-  with the stamps dissolved there is nothing left for them to misread, so
-  they are untouched.
+- Nothing rewrites persisted state: no stamp is cleared, at load or at
+  revive.
+- `declaredBoundaries`, the §7.1 split skip and the §9.4 interloper guard
+  read `MergedFrom` directly. The stamps they read are unchanged by this
+  fix, so they are untouched.
 
 ## Verification
 
 - `pkg/document/tree_revive_merge_source_test.go`: the three-step repro
   across two replicas, asserting both replicas and a server-side replay
   land on `<r><p>abcd</p></r>`.
-- `pkg/document/crdt`: unit coverage that revive clears pointer and stamps,
-  and that a snapshot carrying a live source's lineage loads dissolved.
+- `pkg/document/crdt`: unit coverage that a restore drops the pointer and
+  keeps the stamps, that a reload of that tree derives the same, and that
+  neither derivation path (`rebuildMergeState`, `mergeNodes`) points a live
+  element named by a `MergedFrom`.
 - `go test ./pkg/document/...`, `make lint`.
