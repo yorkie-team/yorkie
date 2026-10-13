@@ -109,6 +109,9 @@ func TestRebuildMergeStateRejectsForgedSource(t *testing.T) {
 
 	t.Run("genuine source", func(t *testing.T) {
 		f := newMergeLineageFixture(t)
+		// A merge source is a tombstone: Phase 5 removes it before Phase 6
+		// moves its children.
+		f.p3.remove(f.nextTicket())
 		f.text.MergedFrom = f.p3.id
 		f.text.MergedAt = f.nextTicket()
 
@@ -117,6 +120,24 @@ func TestRebuildMergeStateRejectsForgedSource(t *testing.T) {
 		require.NotNil(t, f.p3.mergedInto)
 		assert.True(t, f.p3.mergedInto.Equal(f.p2.id),
 			"the lineage an element payload legitimately carries still rebuilds")
+	})
+
+	// A snapshot written before #2189 can name a LIVE element: the source was
+	// revived by an undo and nothing dissolved the lineage it stopped having.
+	// Rebuilding the pointer there is what makes a later delete of that element
+	// cascade §6.2 over children the merge moved out of it before the revive.
+	t.Run("live source", func(t *testing.T) {
+		f := newMergeLineageFixture(t)
+		f.text.MergedFrom = f.p3.id
+		f.text.MergedAt = f.nextTicket()
+
+		NewTree(f.tree.Root(), f.nextTicket())
+
+		assert.Nil(t, f.p3.mergedInto,
+			"a live element is not a merge source")
+		assert.Nil(t, f.text.MergedFrom,
+			"the stale stamps are dropped, so a reload cannot derive it again")
+		assert.Nil(t, f.text.MergedAt)
 	})
 }
 
