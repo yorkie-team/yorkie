@@ -70,14 +70,17 @@ procedure (`ErrSchemeNotAllowed`): it populates no project scope, and the
 handler would read one that was never set. A project the caller cannot see and
 one that does not exist answer alike (`ErrProjectAccessDenied`), so the header
 cannot be used to probe project names. A role string the server does not
-recognize fails closed, because `MemberRole.IsAtLeast` ranks an unknown role
-above `Owner`.
+recognize fails closed, because `MemberRole.IsAtLeast` answers false whenever
+either role is outside the `Owner`/`Admin`/`Member` hierarchy; the same holds
+for a procedure missing from `projectScopedMethods`, whose required role is
+then empty.
 
 ### Redaction
 
-`projects.CanReadSecretKey` is the single rule — a validated role of at least
-`Admin` — and `server/projects` applies it where the role is resolved, not in
-the handlers, so every present and future caller is covered:
+`projects.CanReadSecretKey` is the single rule — a role of at least `Admin`,
+which an unrecognized role never is — and `server/projects` applies it where
+the role is resolved, not in the handlers, so every present and future caller
+is covered:
 
 - `ProjectAndRole` clears the key when the resolved role is below `Admin`.
 - `ListProjects` keeps it for owned projects (being in that list is the owner
