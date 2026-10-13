@@ -859,8 +859,14 @@ func (d *Document) applyChanges(changes []*change.Change) (events []DocEvent, er
 					}
 					d.history.ReconcileTextEdit(op.ParentCreatedAt(), from, to, op.ContentLen())
 				case *operations.TreeEdit:
-					from, to := op.NormalizePos()
-					d.history.ReconcileTreeEdit(op.ParentCreatedAt(), from, to, op.GetContentSize())
+					// One reconciliation per range the op actually changed, in
+					// the order it changed them: an identity-preserving
+					// restore/retombstone revives or re-removes several nodes
+					// at positions its stored indices never describe, and each
+					// measurement is relative to the one before it.
+					for _, r := range op.ExecutedRanges() {
+						d.history.ReconcileTreeEdit(op.ParentCreatedAt(), r.From, r.To, r.InsertedSize)
+					}
 				}
 			}
 		}

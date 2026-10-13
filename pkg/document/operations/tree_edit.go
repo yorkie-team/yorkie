@@ -94,7 +94,8 @@ type TreeEdit struct {
 	// NormalizePos to report the range this op just affected, for reconciling
 	// OTHER stacked entries -- e.g. when this op is a genuinely fresh local or
 	// remote edit, or a copy-reinsert reverse being replayed. Left nil by the
-	// identity-preserving path, which returns before any Tree.Edit call runs.
+	// identity-preserving path, which returns before any Tree.Edit call runs
+	// and reports what it changed through executedRanges instead.
 	lastFromIdx, lastToIdx *int
 
 	// redoSplitLevel is set on the boundary-deletion reverse that undoes a
@@ -130,6 +131,17 @@ type TreeEdit struct {
 	// The JS SDK has no counterpart: TreeEditOperation reports only
 	// insertedContentSize, which is why yorkie#1999 reproduces there too.
 	splitSize int
+
+	// executedRanges is what the identity-preserving restore/retombstone path
+	// changed the last time it ran: one range per node that left or came
+	// back, in the order it did, each measured against the tree as it stood
+	// at that moment. Only that path sets it (non-nil, possibly empty); every
+	// other edit reports its single range through NormalizePos and
+	// GetContentSize. Measured for OpSourceRemote only, so it is empty after
+	// any other source: its one reader, Document.applyChanges, reads it right
+	// after a remote execution. Read by ExecutedRanges. Mirrors
+	// TreeEditOperation.executedRanges in the JS SDK.
+	executedRanges []crdt.TreeVisibleEdit
 }
 
 // NewTreeEdit creates a new instance of TreeEdit.
@@ -229,10 +241,17 @@ func (e *TreeEdit) Execute(
 				toIdx:            e.toIdx,
 			}
 
+			// Where each node lands is measured for the reconciliation loop
+			// only, which reads it off remote executions alone: a local
+			// undo/redo and a replay skip the index walks.
+			measure := source == OpSourceRemote
+
 			var diff resource.DataSize
 			// 1. Re-remove (retombstone) by identity. Isolating a straddling
 			// piece splits it (live-split overhead accounted to diff).
-			retombstonePairs, retombstoneDiff, err := obj.Retombstone(toRetombstone, e.executedAt)
+			retombstonePairs, retombstoneDiff, retombstoneEdits, err := obj.Retombstone(
+				toRetombstone, e.executedAt, measure,
+			)
 			if err != nil {
 				return ExecutionResult{}, err
 			}
@@ -249,7 +268,9 @@ func (e *TreeEdit) Execute(
 			// books the same size into Live — the node just became visible.
 			// Recreated nodes are brand new, so they only need the Live
 			// addition, plus any live-split overhead. Mirrors Text restore.
-			untombstoned, recreated, restorePairs, restoreDiff, err := obj.Restore(toRestore)
+			untombstoned, recreated, restorePairs, restoreDiff, restoreEdits, err := obj.Restore(
+				toRestore, measure,
+			)
 			if err != nil {
 				return ExecutionResult{}, err
 			}
@@ -266,12 +287,25 @@ func (e *TreeEdit) Execute(
 			}
 			root.Acc(diff)
 
-			// JS forces this path's OpInfos to exactly one entry rather than
-			// deriving them from the restore/retombstone change lists, because
-			// an empty list would make Document.executeUndoRedo drop the undo
-			// change before it reaches localChanges (tree_edit_operation.ts:
-			// 351-354). Reporting observable unconditionally is that same
-			// decision.
+			// Where this execution actually landed, for the undo stack: one
+			// range per node that left or came back, in the order it did. The
+			// stored fromIdx/toIdx describe the forward edit this op reverses
+			// and never move (the nodes are addressed by identity), so they
+			// would shift stacked entries by a range this op never touched.
+			// Mirrors executedRanges in the JS TreeEditOperation.
+			// Non-nil even when empty: nil would fall back to NormalizePos,
+			// whose stored indices this execution never touched.
+			e.executedRanges = append(
+				make([]crdt.TreeVisibleEdit, 0, len(retombstoneEdits)+len(restoreEdits)),
+				retombstoneEdits...,
+			)
+			e.executedRanges = append(e.executedRanges, restoreEdits...)
+
+			// Reported observable unconditionally, so an undo/redo whose
+			// nodes all stay under a removed ancestor still reaches the
+			// change. JS (since yorkie-js-sdk#1421) derives one OpInfo per
+			// edit instead and gates on the executed operations; Go has no
+			// Tree OpInfo to derive, so it keeps the unconditional flag.
 			return ExecutionResult{Reverse: reverseOp, Observable: true}, nil
 		}
 
@@ -971,12 +1005,13 @@ func (e *TreeEdit) RetombstoneSpans() []*crdt.TreeRestoreSpan {
 // lastToIdx) is returned. Neither is available for an operation that has
 // never executed, or whose reverse took the identity-preserving path (which
 // returns before either is captured) -- (0, 0) is returned then, matching
-// the JS SDK's own fallback. That degenerate case is harmless: on both of
-// those paths GetContentSize degrades to 0 in lockstep (see there), so every
-// ReconcileOperation case below computes a net-zero shift from it. A replay
-// is the one execution that sets the sizes without capturing a range, and it
-// is reached only through InternalDocument, which never runs the
-// reconciliation loop.
+// the JS SDK's own fallback. A replay is the one execution that sets the
+// sizes without capturing a range, and it is reached only through
+// InternalDocument, which never runs the reconciliation loop.
+//
+// To reconcile stacked undo/redo entries against an execution, use
+// ExecutedRanges instead: the identity-preserving path can remove or revive
+// several visible nodes at positions this single range does not describe.
 func (e *TreeEdit) NormalizePos() (int, int) {
 	if e.isUndoOp && e.fromIdx != nil && e.toIdx != nil {
 		return *e.fromIdx, *e.toIdx
@@ -985,6 +1020,24 @@ func (e *TreeEdit) NormalizePos() (int, int) {
 		return *e.lastFromIdx, *e.lastToIdx
 	}
 	return 0, 0
+}
+
+// ExecutedRanges returns the visible ranges this operation's most recent
+// execution replaced, each with the size it inserted there, in the order they
+// applied -- what stacked undo/redo entries have to be reconciled against.
+//
+// An identity-preserving restore/retombstone reports one range per node that
+// came back or left, measured as it happened, and none when nothing visible
+// changed (e.g. every node stays under a removed ancestor). Every other edit
+// reports its single normalized range. Mirrors
+// TreeEditOperation.getExecutedRanges in the JS SDK.
+func (e *TreeEdit) ExecutedRanges() []crdt.TreeVisibleEdit {
+	if e.executedRanges != nil {
+		return e.executedRanges
+	}
+
+	from, to := e.NormalizePos()
+	return []crdt.TreeVisibleEdit{{From: from, To: to, InsertedSize: e.GetContentSize()}}
 }
 
 // GetContentSize returns the visible-index size this operation's own most

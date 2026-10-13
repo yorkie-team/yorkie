@@ -71,8 +71,9 @@ const (
 	// BuildInternalDocForServerSeq on every snapshot, compaction and
 	// cache-missing push-pull). It resolves conflicts exactly as
 	// OpSourceRemote does; the only difference is that bookkeeping which only
-	// an undo/redo history reads -- the reverse operation, and the pre-edit
-	// visible-index range TreeEdit.NormalizePos reports -- is skipped rather
+	// an undo/redo history reads -- the reverse operation, the pre-edit
+	// visible-index range TreeEdit.NormalizePos reports, and the per-node
+	// ranges TreeEdit.ExecutedRanges reports -- is skipped rather
 	// than computed and thrown away, which is what keeps the replay linear in
 	// the change count.
 	//

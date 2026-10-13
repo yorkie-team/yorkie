@@ -354,13 +354,23 @@ no-op on visible content).
 Tree reconciliation follows the same six-case overlap logic as Text, but uses
 visible integer indices instead of RGA chain positions. Each `TreeEditOperation`
 exposes:
-- `normalizePos()`: returns `[fromIdx, toIdx]` for reconciliation
+- `getExecutedRanges()` (Go: `ExecutedRanges()`): the ranges a remote
+  execution changed, which reconciliation applies in order (see below)
+- `normalizePos()`: returns `[fromIdx, toIdx]`, the single-range fallback
 - `reconcileOperation(remoteFrom, remoteTo, contentLen)`: adjusts stored indices
 - `getContentSize()`: returns total inserted content size (sum of `paddedSize()`)
 
 When a remote change is applied, `Document` scans the History stacks and calls
 `reconcileTreeEdit()` for each pending `TreeEditOperation` targeting the same
-tree.
+tree, once per range the remote op reports through `getExecutedRanges()`
+(Go: `ExecutedRanges()`). An ordinary edit reports its single
+`normalizePos()`/`getContentSize()` range. An identity-preserving restore or
+retombstone addresses nodes by ID, so its stored `fromIdx`/`toIdx` never
+describe where it landed; instead it reports one range per node that came
+back or left, each measured at that moment, so applying them in order
+reproduces the result. A single envelope over the op is not enough: reviving
+runs on both sides of a live node needs a different shift at each gap
+(yorkie#2222).
 
 #### Split Undo/Redo
 
