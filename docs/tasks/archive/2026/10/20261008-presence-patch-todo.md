@@ -20,7 +20,7 @@ Design: [presence-patch.md](../../design/presence-patch.md)
       `ServerCapabilities`
 - [x] Unit tests for the fold, the model and the converter; an integration
       test through attach and push-pull
-- [ ] SDK: send patches when `presence-patch` is advertised, resend a full
+- [x] SDK: send patches when `presence-patch` is advertised, resend a full
       `PUT` on `ErrPresenceBaseUnavailable` (yorkie-js-sdk, separate PR)
 
 - [x] Address the self-review: validate the base on checkpoint and epoch,
@@ -33,3 +33,5 @@ Design: [presence-patch.md](../../design/presence-patch.md)
 - Verified the integration test fails with the fold disabled, and the detach
   case fails without the rule that drops a replaced patch.
 - `make verify` and the presence integration tests pass.
+
+**Archived**: 2026-10-13 — the SDK half landed in yorkie-js-sdk#1477.

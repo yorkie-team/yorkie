@@ -67,7 +67,7 @@ Out of scope: recovering a document whose writes the auth webhook denies
 - [x] Implementation (Green)
 - [x] `make verify`, `make test` (on the final tree, run untouched)
 - [x] Self review
-- [ ] PR
+- [x] PR
 
 ## Review
 
@@ -110,3 +110,5 @@ Out of scope: recovering a document whose writes the auth webhook denies
   still up to `RejectedPushRetryDelay` behind its peers, because the Go
   client has no pull that leaves the refused pack behind — that needs a
   pull-only request the wire protocol does not have today.
+
+**Archived**: 2026-10-13 — merged as #2173.

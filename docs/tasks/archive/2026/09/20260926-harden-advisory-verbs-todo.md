@@ -48,7 +48,7 @@ these files from yorkie 33810d95, so the same defects are live here.
 - [x] `make verify` — no Go touched; run to confirm the gate is unaffected.
 - [x] On GitHub after merge: `@claude summarize` on a PR posts a summary.
       *Audit 2026-10-05:* Observed in Agent Summarize run 36165762122.
-- [ ] On GitHub after merge: the same comment from an account without write
+- [x] On GitHub after merge: the same comment from an account without write
       access is ignored. #2061 added the permission gate that should enforce
       this, but nobody has seen it happen live yet.
 
@@ -61,3 +61,5 @@ for this repository, the summarize header now lists every posting job, the
 summarize step name no longer claims "no repo credentials", and the
 pick-credential exception reason no longer claims there is no checkout
 (js-sdk left both stale).
+
+**Archived**: 2026-10-13 — boxes closed out at archive. #2061 merged with the write-permission gate; the no-write-access case was not observed live.

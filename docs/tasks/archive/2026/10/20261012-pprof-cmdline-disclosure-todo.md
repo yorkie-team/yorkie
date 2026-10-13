@@ -47,9 +47,11 @@ or a general pprof access policy.
 
 ## Acceptance
 
-- [ ] `PprofEnabled` true and false: no request can read a sentinel.
-- [ ] Direct, index/fallback and path variants covered.
-- [ ] Metrics and heap unchanged.
-- [ ] Tests restore `os.Args`; no inspection of live processes.
-- [ ] Regression fails before the fix; `make lint` and the focused package
+- [x] `PprofEnabled` true and false: no request can read a sentinel.
+- [x] Direct, index/fallback and path variants covered.
+- [x] Metrics and heap unchanged.
+- [x] Tests restore `os.Args`; no inspection of live processes.
+- [x] Regression fails before the fix; `make lint` and the focused package
       test (`-race`) pass.
+
+**Archived**: 2026-10-13 — acceptance met by #2200 (closes #2083); boxes ticked at archive.
