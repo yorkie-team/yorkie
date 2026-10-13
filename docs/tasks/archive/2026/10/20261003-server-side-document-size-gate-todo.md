@@ -39,7 +39,7 @@ gates; this task picked one and built it.
       changes goes through without them.
 - [x] Document the overshoot (up to one `SnapshotInterval` of changes, each
       push capped by `maxRequestBytes`) as part of the quota's contract.
-- [ ] yorkie-js-sdk follow-up (separate PR in that repo): treat
+- [x] yorkie-js-sdk follow-up (separate PR in that repo): treat
       `ErrDocumentSizeExceedsLimit` from `PushPullChanges` as terminal for
       the document instead of retrying the same pack — surface an over-quota
       state, stop the sync loop for it, and let the app detach. The code
@@ -54,3 +54,5 @@ gates; this task picked one and built it.
   the running `DocSize` accumulator agree with a rebuild is tracked by the
   rebuild-drift task.
 - Counting bytes pushed since the last snapshot to tighten the overshoot.
+
+**Archived**: 2026-10-13 — the SDK follow-up landed in yorkie-js-sdk#1462 and the Go client in #2173.

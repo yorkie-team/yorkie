@@ -35,16 +35,18 @@ timeout to a mobile client saving battery.
 
 ## Acceptance criteria
 
-- [ ] `WatchRequest.heartbeat_interval_ms` exists and is honored.
-- [ ] Requested interval is clamped to `[min, max]`; the effective value is
+- [x] `WatchRequest.heartbeat_interval_ms` exists and is honored.
+- [x] Requested interval is clamped to `[min, max]`; the effective value is
       advertised in `WatchInitialization`.
-- [ ] A request of `0` yields advertised `0` and no heartbeats.
-- [ ] `max = 0s` disables heartbeats regardless of what a client asks.
-- [ ] `--backend-watch-heartbeat-interval` is deprecated and ignored at every
+- [x] A request of `0` yields advertised `0` and no heartbeats.
+- [x] `max = 0s` disables heartbeats regardless of what a client asks.
+- [x] `--backend-watch-heartbeat-interval` is deprecated and ignored at every
       value, with a startup warning; `config.sample.yml` documents the bounds.
-- [ ] Go client sends its configured interval; default `20s`.
-- [ ] Unit tests cover the clamp, the opt-out and the kill switch.
+- [x] Go client sends its configured interval; default `20s`.
+- [x] Unit tests cover the clamp, the opt-out and the kill switch.
 
 ## Out of scope
 
 JS/iOS/Android SDKs (tracked in the JS mirror, yorkie-js-sdk#1479).
+
+**Archived**: 2026-10-13 — acceptance met by #2209 (closes #2194); boxes ticked at archive. The SDK side is yorkie-js-sdk#1479/#1483.

@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Tasks Archive
@@ -8,15 +8,31 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 81
+Total archived tasks: 99
 
-## 2026/10 (21 tasks)
+## 2026/10 (38 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Watch heartbeat opt-in via WatchRequest (2026-10-12) | [20261012-watch-heartbeat-opt-in-todo.md](./2026/10/20261012-watch-heartbeat-opt-in-todo.md) | [20261012-watch-heartbeat-opt-in-lessons.md](./2026/10/20261012-watch-heartbeat-opt-in-lessons.md) |
 | Resolve the index before a text that follows an element (2026-10-12) | [20261012-tree-findpos-element-text-boundary-todo.md](./2026/10/20261012-tree-findpos-element-text-boundary-todo.md) | [20261012-tree-findpos-element-text-boundary-lessons.md](./2026/10/20261012-tree-findpos-element-text-boundary-lessons.md) |
+| Leave a restore span with a text parent unplaced (2026-10-12) | [20261012-restore-span-text-parent-todo.md](./2026/10/20261012-restore-span-text-parent-todo.md) | [20261012-restore-span-text-parent-lessons.md](./2026/10/20261012-restore-span-text-parent-lessons.md) |
+| Reject a keyless API-Key on the admin path (2026-10-12) | [20261012-reject-empty-admin-api-key-todo.md](./2026/10/20261012-reject-empty-admin-api-key-todo.md) | [20261012-reject-empty-admin-api-key-lessons.md](./2026/10/20261012-reject-empty-admin-api-key-lessons.md) |
+| Redact project SecretKey from users below Admin (2026-10-12) | [20261012-redact-secret-key-for-members-todo.md](./2026/10/20261012-redact-secret-key-for-members-todo.md) | [20261012-redact-secret-key-for-members-lessons.md](./2026/10/20261012-redact-secret-key-for-members-lessons.md) |
+| Redact the MongoDB URI before logging it (2026-10-12) | [20261012-redact-mongo-uri-in-logs-todo.md](./2026/10/20261012-redact-mongo-uri-in-logs-todo.md) | [20261012-redact-mongo-uri-in-logs-lessons.md](./2026/10/20261012-redact-mongo-uri-in-logs-lessons.md) |
+| Omit minVersionVector from the reply to a push-only PushPull (2026-10-12) | [20261012-push-only-reply-no-min-vv-todo.md](./2026/10/20261012-push-only-reply-no-min-vv-todo.md) | [20261012-push-only-reply-no-min-vv-lessons.md](./2026/10/20261012-push-only-reply-no-min-vv-lessons.md) |
+| Refuse the pprof cmdline Route on the Profiling Mux (2026-10-12) | [20261012-pprof-cmdline-disclosure-todo.md](./2026/10/20261012-pprof-cmdline-disclosure-todo.md) | [20261012-pprof-cmdline-disclosure-lessons.md](./2026/10/20261012-pprof-cmdline-disclosure-lessons.md) |
 | Refuse a merge that would move a node under itself (2026-10-12) | [20261012-merge-lineage-cycle-todo.md](./2026/10/20261012-merge-lineage-cycle-todo.md) | [20261012-merge-lineage-cycle-lessons.md](./2026/10/20261012-merge-lineage-cycle-lessons.md) |
+| Stop Signing Admin Tokens with a Public Default Key (2026-10-12) | [20261012-jwt-default-secret-todo.md](./2026/10/20261012-jwt-default-secret-todo.md) | [20261012-jwt-default-secret-lessons.md](./2026/10/20261012-jwt-default-secret-lessons.md) |
+| Make `MemberRole.IsAtLeast` Fail Closed on an Unknown Role (2026-10-12) | [20261012-isatleast-fails-open-unknown-role-todo.md](./2026/10/20261012-isatleast-fails-open-unknown-role-todo.md) | [20261012-isatleast-fails-open-unknown-role-lessons.md](./2026/10/20261012-isatleast-fails-open-unknown-role-lessons.md) |
+| Keep the GitHub OAuth client secret off the command line (2026-10-12) | [20261012-github-client-secret-env-todo.md](./2026/10/20261012-github-client-secret-env-todo.md) | [20261012-github-client-secret-env-lessons.md](./2026/10/20261012-github-client-secret-env-lessons.md) |
+| Read the cluster RPC secret from an existing Secret (2026-10-12) | [20261012-cluster-secret-existing-secret-todo.md](./2026/10/20261012-cluster-secret-existing-secret-todo.md) | [20261012-cluster-secret-existing-secret-lessons.md](./2026/10/20261012-cluster-secret-existing-secret-lessons.md) |
+| Stop the sync loop retrying a push the server will never accept (2026-10-10) | [20261010-park-rejected-writes-todo.md](./2026/10/20261010-park-rejected-writes-todo.md) | [20261010-park-rejected-writes-lessons.md](./2026/10/20261010-park-rejected-writes-lessons.md) |
 | Remove the trusted-tree guard and the git-hook snapshot (2026-10-09) | [20261009-remove-trusted-tree-guard-todo.md](./2026/10/20261009-remove-trusted-tree-guard-todo.md) | [20261009-remove-trusted-tree-guard-lessons.md](./2026/10/20261009-remove-trusted-tree-guard-lessons.md) |
+| Watch stream heartbeat and SDK idle timeout (2026-10-08) | [20261008-watch-stream-heartbeat-todo.md](./2026/10/20261008-watch-stream-heartbeat-todo.md) | [20261008-watch-stream-heartbeat-lessons.md](./2026/10/20261008-watch-stream-heartbeat-lessons.md) |
+| Skip auto revisions when only presence changed since last snapshot (2026-10-08) | [20261008-skip-auto-revision-presence-only-todo.md](./2026/10/20261008-skip-auto-revision-presence-only-todo.md) | [20261008-skip-auto-revision-presence-only-lessons.md](./2026/10/20261008-skip-auto-revision-presence-only-lessons.md) |
+| Send presence as a patch on the way up (#2154) (2026-10-08) | [20261008-presence-patch-todo.md](./2026/10/20261008-presence-patch-todo.md) | [20261008-presence-patch-lessons.md](./2026/10/20261008-presence-patch-lessons.md) |
+| Enforce the Auth Scheme an Admin Method Expects (2026-10-08) | [20261008-admin-auth-scheme-scope-todo.md](./2026/10/20261008-admin-auth-scheme-scope-todo.md) | [20261008-admin-auth-scheme-scope-lessons.md](./2026/10/20261008-admin-auth-scheme-scope-lessons.md) |
 | Stop the split-sibling cascade at a sibling the editor saw alive (2026-10-06) | [20261006-split-sibling-cascade-stop-todo.md](./2026/10/20261006-split-sibling-cascade-stop-todo.md) | [20261006-split-sibling-cascade-stop-lessons.md](./2026/10/20261006-split-sibling-cascade-stop-lessons.md) |
 | Decide Document Removal by Method, Not by the Pack Flag (2026-10-06) | [20261006-server-decided-is-removed-todo.md](./2026/10/20261006-server-decided-is-removed-todo.md) | [20261006-server-decided-is-removed-lessons.md](./2026/10/20261006-server-decided-is-removed-lessons.md) |
 | Refuse Pushed Changes Stamped With Another Client's Actor (2026-10-06) | [20261006-push-actor-check-todo.md](./2026/10/20261006-push-actor-check-todo.md) | [20261006-push-actor-check-lessons.md](./2026/10/20261006-push-actor-check-lessons.md) |
@@ -29,6 +45,7 @@ Total archived tasks: 81
 | Keep the agent loop inside the PR's scope (2026-10-05) | [20261005-agent-loop-scope-todo.md](./2026/10/20261005-agent-loop-scope-todo.md) | [20261005-agent-loop-scope-lessons.md](./2026/10/20261005-agent-loop-scope-lessons.md) |
 | Re-issue pre-attach tickets to the real actor on attach (2026-10-04) | [20261004-reissue-pre-attach-tickets-todo.md](./2026/10/20261004-reissue-pre-attach-tickets-todo.md) | [20261004-reissue-pre-attach-tickets-lessons.md](./2026/10/20261004-reissue-pre-attach-tickets-lessons.md) |
 | Integration flakes after the server-side size gate (2026-10-04) | [20261004-integration-size-gate-flakes-todo.md](./2026/10/20261004-integration-size-gate-flakes-todo.md) | [20261004-integration-size-gate-flakes-lessons.md](./2026/10/20261004-integration-size-gate-flakes-lessons.md) |
+| Server-side gate for MaxSizePerDocument (2026-10-03) | [20261003-server-side-document-size-gate-todo.md](./2026/10/20261003-server-side-document-size-gate-todo.md) | [20261003-server-side-document-size-gate-lessons.md](./2026/10/20261003-server-side-document-size-gate-lessons.md) |
 | Compacting a document past MongoDB's record limit (2026-10-03) | [20261003-compaction-oversized-doc-todo.md](./2026/10/20261003-compaction-oversized-doc-todo.md) | [20261003-compaction-oversized-doc-lessons.md](./2026/10/20261003-compaction-oversized-doc-lessons.md) |
 | Text: local edits went quadratic after the undo/redo port (2026-10-02) | [20261002-text-normalize-pos-quadratic-todo.md](./2026/10/20261002-text-normalize-pos-quadratic-todo.md) | [20261002-text-normalize-pos-quadratic-lessons.md](./2026/10/20261002-text-normalize-pos-quadratic-lessons.md) |
 | Revalidate open Watch streams on demand (2026-10-02) | [20261002-revalidate-watch-access-todo.md](./2026/10/20261002-revalidate-watch-access-todo.md) | [20261002-revalidate-watch-access-lessons.md](./2026/10/20261002-revalidate-watch-access-lessons.md) |
@@ -36,7 +53,7 @@ Total archived tasks: 81
 | Auth webhook cache switch and cache TTL floor (#2068, PR #2076) (2026-10-02) | [20261002-auth-webhook-cache-switch-todo.md](./2026/10/20261002-auth-webhook-cache-switch-todo.md) | [20261002-auth-webhook-cache-switch-lessons.md](./2026/10/20261002-auth-webhook-cache-switch-lessons.md) |
 | Port the agent-loop convergence work from yorkie-js-sdk (2026-10-01) | [20261001-harness-convergence-port-todo.md](./2026/10/20261001-harness-convergence-port-todo.md) | [20261001-harness-convergence-port-lessons.md](./2026/10/20261001-harness-convergence-port-lessons.md) |
 
-## 2026/09 (30 tasks)
+## 2026/09 (31 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
@@ -45,6 +62,7 @@ Total archived tasks: 81
 | Mark LWW losers removed and stop leaking GC size records (2026-09-27) | [20260927-element-rht-loser-and-gc-record-todo.md](./2026/09/20260927-element-rht-loser-and-gc-record-todo.md) | [20260927-element-rht-loser-and-gc-record-lessons.md](./2026/09/20260927-element-rht-loser-and-gc-record-lessons.md) |
 | Counter float deltas and duplicate attach (Go/JS parity) (2026-09-27) | [20260927-counter-float-cast-and-dup-attach-todo.md](./2026/09/20260927-counter-float-cast-and-dup-attach-todo.md) | [20260927-counter-float-cast-and-dup-attach-lessons.md](./2026/09/20260927-counter-float-cast-and-dup-attach-lessons.md) |
 | Guard empty-text anchors and reset the clone on failed applies (2026-09-26) | [20260926-tree-anchor-and-clone-reset-todo.md](./2026/09/20260926-tree-anchor-and-clone-reset-todo.md) | [20260926-tree-anchor-and-clone-reset-lessons.md](./2026/09/20260926-tree-anchor-and-clone-reset-lessons.md) |
+| Harden the advisory verbs (2026-09-26) | [20260926-harden-advisory-verbs-todo.md](./2026/09/20260926-harden-advisory-verbs-todo.md) | [20260926-harden-advisory-verbs-lessons.md](./2026/09/20260926-harden-advisory-verbs-lessons.md) |
 | Catch the codebase up to Go 1.26 and keep it there (2026-09-26) | [20260926-go126-catch-up-todo.md](./2026/09/20260926-go126-catch-up-todo.md) | [20260926-go126-catch-up-lessons.md](./2026/09/20260926-go126-catch-up-lessons.md) |
 | Port the local-harness hook fixes back from yorkie-js-sdk (2026-09-26) | [20260926-backport-hook-fixes-todo.md](./2026/09/20260926-backport-hook-fixes-todo.md) | [20260926-backport-hook-fixes-lessons.md](./2026/09/20260926-backport-hook-fixes-lessons.md) |
 | `go fix` modernizations from the Go 1.26 upgrade (2026-09-25) | [20260925-go-fix-modernizations-todo.md](./2026/09/20260925-go-fix-modernizations-todo.md) | [20260925-go-fix-modernizations-lessons.md](./2026/09/20260925-go-fix-modernizations-lessons.md) |

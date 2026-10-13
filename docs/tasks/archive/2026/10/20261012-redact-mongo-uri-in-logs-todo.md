@@ -39,4 +39,6 @@ reads it. #2176 moved that URI into a Secret precisely so the password needs
       gosec's G101 reads a password inside a URL literal as a hardcoded
       credential, the masked `admin:xxxxx@` included, so the test URIs are
       concatenated from parts rather than written inline.
-- [ ] Full `make test` / integration lane — left to CI; needs MongoDB.
+- [x] Full `make test` / integration lane — left to CI; needs MongoDB.
+
+**Archived**: 2026-10-13 — #2197 merged after CI ran the full lane.
