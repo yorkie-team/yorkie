@@ -435,28 +435,47 @@ children retained their original `MergedFrom`. No redirect change is needed.
 
 An undo of the delete that merged a node away revives it **by identity**
 (`Tree.Restore` → `TreeNode.unremove`). The element is live again, so by
-§6.1 it is no longer a merge source, and the forwarding pointer goes with
-the tombstone that gave it meaning: `unremove` clears `mergedInto`. Left
-in place, a later delete of the revived — and by then usually empty —
-element follows the stale pointer and §6.2 tombstones content that delete
+§6.1 it is no longer a merge source, and both halves of the lineage are
+dropped at that moment (`Tree.dissolveMergeSource`):
+
+- `mergedInto` on the revived element, and
+- `MergedFrom`/`MergedAt` on the children the merge had moved into the
+  target that pointer names.
+
+Left undissolved, a later delete of the revived — and by then usually empty
+— element follows the stale pointer and §6.2 tombstones content that delete
 never covered: `<r><p>ab</p></r>` where every other replica holds
 `<r><p>abcd</p></r>` (#2189, the JS half is yorkie-js-sdk#1406).
 
-**Only the pointer.** The `MergedFrom`/`MergedAt` stamps on the moved
-children are persisted CRDT state and stay: they record a merge that did
-happen, and §7.1's split partitioning and §9.4's interloper guard read them
-on their own, without going through `mergedInto`. Erasing them at a revive
-would change how a later concurrent split or style resolves, and
-differently on each replica depending on when the restore arrived.
+**Both halves, not just the pointer.** `mergedInto` is a runtime cache that
+`rebuildMergeState` re-derives from the stamps, so dropping only the pointer
+would leave the lineage re-derivable: the source is live at the revive, so
+no pointer comes back on the next load, but the moment a later edit
+tombstones that element the *same* surviving stamps name a removed source
+and the load rebuilds the pointer. One replica (in memory, pointer dropped
+at the revive) would keep the text while another (loaded from a snapshot
+written after it) cascades §6.2 over it. Liveness is a property of the
+moment, so it cannot by itself record that an element stopped being a
+source; clearing the stamps records it durably, and makes the load
+idempotent.
 
-Being a runtime cache, `mergedInto` is not written to the snapshot;
-`rebuildMergeState` re-derives it from the stamps, and makes the same
-judgement from the same evidence — it derives a pointer only onto a source
-that is **removed** (§6.1). A reload of a tree whose source an undo revived
-therefore holds exactly what the in-memory replica holds: stamps intact, no
-pointer. `mergeNodes` applies the same rule when an ordinary merge moves a
-stamped child again, so neither derivation path can plant a pointer on a
-live element.
+Snapshots written before this held the undissolved stamps, so
+`rebuildMergeState` clears them when the source it reads is live rather than
+merely declining to derive the pointer — the same reason, applied to the
+decode boundary. `mergeNodes` applies the removed-source rule when an
+ordinary merge moves a stamped child again, so neither derivation path can
+plant a pointer on a live element.
+
+**Known limitation.** §7.1's split partitioning reads `MergedFrom`/
+`MergedAt` without going through `mergedInto`, and §9.4's per-node filter
+fails open on any node carrying a stamp. A split or style that never saw the
+merge and is therefore concurrent with the revive can read those stamps
+before or after the revive clears them, and resolve differently on each
+replica. The window needs an unseen-merge split concurrent with the undo;
+the undissolved pointer above needs only an ordinary reload, which is why
+the lineage is cleared rather than kept. Narrowing this further needs a
+durable "no longer a source" marker on the source itself — a proto change,
+tracked separately.
 
 ## Phase 7: Split
 

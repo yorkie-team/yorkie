@@ -2,36 +2,44 @@
 
 # Lessons — Dissolve the merge lineage when a merge source is revived
 
-## Dissolve the derived half, not the persisted one
+## Liveness cannot record that an element stopped being a source
 
-The first cut cleared both halves at revive time: the `mergedInto` pointer
-and the `MergedFrom`/`MergedAt` stamps on the children the merge had moved.
-The pointer is a runtime cache, so clearing it is a local statement about
-state that is recomputed anyway; the stamps are persisted CRDT state, and
-clearing them is an edit to history.
+The middle iteration of this fix dropped only `mergedInto` and left the
+`MergedFrom`/`MergedAt` stamps, on the reasoning that the pointer is a
+runtime cache and `removedAt == nil` is already persisted on the source, so
+both derivation paths could simply decline on a live source and runtime and
+snapshot would agree without destroying anything.
 
-That edit reaches further than the readers the fix was about.
-`SplitElement`'s §7.1 rule partitions merge-moved children by reading
-`MergedFrom`/`MergedAt` directly, and the §9.4 interloper guard fails open
-on any node carrying a stamp — neither goes through `mergedInto`. Stripping
-the stamps therefore changes how a later concurrent split or style resolves,
-and whether it changes depends on whether the restore arrived before or
-after: two replicas, two answers.
+They agree only until the revived element is deleted again. Liveness is a
+property of the moment, not a verdict on the merge: the moment an ordinary
+edit re-tombstones that element the surviving stamps name a *removed* source
+once more, and the next decode rebuilds the very pointer the revive dropped.
+The in-memory replica, which cleared the pointer and never re-sets it
+outside `mergeNodes`, keeps the text; a replica loaded from the snapshot
+written after that delete cascades §6.2 over it. That is #2189 again, now
+reachable by an ordinary reload rather than by an undo.
 
-The symmetric fix is to make both *derivation* paths judge the same way
-instead: `rebuildMergeState` and `mergeNodes` derive a pointer only onto a
-removed source. A snapshot of a tree whose source was revived then loads to
-exactly what the in-memory replica holds — stamps intact, no pointer — with
-nothing destroyed and no dependence on when the restore was applied.
+A durable statement needs durable state, so the stamps go too — the same
+conclusion the JS port reached (yorkie-js-sdk#1406), which matters on its
+own: a Go replica and a JS replica that disagree about what a merge source
+is do not converge.
 
-## A runtime cache is the right place to encode "not a source"
+## What clearing the stamps costs
 
-Worth noting why the persisted half looked necessary at first: `mergedInto`
-is not in the snapshot, so "this element stopped being a source" seemed to
-need somewhere durable to live. It does not, because the condition is not a
-new fact — it is `removedAt == nil`, which is already persisted on the
-source itself. Deriving the pointer under that condition carries the whole
-statement, and the derivation runs on every load.
+It is not free, and the cost is worth writing down. §7.1's split
+partitioning reads `MergedFrom`/`MergedAt` directly, and §9.4's per-node
+filter fails open on any node carrying a stamp; neither goes through
+`mergedInto`. A split that never saw the merge is concurrent with the undo
+that revives its source, so whether it reads the stamps depends on which
+arrived first — two replicas, two partitions.
+
+Both horns are divergence, so the choice is which is reachable. The
+undissolved-lineage horn needs only a snapshot reload after a revive and a
+delete, both ordinary. The split horn needs an unseen-merge split or style
+concurrent with an undo of exactly that merge boundary. Clearing takes the
+narrower one. Closing it properly needs a durable "no longer a source"
+marker on the source itself, which is a proto change and a separate task;
+§6.4 records it as a known limitation.
 
 ## The two derivation paths are not symmetric
 

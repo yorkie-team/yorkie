@@ -32,9 +32,10 @@ import (
 //
 // A merge source is a tombstone: §1.1's insert redirect, §6.2's propagation
 // and resolveMergeTarget all read `mergedInto` only on a removed node. Before
-// the fix a revive left that pointer on the element it made live again, so
-// deleting the revived -- and now empty -- element followed the stale pointer
-// and tombstoned text no edit of it ever covered. Go landed on
+// the fix a revive left that pointer on the element it made live again, and
+// left the `MergedFrom`/`MergedAt` stamps on the children the merge had moved,
+// so deleting the revived -- and now empty -- element followed the stale
+// pointer and tombstoned text no edit of it ever covered. Go landed on
 // <r><p>ab</p></r> where yorkie-js-sdk, which refuses a live source
 // (yorkie-js-sdk#1406), lands on <r><p>abcd</p></r>.
 func TestTreeReviveDissolvesMergeSource(t *testing.T) {
