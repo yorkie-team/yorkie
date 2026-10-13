@@ -129,15 +129,16 @@ func TestRebuildMergeStateRejectsForgedSource(t *testing.T) {
 	t.Run("live source", func(t *testing.T) {
 		f := newMergeLineageFixture(t)
 		f.text.MergedFrom = f.p3.id
-		f.text.MergedAt = f.nextTicket()
+		mergedAt := f.nextTicket()
+		f.text.MergedAt = mergedAt
 
 		NewTree(f.tree.Root(), f.nextTicket())
 
 		assert.Nil(t, f.p3.mergedInto,
 			"a live element is not a merge source")
-		assert.Nil(t, f.text.MergedFrom,
-			"the stale stamps are dropped, so a reload cannot derive it again")
-		assert.Nil(t, f.text.MergedAt)
+		assert.True(t, f.text.MergedFrom.Equal(f.p3.id),
+			"the decode reads the stamps without rewriting them")
+		assert.Same(t, mergedAt, f.text.MergedAt)
 	})
 }
 

@@ -459,12 +459,18 @@ moment, so it cannot by itself record that an element stopped being a
 source; clearing the stamps records it durably, and makes the load
 idempotent.
 
-Snapshots written before this held the undissolved stamps, so
-`rebuildMergeState` clears them when the source it reads is live rather than
-merely declining to derive the pointer — the same reason, applied to the
-decode boundary. `mergeNodes` applies the removed-source rule when an
+`rebuildMergeState` declines to derive a pointer from a live source but
+leaves the stamps as they are: it also runs on element payloads and on
+`DeepCopy`, so rewriting what it reads would let a decoded payload or a
+clone hold different lineage from its origin. This matches the JS
+`rebuildMergeState`. `mergeNodes` applies the removed-source rule when an
 ordinary merge moves a stamped child again, so neither derivation path can
 plant a pointer on a live element.
+
+A snapshot written before this fix can still carry undissolved stamps that
+name a revived, live source. They stay inert while it is live; if a later
+edit tombstones it, the next load re-derives the pointer. Both SDKs share
+this window, and closing it needs the durable marker below.
 
 **Known limitation.** §7.1's split partitioning reads `MergedFrom`/
 `MergedAt` without going through `mergedInto`, and §9.4's per-node filter
@@ -475,7 +481,7 @@ replica. The window needs an unseen-merge split concurrent with the undo;
 the undissolved pointer above needs only an ordinary reload, which is why
 the lineage is cleared rather than kept. Narrowing this further needs a
 durable "no longer a source" marker on the source itself — a proto change,
-tracked separately.
+tracked in #2233.
 
 ## Phase 7: Split
 

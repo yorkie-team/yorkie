@@ -1083,18 +1083,13 @@ func (t *Tree) rebuildMergeState() {
 			return
 		}
 
-		// A live source is not a merge source (see TreeNode.unremove): the
-		// lineage is dissolved when the source is revived, so only a snapshot
-		// written before #2189 can still name a live element here. Clear the
-		// stamps rather than merely declining to derive the pointer: left in
-		// place, a later delete of that source followed by another snapshot
-		// round trip would find it removed and rebuild the forwarding pointer,
-		// cascading §6.2 over children the in-memory replica no longer counts
-		// as merged. Clearing makes the load idempotent and keeps the next
-		// snapshot written clean.
+		// A merge only ever names a source the merge itself removed: Phase 5
+		// tombstones every merge boundary before Phase 6 moves its children,
+		// so a live element is never a merge source (see TreeNode.unremove).
+		// Decline to derive the pointer, but leave the stamps as they are:
+		// this reader also runs on element payloads and on DeepCopy, so it
+		// must not rewrite what it reads. Mirrors the JS rebuildMergeState.
 		if src.removedAt == nil {
-			child.MergedFrom = nil
-			child.MergedAt = nil
 			return
 		}
 
