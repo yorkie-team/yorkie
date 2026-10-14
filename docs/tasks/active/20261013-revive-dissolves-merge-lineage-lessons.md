@@ -57,3 +57,22 @@ Not run: this task was executed in the autonomous one-shot harness, which is
 granted no tool that can launch the reviewer subagent `/self-review`
 requires. Recorded here so a skipped round is not read as a clean one — the
 branch's review is CI, `@claude review`, and the human reviewer on the PR.
+
+## Round 1 (panel): the lineage is not all under the target
+
+The first implementation walked the children of the node `mergedInto` names.
+That is where a merge *put* the stamped children, but not where they
+necessarily still are: §7.1's `SplitElement` partitions a merged parent and
+carries merge-stamped children into the other half of the pair, so a
+children-of-target walk misses that half. The recreate branch of `Restore`
+was missed for the mirror reason — a purged element comes back live under
+its original ID with no pointer at all, so there was nothing to walk from,
+while stamps elsewhere still named it. Both leftovers are re-derivable: they
+name a live source now, and the next edit that tombstones the revived
+element makes them name a removed one again.
+
+`dissolveMergeSources` is keyed on the revived elements' own IDs and sweeps
+the whole tree once per `Restore` call instead. The lesson is that
+`mergedInto` is a cache of where the lineage *was*, so it is the wrong index
+for finding the lineage; the source ID is the stable key, and keying on it
+also drops the dependence on a pointer that may be a client's.

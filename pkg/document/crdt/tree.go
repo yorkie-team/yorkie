@@ -642,7 +642,8 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 // and tombstone content every other replica keeps (#2189). The persisted half
 // of the lineage — MergedFrom/MergedAt on those children, which
 // rebuildMergeState derives this pointer from — is cleared by
-// Tree.dissolveMergeSource, which the restore paths call before this.
+// Tree.dissolveMergeSources, which Restore runs over every element it made
+// live again.
 func (n *TreeNode) unremove() {
 	if n.removedAt == nil {
 		return
@@ -1107,38 +1108,54 @@ func (t *Tree) rebuildMergeState() {
 	})
 }
 
-// dissolveMergeSource clears the merge lineage an element carries as a merge
-// source, in both halves: the MergedFrom/MergedAt stamps on the children the
-// merge moved into the target mergedInto names, and then the pointer itself.
-// Called before a restore revives the element (#2189).
+// dissolveMergeSources clears the merge lineage the given elements carry as
+// merge sources, in both halves: the mergedInto pointer, and the
+// MergedFrom/MergedAt stamps every child a merge moved out of them still
+// carries. Restore calls it once, after applying every span (#2189).
 //
 // Clearing the stamps is what makes the dissolution survive a snapshot:
 // mergedInto is a runtime cache that rebuildMergeState re-derives from the
 // stamps, so dropping only the pointer would let a reload resurrect the live
-// element as a source. The two halves are dropped together, in the one place
-// that still knows which children the merge moved.
+// element as a source. The two halves are dropped together.
 //
-// The target is resolved through findMergeNode for the same reason §6.2
-// resolves it there: mergedInto is derived from the MergedFrom an element
-// payload (Set/Add/ArraySet) keeps, so the pointer can be a client's, and this
-// walks the target's children. An exact element match keeps the walk on the
-// node the pointer names rather than on whatever a floor lookup lands below.
-// Mirrors the JS CRDTTree revive path.
-func (t *Tree) dissolveMergeSource(node *TreeNode) {
-	if node.mergedInto == nil {
+// The sweep keys on the sources' own IDs and visits the whole tree rather than
+// walking the children of the target mergedInto names, because that target is
+// not where all of the lineage necessarily lives:
+//
+//   - §7.1's SplitElement relocates merge-stamped children into the other half
+//     of the split pair, out of reach of a children-of-target walk; and
+//   - a recreated (previously purged) element comes back live under its
+//     original ID carrying no pointer at all, while stamps elsewhere may still
+//     name it.
+//
+// Either leftover is re-derivable: it names a live source so rebuildMergeState
+// declines it now, but the moment a later edit tombstones the revived element
+// the same stamps name a removed one and the pointer comes back. Keying on the
+// source ID also means only lineage naming *this* element is touched, with no
+// dependence on a pointer that may be a client's (see findMergeNode).
+func (t *Tree) dissolveMergeSources(sources []*TreeNode) {
+	if len(sources) == 0 {
 		return
 	}
 
-	if target := t.findMergeNode(node.mergedInto); target != nil {
-		for _, child := range target.Index.Children(true) {
-			if child.Value.MergedFrom != nil && child.Value.MergedFrom.Equal(node.id) {
-				child.Value.MergedFrom = nil
-				child.Value.MergedAt = nil
-			}
-		}
+	ids := make(map[string]struct{}, len(sources))
+	for _, src := range sources {
+		ids[src.id.toIDString()] = struct{}{}
+		src.mergedInto = nil
 	}
 
-	node.mergedInto = nil
+	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
+		child := node.Value
+		if child.MergedFrom == nil {
+			return
+		}
+		if _, ok := ids[child.MergedFrom.toIDString()]; !ok {
+			return
+		}
+
+		child.MergedFrom = nil
+		child.MergedAt = nil
+	})
 }
 
 // Marshal returns the JSON encoding of this Tree.
@@ -1231,6 +1248,16 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 		pairs = append(pairs, t.drainPendingGCPairs()...)
 	}()
 
+	// Elements this call makes live again that may still be named as a merge
+	// source, dissolved together once every span is applied: a revived
+	// tombstone that still holds a forwarding pointer, and a recreated element,
+	// which comes back under its original ID with no pointer but may still be
+	// named by stamps elsewhere. See dissolveMergeSources (#2189).
+	var mergeSources []*TreeNode
+	defer func() {
+		t.dissolveMergeSources(mergeSources)
+	}()
+
 	for _, span := range spans {
 		if !span.kindAgrees() {
 			continue
@@ -1240,9 +1267,11 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 			if node != nil && node.id.Equal(span.ID) {
 				if node.IsRemoved() {
 					// A revived element is live, so it can no longer be a merge
-					// source: drop the lineage before the tombstone that gave it
-					// meaning goes away (#2189).
-					t.dissolveMergeSource(node)
+					// source: the lineage goes with the tombstone that gave it
+					// meaning (#2189).
+					if node.mergedInto != nil {
+						mergeSources = append(mergeSources, node)
+					}
 					node.unremove()
 					untombstoned = append(untombstoned, node)
 				}
@@ -1254,6 +1283,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 			}
 			if created != nil {
 				recreated = append(recreated, created)
+				mergeSources = append(mergeSources, created)
 			}
 			continue
 		}

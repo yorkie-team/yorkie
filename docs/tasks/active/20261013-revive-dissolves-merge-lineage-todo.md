@@ -41,18 +41,21 @@ dissolve what it makes stale.
 
 1. `TreeNode.unremove` clears `mergedInto`: a revived element is live, so it
    is no longer a source.
-2. `Tree.Restore` calls a new `Tree.dissolveMergeSource` before reviving an
-   element, clearing `MergedFrom`/`MergedAt` on the children the merge moved
-   into the target `mergedInto` names. Without this the lineage stays
-   re-derivable: a later delete of the revived element makes the surviving
-   stamps name a removed source again, and the next snapshot round trip
-   rebuilds the pointer.
+2. `Tree.Restore` collects every element it makes live again — a revived
+   tombstone that still holds `mergedInto`, and a recreated (previously
+   purged) element, which comes back under its original ID with no pointer —
+   and hands them to a new `Tree.dissolveMergeSources`, one sweep per call.
+   The sweep is keyed on the sources' own IDs and visits the whole tree, so
+   it also reaches stamps §7.1's `SplitElement` carried out of the merge
+   target. Without this the lineage stays re-derivable: a later delete of the
+   revived element makes the surviving stamps name a removed source again,
+   and the next snapshot round trip rebuilds the pointer.
 3. `rebuildMergeState` requires `src.removedAt != nil` before deriving
-   `mergedInto`, and clears the stale stamps when the source is live. Old
-   snapshots already hold undissolved stamps; clearing them on load is what
-   keeps a snapshot-loaded replica agreeing with an in-memory one (the
-   in-memory one dissolved at revive time) and what keeps the next snapshot
-   written clean.
+   `mergedInto`, and leaves the stamps as they are: it also runs on element
+   payloads and on `DeepCopy`, so rewriting what it reads would let a decoded
+   payload or a clone hold different lineage from its origin. Old snapshots
+   can still carry undissolved stamps naming a live source; they stay inert
+   while it is live, and §6.4 records the window that leaves.
 4. `mergeNodes` requires the source it recovers from a moved child's
    `MergedFrom` to be removed before pointing its `mergedInto` at the
    destination. Honest merges always tombstone the source in Phase 5, so
@@ -77,7 +80,9 @@ source is.
 - `pkg/document/tree_revive_merge_source_test.go`: the three-step repro
   across two replicas, asserting both replicas and a server-side replay
   land on `<r><p>abcd</p></r>`.
-- `pkg/document/crdt`: unit coverage that a restore clears both halves and
+- `pkg/document/crdt`: unit coverage that a restore clears both halves
+  wherever they sit — under the merge target, under the other half of a
+  split pair, and naming an element the same restore recreated — and
   that re-deleting the revived element does not let a reload derive the
   pointer back, that a snapshot carrying a live source's lineage loads
   dissolved, and that neither derivation path (`rebuildMergeState`,
