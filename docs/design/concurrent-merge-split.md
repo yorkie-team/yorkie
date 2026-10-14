@@ -315,6 +315,14 @@ merge-target (`fromParent`). Each moved child receives:
 - **`mergedInto`** (runtime cache): set on the source node, pointing
   to the target. Rebuilt from `MergedFrom` on snapshot load.
 
+**A merge source is a tombstone.** Phase 5 removes every merge boundary
+before Phase 6 moves its children, and every *reader* of `mergedInto`
+(§1.1's redirect, §6.2's propagation, `resolveMergeTarget`) acts only on a
+removed node. Both *derivation* paths require it too: `mergeNodes` and
+`rebuildMergeState` set the pointer only when the source a child's
+`MergedFrom` names is removed. See §6.4 for what happens when a restore
+makes a source live again.
+
 Both live and **tombstoned** children are moved, in child order
 (`collectBetween` collects them with `Children(true)`). Moving the
 tombstones preserves the source's full RGA sequence in the target, so
@@ -422,6 +430,78 @@ With the chain flat, `FindTreeNodesWithSplitText`'s §1.1 redirect stays a
 single hop: `P.mergedInto` already points at the live R, and its boundary
 lookup (first child with `MergedFrom == P`) still resolves because P's
 children retained their original `MergedFrom`. No redirect change is needed.
+
+### §6.4 Revive Dissolves the Lineage
+
+An undo of the delete that merged a node away revives it **by identity**
+(`Tree.Restore` → `TreeNode.unremove`). The element is live again, so by
+§6.1 it is no longer a merge source, and both halves of the lineage are
+dropped at that moment (`Tree.dissolveMergeSources`):
+
+- `mergedInto` on the revived element, and
+- `MergedFrom`/`MergedAt` on every child the merge had moved out of it.
+
+The second half is swept by one whole-tree traversal per `Restore` call,
+keyed on the revived elements' own IDs rather than on the children of the
+target `mergedInto` names. Two kinds of lineage sit outside that target:
+§7.1's `SplitElement` carries merge-stamped children into the other half of
+a split pair, and a **recreated** element — one the restore rebuilds because
+GC had purged it — comes back live under its original ID with no pointer at
+all, while stamps elsewhere may still name it. Keying on the source ID also
+means only lineage naming the revived element is touched, with no dependence
+on a pointer that may be a client's (see `findMergeNode`).
+
+Left undissolved, a later delete of the revived — and by then usually empty
+— element follows the stale pointer and §6.2 tombstones content that delete
+never covered: `<r><p>ab</p></r>` where every other replica holds
+`<r><p>abcd</p></r>` (#2189, the JS half is yorkie-js-sdk#1406).
+
+**Both halves, not just the pointer.** `mergedInto` is a runtime cache that
+`rebuildMergeState` re-derives from the stamps, so dropping only the pointer
+would leave the lineage re-derivable: the source is live at the revive, so
+no pointer comes back on the next load, but the moment a later edit
+tombstones that element the *same* surviving stamps name a removed source
+and the load rebuilds the pointer. One replica (in memory, pointer dropped
+at the revive) would keep the text while another (loaded from a snapshot
+written after it) cascades §6.2 over it. Liveness is a property of the
+moment, so it cannot by itself record that an element stopped being a
+source; clearing the stamps records it durably, and makes the load
+idempotent.
+
+`rebuildMergeState` declines to derive a pointer from a live source but
+leaves the stamps as they are: it also runs on element payloads and on
+`DeepCopy`, so rewriting what it reads would let a decoded payload or a
+clone hold different lineage from its origin. This matches the JS
+`rebuildMergeState`. `mergeNodes` applies the removed-source rule when an
+ordinary merge moves a stamped child again, so neither derivation path can
+plant a pointer on a live element.
+
+**The stamps follow liveness.** A restore concurrent with a merge of the
+same element lands in either order, and the dissolution runs only in the
+branch that finds the element removed — but so does the revive itself
+(`unremove` clears any `removedAt`, including a concurrent remove's, and
+`remove` is last-writer-wins). Whenever two replicas agree on whether the
+element ends up live, they agree on the stamps: restore last leaves it live
+with the lineage dissolved on both, merge last leaves it tombstoned and
+re-stamped by Phase 6 on both. The stamps are a function of the element's
+liveness, so they add no divergence beyond whatever restore-versus-concurrent-
+remove already resolves.
+
+A snapshot written before this fix can still carry undissolved stamps that
+name a revived, live source. They stay inert while it is live; if a later
+edit tombstones it, the next load re-derives the pointer. Both SDKs share
+this window, and closing it needs the durable marker below.
+
+**Known limitation.** §7.1's split partitioning reads `MergedFrom`/
+`MergedAt` without going through `mergedInto`, and §9.4's per-node filter
+fails open on any node carrying a stamp. A split or style that never saw the
+merge and is therefore concurrent with the revive can read those stamps
+before or after the revive clears them, and resolve differently on each
+replica. The window needs an unseen-merge split concurrent with the undo;
+the undissolved pointer above needs only an ordinary reload, which is why
+the lineage is cleared rather than kept. Narrowing this further needs a
+durable "no longer a source" marker on the source itself — a proto change,
+tracked in #2233.
 
 ## Phase 7: Split
 
@@ -1310,3 +1390,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
 | Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
 | Fix 28 | §4.1 | Stop the split-sibling cascade at a known sibling seen alive |
+| Fix 29 | §6.4 | Dissolve the merge lineage when a restore revives the source |
