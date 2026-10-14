@@ -76,3 +76,26 @@ the whole tree once per `Restore` call instead. The lesson is that
 `mergedInto` is a cache of where the lineage *was*, so it is the wrong index
 for finding the lineage; the source ID is the stable key, and keying on it
 also drops the dependence on a pointer that may be a client's.
+
+## The one red CI lane is not this branch's
+
+The integration lane failed on
+`TestAuthWebhookPresenceOnly/a_reader_attaching_alone_keeps_the_bound_schema`
+while the other eight lanes passed. That subtest raises the project's
+`MaxAttachmentsPerDocument`, creates a schema, and checks what an attach
+naming the bound schema, no schema, or another schema does to the binding;
+its only document mutation is `SetInteger`. No part of it builds a tree, so
+nothing in it reaches `Tree.Restore`, `dissolveMergeSources`,
+`rebuildMergeState`, `TreeNode.unremove` or `mergeNodes` — the whole of what
+this branch changed. The branch's own diff outside `pkg/document` is docs.
+
+Whatever the cause is, it lives in `test/integration/auth_webhook_test.go`
+or in the server's schema-binding and project-cache paths, all outside the
+files this task may touch. Two candidates worth a look by whoever picks it
+up: the project metadata cache has a 5s TTL under
+`helper.MongoProjectCacheTTL`, so an `UpdateProject` followed immediately by
+an attach can be served the pre-update limit on the by-API-key entry; and
+housekeeping runs every 500ms with `CompactionMinChanges = 5`, so
+an unattached document in this subtest is a live compaction candidate
+between its detach and the next attach — `packs.Compact` leaves
+`docInfo.Schema` alone, so that one wants ruling out rather than assuming.
