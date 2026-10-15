@@ -4,7 +4,7 @@
   "steps": 24,
   "seed0": 1,
   "runs": 200,
-  "diverged": 39,
+  "diverged": 37,
   "rows": [
     {
       "seed": 1,
@@ -225,10 +225,10 @@
     },
     {
       "seed": 32,
-      "result": "diverged",
-      "checks": "01101",
-      "digest": "5f42fbff016dd8a8",
-      "xmlDigest": "ce19eeeb6f5e4904"
+      "result": "pass",
+      "checks": "11111",
+      "digest": "ace0eece049b0113",
+      "xmlDigest": "81f91e20b753e26e"
     },
     {
       "seed": 33,
@@ -1002,10 +1002,10 @@
     },
     {
       "seed": 143,
-      "result": "diverged",
-      "checks": "01101",
-      "digest": "7bfe5a920e68c08a",
-      "xmlDigest": "8db0984ef7224f04"
+      "result": "pass",
+      "checks": "11111",
+      "digest": "f670633aaecf5b3e",
+      "xmlDigest": "546c4bf9f4e04505"
     },
     {
       "seed": 144,

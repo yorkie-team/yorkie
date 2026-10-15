@@ -6,8 +6,8 @@
     "xmlDigest": "ad11c9322a618e86"
   },
   "gen-all-193-min.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "016fb7f6bc1fc48c",
     "xmlDigest": "c81262dfe1b6245d"
   },
@@ -71,11 +71,17 @@
     "digest": "dbaaac1ea7da1d59",
     "xmlDigest": "0255001f8de8fee1"
   },
+  "i2169-redo-after-peer-insert-gc.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "28e2f59f05701b1b",
+    "xmlDigest": "f49a9321f5e8b0a9"
+  },
   "i2189-delete-empty-p-after-undo.json": {
     "result": "fail",
     "checks": "11101",
-    "digest": "2f80ef7574bf4c05",
-    "xmlDigest": "d5df3a6b72396302"
+    "digest": "cbca304db5f53002",
+    "xmlDigest": "5701978835d219a3"
   },
   "i2190-concurrent-multilevel-deletes.json": {
     "result": "diverged",

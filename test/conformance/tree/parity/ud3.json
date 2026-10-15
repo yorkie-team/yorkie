@@ -456,10 +456,10 @@
     },
     {
       "seed": 65,
-      "result": "error",
-      "checks": "10101",
-      "digest": "498ee42b3c0b146b",
-      "xmlDigest": "498ee42b3c0b146b"
+      "result": "pass",
+      "checks": "11111",
+      "digest": "e4f8da4ca9292083",
+      "xmlDigest": "0c3d1962c6cd45d1"
     },
     {
       "seed": 66,
@@ -547,8 +547,8 @@
     },
     {
       "seed": 78,
-      "result": "fail",
-      "checks": "11101",
+      "result": "pass",
+      "checks": "11111",
       "digest": "cb084dc8a7c4bf72",
       "xmlDigest": "e7fedbffce3dd85c"
     },
