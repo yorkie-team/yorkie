@@ -1,0 +1,54 @@
+{
+  "v": 2,
+  "id": "ri-peer-undoes-cross-element-merge-left-of-enter",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/peer undoes a cross-element merge left of pending enter (tree_undo_remote_identity_reconcile_test.go).",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "ab" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "cd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "ef" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "update", "ops": [{ "op": "edit", "from": 2, "to": 6 }] },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 6, "to": 6, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>a</p><p>d</p><p>e</p><p>f</p></doc>",
+        "<doc><p>a</p><p>d</p><p>e</p><p>f</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>a</p><p>d</p><p>e</p><p>f</p></doc>",
+        "<doc><p>a</p><p>d</p><p>ef</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>a</p><p>d</p><p>ef</p></doc>",
+        "<doc><p>a</p><p>d</p><p>ef</p></doc>"
+      ]
+    }
+  ]
+}

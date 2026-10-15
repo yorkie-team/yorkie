@@ -1,0 +1,53 @@
+{
+  "v": 2,
+  "id": "ri-restore-element-right-of-enter",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/restore element right of pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run ends elsewhere (I4).",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "update", "ops": [{ "op": "edit", "from": 6, "to": 12 }] },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 3, "to": 3, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
+        "<doc><p>ab</p><p>cd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>abcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    }
+  ]
+}

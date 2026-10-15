@@ -1,0 +1,31 @@
+{
+  "v": 2,
+  "id": "ri-restore-under-concurrently-removed-ancestor",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/restore under a concurrently removed ancestor (tree_undo_remote_identity_reconcile_test.go). The original marks it jsDiverges and only logs the final state: B's undo of its paragraph delete revives only the nodes B removed, so the replicas end at <doc><p>ad</p><p>efgh</p></doc> and <doc><p>abcd</p><p>efgh</p></doc> on both SDKs. Its intermediate XML is JS's output and a fix may change it, so no expect.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "update", "ops": [{ "op": "edit", "from": 2, "to": 4 }] },
+    { "op": "exchange" },
+    { "r": 1, "op": "update", "ops": [{ "op": "edit", "from": 0, "to": 4 }] },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 2, "to": 2, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    { "r": 1, "op": "undo" },
+    { "r": 1, "op": "undo" },
+    { "op": "exchange" }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "v": 2,
+  "id": "ri-restore-text-at-enter",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "known-error", "js": "known-error" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/restore text at pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run throws (Go panics with \"split 1:3:AAAAAAAAAAAAAAAB:0 at 3 of 1: split offset out of range\"; JS: \"split at 3 of 1: offset out of range\").",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "update", "ops": [{ "op": "edit", "from": 2, "to": 4 }] },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 2, "to": 2, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>a</p><p>bcd</p><p>efgh</p></doc>",
+        "<doc><p>a</p><p>bcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>a</p><p>bcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>abcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    }
+  ]
+}

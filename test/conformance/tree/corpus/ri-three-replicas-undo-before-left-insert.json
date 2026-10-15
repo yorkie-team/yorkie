@@ -1,9 +1,9 @@
 {
   "v": 2,
-  "id": "v2-exchange-ri-three-replicas",
+  "id": "ri-three-replicas-undo-before-left-insert",
   "issues": ["yorkie#2222"],
   "status": { "go": "pass", "js": "pass" },
-  "note": "TestTreeUndoRemoteIdentityReconcile (tree_undo_remote_identity_reconcile_test.go), three replicas, identity undo after a left insert: d1's undo retombstones XY by identity while d3 inserts Q left of it, and d2's stacked undo of its Enter has to follow both.",
+  "note": "TestTreeUndoRemoteIdentityReconcile/three replicas, identity undo before a left insert (tree_undo_remote_identity_reconcile_test.go).",
   "replicas": 3,
   "delivery": "exchange",
   "init": {
@@ -34,9 +34,9 @@
     {
       "op": "exchange",
       "orders": [
-        [2, 1],
-        [2, 0],
-        [1, 0]
+        [1, 2],
+        [0, 2],
+        [0, 1]
       ]
     },
     {

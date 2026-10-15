@@ -34,7 +34,7 @@ import (
 // remote; replica 1 holds the stacked undo/redo entry that has to be moved
 // by it.
 type riStep struct {
-	kind    string // update, undo, redo, sync, check
+	kind    string // update, undo, sync, check
 	replica int
 	edits   []riOp
 	orders  [][]int
@@ -47,7 +47,6 @@ type riOp struct {
 	from, to   int
 	content    *json.TreeNode
 	splitLevel int
-	style      map[string]string
 }
 
 func riText(value string) json.TreeNode {
@@ -66,18 +65,12 @@ func riDelete(from, to int) riOp { return riOp{from: from, to: to} }
 
 func riSplit(at, level int) riOp { return riOp{from: at, to: at, splitLevel: level} }
 
-func riStyle(from, to int, attrs map[string]string) riOp {
-	return riOp{from: from, to: to, style: attrs}
-}
-
 // riUpdate runs the given operations on one replica as a single change.
 func riUpdate(replica int, ops ...riOp) riStep {
 	return riStep{kind: "update", replica: replica, edits: ops}
 }
 
 func riUndo(replica int) riStep { return riStep{kind: "undo", replica: replica} }
-
-func riRedo(replica int) riStep { return riStep{kind: "redo", replica: replica} }
 
 // riSync exchanges pending changes; with no orders every replica receives
 // every other replica's changes in index order.
@@ -93,18 +86,18 @@ var seedTwoParagraphs = riElem("doc",
 	riElem("p", riText("efgh")),
 )
 
-var seedThreeParagraphs = riElem("doc",
-	riElem("p", riText("ab")),
-	riElem("p", riText("cd")),
-	riElem("p", riText("ef")),
-)
-
 // TestTreeUndoRemoteIdentityReconcile checks that a peer's identity-preserving
 // Tree undo/redo (restore or retombstone by node identity) moves the stacked,
 // index-addressed undo/redo entries of the replica that receives it, the way a
 // plain remote edit does (yorkie#2222). Every expected string was produced by
 // running the same scenario on the JS SDK (790422ce, #1421 reports the ranges
 // such an op executed), so a failure here is a cross-SDK divergence.
+//
+// The scenarios the conformance corpus holds to every assertion moved there
+// (test/conformance/tree/corpus/ri-*.json). These stay because their corpus
+// scripts do not pass in Go: five fail only in the corpus's minvv GC mode
+// (known-error, known-fail), which hides their off-mode checks, and the
+// jsDiverges one diverges.
 func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -118,182 +111,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 		// rather than asserted.
 		jsDiverges bool
 	}{
-		{
-			name: "retombstone text left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riSplit(10, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone text right of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(9, 9, riText("XY"))),
-				riSync(),
-				riUpdate(1, riSplit(2, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>a</p><p>bcd</p><p>efgh</p></doc>",
-					"<doc><p>a</p><p>bcd</p><p>efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>a</p><p>bcd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone text straddling pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(3, 3, riText("XY"))),
-				riSync(),
-				riUpdate(1, riSplit(4, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone text ending at pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(3, 3, riText("X"))),
-				riSync(),
-				riUpdate(1, riSplit(4, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone text starting at pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(3, 3, riText("X"))),
-				riSync(),
-				riUpdate(1, riSplit(3, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone element left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(0, 0, riElem("p", riText("XY")))),
-				riSync(),
-				riUpdate(1, riSplit(12, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone element right of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(12, 12, riElem("p", riText("XY")))),
-				riSync(),
-				riUpdate(1, riSplit(3, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "retombstone element between paragraphs left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(6, 6, riElem("p", riText("XY")))),
-				riSync(),
-				riUpdate(1, riSplit(12, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
 		{
 			// On both SDKs the retombstone misses the half the concurrent
 			// Enter split off, so the replicas differ at "synced" until B's
@@ -312,50 +129,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 				riUndo(1),
 				riCheck("after undo",
 					"<doc><p>abcd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "restore text left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(2, 4)),
-				riSync(),
-				riUpdate(1, riSplit(6, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "restore text right of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(8, 10)),
-				riSync(),
-				riUpdate(1, riSplit(3, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ab</p><p>cd</p><p>efgh</p></doc>",
 					"<doc><p>abcd</p><p>efgh</p></doc>"),
 			},
 			wantFinal: []string{
@@ -386,28 +159,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "restore element left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(0, 6)),
-				riSync(),
-				riUpdate(1, riSplit(2, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
 			name: "restore element right of pending enter",
 			seed: seedTwoParagraphs,
 			steps: []riStep{
@@ -430,98 +181,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "redo retombstones text left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(2, 4)),
-				riUndo(0),
-				riSync(),
-				riUpdate(1, riSplit(8, 1)),
-				riRedo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ad</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>ad</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ad</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>ad</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>ad</p><p>efgh</p></doc>",
-				"<doc><p>ad</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "redo restores text left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riUndo(0),
-				riSync(),
-				riUpdate(1, riSplit(8, 1)),
-				riRedo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>aXYbcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>aXYbcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>aXYbcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>aXYbcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>aXYbcd</p><p>efgh</p></doc>",
-				"<doc><p>aXYbcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "redo restores element left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(0, 0, riElem("p", riText("XY")))),
-				riUndo(0),
-				riSync(),
-				riUpdate(1, riSplit(8, 1)),
-				riRedo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>XY</p><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>XY</p><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>XY</p><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>XY</p><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>XY</p><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>XY</p><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "redo retombstones element left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(0, 6)),
-				riUndo(0),
-				riSync(),
-				riUpdate(1, riSplit(8, 1)),
-				riRedo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>e</p><p>fgh</p></doc>",
-					"<doc><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>e</p><p>fgh</p></doc>",
-					"<doc><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>efgh</p></doc>",
-				"<doc><p>efgh</p></doc>",
-			},
-		},
-		{
 			name: "restore two separate text ranges around pending enter",
 			seed: seedTwoParagraphs,
 			steps: []riStep{
@@ -536,28 +195,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 				riUndo(1),
 				riCheck("after undo",
 					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "restore two separate text ranges left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(8, 9), riDelete(2, 3)),
-				riSync(),
-				riUpdate(1, riSplit(8, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>efg</p><p>h</p></doc>",
-					"<doc><p>abcd</p><p>efg</p><p>h</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>efg</p><p>h</p></doc>",
 					"<doc><p>abcd</p><p>efgh</p></doc>"),
 			},
 			wantFinal: []string{
@@ -585,72 +222,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 			wantFinal: []string{
 				"<doc><p>abcd</p><p>efgh</p></doc>",
 				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "restore two whole paragraphs left of pending enter",
-			seed: seedThreeParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(0, 8)),
-				riSync(),
-				riUpdate(1, riSplit(2, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>ab</p><p>cd</p><p>e</p><p>f</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>e</p><p>f</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>ab</p><p>cd</p><p>e</p><p>f</p></doc>",
-					"<doc><p>ab</p><p>cd</p><p>ef</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>ab</p><p>cd</p><p>ef</p></doc>",
-				"<doc><p>ab</p><p>cd</p><p>ef</p></doc>",
-			},
-		},
-		{
-			name: "retombstone two separate inserts left of pending enter",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(1, 1, riText("X")), riInsert(4, 4, riText("Y"))),
-				riSync(),
-				riUpdate(1, riSplit(11, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>ef</p><p>gh</p></doc>",
-					"<doc><p>abcd</p><p>ef</p><p>gh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>ef</p><p>gh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "peer undoes a cross-element merge left of pending enter",
-			seed: seedThreeParagraphs,
-			steps: []riStep{
-				riUpdate(0, riDelete(2, 6)),
-				riSync(),
-				riUpdate(1, riSplit(6, 1)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>a</p><p>d</p><p>e</p><p>f</p></doc>",
-					"<doc><p>a</p><p>d</p><p>e</p><p>f</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>a</p><p>d</p><p>e</p><p>f</p></doc>",
-					"<doc><p>a</p><p>d</p><p>ef</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>a</p><p>d</p><p>ef</p></doc>",
-				"<doc><p>a</p><p>d</p><p>ef</p></doc>",
 			},
 		},
 		{
@@ -685,194 +256,6 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 				"<doc><p>abcd</p><p>efgh</p></doc>",
 			},
 			jsDiverges: true,
-		},
-		{
-			name: "pending enter redo",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riSplit(10, 1)),
-				riUndo(1),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-				riRedo(1),
-				riCheck("after redo",
-					"<doc><p>abcd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-				"<doc><p>abcd</p><p>e</p><p>fgh</p></doc>",
-			},
-		},
-		{
-			name: "pending merge undo",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riDelete(7, 9)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcdefgh</p></doc>",
-					"<doc><p>abcdefgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcdefgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "pending merge redo",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riDelete(7, 9)),
-				riUndo(1),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-				riRedo(1),
-				riCheck("after redo",
-					"<doc><p>abcd</p><p>efgh</p></doc>",
-					"<doc><p>abcdefgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcdefgh</p></doc>",
-				"<doc><p>abcdefgh</p></doc>",
-			},
-		},
-		{
-			name: "pending insert undo",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riInsert(10, 10, riText("Z"))),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>eZfgh</p></doc>",
-					"<doc><p>abcd</p><p>eZfgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>eZfgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "pending delete undo",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riDelete(10, 12)),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p>eh</p></doc>",
-					"<doc><p>abcd</p><p>eh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p>eh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name: "pending style undo",
-			seed: seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riStyle(8, 14, map[string]string{"bold": "true"})),
-				riUndo(0),
-				riSync(),
-				riCheck("synced",
-					"<doc><p>abcd</p><p bold=\"true\">efgh</p></doc>",
-					"<doc><p>abcd</p><p bold=\"true\">efgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>abcd</p><p bold=\"true\">efgh</p></doc>",
-					"<doc><p>abcd</p><p>efgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-				"<doc><p>abcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name:     "three replicas, identity undo before a left insert",
-			replicas: 3,
-			seed:     seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riSplit(10, 1)),
-				riUndo(0),
-				riUpdate(2, riInsert(1, 1, riText("Q"))),
-				riSync([]int{1, 2}, []int{0, 2}, []int{0, 1}),
-				riCheck("synced",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>Qabcd</p><p>efgh</p></doc>",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>Qabcd</p><p>efgh</p></doc>",
-				"<doc><p>Qabcd</p><p>efgh</p></doc>",
-				"<doc><p>Qabcd</p><p>efgh</p></doc>",
-			},
-		},
-		{
-			name:     "three replicas, identity undo after a left insert",
-			replicas: 3,
-			seed:     seedTwoParagraphs,
-			steps: []riStep{
-				riUpdate(0, riInsert(2, 2, riText("XY"))),
-				riSync(),
-				riUpdate(1, riSplit(10, 1)),
-				riUndo(0),
-				riUpdate(2, riInsert(1, 1, riText("Q"))),
-				riSync([]int{2, 1}, []int{2, 0}, []int{1, 0}),
-				riCheck("synced",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>"),
-				riUndo(1),
-				riCheck("after undo",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
-					"<doc><p>Qabcd</p><p>efgh</p></doc>",
-					"<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>"),
-			},
-			wantFinal: []string{
-				"<doc><p>Qabcd</p><p>efgh</p></doc>",
-				"<doc><p>Qabcd</p><p>efgh</p></doc>",
-				"<doc><p>Qabcd</p><p>efgh</p></doc>",
-			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -925,18 +308,12 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 					require.NoError(t, docs[step.replica].Update(func(root *json.Object, p *presence.Presence) error {
 						tree := root.GetTree("t")
 						for _, op := range step.edits {
-							if op.style != nil {
-								tree.Style(op.from, op.to, op.style)
-							} else {
-								tree.Edit(op.from, op.to, op.content, op.splitLevel)
-							}
+							tree.Edit(op.from, op.to, op.content, op.splitLevel)
 						}
 						return nil
 					}), "step %d", i)
 				case "undo":
 					require.NoError(t, docs[step.replica].Undo(), "step %d", i)
-				case "redo":
-					require.NoError(t, docs[step.replica].Redo(), "step %d", i)
 				case "sync":
 					orders := step.orders
 					if len(orders) == 0 {
