@@ -42,6 +42,7 @@ const (
 type Row struct {
 	Seed      int    `json:"seed"`
 	Result    string `json:"result"`
+	Checks    string `json:"checks"`
 	Digest    string `json:"digest"`
 	XMLDigest string `json:"xmlDigest"`
 }
@@ -67,7 +68,13 @@ func runFamily(f Family, seed0, runs int) Fixture {
 			for k := range jobs {
 				seed := seed0 + k
 				rec := Run(Gen(uint32(seed), f.Fam, f.N, f.Steps))
-				rows[k] = Row{Seed: seed, Result: rec.Result, Digest: rec.Digest, XMLDigest: rec.XMLDigest}
+				rows[k] = Row{
+					Seed:      seed,
+					Result:    rec.Result,
+					Checks:    rec.Checks.String(),
+					Digest:    rec.Digest,
+					XMLDigest: rec.XMLDigest,
+				}
 			}
 		})
 	}
@@ -109,7 +116,7 @@ func TestCorpus(t *testing.T) {
 			want := statuses[status]
 			rec := Run(s)
 			assert.Equal(t, want, rec.Result,
-				"%s: status.%s is %q but the result is %q (checks %+v, xml %q, err %q): "+
+				"%s: status.%s is %q but the result is %q (checks %s, xml %q, err %q): "+
 					"update status.%s in the ledger if the change is intended\n%s",
 				path, sdk, status, rec.Result, rec.Checks, rec.XML, rec.Err, sdk,
 				strings.Join(rec.Steps, "\n"))

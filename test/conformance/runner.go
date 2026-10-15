@@ -49,6 +49,19 @@ type Checks struct {
 	I1, I2, I3, I4 bool
 }
 
+// String is the checks as four `1`/`0` characters for I1..I4, e.g. "0110".
+func (c Checks) String() string {
+	var sb strings.Builder
+	for _, ok := range []bool{c.I1, c.I2, c.I3, c.I4} {
+		if ok {
+			sb.WriteByte('1')
+		} else {
+			sb.WriteByte('0')
+		}
+	}
+	return sb.String()
+}
+
 // Record is what one run of a script yields. Two runners agree on a script
 // when their records have the same Steps, XML and digests.
 type Record struct {
