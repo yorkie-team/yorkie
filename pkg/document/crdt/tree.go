@@ -1122,12 +1122,35 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // where position resolution walks off the top of the detached subtree. Its
 // removed children are on the worklist themselves, so the element follows
 // them within the same collection.
-func (t *Tree) HoldsTombstone(child GCChild, _ time.VersionVector) bool {
+//
+// A removed node a merge moved is held while its merge source is still
+// linked and the source's own removal is not covered (or it is live again). §1.1 resolves a
+// left-most position inside the merge source to the first child in the
+// target whose MergedFrom names the source; purging that child first sends
+// the position to the fallback slot on one replica while another, which has
+// not collected, still finds it (#2099).
+func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil {
 		return false
 	}
-	return !node.IsText() && len(node.Index.Children(true)) > 0
+	if !node.IsText() && len(node.Index.Children(true)) > 0 {
+		return true
+	}
+	return t.holdsForMergeSource(node, vector)
+}
+
+// holdsForMergeSource reports whether node, a child a merge moved, is still
+// the §1.1 boundary for positions inside its merge source.
+func (t *Tree) holdsForMergeSource(node *TreeNode, vector time.VersionVector) bool {
+	if node.MergedFrom == nil {
+		return false
+	}
+	source := t.findMergeNode(node.MergedFrom)
+	if source == nil || source.Index == nil || source.Index.Parent == nil {
+		return false
+	}
+	return source.removedAt == nil || !vector.EqualToOrAfter(source.removedAt)
 }
 
 func (t *Tree) Purge(child GCChild) error {
