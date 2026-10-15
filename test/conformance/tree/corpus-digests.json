@@ -210,10 +210,10 @@
     "xmlDigest": "db41bf8a0a546ab6"
   },
   "ri-restore-element-and-text-in-one-change-around-enter.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "d151092ccf9f9ed8",
-    "xmlDigest": "d151092ccf9f9ed8"
+    "result": "fail",
+    "checks": "11101",
+    "digest": "77582d75c090dca5",
+    "xmlDigest": "6e31b3d8840af0bb"
   },
   "ri-restore-element-left-of-enter.json": {
     "result": "pass",
@@ -228,10 +228,10 @@
     "xmlDigest": "5ac19d8ea0efe58d"
   },
   "ri-restore-text-at-enter.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "4a182a0b1486b5a3",
-    "xmlDigest": "4a182a0b1486b5a3"
+    "result": "fail",
+    "checks": "11101",
+    "digest": "28dc9ee6a053b748",
+    "xmlDigest": "9b500465a5f6d46e"
   },
   "ri-restore-text-left-of-enter.json": {
     "result": "pass",

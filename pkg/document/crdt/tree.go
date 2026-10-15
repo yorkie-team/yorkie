@@ -1470,6 +1470,31 @@ func (t *Tree) recreateParent(span *TreeRestoreSpan, id *TreeNodeID) *TreeNode {
 	return parent
 }
 
+// relinkRecreatedText splices a recreated text piece back into the
+// InsPrevID/InsNextID chain of its insertion. Purge unlinked the piece and
+// joined its neighbours to each other; a recreated piece that stays out of
+// the chain is invisible to the walks that follow it, and the next split of
+// a neighbour hands the right half an InsNextID that skips it. Only the
+// pieces of the same insertion that end exactly where it starts, or start
+// exactly where it ends, are its neighbours.
+func (t *Tree) relinkRecreatedText(node *TreeNode) {
+	start := node.id.Offset
+	if start > 0 {
+		pred := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: start - 1})
+		if pred != nil && pred != node && pred.IsText() && pred.id.Offset+pred.Len() == start {
+			node.InsPrevID = pred.id
+			pred.InsNextID = node.id
+		}
+	}
+
+	end := start + node.Len()
+	succ := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: end})
+	if succ != nil && succ != node && succ.IsText() && succ.id.Offset == end {
+		node.InsNextID = succ.id
+		succ.InsPrevID = node.id
+	}
+}
+
 // recreateFromSpan rebuilds a purged node (or purged text sub-range) under its
 // original identity and attaches it via the anchor ladder (floor-lookup +
 // parent-identity check at each rung): (a) same-insertion successor/
@@ -1537,6 +1562,9 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			return nil, err
 		}
 		t.putNode(node)
+		if span.IsText {
+			t.relinkRecreatedText(node)
+		}
 		t.pendingGCPairs = append(t.pendingGCPairs, recreatedAttrPairs...)
 		// The parent has been tombstoned since this node was purged, so the
 		// node is born tombstoned rather than live. This mirrors the

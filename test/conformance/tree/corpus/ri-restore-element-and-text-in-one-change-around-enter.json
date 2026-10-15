@@ -2,8 +2,8 @@
   "v": 2,
   "id": "ri-restore-element-and-text-in-one-change-around-enter",
   "issues": ["yorkie#2222"],
-  "status": { "go": "known-error", "js": "known-error" },
-  "note": "TestTreeUndoRemoteIdentityReconcile/restore element and text in one change around pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run throws (Go panics with \"split 1:5:AAAAAAAAAAAAAAAB:0 at 3 of 1: split offset out of range\"; JS: \"split at 3 of 1: offset out of range\").",
+  "status": { "go": "known-fail", "js": "known-error" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/restore element and text in one change around pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run throws in JS (\"split at 3 of 1: offset out of range\"). Go threw the same (\"split 1:5:AAAAAAAAAAAAAAAB:0 at 3 of 1: split offset out of range\") until recreateFromSpan relinked a recreated text piece into its insertion chain; now its minvv run completes but ends apart from the off run (I4).",
   "replicas": 2,
   "delivery": "exchange",
   "init": {
