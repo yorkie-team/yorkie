@@ -43,24 +43,31 @@ CONFORMANCE_FAM=all CONFORMANCE_RUNS=5000 CONFORMANCE_OUT=/tmp/all.json \
 - `status` per SDK, the ledger: `pass`, `known-diverge`, `known-error` or
   `known-fail`, expecting the result `pass`, `diverged`, `error` or `fail`
   respectively. Only corpus scripts carry it.
-- Loading is strict: an unknown field (top level or in a step), an unknown
-  `op`, an unknown `k` in a `gen` step, a `v` other than 1, an unknown
-  `status` value or an out-of-range `r` fails the script, naming its file.
+- Loading is strict and fails the script, naming its file, on: input other
+  than whitespace after the script; an unknown field (top level or in a
+  step); a `v` other than 1; a `replicas` that is not a positive integer; a
+  `status` key other than `go` and `js` or an unknown `status` value; a
+  step without `r` or `op`, or with an `r` that is not an integer in
+  `0..replicas-1`; an unknown `op`; a step missing a field its op requires,
+  or carrying a field its op does not take (even one valid for another
+  op); a `null` field; or a field of the wrong type (see Steps).
 
 ## Steps
 
-Each step has `r` (replica index) and `op`.
+Each step has `r` (replica index, an integer) and `op`, and exactly the
+fields of its op below: required unless marked optional, none other.
+`from`, `to` and `split` are integers.
 
 | op | fields | effect |
 |---|---|---|
 | `edit` | `from`, `to`, optional `text` (string), optional `split` (int) | `t.edit(from, to, text ? {type:'text', value:text} : undefined, split ?? 0)` |
-| `style` | `from`, `to`, `attrs` (object of string→string) | `t.style(from, to, attrs)` |
-| `removeStyle` | `from`, `to`, `keys` (array) | `t.removeStyle(from, to, keys)` |
+| `style` | `from`, `to`, `attrs` (non-empty object of string→string) | `t.style(from, to, attrs)` |
+| `removeStyle` | `from`, `to`, `keys` (non-empty array of strings) | `t.removeStyle(from, to, keys)` |
 | `undo` / `redo` | – | `doc.history.undo()` / `redo()`; when the stack is empty it is a noop |
 | `pull` | – | deliver the next server-log entry this replica has not seen (see Delivery). Noop if none |
 | `sync` | – | `pull` until none is left |
 | `snapshot` | – | replace replica `r` by a document rebuilt from its own snapshot bytes (see Snapshot) |
-| `gen` | `k`, `f`, `g`, `h`, `v` | abstract generator event, resolved on replica `r` exactly as fuzz2 resolves `ins`, `split`, `del`, `merge`, `style` |
+| `gen` | `k` (`ins`, `split`, `del`, `merge` or `style`), `f`, `g`, `h` (numbers in [0, 1)), `v` (string) | abstract generator event, resolved on replica `r` exactly as fuzz2 resolves `ins`, `split`, `del`, `merge`, `style` |
 
 An empty `text` counts as absent.
 

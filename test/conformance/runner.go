@@ -337,7 +337,7 @@ func (rn *run) local(st Step) string {
 	case "edit":
 		rn.edit(st.R, st.From, st.To, st.Text, st.Split)
 		return describeEdit(st.From, st.To, st.Text, st.Split)
-	case "style":
+	case opStyle:
 		rn.update(st.R, func(t *json.Tree) { t.Style(st.From, st.To, st.Attrs) })
 		return describeStyle(st.From, st.To, st.Attrs)
 	case "removeStyle":

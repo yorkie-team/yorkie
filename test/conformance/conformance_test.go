@@ -118,18 +118,46 @@ func TestCorpus(t *testing.T) {
 }
 
 // TestLoadScriptRejects checks that a malformed script fails to load and
-// names its file.
+// names its file. The JS runner's loader test holds the same cases.
 func TestLoadScriptRejects(t *testing.T) {
 	head := `"v":1,"id":"x","replicas":1,"init":"ab"`
+	step := func(st string) string { return `{` + head + `,"steps":[` + st + `]}` }
 	for name, body := range map[string]string{
-		"version":      `{"v":2,"id":"x","replicas":1,"init":"ab","steps":[]}`,
-		"field":        `{` + head + `,"steps":[],"extra":1}`,
-		"step field":   `{` + head + `,"steps":[{"r":0,"op":"pull","form":1}]}`,
-		"op":           `{` + head + `,"steps":[{"r":0,"op":"insert"}]}`,
-		"gen kind":     `{` + head + `,"steps":[{"r":0,"op":"gen","k":"move"}]}`,
-		"status":       `{` + head + `,"status":{"go":"diverged"},"steps":[]}`,
-		"replica":      `{` + head + `,"steps":[{"r":1,"op":"pull"}]}`,
-		"trailing doc": `{` + head + `,"steps":[]} {}`,
+		"version":         `{"v":2,"id":"x","replicas":1,"init":"ab","steps":[]}`,
+		"field":           `{` + head + `,"steps":[],"extra":1}`,
+		"step field":      step(`{"r":0,"op":"pull","form":1}`),
+		"op":              step(`{"r":0,"op":"insert"}`),
+		"gen kind":        step(`{"r":0,"op":"gen","k":"move","f":0,"g":0,"h":0,"v":"c"}`),
+		"status":          `{` + head + `,"status":{"go":"diverged"},"steps":[]}`,
+		"status sdk":      `{` + head + `,"status":{"goo":"pass"},"steps":[]}`,
+		"replica":         step(`{"r":1,"op":"pull"}`),
+		"fractional r":    step(`{"r":0.5,"op":"pull"}`),
+		"missing r":       step(`{"op":"pull"}`),
+		"null r":          step(`{"r":null,"op":"pull"}`),
+		"null step":       step(`null`),
+		"replicas":        `{"v":1,"id":"x","replicas":0,"init":"ab","steps":[]}`,
+		"fractional reps": `{"v":1,"id":"x","replicas":1.5,"init":"ab","steps":[]}`,
+		"trailing doc":    `{` + head + `,"steps":[]} {}`,
+		"trailing brace":  `{` + head + `,"steps":[]} }`,
+		"edit no to":      step(`{"r":0,"op":"edit","from":1}`),
+		"edit float":      step(`{"r":0,"op":"edit","from":1.5,"to":2}`),
+		"edit null text":  step(`{"r":0,"op":"edit","from":1,"to":1,"text":null}`),
+		"edit int text":   step(`{"r":0,"op":"edit","from":1,"to":1,"text":1}`),
+		"edit attrs":      step(`{"r":0,"op":"edit","from":1,"to":1,"attrs":{"b":"1"}}`),
+		"style no attrs":  step(`{"r":0,"op":"style","from":0,"to":1}`),
+		"style {} attrs":  step(`{"r":0,"op":"style","from":0,"to":1,"attrs":{}}`),
+		"style int attr":  step(`{"r":0,"op":"style","from":0,"to":1,"attrs":{"b":1}}`),
+		"style null attr": step(`{"r":0,"op":"style","from":0,"to":1,"attrs":{"b":null}}`),
+		"rs no keys":      step(`{"r":0,"op":"removeStyle","from":0,"to":1}`),
+		"rs empty keys":   step(`{"r":0,"op":"removeStyle","from":0,"to":1,"keys":[]}`),
+		"rs int key":      step(`{"r":0,"op":"removeStyle","from":0,"to":1,"keys":[1]}`),
+		"rs null key":     step(`{"r":0,"op":"removeStyle","from":0,"to":1,"keys":[null]}`),
+		"gen no v":        step(`{"r":0,"op":"gen","k":"ins","f":0,"g":0,"h":0}`),
+		"gen f of 1":      step(`{"r":0,"op":"gen","k":"ins","f":1,"g":0,"h":0,"v":"c"}`),
+		"gen negative h":  step(`{"r":0,"op":"gen","k":"ins","f":0,"g":0,"h":-0.1,"v":"c"}`),
+		"gen int v":       step(`{"r":0,"op":"gen","k":"ins","f":0,"g":0,"h":0,"v":1}`),
+		"pull attrs":      step(`{"r":0,"op":"pull","attrs":{"b":"1"}}`),
+		"undo from":       step(`{"r":0,"op":"undo","from":0}`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "bad.json")

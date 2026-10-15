@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -69,10 +70,26 @@ var statuses = map[string]string{
 	"known-fail":    ResultFail,
 }
 
-// ops are the step ops of format v1.
-var ops = map[string]bool{
-	"edit": true, "style": true, "removeStyle": true, "undo": true, "redo": true,
-	"pull": true, "sync": true, "snapshot": true, "gen": true,
+// sdks are the keys a script's status may carry.
+var sdks = map[string]bool{"go": true, "js": true}
+
+// opStyle is the op that styles a range, not to be confused with the `style`
+// generator kind.
+const opStyle = "style"
+
+// opFields lists, for each step op of format v1, the fields a step may carry
+// besides `r` and `op`, each marked true when it is required. A field valid
+// for another op is an error, so a misplaced field fails loudly too.
+var opFields = map[string]map[string]bool{
+	"edit":        {"from": true, "to": true, "text": false, "split": false},
+	opStyle:       {"from": true, "to": true, "attrs": true},
+	"removeStyle": {"from": true, "to": true, "keys": true},
+	"undo":        {},
+	"redo":        {},
+	"pull":        {},
+	"sync":        {},
+	"snapshot":    {},
+	"gen":         {"k": true, "f": true, "g": true, "h": true, "v": true},
 }
 
 // genKinds are the generator events a `gen` step may carry.
@@ -81,8 +98,9 @@ var genKinds = map[string]bool{
 }
 
 // LoadScript reads and validates a script file. Unknown fields, ops,
-// generator kinds and ledger values are errors, so a typo fails loudly
-// instead of silently replaying something else.
+// generator kinds and ledger values are errors, and so are steps missing a
+// field their op needs or carrying one it does not take, so a typo fails
+// loudly instead of silently replaying something else.
 func LoadScript(path string) (*Script, error) {
 	raw, err := os.ReadFile(path) // #nosec G304 -- test fixture path
 	if err != nil {
@@ -94,9 +112,19 @@ func LoadScript(path string) (*Script, error) {
 	if err := dec.Decode(&s); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if dec.More() {
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		return nil, fmt.Errorf("parse %s: trailing data after the script", path)
 	}
+
+	// The typed decode cannot tell a missing or null field from a zero one,
+	// so the steps are checked once more as raw fields.
+	var fields struct {
+		Steps []map[string]json.RawMessage `json:"steps"`
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+
 	if s.V != 1 {
 		return nil, fmt.Errorf("%s: unsupported version %d", path, s.V)
 	}
@@ -104,20 +132,92 @@ func LoadScript(path string) (*Script, error) {
 		return nil, fmt.Errorf("%s: replicas must be at least 1", path)
 	}
 	for sdk, status := range s.Status {
+		if !sdks[sdk] {
+			return nil, fmt.Errorf("%s: status: unknown sdk %q", path, sdk)
+		}
 		if _, ok := statuses[status]; !ok {
 			return nil, fmt.Errorf("%s: status.%s: unknown value %q", path, sdk, status)
 		}
 	}
 	for i, st := range s.Steps {
-		if st.R < 0 || st.R >= s.Replicas {
-			return nil, fmt.Errorf("%s: step %d: replica %d out of range", path, i, st.R)
-		}
-		if !ops[st.Op] {
-			return nil, fmt.Errorf("%s: step %d: unknown op %q", path, i, st.Op)
-		}
-		if st.Op == "gen" && !genKinds[st.K] {
-			return nil, fmt.Errorf("%s: step %d: unknown gen kind %q", path, i, st.K)
+		if err := checkStep(st, fields.Steps[i], s.Replicas); err != nil {
+			return nil, fmt.Errorf("%s: step %d: %w", path, i, err)
 		}
 	}
 	return &s, nil
+}
+
+// checkStep validates one step against its raw fields.
+func checkStep(st Step, raw map[string]json.RawMessage, replicas int) error {
+	for _, k := range []string{"r", "op"} {
+		if v, ok := raw[k]; !ok || isNull(v) {
+			return fmt.Errorf("missing %q", k)
+		}
+	}
+	if st.R < 0 || st.R >= replicas {
+		return fmt.Errorf("replica %d out of range", st.R)
+	}
+	allowed, ok := opFields[st.Op]
+	if !ok {
+		return fmt.Errorf("unknown op %q", st.Op)
+	}
+	for k, v := range raw {
+		if k == "r" || k == "op" {
+			continue
+		}
+		if _, ok := allowed[k]; !ok {
+			return fmt.Errorf("field %q is not valid for op %q", k, st.Op)
+		}
+		if isNull(v) {
+			return fmt.Errorf("field %q is null", k)
+		}
+	}
+	for k, required := range allowed {
+		if _, ok := raw[k]; required && !ok {
+			return fmt.Errorf("op %q needs %q", st.Op, k)
+		}
+	}
+
+	switch st.Op {
+	case opStyle:
+		var attrs map[string]*string
+		if err := json.Unmarshal(raw["attrs"], &attrs); err != nil {
+			return fmt.Errorf("attrs: %w", err)
+		}
+		if len(attrs) == 0 {
+			return fmt.Errorf("attrs is empty")
+		}
+		for k, v := range attrs {
+			if v == nil {
+				return fmt.Errorf("attrs.%s is not a string", k)
+			}
+		}
+	case "removeStyle":
+		var keys []*string
+		if err := json.Unmarshal(raw["keys"], &keys); err != nil {
+			return fmt.Errorf("keys: %w", err)
+		}
+		if len(keys) == 0 {
+			return fmt.Errorf("keys is empty")
+		}
+		for j, v := range keys {
+			if v == nil {
+				return fmt.Errorf("keys[%d] is not a string", j)
+			}
+		}
+	case "gen":
+		if !genKinds[st.K] {
+			return fmt.Errorf("unknown gen kind %q", st.K)
+		}
+		for k, v := range map[string]float64{"f": st.F, "g": st.G, "h": st.H} {
+			if v < 0 || v >= 1 {
+				return fmt.Errorf("%s %v is not in [0, 1)", k, v)
+			}
+		}
+	}
+	return nil
+}
+
+func isNull(v json.RawMessage) bool {
+	return string(bytes.TrimSpace(v)) == "null"
 }
