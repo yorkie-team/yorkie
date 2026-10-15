@@ -5,7 +5,13 @@ package) and the JS SDK (`packages/sdk/test/conformance/` in
 yorkie-js-sdk). Two runners that follow this document produce byte-identical
 records for the same script, so Go/JS parity is itself a check.
 
-This file is the normative spec of format v1 and the SSOT for both runners.
+This file is the normative spec of format v2 and the SSOT for both runners.
+Format v1 is the subset of v2 without the features marked "v2"; a v1
+script that uses a v2 feature is rejected. Moving the runners to v2 left
+every existing record unchanged except `checks`, which gained E. Two v2
+rules also apply to v1 scripts but changed none of them: the undo stacks
+are cleared after the init change, and a `split` of level 2 or more has its
+own step line.
 yorkie-js-sdk keeps a copy of `tree/` with a `SOURCE` file holding the yorkie
 commit it came from. Where this spec is silent, the behaviour of the scratch
 fuzz `tree_1436_fuzz2` (Go and TS twins) is the reference.
@@ -21,23 +27,39 @@ CONFORMANCE_FAM=all CONFORMANCE_RUNS=5000 CONFORMANCE_OUT=/tmp/all.json \
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "id": "js1436-min-a",
   "issues": ["yorkie-js-sdk#1436", "yorkie#2167"],
   "status": { "go": "known-diverge", "js": "known-diverge" },
   "note": "free text",
   "replicas": 2,
+  "delivery": "log",
   "init": "abcd",
   "steps": [ ... ]
 }
 ```
 
-- `init`: the text of the single paragraph the document starts with:
-  `<doc><p>{init}</p></doc>`. Replica 0 creates the tree with
-  `root.t = new Tree({type:'doc', children:[{type:'p', children:[{type:'text', value: init}]}]})`
-  and every other replica applies that change before step 0. The init change
-  is not in the server log. Its push ack and its delivery carry the initial
-  (empty) version vector in both GC modes.
+- `v`: `1` or `2`.
+- `init`, either form:
+  - a string, the text of the single paragraph the document starts with:
+    `<doc><p>{init}</p></doc>`, i.e. the tree
+    `{type:'doc', children:[{type:'p', children:[{type:'text', value: init}]}]}`;
+  - (v2) a tree node object, the whole tree: `{"type":"doc","children":[…]}`.
+    A node is a text node `{"type":"text","value":…}` (exactly these two
+    fields, `value` a string) or an element `{"type":…}` with a non-empty
+    string `type` other than `text`, optional `children` (an array of
+    nodes) and optional `attributes` (an object of string→string), and no
+    other field. The root must be an element.
+
+  Replica 0 creates the tree with `root.t = new Tree(node)` (Go:
+  `SetNewTree("t", node)`) and every other replica applies that change
+  before step 0. The init change is not in the server log. Its push ack and
+  its delivery carry the initial (empty) version vector in both GC modes.
+  Then every replica clears its undo and redo stacks (Go `ClearHistory()`,
+  JS `clearHistory()`): the init change is not an edit of the script, and an
+  `undo` that reached it would remove the tree.
+- `delivery` (v2, optional): `log` (the default) or `exchange`; see Delivery
+  and GC.
 - Actor of replica `i` is the 24-digit decimal `i+1` zero-padded
   (`000000000000000000000001`), as in fuzz2. Document key `conformance`.
 - `status` per SDK, the ledger: `pass`, `known-diverge`, `known-error` or
@@ -45,38 +67,65 @@ CONFORMANCE_FAM=all CONFORMANCE_RUNS=5000 CONFORMANCE_OUT=/tmp/all.json \
   respectively. Only corpus scripts carry it.
 - Loading is strict and fails the script, naming its file, on: input other
   than whitespace after the script; an unknown field (top level or in a
-  step); a `v` other than 1; a `replicas` that is not a positive integer; a
-  `status` key other than `go` and `js` or an unknown `status` value; a
-  step without `r` or `op`, or with an `r` that is not an integer in
+  step); a `v` other than 1 or 2; a `replicas` that is not a positive
+  integer; a `status` key other than `go` and `js` or an unknown `status`
+  value; a step without `r` or `op`, or with an `r` that is not an integer in
   `0..replicas-1`; an unknown `op`; a step missing a field its op requires,
   or carrying a field its op does not take (even one valid for another
   op); a `null` field; or a field of the wrong type (see Steps).
+- v2 adds these rejections: in a v1 script, a tree node `init`, a
+  `delivery` field, a `contents` field or an `update`, `exchange` or
+  `expect` step; a malformed tree node (in `init` or
+  `contents`, see above); a `delivery` other than `log` and `exchange`; an
+  `init` that is neither a string nor an object; a `gen` step when `init` is
+  a tree node; `pull` or `sync` with `exchange` delivery and `exchange` with
+  `log` delivery; an `r` on `exchange` or `expect`; and the per-op rules
+  below.
 
 ## Steps
 
 Each step has `r` (replica index, an integer) and `op`, and exactly the
 fields of its op below: required unless marked optional, none other.
-`from`, `to` and `split` are integers.
+`exchange` and `expect` take no `r`. `from`, `to` and `split` are integers.
 
 | op | fields | effect |
 |---|---|---|
-| `edit` | `from`, `to`, optional `text` (string), optional `split` (int) | `t.edit(from, to, text ? {type:'text', value:text} : undefined, split ?? 0)` |
+| `edit` | `from`, `to`, optional `text` (string), optional `contents` (v2), optional `split` (int) | `t.edit(from, to, text ? {type:'text', value:text} : undefined, split ?? 0)`; with `contents`, `t.editBulk(from, to, contents, split ?? 0)` (Go `EditBulk`) |
+| `update` (v2) | `ops` (non-empty array of nested ops) | one `doc.update` running each nested op on `t` in order: one change, one undo unit |
 | `style` | `from`, `to`, `attrs` (non-empty object of string→string) | `t.style(from, to, attrs)` |
 | `removeStyle` | `from`, `to`, `keys` (non-empty array of strings) | `t.removeStyle(from, to, keys)` |
 | `undo` / `redo` | – | `doc.history.undo()` / `redo()`; when the stack is empty it is a noop |
-| `pull` | – | deliver the next server-log entry this replica has not seen (see Delivery). Noop if none |
-| `sync` | – | `pull` until none is left |
+| `pull` | – | `log` delivery only: deliver the next server-log entry this replica has not seen (see Delivery). Noop if none |
+| `sync` | – | `log` delivery only: `pull` until none is left |
+| `exchange` (v2) | no `r`; optional `orders` | `exchange` delivery only: hand every replica's local changes to the others (see Delivery) |
 | `snapshot` | – | replace replica `r` by a document rebuilt from its own snapshot bytes (see Snapshot) |
+| `expect` (v2) | no `r`; `xml` (array of strings, one per replica), optional `label` (string) | off run only: compare each replica's `toXML()` with `xml[i]` (see Checks). Changes nothing |
 | `gen` | `k` (`ins`, `split`, `del`, `merge` or `style`), `f`, `g`, `h` (numbers in [0, 1)), `v` (string) | abstract generator event, resolved on replica `r` exactly as fuzz2 resolves `ins`, `split`, `del`, `merge`, `style` |
 
 An empty `text` counts as absent.
 
+- `contents` (v2): a non-empty array of tree nodes (the `init` node rules,
+  any root type), inserted in order. `text` and `contents` are exclusive.
+- `update` (v2): each nested op is an `edit`, `style` or `removeStyle` object
+  without `r`, held to that op's rules above (fields, types, `contents`).
+  Any other op, an `r`, a `null` entry or an empty `ops` is rejected.
+- `orders` (v2): an array with one entry per replica; entry `i` lists, in
+  arrival order, whose changes replica `i` receives, and must be a
+  permutation of the other replicas (no `i`, no repeats, every other replica
+  once). Absent: each replica receives the others in ascending index.
+- Level-2 splits need nothing new: `split: 2` splits the text's parent and
+  its parent in one edit (`<p><span>ab</span></p>` split at 3 with level 2
+  gives `<p><span>a</span></p><p><span>b</span></p>`).
+
 Every step that is a local operation (`edit`, `style`, `removeStyle`,
-`undo`, `redo`, `gen`) appends exactly one entry to the server log at that
-step, authored by `r`, carrying the changes it produced. If it produced no
-change (generator noop, empty undo stack), the entry carries no changes but
-is still appended and still counts for delivery — this keeps fuzz2's
-numbering.
+`update`, `undo`, `redo`, `gen`) with `log` delivery appends exactly one
+entry to the server log at that step, authored by `r`, carrying the changes
+it produced. If it produced no change (generator noop, empty undo stack),
+the entry carries no changes but is still appended and still counts for
+delivery — this keeps fuzz2's numbering. With `exchange` delivery a local
+operation is not pushed: its changes stay among the replica's local changes
+until the next `exchange`. It produced a change when the number of local
+changes in `doc.createChangePack()` grew.
 
 An exception thrown by any step aborts the run with `error` (I2 failure).
 
@@ -111,6 +160,9 @@ characters outside the BMP.
 
 ## Delivery and GC
 
+`log` delivery (the default, and all of v1) is the server log below.
+`exchange` delivery (v2) has no server log; see Exchange.
+
 - Server log: ordered entries `{author, changes?}`. Server order is the
   order steps appended them; delivery is causal by construction.
 - Every pack a replica applies goes through the protobuf converter
@@ -142,6 +194,34 @@ characters outside the BMP.
   step lines). In `minvv` mode, then apply one more empty pack with
   `Checkpoint(0, 0)` and the final `minVV` to every replica.
 
+### Exchange
+
+`exchange` delivery replays the `exchangeInOrder` helper of yorkie's
+`pkg/document/tree_split_order_test.go`. An `exchange` step, with `orders`
+resolved (absent: ascending index):
+
+1. Collect: for each replica `i`, its local changes as one pack,
+   `doc.createChangePack()` sent through the converter. A pack without
+   changes is empty.
+2. Deliver: for `i = 0..n-1`, for each `j` in `orders[i]`, if `j`'s pack is
+   not empty, apply its changes to replica `i` in a pack with
+   `Checkpoint(0, 0)` and the initial version vector, through the converter.
+3. Ack: for `i = 0..n-1` whose pack is not empty, apply an empty pack with
+   `Checkpoint(0, lastClientSeq)` and the initial version vector, where
+   `lastClientSeq` is that of the pack's last change.
+4. `minvv` mode only: every replica has now received every change, so set
+   every row to its replica's version vector, then apply one empty pack with
+   `Checkpoint(0, 0)` and `minVV` to every replica, in index order.
+
+End of run: one `exchange` with default orders, not recorded as a step line.
+There is no other end-of-run drain or GC pack. I4 compares off and minvv as
+with `log` delivery.
+
+Not modelled (follow-up): a minvv collection while some replica still holds
+an unexchanged local edit. Rows only move at an `exchange`, when nothing is
+in flight, so GC here never races a concurrent edit; the `log` mode covers
+that race.
+
 ## Snapshot
 
 Rebuilding replica `r`: encode its root object with no presences using the
@@ -156,6 +236,9 @@ holds; but a corpus script should not rely on local edits after a
 
 A `snapshot` step replaces replica `r` with its rebuild in both modes; in
 `off` mode it also checks I3 on it. Cursor and server row are unchanged.
+With `exchange` delivery, a `snapshot` of a replica that holds local changes
+not yet exchanged throws (the rebuild would drop them), ending the run with
+`error`.
 
 ## Checks
 
@@ -168,12 +251,16 @@ throws, `minvv` mode is not run.
   drain, for every replica): the rebuild gives the same `toXML()` and shape.
 - **I4**: final `toXML()` of replica 0 in `minvv` mode equals off mode, and
   all replicas agree in `minvv` mode.
-- **I6**: not implemented in v1.
+- **E** (v2, off mode): every `expect` step of the script ran and, at each,
+  every replica's `toXML()` equalled its `xml` entry. A script without
+  `expect` steps holds E. `expect` steps do nothing in `minvv` mode.
+- **I6**: not implemented.
 
 A check that could not be evaluated because a run threw is `false`, and a
 check that throws counts as `false`: a rebuild that throws in the I3 check
 fails I3 (result `fail`) instead of aborting the runner.
-`diverged` = I1 fails. A run's result is `pass` only if I1–I4 all hold.
+`diverged` = I1 fails. A run's result is `pass` only if I1–I4 and E all
+hold.
 
 ## Canonical strings
 
@@ -185,17 +272,32 @@ fails I3 (result `fail`) instead of aborting the runner.
     `{type}#{id}{x?}[{child},{child}…]`; `x` when removed.
 - Step description (one line per step, in step order, from the `off` run):
   - local op that produced a change: `d{r+1}.edit({from},{to},'{text}')`,
-    `d{r+1}.split({from})` for `split` without text and `from == to`,
-    `d{r+1}.edit({from},{to})`, `d{r+1}.style({from},{to},{k}={v},…)` keys
+    `d{r+1}.split({from})` for `split: 1` without text and `from == to`,
+    `d{r+1}.split({from},{split})` for `split` ≥ 2 without text and
+    `from == to`, `d{r+1}.edit({from},{to})`,
+    `d{r+1}.edit({from},{to},{xml},{xml}…)` with `contents` (one canonical
+    XML per node, `,`-separated, no quotes; `split` not shown, as with
+    `text`), `d{r+1}.style({from},{to},{k}={v},…)` keys
     sorted, `d{r+1}.removeStyle({from},{to},{k},…)` keys in script order,
-    `d{r+1}.undo`, `d{r+1}.redo`. A `gen` step is described by what it
+    `d{r+1}.undo`, `d{r+1}.redo`,
+    `d{r+1}.update[{op};{op}…]` where each `{op}` is the nested op's form
+    above without `d{r+1}.` (e.g. `d1.update[edit(1,1,'X');style(7,13,b=1)]`).
+    A `gen` step is described by what it
     resolved to: `ins` as `edit(i,i,'v')`, `split` as `split(i)`, `del` and
     `merge` as `edit(from,to)`, `style` as `style(from,to,k=v)`.
   - local op with no change: `d{r+1}.noop`.
+  - canonical XML of a script node: a text node is its `value`; an element
+    is `<{type}` + ` {k}="{v}"` per attribute, keys sorted + `>` + its
+    children + `</{type}>`. Nothing is escaped. It is built from the script
+    node, not by the SDK.
   - pull: `pull d{r+1} <- #{logIndex}` or `pull d{r+1} -` when nothing was
     left. `sync` expands to one `pull d{r+1} <- #{logIndex}` line per
     delivered entry and adds nothing when none was left. `snapshot`:
     `d{r+1}.snapshot`.
+  - `exchange`: `exchange d1<-[{from},…] d2<-[…] …`, one `d{i+1}<-[…]` per
+    replica separated by a space, each listing the resolved order as
+    `d{j+1}` separated by `,` (`exchange d1<-[d3,d2] d2<-[d1,d3] d3<-[d2,d1]`).
+  - `expect`: `expect` (the label is not part of the line).
   - A step that throws adds no line.
 
 ## Record
@@ -204,7 +306,7 @@ fails I3 (result `fail`) instead of aborting the runner.
 {
   "id": "…", "n": 2,
   "result": "pass | diverged | error | fail",
-  "checks": "1111",
+  "checks": "11111",
   "steps": ["d1.edit(2,2,'c')", "pull d2 <- #0", "…"],
   "xml": ["<doc>…</doc>", "<doc>…</doc>"],
   "digest": "first 16 hex of sha256(steps.join('\n') + '\n' + xml.join('\n') + '\n' + shapes.join('\n'))",
@@ -213,12 +315,12 @@ fails I3 (result `fail`) instead of aborting the runner.
 ```
 
 `xml` and shapes are those of the `off` run after the end-of-run drain.
-`checks` is four characters, `1` when the check holds and `0` otherwise,
-for I1, I2, I3 and I4 in that order (`"0110"`: diverged, no throw, I3 held,
-I4 failed).
+`checks` is five characters, `1` when the check holds and `0` otherwise,
+for I1, I2, I3, I4 and E in that order (`"01101"`: diverged, no throw, I3
+held, I4 failed, every expect held).
 
 `result`: `error` if I2 failed, else `diverged` if I1 failed, else `fail` if
-I3 or I4 failed, else `pass`. On `error`, `xml` is empty and both digests
+I3, I4 or E failed, else `pass`. On `error`, `xml` is empty and both digests
 are the first 16 hex of `sha256(steps.join('\n') + '\nERROR')` (error
 messages differ between SDKs).
 

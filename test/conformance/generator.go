@@ -123,14 +123,14 @@ func Gen(seed uint32, fam string, n, steps int) *Script {
 		f, g, h := rnd(), rnd(), rnd()
 		v := string(valuePool[c%len(valuePool)])
 		c++
-		out = append(out, Step{R: r, Op: "gen", K: k, F: f, G: g, H: h, Val: v})
+		out = append(out, Step{R: r, Op: opGen, K: k, F: f, G: g, H: h, Val: v})
 		authors = append(authors, r)
 	}
 	return &Script{
 		V:        1,
 		ID:       fmt.Sprintf("gen-%s-n%d-s%d-%d", fam, n, steps, seed),
 		Replicas: n,
-		Init:     "abcd",
+		Init:     Init{Text: "abcd"},
 		Steps:    out,
 	}
 }

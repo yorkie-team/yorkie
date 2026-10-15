@@ -1,0 +1,58 @@
+{
+  "v": 2,
+  "id": "v2-tree-init-contents",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "A tree init of two paragraphs, the first holding a styled span; an element inserted through contents; a level-2 split of span and paragraph in one edit. Covers the contents step line and expect.",
+  "replicas": 2,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          {
+            "type": "span",
+            "attributes": { "bold": "true" },
+            "children": [{ "type": "text", "value": "ab" }]
+          },
+          { "type": "text", "value": "cd" }
+        ]
+      },
+      { "type": "p", "children": [{ "type": "text", "value": "ef" }] }
+    ]
+  },
+  "steps": [
+    {
+      "op": "expect",
+      "label": "init",
+      "xml": [
+        "<doc><p><span bold=\"true\">ab</span>cd</p><p>ef</p></doc>",
+        "<doc><p><span bold=\"true\">ab</span>cd</p><p>ef</p></doc>"
+      ]
+    },
+    {
+      "r": 0,
+      "op": "edit",
+      "from": 8,
+      "to": 8,
+      "contents": [
+        {
+          "type": "p",
+          "attributes": { "i": "1" },
+          "children": [{ "type": "text", "value": "XY" }]
+        }
+      ]
+    },
+    { "r": 1, "op": "pull" },
+    { "r": 1, "op": "edit", "from": 3, "to": 3, "split": 2 },
+    { "r": 0, "op": "pull" },
+    {
+      "op": "expect",
+      "label": "split",
+      "xml": [
+        "<doc><p><span bold=\"true\">a</span></p><p><span bold=\"true\">b</span>cd</p><p i=\"1\">XY</p><p>ef</p></doc>",
+        "<doc><p><span bold=\"true\">a</span></p><p><span bold=\"true\">b</span>cd</p><p i=\"1\">XY</p><p>ef</p></doc>"
+      ]
+    }
+  ]
+}

@@ -18,6 +18,7 @@ package conformance
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -116,9 +117,9 @@ func TestCorpus(t *testing.T) {
 			want := statuses[status]
 			rec := Run(s)
 			assert.Equal(t, want, rec.Result,
-				"%s: status.%s is %q but the result is %q (checks %s, xml %q, err %q): "+
+				"%s: status.%s is %q but the result is %q (checks %s, xml %q, err %q, expects %q): "+
 					"update status.%s in the ledger if the change is intended\n%s",
-				path, sdk, status, rec.Result, rec.Checks, rec.XML, rec.Err, sdk,
+				path, sdk, status, rec.Result, rec.Checks, rec.XML, rec.Err, rec.Expects, sdk,
 				strings.Join(rec.Steps, "\n"))
 		})
 	}
@@ -129,8 +130,8 @@ func TestCorpus(t *testing.T) {
 func TestLoadScriptRejects(t *testing.T) {
 	head := `"v":1,"id":"x","replicas":1,"init":"ab"`
 	step := func(st string) string { return `{` + head + `,"steps":[` + st + `]}` }
-	for name, body := range map[string]string{
-		"version":         `{"v":2,"id":"x","replicas":1,"init":"ab","steps":[]}`,
+	cases := map[string]string{
+		"version":         `{"v":3,"id":"x","replicas":1,"init":"ab","steps":[]}`,
 		"field":           `{` + head + `,"steps":[],"extra":1}`,
 		"step field":      step(`{"r":0,"op":"pull","form":1}`),
 		"op":              step(`{"r":0,"op":"insert"}`),
@@ -165,7 +166,9 @@ func TestLoadScriptRejects(t *testing.T) {
 		"gen int v":       step(`{"r":0,"op":"gen","k":"ins","f":0,"g":0,"h":0,"v":1}`),
 		"pull attrs":      step(`{"r":0,"op":"pull","attrs":{"b":"1"}}`),
 		"undo from":       step(`{"r":0,"op":"undo","from":0}`),
-	} {
+	}
+	maps.Copy(cases, rejectsV2)
+	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "bad.json")
 			require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
@@ -173,6 +176,91 @@ func TestLoadScriptRejects(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), path)
 		})
+	}
+}
+
+// rejectsV2 are the malformed scripts of the format v2 rules. The JS
+// runner's loader test holds the same cases.
+var rejectsV2 = func() map[string]string {
+	v1 := `"v":1,"id":"x","replicas":2`
+	v2 := `"v":2,"id":"x","replicas":2`
+	log := func(st string) string { return `{` + v2 + `,"init":"ab","steps":[` + st + `]}` }
+	ex := func(st string) string {
+		return `{` + v2 + `,"delivery":"exchange","init":"ab","steps":[` + st + `]}`
+	}
+	init := func(node string) string { return `{` + v2 + `,"init":` + node + `,"steps":[]}` }
+	edit := `"op":"edit","from":1,"to":1`
+	return map[string]string{
+		"v1 expect":       `{` + v1 + `,"init":"ab","steps":[{"op":"expect","xml":["",""]}]}`,
+		"v1 update":       `{` + v1 + `,"init":"ab","steps":[{"r":0,"op":"update","ops":[{` + edit + `}]}]}`,
+		"v1 tree init":    `{` + v1 + `,"init":{"type":"doc"},"steps":[]}`,
+		"v1 contents":     `{` + v1 + `,"init":"ab","steps":[{"r":0,` + edit + `,"contents":[{"type":"p"}]}]}`,
+		"v1 delivery":     `{` + v1 + `,"delivery":"log","init":"ab","steps":[]}`,
+		"delivery":        `{` + v2 + `,"delivery":"push","init":"ab","steps":[]}`,
+		"null delivery":   `{` + v2 + `,"delivery":null,"init":"ab","steps":[]}`,
+		"null init":       `{` + v2 + `,"init":null,"steps":[]}`,
+		"number init":     init(`1`),
+		"text root":       init(`{"type":"text","value":"a"}`),
+		"no type":         init(`{"children":[]}`),
+		"empty type":      init(`{"type":""}`),
+		"element value":   init(`{"type":"doc","value":"a"}`),
+		"element field":   init(`{"type":"doc","kids":[]}`),
+		"text children":   init(`{"type":"doc","children":[{"type":"text","value":"a","children":[]}]}`),
+		"text no value":   init(`{"type":"doc","children":[{"type":"text"}]}`),
+		"text int value":  init(`{"type":"doc","children":[{"type":"text","value":1}]}`),
+		"null child":      init(`{"type":"doc","children":[null]}`),
+		"children object": init(`{"type":"doc","children":{}}`),
+		"int attribute":   init(`{"type":"doc","attributes":{"b":1}}`),
+		"null attribute":  init(`{"type":"doc","attributes":{"b":null}}`),
+		"gen with tree init": `{` + v2 + `,"init":{"type":"doc"},"steps":[` +
+			`{"r":0,"op":"gen","k":"ins","f":0,"g":0,"h":0,"v":"c"}]}`,
+		"contents and text":     log(`{"r":0,` + edit + `,"text":"a","contents":[{"type":"p"}]}`),
+		"empty contents":        log(`{"r":0,` + edit + `,"contents":[]}`),
+		"contents object":       log(`{"r":0,` + edit + `,"contents":{"type":"p"}}`),
+		"bad contents node":     log(`{"r":0,` + edit + `,"contents":[{"type":"p","extra":1}]}`),
+		"update no ops":         log(`{"r":0,"op":"update"}`),
+		"update empty ops":      log(`{"r":0,"op":"update","ops":[]}`),
+		"update nested r":       log(`{"r":0,"op":"update","ops":[{"r":0,` + edit + `}]}`),
+		"update nested undo":    log(`{"r":0,"op":"update","ops":[{"op":"undo"}]}`),
+		"update nested update":  log(`{"r":0,"op":"update","ops":[{"op":"update","ops":[{` + edit + `}]}]}`),
+		"update nested no to":   log(`{"r":0,"op":"update","ops":[{"op":"edit","from":1}]}`),
+		"update nested no op":   log(`{"r":0,"op":"update","ops":[{"from":1,"to":1}]}`),
+		"update nested null":    log(`{"r":0,"op":"update","ops":[null]}`),
+		"update no r":           log(`{"op":"update","ops":[{` + edit + `}]}`),
+		"pull in exchange":      ex(`{"r":0,"op":"pull"}`),
+		"sync in exchange":      ex(`{"r":0,"op":"sync"}`),
+		"exchange in log":       log(`{"op":"exchange"}`),
+		"exchange r":            ex(`{"r":0,"op":"exchange"}`),
+		"exchange null orders":  ex(`{"op":"exchange","orders":null}`),
+		"orders count":          ex(`{"op":"exchange","orders":[[1]]}`),
+		"orders self":           ex(`{"op":"exchange","orders":[[0],[0]]}`),
+		"orders missing":        ex(`{"op":"exchange","orders":[[],[0]]}`),
+		"orders duplicate":      ex(`{"op":"exchange","orders":[[1,1],[0]]}`),
+		"orders out of range":   ex(`{"op":"exchange","orders":[[2],[0]]}`),
+		"orders null order":     ex(`{"op":"exchange","orders":[[1],null]}`),
+		"orders null replica":   ex(`{"op":"exchange","orders":[[null],[0]]}`),
+		"orders fractional":     ex(`{"op":"exchange","orders":[[1.5],[0]]}`),
+		"expect r":              log(`{"r":0,"op":"expect","xml":["",""]}`),
+		"expect no xml":         log(`{"op":"expect"}`),
+		"expect xml count":      log(`{"op":"expect","xml":[""]}`),
+		"expect null xml entry": log(`{"op":"expect","xml":["",null]}`),
+		"expect int label":      log(`{"op":"expect","xml":["",""],"label":1}`),
+	}
+}()
+
+// TestExpect checks that an expect that does not hold fails the run without
+// touching I1-I4, and that one that holds passes it.
+func TestExpect(t *testing.T) {
+	for _, tc := range []struct{ xml, result, checks string }{
+		{"<doc><p>ab</p></doc>", ResultPass, "11111"},
+		{"<doc><p>ba</p></doc>", ResultFail, "11110"},
+	} {
+		s, err := ParseScript([]byte(`{"v":2,"id":"x","replicas":2,"init":"ab","steps":[` +
+			`{"op":"expect","xml":["<doc><p>ab</p></doc>","` + tc.xml + `"]}]}`))
+		require.NoError(t, err)
+		rec := Run(s)
+		assert.Equal(t, tc.result, rec.Result)
+		assert.Equal(t, tc.checks, rec.Checks.String())
 	}
 }
 

@@ -1,0 +1,58 @@
+{
+  "v": 2,
+  "id": "v2-update-undo",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "An update of an insert, a style and a removeStyle is one change, so one undo reverts all three on both replicas, and one redo brings them back.",
+  "replicas": 2,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "attributes": { "i": "1" },
+        "children": [{ "type": "text", "value": "abcd" }]
+      },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 1, "to": 1, "text": "X" },
+        { "op": "style", "from": 7, "to": 13, "attrs": { "b": "1" } },
+        { "op": "removeStyle", "from": 0, "to": 7, "keys": ["i"] }
+      ]
+    },
+    { "r": 1, "op": "pull" },
+    {
+      "op": "expect",
+      "label": "updated",
+      "xml": [
+        "<doc><p>Xabcd</p><p b=\"1\">efgh</p></doc>",
+        "<doc><p>Xabcd</p><p b=\"1\">efgh</p></doc>"
+      ]
+    },
+    { "r": 0, "op": "undo" },
+    { "r": 1, "op": "pull" },
+    {
+      "op": "expect",
+      "label": "undone",
+      "xml": [
+        "<doc><p i=\"1\">abcd</p><p>efgh</p></doc>",
+        "<doc><p i=\"1\">abcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "r": 0, "op": "redo" },
+    { "r": 1, "op": "pull" },
+    {
+      "op": "expect",
+      "label": "redone",
+      "xml": [
+        "<doc><p>Xabcd</p><p b=\"1\">efgh</p></doc>",
+        "<doc><p>Xabcd</p><p b=\"1\">efgh</p></doc>"
+      ]
+    }
+  ]
+}

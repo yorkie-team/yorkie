@@ -44,15 +44,16 @@ const (
 	ResultFail     = "fail"
 )
 
-// Checks holds the outcome of each invariant.
+// Checks holds the outcome of each invariant and of the expect steps (E).
 type Checks struct {
-	I1, I2, I3, I4 bool
+	I1, I2, I3, I4, E bool
 }
 
-// String is the checks as four `1`/`0` characters for I1..I4, e.g. "0110".
+// String is the checks as five `1`/`0` characters for I1..I4 and E, e.g.
+// "01101".
 func (c Checks) String() string {
 	var sb strings.Builder
-	for _, ok := range []bool{c.I1, c.I2, c.I3, c.I4} {
+	for _, ok := range []bool{c.I1, c.I2, c.I3, c.I4, c.E} {
 		if ok {
 			sb.WriteByte('1')
 		} else {
@@ -75,6 +76,9 @@ type Record struct {
 	Digest    string
 	XMLDigest string
 	Err       string
+
+	// Expects describes each expect step that did not hold.
+	Expects []string
 }
 
 // entry is one server-log entry. A nil changes slice is an op that produced
@@ -86,20 +90,26 @@ type entry struct {
 
 // run is one replay of a script in one GC mode.
 type run struct {
-	minVVMode bool
-	actors    []time.ActorID
-	docs      []*document.Document
-	clientSeq []uint32
-	log       []entry
-	cursor    []int
-	rows      []time.VersionVector
-	lines     []string
+	minVVMode    bool
+	exchangeMode bool
+	actors       []time.ActorID
+	docs         []*document.Document
+	clientSeq    []uint32
+	log          []entry
+	cursor       []int
+	rows         []time.VersionVector
+	lines        []string
 
 	// snapshotOK turns false when an I3 comparison fails.
 	snapshotOK bool
+
+	// expects counts the expect steps run; expectFails describes those that
+	// did not hold. Both stay empty in minvv mode.
+	expects     int
+	expectFails []string
 }
 
-// Run replays the script in off and minvv modes and checks I1-I4.
+// Run replays the script in off and minvv modes and checks I1-I4 and E.
 func Run(s *Script) Record {
 	rec := Record{ID: s.ID, N: s.Replicas}
 	off, offErr := replay(s, false)
@@ -107,9 +117,17 @@ func Run(s *Script) Record {
 	if rec.Steps == nil {
 		rec.Steps = []string{}
 	}
+	rec.Expects = off.expectFails
+	expects := 0
+	for _, st := range s.Steps {
+		if st.Op == opExpect {
+			expects++
+		}
+	}
+	e := off.expects == expects && len(off.expectFails) == 0
 	if offErr != nil {
 		rec.Err = offErr.Error()
-		return finish(rec, false, false, false, false)
+		return finish(rec, Checks{E: e})
 	}
 
 	xml, shapes := off.state()
@@ -130,7 +148,7 @@ func Run(s *Script) Record {
 	mv, mvErr := replay(s, true)
 	if mvErr != nil {
 		rec.Err = mvErr.Error()
-		return finish(rec, i1, false, i3, false)
+		return finish(rec, Checks{I1: i1, I3: i3, E: e})
 	}
 	mvXML, _ := mv.state()
 	i4 := mvXML[0] == xml[0]
@@ -139,23 +157,23 @@ func Run(s *Script) Record {
 			i4 = false
 		}
 	}
-	return finish(rec, i1, true, i3, i4)
+	return finish(rec, Checks{I1: i1, I2: true, I3: i3, I4: i4, E: e})
 }
 
-func finish(rec Record, i1, i2, i3, i4 bool) Record {
-	rec.Checks = Checks{I1: i1, I2: i2, I3: i3, I4: i4}
+func finish(rec Record, c Checks) Record {
+	rec.Checks = c
 	steps := strings.Join(rec.Steps, "\n")
 	switch {
-	case !i2:
+	case !c.I2:
 		rec.Result = ResultError
 		rec.XML = []string{}
 		rec.Shapes = nil
 		rec.Digest = digest(steps + "\nERROR")
 		rec.XMLDigest = rec.Digest
 		return rec
-	case !i1:
+	case !c.I1:
 		rec.Result = ResultDiverged
-	case !i3 || !i4:
+	case !c.I3 || !c.I4 || !c.E:
 		rec.Result = ResultFail
 	default:
 		rec.Result = ResultPass
@@ -182,9 +200,14 @@ func replay(s *Script, minVVMode bool) (rn *run, err error) {
 		}
 	}()
 
+	rn.exchangeMode = s.Delivery == DeliveryExchange
 	rn.setup(s.Replicas, s.Init)
 	for _, st := range s.Steps {
 		rn.step(st)
+	}
+	if rn.exchangeMode {
+		rn.exchange(nil)
+		return rn, nil
 	}
 	for r := range rn.docs {
 		for rn.pull(r) >= 0 {
@@ -205,7 +228,7 @@ func must(err error) {
 	}
 }
 
-func (rn *run) setup(n int, init string) {
+func (rn *run) setup(n int, init Init) {
 	rn.actors = make([]time.ActorID, n)
 	rn.docs = make([]*document.Document, n)
 	rn.clientSeq = make([]uint32, n)
@@ -218,19 +241,29 @@ func (rn *run) setup(n int, init string) {
 		rn.docs[i].SetActor(actor)
 	}
 
-	must(rn.docs[0].Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("t", json.TreeNode{
+	root := init.Node
+	if root == nil {
+		root = &json.TreeNode{
 			Type: "doc",
 			Children: []json.TreeNode{{
 				Type:     "p",
-				Children: []json.TreeNode{{Type: "text", Value: init}},
+				Children: []json.TreeNode{{Type: textType, Value: init.Text}},
 			}},
-		})
+		}
+	}
+	must(rn.docs[0].Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetNewTree("t", *root)
 		return nil
 	}))
 	initChanges := rn.take(0)
 	for i := 1; i < n; i++ {
 		rn.apply(i, initChanges, change.NewCheckpoint(0, 0), time.InitialVersionVector)
+	}
+
+	// The init change is not an edit of the script: an undo must not reach
+	// it, or it would remove the tree.
+	for _, doc := range rn.docs {
+		must(doc.ClearHistory())
 	}
 
 	// Every replica holds a row from the start, so minVV never covers what a
@@ -331,7 +364,21 @@ func (rn *run) step(st Step) {
 	case "snapshot":
 		rn.snapshot(st.R)
 		rn.lines = append(rn.lines, d+".snapshot")
+	case "exchange":
+		rn.lines = append(rn.lines, rn.exchange(st.Orders))
+	case opExpect:
+		rn.expect(st)
+		rn.lines = append(rn.lines, opExpect)
 	default:
+		if rn.exchangeMode {
+			before := rn.localChanges(st.R)
+			desc := rn.local(st)
+			if rn.localChanges(st.R) == before || desc == "" {
+				desc = "noop"
+			}
+			rn.lines = append(rn.lines, d+"."+desc)
+			return
+		}
 		desc := rn.local(st)
 		changes := rn.take(st.R)
 		rn.log = append(rn.log, entry{author: st.R, changes: changes})
@@ -347,22 +394,27 @@ func (rn *run) step(st Step) {
 func (rn *run) local(st Step) string {
 	doc := rn.docs[st.R]
 	switch st.Op {
-	case "edit":
-		rn.edit(st.R, st.From, st.To, st.Text, st.Split)
-		return describeEdit(st.From, st.To, st.Text, st.Split)
-	case opStyle:
-		rn.update(st.R, func(t *json.Tree) { t.Style(st.From, st.To, st.Attrs) })
-		return describeStyle(st.From, st.To, st.Attrs)
-	case "removeStyle":
-		rn.update(st.R, func(t *json.Tree) { t.RemoveStyle(st.From, st.To, st.Keys) })
-		return fmt.Sprintf("removeStyle(%d,%d,%s)", st.From, st.To, strings.Join(st.Keys, ","))
+	case opEdit, opStyle, opRemoveStyle:
+		rn.update(st.R, func(t *json.Tree) { treeOp(t, st) })
+		return describeOp(st)
+	case "update":
+		rn.update(st.R, func(t *json.Tree) {
+			for _, op := range st.Ops {
+				treeOp(t, op)
+			}
+		})
+		descs := make([]string, len(st.Ops))
+		for i, op := range st.Ops {
+			descs[i] = describeOp(op)
+		}
+		return "update[" + strings.Join(descs, ";") + "]"
 	case "undo":
 		must(doc.Undo())
 		return "undo"
 	case "redo":
 		must(doc.Redo())
 		return "redo"
-	case "gen":
+	case opGen:
 		return rn.gen(st)
 	}
 	panic(fmt.Sprintf("unknown op %q", st.Op))
@@ -375,24 +427,141 @@ func (rn *run) update(r int, fn func(t *json.Tree)) {
 	}))
 }
 
+// edit runs an edit with optional text on replica r.
 func (rn *run) edit(r, from, to int, text string, split int) {
 	rn.update(r, func(t *json.Tree) {
-		if text != "" {
-			t.Edit(from, to, &json.TreeNode{Type: "text", Value: text}, split)
-		} else {
-			t.Edit(from, to, nil, split)
-		}
+		treeOp(t, Step{Op: opEdit, From: from, To: to, Text: text, Split: split})
 	})
+}
+
+// treeOp runs one edit, style or removeStyle op on the tree.
+func treeOp(t *json.Tree, st Step) {
+	switch st.Op {
+	case opEdit:
+		switch {
+		case st.nodes != nil:
+			t.EditBulk(st.From, st.To, st.nodes, st.Split)
+		case st.Text != "":
+			t.Edit(st.From, st.To, &json.TreeNode{Type: textType, Value: st.Text}, st.Split)
+		default:
+			t.Edit(st.From, st.To, nil, st.Split)
+		}
+	case opStyle:
+		t.Style(st.From, st.To, st.Attrs)
+	case opRemoveStyle:
+		t.RemoveStyle(st.From, st.To, st.Keys)
+	}
+}
+
+// describeOp is the step-line form of an edit, style or removeStyle op.
+func describeOp(st Step) string {
+	switch st.Op {
+	case opStyle:
+		return describeStyle(st.From, st.To, st.Attrs)
+	case opRemoveStyle:
+		return fmt.Sprintf("removeStyle(%d,%d,%s)", st.From, st.To, strings.Join(st.Keys, ","))
+	}
+	if st.nodes != nil {
+		xml := make([]string, len(st.nodes))
+		for i, n := range st.nodes {
+			xml[i] = nodeXML(n)
+		}
+		return fmt.Sprintf("edit(%d,%d,%s)", st.From, st.To, strings.Join(xml, ","))
+	}
+	return describeEdit(st.From, st.To, st.Text, st.Split)
 }
 
 func describeEdit(from, to int, text string, split int) string {
 	switch {
 	case text != "":
 		return fmt.Sprintf("edit(%d,%d,'%s')", from, to, text)
-	case split > 0 && from == to:
+	case split == 1 && from == to:
 		return fmt.Sprintf("split(%d)", from)
+	case split > 1 && from == to:
+		return fmt.Sprintf("split(%d,%d)", from, split)
 	default:
 		return fmt.Sprintf("edit(%d,%d)", from, to)
+	}
+}
+
+// localChanges counts replica r's changes not yet exchanged.
+func (rn *run) localChanges(r int) int {
+	return len(rn.docs[r].CreateChangePack().Changes)
+}
+
+// exchange hands every replica's local changes to the others, as one pack
+// per author, in the given orders (nil: each replica receives the others in
+// ascending index), then acks every author. In minvv mode every replica has
+// then seen everything, so all rows are set and one empty pack carrying
+// minVV goes to every replica. It returns the step line.
+func (rn *run) exchange(orders [][]int) string {
+	n := len(rn.docs)
+	if orders == nil {
+		orders = make([][]int, n)
+		for i := range n {
+			for j := range n {
+				if j != i {
+					orders[i] = append(orders[i], j)
+				}
+			}
+		}
+	}
+
+	packs := make([][]*change.Change, n)
+	for i, doc := range rn.docs {
+		pb, err := converter.ToChangePack(doc.CreateChangePack())
+		must(err)
+		pack, err := converter.FromChangePack(pb)
+		must(err)
+		if len(pack.Changes) > 0 {
+			packs[i] = pack.Changes
+		}
+	}
+	for i, order := range orders {
+		for _, j := range order {
+			if packs[j] != nil {
+				rn.apply(i, packs[j], change.NewCheckpoint(0, 0), time.InitialVersionVector)
+			}
+		}
+	}
+	for i, changes := range packs {
+		if changes != nil {
+			rn.clientSeq[i] = changes[len(changes)-1].ClientSeq()
+			rn.apply(i, nil, change.NewCheckpoint(0, rn.clientSeq[i]), time.InitialVersionVector)
+		}
+	}
+	if rn.minVVMode {
+		for i, doc := range rn.docs {
+			rn.rows[i] = doc.VersionVector()
+		}
+		vv := rn.minVV()
+		for i := range rn.docs {
+			rn.apply(i, nil, change.NewCheckpoint(0, 0), vv)
+		}
+	}
+
+	parts := make([]string, n)
+	for i, order := range orders {
+		from := make([]string, len(order))
+		for k, j := range order {
+			from[k] = fmt.Sprintf("d%d", j+1)
+		}
+		parts[i] = fmt.Sprintf("d%d<-[%s]", i+1, strings.Join(from, ","))
+	}
+	return "exchange " + strings.Join(parts, " ")
+}
+
+// expect compares each replica's XML with the expected one, in off mode.
+func (rn *run) expect(st Step) {
+	if rn.minVVMode {
+		return
+	}
+	rn.expects++
+	for r, d := range rn.docs {
+		if got := tree(d).ToXML(); got != st.XML[r] {
+			rn.expectFails = append(rn.expectFails, fmt.Sprintf(
+				"expect %q (step line %d): d%d is %s, want %s", st.Label, len(rn.lines), r+1, got, st.XML[r]))
+		}
 	}
 }
 
@@ -443,8 +612,12 @@ func (rn *run) snapshotMatches(r int) (rebuilt *document.Document, ok bool) {
 }
 
 // snapshot replaces replica r by its rebuild; in off mode it checks I3 too.
-// A rebuild that panics outside the check aborts the run.
+// A rebuild that panics outside the check aborts the run, and so does a
+// replica holding changes not yet exchanged, which the rebuild would lose.
 func (rn *run) snapshot(r int) {
+	if rn.docs[r].HasLocalChanges() {
+		panic(fmt.Sprintf("snapshot of d%d with changes not yet exchanged", r+1))
+	}
 	var rebuilt *document.Document
 	if !rn.minVVMode {
 		var ok bool
