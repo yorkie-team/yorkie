@@ -1348,6 +1348,7 @@ func (t *Tree) Retombstone(
 			pieces = []*TreeNode{n}
 		}
 
+		anchored := false
 		for _, piece := range pieces {
 			if piece.IsRemoved() {
 				continue
@@ -1368,6 +1369,9 @@ func (t *Tree) Retombstone(
 			if measure {
 				from, to, visible = t.visibleRangeOf(target)
 			}
+			if refreshSpanAnchors(span, target, !anchored) {
+				anchored = true
+			}
 			if target.remove(executedAt) {
 				pairs = append(pairs, GCPair{Parent: t, Child: target})
 				if visible {
@@ -1377,6 +1381,33 @@ func (t *Tree) Retombstone(
 		}
 	}
 	return pairs, diff, edits, nil
+}
+
+// refreshSpanAnchors points span's sibling anchors at the neighbours target
+// has right before Retombstone removes it. The anchors were captured when the
+// span was first recorded; content a peer inserted next to the node since
+// then is what the node sits beside now, and a later Restore that has to
+// recreate the node after GC must land it there, not at the stale anchor
+// (#2169). The left anchor is taken from the first piece of the span that is
+// removed, the right anchor from the last. It reports whether target had a
+// parent to read neighbours from.
+func refreshSpanAnchors(span *TreeRestoreSpan, target *TreeNode, first bool) bool {
+	if target.Index.Parent == nil {
+		return false
+	}
+	siblings := target.Index.Parent.Children(true)
+	idx := slices.Index(siblings, target.Index)
+	if first {
+		span.LeftSiblingID = nil
+		if idx > 0 {
+			span.LeftSiblingID = leftAnchorID(siblings[idx-1].Value)
+		}
+	}
+	span.RightSiblingID = nil
+	if idx >= 0 && idx < len(siblings)-1 {
+		span.RightSiblingID = siblings[idx+1].Value.id
+	}
+	return true
 }
 
 // visibleRangeOf returns the visible-index range [from, to) node covers, or
