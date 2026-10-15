@@ -1,0 +1,368 @@
+{
+  "js1436-min-a.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "d9781b059f2841c1",
+    "xmlDigest": "ac9f349ebf370d9b"
+  },
+  "js1436-min-b.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "6d72d46c25cc9022",
+    "xmlDigest": "41ee48fc767ed9ed"
+  },
+  "js1436-min-c.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "fa61db50af029883",
+    "xmlDigest": "ffbc9035307a6d0d"
+  },
+  "remove-style-split-both-split-one-removes.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "3ca52ab5c3ea9441",
+    "xmlDigest": "b04a60c135d437d5"
+  },
+  "remove-style-split-one-splits-other-removes.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "9354a53b8396f14a",
+    "xmlDigest": "ffc5bc3a642aa148"
+  },
+  "ri-peer-undoes-cross-element-merge-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "adb0cf8776997192",
+    "xmlDigest": "e088822cbec3f6df"
+  },
+  "ri-pending-delete-undo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "e7547672f3428e59",
+    "xmlDigest": "32849817ef97c3dc"
+  },
+  "ri-pending-enter-redo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "904587b82b233bf6",
+    "xmlDigest": "8bc20bbce35bd347"
+  },
+  "ri-pending-insert-undo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "9961f5cb4428f93f",
+    "xmlDigest": "44a362c58d527426"
+  },
+  "ri-pending-merge-redo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "9c36b3bc6ef5813d",
+    "xmlDigest": "fc142704875b95f9"
+  },
+  "ri-pending-merge-undo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "7af4773cbe791b1f",
+    "xmlDigest": "b917614e7d84e1e7"
+  },
+  "ri-pending-style-undo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "214bc41da416625e",
+    "xmlDigest": "e780f61702c5ab8a"
+  },
+  "ri-redo-restores-element-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "860a37f21e9aafb2",
+    "xmlDigest": "879330a14cc4fcf6"
+  },
+  "ri-redo-restores-text-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "26eb7e8e2e570878",
+    "xmlDigest": "baa075a5a9baf10b"
+  },
+  "ri-redo-retombstones-element-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "85f517af8276bdfe",
+    "xmlDigest": "581e7290e3b3eb65"
+  },
+  "ri-redo-retombstones-text-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "8e053832129aaf7f",
+    "xmlDigest": "db41bf8a0a546ab6"
+  },
+  "ri-restore-element-and-text-in-one-change-around-enter.json": {
+    "result": "error",
+    "checks": "10101",
+    "digest": "d151092ccf9f9ed8",
+    "xmlDigest": "d151092ccf9f9ed8"
+  },
+  "ri-restore-element-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "0f0a7a92f9108f21",
+    "xmlDigest": "571f980d5cd164a4"
+  },
+  "ri-restore-element-right-of-enter.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "8cca2a14925ff58c",
+    "xmlDigest": "5ac19d8ea0efe58d"
+  },
+  "ri-restore-text-at-enter.json": {
+    "result": "error",
+    "checks": "10101",
+    "digest": "4a182a0b1486b5a3",
+    "xmlDigest": "4a182a0b1486b5a3"
+  },
+  "ri-restore-text-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "f0c922b7d0e7a80a",
+    "xmlDigest": "dda21d9f2f5f01e4"
+  },
+  "ri-restore-text-right-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "dbe1dcf6fb6a97d8",
+    "xmlDigest": "3033337a4b7f6830"
+  },
+  "ri-restore-two-separate-text-ranges-around-enter.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "08bb72b1627f6c5a",
+    "xmlDigest": "de3aa7ebcdc9bbcb"
+  },
+  "ri-restore-two-separate-text-ranges-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "c4fa4f342b050ad5",
+    "xmlDigest": "bdd020c8284cb4a4"
+  },
+  "ri-restore-two-whole-paragraphs-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "18814b0c98a40800",
+    "xmlDigest": "4c2d63564402e72b"
+  },
+  "ri-restore-under-concurrently-removed-ancestor.json": {
+    "result": "diverged",
+    "checks": "01111",
+    "digest": "5380ea4f7078e626",
+    "xmlDigest": "8632cbc727b34cf1"
+  },
+  "ri-retombstone-element-between-paragraphs-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "0946925d8872ad00",
+    "xmlDigest": "edb174dd969a14a1"
+  },
+  "ri-retombstone-element-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "ad2908488f57076b",
+    "xmlDigest": "54a7955c7d4ea2f6"
+  },
+  "ri-retombstone-element-right-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "95d740f3e91ce352",
+    "xmlDigest": "9bd77c4321c0e102"
+  },
+  "ri-retombstone-element-split-by-enter.json": {
+    "result": "error",
+    "checks": "10101",
+    "digest": "57e4ca2f7dce33ca",
+    "xmlDigest": "57e4ca2f7dce33ca"
+  },
+  "ri-retombstone-text-ending-at-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "c51b70924186e0e4",
+    "xmlDigest": "cb256e047670d236"
+  },
+  "ri-retombstone-text-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "b858c04bf5481737",
+    "xmlDigest": "dc570971274493cf"
+  },
+  "ri-retombstone-text-right-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "533d7d8dde4f40e8",
+    "xmlDigest": "4e9c04f9354f21cf"
+  },
+  "ri-retombstone-text-starting-at-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "c1509d862c496c36",
+    "xmlDigest": "cf015c657ddc4660"
+  },
+  "ri-retombstone-text-straddling-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "1516b0c4d1a31db3",
+    "xmlDigest": "8961c8021b88e045"
+  },
+  "ri-retombstone-two-separate-inserts-left-of-enter.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "5d9709a9ec13702d",
+    "xmlDigest": "2773a381d6838411"
+  },
+  "ri-three-replicas-undo-after-left-insert.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "81702d9bbd37c6f2",
+    "xmlDigest": "54174d934d2e36a8"
+  },
+  "ri-three-replicas-undo-before-left-insert.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "0a5e55f340149e4c",
+    "xmlDigest": "944922c47de6260d"
+  },
+  "split-order-empty-node-attributes.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "3e0c14fb48583b9f",
+    "xmlDigest": "282528147b9f0bda"
+  },
+  "split-order-end-of-text-2.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "a81c0c8d749722df",
+    "xmlDigest": "41e654b474a2f2e4"
+  },
+  "split-order-end-of-text-3.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "099aee489f9fa7e8",
+    "xmlDigest": "8960fcab7610391e"
+  },
+  "split-order-older-enter-two-edits-d1.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "daa55dd17e82bebe",
+    "xmlDigest": "360acf60765ed3d4"
+  },
+  "split-order-older-enter-two-edits-d2.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "a3b384af616c6965",
+    "xmlDigest": "b1507191286bb1a6"
+  },
+  "split-order-older-paragraph-d1.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "47955296407a82f4",
+    "xmlDigest": "3fa664dece760303"
+  },
+  "split-order-older-paragraph-d2.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "51e168ab8ea725b2",
+    "xmlDigest": "cc66ccf42860ec9a"
+  },
+  "split-order-older-span-again-d1.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "183554440a80884d",
+    "xmlDigest": "ea2c700d4f44b611"
+  },
+  "split-order-older-span-again-d2.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "8829d4d61b90923c",
+    "xmlDigest": "5b3cafb84626d27b"
+  },
+  "split-order-paragraph-2.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "1550352b66775252",
+    "xmlDigest": "993d1fca3361f9f5"
+  },
+  "split-order-paragraph-3.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "13f76b89cae471d5",
+    "xmlDigest": "980cdecae35c5993"
+  },
+  "split-order-span-2.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "930d78605ea37165",
+    "xmlDigest": "f2f942f2b16d0e4a"
+  },
+  "split-order-span-3.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "8df65abf02fcb5e4",
+    "xmlDigest": "abc68833c55f1312"
+  },
+  "split-order-span-and-paragraph-2.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "f2e31cf66fb2b940",
+    "xmlDigest": "ecde879afcc30d01"
+  },
+  "split-order-span-and-paragraph-3.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "af7cf0d3ae636376",
+    "xmlDigest": "3858c9ff2d3f130b"
+  },
+  "split-order-span-then-paragraph-2.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "6a798efac8d328aa",
+    "xmlDigest": "d20dddb5a96b0bbc"
+  },
+  "split-order-span-then-paragraph-3.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "7b4ae79872b8f6e8",
+    "xmlDigest": "99b5903e72897f79"
+  },
+  "text-insert-sequential.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "4a84b1e4abc0b040",
+    "xmlDigest": "aa4200b0a98ce594"
+  },
+  "undo-redo-removestyle.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "bc547a296932bf76",
+    "xmlDigest": "f16129e134e2cdd0"
+  },
+  "unwrap-paragraph-emptied-by-merge.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "e561e96e7669c256",
+    "xmlDigest": "87f2e9a4ad3a3c63"
+  },
+  "unwrap-same-unwrap-both-replicas.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "7ab9f80133bc1854",
+    "xmlDigest": "b9d35ce36f563439"
+  },
+  "v2-tree-init-contents.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "56ec621fc7ccd5ea",
+    "xmlDigest": "128391d19bf41454"
+  },
+  "v2-update-undo.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "47b69628075e74e1",
+    "xmlDigest": "65df70f79bb5e655"
+  }
+}

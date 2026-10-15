@@ -17,12 +17,14 @@
 package conformance
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,11 +35,12 @@ import (
 )
 
 const (
-	corpusDir  = "tree/corpus"
-	parityDir  = "tree/parity"
-	paritySeed = 1
-	parityRuns = 200
-	sdk        = "go"
+	corpusDir     = "tree/corpus"
+	corpusDigests = "tree/corpus-digests.json"
+	parityDir     = "tree/parity"
+	paritySeed    = 1
+	parityRuns    = 200
+	sdk           = "go"
 )
 
 // Row is one seed's outcome in a parity fixture.
@@ -102,13 +105,25 @@ func writeJSON(t *testing.T, path string, v any) {
 	require.NoError(t, os.WriteFile(path, append(b, '\n'), 0o600)) // #nosec G703 -- test-chosen path
 }
 
+// CorpusDigest is one corpus script's record in corpus-digests.json.
+type CorpusDigest struct {
+	Result    string `json:"result"`
+	Checks    string `json:"checks"`
+	Digest    string `json:"digest"`
+	XMLDigest string `json:"xmlDigest"`
+}
+
 // TestCorpus runs every corpus script and holds it to its ledger status:
-// the result must be exactly the one the status maps to.
+// the result must be exactly the one the status maps to. It then holds every
+// record to corpus-digests.json, which both runners check, so the step lines,
+// xml and shapes of the ops only the corpus reaches are pinned byte for byte.
+// CONFORMANCE_UPDATE=1 rewrites the file.
 func TestCorpus(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join(corpusDir, "*.json"))
 	require.NoError(t, err)
 	require.NotEmpty(t, paths)
 
+	got := map[string]CorpusDigest{}
 	for _, path := range paths {
 		t.Run(strings.TrimSuffix(filepath.Base(path), ".json"), func(t *testing.T) {
 			s, err := LoadScript(path)
@@ -117,6 +132,12 @@ func TestCorpus(t *testing.T) {
 			require.True(t, ok, "%s: status.%s is missing", path, sdk)
 			want := statuses[status]
 			rec := Run(s)
+			got[filepath.Base(path)] = CorpusDigest{
+				Result:    rec.Result,
+				Checks:    rec.Checks.String(),
+				Digest:    rec.Digest,
+				XMLDigest: rec.XMLDigest,
+			}
 			assert.Equal(t, want, rec.Result,
 				"%s: status.%s is %q but the result is %q (checks %s, xml %q, err %q, expects %q): "+
 					"update status.%s in the ledger if the change is intended\n%s",
@@ -124,6 +145,41 @@ func TestCorpus(t *testing.T) {
 				strings.Join(rec.Steps, "\n"))
 		})
 	}
+
+	if os.Getenv("CONFORMANCE_UPDATE") == "1" {
+		writeJSON(t, corpusDigests, got)
+		return
+	}
+	checkCorpusDigests(t, paths, got)
+}
+
+// checkCorpusDigests holds the records of the corpus scripts at paths to
+// corpus-digests.json: the file lists exactly those scripts, each entry
+// matches its record, and the file is byte for byte the one
+// CONFORMANCE_UPDATE=1 writes.
+func checkCorpusDigests(t *testing.T, paths []string, got map[string]CorpusDigest) {
+	t.Helper()
+	raw, err := os.ReadFile(corpusDigests)
+	require.NoError(t, err, "run with CONFORMANCE_UPDATE=1 to create it")
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var want map[string]CorpusDigest
+	require.NoError(t, dec.Decode(&want), corpusDigests)
+
+	names := make([]string, 0, len(paths))
+	for _, path := range paths {
+		names = append(names, filepath.Base(path))
+	}
+	require.Equal(t, names, slices.Sorted(maps.Keys(want)),
+		"%s must list exactly the corpus scripts", corpusDigests)
+	for _, name := range names {
+		assert.Equal(t, want[name], got[name], "%s: %s differs from the Go record", corpusDigests, name)
+	}
+
+	canon, err := json.MarshalIndent(want, "", "  ")
+	require.NoError(t, err)
+	require.Equal(t, string(append(canon, '\n')), string(raw),
+		"%s is not in the form CONFORMANCE_UPDATE=1 writes", corpusDigests)
 }
 
 // TestLoadScriptRejects checks that a malformed script fails to load and
