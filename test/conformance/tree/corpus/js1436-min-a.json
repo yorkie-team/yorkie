@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "js1436-min-a",
+  "issues": ["yorkie-js-sdk#1436", "yorkie#2167"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "d1 inserts 'e' after 'a' and then splits before it; d2 concurrently splits after 'a'. Text at a concurrent same-position split lands on different sides.",
+  "replicas": 2,
+  "init": "ab",
+  "steps": [
+    { "r": 0, "op": "edit", "from": 2, "to": 2, "text": "e" },
+    { "r": 0, "op": "edit", "from": 2, "to": 2, "split": 1 },
+    { "r": 1, "op": "edit", "from": 2, "to": 2, "split": 1 }
+  ]
+}
