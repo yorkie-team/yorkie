@@ -1155,6 +1155,20 @@ func (t *Tree) Purge(child GCChild) error {
 	return nil
 }
 
+// TreeVisibleEdit is one visible change an identity-preserving Restore or
+// Retombstone made: the visible-index range [From, To) it replaced, measured
+// against the tree as it stood at that moment, and the size it inserted there.
+// A removal reports the range the node covered and InsertedSize 0; a revival
+// reports a collapsed range (From == To) at the node's position and its padded
+// size as InsertedSize. Undo-stack reconciliation applies them one after
+// another, exactly like a sequence of ordinary edits; an ordinary TreeEdit
+// reports its single range in the same shape (see
+// operations.TreeEdit.ExecutedRanges). Mirrors the JS TreeVisibleEdit, minus
+// the paths and value only its OpInfo uses.
+type TreeVisibleEdit struct {
+	From, To, InsertedSize int
+}
+
 // Restore re-establishes the nodes described by spans under their ORIGINAL
 // identities (identity-preserving Tree undo): live → skip (idempotent),
 // tombstoned → unremove in place, purged → recreate. A span whose kind does
@@ -1162,9 +1176,16 @@ func (t *Tree) Purge(child GCChild) error {
 // Retombstone. Spans must be in
 // parent-before-child order. Returns (untombstoned, recreated); the caller
 // un-registers GC pairs for the un-tombstoned nodes and accounts recreated
-// sizes to Live. Mirrors the JS CRDTTree.restore.
-func (t *Tree) Restore(spans []*TreeRestoreSpan) (
-	untombstoned, recreated []*TreeNode, pairs []GCPair, diff resource.DataSize, err error,
+// sizes to Live. When measure is set it also returns one insertion per node
+// that became visible, in the order it did, each measured right after that
+// node came back, so applying them one after another reproduces the result
+// (see TreeVisibleEdit). Mirrors the JS CRDTTree.restore.
+func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
+	untombstoned, recreated []*TreeNode,
+	pairs []GCPair,
+	diff resource.DataSize,
+	edits []TreeVisibleEdit,
+	err error,
 ) {
 	// Splitting a removed straddler buffers born-removed remainders as pending
 	// GC pairs (see TreeNode.Split). Drain them into the returned pairs on EVERY
@@ -1176,6 +1197,15 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 		pairs = append(pairs, t.drainPendingGCPairs()...)
 	}()
 
+	revived := func(node *TreeNode) {
+		if !measure {
+			return
+		}
+		if from, to, ok := t.visibleRangeOf(node); ok {
+			edits = append(edits, TreeVisibleEdit{From: from, To: from, InsertedSize: to - from})
+		}
+	}
+
 	for _, span := range spans {
 		if !span.kindAgrees() {
 			continue
@@ -1186,15 +1216,17 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 				if node.IsRemoved() {
 					node.unremove()
 					untombstoned = append(untombstoned, node)
+					revived(node)
 				}
 				continue
 			}
 			created, cErr := t.recreateFromSpan(span, span.ID.Offset, span.Length)
 			if cErr != nil {
-				return nil, nil, nil, diff, cErr
+				return nil, nil, nil, diff, nil, cErr
 			}
 			if created != nil {
 				recreated = append(recreated, created)
+				revived(created)
 			}
 			continue
 		}
@@ -1218,11 +1250,12 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 				overlapEnd := min(pieceEnd, end)
 				target, iErr := t.isolateTextRange(piece, cursor, overlapEnd, &diff)
 				if iErr != nil {
-					return nil, nil, nil, diff, iErr
+					return nil, nil, nil, diff, nil, iErr
 				}
 				if target.IsRemoved() {
 					target.unremove()
 					untombstoned = append(untombstoned, target)
+					revived(target)
 				}
 				cursor = overlapEnd
 				if overlapEnd >= pieceEnd {
@@ -1235,17 +1268,18 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan) (
 				}
 				created, cErr := t.recreateFromSpan(span, cursor, gapEnd-cursor)
 				if cErr != nil {
-					return nil, nil, nil, diff, cErr
+					return nil, nil, nil, diff, nil, cErr
 				}
 				if created != nil {
 					recreated = append(recreated, created)
+					revived(created)
 				}
 				cursor = gapEnd
 			}
 		}
 	}
 
-	return untombstoned, recreated, nil, diff, nil
+	return untombstoned, recreated, nil, diff, edits, nil
 }
 
 // isolateTextRange splits piece so that a node exactly covering the absolute
@@ -1289,13 +1323,16 @@ func (t *Tree) isolateTextRange(
 // images and segmentation stays convergent). A span whose kind does not agree
 // with itself is skipped, exactly as Restore skips it, so neither direction
 // acts on what the other ignores. Returns the GC pairs for the newly
-// tombstoned nodes and the live-split overhead. Mirrors the JS
+// tombstoned nodes, the live-split overhead, and, when measure is set, one
+// deletion per visible node it removed, each measured right before the removal
+// so they apply one after another (see TreeVisibleEdit). Mirrors the JS
 // CRDTTree.retombstone.
 func (t *Tree) Retombstone(
-	spans []*TreeRestoreSpan, executedAt *time.Ticket,
-) ([]GCPair, resource.DataSize, error) {
+	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool,
+) ([]GCPair, resource.DataSize, []TreeVisibleEdit, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
+	var edits []TreeVisibleEdit
 	for _, span := range spans {
 		if !span.kindAgrees() {
 			continue
@@ -1322,15 +1359,51 @@ func (t *Tree) Retombstone(
 				var iErr error
 				target, iErr = t.isolateTextRange(piece, from, to, &diff)
 				if iErr != nil {
-					return nil, resource.DataSize{}, iErr
+					return nil, resource.DataSize{}, nil, iErr
 				}
+			}
+			// Measure while target is still visible.
+			var from, to int
+			visible := false
+			if measure {
+				from, to, visible = t.visibleRangeOf(target)
 			}
 			if target.remove(executedAt) {
 				pairs = append(pairs, GCPair{Parent: t, Child: target})
+				if visible {
+					edits = append(edits, TreeVisibleEdit{From: from, To: to})
+				}
 			}
 		}
 	}
-	return pairs, diff, nil
+	return pairs, diff, edits, nil
+}
+
+// visibleRangeOf returns the visible-index range [from, to) node covers, or
+// ok=false when it or one of its ancestors is removed and so takes no room in
+// the index. Mirrors the JS CRDTTree.visibleRangeOf.
+//
+// A tree the index cannot walk degrades to ok=false rather than an error. The
+// caller runs inside TreeEdit.Execute after the CRDT state has settled, and
+// for a remote change the spans came off the wire: failing there would abort
+// the pack and wedge the document on every replica that receives it, while a
+// missed range only leaves a stacked undo/redo entry unshifted. JS makes the
+// same trade (it logs and reports nothing).
+func (t *Tree) visibleRangeOf(node *TreeNode) (from, to int, ok bool) {
+	if node.Index.Parent == nil {
+		return 0, 0, false
+	}
+	for n := node.Index; n != nil; n = n.Parent {
+		if n.Value.IsRemoved() {
+			return 0, 0, false
+		}
+	}
+
+	to, err := t.ToIndex(node.Index.Parent.Value, node)
+	if err != nil || to < 0 {
+		return 0, 0, false
+	}
+	return to - node.Index.PaddedLength(), to, true
 }
 
 // findPiecesOverlapping collects surviving pieces (live or tombstoned) of the

@@ -75,7 +75,7 @@ func TestTreeRestoreUnremove(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 
-	untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+	untombstoned, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, true)
 	assert.NoError(t, err)
 	assert.Len(t, untombstoned, 1, "the tombstone is revived in place")
 	assert.Empty(t, recreated, "nothing was purged, so nothing is recreated")
@@ -96,17 +96,26 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
-	pairs, _, rErr := tree.Retombstone(spans, helper.TimeT(ctx))
+	pairs, _, removed, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true)
 	assert.NoError(t, rErr)
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
 	assert.Equal(t, "<r></r>", tree.ToXML())
+	// <p> is measured with its text while still visible; the text is then
+	// already under a removed ancestor and takes no room of its own.
+	assert.Equal(t, []crdt.TreeVisibleEdit{{From: 0, To: 7}}, removed)
 
 	// Restore (undo): the same identities come back, parent before child.
-	untombstoned, recreated, _, _, err := tree.Restore(spans)
+	untombstoned, recreated, _, _, revived, err := tree.Restore(spans, true)
 	assert.NoError(t, err)
 	assert.Len(t, untombstoned, 2)
 	assert.Empty(t, recreated)
 	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+	// Each node is measured right after it comes back: first the empty <p>,
+	// then the text inside it, so applying them in order reproduces the tree.
+	assert.Equal(t, []crdt.TreeVisibleEdit{
+		{From: 0, To: 0, InsertedSize: 2},
+		{From: 1, To: 1, InsertedSize: 5},
+	}, revived)
 }
 
 // TestTreeRestoreExecuteAfterGC exercises the full server execution path: a
@@ -232,7 +241,7 @@ func TestTreeRestoreParentGoneSkip(t *testing.T) {
 		ParentID: ghostParent,
 	}
 
-	untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{orphan})
+	untombstoned, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{orphan}, true)
 	assert.NoError(t, err)
 	assert.Empty(t, untombstoned)
 	assert.Empty(t, recreated, "a node with no surviving parent is skipped (B1)")
@@ -259,7 +268,7 @@ func TestTreeRestoreTextParentSkip(t *testing.T) {
 			span.NodeType, span.Length, span.Value = "text", 1, "x"
 		}
 
-		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		untombstoned, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, true)
 		assert.NoError(t, err, "isText=%v", isText)
 		assert.Empty(t, untombstoned)
 		assert.Empty(t, recreated, "a node under a text parent is skipped")
@@ -289,7 +298,7 @@ func TestTreeRestoreKindMismatchSkip(t *testing.T) {
 		}
 
 		spans := []*crdt.TreeRestoreSpan{span, span}
-		untombstoned, recreated, _, _, err := tree.Restore(spans)
+		untombstoned, recreated, _, _, _, err := tree.Restore(spans, true)
 		assert.NoError(t, err, "isText=%v", isText)
 		assert.Empty(t, untombstoned)
 		assert.Empty(t, recreated, "isText=%v: a mismatched span is skipped", isText)
@@ -315,7 +324,7 @@ func TestTreeRestoreKindMismatchKeepsTombstone(t *testing.T) {
 	span := textSpan(text, p)
 	span.NodeType = "p"
 
-	untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+	untombstoned, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, true)
 	assert.NoError(t, err)
 	assert.Empty(t, untombstoned, "a mismatched span revives nothing")
 	assert.Empty(t, recreated)
@@ -344,7 +353,7 @@ func TestTreeRetombstoneKindMismatchSkip(t *testing.T) {
 			span := textSpan(text, p)
 			span.IsText, span.NodeType = tc.isText, tc.nodeType
 
-			pairs, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx))
+			pairs, _, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true)
 			assert.NoError(t, err)
 			assert.Empty(t, pairs, "a mismatched span re-tombstones nothing")
 			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")
@@ -375,7 +384,7 @@ func TestTreeRestoreClaimedIdentitySkip(t *testing.T) {
 			ParentID: tree.Root().ID(),
 		}
 
-		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		untombstoned, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, true)
 		assert.NoError(t, err)
 		assert.Empty(t, untombstoned)
 		assert.Empty(t, recreated, "a claimed identity is not recreated")
@@ -400,7 +409,7 @@ func TestTreeRestoreClaimedIdentitySkip(t *testing.T) {
 			ParentID: p.ID(),
 		}
 
-		untombstoned, recreated, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		untombstoned, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, true)
 		assert.NoError(t, err)
 		assert.Empty(t, untombstoned)
 		assert.Empty(t, recreated, "an id inside a live run is not recreated")
@@ -564,7 +573,7 @@ func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, "<r></r>", tree.ToXML())
 
-			_, _, _, _, err = tree.Restore(spans)
+			_, _, _, _, _, err = tree.Restore(spans, true)
 			assert.NoError(t, err)
 
 			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
@@ -699,7 +708,7 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 		assert.NoError(t, err)
 	}
 	applyU := func(tree *crdt.Tree, span *crdt.TreeRestoreSpan) {
-		_, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span})
+		_, _, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, true)
 		assert.NoError(t, err)
 	}
 	applyX := func(tree *crdt.Tree, ctx *change.Context) {
