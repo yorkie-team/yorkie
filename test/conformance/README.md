@@ -79,6 +79,14 @@ Let `ps` be the live paragraphs of replica `r`: from `t.toJSON()`, each child
 of the root gives `[base, text]` where `text` is the concatenation of its
 text children and `base` starts at 0 and advances by `len(text) + 2`.
 
+`len` counts UTF-16 code units, the unit of Tree indexes in both SDKs (a JS
+string's `length`; Go encodes the text with `utf16.Encode`), so every base,
+slot, candidate and room below is in UTF-16 code units. A slot or candidate
+inside a surrogate pair is not skipped: the Tree rejects such an index in
+both SDKs, so the step throws and the run ends with `error`. The generator
+only writes ASCII, so this needs a hand-written `init` or `text` with
+characters outside the BMP.
+
 - `ins` / `split`: slots = for each paragraph, `k = 0..len(text)`, index
   `base + 1 + k`. Pick `slots[floor(f * len(slots))]`. `ins` →
   `edit(idx, idx, text=v)`; `split` → `edit(idx, idx, split=1)`.

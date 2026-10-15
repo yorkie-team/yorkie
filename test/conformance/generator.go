@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 )
@@ -134,13 +135,14 @@ func Gen(seed uint32, fam string, n, steps int) *Script {
 	}
 }
 
+// para is a live paragraph: the index of its <p> and the length of its
+// text in UTF-16 code units, the unit of Tree indexes in both SDKs.
 type para struct {
 	base int
-	text []rune
+	size int
 }
 
-// paras lists the live paragraphs of replica r: the index of each <p> and
-// the concatenation of its text children.
+// paras lists the live paragraphs of replica r.
 func (rn *run) paras(r int) []para {
 	var out []para
 	base := 0
@@ -151,9 +153,9 @@ func (rn *run) paras(r int) []para {
 				sb.WriteString(c.Value)
 			}
 		}
-		text := []rune(sb.String())
-		out = append(out, para{base, text})
-		base += len(text) + 2
+		size := len(utf16.Encode([]rune(sb.String())))
+		out = append(out, para{base, size})
+		base += size + 2
 	}
 	return out
 }
@@ -170,7 +172,7 @@ func (rn *run) gen(st Step) string {
 	case "ins", "split":
 		var slots []int
 		for _, p := range ps {
-			for k := 0; k <= len(p.text); k++ {
+			for k := 0; k <= p.size; k++ {
 				slots = append(slots, p.base+1+k)
 			}
 		}
@@ -188,8 +190,8 @@ func (rn *run) gen(st Step) string {
 		type cand struct{ idx, room int }
 		var cs []cand
 		for _, p := range ps {
-			for k := 0; k < len(p.text); k++ {
-				cs = append(cs, cand{p.base + 1 + k, min(3, len(p.text)-k)})
+			for k := 0; k < p.size; k++ {
+				cs = append(cs, cand{p.base + 1 + k, min(3, p.size-k)})
 			}
 		}
 		if len(cs) == 0 {
@@ -204,11 +206,11 @@ func (rn *run) gen(st Step) string {
 			return ""
 		}
 		i := pickIndex(st.F, len(ps)-1)
-		base, text, next := ps[i].base, ps[i].text, ps[i+1].text
-		a := pickIndex(st.G, min(2, len(text))+1)
-		b := pickIndex(st.H, min(2, len(next))+1)
-		from := base + 1 + len(text) - a
-		to := base + len(text) + 3 + b
+		base, size, next := ps[i].base, ps[i].size, ps[i+1].size
+		a := pickIndex(st.G, min(2, size)+1)
+		b := pickIndex(st.H, min(2, next)+1)
+		from := base + 1 + size - a
+		to := base + size + 3 + b
 		rn.edit(st.R, from, to, "", 0)
 		return describeEdit(from, to, "", 0)
 	case "style":
@@ -221,7 +223,7 @@ func (rn *run) gen(st Step) string {
 			key = "b"
 		}
 		attrs := map[string]string{key: st.Val}
-		to := p.base + len(p.text) + 2
+		to := p.base + p.size + 2
 		rn.update(st.R, func(t *json.Tree) { t.Style(p.base, to, attrs) })
 		return describeStyle(p.base, to, attrs)
 	}
