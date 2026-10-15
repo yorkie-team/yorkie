@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "id": "undo-redo-removestyle",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "Sequential style, removeStyle, undo and redo on both replicas, each seen by the peer before the next edit, plus a snapshot reload. Covers the step lines of undo, redo, removeStyle and style.",
+  "replicas": 2,
+  "init": "ab",
+  "steps": [
+    {
+      "r": 0,
+      "op": "style",
+      "from": 0,
+      "to": 4,
+      "attrs": { "b": "1", "i": "2" }
+    },
+    { "r": 1, "op": "pull" },
+    { "r": 1, "op": "edit", "from": 3, "to": 3, "text": "c" },
+    { "r": 0, "op": "pull" },
+    { "r": 0, "op": "removeStyle", "from": 0, "to": 5, "keys": ["i", "b"] },
+    { "r": 1, "op": "pull" },
+    { "r": 0, "op": "undo" },
+    { "r": 1, "op": "pull" },
+    { "r": 1, "op": "undo" },
+    { "r": 1, "op": "redo" },
+    { "r": 0, "op": "sync" },
+    { "r": 0, "op": "redo" },
+    { "r": 1, "op": "snapshot" },
+    { "r": 1, "op": "pull" },
+    { "r": 1, "op": "redo" }
+  ]
+}
