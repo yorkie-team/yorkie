@@ -2574,6 +2574,17 @@ func (t *Tree) isSplitProductOf(node, origin *TreeNode) bool {
 	return false
 }
 
+// isSplitProductOfLeftElement reports whether next, a sibling the step-04
+// walk of FindTreeNodesWithSplitText is about to pass, was split off the
+// element the position anchors on. Only an element anchor has split
+// products; a left-most position anchors on its parent, not on a sibling.
+func (t *Tree) isSplitProductOfLeftElement(next, left *TreeNode, isLeftMost bool) bool {
+	if isLeftMost || left.IsText() || next.IsText() || next.InsPrevID == nil {
+		return false
+	}
+	return t.isSplitProductOf(next, left)
+}
+
 // declaredAncestryHas walks the CURRENT ancestry of the element a position
 // named as its parent, from that element up to the root, and reports whether
 // any of them matches. Both callers below ask "was this position declared
@@ -4385,10 +4396,19 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		idx = realParentNode.Index.OffsetOfChild(leftNode.Index) + 1
 	}
 
+	// A split product of the left element is not a concurrent insert at this
+	// position even though its createdAt is newer: it is the right half of the
+	// element the position names, and §7.4 places a position after the left
+	// half before that right half. Skipping it would move the position past
+	// content the editor saw on the far side of the element.
+	anchorElement := leftNode
 	parentChildren := realParentNode.Index.Children(true)
 	for i := idx; i < len(parentChildren); i++ {
 		next := parentChildren[i].Value
 		if !next.id.CreatedAt.After(editedAt) {
+			break
+		}
+		if t.isSplitProductOfLeftElement(next, anchorElement, isLeftMost) {
 			break
 		}
 		leftNode = next
