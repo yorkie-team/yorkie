@@ -113,6 +113,9 @@ func editRangeOnEach(t *testing.T, docs []*document.Document, ranges [][2]int) {
 // root, and a delete that ends at the next paragraph's opening token merges
 // into the root too, so the skip fired and the hoisted text stayed alive on
 // the replica that unwrapped first.
+//
+// The same-unwrap and merge-emptied cases moved to the conformance corpus
+// (test/conformance/tree/corpus/unwrap-*.json).
 func TestTreeUnwrapAndMergeDelete(t *testing.T) {
 	t.Run("unwrap of a paragraph a concurrent delete covers whole", func(t *testing.T) {
 		docs := twoParagraphReplicas(t, 2)
@@ -149,44 +152,6 @@ func TestTreeUnwrapAndMergeDelete(t *testing.T) {
 		assert.NotEqual(t, treeShape(t, docs[0]), treeShape(t, docs[1]),
 			"merge-moved child ordering now converges: close "+
 				"20260924-merge-moved-child-order and replace this with "+
-				"the treeShape equality the other subtests assert")
-	})
-
-	t.Run("same unwrap on both replicas keeps the hoisted children", func(t *testing.T) {
-		docs := twoParagraphReplicas(t, 2)
-
-		// The skip §6.2 still needs: both replicas run the same unwrap, so
-		// each sees the other's merge already done and must not read it as a
-		// delete of the children it moved itself. Edit(4, 5) removes p2's
-		// opening token, hoisting cd into the root after p1.
-		//
-		// The last paragraph, deliberately: unwrapping p1 instead drags in a
-		// separate, pre-existing §1.1 problem, where the redirect of the
-		// second unwrap's to-position onto the hoisted ab -- which mergeNodes
-		// appended after p2 -- widens that range over the untouched p2 and
-		// destroys cd. Both replicas agree on that loss, before this change
-		// and after, but asserting it here would bless it as the expected
-		// result of an unwrap and hide what this subtest is actually for.
-		editRangeOnEach(t, docs, [][2]int{{4, 5}, {4, 5}})
-
-		// Without the skip the replica that unwrapped first tombstones the cd
-		// it hoisted itself, leaving <r><p>ab</p></r> against
-		// <r><p>ab</p>cd</r>.
-		assert.Equal(t, "<r><p>ab</p>cd</r>", treeXML(t, docs[0]))
-		assert.Equal(t, "<r><p>ab</p>cd</r>", treeXML(t, docs[1]))
-		assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
-	})
-
-	t.Run("unwrap of a paragraph a concurrent merge emptied", func(t *testing.T) {
-		docs := twoParagraphReplicas(t, 2)
-
-		// The other skip §6.2 needs: d1 merges p2 into p1 (Edit(1, 5) removes
-		// ab, p1's closing token and p2's opening token), while d2 unwraps p2
-		// by removing its closing token (Edit(7, 8)). d2's range starts
-		// inside p2, so it deletes nothing p2 held -- cd survives.
-		editRangeOnEach(t, docs, [][2]int{{1, 5}, {7, 8}})
-
-		assert.Equal(t, "<r><p>cd</p></r>", treeXML(t, docs[0]))
-		assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
+				"a treeShape equality")
 	})
 }

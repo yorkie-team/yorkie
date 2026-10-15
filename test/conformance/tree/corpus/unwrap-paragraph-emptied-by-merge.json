@@ -1,0 +1,26 @@
+{
+  "v": 2,
+  "id": "unwrap-paragraph-emptied-by-merge",
+  "issues": ["yorkie#1956"],
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeUnwrapAndMergeDelete/unwrap of a paragraph a concurrent merge emptied (tree_unwrap_merge_delete_test.go). d1 merges p2 into p1 with edit(1, 5) while d2 unwraps p2 by removing its closing token with edit(7, 8); d2's range starts inside p2, so cd survives.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "r",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "ab" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "cd" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 1, "to": 5 },
+    { "r": 1, "op": "edit", "from": 7, "to": 8 },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "exchanged",
+      "xml": ["<r><p>cd</p></r>", "<r><p>cd</p></r>"]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "v": 2,
+  "id": "remove-style-split-one-splits-other-removes",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeRemoveStyleOverAConcurrentlySplitBoundary/one replica splits, the other removes the style (tree_remove_style_split_test.go). The removal was issued against the unsplit span, so the advance has to carry its right anchor past the other replica's split product: both halves come back unbolded on both replicas.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          {
+            "type": "span",
+            "attributes": { "bold": "true" },
+            "children": [{ "type": "text", "value": "abcde" }]
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "r": 1, "op": "removeStyle", "from": 1, "to": 8, "keys": ["bold"] },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "exchanged",
+      "xml": [
+        "<doc><p><span>abc</span><span>de</span></p></doc>",
+        "<doc><p><span>abc</span><span>de</span></p></doc>"
+      ]
+    }
+  ]
+}

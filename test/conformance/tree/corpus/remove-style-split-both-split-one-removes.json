@@ -1,0 +1,43 @@
+{
+  "v": 2,
+  "id": "remove-style-split-both-split-one-removes",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeRemoveStyleOverAConcurrentlySplitBoundary/both replicas split and one removes the style (tree_remove_style_split_test.go). The removal saw its own split first, so it covers only the left product; the two splits of one boundary order by ticket and leave an empty middle product.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          {
+            "type": "span",
+            "attributes": { "bold": "true" },
+            "children": [{ "type": "text", "value": "abcde" }]
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 5, "to": 5, "split": 1 },
+        { "op": "removeStyle", "from": 1, "to": 6, "keys": ["bold"] }
+      ]
+    },
+    { "r": 1, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "exchanged",
+      "xml": [
+        "<doc><p><span>abc</span><span></span><span bold=\"true\">de</span></p></doc>",
+        "<doc><p><span>abc</span><span></span><span bold=\"true\">de</span></p></doc>"
+      ]
+    }
+  ]
+}
