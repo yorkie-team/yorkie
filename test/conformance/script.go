@@ -20,6 +20,7 @@
 package conformance
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -59,15 +60,42 @@ type Step struct {
 	Val string  `json:"v,omitempty"`
 }
 
-// LoadScript reads and validates a script file.
+// statuses are the ledger values a corpus script may record per SDK, each
+// with the only result it accepts.
+var statuses = map[string]string{
+	"pass":          ResultPass,
+	"known-diverge": ResultDiverged,
+	"known-error":   ResultError,
+	"known-fail":    ResultFail,
+}
+
+// ops are the step ops of format v1.
+var ops = map[string]bool{
+	"edit": true, "style": true, "removeStyle": true, "undo": true, "redo": true,
+	"pull": true, "sync": true, "snapshot": true, "gen": true,
+}
+
+// genKinds are the generator events a `gen` step may carry.
+var genKinds = map[string]bool{
+	"ins": true, "split": true, "del": true, "merge": true, "style": true,
+}
+
+// LoadScript reads and validates a script file. Unknown fields, ops,
+// generator kinds and ledger values are errors, so a typo fails loudly
+// instead of silently replaying something else.
 func LoadScript(path string) (*Script, error) {
 	raw, err := os.ReadFile(path) // #nosec G304 -- test fixture path
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
 	var s Script
-	if err := json.Unmarshal(raw, &s); err != nil {
+	if err := dec.Decode(&s); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("parse %s: trailing data after the script", path)
 	}
 	if s.V != 1 {
 		return nil, fmt.Errorf("%s: unsupported version %d", path, s.V)
@@ -75,9 +103,20 @@ func LoadScript(path string) (*Script, error) {
 	if s.Replicas < 1 {
 		return nil, fmt.Errorf("%s: replicas must be at least 1", path)
 	}
+	for sdk, status := range s.Status {
+		if _, ok := statuses[status]; !ok {
+			return nil, fmt.Errorf("%s: status.%s: unknown value %q", path, sdk, status)
+		}
+	}
 	for i, st := range s.Steps {
 		if st.R < 0 || st.R >= s.Replicas {
 			return nil, fmt.Errorf("%s: step %d: replica %d out of range", path, i, st.R)
+		}
+		if !ops[st.Op] {
+			return nil, fmt.Errorf("%s: step %d: unknown op %q", path, i, st.Op)
+		}
+		if st.Op == "gen" && !genKinds[st.K] {
+			return nil, fmt.Errorf("%s: step %d: unknown gen kind %q", path, i, st.K)
 		}
 	}
 	return &s, nil

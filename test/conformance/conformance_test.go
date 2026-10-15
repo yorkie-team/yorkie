@@ -93,8 +93,8 @@ func writeJSON(t *testing.T, path string, v any) {
 	require.NoError(t, os.WriteFile(path, append(b, '\n'), 0o600)) // #nosec G703 -- test-chosen path
 }
 
-// TestCorpus runs every corpus script and holds it to its ledger status,
-// strictly both ways.
+// TestCorpus runs every corpus script and holds it to its ledger status:
+// the result must be exactly the one the status maps to.
 func TestCorpus(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join(corpusDir, "*.json"))
 	require.NoError(t, err)
@@ -104,18 +104,39 @@ func TestCorpus(t *testing.T) {
 		t.Run(strings.TrimSuffix(filepath.Base(path), ".json"), func(t *testing.T) {
 			s, err := LoadScript(path)
 			require.NoError(t, err)
-			status := s.Status[sdk]
+			status, ok := s.Status[sdk]
+			require.True(t, ok, "%s: status.%s is missing", path, sdk)
+			want := statuses[status]
 			rec := Run(s)
-			switch status {
-			case "pass":
-				assert.Equal(t, ResultPass, rec.Result,
-					"%s regressed: checks %+v, xml %q, err %s", s.ID, rec.Checks, rec.XML, rec.Err)
-			case "known-diverge":
-				assert.NotEqual(t, ResultPass, rec.Result,
-					"%s now passes: update status.%s to \"pass\" in %s", s.ID, sdk, path)
-			default:
-				t.Fatalf("%s: status.%s must be \"pass\" or \"known-diverge\", got %q", path, sdk, status)
-			}
+			assert.Equal(t, want, rec.Result,
+				"%s: status.%s is %q but the result is %q (checks %+v, xml %q, err %q): "+
+					"update status.%s in the ledger if the change is intended\n%s",
+				path, sdk, status, rec.Result, rec.Checks, rec.XML, rec.Err, sdk,
+				strings.Join(rec.Steps, "\n"))
+		})
+	}
+}
+
+// TestLoadScriptRejects checks that a malformed script fails to load and
+// names its file.
+func TestLoadScriptRejects(t *testing.T) {
+	head := `"v":1,"id":"x","replicas":1,"init":"ab"`
+	for name, body := range map[string]string{
+		"version":      `{"v":2,"id":"x","replicas":1,"init":"ab","steps":[]}`,
+		"field":        `{` + head + `,"steps":[],"extra":1}`,
+		"step field":   `{` + head + `,"steps":[{"r":0,"op":"pull","form":1}]}`,
+		"op":           `{` + head + `,"steps":[{"r":0,"op":"insert"}]}`,
+		"gen kind":     `{` + head + `,"steps":[{"r":0,"op":"gen","k":"move"}]}`,
+		"status":       `{` + head + `,"status":{"go":"diverged"},"steps":[]}`,
+		"replica":      `{` + head + `,"steps":[{"r":1,"op":"pull"}]}`,
+		"trailing doc": `{` + head + `,"steps":[]} {}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "bad.json")
+			require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+			_, err := LoadScript(path)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), path)
 		})
 	}
 }
@@ -138,11 +159,13 @@ func TestParity(t *testing.T) {
 			require.NoError(t, err, "run with CONFORMANCE_UPDATE=1 to create it")
 			var want Fixture
 			require.NoError(t, json.Unmarshal(raw, &want))
-			require.Equal(t, want.Runs, len(got.Rows))
+			require.Len(t, want.Rows, want.Runs, "%s: rows do not match runs", path)
+			wantHead, gotHead := want, got
+			wantHead.Rows, gotHead.Rows = nil, nil
+			require.Equal(t, wantHead, gotHead, "%s: header differs from the regenerated one", path)
 			for i, w := range want.Rows {
 				assert.Equal(t, w, got.Rows[i], "seed %d of %s differs from the fixture", w.Seed, f.Name)
 			}
-			assert.Equal(t, want.Diverged, got.Diverged, "%s divergence count moved", f.Name)
 		})
 	}
 }

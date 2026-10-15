@@ -46,27 +46,22 @@ const (
 
 // Checks holds the outcome of each invariant.
 type Checks struct {
-	I1 bool `json:"I1"`
-	I2 bool `json:"I2"`
-	I3 bool `json:"I3"`
-	I4 bool `json:"I4"`
+	I1, I2, I3, I4 bool
 }
 
 // Record is what one run of a script yields. Two runners agree on a script
 // when their records have the same Steps, XML and digests.
 type Record struct {
-	ID        string   `json:"id"`
-	Seed      int      `json:"seed,omitempty"`
-	Fam       string   `json:"fam,omitempty"`
-	N         int      `json:"n"`
-	Result    string   `json:"result"`
-	Checks    Checks   `json:"checks"`
-	Steps     []string `json:"steps"`
-	XML       []string `json:"xml"`
-	Shapes    []string `json:"-"`
-	Digest    string   `json:"digest"`
-	XMLDigest string   `json:"xmlDigest"`
-	Err       string   `json:"error,omitempty"`
+	ID        string
+	N         int
+	Result    string
+	Checks    Checks
+	Steps     []string
+	XML       []string
+	Shapes    []string
+	Digest    string
+	XMLDigest string
+	Err       string
 }
 
 // entry is one server-log entry. A nil changes slice is an op that produced
@@ -114,7 +109,7 @@ func Run(s *Script) Record {
 	}
 	i3 := off.snapshotOK
 	for r := range off.docs {
-		if !off.snapshotMatches(r) {
+		if _, ok := off.snapshotMatches(r); !ok {
 			i3 = false
 		}
 	}
@@ -280,11 +275,9 @@ func (rn *run) take(r int) []*change.Change {
 		return nil
 	}
 	rn.clientSeq[r] = pack.Changes[len(pack.Changes)-1].ClientSeq()
-	if rn.rows != nil {
-		rn.rows[r] = rn.docs[r].VersionVector()
-	}
 	vv := time.InitialVersionVector
 	if rn.rows != nil {
+		rn.rows[r] = rn.docs[r].VersionVector()
 		vv = rn.packVV(r)
 	}
 	rn.apply(r, nil, change.NewCheckpoint(0, rn.clientSeq[r]), vv)
@@ -422,20 +415,32 @@ func (rn *run) rebuild(r int) *document.Document {
 	return doc
 }
 
-// snapshotMatches is I3 for replica r: its rebuild has the same XML and
-// shape.
-func (rn *run) snapshotMatches(r int) bool {
-	rebuilt := rn.rebuild(r)
-	return tree(rebuilt).ToXML() == tree(rn.docs[r]).ToXML() && shape(rebuilt) == shape(rn.docs[r])
+// snapshotMatches is I3 for replica r: it rebuilds r and reports whether the
+// rebuild has the same XML and shape. A rebuild that panics counts as a
+// mismatch and yields no document, as JS's checkRebuild does.
+func (rn *run) snapshotMatches(r int) (rebuilt *document.Document, ok bool) {
+	defer func() {
+		if recover() != nil {
+			rebuilt, ok = nil, false
+		}
+	}()
+	rebuilt = rn.rebuild(r)
+	ok = tree(rebuilt).ToXML() == tree(rn.docs[r]).ToXML() && shape(rebuilt) == shape(rn.docs[r])
+	return rebuilt, ok
 }
 
+// snapshot replaces replica r by its rebuild; in off mode it checks I3 too.
+// A rebuild that panics outside the check aborts the run.
 func (rn *run) snapshot(r int) {
-	rebuilt := rn.rebuild(r)
+	var rebuilt *document.Document
 	if !rn.minVVMode {
-		same := tree(rebuilt).ToXML() == tree(rn.docs[r]).ToXML() && shape(rebuilt) == shape(rn.docs[r])
-		if !same {
+		var ok bool
+		if rebuilt, ok = rn.snapshotMatches(r); !ok {
 			rn.snapshotOK = false
 		}
+	}
+	if rebuilt == nil {
+		rebuilt = rn.rebuild(r)
 	}
 	rn.docs[r] = rebuilt
 }
