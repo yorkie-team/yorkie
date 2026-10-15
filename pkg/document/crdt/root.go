@@ -634,6 +634,33 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		count += r.deregisterElement(pair.elem)
 	}
 
+	// One purge can release another: a parent held for its children (see
+	// GCHold) becomes collectable once they are gone, and a tombstone whose
+	// successor was a purged tombstone gets a new successor to check. So the
+	// worklist is walked until a pass purges nothing, which also makes the
+	// outcome independent of the map's iteration order.
+	nodeDeferred := 0
+	for {
+		purged, held, err := r.collectNodePairsOnce(vector)
+		if err != nil {
+			return 0, 0, err
+		}
+		count += purged
+		nodeDeferred = held
+		if purged == 0 {
+			break
+		}
+	}
+	deferred += nodeDeferred
+
+	return count, deferred, nil
+}
+
+// collectNodePairsOnce makes one pass over gcNodePairMap, purging every
+// pair whose removal, GCBarrier and GCHold allow it at vector. It returns how
+// many it purged and how many it had to leave for a barrier or a hold.
+func (r *Root) collectNodePairsOnce(vector time.VersionVector) (int, int, error) {
+	count, deferred := 0, 0
 	// Delete by the range key, not by one recomputed after Purge: keyOf reads
 	// the child's IDString, and an entry keyed on a value the purge had
 	// changed would survive the delete, keep GarbageLen from ever reaching

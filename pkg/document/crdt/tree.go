@@ -1112,10 +1112,22 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
-// HoldsTombstone implements GCHold[GCChild]. No tombstone of a Tree is held
-// yet; the rules are added one by one below.
-func (t *Tree) HoldsTombstone(_ GCChild, _ time.VersionVector) bool {
-	return false
+// HoldsTombstone implements GCHold[GCChild]: it keeps a removed node that a
+// later edit or a later purge still reads.
+//
+// A removed element with children is held until they are gone. Purging it
+// detaches its whole subtree in one go, and a child that is still live there
+// (a concurrent insert under an element some replica removed, or one a
+// restore revived) is lost with it while staying registered in NodeMapByID,
+// where position resolution walks off the top of the detached subtree. Its
+// removed children are on the worklist themselves, so the element follows
+// them within the same collection.
+func (t *Tree) HoldsTombstone(child GCChild, _ time.VersionVector) bool {
+	node, ok := child.(*TreeNode)
+	if !ok || node.Index == nil {
+		return false
+	}
+	return !node.IsText() && len(node.Index.Children(true)) > 0
 }
 
 func (t *Tree) Purge(child GCChild) error {
