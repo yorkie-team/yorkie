@@ -250,7 +250,7 @@ func (e *TreeEdit) Execute(
 			// 1. Re-remove (retombstone) by identity. Isolating a straddling
 			// piece splits it (live-split overhead accounted to diff).
 			retombstonePairs, retombstoneDiff, retombstoneEdits, err := obj.Retombstone(
-				toRetombstone, e.executedAt, measure,
+				toRetombstone, e.executedAt, measure, versionVector,
 			)
 			if err != nil {
 				return ExecutionResult{}, err

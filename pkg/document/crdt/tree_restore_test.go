@@ -96,7 +96,7 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
-	pairs, _, removed, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true)
+	pairs, _, removed, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true, nil)
 	assert.NoError(t, rErr)
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
 	assert.Equal(t, "<r></r>", tree.ToXML())
@@ -353,7 +353,7 @@ func TestTreeRetombstoneKindMismatchSkip(t *testing.T) {
 			span := textSpan(text, p)
 			span.IsText, span.NodeType = tc.isText, tc.nodeType
 
-			pairs, _, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true)
+			pairs, _, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true, nil)
 			assert.NoError(t, err)
 			assert.Empty(t, pairs, "a mismatched span re-tombstones nothing")
 			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")

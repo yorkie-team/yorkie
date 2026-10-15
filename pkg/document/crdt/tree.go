@@ -1328,7 +1328,7 @@ func (t *Tree) isolateTextRange(
 // so they apply one after another (see TreeVisibleEdit). Mirrors the JS
 // CRDTTree.retombstone.
 func (t *Tree) Retombstone(
-	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool,
+	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool, versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, []TreeVisibleEdit, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
@@ -1378,9 +1378,46 @@ func (t *Tree) Retombstone(
 					edits = append(edits, TreeVisibleEdit{From: from, To: to})
 				}
 			}
+			pairs, edits = t.retombstoneUnknownSplitSiblings(target, executedAt, measure, versionVector, pairs, edits)
 		}
 	}
 	return pairs, diff, edits, nil
+}
+
+// retombstoneUnknownSplitSiblings applies the §4.1 cascade to an element
+// Retombstone just removed: the split products a concurrent split cut off it,
+// which the acting change did not know, go with it, as they do when an
+// ordinary delete removes the element. Without it a replica that applied the
+// concurrent split before the retombstone keeps the product live while one
+// that applied it after splits an already removed element and gets a removed
+// product.
+func (t *Tree) retombstoneUnknownSplitSiblings(
+	target *TreeNode,
+	executedAt *time.Ticket,
+	measure bool,
+	versionVector time.VersionVector,
+	pairs []GCPair,
+	edits []TreeVisibleEdit,
+) ([]GCPair, []TreeVisibleEdit) {
+	if target.IsText() || target.InsNextID == nil {
+		return pairs, edits
+	}
+
+	neverEnclosed := func(*TreeNode) bool { return false }
+	for _, sibling := range t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed) {
+		var from, to int
+		visible := false
+		if measure {
+			from, to, visible = t.visibleRangeOf(sibling)
+		}
+		if sibling.remove(executedAt) {
+			pairs = append(pairs, GCPair{Parent: t, Child: sibling})
+			if visible {
+				edits = append(edits, TreeVisibleEdit{From: from, To: to})
+			}
+		}
+	}
+	return pairs, edits
 }
 
 // refreshSpanAnchors points span's sibling anchors at the neighbours target
