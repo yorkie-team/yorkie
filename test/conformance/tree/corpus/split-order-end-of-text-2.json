@@ -1,0 +1,45 @@
+{
+  "v": 2,
+  "id": "split-order-end-of-text-2",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeSameBoundarySplitOrder/the same at the end of the text: two replicas, and a range delete afterwards (tree_split_order_test.go). Both replicas split <span>abcde</span> the same way and exchange; d1 then deletes the whole root range, which has to leave <doc></doc> on both, with the split products in one order (I1).",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          { "type": "span", "children": [{ "type": "text", "value": "abcde" }] }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 7, "to": 7, "split": 1 },
+        { "op": "edit", "from": 8, "to": 8, "split": 1 }
+      ]
+    },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 7, "to": 7, "split": 1 },
+        { "op": "edit", "from": 8, "to": 8, "split": 1 }
+      ]
+    },
+    { "op": "exchange" },
+    { "r": 0, "op": "edit", "from": 0, "to": 17 },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "deleted",
+      "xml": ["<doc></doc>", "<doc></doc>"]
+    }
+  ]
+}

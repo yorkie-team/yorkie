@@ -1,0 +1,26 @@
+{
+  "v": 2,
+  "id": "split-order-older-paragraph-d1",
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "TestTreeSameBoundarySplitAfterOlderSplit/the older actor splits the paragraph, older split by replica 0 (tree_split_order_test.go). d1 splits <span>abcde</span> after c and both sync; then d1 runs the case's edit while d2 splits the older product's left half at the same boundary. KNOWN, skipped in the original: the other actor's empty product lands before the paragraph boundary on the replica that applied it first (the edit's position advance passes it) and after it on the other (§7.4 re-parents it next to the older product). Diverges on main too.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          { "type": "span", "children": [{ "type": "text", "value": "abcde" }] }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "op": "exchange" },
+    { "r": 0, "op": "edit", "from": 6, "to": 6, "split": 1 },
+    { "r": 1, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "op": "exchange" }
+  ]
+}

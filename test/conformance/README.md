@@ -197,7 +197,7 @@ characters outside the BMP.
 ### Exchange
 
 `exchange` delivery replays the `exchangeInOrder` helper of yorkie's
-`pkg/document/tree_split_order_test.go`. An `exchange` step, with `orders`
+`pkg/document/tree_undo_test.go`. An `exchange` step, with `orders`
 resolved (absent: ascending index):
 
 1. Collect: for each replica `i`, its local changes as one pack,

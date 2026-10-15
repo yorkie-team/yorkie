@@ -1,8 +1,8 @@
 {
   "v": 2,
-  "id": "v2-exchange-split-order",
+  "id": "split-order-span-and-paragraph-3",
   "status": { "go": "pass", "js": "pass" },
-  "note": "TestTreeSameBoundarySplitOrder (tree_split_order_test.go), span and paragraph split in one edit, three replicas: each splits <span>abcde</span> after c with split level 2 and receives the others in a cyclic order. The products of the splits must end up in one order everywhere.",
+  "note": "TestTreeSameBoundarySplitOrder/span and paragraph split in one edit: three replicas, each in a different arrival order (tree_split_order_test.go). Each replica splits <span>abcde</span> the same way and receives the others in a cyclic order; the products of the splits must end up in one order everywhere (I1), and the text before the split stays (expect).",
   "replicas": 3,
   "delivery": "exchange",
   "init": {

@@ -17,10 +17,13 @@
 package document_test
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -57,6 +60,67 @@ func treeCRDT(t *testing.T, doc *document.Document) *crdt.Tree {
 func treeXML(t *testing.T, doc *document.Document) string {
 	t.Helper()
 	return treeCRDT(t, doc).ToXML()
+}
+
+// treeShape renders the tree under "t" with every node's ID, tombstones
+// included. XML cannot tell two empty <p>s apart; this can, so it is what the
+// convergence checks below compare.
+func treeShape(t *testing.T, doc *document.Document) string {
+	t.Helper()
+
+	var walk func(n *crdt.TreeNode) string
+	walk = func(n *crdt.TreeNode) string {
+		removed := ""
+		if n.RemovedAt() != nil {
+			removed = "x"
+		}
+		if n.IsText() {
+			return fmt.Sprintf("%s%s%q", n.IDString(), removed, n.Value)
+		}
+		var children []string
+		for _, child := range n.Children(true) {
+			children = append(children, walk(child))
+		}
+		return fmt.Sprintf("%s#%s%s[%s]", n.Type(), n.IDString(), removed, strings.Join(children, ","))
+	}
+
+	return walk(treeCRDT(t, doc).Root())
+}
+
+// exchangeInOrder hands every replica's pending changes to the others. orders[i]
+// lists, in arrival order, whose changes replica i receives, so each replica
+// can see the concurrent changes in a different order.
+func exchangeInOrder(t *testing.T, docs []*document.Document, orders [][]int) {
+	t.Helper()
+
+	// Through protobuf, as on the wire: handing a change's pointer to another
+	// document lets the receiver rewrite its version vector in place.
+	packs := make([]*change.Pack, len(docs))
+	for i, doc := range docs {
+		pb, err := converter.ToChangePack(doc.CreateChangePack())
+		require.NoError(t, err)
+		packs[i], err = converter.FromChangePack(pb)
+		require.NoError(t, err)
+	}
+	for i, doc := range docs {
+		for _, j := range orders[i] {
+			if j == i {
+				continue
+			}
+			require.NoError(t, doc.ApplyChangePack(change.NewPack(
+				packs[j].DocumentKey, change.NewCheckpoint(0, 0), packs[j].Changes, time.InitialVersionVector, nil,
+			)))
+		}
+	}
+	for i, doc := range docs {
+		var lastSeq uint32
+		if n := len(packs[i].Changes); n > 0 {
+			lastSeq = packs[i].Changes[n-1].ClientSeq()
+		}
+		require.NoError(t, doc.ApplyChangePack(change.NewPack(
+			packs[i].DocumentKey, change.NewCheckpoint(0, lastSeq), nil, time.InitialVersionVector, nil,
+		)))
+	}
 }
 
 // assertNoDuplicateTreeIDs fails when any id names more than one node. A
