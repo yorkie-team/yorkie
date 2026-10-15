@@ -28,8 +28,7 @@ Unlike the other suites under `test/`, this package carries no build tag,
 so `go test ./...` — `make verify` and CI's `test` lane — runs it. That is
 deliberate: the tag-gated suites are gated because they need a service
 (`integration`, `complex`) or run for hours (`bench`, `fuzz`), and this one
-needs neither, finishing the corpus and all 1200 parity rows in under a
-second. `TestLargeRun` is the part that would not fit a commit gate, and an
+needs neither, finishing the corpus and all 3800 parity rows in seconds. `TestLargeRun` is the part that would not fit a commit gate, and an
 unset `CONFORMANCE_FAM` skips it.
 
 ## Script
@@ -87,8 +86,10 @@ unset `CONFORMANCE_FAM` skips it.
   `delivery` field, a `contents` field or an `update`, `exchange` or
   `expect` step; a malformed tree node (in `init` or
   `contents`, see above); a `delivery` other than `log` and `exchange`; an
-  `init` that is neither a string nor an object; a `gen` step when `init` is
-  a tree node; `pull` or `sync` with `exchange` delivery and `exchange` with
+  `init` that is neither a string nor an object; a `gen` step of a
+  paragraph kind (`ins`, `split`, `del`, `merge`, `style`) when `init` is a
+  tree node, and one of a span kind (`sins`, `ssplit`, `senter`,
+  `senter11`, `sdel`) when `init` is a string; `pull` or `sync` with `exchange` delivery and `exchange` with
   `log` delivery; an `r` on `exchange` or `expect`; and the per-op rules
   below.
 
@@ -110,7 +111,7 @@ fields of its op below: required unless marked optional, none other.
 | `exchange` (v2) | no `r`; optional `orders` | `exchange` delivery only: hand every replica's local changes to the others (see Delivery) |
 | `snapshot` | – | replace replica `r` by a document rebuilt from its own snapshot bytes (see Snapshot) |
 | `expect` (v2) | no `r`; `xml` (array of strings, one per replica), optional `label` (string) | off run only: compare each replica's `toXML()` with `xml[i]` (see Checks). Changes nothing |
-| `gen` | `k` (`ins`, `split`, `del`, `merge` or `style`), `f`, `g`, `h` (numbers in [0, 1)), `v` (string) | abstract generator event, resolved on replica `r` exactly as fuzz2 resolves `ins`, `split`, `del`, `merge`, `style` |
+| `gen` | `k` (`ins`, `split`, `del`, `merge`, `style`, or (v2) a span kind `sins`, `ssplit`, `senter`, `senter11`, `sdel`), `f`, `g`, `h` (numbers in [0, 1)), `v` (string) | abstract generator event, resolved on replica `r` exactly as fuzz2 resolves `ins`, `split`, `del`, `merge`, `style`, and the span kinds as below |
 
 An empty `text` counts as absent.
 
@@ -168,6 +169,29 @@ characters outside the BMP.
   else `i`; `style(base, base + len(text) + 2, {key: v})`.
 - No candidate → noop.
 
+### Span kinds (v2)
+
+The span kinds resolve on the text slots of spans, for trees of the shape
+`<doc><p><span>…</span>…</p>…</doc>`. Walk the live children of the root
+as paragraphs with a running index `idx` from 0: `idx += 1` for the
+paragraph's start; for each live child of the paragraph, a text node adds
+its length, and an element (a span) adds 1 for its start, then offers the
+slots `k = 0..len(text)` at index `idx + k`, where `text` is the
+concatenation of the span's text children, then adds `len(text) + 1`;
+`idx += 1` for the paragraph's end. Pick `slots[floor(f * len(slots))]`
+(index `i`, offset `k` in a span of length `len`). No slot → noop.
+
+- `sins` → `edit(i, i, text=v)`.
+- `ssplit` → `edit(i, i, split=1)`: split the span.
+- `senter` → `edit(i, i, split=2)`: Enter as one edit, splitting the span
+  and its paragraph.
+- `senter11` → one `update` running `edit(i, i, split=1)` then
+  `edit(i+1, i+1, split=1)`: Enter as two edits, the span and then the
+  paragraph between the two halves. Its step line is
+  `d{r+1}.update[split(i);split(i+1)]`.
+- `sdel`: noop if `k = len`; otherwise
+  `edit(i, i + 1 + floor(g * min(2, len - k)))`.
+
 ## Delivery and GC
 
 `log` delivery (the default, and all of v1) is the server log below.
@@ -203,6 +227,17 @@ characters outside the BMP.
 - End of run, in each mode: for `r = 0..n-1`, `sync(r)` (not recorded as
   step lines). In `minvv` mode, then apply one more empty pack with
   `Checkpoint(0, 0)` and the final `minVV` to every replica.
+- Lagging minVV (large runs only, not part of any record or fixture): a
+  runner may offer the `minvv` mode with the race of yorkie#2110, where a
+  reply's minVV is taken after another client's push landed but the reply
+  carries changes read before it. With `log` delivery, a pack applied to
+  replica `r` then also carries `minVV` when, after that pack, the only
+  log entry `r` has not seen and did not author is the newest entry of the
+  log. Everything else, off mode and the checks included, is unchanged.
+  Under this mode GC collects tombstones a pending change still refers to,
+  so `error` results ("node not found") are expected; the mode measures
+  how much of the suite depends on the #2110 contract. Go:
+  `Options.LaggingMinVV`, `CONFORMANCE_GC=lagging`.
 
 ### Exchange
 
@@ -352,16 +387,67 @@ messages differ between SDKs).
 mulberry32 exactly as fuzz2 (`gen(seed, fam, n, steps)`), with the same
 families, weights, pull probability (0.5 when the replica has a pending
 entry), value pool and pending count. Output is a script whose steps are
-`gen` and `pull`, with `init` `abcd`.
+`gen` and `pull` (and `undo`, `redo` and `sync` in the families below that
+have them), with `init` `abcd`.
 
-| Fixture family | fam | n | steps |
-|---|---|---|---|
-| `is` | is | 2 | 24 |
-| `del` | del | 2 | 24 |
-| `merge` | merge | 2 | 24 |
-| `style` | style | 2 | 24 |
-| `all` | all | 2 | 24 |
-| `all3` | all | 3 | 30 |
+Each step draws, in order: the replica `r = floor(rnd() * n)`; in an
+observer family, if `r` is the observer (replica `n-1`), nothing more:
+a `sync` step if `r` has a pending entry, no step otherwise. Else one
+number for the pull test (`rnd() < 0.5` and a pending entry → `pull`, and
+nothing more), then the kind by weight, then `f`, `g`, `h` and the value
+`valuePool[c % len]` (`c` counts local ops). Kind `undo` or `redo` emits
+an `undo` or `redo` step, after drawing `f`, `g`, `h` and the value like
+any local op; every other kind emits a `gen` step. Every local op step
+(`gen`, `undo`, `redo`) counts as an entry for the pending count, as the
+server log does. A `sync` sets the observer's cursor past every entry.
+
+Weights, in order (the last kind takes what rounding leaves):
+
+| fam | weights |
+|---|---|
+| is | ins .5, split .5 |
+| del | ins .35, split .35, del .3 |
+| merge | ins .35, split .35, merge .3 |
+| style | ins .35, split .35, style .3 |
+| all | ins .3, split .3, del .15, merge .15, style .1 |
+| ud | ins .35, del .3, undo .25, redo .1 |
+| uds | ins .3, split .2, del .2, undo .2, redo .1 |
+| udm | ins .3, split .15, del .1, merge .15, undo .2, redo .1 |
+| udst | ins .3, split .15, style .25, undo .2, redo .1 |
+| uall | ins .25, split .2, del .1, merge .1, style .05, undo .2, redo .1 |
+| span | sins .4, ssplit .15, senter .15, senter11 .3 |
+| spand | sins .4, ssplit .15, senter .15, senter11 .15, sdel .15 |
+
+A `span` or `spand` script is v2 and its `init` is the tree
+`<doc><p><span>abcd</span></p></doc>`. The script id is
+`gen-{fam}-n{n}-s{steps}-{seed}`, with `n{n}o` in an observer family.
+
+| Fixture family | fam | n | steps | observer |
+|---|---|---|---|---|
+| `is` | is | 2 | 24 | |
+| `del` | del | 2 | 24 | |
+| `merge` | merge | 2 | 24 | |
+| `style` | style | 2 | 24 | |
+| `all` | all | 2 | 24 | |
+| `all3` | all | 3 | 30 | |
+| `ud` | ud | 2 | 24 | |
+| `ud3` | ud | 3 | 30 | |
+| `uds` | uds | 2 | 24 | |
+| `uds3` | uds | 3 | 30 | |
+| `udm` | udm | 2 | 24 | |
+| `udst` | udst | 2 | 24 | |
+| `uall` | uall | 2 | 24 | |
+| `uall3` | uall | 3 | 30 | |
+| `span` | span | 2 | 24 | |
+| `spand` | spand | 2 | 24 | |
+| `spand3` | spand | 3 | 30 | |
+| `del4o` | del | 4 | 40 | yes |
+| `all4o` | all | 4 | 40 | yes |
+
+The undo families cover undo and redo of every edit kind, the span families
+splits inside elements (Enter as one edit and as two), and the observer
+families a fourth replica that only syncs, so a replica that never edits
+still moves the minVV and collects (yorkie#2099).
 
 ## Files
 
@@ -378,9 +464,10 @@ entry), value pool and pending count. Output is a script whose steps are
   no generated script carries `undo`, `redo`, `snapshot`, `removeStyle`,
   `update` or `contents`, so only this file pins the step lines, xml and
   shapes of those ops byte for byte.
-- `parity/{family}.json`: `{fam, n, steps, seed0: 1, runs: 200, diverged,
-  rows: [{seed, result, checks, digest, xmlDigest}]}` generated by the Go
-  runner.
+- `parity/{family}.json`: `{fam, n, steps, observer?, seed0: 1, runs: 200,
+  diverged, rows: [{seed, result, checks, digest, xmlDigest}]}` generated
+  by the Go runner. `observer` is present, `true`, only for an observer
+  family.
   `diverged` counts rows whose `result` is `diverged`.
 
 Both runners check `corpus-digests.json`: it must list exactly the files
@@ -393,7 +480,7 @@ it in the same commit. Its provenance is its place in yorkie's `tree/`:
 yorkie-js-sdk takes it from there with the rest of the copy.
 
 Both runners check the parity fixtures: the header (`fam`, `n`, `steps`,
-`seed0`, `runs`, `diverged`) must equal the regenerated one, `rows` must
+`observer`, `seed0`, `runs`, `diverged`) must equal the regenerated one, `rows` must
 hold `runs` rows, and every row's `result`, `checks`, `digest` and
 `xmlDigest` must match. The Go runner regenerates them with
 `CONFORMANCE_UPDATE=1`; a change that moves a row regenerates the fixture in
@@ -401,4 +488,5 @@ the same commit, so the diff shows which seeds moved.
 
 Env for large runs (no fixture comparison): `CONFORMANCE_FAM` (a fixture
 family name), `CONFORMANCE_RUNS` (default 5000), `CONFORMANCE_SEED0`
-(default 1), `CONFORMANCE_OUT` (writes the rows in the parity-fixture shape).
+(default 1), `CONFORMANCE_OUT` (writes the rows in the parity-fixture shape),
+`CONFORMANCE_GC` (`lagging`: the lagging minVV of Delivery and GC).

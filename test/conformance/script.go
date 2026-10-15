@@ -299,8 +299,12 @@ func checkStep(s *Script, st *Step, raw map[string]json.RawMessage, nested bool)
 	if mode, ok := deliveryOps[st.Op]; ok && mode != s.Delivery {
 		return fmt.Errorf("op %q is not valid with delivery %q", st.Op, s.Delivery)
 	}
-	if st.Op == opGen && s.Init.Node != nil {
-		return fmt.Errorf("op %q needs a string init", st.Op)
+	if st.Op == opGen {
+		if span := spanGenKinds[st.K]; span && s.Init.Node == nil {
+			return fmt.Errorf("gen kind %q needs a tree init", st.K)
+		} else if !span && s.Init.Node != nil {
+			return fmt.Errorf("op %q needs a string init", st.Op)
+		}
 	}
 	for k, v := range raw {
 		if k == "r" || k == "op" {
@@ -382,7 +386,7 @@ func checkValues(s *Script, st *Step, raw map[string]json.RawMessage) error {
 	case opExpect:
 		return checkXML(raw["xml"], s.Replicas)
 	case opGen:
-		if !genKinds[st.K] {
+		if !genKinds[st.K] && !spanGenKinds[st.K] {
 			return fmt.Errorf("unknown gen kind %q", st.K)
 		}
 		for k, v := range map[string]float64{"f": st.F, "g": st.G, "h": st.H} {

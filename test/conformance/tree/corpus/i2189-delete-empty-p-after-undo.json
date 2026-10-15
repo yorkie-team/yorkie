@@ -1,0 +1,25 @@
+{
+  "v": 2,
+  "id": "i2189-delete-empty-p-after-undo",
+  "issues": ["yorkie#2189"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "Concurrent cross-paragraph deletes, an undo that revives the merged paragraph, then a delete of the revived empty paragraph. Off mode converges; minvv mode ends with different XML (I4 fails). Likely cause (#2189): the revived node keeps its old merge lineage, so the later delete propagates through it.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "r",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "ab" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "cd" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 8 },
+    { "r": 1, "op": "edit", "from": 3, "to": 5 },
+    { "op": "exchange" },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    { "r": 1, "op": "edit", "from": 6, "to": 8 },
+    { "op": "exchange" }
+  ]
+}

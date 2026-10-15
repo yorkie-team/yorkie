@@ -57,6 +57,7 @@ type Fixture struct {
 	Fam      string `json:"fam"`
 	N        int    `json:"n"`
 	Steps    int    `json:"steps"`
+	Observer bool   `json:"observer,omitempty"`
 	Seed0    int    `json:"seed0"`
 	Runs     int    `json:"runs"`
 	Diverged int    `json:"diverged"`
@@ -65,6 +66,11 @@ type Fixture struct {
 
 // runFamily runs seeds seed0..seed0+runs-1 of a family in parallel.
 func runFamily(f Family, seed0, runs int) Fixture {
+	return runFamilyWith(f, seed0, runs, Options{})
+}
+
+// runFamilyWith is runFamily with run options.
+func runFamilyWith(f Family, seed0, runs int, opts Options) Fixture {
 	rows := make([]Row, runs)
 	jobs := make(chan int)
 	var wg sync.WaitGroup
@@ -72,7 +78,7 @@ func runFamily(f Family, seed0, runs int) Fixture {
 		wg.Go(func() {
 			for k := range jobs {
 				seed := seed0 + k
-				rec := Run(Gen(uint32(seed), f.Fam, f.N, f.Steps))
+				rec := RunWith(f.Gen(uint32(seed)), opts)
 				rows[k] = Row{
 					Seed:      seed,
 					Result:    rec.Result,
@@ -89,7 +95,7 @@ func runFamily(f Family, seed0, runs int) Fixture {
 	close(jobs)
 	wg.Wait()
 
-	fx := Fixture{Fam: f.Fam, N: f.N, Steps: f.Steps, Seed0: seed0, Runs: runs, Rows: rows}
+	fx := Fixture{Fam: f.Fam, N: f.N, Steps: f.Steps, Observer: f.Observer, Seed0: seed0, Runs: runs, Rows: rows}
 	for _, r := range rows {
 		if r.Result == ResultDiverged {
 			fx.Diverged++
@@ -271,6 +277,7 @@ var rejectsV2 = func() map[string]string {
 		"null attribute":  init(`{"type":"doc","attributes":{"b":null}}`),
 		"gen with tree init": `{` + v2 + `,"init":{"type":"doc"},"steps":[` +
 			`{"r":0,"op":"gen","k":"ins","f":0,"g":0,"h":0,"v":"c"}]}`,
+		"span gen text init":    log(`{"r":0,"op":"gen","k":"sins","f":0,"g":0,"h":0,"v":"c"}`),
 		"contents and text":     log(`{"r":0,` + edit + `,"text":"a","contents":[{"type":"p"}]}`),
 		"empty contents":        log(`{"r":0,` + edit + `,"contents":[]}`),
 		"contents object":       log(`{"r":0,` + edit + `,"contents":{"type":"p"}}`),
@@ -506,9 +513,52 @@ func TestParity(t *testing.T) {
 	}
 }
 
+// TestLaggingMinVV pins the lagging minVV option: a script that converges
+// under the protocol's GC throws once the one push still on its way to d1
+// is covered by the minVV d1 collects with (yorkie#2110). Off mode is the
+// same in both runs.
+func TestLaggingMinVV(t *testing.T) {
+	s, err := ParseScript([]byte(`{"v":1,"id":"lagging","replicas":2,"init":"abcd","steps":[` +
+		`{"r":1,"op":"edit","from":2,"to":2,"split":1},` +
+		`{"r":0,"op":"edit","from":1,"to":4},` +
+		`{"r":1,"op":"edit","from":5,"to":6},` +
+		`{"r":1,"op":"pull"}]}`))
+	require.NoError(t, err)
+
+	rec := Run(s)
+	require.Equal(t, ResultPass, rec.Result, "checks %s, err %q", rec.Checks, rec.Err)
+	lag := RunWith(s, Options{LaggingMinVV: true})
+	assert.Equal(t, ResultError, lag.Result, "checks %s", lag.Checks)
+	assert.Equal(t, "10101", lag.Checks.String())
+	assert.Equal(t, rec.Steps, lag.Steps)
+}
+
+// TestObserverOnlySyncs checks that the observer of an observer family
+// never takes a local op, and that it does sync.
+func TestObserverOnlySyncs(t *testing.T) {
+	for _, f := range Families {
+		if !f.Observer {
+			continue
+		}
+		synced := false
+		for seed := uint32(1); seed <= 50; seed++ {
+			for _, st := range f.Gen(seed).Steps {
+				if st.R != f.N-1 {
+					continue
+				}
+				require.Equal(t, opSync, st.Op, "%s seed %d", f.Name, seed)
+				synced = true
+			}
+		}
+		assert.True(t, synced, f.Name)
+	}
+}
+
 // TestLargeRun runs a seed range of one family and writes its rows, for
 // comparing against the JS runner. It is skipped unless CONFORMANCE_FAM is
-// set; CONFORMANCE_RUNS, CONFORMANCE_SEED0 and CONFORMANCE_OUT tune it.
+// set; CONFORMANCE_RUNS, CONFORMANCE_SEED0 and CONFORMANCE_OUT tune it, and
+// CONFORMANCE_GC=lagging runs the minvv mode with the lagging minVV of
+// yorkie#2110 (see Options).
 func TestLargeRun(t *testing.T) {
 	name := os.Getenv("CONFORMANCE_FAM")
 	if name == "" {
@@ -518,7 +568,16 @@ func TestLargeRun(t *testing.T) {
 	require.True(t, ok, "unknown family %q", name)
 	runs, seed0 := envInt(t, "CONFORMANCE_RUNS", 5000), envInt(t, "CONFORMANCE_SEED0", 1)
 
-	fx := runFamily(f, seed0, runs)
+	var opts Options
+	switch gc := os.Getenv("CONFORMANCE_GC"); gc {
+	case "":
+	case "lagging":
+		opts.LaggingMinVV = true
+	default:
+		t.Fatalf("unknown CONFORMANCE_GC %q", gc)
+	}
+
+	fx := runFamilyWith(f, seed0, runs, opts)
 	counts := map[string]int{}
 	for _, r := range fx.Rows {
 		counts[r.Result]++
