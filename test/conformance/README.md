@@ -490,3 +490,11 @@ Env for large runs (no fixture comparison): `CONFORMANCE_FAM` (a fixture
 family name), `CONFORMANCE_RUNS` (default 5000), `CONFORMANCE_SEED0`
 (default 1), `CONFORMANCE_OUT` (writes the rows in the parity-fixture shape),
 `CONFORMANCE_GC` (`lagging`: the lagging minVV of Delivery and GC).
+
+`TestSpanOracle` (Go only, not part of the runner contract, skipped unless
+`CONFORMANCE_ORACLE_OUT` names an output file) enumerates every two- and
+three-op combination of the span kinds on `<doc><p><span>abcd</span></p></doc>`
+in four causal shapes and compares each result with the outcomes a flat
+token model allows (every op's tokens stay between the two tokens around
+its gap, no op lands inside another, text only inside spans). The
+`oracle-*` corpus scripts come from it.
