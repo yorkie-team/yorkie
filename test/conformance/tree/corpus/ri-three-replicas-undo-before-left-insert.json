@@ -1,0 +1,72 @@
+{
+  "v": 2,
+  "id": "ri-three-replicas-undo-before-left-insert",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/three replicas, identity undo before a left insert (tree_undo_remote_identity_reconcile_test.go).",
+  "replicas": 3,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 2, "to": 2, "text": "XY" }]
+    },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 10, "to": 10, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    {
+      "r": 2,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 1, "to": 1, "text": "Q" }]
+    },
+    {
+      "op": "exchange",
+      "orders": [
+        [1, 2],
+        [0, 2],
+        [0, 1]
+      ]
+    },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
+        "<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
+        "<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>",
+        "<doc><p>Qabcd</p><p>efgh</p></doc>",
+        "<doc><p>Qabcd</p><p>e</p><p>fgh</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>Qabcd</p><p>efgh</p></doc>",
+        "<doc><p>Qabcd</p><p>efgh</p></doc>",
+        "<doc><p>Qabcd</p><p>efgh</p></doc>"
+      ]
+    }
+  ]
+}

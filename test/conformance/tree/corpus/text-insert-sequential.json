@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "id": "text-insert-sequential",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "Baseline: two inserts and a split, each seen by the peer before the next edit, plus a snapshot reload.",
+  "replicas": 2,
+  "init": "ab",
+  "steps": [
+    { "r": 0, "op": "edit", "from": 3, "to": 3, "text": "c" },
+    { "r": 1, "op": "pull" },
+    { "r": 1, "op": "edit", "from": 1, "to": 1, "text": "x" },
+    { "r": 0, "op": "sync" },
+    { "r": 0, "op": "edit", "from": 2, "to": 2, "split": 1 },
+    { "r": 1, "op": "sync" },
+    { "r": 1, "op": "snapshot" },
+    { "r": 0, "op": "style", "from": 0, "to": 3, "attrs": { "b": "1" } },
+    { "r": 1, "op": "pull" },
+    { "r": 1, "op": "pull" }
+  ]
+}

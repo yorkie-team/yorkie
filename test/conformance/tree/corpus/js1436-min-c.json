@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "js1436-min-c",
+  "issues": ["yorkie-js-sdk#1436", "yorkie#2167"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "d1 inserts 's' at the start of the paragraph, d2 concurrently splits there, then d1 splits before 's'.",
+  "replicas": 2,
+  "init": "ab",
+  "steps": [
+    { "r": 0, "op": "edit", "from": 1, "to": 1, "text": "s" },
+    { "r": 1, "op": "edit", "from": 1, "to": 1, "split": 1 },
+    { "r": 0, "op": "edit", "from": 1, "to": 1, "split": 1 }
+  ]
+}

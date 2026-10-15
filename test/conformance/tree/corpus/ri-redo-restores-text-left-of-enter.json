@@ -1,0 +1,58 @@
+{
+  "v": 2,
+  "id": "ri-redo-restores-text-left-of-enter",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/redo restores text left of pending enter (tree_undo_remote_identity_reconcile_test.go).",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 2, "to": 2, "text": "XY" }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 8, "to": 8, "split": 1 }]
+    },
+    { "r": 0, "op": "redo" },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>aXYbcd</p><p>e</p><p>fgh</p></doc>",
+        "<doc><p>aXYbcd</p><p>e</p><p>fgh</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>aXYbcd</p><p>e</p><p>fgh</p></doc>",
+        "<doc><p>aXYbcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>aXYbcd</p><p>efgh</p></doc>",
+        "<doc><p>aXYbcd</p><p>efgh</p></doc>"
+      ]
+    }
+  ]
+}

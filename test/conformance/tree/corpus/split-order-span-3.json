@@ -1,0 +1,41 @@
+{
+  "v": 2,
+  "id": "split-order-span-3",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeSameBoundarySplitOrder/span split: three replicas, each in a different arrival order (tree_split_order_test.go). Each replica splits <span>abcde</span> the same way and receives the others in a cyclic order; the products of the splits must end up in one order everywhere (I1), and the text before the split stays (expect).",
+  "replicas": 3,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          { "type": "span", "children": [{ "type": "text", "value": "abcde" }] }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "r": 1, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "r": 2, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    {
+      "op": "exchange",
+      "orders": [
+        [2, 1],
+        [0, 2],
+        [1, 0]
+      ]
+    },
+    {
+      "op": "expect",
+      "label": "exchanged",
+      "xml": [
+        "<doc><p><span>abc</span><span></span><span></span><span>de</span></p></doc>",
+        "<doc><p><span>abc</span><span></span><span></span><span>de</span></p></doc>",
+        "<doc><p><span>abc</span><span></span><span></span><span>de</span></p></doc>"
+      ]
+    }
+  ]
+}

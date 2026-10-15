@@ -1,0 +1,66 @@
+{
+  "v": 2,
+  "id": "ri-retombstone-element-split-by-enter",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "known-error", "js": "known-error" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/retombstone element split by pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run throws (Go panics with \"node not found\"; JS: \"cannot find node of CRDTTreePos while applying a remote TreeEditOperation\").",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        {
+          "op": "edit",
+          "from": 6,
+          "to": 6,
+          "contents": [
+            { "type": "p", "children": [{ "type": "text", "value": "XY" }] }
+          ]
+        }
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 8, "to": 8, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>abcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p></p><p>efgh</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>abcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>abcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    }
+  ]
+}

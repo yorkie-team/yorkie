@@ -1,0 +1,38 @@
+{
+  "v": 2,
+  "id": "split-order-empty-node-attributes",
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeSameBoundarySplitOrder/the empty node between two halves carries the same attributes everywhere (tree_split_order_test.go). Both replicas split <span>abcde</span> after c in one update with a style: d1 bolds the left half, d2 italicises the right half. The empty product between the halves must carry the same attributes on both (I1).",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          { "type": "span", "children": [{ "type": "text", "value": "abcde" }] }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 5, "to": 5, "split": 1 },
+        { "op": "style", "from": 1, "to": 6, "attrs": { "bold": "true" } }
+      ]
+    },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 5, "to": 5, "split": 1 },
+        { "op": "style", "from": 6, "to": 10, "attrs": { "italic": "true" } }
+      ]
+    },
+    { "op": "exchange" }
+  ]
+}

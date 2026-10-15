@@ -1,0 +1,26 @@
+{
+  "v": 2,
+  "id": "unwrap-same-unwrap-both-replicas",
+  "issues": ["yorkie#1956"],
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeUnwrapAndMergeDelete/same unwrap on both replicas keeps the hoisted children (tree_unwrap_merge_delete_test.go). Both replicas unwrap the last paragraph with edit(4, 5); each sees the other's merge already done and must not delete the cd it hoisted itself.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "r",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "ab" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "cd" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 5 },
+    { "r": 1, "op": "edit", "from": 4, "to": 5 },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "exchanged",
+      "xml": ["<r><p>ab</p>cd</r>", "<r><p>ab</p>cd</r>"]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "v": 2,
+  "id": "ri-retombstone-text-right-of-enter",
+  "issues": ["yorkie#2222"],
+  "status": { "go": "pass", "js": "pass" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/retombstone text right of pending enter (tree_undo_remote_identity_reconcile_test.go).",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "abcd" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "efgh" }] }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 9, "to": 9, "text": "XY" }]
+    },
+    { "op": "exchange" },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [{ "op": "edit", "from": 2, "to": 2, "split": 1 }]
+    },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>a</p><p>bcd</p><p>efgh</p></doc>",
+        "<doc><p>a</p><p>bcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "r": 1, "op": "undo" },
+    {
+      "op": "expect",
+      "label": "after undo",
+      "xml": [
+        "<doc><p>a</p><p>bcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    },
+    { "op": "exchange" },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>abcd</p><p>efgh</p></doc>",
+        "<doc><p>abcd</p><p>efgh</p></doc>"
+      ]
+    }
+  ]
+}

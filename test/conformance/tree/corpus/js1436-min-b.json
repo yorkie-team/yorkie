@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "js1436-min-b",
+  "issues": ["yorkie-js-sdk#1436", "yorkie#2167"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "d2 inserts 'r' after 'a', d1 concurrently inserts 'u' there, then d2 splits before 'r'.",
+  "replicas": 2,
+  "init": "ab",
+  "steps": [
+    { "r": 1, "op": "edit", "from": 2, "to": 2, "text": "r" },
+    { "r": 0, "op": "edit", "from": 2, "to": 2, "text": "u" },
+    { "r": 1, "op": "edit", "from": 2, "to": 2, "split": 1 }
+  ]
+}
