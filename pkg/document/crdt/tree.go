@@ -4407,9 +4407,14 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		}
 	}
 
-	// 03. Split text node if the left node is text node.
-	if leftNode.IsText() {
-		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil, nil)
+	// 03. Split text node if the left node is text node. A left sibling
+	// offset past the end of the floor piece means the pieces between them
+	// were purged: they were tombstones every replica had seen removed, so a
+	// position after them is a position after the floor piece, and there is
+	// nothing to split.
+	if splitOffset := pos.LeftSiblingID.Offset - leftNode.id.Offset; leftNode.IsText() &&
+		splitOffset <= leftNode.Len() {
+		diff2, err := leftNode.Split(t, splitOffset, nil, nil)
 		if err != nil {
 			return nil, nil, diff, err
 		}
