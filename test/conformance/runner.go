@@ -104,11 +104,14 @@ type run struct {
 	snapshotOK bool
 
 	// arrivals holds one entry per exchange, the packs it delivered as
-	// `d{to}<-d{from}` in the order they were applied. Nothing in a record
-	// depends on it: it is what lets a test pin that `orders` reached the
-	// documents, rather than only the step line, since a correct CRDT
-	// converges whatever the arrival order.
+	// `d{to}<-d{from}` in the order they were applied, and senders the
+	// replicas that had a pack to hand over in it. Nothing in a record
+	// depends on them, and they live in the runner because only the
+	// delivery loop sees the order packs arrive in: a correct CRDT
+	// converges whatever that order, so no record can show whether
+	// `orders` reached the documents, and a test has to read it here.
 	arrivals [][]string
+	senders  [][]int
 
 	// expects counts the expect steps run; expectFails describes those that
 	// did not hold. Both stay empty in minvv mode.
@@ -515,6 +518,7 @@ func (rn *run) exchange(orders [][]int) string {
 	}
 
 	packs := make([][]*change.Change, n)
+	senders := []int{}
 	for i, doc := range rn.docs {
 		pb, err := converter.ToChangePack(doc.CreateChangePack())
 		must(err)
@@ -522,8 +526,10 @@ func (rn *run) exchange(orders [][]int) string {
 		must(err)
 		if len(pack.Changes) > 0 {
 			packs[i] = pack.Changes
+			senders = append(senders, i)
 		}
 	}
+	rn.senders = append(rn.senders, senders)
 	delivered := []string{}
 	for i, order := range orders {
 		for _, j := range order {

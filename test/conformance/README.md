@@ -224,9 +224,15 @@ resolved (absent: ascending index):
 A runner must pin step 2's order with a test of its own: a correct CRDT
 converges whatever the arrival order, so no script's result, XML or digest
 can tell a runner that honours `orders` from one that delivers in ascending
-index and happens to parse the field (Go: `TestExchangeOrders` and
-`TestExchangeOrdersCorpus` compare the deliveries an exchange actually
-applied with the ones its `orders` calls for).
+index and happens to parse the field. The runner records, outside the
+record, each exchange's deliveries as `d{to}<-d{from}` in the order it
+applied them, and the replicas whose pack was not empty. In off and minvv
+mode, the tests compare those deliveries, exactly, with the ones `orders`
+calls for, restricted to those replicas: a fixed script, and every
+exchange of the corpus (for a `known-error` script, the exchanges that
+completed before the error), with at least one delivery overall (Go:
+`TestExchangeOrders` and `TestExchangeOrdersCorpus`; JS: the
+`Tree conformance: exchange orders` tests).
 
 End of run: one `exchange` with default orders, not recorded as a step line.
 There is no other end-of-run drain or GC pack. I4 compares off and minvv as
