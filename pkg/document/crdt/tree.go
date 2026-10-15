@@ -1112,6 +1112,12 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
+// HoldsTombstone implements GCHold[GCChild]. No tombstone of a Tree is held
+// yet; the rules are added one by one below.
+func (t *Tree) HoldsTombstone(_ GCChild, _ time.VersionVector) bool {
+	return false
+}
+
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
