@@ -103,6 +103,13 @@ type run struct {
 	// snapshotOK turns false when an I3 comparison fails.
 	snapshotOK bool
 
+	// arrivals holds one entry per exchange, the packs it delivered as
+	// `d{to}<-d{from}` in the order they were applied. Nothing in a record
+	// depends on it: it is what lets a test pin that `orders` reached the
+	// documents, rather than only the step line, since a correct CRDT
+	// converges whatever the arrival order.
+	arrivals [][]string
+
 	// expects counts the expect steps run; expectFails describes those that
 	// did not hold. Both stay empty in minvv mode.
 	expects     int
@@ -364,7 +371,7 @@ func (rn *run) step(st Step) {
 	case "snapshot":
 		rn.snapshot(st.R)
 		rn.lines = append(rn.lines, d+".snapshot")
-	case "exchange":
+	case opExchange:
 		rn.lines = append(rn.lines, rn.exchange(st.Orders))
 	case opExpect:
 		rn.expect(st)
@@ -517,13 +524,16 @@ func (rn *run) exchange(orders [][]int) string {
 			packs[i] = pack.Changes
 		}
 	}
+	delivered := []string{}
 	for i, order := range orders {
 		for _, j := range order {
 			if packs[j] != nil {
 				rn.apply(i, packs[j], change.NewCheckpoint(0, 0), time.InitialVersionVector)
+				delivered = append(delivered, fmt.Sprintf("d%d<-d%d", i+1, j+1))
 			}
 		}
 	}
+	rn.arrivals = append(rn.arrivals, delivered)
 	for i, changes := range packs {
 		if changes != nil {
 			rn.clientSeq[i] = changes[len(changes)-1].ClientSeq()

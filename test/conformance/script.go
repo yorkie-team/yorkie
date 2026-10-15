@@ -139,6 +139,7 @@ const (
 	opRemoveStyle = "removeStyle"
 	opGen         = "gen"
 	opExpect      = "expect"
+	opExchange    = "exchange"
 )
 
 // textType is the type of a text node.
@@ -156,7 +157,7 @@ var opFields = map[string]map[string]bool{
 	"redo":        {},
 	"pull":        {},
 	"sync":        {},
-	"exchange":    {"orders": false},
+	opExchange:    {"orders": false},
 	"snapshot":    {},
 	opExpect:      {"xml": true, "label": false},
 	opGen:         {"k": true, "f": true, "g": true, "h": true, "v": true},
@@ -164,19 +165,19 @@ var opFields = map[string]map[string]bool{
 
 // v2Ops are the ops, and v2Fields the fields, that format v1 does not have.
 var (
-	v2Ops    = map[string]bool{"update": true, "exchange": true, opExpect: true}
+	v2Ops    = map[string]bool{"update": true, opExchange: true, opExpect: true}
 	v2Fields = map[string]bool{"contents": true}
 )
 
 // replicaless ops take no `r`; nestable ops are the ones an `update` holds.
 var (
-	replicaless = map[string]bool{"exchange": true, opExpect: true}
+	replicaless = map[string]bool{opExchange: true, opExpect: true}
 	nestable    = map[string]bool{opEdit: true, opStyle: true, opRemoveStyle: true}
 )
 
 // deliveryOps are the ops valid in one delivery mode only.
 var deliveryOps = map[string]string{
-	"pull": DeliveryLog, "sync": DeliveryLog, "exchange": DeliveryExchange,
+	"pull": DeliveryLog, "sync": DeliveryLog, opExchange: DeliveryExchange,
 }
 
 // genKinds are the generator events a `gen` step may carry.
@@ -363,7 +364,7 @@ func checkValues(s *Script, st *Step, raw map[string]json.RawMessage) error {
 				return fmt.Errorf("ops[%d]: %w", j, err)
 			}
 		}
-	case "exchange":
+	case opExchange:
 		if _, ok := raw["orders"]; ok {
 			if err := checkOrders(raw["orders"], s.Replicas); err != nil {
 				return fmt.Errorf("orders: %w", err)

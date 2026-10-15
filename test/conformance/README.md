@@ -23,6 +23,14 @@ CONFORMANCE_FAM=all CONFORMANCE_RUNS=5000 CONFORMANCE_OUT=/tmp/all.json \
   go test ./test/conformance/ -run TestLargeRun -v               # large run
 ```
 
+Unlike the other suites under `test/`, this package carries no build tag,
+so `go test ./...` — `make verify` and CI's `test` lane — runs it. That is
+deliberate: the tag-gated suites are gated because they need a service
+(`integration`, `complex`) or run for hours (`bench`, `fuzz`), and this one
+needs neither, finishing the corpus and all 1200 parity rows in under a
+second. `TestLargeRun` is the part that would not fit a commit gate, and an
+unset `CONFORMANCE_FAM` skips it.
+
 ## Script
 
 ```json
@@ -212,6 +220,13 @@ resolved (absent: ascending index):
 4. `minvv` mode only: every replica has now received every change, so set
    every row to its replica's version vector, then apply one empty pack with
    `Checkpoint(0, 0)` and `minVV` to every replica, in index order.
+
+A runner must pin step 2's order with a test of its own: a correct CRDT
+converges whatever the arrival order, so no script's result, XML or digest
+can tell a runner that honours `orders` from one that delivers in ascending
+index and happens to parse the field (Go: `TestExchangeOrders` and
+`TestExchangeOrdersCorpus` compare the deliveries an exchange actually
+applied with the ones its `orders` calls for).
 
 End of run: one `exchange` with default orders, not recorded as a step line.
 There is no other end-of-run drain or GC pack. I4 compares off and minvv as

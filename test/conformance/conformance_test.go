@@ -18,6 +18,7 @@ package conformance
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -262,6 +263,140 @@ func TestExpect(t *testing.T) {
 		assert.Equal(t, tc.result, rec.Result)
 		assert.Equal(t, tc.checks, rec.Checks.String())
 	}
+}
+
+// exchangeScript is a three-replica exchange script in which every replica
+// holds one local edit, followed by a single exchange step carrying orders.
+func exchangeScript(t *testing.T, orders string) *Script {
+	t.Helper()
+	s, err := ParseScript([]byte(`{"v":2,"id":"orders","replicas":3,"delivery":"exchange",` +
+		`"init":"abc","steps":[` +
+		`{"r":0,"op":"edit","from":1,"to":1,"text":"A"},` +
+		`{"r":1,"op":"edit","from":2,"to":2,"text":"B"},` +
+		`{"r":2,"op":"edit","from":3,"to":3,"text":"C"},` +
+		`{"op":"exchange"` + orders + `}]}`))
+	require.NoError(t, err)
+	return s
+}
+
+// TestExchangeOrders holds the exchange step to the arrival order its
+// `orders` declares, both in the packs it applies and in its step line. A
+// runner that parsed `orders` and then delivered in ascending index would
+// converge on every corpus script all the same, so nothing else here would
+// catch it: the whole point of the field is the order the packs arrive in.
+func TestExchangeOrders(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		orders   string
+		arrivals []string
+		line     string
+	}{{
+		name:     "absent is ascending index",
+		orders:   "",
+		arrivals: []string{"d1<-d2", "d1<-d3", "d2<-d1", "d2<-d3", "d3<-d1", "d3<-d2"},
+		line:     "exchange d1<-[d2,d3] d2<-[d1,d3] d3<-[d1,d2]",
+	}, {
+		name:     "spelling out the ascending order changes nothing",
+		orders:   `,"orders":[[1,2],[0,2],[0,1]]`,
+		arrivals: []string{"d1<-d2", "d1<-d3", "d2<-d1", "d2<-d3", "d3<-d1", "d3<-d2"},
+		line:     "exchange d1<-[d2,d3] d2<-[d1,d3] d3<-[d1,d2]",
+	}, {
+		name:     "every replica reversed",
+		orders:   `,"orders":[[2,1],[2,0],[1,0]]`,
+		arrivals: []string{"d1<-d3", "d1<-d2", "d2<-d3", "d2<-d1", "d3<-d2", "d3<-d1"},
+		line:     "exchange d1<-[d3,d2] d2<-[d3,d1] d3<-[d2,d1]",
+	}, {
+		name:     "the order the split-order-*-3 scripts use",
+		orders:   `,"orders":[[2,1],[0,2],[1,0]]`,
+		arrivals: []string{"d1<-d3", "d1<-d2", "d2<-d1", "d2<-d3", "d3<-d2", "d3<-d1"},
+		line:     "exchange d1<-[d3,d2] d2<-[d1,d3] d3<-[d2,d1]",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := exchangeScript(t, tc.orders)
+			rn, err := replay(s, false)
+			require.NoError(t, err)
+			// Two exchanges run: the step, then the end-of-run one, which
+			// delivers nothing because the step handed over and acked
+			// every replica's changes.
+			require.Len(t, rn.arrivals, 2)
+			assert.Equal(t, tc.arrivals, rn.arrivals[0])
+			assert.Empty(t, rn.arrivals[1])
+
+			rec := Run(s)
+			require.Equal(t, ResultPass, rec.Result, "checks %s, err %q", rec.Checks, rec.Err)
+			assert.Contains(t, rec.Steps, tc.line)
+		})
+	}
+}
+
+// TestExchangeOrdersCorpus holds every corpus script that declares `orders`
+// to that arrival order. TestCorpus checks only the one-word result, which
+// convergence makes blind to the field.
+func TestExchangeOrdersCorpus(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join(corpusDir, "*.json"))
+	require.NoError(t, err)
+	checked := 0
+	for _, path := range paths {
+		s, err := LoadScript(path)
+		require.NoError(t, err)
+		if !declaresOrders(s) {
+			continue
+		}
+		checked++
+		t.Run(strings.TrimSuffix(filepath.Base(path), ".json"), func(t *testing.T) {
+			rn, err := replay(s, false)
+			require.NoError(t, err)
+			k := 0
+			for i, st := range s.Steps {
+				if st.Op != opExchange {
+					continue
+				}
+				if st.Orders != nil {
+					require.Less(t, k, len(rn.arrivals), "%s: step %d never ran", path, i)
+					// A replica with nothing to hand over is skipped, so the
+					// declared order is what the arrivals are a subsequence
+					// of; any reordering breaks that.
+					assert.Truef(t, subsequence(rn.arrivals[k], declaredArrivals(st)),
+						"%s: step %d delivered %v, which is not in the declared order %v",
+						path, i, rn.arrivals[k], declaredArrivals(st))
+				}
+				k++
+			}
+		})
+	}
+	require.NotZero(t, checked, "no corpus script declares orders")
+}
+
+func declaresOrders(s *Script) bool {
+	for _, st := range s.Steps {
+		if st.Op == opExchange && st.Orders != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// declaredArrivals is every delivery an exchange step's orders calls for, as
+// run.arrivals spells them.
+func declaredArrivals(st Step) []string {
+	var want []string
+	for to, order := range st.Orders {
+		for _, from := range order {
+			want = append(want, fmt.Sprintf("d%d<-d%d", to+1, from+1))
+		}
+	}
+	return want
+}
+
+// subsequence reports whether got appears in want in order, gaps allowed.
+func subsequence(got, want []string) bool {
+	i := 0
+	for _, w := range want {
+		if i < len(got) && got[i] == w {
+			i++
+		}
+	}
+	return i == len(got)
 }
 
 // TestParity regenerates every family's rows and compares them with the
