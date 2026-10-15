@@ -103,7 +103,7 @@ func Gen(seed uint32, fam string, n, steps int) *Script {
 	for range steps {
 		r := int(math.Floor(rnd() * float64(n)))
 		if rnd() < 0.5 && pending(r) > 0 {
-			out = append(out, Step{R: r, Op: "pull"})
+			out = append(out, Step{R: r, Op: opPull})
 			for cursor[r] < len(authors) && authors[cursor[r]] == r {
 				cursor[r]++
 			}

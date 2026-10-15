@@ -31,7 +31,9 @@ import (
 	yjson "github.com/yorkie-team/yorkie/pkg/document/json"
 )
 
-// Delivery modes of a script.
+// Delivery modes of a script. `exchange` names both a delivery mode and the
+// op only that mode takes: DeliveryExchange is the value of `delivery`,
+// opExchange the value of a step's `op`.
 const (
 	DeliveryLog      = "log"
 	DeliveryExchange = "exchange"
@@ -129,17 +131,21 @@ var statuses = map[string]string{
 // sdks are the keys a script's status may carry.
 var sdks = map[string]bool{"go": true, "js": true}
 
-// opStyle is the op that styles a range, not to be confused with the `style`
-// generator kind.
-const opStyle = "style"
-
-// Ops named in more than one place.
+// Step ops. opStyle is the op that styles a range, not to be confused with
+// the `style` generator kind.
 const (
 	opEdit        = "edit"
+	opStyle       = "style"
 	opRemoveStyle = "removeStyle"
-	opGen         = "gen"
-	opExpect      = "expect"
+	opUpdate      = "update"
+	opUndo        = "undo"
+	opRedo        = "redo"
+	opPull        = "pull"
+	opSync        = "sync"
 	opExchange    = "exchange"
+	opSnapshot    = "snapshot"
+	opExpect      = "expect"
+	opGen         = "gen"
 )
 
 // textType is the type of a text node.
@@ -152,20 +158,20 @@ var opFields = map[string]map[string]bool{
 	opEdit:        {"from": true, "to": true, "text": false, "contents": false, "split": false},
 	opStyle:       {"from": true, "to": true, "attrs": true},
 	opRemoveStyle: {"from": true, "to": true, "keys": true},
-	"update":      {"ops": true},
-	"undo":        {},
-	"redo":        {},
-	"pull":        {},
-	"sync":        {},
+	opUpdate:      {"ops": true},
+	opUndo:        {},
+	opRedo:        {},
+	opPull:        {},
+	opSync:        {},
 	opExchange:    {"orders": false},
-	"snapshot":    {},
+	opSnapshot:    {},
 	opExpect:      {"xml": true, "label": false},
 	opGen:         {"k": true, "f": true, "g": true, "h": true, "v": true},
 }
 
 // v2Ops are the ops, and v2Fields the fields, that format v1 does not have.
 var (
-	v2Ops    = map[string]bool{"update": true, opExchange: true, opExpect: true}
+	v2Ops    = map[string]bool{opUpdate: true, opExchange: true, opExpect: true}
 	v2Fields = map[string]bool{"contents": true}
 )
 
@@ -177,7 +183,7 @@ var (
 
 // deliveryOps are the ops valid in one delivery mode only.
 var deliveryOps = map[string]string{
-	"pull": DeliveryLog, "sync": DeliveryLog, opExchange: DeliveryExchange,
+	opPull: DeliveryLog, opSync: DeliveryLog, opExchange: DeliveryExchange,
 }
 
 // genKinds are the generator events a `gen` step may carry.
@@ -351,7 +357,7 @@ func checkValues(s *Script, st *Step, raw map[string]json.RawMessage) error {
 				return fmt.Errorf("keys[%d] is not a string", j)
 			}
 		}
-	case "update":
+	case opUpdate:
 		var ops []map[string]json.RawMessage
 		if err := json.Unmarshal(raw["ops"], &ops); err != nil {
 			return fmt.Errorf("ops: %w", err)
@@ -360,6 +366,9 @@ func checkValues(s *Script, st *Step, raw map[string]json.RawMessage) error {
 			return fmt.Errorf("ops is empty")
 		}
 		for j := range st.Ops {
+			if ops[j] == nil {
+				return fmt.Errorf("ops[%d] is null", j)
+			}
 			if err := checkStep(s, &st.Ops[j], ops[j], true); err != nil {
 				return fmt.Errorf("ops[%d]: %w", j, err)
 			}

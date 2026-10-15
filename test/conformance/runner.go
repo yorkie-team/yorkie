@@ -358,17 +358,17 @@ func (rn *run) pull(r int) int {
 func (rn *run) step(st Step) {
 	d := fmt.Sprintf("d%d", st.R+1)
 	switch st.Op {
-	case "pull":
+	case opPull:
 		if idx := rn.pull(st.R); idx >= 0 {
 			rn.lines = append(rn.lines, fmt.Sprintf("pull %s <- #%d", d, idx))
 		} else {
 			rn.lines = append(rn.lines, fmt.Sprintf("pull %s -", d))
 		}
-	case "sync":
+	case opSync:
 		for idx := rn.pull(st.R); idx >= 0; idx = rn.pull(st.R) {
 			rn.lines = append(rn.lines, fmt.Sprintf("pull %s <- #%d", d, idx))
 		}
-	case "snapshot":
+	case opSnapshot:
 		rn.snapshot(st.R)
 		rn.lines = append(rn.lines, d+".snapshot")
 	case opExchange:
@@ -404,7 +404,7 @@ func (rn *run) local(st Step) string {
 	case opEdit, opStyle, opRemoveStyle:
 		rn.update(st.R, func(t *json.Tree) { treeOp(t, st) })
 		return describeOp(st)
-	case "update":
+	case opUpdate:
 		rn.update(st.R, func(t *json.Tree) {
 			for _, op := range st.Ops {
 				treeOp(t, op)
@@ -415,10 +415,10 @@ func (rn *run) local(st Step) string {
 			descs[i] = describeOp(op)
 		}
 		return "update[" + strings.Join(descs, ";") + "]"
-	case "undo":
+	case opUndo:
 		must(doc.Undo())
 		return "undo"
-	case "redo":
+	case opRedo:
 		must(doc.Redo())
 		return "redo"
 	case opGen:
