@@ -56,8 +56,9 @@ unset `CONFORMANCE_FAM` skips it.
     A node is a text node `{"type":"text","value":…}` (exactly these two
     fields, `value` a string) or an element `{"type":…}` with a non-empty
     string `type` other than `text`, optional `children` (an array of
-    nodes) and optional `attributes` (an object of string→string), and no
-    other field. The root must be an element.
+    nodes; absent means none, for the root too) and optional `attributes`
+    (an object of string→string), and no other field. The root must be an
+    element.
 
   Replica 0 creates the tree with `root.t = new Tree(node)` (Go:
   `SetNewTree("t", node)`) and every other replica applies that change

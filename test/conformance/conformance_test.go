@@ -265,6 +265,20 @@ func TestExpect(t *testing.T) {
 	}
 }
 
+// TestElementWithoutChildren checks that an element node without
+// `children`, the init root or a node of an edit's contents, has none. The
+// JS runner's test holds the same case.
+func TestElementWithoutChildren(t *testing.T) {
+	s, err := ParseScript([]byte(`{"v":2,"id":"x","replicas":2,"init":{"type":"doc"},"steps":[` +
+		`{"op":"expect","xml":["<doc></doc>","<doc></doc>"]},` +
+		`{"r":0,"op":"edit","from":0,"to":0,"contents":[{"type":"p"}]},` +
+		`{"r":1,"op":"sync"}]}`))
+	require.NoError(t, err)
+	rec := Run(s)
+	require.Equal(t, ResultPass, rec.Result, "checks %s, err %q", rec.Checks, rec.Err)
+	assert.Equal(t, []string{"<doc><p></p></doc>", "<doc><p></p></doc>"}, rec.XML)
+}
+
 // exchangeScript is a three-replica exchange script in which every replica
 // holds one local edit, followed by a single exchange step carrying orders.
 func exchangeScript(t *testing.T, orders string) *Script {
