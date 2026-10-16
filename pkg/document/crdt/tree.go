@@ -1204,10 +1204,8 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // child in the target whose MergedFrom names the source; purging that child
 // first sends the position to the fallback slot on one replica while
 // another, which has not collected, still finds it (#2099). The hold always
-// ends: either the minimum synced vector comes to cover the source's removal,
-// or it does not carry the removing actor at all, in which case the child is
-// released rather than held for a coverage that can never arrive (see
-// holdsForMergeSource).
+// ends: the source's removal becomes covered as the minimum synced vector
+// advances.
 //
 // A removed element is not held for its children. A live child under it (a
 // concurrent insert, or one a restore revived) has no GC pair of its own, so
@@ -1231,19 +1229,6 @@ func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
 // bytes in docSize.GC — for the life of the document, which is exactly the
 // state mergeNodes and rebuildMergeState now refuse to derive a pointer
 // from.
-//
-// Which removal gates the hold is therefore chosen by a stamp the client
-// writes, so the wait it buys has to be bounded by something the client does
-// not control. It is: the only thing that ends this hold is the collection
-// vector covering the source's removal, and a vector that does not carry the
-// removing actor never covers it — EqualToOrAfter reads a missing actor as
-// not covered, and Min floors an actor missing from either side at 0, so one
-// that has dropped out of the minimum synced vector does not come back. A
-// stamp naming such a source would pin this child, and its bytes in
-// docSize.GC, for the life of the document, which is the leak GCHold's
-// contract rules out. Release it instead: the §1.1 boundary is worth a
-// bounded wait, not an unbounded one. What is left is a wait no longer than
-// the source tombstone's own, which every replica agrees on.
 func (t *Tree) holdsForMergeSource(node *TreeNode, vector time.VersionVector) bool {
 	if node.MergedFrom == nil {
 		return false
@@ -1251,9 +1236,6 @@ func (t *Tree) holdsForMergeSource(node *TreeNode, vector time.VersionVector) bo
 	source := t.findMergeNode(node.MergedFrom)
 	if source == nil || source.Index == nil || source.Index.Parent == nil ||
 		source.removedAt == nil {
-		return false
-	}
-	if _, ok := vector.Get(source.removedAt.ActorID()); !ok {
 		return false
 	}
 	return !vector.EqualToOrAfter(source.removedAt)

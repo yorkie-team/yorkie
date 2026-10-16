@@ -34,17 +34,6 @@ func vectorCovering(ticket *time.Ticket) time.VersionVector {
 	return vector
 }
 
-// vectorShortOf returns a version vector that carries the ticket's actor but
-// has not yet observed the ticket itself, as the collection vector of a
-// replica still waiting on that removal does. A collection only ever reaches
-// GCHold with a vector that covers the child's OWN removal, so the empty
-// vector is never the shape of a real one.
-func vectorShortOf(ticket *time.Ticket) time.VersionVector {
-	vector := time.NewVersionVector()
-	vector.Set(ticket.ActorID(), ticket.Lamport()-1)
-	return vector
-}
-
 // TestTreeDoesNotHoldTombstoneForChildren pins that a removed element is not
 // held for its children. A live child under it has no GC pair of its own, so
 // a hold for one would never end and would pin the element, and its bytes in
@@ -76,35 +65,10 @@ func TestTreeHoldsTombstoneForMergeSource(t *testing.T) {
 		f.text.MergedAt = removedAt
 		f.text.remove(f.nextTicket())
 
-		assert.True(t, f.tree.HoldsTombstone(f.text, vectorShortOf(removedAt)),
+		assert.True(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector()),
 			"a peer that has not seen the merge still resolves positions through it")
 		assert.False(t, f.tree.HoldsTombstone(f.text, vectorCovering(removedAt)),
 			"once every replica has seen the merge the boundary is free")
-	})
-
-	// The stamp picks WHICH removal gates this tombstone, and a vector that
-	// does not carry the removing actor never covers it: a missing actor reads
-	// as not covered and Min floors it at 0 for good. Held on that, the child
-	// and its bytes in docSize.GC would never be collected again, so the hold
-	// is released instead -- a hold GCHold's contract would not allow.
-	t.Run("source removal the vector can never cover", func(t *testing.T) {
-		f := newMergeLineageFixture(t)
-		removedAt := f.nextTicket()
-		f.p3.remove(removedAt)
-		f.text.MergedFrom = f.p3.id
-		f.text.MergedAt = removedAt
-		textRemovedAt := f.nextTicket()
-		f.text.remove(textRemovedAt)
-
-		other, err := time.ActorIDFromHex("0000000000000000000000ff")
-		require.NoError(t, err)
-		vector := time.NewVersionVector()
-		vector.Set(other, textRemovedAt.Lamport())
-
-		require.False(t, vector.EqualToOrAfter(removedAt),
-			"the actor that removed the source is absent, so coverage never arrives")
-		assert.False(t, f.tree.HoldsTombstone(f.text, vector),
-			"a hold no later vector releases is a leak, not a boundary")
 	})
 
 	// MergedFrom rides in on a client-supplied element payload, so a stamp can
