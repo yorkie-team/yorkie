@@ -923,3 +923,43 @@ func TestTreeRestoreFollowsSuccessorIntoConcurrentSplit(t *testing.T) {
 		})
 	}
 }
+
+// TestTreeRetombstoneAnchorsTravelTogether pins that Retombstone replaces a
+// span's three anchors together. A peer already removed "he", a piece that
+// straddles the start of the span "ell" and that the retombstone does not
+// split. The left anchor is then the piece's own last character before the
+// span, not the one the span was recorded with: recreateFromSpan honours the
+// left anchor first, so a stale one beside a fresh ParentID would land the
+// range at the stale place.
+func TestTreeRetombstoneAnchorsTravelTogether(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+
+	stale := crdt.NewTreeNodeID(helper.TimeT(ctx), 0)
+	span := &crdt.TreeRestoreSpan{
+		ID:             crdt.NewTreeNodeID(createdAt, 1),
+		NodeType:       "text",
+		IsText:         true,
+		Length:         3,
+		Value:          "ell",
+		ParentID:       p.ID(),
+		LeftSiblingID:  stale,
+		RightSiblingID: stale,
+	}
+
+	// "he" goes as one piece, straddling the span's start.
+	editT(t, tree, ctx, 1, 3, nil)
+	assert.Equal(t, "<r><p>llo</p></r>", tree.ToXML())
+
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>o</p></r>", tree.ToXML())
+	assert.Len(t, applied, 1)
+	assert.Equal(t, p.ID(), applied[0].ParentID)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID,
+		`the left anchor is "h", inside the straddling piece`)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID,
+		`the right anchor is "o"`)
+}

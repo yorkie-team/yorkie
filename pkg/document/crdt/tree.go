@@ -1669,11 +1669,18 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 // piece a peer had already removed is skipped by the removal but still
 // bounds the range, and anchoring on the first piece the removal touched
 // instead would name a neighbour inside the range. A removed piece that
-// straddles the boundary is not split here, so it has no neighbour that is
-// the boundary's and leaves that anchor as recorded; a purged end leaves the
-// neighbour of the nearest surviving piece, which is what now sits beside
-// the gap. ParentID travels with the left anchor when it is refreshed, else
-// with the right (see anchorsOf).
+// straddles a boundary is not split here, so its own characters outside the
+// range are the neighbour on that side: the left anchor names its last one
+// before the range, the right anchor the piece itself. A purged end leaves
+// the neighbour of the nearest surviving piece, which is what now sits beside
+// the gap.
+//
+// The three anchors are always replaced together, under the first piece's
+// parent (see anchorsOf): recreateFromSpan honours a sibling anchor only
+// under the span's ParentID and tries the left one first, so a fresh parent
+// beside a stale left anchor would land the range at the stale place. A
+// right anchor under another parent -- the span was split across elements --
+// is dropped rather than paired with the wrong one.
 //
 // It never writes through the pointer it is given. The spans Retombstone
 // receives are the TreeEdit operation's own payload — the same objects
@@ -1698,26 +1705,24 @@ func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
 		return span
 	}
 
-	fresh := *span
-	refreshed, leftRefreshed := false, false
-	if !span.IsText || first.id.Offset >= start {
-		if parentID, leftID, _, ok := anchorsOf(first); ok {
-			fresh.ParentID, fresh.LeftSiblingID = parentID, leftID
-			refreshed, leftRefreshed = true, true
-		}
-	}
-	if !span.IsText || last.id.Offset+last.Length() <= end {
-		if parentID, _, rightID, ok := anchorsOf(last); ok {
-			if !leftRefreshed {
-				fresh.ParentID = parentID
-			}
-			fresh.RightSiblingID = rightID
-			refreshed = true
-		}
-	}
-	if !refreshed {
+	parentID, leftID, _, ok := anchorsOf(first)
+	if !ok {
 		return span
 	}
+	if span.IsText && first.id.Offset < start {
+		leftID = NewTreeNodeID(span.ID.CreatedAt, start-1)
+	}
+
+	var rightID *TreeNodeID
+	if lastParentID, _, lastRightID, ok := anchorsOf(last); ok && lastParentID.Equal(parentID) {
+		rightID = lastRightID
+		if span.IsText && last.id.Offset+last.Length() > end {
+			rightID = last.id
+		}
+	}
+
+	fresh := *span
+	fresh.ParentID, fresh.LeftSiblingID, fresh.RightSiblingID = parentID, leftID, rightID
 	return &fresh
 }
 
