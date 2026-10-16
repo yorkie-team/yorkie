@@ -35,10 +35,10 @@ func vectorCovering(ticket *time.Ticket) time.VersionVector {
 }
 
 // TestTreeHoldsTombstoneForChildren pins the first GCHold rule: a removed
-// element stays linked while it still has children. Purging it detaches the
-// whole subtree in one go, so a live child inside it would be lost while
-// staying registered in NodeMapByID, where position resolution then walks off
-// the top of a subtree no longer attached to the tree.
+// element stays linked while its subtree still holds a tombstone this
+// collection cannot purge yet. Purging the element detaches the whole subtree
+// in one go, so such a tombstone would be unlinked before the vector that
+// decides its own place has arrived.
 func TestTreeHoldsTombstoneForChildren(t *testing.T) {
 	f := newMergeLineageFixture(t)
 	vector := time.NewVersionVector()
@@ -47,17 +47,49 @@ func TestTreeHoldsTombstoneForChildren(t *testing.T) {
 		"an element with no children is not held")
 
 	f.p2.remove(f.nextTicket())
+	assert.False(t, f.tree.HoldsTombstone(f.p2, vector),
+		"a subtree of live children holds nothing back")
+
+	textRemovedAt := f.nextTicket()
+	f.text.remove(textRemovedAt)
 	assert.True(t, f.tree.HoldsTombstone(f.p2, vector),
-		"a removed element is held while its subtree is still linked")
+		"a tombstone inside it this vector cannot purge holds it")
 
 	assert.False(t, f.tree.HoldsTombstone(f.text, vector),
 		"a text node holds nothing, so it is never held for children")
 
-	// Its own children are on the worklist, so they go first; the element
-	// follows them within the same collection pass.
+	// The hold is on the vector, not on the link: once the collection covers
+	// the child's own removal the child goes in this same pass, and the element
+	// follows it whichever order the worklist offers the two in.
+	assert.False(t, f.tree.HoldsTombstone(f.p2, vectorCovering(textRemovedAt)),
+		"a vector that covers the subtree's removals releases the hold")
+
 	require.NoError(t, f.tree.Purge(f.text))
 	assert.False(t, f.tree.HoldsTombstone(f.p2, vector),
 		"the hold is released once the subtree is gone")
+}
+
+// TestTreeHoldForChildrenAlwaysEnds pins what keeps the first GCHold rule from
+// leaking: a LIVE child under a removed element -- a concurrent insert under
+// an element some replica removed, or one a restore revived -- is on nobody's
+// worklist, so a hold for one would never end and would pin the element, and
+// its bytes in docSize.GC, for the life of the document. The survivor is
+// unregistered with the subtree it is detached in instead, so nothing is left
+// resolvable into a subtree the tree no longer holds.
+func TestTreeHoldForChildrenAlwaysEnds(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	removedAt := f.nextTicket()
+	f.p2.remove(removedAt)
+
+	// The child stays live: with no removal of its own, no GC pair ever offers
+	// it for purging.
+	require.Nil(t, f.text.removedAt)
+	assert.False(t, f.tree.HoldsTombstone(f.p2, vectorCovering(removedAt)),
+		"a live child is on no worklist, so it must not hold the element")
+
+	require.NoError(t, f.tree.Purge(f.p2))
+	assert.Nil(t, f.tree.findFloorNode(f.text.id),
+		"the live child is unregistered with the subtree it was detached in")
 }
 
 // TestTreeHoldsTombstoneForMergeSource pins the second GCHold rule: a removed

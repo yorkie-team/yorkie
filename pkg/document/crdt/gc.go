@@ -95,9 +95,11 @@ type GCBarrier[C any] interface {
 // GCHold is an optional capability of a GC parent that has to keep some of
 // its tombstones past the point GCBarrier would release them, because a rule
 // that later edits run still reads them: a removed element is the parent of
-// whatever its subtree holds, and a child a merge moved is the boundary a
-// position inside the merge source resolves against. A held child stays on
-// the worklist and is offered again on the next collection.
+// the tombstones its subtree still holds, and a child a merge moved is the
+// boundary a position inside the merge source resolves against. A held child
+// stays on the worklist and is offered again on the next collection, so every
+// hold has to be one a later vector releases — one that cannot be is a leak
+// of the child's bytes in docSize.GC for the life of the document.
 type GCHold[C any] interface {
 	// HoldsTombstone reports whether the given child must stay linked for
 	// now, given the version vector the collection runs at.
