@@ -148,7 +148,7 @@ func (m *oModel) spanSlots() []int {
 	var out []int
 	for i := 0; i <= len(m.ids); i++ {
 		st := m.stack(i)
-		if len(st) == 2 && st[1] == "span" {
+		if len(st) == 2 && st[1] == oTagSpan {
 			out = append(out, i)
 		}
 	}
@@ -169,12 +169,12 @@ func (m *oModel) wellFormed() bool {
 			st = st[:len(st)-1]
 		case strings.HasPrefix(s, "<"):
 			t := strings.Trim(s, "<>")
-			if (t == "p" && len(st) != 0) || (t == "span" && (len(st) != 1 || st[0] != "p")) {
+			if (t == "p" && len(st) != 0) || (t == oTagSpan && (len(st) != 1 || st[0] != "p")) {
 				return false
 			}
 			st = append(st, t)
 		default:
-			if len(st) != 2 || st[1] != "span" {
+			if len(st) != 2 || st[1] != oTagSpan {
 				return false
 			}
 		}
@@ -208,7 +208,13 @@ var oPatterns = []oPattern{
 	{name: "3s", reps: []int{0, 1, 0}, after: [][]int{{}, {0}, {0}}},
 }
 
-var oKinds = []string{"ins", "ssplit", "senter", "senter11"}
+// The oracle's op kinds and the element tag a span slot sits in.
+const (
+	oKindIns = "ins"
+	oTagSpan = "span"
+)
+
+var oKinds = []string{oKindIns, "ssplit", "senter", "senter11"}
 
 // apply runs op k on model m and returns its primitives and its step.
 func (m *oModel) apply(k int, o oOp) ([]oPrim, Step, bool) {
@@ -218,7 +224,7 @@ func (m *oModel) apply(k int, o oOp) ([]oPrim, Step, bool) {
 	}
 	i := slots[o.slot]
 	switch o.kind {
-	case "ins":
+	case oKindIns:
 		return []oPrim{m.insert(k, i, []string{o.val})},
 			Step{R: o.r, Op: opEdit, From: i, To: i, Text: o.val}, true
 	case "ssplit":
@@ -409,7 +415,7 @@ func TestSpanOracle(t *testing.T) {
 	if out == "" {
 		t.Skip("CONFORMANCE_ORACLE_OUT is not set")
 	}
-	f, err := os.Create(out) // #nosec G304 -- test-chosen path
+	f, err := os.Create(out) // #nosec G304 G703 -- test-chosen path
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 	enc := json.NewEncoder(f)
