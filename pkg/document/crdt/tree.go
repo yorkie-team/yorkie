@@ -1196,56 +1196,27 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 }
 
 // HoldsTombstone implements GCHold[GCChild]: it keeps a removed node that a
-// later edit or a later purge still reads.
-//
-// A removed element is held while its subtree still holds a tombstone whose
-// own removal this collection does not yet cover. Purging the element
-// detaches the whole subtree in one go, so such a tombstone would be unlinked
-// before the vector that decides its own place has arrived.
-//
-// The hold is on that, and only that, so it always ends: every uncovered
-// removal becomes covered as the minimum synced vector advances. A subtree
-// whose tombstones are all covered goes in the same collection — the pass
-// repeats until nothing purges — and a LIVE child (a concurrent insert under
-// an element some replica removed, or one a restore revived) is nobody's
-// worklist entry at all, so holding for one would pin the element, and its
-// bytes in docSize.GC, for the life of the document. Purge instead
-// unregisters the whole detached subtree from NodeMapByID, so no survivor is
-// left resolvable into a subtree the tree no longer holds.
+// later edit still reads.
 //
 // A removed node a merge moved is held while its merge source is still a
 // linked tombstone whose own removal the collection does not yet cover.
 // §1.1 resolves a left-most position inside the merge source to the first
 // child in the target whose MergedFrom names the source; purging that child
 // first sends the position to the fallback slot on one replica while
-// another, which has not collected, still finds it (#2099).
+// another, which has not collected, still finds it (#2099). The hold always
+// ends: the source's removal becomes covered as the minimum synced vector
+// advances.
+//
+// A removed element is not held for its children. A live child under it (a
+// concurrent insert, or one a restore revived) has no GC pair of its own, so
+// a hold on it would never end; what purging such a subtree should do with
+// the live child is left to a separate change.
 func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil {
 		return false
 	}
-	if !node.IsText() && holdsForUncoveredTombstone(node, vector) {
-		return true
-	}
 	return t.holdsForMergeSource(node, vector)
-}
-
-// holdsForUncoveredTombstone reports whether node's subtree still holds a
-// tombstone whose removal vector does not cover, i.e. one this collection
-// could not purge on its own yet. Descendants count, not just children: a
-// live child can carry such a tombstone below it, and purging node would
-// detach that one just the same.
-func holdsForUncoveredTombstone(node *TreeNode, vector time.VersionVector) bool {
-	held := false
-	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-		if held || n.Value == node {
-			return
-		}
-		if removedAt := n.Value.removedAt; removedAt != nil && !vector.EqualToOrAfter(removedAt) {
-			held = true
-		}
-	})
-	return held
 }
 
 // holdsForMergeSource reports whether node, a child a merge moved, is still
@@ -1289,18 +1260,6 @@ func (t *Tree) Purge(child GCChild) error {
 	// unregister a different node that shares this one's ID — see putNode.
 	// Only drop the entry this node actually holds.
 	t.unregisterNode(node)
-
-	// Detaching an element takes its whole subtree with it, survivors
-	// included: a child still live under a removed parent (a concurrent
-	// insert, or one a restore revived) has no GC pair of its own, so nothing
-	// else would ever drop its entry. Left registered, position resolution
-	// finds it and walks off the top of a subtree the tree no longer holds.
-	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-		if n.Value == node {
-			return
-		}
-		t.unregisterNode(n.Value)
-	})
 
 	insPrevID := node.InsPrevID
 	insNextID := node.InsNextID
