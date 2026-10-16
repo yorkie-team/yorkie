@@ -4,7 +4,7 @@
   "steps": 24,
   "seed0": 1,
   "runs": 200,
-  "diverged": 131,
+  "diverged": 130,
   "rows": [
     {
       "seed": 1,
@@ -547,10 +547,10 @@
     },
     {
       "seed": 78,
-      "result": "diverged",
-      "checks": "01111",
-      "digest": "5deb777168d0bf9c",
-      "xmlDigest": "68cf430b4898aa31"
+      "result": "error",
+      "checks": "00101",
+      "digest": "14cfcbe083610dd1",
+      "xmlDigest": "14cfcbe083610dd1"
     },
     {
       "seed": 79,

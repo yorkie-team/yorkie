@@ -4802,14 +4802,13 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		}
 	}
 
-	// 03. Split text node if the left node is text node. A left sibling
-	// offset past the end of the floor piece means the pieces between them
-	// were purged: they were tombstones every replica had seen removed, so a
-	// position after them is a position after the floor piece, and there is
-	// nothing to split.
-	if splitOffset := pos.LeftSiblingID.Offset - leftNode.id.Offset; leftNode.IsText() &&
-		splitOffset <= leftNode.Len() {
-		diff2, err := leftNode.Split(t, splitOffset, nil, nil)
+	// 03. Split text node if the left node is text node, unless the position
+	// is past purged pieces (see afterPurgedText): those were tombstones every
+	// replica had seen removed, so a position after them is a position after
+	// the floor piece, and there is nothing to split. Any other offset past
+	// the piece is out of range and fails the split.
+	if leftNode.IsText() && !t.afterPurgedText(leftNode, pos.LeftSiblingID) {
+		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil, nil)
 		if err != nil {
 			return nil, nil, diff, err
 		}
@@ -4850,6 +4849,27 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	}
 
 	return realParentNode, leftNode, diff, nil
+}
+
+// afterPurgedText reports whether id, a left sibling ID that resolved to the
+// text piece floor, names an offset past the end of floor that only a purge
+// can explain: the next surviving piece of the same insertion, which Purge
+// relinks floor to, starts at or past id. The characters in between existed,
+// since an insertion's pieces cover it without gaps, and none of them is
+// registered any more, so GC took them. (id can name the start of that next
+// piece itself: ToTreeNodes resolves such an ID to the piece before it.)
+//
+// An offset past the last surviving piece is not accepted, though a purge of
+// the insertion's tail produces it too: nothing left in the tree tells that
+// purge from an offset the insertion never had.
+func (t *Tree) afterPurgedText(floor *TreeNode, id *TreeNodeID) bool {
+	if id.Offset <= floor.id.Offset+floor.Len() || floor.InsNextID == nil {
+		return false
+	}
+
+	next := t.findFloorNode(floor.InsNextID)
+	return next != nil && next != floor && next.IsText() &&
+		next.id.CreatedAt.Compare(floor.id.CreatedAt) == 0 && next.id.Offset >= id.Offset
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.

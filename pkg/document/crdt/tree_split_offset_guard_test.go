@@ -26,10 +26,13 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-// TestFindTreeNodesWithSplitTextSplitOffset pins both sides of step 03's
-// range guard: an offset inside the floor piece still splits it, and one past
-// its end -- which only a purge of the pieces between can produce -- anchors
-// after the piece instead of failing with ErrSplitOutOfRange.
+// TestFindTreeNodesWithSplitTextSplitOffset pins every side of step 03's
+// range guard: an offset inside the floor piece still splits it; one past its
+// end that a purge of the pieces between explains -- a later piece of the
+// insertion survives past it -- anchors after the piece; and any other offset
+// past the piece still fails with ErrSplitOutOfRange, a purge of the
+// insertion's tail included, since nothing tells that purge from an offset
+// the insertion never had.
 func TestFindTreeNodesWithSplitTextSplitOffset(t *testing.T) {
 	t.Run("an offset inside the floor piece splits it", func(t *testing.T) {
 		tree, ctx := newBoldHelloWorldTree(t)
@@ -48,31 +51,54 @@ func TestFindTreeNodesWithSplitTextSplitOffset(t *testing.T) {
 		assert.Equal(t, []string{"b", `" wo"`, `"rld"`}, childrenOfP(tree))
 	})
 
-	t.Run("an offset past the floor piece anchors after it", func(t *testing.T) {
-		// Delete "rld" and purge it, leaving " wo" as the floor piece of the
-		// insertion while positions a peer declared still name offsets inside
-		// the range that is gone.
+	t.Run("an offset past purged pieces anchors after the floor piece", func(t *testing.T) {
+		// Delete "or" and purge it, leaving " w" and "ld" as the surviving
+		// pieces of the insertion while positions a peer declared still name
+		// offsets inside the range that is gone.
 		tree, ctx := newBoldHelloWorldTree(t)
 		world := tree.Root().Index.Children()[0].Children()[1].Value
 		createdAt, baseOffset := world.ID().CreatedAt, world.ID().Offset
-		editT(t, tree, ctx, 11, 14, nil)
-		require.Equal(t, "<r><p><b>hello</b> wo</p></r>", tree.ToXML())
+		editT(t, tree, ctx, 10, 12, nil)
+		require.Equal(t, "<r><p><b>hello</b> wld</p></r>", tree.ToXML())
 
-		tail := tree.Root().Index.Children()[0].Children(true)[2].Value
-		require.True(t, tail.IsRemoved())
-		require.NoError(t, tree.Purge(tail))
-		require.Equal(t, []string{"b", `" wo"`}, childrenOfP(tree))
+		gap := tree.Root().Index.Children()[0].Children(true)[2].Value
+		require.True(t, gap.IsRemoved())
+		require.NoError(t, tree.Purge(gap))
+		require.Equal(t, []string{"b", `" w"`, `"ld"`}, childrenOfP(tree))
 
-		// Offset 5 is the last character of the purged tail: past the end of
-		// the " wo" piece the floor lookup now answers with.
+		// Offset 3 is right after the purged "o": past the end of the " w"
+		// piece the lookup now answers with, before the surviving "ld".
 		pos := crdt.NewTreePos(
 			tree.Root().Index.Children()[0].Value.ID(),
-			crdt.NewTreeNodeID(createdAt, baseOffset+5),
+			crdt.NewTreeNodeID(createdAt, baseOffset+3),
 		)
 		parent, left, _, err := tree.FindTreeNodesWithSplitText(pos, helper.TimeT(ctx))
 		require.NoError(t, err, "a position after purged pieces is not out of range")
 		assert.Equal(t, "p", parent.Type())
-		assert.Equal(t, " wo", left.Value, "it anchors after the surviving piece")
-		assert.Equal(t, []string{"b", `" wo"`}, childrenOfP(tree), "nothing was split")
+		assert.Equal(t, " w", left.Value, "it anchors after the surviving piece")
+		assert.Equal(t, []string{"b", `" w"`, `"ld"`}, childrenOfP(tree), "nothing was split")
+	})
+
+	t.Run("an offset past the last surviving piece is out of range", func(t *testing.T) {
+		tree, ctx := newBoldHelloWorldTree(t)
+		world := tree.Root().Index.Children()[0].Children()[1].Value
+		createdAt, baseOffset := world.ID().CreatedAt, world.ID().Offset
+		p := tree.Root().Index.Children()[0].Value.ID()
+
+		pos := crdt.NewTreePos(p, crdt.NewTreeNodeID(createdAt, baseOffset+9))
+		_, _, _, err := tree.FindTreeNodesWithSplitText(pos, helper.TimeT(ctx))
+		assert.ErrorIs(t, err, crdt.ErrSplitOutOfRange, "an offset the insertion never had")
+
+		// Delete "rld" and purge it: the tail is gone with nothing after it,
+		// so an offset inside it reads exactly like one the insertion never
+		// had.
+		editT(t, tree, ctx, 11, 14, nil)
+		tail := tree.Root().Index.Children()[0].Children(true)[2].Value
+		require.True(t, tail.IsRemoved())
+		require.NoError(t, tree.Purge(tail))
+
+		pos = crdt.NewTreePos(p, crdt.NewTreeNodeID(createdAt, baseOffset+5))
+		_, _, _, err = tree.FindTreeNodesWithSplitText(pos, helper.TimeT(ctx))
+		assert.ErrorIs(t, err, crdt.ErrSplitOutOfRange, "a purged tail is not told apart")
 	})
 }
