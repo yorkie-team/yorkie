@@ -39,7 +39,6 @@ const (
 	corpusDigests = "tree/corpus-digests.json"
 	parityDir     = "tree/parity"
 	paritySeed    = 1
-	parityRuns    = 200
 	sdk           = "go"
 )
 
@@ -503,7 +502,7 @@ func TestParity(t *testing.T) {
 	for _, f := range Families {
 		t.Run(f.Name, func(t *testing.T) {
 			t.Parallel()
-			got := runFamily(f, paritySeed, parityRuns)
+			got := runFamily(f, paritySeed, f.ParityRuns())
 			path := filepath.Join(parityDir, f.Name+".json")
 			if update {
 				writeJSON(t, path, got)

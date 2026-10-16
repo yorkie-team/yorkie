@@ -27,14 +27,34 @@ import (
 
 // Family is a fixture family: which generator family, how many replicas
 // and how many steps. With Observer the last replica never edits: it only
-// pulls, the way a read-only client keeps its server row moving.
+// pulls, the way a read-only client keeps its server row moving. Runs is
+// how many seeds its parity fixture pins, 0 meaning defaultRuns.
 type Family struct {
 	Name     string
 	Fam      string
 	N        int
 	Steps    int
 	Observer bool
+	Runs     int
 }
+
+// defaultRuns is the seed count of a family that does not state one, and
+// v2Runs the count of the families format v2 added.
+//
+// The parity fixtures are a cross-SDK check — the two runners must agree
+// byte for byte on the same seed — not the net that catches a convergence
+// bug: a seed that caught one is minimized into tree/corpus, which every
+// run replays whatever the seed count is. So the count only has to be wide
+// enough to catch a runner that drifts, and the v2 families take a quarter
+// of the v1 count. That is a CPU bound, not a taste: this package has no
+// build tag, so CI's one test lane runs it beside the integration suite on
+// the same four cores, and the v2 families at the v1 count tripled the
+// suite's share of them (70s to 219s) — which is CPU the timing-sensitive
+// integration tests then miss their deadlines without.
+const (
+	defaultRuns = 200
+	v2Runs      = 50
+)
 
 // Families are the fixture families. The first six are those of format v1;
 // the undo, span and observer families came with format v2.
@@ -46,21 +66,29 @@ var Families = []Family{
 	{Name: "all", Fam: "all", N: 2, Steps: 24},
 	{Name: "all3", Fam: "all", N: 3, Steps: 30},
 
-	{Name: "ud", Fam: "ud", N: 2, Steps: 24},
-	{Name: "ud3", Fam: "ud", N: 3, Steps: 30},
-	{Name: "uds", Fam: "uds", N: 2, Steps: 24},
-	{Name: "uds3", Fam: "uds", N: 3, Steps: 30},
-	{Name: "udm", Fam: "udm", N: 2, Steps: 24},
-	{Name: "udst", Fam: "udst", N: 2, Steps: 24},
-	{Name: "uall", Fam: "uall", N: 2, Steps: 24},
-	{Name: "uall3", Fam: "uall", N: 3, Steps: 30},
+	{Name: "ud", Fam: "ud", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "ud3", Fam: "ud", N: 3, Steps: 30, Runs: v2Runs},
+	{Name: "uds", Fam: "uds", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "uds3", Fam: "uds", N: 3, Steps: 30, Runs: v2Runs},
+	{Name: "udm", Fam: "udm", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "udst", Fam: "udst", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "uall", Fam: "uall", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "uall3", Fam: "uall", N: 3, Steps: 30, Runs: v2Runs},
 
-	{Name: "span", Fam: "span", N: 2, Steps: 24},
-	{Name: "spand", Fam: "spand", N: 2, Steps: 24},
-	{Name: "spand3", Fam: "spand", N: 3, Steps: 30},
+	{Name: "span", Fam: "span", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "spand", Fam: "spand", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "spand3", Fam: "spand", N: 3, Steps: 30, Runs: v2Runs},
 
-	{Name: "del4o", Fam: "del", N: 4, Steps: 40, Observer: true},
-	{Name: "all4o", Fam: "all", N: 4, Steps: 40, Observer: true},
+	{Name: "del4o", Fam: "del", N: 4, Steps: 40, Observer: true, Runs: v2Runs},
+	{Name: "all4o", Fam: "all", N: 4, Steps: 40, Observer: true, Runs: v2Runs},
+}
+
+// ParityRuns is how many seeds this family's parity fixture pins.
+func (f Family) ParityRuns() int {
+	if f.Runs == 0 {
+		return defaultRuns
+	}
+	return f.Runs
 }
 
 // FamilyByName returns the fixture family with the given name.

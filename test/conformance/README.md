@@ -28,8 +28,16 @@ Unlike the other suites under `test/`, this package carries no build tag,
 so `go test ./...` — `make verify` and CI's `test` lane — runs it. That is
 deliberate: the tag-gated suites are gated because they need a service
 (`integration`, `complex`) or run for hours (`bench`, `fuzz`), and this one
-needs neither, finishing the corpus and all 3800 parity rows in seconds. `TestLargeRun` is the part that would not fit a commit gate, and an
+needs neither, finishing the corpus and all 1850 parity rows in seconds.
+`TestLargeRun` is the part that would not fit a commit gate, and an
 unset `CONFORMANCE_FAM` skips it.
+
+The one lane that runs it also runs the integration suite, on the same four
+cores, so the rows are a CPU budget as much as a check: a v1 family pins 200
+seeds and a v2 family 50. What catches a convergence bug is the corpus — a
+seed that caught one is minimized into `corpus/` and replayed on every run —
+so the seed count only has to be wide enough to catch a runner that drifts
+from the other SDK.
 
 ## Script
 
@@ -464,10 +472,11 @@ still moves the minVV and collects (yorkie#2099).
   no generated script carries `undo`, `redo`, `snapshot`, `removeStyle`,
   `update` or `contents`, so only this file pins the step lines, xml and
   shapes of those ops byte for byte.
-- `parity/{family}.json`: `{fam, n, steps, observer?, seed0: 1, runs: 200,
+- `parity/{family}.json`: `{fam, n, steps, observer?, seed0: 1, runs,
   diverged, rows: [{seed, result, checks, digest, xmlDigest}]}` generated
   by the Go runner. `observer` is present, `true`, only for an observer
-  family.
+  family. `runs` is 200 for a v1 family and 50 for a v2 one; a runner reads
+  it from the header rather than assuming one count.
   `diverged` counts rows whose `result` is `diverged`.
 
 Both runners check `corpus-digests.json`: it must list exactly the files
