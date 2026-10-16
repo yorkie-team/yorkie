@@ -512,3 +512,103 @@ func TestMergeNodesRefusesCycleFromForgedLineage(t *testing.T) {
 		})
 	}
 }
+
+// TestRestoreDissolvesLineageWhateverTheSpanResolvesTo pins that the
+// dissolution follows the SPAN, not the outcome the local tree happens to
+// produce for it.
+//
+// An element span resolves to one of four things -- the element is live
+// already, it is a tombstone the span revives, it is purged and recreated, or
+// the recreate declines because the parent is itself removed -- and which one
+// a replica takes is a property of that replica's state, never of the
+// operation. Dissolving only on the revive and the successful recreate left
+// the other two keeping the persisted MergedFrom/MergedAt that their peers
+// wiped, and that is the lineage §6.2 cascades on: the replica that kept the
+// stamps re-derives the pointer on the next load and tombstones content the
+// one that dropped them keeps (#2189).
+func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
+	// build returns <r><p>cd</p><dead></dead></r> with "cd" stamped as moved
+	// out of srcID, plus the tickets to keep editing it.
+	build := func(t *testing.T) (
+		tree *Tree, root, dead, moved *TreeNode, nextTicket func() *time.Ticket,
+	) {
+		t.Helper()
+
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		nextTicket = func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+
+		root = NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+		p := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+		dead = NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+		moved = NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "cd")
+		require.NoError(t, root.Append(p, dead))
+		require.NoError(t, p.Append(moved))
+		dead.remove(nextTicket())
+
+		return NewTree(root, nextTicket()), root, dead, moved, nextTicket
+	}
+
+	t.Run("the element is live already", func(t *testing.T) {
+		tree, root, _, moved, nextTicket := build(t)
+		// A live element named by the stamps: the peer that revived it from a
+		// tombstone dissolves them, so this replica has to as well.
+		live := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+		require.NoError(t, root.Append(live))
+		tree.putNode(live)
+		moved.MergedFrom = live.id
+		moved.MergedAt = nextTicket()
+
+		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
+			{ID: live.id, NodeType: "p", Length: 1},
+		}, false)
+		require.NoError(t, err)
+		require.Empty(t, untombstoned, "a live element is neither revived")
+		require.Empty(t, recreated, "nor recreated")
+
+		assert.Nil(t, moved.MergedFrom,
+			"an undo that finds the element live must still drop the stamps its peer drops")
+		assert.Nil(t, moved.MergedAt)
+
+		// The element is deleted again and the tree reloaded from the snapshot
+		// that delete writes: with no stamps left there is nothing to derive a
+		// forwarding pointer from, so §6.2 has nothing to cascade over.
+		live.remove(nextTicket())
+		NewTree(tree.Root(), nextTicket())
+		assert.Nil(t, live.mergedInto,
+			"a kept stamp would hand the next load the pointer #2189 cascades from")
+		assert.Equal(t, "cd", moved.Value)
+	})
+
+	t.Run("the recreate declines under a removed parent", func(t *testing.T) {
+		tree, _, dead, moved, nextTicket := build(t)
+		// A purged element whose parent has since been removed: the recreate
+		// brings it back born tombstoned and reports nothing, while a peer
+		// whose parent was still live recreated it and dissolved the stamps.
+		purgedID := NewTreeNodeID(nextTicket(), 0)
+		moved.MergedFrom = purgedID
+		moved.MergedAt = nextTicket()
+
+		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
+			{ID: purgedID, NodeType: "p", Length: 1, ParentID: dead.id},
+		}, false)
+		require.NoError(t, err)
+		require.Empty(t, untombstoned)
+		require.Empty(t, recreated, "a node born tombstoned is not reported as recreated")
+
+		assert.Nil(t, moved.MergedFrom,
+			"the stamps go even when this replica's recreate declines")
+		assert.Nil(t, moved.MergedAt)
+
+		reborn := tree.findFloorNode(purgedID)
+		require.NotNil(t, reborn, "the element is still recreated, under the dead parent")
+		require.True(t, reborn.IsRemoved())
+		NewTree(tree.Root(), nextTicket())
+		assert.Nil(t, reborn.mergedInto,
+			"and the reload must not derive a pointer onto the element it brought back")
+	})
+}

@@ -642,8 +642,8 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 // and tombstone content every other replica keeps (#2189). The persisted half
 // of the lineage — MergedFrom/MergedAt on those children, which
 // rebuildMergeState derives this pointer from — is cleared by
-// Tree.dissolveMergeSources, which Restore runs over every element it made
-// live again.
+// Tree.dissolveMergeSources, which Restore runs over every element span it
+// applies, whatever that span turned out to resolve to locally.
 func (n *TreeNode) unremove() {
 	if n.removedAt == nil {
 		return
@@ -1108,10 +1108,19 @@ func (t *Tree) rebuildMergeState() {
 	})
 }
 
-// dissolveMergeSources clears the merge lineage the given elements carry as
-// merge sources, in both halves: the mergedInto pointer, and the
+// dissolveMergeSources clears the merge lineage the elements with the given
+// IDs carry as merge sources, in both halves: the mergedInto pointer, and the
 // MergedFrom/MergedAt stamps every child a merge moved out of them still
 // carries. Restore calls it once, after applying every span (#2189).
+//
+// It takes IDs, not nodes, because the caller queues one per element span
+// before knowing what the local tree holds for it: the element may be live
+// already, a tombstone the span revived, a recreate, or absent entirely
+// (recreateFromSpan declines under a removed or unresolvable parent). Only the
+// pointer half needs a node, and it is looked up here; the stamp half is a
+// sweep over IDs, so an element that is not in this replica's tree still has
+// the lineage naming it cleared — which is the point, since a replica that did
+// hold it clears the same stamps.
 //
 // Clearing the stamps is what makes the dissolution survive a snapshot:
 // mergedInto is a runtime cache that rebuildMergeState re-derives from the
@@ -1133,15 +1142,17 @@ func (t *Tree) rebuildMergeState() {
 // the same stamps name a removed one and the pointer comes back. Keying on the
 // source ID also means only lineage naming *this* element is touched, with no
 // dependence on a pointer that may be a client's (see findMergeNode).
-func (t *Tree) dissolveMergeSources(sources []*TreeNode) {
+func (t *Tree) dissolveMergeSources(sources []*TreeNodeID) {
 	if len(sources) == 0 {
 		return
 	}
 
 	ids := make(map[string]struct{}, len(sources))
-	for _, src := range sources {
-		ids[src.id.toIDString()] = struct{}{}
-		src.mergedInto = nil
+	for _, id := range sources {
+		ids[id.toIDString()] = struct{}{}
+		if src := t.findFloorNode(id); src != nil && src.id.Equal(id) {
+			src.mergedInto = nil
+		}
 	}
 
 	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
@@ -1328,13 +1339,20 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 		}
 	}
 
-	// Elements this call makes live again that may still be named as a merge
-	// source, dissolved together once every span is applied: every revived
-	// tombstone, whether or not it still holds a forwarding pointer, and every
-	// recreated element, which comes back under its original ID with no
-	// pointer but may still be named by stamps elsewhere. See
-	// dissolveMergeSources (#2189).
-	var mergeSources []*TreeNode
+	// Elements this call restores and so may no longer be named as a merge
+	// source, dissolved together once every span is applied. Queued from the
+	// SPAN rather than from whatever the local tree turned out to hold: an
+	// element span resolves to one of four outcomes — already live, a revived
+	// tombstone, a recreated element, or a recreate that declines (born
+	// tombstoned under a removed parent, or an unresolvable parent) — and
+	// which one a replica takes depends only on its local state. Keying the
+	// dissolution on the span's own ID is what keeps the persisted half
+	// (MergedFrom/MergedAt on children a merge moved out of the element)
+	// identical on every replica; deriving it from the outcome let two
+	// replicas persist different lineage for the same undo, and that lineage
+	// is what propagateMergeDeletes cascades on. See dissolveMergeSources
+	// (#2189).
+	var mergeSources []*TreeNodeID
 	defer func() {
 		t.dissolveMergeSources(mergeSources)
 	}()
@@ -1344,17 +1362,17 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 			continue
 		}
 		if !span.IsText {
+			// A restored element can no longer be a merge source: the lineage
+			// goes with the tombstone that gave it meaning (#2189). Queued for
+			// every element span, before the outcome is known, and whether or
+			// not the runtime pointer is set — the persisted half outlives the
+			// pointer and rebuildMergeState would derive it back from a
+			// snapshot the moment a later edit removes this node again.
+			mergeSources = append(mergeSources, span.ID)
+
 			node := t.findFloorNode(span.ID)
 			if node != nil && node.id.Equal(span.ID) {
 				if node.IsRemoved() {
-					// A revived element is live, so it can no longer be a merge
-					// source: the lineage goes with the tombstone that gave it
-					// meaning (#2189). Queued whether or not the runtime
-					// pointer is set — the persisted half (MergedFrom/MergedAt
-					// on children a merge moved out of it) outlives the pointer
-					// and rebuildMergeState would derive it back from a
-					// snapshot the moment a later edit removes this node again.
-					mergeSources = append(mergeSources, node)
 					node.unremove()
 					untombstoned = append(untombstoned, node)
 					revived(node)
@@ -1368,7 +1386,6 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 			if created != nil {
 				recreated = append(recreated, created)
 				revived(created)
-				mergeSources = append(mergeSources, created)
 			}
 			continue
 		}

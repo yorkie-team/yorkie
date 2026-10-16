@@ -442,8 +442,8 @@ dropped at that moment (`Tree.dissolveMergeSources`):
 - `MergedFrom`/`MergedAt` on every child the merge had moved out of it.
 
 The second half is swept by one whole-tree traversal per `Restore` call,
-keyed on the revived elements' own IDs rather than on the children of the
-target `mergedInto` names. Two kinds of lineage sit outside that target:
+keyed on the restored spans' own element IDs rather than on the children of
+the target `mergedInto` names. Two kinds of lineage sit outside that target:
 §7.1's `SplitElement` carries merge-stamped children into the other half of
 a split pair, and a **recreated** element — one the restore rebuilds because
 GC had purged it — comes back live under its original ID with no pointer at
@@ -476,16 +476,27 @@ clone hold different lineage from its origin. This matches the JS
 ordinary merge moves a stamped child again, so neither derivation path can
 plant a pointer on a live element.
 
-**The stamps follow liveness.** A restore concurrent with a merge of the
-same element lands in either order, and the dissolution runs only in the
-branch that finds the element removed — but so does the revive itself
-(`unremove` clears any `removedAt`, including a concurrent remove's, and
-`remove` is last-writer-wins). Whenever two replicas agree on whether the
-element ends up live, they agree on the stamps: restore last leaves it live
-with the lineage dissolved on both, merge last leaves it tombstoned and
-re-stamped by Phase 6 on both. The stamps are a function of the element's
-liveness, so they add no divergence beyond whatever restore-versus-concurrent-
-remove already resolves.
+**The dissolution keys on the span, not on the outcome.** An element span
+resolves to one of four local outcomes — the element is live already, it is
+a tombstone the span revives, it is purged and recreated, or the recreate
+declines (born tombstoned under a removed parent, or no resolvable parent)
+— and which one a replica takes is a property of that replica's state, not
+of the operation. So `Restore` queues the dissolution from the span's ID
+before the outcome is known, and every replica applying the same undo
+clears the same stamps. Deriving it from the outcome instead let two
+replicas persist different `MergedFrom`/`MergedAt` for one undo, and that
+is exactly the lineage §6.2 cascades on: a replica that still held the
+stamps would tombstone content the replica that dropped them keeps.
+
+Dissolving against an element that is live, or that this replica does not
+hold at all, costs nothing: `rebuildMergeState` already declines to derive
+a pointer from a live source, so the stamps were inert — clearing them only
+makes the inertness durable, which is the same reason both halves are
+dropped together above. A restore concurrent with a merge of the same
+element therefore lands in either order without divergence: `unremove`
+clears any `removedAt`, including a concurrent remove's, `remove` is
+last-writer-wins, and whichever way liveness settles, Phase 6 re-stamps on
+every replica or on none.
 
 A snapshot written before this fix can still carry undissolved stamps that
 name a revived, live source. They stay inert while it is live; if a later
