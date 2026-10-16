@@ -449,6 +449,12 @@
     "digest": "7b4ae79872b8f6e8",
     "xmlDigest": "99b5903e72897f79"
   },
+  "split-product-walk-past-concurrent-insert.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "d6c820351f05e624",
+    "xmlDigest": "d4884033fb42d557"
+  },
   "text-insert-sequential.json": {
     "result": "pass",
     "checks": "11111",

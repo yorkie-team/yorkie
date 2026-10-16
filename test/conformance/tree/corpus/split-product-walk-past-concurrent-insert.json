@@ -1,0 +1,109 @@
+{
+  "v": 2,
+  "id": "split-product-walk-past-concurrent-insert",
+  "status": {
+    "go": "pass",
+    "js": "pass"
+  },
+  "note": "Step 04 passes a split product of the left element over as an anchor but keeps walking through it. d2 splits <p>ab</p> while d1 inserts <p>x</p> and d3 inserts <p>n</p> after it. d3 then applies the split, whose product lands between p and n, and then d1's x. Ending the walk at the split product stopped x there, so d3 held x before n while d1 and d2 held n before x.",
+  "replicas": 3,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          {
+            "type": "text",
+            "value": "ab"
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        {
+          "op": "edit",
+          "from": 4,
+          "to": 4,
+          "contents": [
+            {
+              "type": "p",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "x"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [
+        {
+          "op": "edit",
+          "from": 2,
+          "to": 2,
+          "split": 1
+        }
+      ]
+    },
+    {
+      "r": 2,
+      "op": "update",
+      "ops": [
+        {
+          "op": "edit",
+          "from": 4,
+          "to": 4,
+          "contents": [
+            {
+              "type": "p",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "n"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "exchange",
+      "orders": [
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p>a</p><p>b</p><p>n</p><p>x</p></doc>",
+        "<doc><p>a</p><p>b</p><p>n</p><p>x</p></doc>",
+        "<doc><p>a</p><p>b</p><p>n</p><p>x</p></doc>"
+      ]
+    }
+  ]
+}

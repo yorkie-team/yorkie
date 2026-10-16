@@ -98,6 +98,26 @@ When a merge redirect places the `to` position before `from` in tree
 order, the range is inverted. This is treated as a no-op
 (`if fromIdx > toIdx { return nil }`).
 
+### §1.3 Step 04: Split Products of the Left Element
+
+Step 04 walks the siblings after the left anchor whose `CreatedAt` is
+newer than the edit, as RGA orders concurrent inserts after the same
+node. A split product of the left element is newer too, but it is not a
+concurrent insert at this position: it is the right half of the element
+the position names. Taking it as the anchor would move the position past
+content the editor saw on the far side of that element.
+
+The product is therefore **passed over, not walked away from**: it is
+never taken as the anchor, but the walk continues through it to the
+concurrent inserts that follow. Stopping the walk at the product would
+also hide those inserts. A replica that has not applied the split yet
+sees them as siblings of the unsplit element and walks past them, so the
+two replicas would anchor the same insert on different nodes. The check
+reads only tree structure (`isSplitProductOf` walks `InsPrevID`), so it
+needs no version vector. Pinned by the corpus scripts
+`split-order-older-*` (a product is not the anchor) and
+`split-product-walk-past-concurrent-insert` (the walk goes on past it).
+
 ## Phase 2: Split Sibling Advance
 
 **Function**: `advancePastUnknownSplitSiblings`
