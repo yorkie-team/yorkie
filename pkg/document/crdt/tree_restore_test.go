@@ -753,3 +753,39 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 	assertLengthCacheSound(t, r1, "replica 1")
 	assertLengthCacheSound(t, r2, "replica 2")
 }
+
+// TestTreeRetombstoneAnchorsOnTheSpansFirstPiece pins where Retombstone reads
+// a text span's refreshed anchors: off the pieces that bound the span, even
+// one a peer already removed, not off the first piece the retombstone removed
+// itself. Anchoring on that one would name a piece of the span as the span's
+// own left neighbour.
+func TestTreeRetombstoneAnchorsOnTheSpansFirstPiece(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+
+	// The span covers "ell", offsets 1 to 4 of the insertion.
+	span := &crdt.TreeRestoreSpan{
+		ID:       crdt.NewTreeNodeID(createdAt, 1),
+		NodeType: "text",
+		IsText:   true,
+		Length:   3,
+		Value:    "ell",
+		ParentID: p.ID(),
+	}
+
+	// A peer already removed "e", the span's first piece.
+	editT(t, tree, ctx, 2, 3, nil)
+	assert.Equal(t, "<r><p>hllo</p></r>", tree.ToXML())
+
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>ho</p></r>", tree.ToXML())
+	assert.Len(t, applied, 1)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID,
+		`the left anchor is "h", the neighbour of the removed first piece`)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID,
+		`the right anchor is "o"`)
+	assert.Equal(t, p.ID(), applied[0].ParentID)
+}

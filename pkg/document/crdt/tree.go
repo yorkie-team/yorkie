@@ -1520,12 +1520,12 @@ func (t *Tree) Retombstone(
 			pieces = []*TreeNode{n}
 		}
 
-		anchored := false
-		current := span
+		live := false
 		for _, piece := range pieces {
 			if piece.IsRemoved() {
 				continue
 			}
+			live = true
 			target := piece
 			if piece.IsText() {
 				from := max(piece.id.Offset, start)
@@ -1542,9 +1542,6 @@ func (t *Tree) Retombstone(
 			if measure {
 				from, to, visible = t.visibleRangeOf(target)
 			}
-			if fresh, ok := refreshSpanAnchors(current, target, !anchored); ok {
-				current, anchored = fresh, true
-			}
 			if target.remove(executedAt) {
 				pairs = append(pairs, GCPair{Parent: t, Child: target})
 				if visible {
@@ -1555,7 +1552,10 @@ func (t *Tree) Retombstone(
 				target, executedAt, measure, versionVector, pairs, edits, cascaded,
 			)
 		}
-		applied = append(applied, current)
+		if live {
+			span = t.refreshSpanAnchors(span)
+		}
+		applied = append(applied, span)
 	}
 	return pairs, diff, edits, append(applied, cascaded...), nil
 }
@@ -1607,13 +1607,24 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 }
 
 // refreshSpanAnchors returns a span like the given one whose parent and
-// sibling anchors point at the neighbours target has right before Retombstone
-// removes it. The anchors were captured when the span was first recorded;
-// content a peer inserted next to the node since then is what the node sits
-// beside now, and a later Restore that has to recreate the node after GC must
-// land it there, not at the stale anchor (#2169). The left anchor is taken
-// from the first piece of the span that is removed, the right anchor from the
-// last; ParentID always travels with them (see anchorsOf).
+// sibling anchors point at the neighbours the span's range has now, right
+// after Retombstone removed it. The anchors were captured when the span was
+// first recorded; content a peer inserted next to the range since then is
+// what the range sits beside now, and a later Restore that has to recreate it
+// after GC must land it there, not at the stale anchor (#2169). A removal
+// leaves every node in place as a tombstone, so reading the neighbours after
+// it reads what was there before it.
+//
+// Each anchor is read off the piece that bounds the range on its side, live
+// or not: the left one off the first piece, the right one off the last. A
+// piece a peer had already removed is skipped by the removal but still
+// bounds the range, and anchoring on the first piece the removal touched
+// instead would name a neighbour inside the range. A removed piece that
+// straddles the boundary is not split here, so it has no neighbour that is
+// the boundary's and leaves that anchor as recorded; a purged end leaves the
+// neighbour of the nearest surviving piece, which is what now sits beside
+// the gap. ParentID travels with the left anchor when it is refreshed, else
+// with the right (see anchorsOf).
 //
 // It never writes through the pointer it is given. The spans Retombstone
 // receives are the TreeEdit operation's own payload — the same objects
@@ -1621,19 +1632,44 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 // and the reverse operation shares — so a refresh written in place would
 // retroactively rewrite an unpushed change with anchors derived from local
 // state. Only the copy reaches the reverse operation this execution builds.
-func refreshSpanAnchors(span *TreeRestoreSpan, target *TreeNode, first bool) (*TreeRestoreSpan, bool) {
-	parentID, leftID, rightID, ok := anchorsOf(target)
-	if !ok {
-		return span, false
+func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
+	start := span.ID.Offset
+	end := start + max(span.Length, 1)
+
+	var first, last *TreeNode
+	if span.IsText {
+		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		if len(pieces) == 0 {
+			return span
+		}
+		first, last = pieces[0], pieces[len(pieces)-1]
+	} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
+		first, last = n, n
+	} else {
+		return span
 	}
 
 	fresh := *span
-	fresh.ParentID = parentID
-	if first {
-		fresh.LeftSiblingID = leftID
+	refreshed, leftRefreshed := false, false
+	if !span.IsText || first.id.Offset >= start {
+		if parentID, leftID, _, ok := anchorsOf(first); ok {
+			fresh.ParentID, fresh.LeftSiblingID = parentID, leftID
+			refreshed, leftRefreshed = true, true
+		}
 	}
-	fresh.RightSiblingID = rightID
-	return &fresh, true
+	if !span.IsText || last.id.Offset+last.Length() <= end {
+		if parentID, _, rightID, ok := anchorsOf(last); ok {
+			if !leftRefreshed {
+				fresh.ParentID = parentID
+			}
+			fresh.RightSiblingID = rightID
+			refreshed = true
+		}
+	}
+	if !refreshed {
+		return span
+	}
+	return &fresh
 }
 
 // visibleRangeOf returns the visible-index range [from, to) node covers, or
