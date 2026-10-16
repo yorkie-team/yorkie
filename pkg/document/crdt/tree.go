@@ -1589,6 +1589,13 @@ func (t *Tree) Retombstone(
 // same: the spans the acting operation carries describe only the element, so
 // without an entry of its own a cascaded sibling would be removed by the redo
 // and left tombstoned by the matching undo.
+//
+// The spans go out parent before child, as Restore requires: once GC has
+// purged the cascade, the undo recreates each node under a parent an earlier
+// span brought back, and declines one whose parent is not there yet.
+// appendUnknownSplitSiblings lists each sibling's subtree in postorder, so
+// the spans are collected per node and emitted by a preorder walk of every
+// sibling it returned.
 func (t *Tree) retombstoneUnknownSplitSiblings(
 	target *TreeNode,
 	executedAt *time.Ticket,
@@ -1603,7 +1610,9 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 	}
 
 	neverEnclosed := func(*TreeNode) bool { return false }
-	for _, sibling := range t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed) {
+	siblings := t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed)
+	spans := make(map[*TreeNode]*TreeRestoreSpan, len(siblings))
+	for _, sibling := range siblings {
 		var from, to int
 		visible := false
 		if measure {
@@ -1612,11 +1621,25 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 		span := restoreSpanOf(sibling)
 		if sibling.remove(executedAt) {
 			pairs = append(pairs, GCPair{Parent: t, Child: sibling})
-			cascaded = append(cascaded, span)
+			spans[sibling] = span
 			if visible {
 				edits = append(edits, TreeVisibleEdit{From: from, To: to})
 			}
 		}
+	}
+
+	var emit func(node *TreeNode)
+	emit = func(node *TreeNode) {
+		if span, ok := spans[node]; ok {
+			cascaded = append(cascaded, span)
+			delete(spans, node)
+		}
+		for _, child := range node.Index.Children(true) {
+			emit(child.Value)
+		}
+	}
+	for _, sibling := range siblings {
+		emit(sibling)
 	}
 	return pairs, edits, cascaded
 }
