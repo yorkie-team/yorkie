@@ -118,6 +118,11 @@ needs no version vector. Pinned by the corpus scripts
 `split-order-older-*` (a product is not the anchor) and
 `split-product-walk-past-concurrent-insert` (the walk goes on past it).
 
+The rule applies to `BoundaryInsert` only. A `BoundaryRange` position
+(§9.3) after the element is a style range's boundary, drawn after the
+whole element as the styling client saw it, so the walk takes the product
+as before and §9.1/§9.2 deal with the split.
+
 ## Phase 2: Split Sibling Advance
 
 **Function**: `advancePastUnknownSplitSiblings`

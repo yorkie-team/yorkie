@@ -102,3 +102,42 @@ func TestFindTreeNodesWithSplitTextSplitOffset(t *testing.T) {
 		assert.ErrorIs(t, err, crdt.ErrSplitOutOfRange, "a purged tail is not told apart")
 	})
 }
+
+// TestFindTreeNodesWithSplitTextSplitProductByMode pins that step 04 passes
+// over a split product of the left element only for an insert. An insert
+// after the element lands between it and the product (§1.3, §7.4). A range
+// boundary after the element is one the styling client drew after the whole
+// element as it saw it, unsplit, so it goes past the product as the walk
+// always has; Style's own split handling (§9.1, §9.2) starts from there.
+func TestFindTreeNodesWithSplitTextSplitProductByMode(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mode crdt.PosBoundary
+		want string
+	}{
+		{"an insert stays before the product", crdt.BoundaryInsert, "left"},
+		{"a range boundary goes past it", crdt.BoundaryRange, "product"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := helper.TextChangeContext(helper.TestRoot())
+			tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+			editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+			editT(t, tree, ctx, 1, 1, textNode(ctx, "ab"))
+			left := tree.Root().Children()[0]
+
+			// The position after <p>ab</p> is declared before a concurrent
+			// split cuts the paragraph in two.
+			editedAt := helper.TimeT(ctx)
+			pos := crdt.NewTreePos(tree.Root().ID(), left.ID())
+			_, _, err := tree.EditT(2, 2, nil, 1, helper.TimeT(ctx), issueTicket(ctx))
+			require.NoError(t, err)
+			require.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+			product := tree.Root().Children()[1]
+
+			_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, editedAt, tc.mode)
+			require.NoError(t, err)
+			want := map[string]*crdt.TreeNode{"left": left, "product": product}[tc.want]
+			assert.Same(t, want, anchor)
+		})
+	}
+}

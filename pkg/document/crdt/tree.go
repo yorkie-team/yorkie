@@ -4897,6 +4897,11 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	// that has not applied the split still walks past -- it sees them as
 	// siblings of the unsplit element -- so the two sides would anchor the
 	// same insert on different nodes.
+	//
+	// Only an insert does this. A range boundary (Style, RemoveStyle) after
+	// the element was drawn after the whole element its client saw, unsplit,
+	// so the walk takes the product as it always has, and §9.1/§9.2 handle the
+	// split from there.
 	anchorElement := leftNode
 	parentChildren := realParentNode.Index.Children(true)
 	for i := idx; i < len(parentChildren); i++ {
@@ -4904,7 +4909,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		if !next.id.CreatedAt.After(editedAt) {
 			break
 		}
-		if t.isSplitProductOfLeftElement(next, anchorElement, isLeftMost) {
+		if mode == BoundaryInsert && t.isSplitProductOfLeftElement(next, anchorElement, isLeftMost) {
 			continue
 		}
 		leftNode = next
