@@ -1195,12 +1195,12 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // removed children are on the worklist themselves, so the element follows
 // them within the same collection.
 //
-// A removed node a merge moved is held while its merge source is still
-// linked and the source's own removal is not covered (or it is live again). §1.1 resolves a
-// left-most position inside the merge source to the first child in the
-// target whose MergedFrom names the source; purging that child first sends
-// the position to the fallback slot on one replica while another, which has
-// not collected, still finds it (#2099).
+// A removed node a merge moved is held while its merge source is still a
+// linked tombstone whose own removal the collection does not yet cover.
+// §1.1 resolves a left-most position inside the merge source to the first
+// child in the target whose MergedFrom names the source; purging that child
+// first sends the position to the fallback slot on one replica while
+// another, which has not collected, still finds it (#2099).
 func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil {
@@ -1214,15 +1214,24 @@ func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
 
 // holdsForMergeSource reports whether node, a child a merge moved, is still
 // the §1.1 boundary for positions inside its merge source.
+//
+// A LIVE source is never a reason to hold. §1.1 only redirects into the
+// merge target for a source that is removed, so a live one has no position
+// to lose; and MergedFrom rides in on a client-supplied element payload, so
+// a stamp naming a live element would otherwise pin the tombstone — and its
+// bytes in docSize.GC — for the life of the document, which is exactly the
+// state mergeNodes and rebuildMergeState now refuse to derive a pointer
+// from.
 func (t *Tree) holdsForMergeSource(node *TreeNode, vector time.VersionVector) bool {
 	if node.MergedFrom == nil {
 		return false
 	}
 	source := t.findMergeNode(node.MergedFrom)
-	if source == nil || source.Index == nil || source.Index.Parent == nil {
+	if source == nil || source.Index == nil || source.Index.Parent == nil ||
+		source.removedAt == nil {
 		return false
 	}
-	return source.removedAt == nil || !vector.EqualToOrAfter(source.removedAt)
+	return !vector.EqualToOrAfter(source.removedAt)
 }
 
 func (t *Tree) Purge(child GCChild) error {
@@ -1320,10 +1329,11 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 	}
 
 	// Elements this call makes live again that may still be named as a merge
-	// source, dissolved together once every span is applied: a revived
-	// tombstone that still holds a forwarding pointer, and a recreated element,
-	// which comes back under its original ID with no pointer but may still be
-	// named by stamps elsewhere. See dissolveMergeSources (#2189).
+	// source, dissolved together once every span is applied: every revived
+	// tombstone, whether or not it still holds a forwarding pointer, and every
+	// recreated element, which comes back under its original ID with no
+	// pointer but may still be named by stamps elsewhere. See
+	// dissolveMergeSources (#2189).
 	var mergeSources []*TreeNode
 	defer func() {
 		t.dissolveMergeSources(mergeSources)
@@ -1339,10 +1349,12 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 				if node.IsRemoved() {
 					// A revived element is live, so it can no longer be a merge
 					// source: the lineage goes with the tombstone that gave it
-					// meaning (#2189).
-					if node.mergedInto != nil {
-						mergeSources = append(mergeSources, node)
-					}
+					// meaning (#2189). Queued whether or not the runtime
+					// pointer is set — the persisted half (MergedFrom/MergedAt
+					// on children a merge moved out of it) outlives the pointer
+					// and rebuildMergeState would derive it back from a
+					// snapshot the moment a later edit removes this node again.
+					mergeSources = append(mergeSources, node)
 					node.unremove()
 					untombstoned = append(untombstoned, node)
 					revived(node)
@@ -1457,14 +1469,23 @@ func (t *Tree) isolateTextRange(
 // deletion per visible node it removed, each measured right before the removal
 // so they apply one after another (see TreeVisibleEdit). Mirrors the JS
 // CRDTTree.retombstone.
+//
+// It also returns the spans describing everything it removed, for the reverse
+// operation the caller builds: one entry per input span, the input itself or
+// a copy with refreshed anchors (see refreshSpanAnchors), followed by one
+// freshly captured span per node the §4.1 cascade took with its element. The
+// inputs themselves are never modified.
 func (t *Tree) Retombstone(
 	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool, versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []TreeVisibleEdit, error) {
+) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
 	var edits []TreeVisibleEdit
+	applied := make([]*TreeRestoreSpan, 0, len(spans))
+	var cascaded []*TreeRestoreSpan
 	for _, span := range spans {
 		if !span.kindAgrees() {
+			applied = append(applied, span)
 			continue
 		}
 		start := span.ID.Offset
@@ -1479,6 +1500,7 @@ func (t *Tree) Retombstone(
 		}
 
 		anchored := false
+		current := span
 		for _, piece := range pieces {
 			if piece.IsRemoved() {
 				continue
@@ -1490,7 +1512,7 @@ func (t *Tree) Retombstone(
 				var iErr error
 				target, iErr = t.isolateTextRange(piece, from, to, &diff)
 				if iErr != nil {
-					return nil, resource.DataSize{}, nil, iErr
+					return nil, resource.DataSize{}, nil, nil, iErr
 				}
 			}
 			// Measure while target is still visible.
@@ -1499,8 +1521,8 @@ func (t *Tree) Retombstone(
 			if measure {
 				from, to, visible = t.visibleRangeOf(target)
 			}
-			if refreshSpanAnchors(span, target, !anchored) {
-				anchored = true
+			if fresh, ok := refreshSpanAnchors(current, target, !anchored); ok {
+				current, anchored = fresh, true
 			}
 			if target.remove(executedAt) {
 				pairs = append(pairs, GCPair{Parent: t, Child: target})
@@ -1508,10 +1530,13 @@ func (t *Tree) Retombstone(
 					edits = append(edits, TreeVisibleEdit{From: from, To: to})
 				}
 			}
-			pairs, edits = t.retombstoneUnknownSplitSiblings(target, executedAt, measure, versionVector, pairs, edits)
+			pairs, edits, cascaded = t.retombstoneUnknownSplitSiblings(
+				target, executedAt, measure, versionVector, pairs, edits, cascaded,
+			)
 		}
+		applied = append(applied, current)
 	}
-	return pairs, diff, edits, nil
+	return pairs, diff, edits, append(applied, cascaded...), nil
 }
 
 // retombstoneUnknownSplitSiblings applies the §4.1 cascade to an element
@@ -1521,6 +1546,13 @@ func (t *Tree) Retombstone(
 // concurrent split before the retombstone keeps the product live while one
 // that applied it after splits an already removed element and gets a removed
 // product.
+//
+// Every sibling it actually tombstones is appended to cascaded as its own
+// restore span, captured right before the removal. The forward delete path
+// records a span for every node in toBeRemoveds, and this cascade owes the
+// same: the spans the acting operation carries describe only the element, so
+// without an entry of its own a cascaded sibling would be removed by the redo
+// and left tombstoned by the matching undo.
 func (t *Tree) retombstoneUnknownSplitSiblings(
 	target *TreeNode,
 	executedAt *time.Ticket,
@@ -1528,9 +1560,10 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 	versionVector time.VersionVector,
 	pairs []GCPair,
 	edits []TreeVisibleEdit,
-) ([]GCPair, []TreeVisibleEdit) {
+	cascaded []*TreeRestoreSpan,
+) ([]GCPair, []TreeVisibleEdit, []*TreeRestoreSpan) {
 	if target.IsText() || target.InsNextID == nil {
-		return pairs, edits
+		return pairs, edits, cascaded
 	}
 
 	neverEnclosed := func(*TreeNode) bool { return false }
@@ -1540,41 +1573,46 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 		if measure {
 			from, to, visible = t.visibleRangeOf(sibling)
 		}
+		span := restoreSpanOf(sibling)
 		if sibling.remove(executedAt) {
 			pairs = append(pairs, GCPair{Parent: t, Child: sibling})
+			cascaded = append(cascaded, span)
 			if visible {
 				edits = append(edits, TreeVisibleEdit{From: from, To: to})
 			}
 		}
 	}
-	return pairs, edits
+	return pairs, edits, cascaded
 }
 
-// refreshSpanAnchors points span's sibling anchors at the neighbours target
-// has right before Retombstone removes it. The anchors were captured when the
-// span was first recorded; content a peer inserted next to the node since
-// then is what the node sits beside now, and a later Restore that has to
-// recreate the node after GC must land it there, not at the stale anchor
-// (#2169). The left anchor is taken from the first piece of the span that is
-// removed, the right anchor from the last. It reports whether target had a
-// parent to read neighbours from.
-func refreshSpanAnchors(span *TreeRestoreSpan, target *TreeNode, first bool) bool {
-	if target.Index.Parent == nil {
-		return false
+// refreshSpanAnchors returns a span like the given one whose parent and
+// sibling anchors point at the neighbours target has right before Retombstone
+// removes it. The anchors were captured when the span was first recorded;
+// content a peer inserted next to the node since then is what the node sits
+// beside now, and a later Restore that has to recreate the node after GC must
+// land it there, not at the stale anchor (#2169). The left anchor is taken
+// from the first piece of the span that is removed, the right anchor from the
+// last; ParentID always travels with them (see anchorsOf).
+//
+// It never writes through the pointer it is given. The spans Retombstone
+// receives are the TreeEdit operation's own payload — the same objects
+// to_pb serializes at push time, the clone and the root execution both run,
+// and the reverse operation shares — so a refresh written in place would
+// retroactively rewrite an unpushed change with anchors derived from local
+// state. Only the copy reaches the reverse operation this execution builds.
+func refreshSpanAnchors(span *TreeRestoreSpan, target *TreeNode, first bool) (*TreeRestoreSpan, bool) {
+	parentID, leftID, rightID, ok := anchorsOf(target)
+	if !ok {
+		return span, false
 	}
-	siblings := target.Index.Parent.Children(true)
-	idx := slices.Index(siblings, target.Index)
+
+	fresh := *span
+	fresh.ParentID = parentID
 	if first {
-		span.LeftSiblingID = nil
-		if idx > 0 {
-			span.LeftSiblingID = leftAnchorID(siblings[idx-1].Value)
-		}
+		fresh.LeftSiblingID = leftID
 	}
-	span.RightSiblingID = nil
-	if idx >= 0 && idx < len(siblings)-1 {
-		span.RightSiblingID = siblings[idx+1].Value.id
-	}
-	return true
+	fresh.RightSiblingID = rightID
+	return &fresh, true
 }
 
 // visibleRangeOf returns the visible-index range [from, to) node covers, or
@@ -2581,22 +2619,40 @@ func restoreSpanOf(node *TreeNode) *TreeRestoreSpan {
 		span.Attributes = node.Attrs.DeepCopy()
 	}
 
-	if node.Index.Parent == nil {
+	parentID, leftID, rightID, ok := anchorsOf(node)
+	if !ok {
 		return span
+	}
+	span.ParentID = parentID
+	span.LeftSiblingID = leftID
+	span.RightSiblingID = rightID
+
+	return span
+}
+
+// anchorsOf reads where node sits among its siblings right now: the ID of its
+// parent and the left/right sibling anchors a restore span puts it back by.
+// ok is false when node has no parent to read them from. The three are only
+// ever read together: recreateFromSpan honours a sibling anchor solely when
+// it is still a child of the span's ParentID (see its sameParent check), so a
+// span that mixes a fresh anchor with a stale parent silently falls back to
+// id-order placement.
+func anchorsOf(node *TreeNode) (parentID, leftID, rightID *TreeNodeID, ok bool) {
+	if node.Index.Parent == nil {
+		return nil, nil, nil, false
 	}
 
 	parent := node.Index.Parent.Value
-	span.ParentID = parent.id
 	siblings := parent.Index.Children(true)
 	idx := slices.Index(siblings, node.Index)
 	if idx > 0 {
-		span.LeftSiblingID = leftAnchorID(siblings[idx-1].Value)
+		leftID = leftAnchorID(siblings[idx-1].Value)
 	}
 	if idx >= 0 && idx < len(siblings)-1 {
-		span.RightSiblingID = siblings[idx+1].Value.id
+		rightID = siblings[idx+1].Value.id
 	}
 
-	return span
+	return parent.id, leftID, rightID, true
 }
 
 // leftAnchorID returns the ID to store as a restore span's left-sibling

@@ -492,6 +492,17 @@ name a revived, live source. They stay inert while it is live; if a later
 edit tombstones it, the next load re-derives the pointer. Both SDKs share
 this window, and closing it needs the durable marker below.
 
+**GC holds on the removed source only.** `Tree.HoldsTombstone` keeps a
+tombstone a merge moved while the §1.1 boundary it provides is still needed:
+while the *source* is a linked tombstone whose own removal the collecting
+version vector does not yet cover (#2099). A `MergedFrom` naming a **live**
+element is never a reason to hold — §1.1 redirects only for a removed
+source, so nothing resolves through it, and since the stamp rides in on a
+client-supplied element payload an unconditional hold would pin the
+tombstone, and its bytes in `docSize.GC`, for the life of the document. The
+hold therefore applies the same removed-source rule as `mergeNodes` and
+`rebuildMergeState` above.
+
 **Known limitation.** §7.1's split partitioning reads `MergedFrom`/
 `MergedAt` without going through `mergedInto`, and §9.4's per-node filter
 fails open on any node carrying a stamp. A split or style that never saw the

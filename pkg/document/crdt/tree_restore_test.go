@@ -96,9 +96,23 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
-	pairs, _, removed, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true, nil)
+	spansBefore := []crdt.TreeRestoreSpan{*spans[0], *spans[1]}
+	pairs, _, removed, applied, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true, nil)
 	assert.NoError(t, rErr)
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
+	// The spans are the acting operation's own payload, shared with its
+	// reverse and serialized at push time: Retombstone reports its refreshed
+	// anchors through fresh objects instead of writing through them.
+	assert.Equal(t, spansBefore[0], *spans[0], "the input span is not mutated")
+	assert.Equal(t, spansBefore[1], *spans[1], "the input span is not mutated")
+	assert.Len(t, applied, 2, "one applied span per input span")
+	for i, span := range applied {
+		assert.NotSame(t, spans[i], span, "a refreshed span is a copy")
+		assert.Equal(t, spans[i].ID, span.ID)
+		// The anchors travel together: a refreshed sibling anchor paired with
+		// a stale ParentID silently loses the anchor in recreateFromSpan.
+		assert.Equal(t, spans[i].ParentID, span.ParentID, "ParentID is refreshed with them")
+	}
 	assert.Equal(t, "<r></r>", tree.ToXML())
 	// <p> is measured with its text while still visible; the text is then
 	// already under a removed ancestor and takes no room of its own.
@@ -353,9 +367,11 @@ func TestTreeRetombstoneKindMismatchSkip(t *testing.T) {
 			span := textSpan(text, p)
 			span.IsText, span.NodeType = tc.isText, tc.nodeType
 
-			pairs, _, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true, nil)
+			pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true, nil)
 			assert.NoError(t, err)
 			assert.Empty(t, pairs, "a mismatched span re-tombstones nothing")
+			assert.Equal(t, []*crdt.TreeRestoreSpan{span}, applied,
+				"a skipped span is reported back unchanged")
 			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")
 		})
 	}
