@@ -634,9 +634,8 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		count += r.deregisterElement(pair.elem)
 	}
 
-	// One purge can release another: a parent held for its children (see
-	// GCHold) becomes collectable once they are gone, and a tombstone whose
-	// successor was a purged tombstone gets a new successor to check. So the
+	// One purge can release another: a tombstone whose successor was a purged
+	// tombstone gets a new successor to check against GCBarrier. So the
 	// worklist is walked until a pass purges nothing, which also makes the
 	// outcome independent of the map's iteration order.
 	nodeDeferred := 0
