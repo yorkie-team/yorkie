@@ -534,6 +534,17 @@ tombstone, and its bytes in `docSize.GC`, for the life of the document. The
 hold therefore applies the same removed-source rule as `mergeNodes` and
 `rebuildMergeState` above.
 
+**The GC path is not covered.** Dissolution fixes the shape without GC:
+the corpus script `i2189-delete-empty-p-after-undo` (concurrent
+cross-paragraph deletes, an undo reviving the merged paragraph, then a
+delete of the revived empty paragraph) now converges on
+`<r><p>abcd</p></r>` with collection off. Its minvv run — collection at a
+lagging minimum version vector — still diverges, `<r><p>ab</p></r>`
+against `<r><p>abcd</p></r>`, so the script stays `known-fail` in the
+ledger. The residual cause is not undissolved lineage, which this section
+closes; it is what collection at a lagging vector leaves behind around the
+revived element, and it is open.
+
 **Known limitation.** §7.1's split partitioning reads `MergedFrom`/
 `MergedAt` without going through `mergedInto`, and §9.4's per-node filter
 fails open on any node carrying a stamp. A split or style that never saw the

@@ -77,3 +77,57 @@ func TestRestoreRelinksRecreatedTextPiece(t *testing.T) {
 	require.NotNil(t, tail.InsPrevID)
 	assert.True(t, tail.InsPrevID.Equal(gapID), "and neither does the successor")
 }
+
+// TestRestoreRelinksAcrossPurgedNeighbour pins the chain when the piece that
+// was exactly adjacent to the recreated one was purged too. The splice has to
+// land between the nearest SURVIVING pieces -- the ones Purge joined to each
+// other -- or the predecessor points at the recreated piece while the piece
+// beyond the gap still claims the predecessor, leaving the chain asymmetric.
+func TestRestoreRelinksAcrossPurgedNeighbour(t *testing.T) {
+	tree, ctx := newBoldHelloWorldTree(t)
+
+	// Cut " world" into four pieces by deleting "r" and then "l", so the two
+	// tombstones sit between the surviving " wo" and "d".
+	editT(t, tree, ctx, 11, 12, nil)
+	editT(t, tree, ctx, 11, 12, nil)
+	require.Equal(t, []string{"b", `" wo"`, `~"r"~`, `~"l"~`, `"d"`}, childrenOfP(tree))
+
+	pieces := tree.Root().Index.Children()[0].Children(true)
+	head, gap, mid, tail := pieces[1].Value, pieces[2].Value, pieces[3].Value, pieces[4].Value
+	require.Equal(t, " wo", head.Value)
+	require.Equal(t, "r", gap.Value)
+	require.Equal(t, "l", mid.Value)
+	require.Equal(t, "d", tail.Value)
+	gapID := gap.ID()
+
+	// Purge both tombstones: the chain closes over the whole gap, so "d" is
+	// no longer the piece that starts where "r" ended.
+	require.NoError(t, tree.Purge(gap))
+	require.NoError(t, tree.Purge(mid))
+	require.True(t, head.InsNextID.Equal(tail.ID()), "purge joined the survivors")
+	require.True(t, tail.InsPrevID.Equal(head.ID()), "purge joined the survivors")
+
+	p := tree.Root().Index.Children()[0].Value
+	span := &crdt.TreeRestoreSpan{
+		ID:            gapID,
+		NodeType:      "text",
+		IsText:        true,
+		Length:        1,
+		Value:         "r",
+		ParentID:      p.ID(),
+		LeftSiblingID: crdt.NewTreeNodeID(head.ID().CreatedAt, head.ID().Offset+head.Length()-1),
+	}
+	_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false)
+	require.NoError(t, err)
+	require.Len(t, recreated, 1)
+
+	back := recreated[0]
+	require.NotNil(t, back.InsPrevID)
+	require.NotNil(t, back.InsNextID)
+	assert.True(t, back.InsPrevID.Equal(head.ID()), "the piece points back at the surviving predecessor")
+	assert.True(t, back.InsNextID.Equal(tail.ID()), "and forward at the surviving successor")
+	require.NotNil(t, head.InsNextID)
+	assert.True(t, head.InsNextID.Equal(gapID), "the predecessor no longer skips it")
+	require.NotNil(t, tail.InsPrevID)
+	assert.True(t, tail.InsPrevID.Equal(gapID), "and the successor agrees, so the chain is symmetric")
+}
