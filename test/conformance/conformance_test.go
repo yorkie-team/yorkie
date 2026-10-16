@@ -64,6 +64,16 @@ type Fixture struct {
 	Rows     []Row  `json:"rows"`
 }
 
+// cores bounds the seeds the whole package replays at once. TestParity
+// runs every family in parallel and each family fans its seeds out again,
+// so without a shared bound the suite keeps every core busy for its whole
+// run. `go test ./...` runs package binaries side by side, and the CPU the
+// suite leaves free is the CPU the timing-sensitive tests of the other
+// packages — cluster leadership, housekeeping — need to meet their
+// deadlines. Half the cores is enough to replay a family quickly and
+// leaves the other half for them.
+var cores = make(chan struct{}, max(1, runtime.NumCPU()/2))
+
 // runFamily runs seeds seed0..seed0+runs-1 of a family in parallel.
 func runFamily(f Family, seed0, runs int) Fixture {
 	return runFamilyWith(f, seed0, runs, Options{})
@@ -74,9 +84,10 @@ func runFamilyWith(f Family, seed0, runs int, opts Options) Fixture {
 	rows := make([]Row, runs)
 	jobs := make(chan int)
 	var wg sync.WaitGroup
-	for range runtime.NumCPU() {
+	for range cap(cores) {
 		wg.Go(func() {
 			for k := range jobs {
+				cores <- struct{}{}
 				seed := seed0 + k
 				rec := RunWith(f.Gen(uint32(seed)), opts)
 				rows[k] = Row{
@@ -86,6 +97,7 @@ func runFamilyWith(f Family, seed0, runs int, opts Options) Fixture {
 					Digest:    rec.Digest,
 					XMLDigest: rec.XMLDigest,
 				}
+				<-cores
 			}
 		})
 	}
