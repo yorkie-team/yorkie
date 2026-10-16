@@ -104,11 +104,11 @@ func TestFindTreeNodesWithSplitTextSplitOffset(t *testing.T) {
 }
 
 // TestFindTreeNodesWithSplitTextSplitProductByMode pins that step 04 passes
-// over a split product of the left element only for an insert. An insert
-// after the element lands between it and the product (§1.3, §7.4). A range
-// boundary after the element is one the styling client drew after the whole
-// element as it saw it, unsplit, so it goes past the product as the walk
-// always has; Style's own split handling (§9.1, §9.2) starts from there.
+// over a split product of the left element only for an insert position. An
+// insert after the element lands between it and the product (§1.3, §7.4). A
+// range boundary after the element -- a style range's, or the end of a
+// non-empty Edit range -- was drawn after the whole element its client saw,
+// unsplit, so it goes past the product as the walk always has.
 func TestFindTreeNodesWithSplitTextSplitProductByMode(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -117,6 +117,7 @@ func TestFindTreeNodesWithSplitTextSplitProductByMode(t *testing.T) {
 	}{
 		{"an insert stays before the product", crdt.BoundaryInsert, "left"},
 		{"a range boundary goes past it", crdt.BoundaryRange, "product"},
+		{"an edit's range end goes past it", crdt.BoundaryEditEnd, "product"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := helper.TextChangeContext(helper.TestRoot())

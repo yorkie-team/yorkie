@@ -2493,7 +2493,12 @@ func (t *Tree) Edit(
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	// The end of a range is not an insert position unless the range is empty.
+	toMode := BoundaryEditEnd
+	if from.ParentID.Equal(to.ParentID) && from.LeftSiblingID.Equal(to.LeftSiblingID) {
+		toMode = BoundaryInsert
+	}
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, toMode)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, info, err
@@ -4784,6 +4789,12 @@ const (
 	// tombstone, so a style range neither grows over nor shrinks past
 	// nodes concurrently inserted at that anchor.
 	BoundaryRange
+
+	// BoundaryEditEnd is the end of an Edit's range when it is not also the
+	// insert position. It resolves as BoundaryInsert does, except that step
+	// 04 does not pass over a split product of the left element (§1.3):
+	// only an insert lands between the element and its product.
+	BoundaryEditEnd
 )
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
@@ -4898,10 +4909,11 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	// siblings of the unsplit element -- so the two sides would anchor the
 	// same insert on different nodes.
 	//
-	// Only an insert does this. A range boundary (Style, RemoveStyle) after
-	// the element was drawn after the whole element its client saw, unsplit,
-	// so the walk takes the product as it always has, and §9.1/§9.2 handle the
-	// split from there.
+	// Only an insert position does this (BoundaryInsert). A range boundary
+	// after the element -- a style range's (BoundaryRange) or the end of a
+	// non-empty Edit range (BoundaryEditEnd) -- was drawn after the whole
+	// element its client saw, unsplit, so the walk takes the product as it
+	// always has, and the split handling of the caller starts from there.
 	anchorElement := leftNode
 	parentChildren := realParentNode.Index.Children(true)
 	for i := idx; i < len(parentChildren); i++ {

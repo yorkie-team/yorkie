@@ -118,10 +118,12 @@ needs no version vector. Pinned by the corpus scripts
 `split-order-older-*` (a product is not the anchor) and
 `split-product-walk-past-concurrent-insert` (the walk goes on past it).
 
-The rule applies to `BoundaryInsert` only. A `BoundaryRange` position
-(§9.3) after the element is a style range's boundary, drawn after the
-whole element as the styling client saw it, so the walk takes the product
-as before and §9.1/§9.2 deal with the split.
+The rule applies to an insert position (`BoundaryInsert`) only: an
+Edit's `from`, and its `to` when the range is empty. A `BoundaryRange`
+position (§9.3), a style range's boundary, and a `BoundaryEditEnd`
+position, the end of a non-empty Edit range, were drawn after the whole
+element as their client saw it, so the walk takes the product as before
+and the caller's split handling (§9.1/§9.2, §4.1) deals with it.
 
 ## Phase 2: Split Sibling Advance
 
@@ -354,7 +356,9 @@ tombstones preserves the source's full RGA sequence in the target, so
 a concurrent insert anchored on a removed sibling (e.g. `c` in a
 `cd → c,d` split whose `c` was deleted) resolves in the target through
 the normal path and is ordered against the other concurrent inserts by
-the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04).
+the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04,
+which passes over split products of the left element at an insert
+position, §1.3).
 This is what makes the merging replica converge with a replica that
 applied the insert *before* the merge, including when several clients
 insert at the same anchor.
