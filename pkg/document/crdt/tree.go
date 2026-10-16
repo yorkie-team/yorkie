@@ -1850,11 +1850,12 @@ func (t *Tree) relinkRecreatedText(node *TreeNode) {
 	if pred == nil {
 		// Nothing of the insertion survives in front of this piece, so there
 		// is no chain position to splice into. The successor is still linked
-		// if it is exactly adjacent and has no predecessor of its own, and
-		// both ends of that link are written here.
+		// if it is exactly adjacent and has no surviving predecessor of its
+		// own -- none at all, or one that names a piece no longer registered
+		// -- and both ends of that link are written here.
 		succ := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: end})
 		if succ != nil && succ != node && succ.IsText() &&
-			succ.id.Offset == end && succ.InsPrevID == nil {
+			succ.id.Offset == end && !t.registersExactly(succ.InsPrevID) {
 			node.InsNextID = succ.id
 			succ.InsPrevID = node.id
 		}
@@ -1870,6 +1871,15 @@ func (t *Tree) relinkRecreatedText(node *TreeNode) {
 			succ.InsPrevID = node.id
 		}
 	}
+}
+
+// registersExactly reports whether a node is registered under exactly id.
+func (t *Tree) registersExactly(id *TreeNodeID) bool {
+	if id == nil {
+		return false
+	}
+	node := t.findFloorNode(id)
+	return node != nil && node.id.Equal(id)
 }
 
 // survivingInsPrev returns the nearest piece of node's insertion that is still
@@ -2011,7 +2021,11 @@ func (t *Tree) recreateFromSpan(
 			}
 			if home := t.concurrentSplitHome(succ, parent, versionVector); home != nil {
 				return attach(func() error {
-					return home.InsertAt(node, slices.Index(home.Children(true), succ))
+					idx := slices.Index(home.Children(true), succ)
+					if idx < 0 {
+						idx = len(home.Children(true))
+					}
+					return home.InsertAt(node, idx)
 				})
 			}
 		}

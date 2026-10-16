@@ -131,3 +131,52 @@ func TestRestoreRelinksAcrossPurgedNeighbour(t *testing.T) {
 	require.NotNil(t, tail.InsPrevID)
 	assert.True(t, tail.InsPrevID.Equal(gapID), "and the successor agrees, so the chain is symmetric")
 }
+
+// TestRestoreRelinksRecreatedHeadPiece pins the chain when nothing of the
+// insertion survives in front of the recreated piece: it is linked to its
+// exactly adjacent successor, both ends, whether the successor names no
+// predecessor or one that is no longer registered.
+func TestRestoreRelinksRecreatedHeadPiece(t *testing.T) {
+	for _, stale := range []bool{false, true} {
+		name := "the successor names no predecessor"
+		if stale {
+			name = "the successor names a purged predecessor"
+		}
+		t.Run(name, func(t *testing.T) {
+			tree, ctx := newBoldHelloWorldTree(t)
+
+			// Delete " wo" off the front of " world" and purge it.
+			editT(t, tree, ctx, 8, 11, nil)
+			require.Equal(t, []string{"b", `~" wo"~`, `"rld"`}, childrenOfP(tree))
+			pieces := tree.Root().Index.Children()[0].Children(true)
+			gap, tail := pieces[1].Value, pieces[2].Value
+			gapID := gap.ID()
+			require.NoError(t, tree.Purge(gap))
+			require.Nil(t, tail.InsPrevID, "purge left the successor without a predecessor")
+			if stale {
+				tail.InsPrevID = crdt.NewTreeNodeID(gapID.CreatedAt, gapID.Offset+1)
+			}
+
+			p := tree.Root().Index.Children()[0].Value
+			span := &crdt.TreeRestoreSpan{
+				ID:             gapID,
+				NodeType:       "text",
+				IsText:         true,
+				Length:         3,
+				Value:          " wo",
+				ParentID:       p.ID(),
+				RightSiblingID: tail.ID(),
+			}
+			_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false, nil)
+			require.NoError(t, err)
+			require.Len(t, recreated, 1)
+			assert.Equal(t, []string{"b", `" wo"`, `"rld"`}, childrenOfP(tree))
+
+			back := recreated[0]
+			require.NotNil(t, back.InsNextID)
+			assert.True(t, back.InsNextID.Equal(tail.ID()), "the head points at its successor")
+			require.NotNil(t, tail.InsPrevID)
+			assert.True(t, tail.InsPrevID.Equal(gapID), "and the successor back at it")
+		})
+	}
+}
