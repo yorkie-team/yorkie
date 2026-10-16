@@ -857,3 +857,69 @@ func TestTreeRetombstoneCascadesToUnknownSplitProducts(t *testing.T) {
 	assert.Len(t, recreated, 3, "every cascaded node comes back")
 	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
 }
+
+// TestTreeRestoreFollowsSuccessorIntoConcurrentSplit pins rung (a) of the
+// recreate ladder for a successor a split moved out of the span's parent.
+//
+// "bc" is deleted and purged from <p>abcd</p>, and a peer then splits the
+// paragraph between "a" and "d". A restore of "bc" that did not know the
+// split recreates it before "d" in the split product, which is where the
+// split itself puts the range on a replica that applies it after the
+// restore. A restore that knew the split leaves it to the other rungs, which
+// put it back after "a": when such a restore recorded its span the range was
+// still in the parent, left of the split.
+func TestTreeRestoreFollowsSuccessorIntoConcurrentSplit(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		knowSplit bool
+		want      string
+	}{
+		{"a split the restore did not know", false, "<r><p>a</p><p>bcd</p></r>"},
+		{"a split the restore knew", true, "<r><p>abc</p><p>d</p></r>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := helper.TextChangeContext(helper.TestRoot())
+			tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+			editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+			editT(t, tree, ctx, 1, 1, textNode(ctx, "abcd"))
+			p := tree.Root().Children()[0]
+			createdAt := p.Children()[0].ID().CreatedAt
+			span := &crdt.TreeRestoreSpan{
+				ID:            crdt.NewTreeNodeID(createdAt, 1),
+				NodeType:      "text",
+				IsText:        true,
+				Length:        2,
+				Value:         "bc",
+				ParentID:      p.ID(),
+				LeftSiblingID: crdt.NewTreeNodeID(createdAt, 0),
+			}
+
+			editT(t, tree, ctx, 2, 4, nil)
+			bc := p.Children(true)[1]
+			assert.True(t, bc.IsRemoved())
+			assert.NoError(t, tree.Purge(bc))
+
+			at := helper.TimeT(ctx)
+			known := time.NewVersionVector()
+			known.Set(at.ActorID(), at.Lamport())
+			peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+			assert.NoError(t, err)
+			lamport := at.Lamport()
+			peerTicket := func() *time.Ticket {
+				lamport++
+				return time.NewTicket(lamport, 0, peer)
+			}
+			_, _, err = tree.EditT(2, 2, nil, 1, peerTicket(), peerTicket)
+			assert.NoError(t, err)
+			assert.Equal(t, "<r><p>a</p><p>d</p></r>", tree.ToXML())
+			if tc.knowSplit {
+				known.Set(peer, lamport)
+			}
+
+			_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false, known)
+			assert.NoError(t, err)
+			assert.Len(t, recreated, 1)
+			assert.Equal(t, tc.want, tree.ToXML())
+		})
+	}
+}
