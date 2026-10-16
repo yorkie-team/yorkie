@@ -1113,6 +1113,16 @@ func (t *Tree) rebuildMergeState() {
 // MergedFrom/MergedAt stamps every child a merge moved out of them still
 // carries. Restore calls it once, after applying every span (#2189).
 //
+// Only the stamps of merges the restoring change knew are cleared, judged by
+// MergedAt against its version vector. The restore reverses a removal its
+// author saw, and the merges that author saw are the lineage that removal
+// left; a merge concurrent with the restore stamps its children on every
+// replica whichever order the two arrive in — after the restore on a replica
+// that applied the restore first — so clearing its stamps on a replica that
+// applied the merge first is what would make the persisted lineage depend on
+// the arrival order. A stamp without MergedAt predates the field and is
+// treated as known.
+//
 // It takes IDs, not nodes, because the caller queues one per element span
 // before knowing what the local tree holds for it: the element may be live
 // already, a tombstone the span revived, a recreate, or absent entirely
@@ -1142,7 +1152,7 @@ func (t *Tree) rebuildMergeState() {
 // the same stamps name a removed one and the pointer comes back. Keying on the
 // source ID also means only lineage naming *this* element is touched, with no
 // dependence on a pointer that may be a client's (see findMergeNode).
-func (t *Tree) dissolveMergeSources(sources []*TreeNodeID) {
+func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.VersionVector) {
 	if len(sources) == 0 {
 		return
 	}
@@ -1161,6 +1171,9 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID) {
 			return
 		}
 		if _, ok := ids[child.MergedFrom.toIDString()]; !ok {
+			return
+		}
+		if child.MergedAt != nil && !time.TicketKnown(versionVector, child.MergedAt) {
 			return
 		}
 
@@ -1316,8 +1329,10 @@ type TreeVisibleEdit struct {
 // sizes to Live. When measure is set it also returns one insertion per node
 // that became visible, in the order it did, each measured right after that
 // node came back, so applying them one after another reproduces the result
-// (see TreeVisibleEdit). Mirrors the JS CRDTTree.restore.
-func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
+// (see TreeVisibleEdit). versionVector is that of the change the restore
+// belongs to; it decides which merge lineage the restore dissolves (see
+// dissolveMergeSources). Mirrors the JS CRDTTree.restore.
+func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector time.VersionVector) (
 	untombstoned, recreated []*TreeNode,
 	pairs []GCPair,
 	diff resource.DataSize,
@@ -1355,11 +1370,9 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 	// identical on every replica; deriving it from the outcome let two
 	// replicas persist different lineage for the same undo, and that lineage
 	// is what propagateMergeDeletes cascades on. See dissolveMergeSources
-	// (#2189).
+	// (#2189). It runs on the success path only: a restore that fails part
+	// way leaves the lineage of spans it never applied alone.
 	var mergeSources []*TreeNodeID
-	defer func() {
-		t.dissolveMergeSources(mergeSources)
-	}()
 
 	for _, span := range spans {
 		if !span.kindAgrees() {
@@ -1441,6 +1454,8 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool) (
 			}
 		}
 	}
+
+	t.dissolveMergeSources(mergeSources, versionVector)
 
 	return untombstoned, recreated, nil, diff, edits, nil
 }

@@ -62,7 +62,7 @@ func TestRestoreRelinksRecreatedTextPiece(t *testing.T) {
 		ParentID:      p.ID(),
 		LeftSiblingID: crdt.NewTreeNodeID(head.ID().CreatedAt, head.ID().Offset+head.Length()-1),
 	}
-	_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false)
+	_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false, nil)
 	require.NoError(t, err)
 	require.Len(t, recreated, 1)
 	assert.Equal(t, []string{"b", `" wo"`, `"r"`, `"ld"`}, childrenOfP(tree))
@@ -117,7 +117,7 @@ func TestRestoreRelinksAcrossPurgedNeighbour(t *testing.T) {
 		ParentID:      p.ID(),
 		LeftSiblingID: crdt.NewTreeNodeID(head.ID().CreatedAt, head.ID().Offset+head.Length()-1),
 	}
-	_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false)
+	_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false, nil)
 	require.NoError(t, err)
 	require.Len(t, recreated, 1)
 

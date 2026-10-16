@@ -282,7 +282,7 @@ func (e *TreeEdit) Execute(
 			// Recreated nodes are brand new, so they only need the Live
 			// addition, plus any live-split overhead. Mirrors Text restore.
 			untombstoned, recreated, restorePairs, restoreDiff, restoreEdits, err := obj.Restore(
-				toRestore, measure,
+				toRestore, measure, versionVector,
 			)
 			if err != nil {
 				return ExecutionResult{}, err

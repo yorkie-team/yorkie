@@ -512,11 +512,18 @@ Dissolving against an element that is live, or that this replica does not
 hold at all, costs nothing: `rebuildMergeState` already declines to derive
 a pointer from a live source, so the stamps were inert — clearing them only
 makes the inertness durable, which is the same reason both halves are
-dropped together above. A restore concurrent with a merge of the same
-element therefore lands in either order without divergence: `unremove`
-clears any `removedAt`, including a concurrent remove's, `remove` is
-last-writer-wins, and whichever way liveness settles, Phase 6 re-stamps on
-every replica or on none.
+dropped together above.
+
+**Only merges the restore knew are dissolved.** A stamp is cleared only when
+the restoring change's version vector covers its `MergedAt`. A merge of the
+same element concurrent with the restore stamps the children it moves on
+every replica: after the dissolution on a replica that applies the restore
+first, before it on one that applies the merge first. Clearing it there
+would leave the stamps on one replica and not the other, so it is left on
+both. The two orders still disagree on whether the element is live, because
+`unremove` clears the concurrent merge's `removedAt` on the replica that
+applies the restore second; that is the pre-existing gap between an
+identity revive and a concurrent remove, not the lineage.
 
 A snapshot written before this fix can still carry undissolved stamps that
 name a revived, live source. They stay inert while it is live; if a later

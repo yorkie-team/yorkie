@@ -164,7 +164,7 @@ func TestRestoreDissolvesMergeLineage(t *testing.T) {
 		ID:       f.p3.id,
 		NodeType: "p",
 		Length:   1,
-	}}, false)
+	}}, false, nil)
 	require.NoError(t, err)
 	require.Empty(t, recreated, "the tombstone is revived in place, not recreated")
 	require.Len(t, untombstoned, 1)
@@ -244,7 +244,7 @@ func TestRestoreDissolvesLineageAwayFromTheTarget(t *testing.T) {
 	untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 		{ID: src.id, NodeType: "p", Length: 1},
 		{ID: purgedID, NodeType: "p", Length: 1, ParentID: root.id, LeftSiblingID: p2.id},
-	}, false)
+	}, false, nil)
 	require.NoError(t, err)
 	require.Len(t, untombstoned, 1)
 	require.Len(t, recreated, 1, "the purged element comes back under its own ID")
@@ -565,7 +565,7 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 
 		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 			{ID: live.id, NodeType: "p", Length: 1},
-		}, false)
+		}, false, nil)
 		require.NoError(t, err)
 		require.Empty(t, untombstoned, "a live element is neither revived")
 		require.Empty(t, recreated, "nor recreated")
@@ -595,7 +595,7 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 
 		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 			{ID: purgedID, NodeType: "p", Length: 1, ParentID: dead.id},
-		}, false)
+		}, false, nil)
 		require.NoError(t, err)
 		require.Empty(t, untombstoned)
 		require.Empty(t, recreated, "a node born tombstoned is not reported as recreated")

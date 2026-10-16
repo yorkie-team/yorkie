@@ -17,11 +17,14 @@
 package document_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
@@ -81,4 +84,49 @@ func TestTreeReviveDissolvesMergeSource(t *testing.T) {
 	assert.Equal(t, treeShape(t, docs[0]), treeShape(t, docs[1]))
 	assertNoDuplicateTreeIDs(t, docs[0], "after deleting the revived paragraph")
 	assertNoDuplicateTreeIDs(t, docs[1], "after deleting the revived paragraph")
+}
+
+// TestTreeReviveConcurrentWithMergeKeepsTheSameLineage checks that the
+// lineage a revive dissolves does not depend on the order a concurrent merge
+// of the same element arrives in.
+//
+// d0 deletes p2 and undoes the delete while d1, which saw neither, merges p2
+// into p1. d1 applies its merge and then the revive; d0 applies the revive and
+// then the merge, whose Phase 6 stamps cd after the dissolution has run. The
+// revive only dissolves the lineage of merges its own change knew, so d1 keeps
+// the stamps d0's merge writes after it. The two still end apart on whether p2
+// is live -- a revive by identity clears a concurrent removal on the replica
+// that applies it second, as on main -- so only the lineage is compared here.
+func TestTreeReviveConcurrentWithMergeKeepsTheSameLineage(t *testing.T) {
+	docs := twoParagraphReplicas(t, 2)
+
+	require.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(4, 8, nil, 0)
+		return nil
+	}))
+	require.NoError(t, docs[0].Undo())
+	require.NoError(t, docs[1].Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(3, 5, nil, 0)
+		return nil
+	}))
+	exchangeInOrder(t, docs, [][]int{{1}, {0}})
+
+	lineage := func(doc *document.Document) []string {
+		var stamps []string
+		var walk func(n *crdt.TreeNode)
+		walk = func(n *crdt.TreeNode) {
+			if n.MergedFrom != nil {
+				stamps = append(stamps, fmt.Sprintf("%s<-%s@%s",
+					n.IDString(), n.MergedFrom.CreatedAt.ToTestString(), n.MergedAt.ToTestString()))
+			}
+			for _, child := range n.Children(true) {
+				walk(child)
+			}
+		}
+		walk(treeCRDT(t, doc).Root())
+		return stamps
+	}
+	require.Len(t, lineage(docs[0]), 1, "the merge stamped cd after the revive")
+	assert.Equal(t, lineage(docs[0]), lineage(docs[1]),
+		"the revive must not clear a concurrent merge's stamps on one replica only")
 }
