@@ -502,8 +502,9 @@ family name), `CONFORMANCE_RUNS` (default 5000), `CONFORMANCE_SEED0`
 
 `TestSpanOracle` (Go only, not part of the runner contract, skipped unless
 `CONFORMANCE_ORACLE_OUT` names an output file) enumerates every two- and
-three-op combination of the span kinds on `<doc><p><span>abcd</span></p></doc>`
-in four causal shapes and compares each result with the outcomes a flat
+three-op combination of the span kinds `sins`, `ssplit`, `senter` and
+`senter11` on `<doc><p><span>abcd</span></p></doc>` in four causal shapes and compares each result with the outcomes a flat
 token model allows (every op's tokens stay between the two tokens around
-its gap, no op lands inside another, text only inside spans). The
-`oracle-*` corpus scripts come from it.
+its gap, no op lands inside another, text only inside spans). `sdel` is
+not among them: the token model has no deletion. The `oracle-*` corpus
+scripts come from it.
