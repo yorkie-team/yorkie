@@ -534,6 +534,14 @@ tombstone, and its bytes in `docSize.GC`, for the life of the document. The
 hold therefore applies the same removed-source rule as `mergeNodes` and
 `rebuildMergeState` above.
 
+Because the stamp picks *which* removal gates the hold, the wait it buys is
+bounded by something the client cannot set. A vector that does not carry the
+source's removing actor never covers that removal — `EqualToOrAfter` reads a
+missing actor as not covered, and `Min` floors an actor missing from either
+side at 0, so one that has dropped out of the minimum synced vector does not
+return. The hold is released in that case rather than run forever, leaving a
+wait no longer than the source tombstone's own.
+
 **The GC path is not covered.** Dissolution fixes the shape without GC:
 the corpus script `i2189-delete-empty-p-after-undo` (concurrent
 cross-paragraph deletes, an undo reviving the merged paragraph, then a
