@@ -19,6 +19,7 @@ package conformance
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"sort"
@@ -76,12 +77,8 @@ func newOModel() *oModel {
 
 func (m *oModel) clone() *oModel {
 	c := &oModel{ids: append([]int{}, m.ids...), toks: map[int]oTok{}, seq: map[int]int{}}
-	for k, v := range m.toks {
-		c.toks[k] = v
-	}
-	for k, v := range m.seq {
-		c.seq[k] = v
-	}
+	maps.Copy(c.toks, m.toks)
+	maps.Copy(c.seq, m.seq)
 	return c
 }
 
@@ -447,7 +444,7 @@ func TestSpanOracle(t *testing.T) {
 				return
 			}
 			for _, k := range oKinds {
-				for sl := 0; sl < 12; sl++ {
+				for sl := range 12 {
 					walk(append(append([]string{}, kinds...), k), append(append([]int{}, slots...), sl))
 				}
 			}
