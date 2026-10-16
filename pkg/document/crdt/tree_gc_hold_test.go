@@ -52,24 +52,56 @@ func TestTreeDoesNotHoldTombstoneForChildren(t *testing.T) {
 		"a removed child does not hold the element either")
 }
 
-// TestTreeHoldsTombstoneForMergeSource pins the second GCHold rule: a removed
-// node a merge moved is the §1.1 boundary for positions declared inside its
-// merge source, so it outlives the source's own removal becoming common
-// knowledge (#2099) -- and no longer.
+// TestTreeHoldsTombstoneForMergeSource pins the GCHold rule: a removed node a
+// merge moved is the §1.1 boundary for positions declared inside its merge
+// source, so it outlives its own removal until every replica has seen the
+// merge -- and no longer.
 func TestTreeHoldsTombstoneForMergeSource(t *testing.T) {
-	t.Run("source removal not yet common knowledge", func(t *testing.T) {
+	// merged stamps text as moved out of p3 into p2 by a merge at the ticket
+	// mergedAt returns (the fixture's next one when nil), tombstones p3,
+	// removes text, and re-reads the tree as a decode does, which derives
+	// p3's forwarding pointer from the stamp. It returns the fixture, the
+	// merge ticket and the text's removal.
+	merged := func(t *testing.T, mergedAt *time.Ticket) (*mergeLineageFixture, *time.Ticket, *time.Ticket) {
+		t.Helper()
 		f := newMergeLineageFixture(t)
-		removedAt := f.nextTicket()
-		f.p3.remove(removedAt)
+		if mergedAt == nil {
+			mergedAt = f.nextTicket()
+		}
+		f.p3.remove(mergedAt)
 		f.text.MergedFrom = f.p3.id
-		f.text.MergedAt = removedAt
-		f.text.remove(f.nextTicket())
+		f.text.MergedAt = mergedAt
+		removedAt := f.nextTicket()
+		f.text.remove(removedAt)
+		f.tree = NewTree(f.tree.Root(), f.nextTicket())
+		require.NotNil(t, f.p3.mergedInto)
+		return f, mergedAt, removedAt
+	}
 
+	t.Run("the merge is not yet common knowledge", func(t *testing.T) {
+		f, mergedAt, _ := merged(t, nil)
 		seen := vectorCovering(f.nextTicket())
+
 		assert.True(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector(), seen),
 			"a peer that has not seen the merge still resolves positions through it")
-		assert.False(t, f.tree.HoldsTombstone(f.text, vectorCovering(removedAt), seen),
+		assert.False(t, f.tree.HoldsTombstone(f.text, vectorCovering(mergedAt), seen),
 			"once every replica has seen the merge the boundary is free")
+	})
+
+	// The source's removedAt is last-writer-wins: a later delete of the
+	// source overwrites it on the replicas that applied that delete only. The
+	// hold reads the merge ticket the child carries, which every replica has,
+	// so they release together.
+	t.Run("a later delete overwrote the source's removedAt", func(t *testing.T) {
+		peer, err := time.ActorIDFromHex("0000000000000000000000dd")
+		require.NoError(t, err)
+		f, mergedAt, _ := merged(t, nil)
+		f.p3.remove(time.NewTicket(1<<20, 0, peer))
+		seen := vectorCovering(f.nextTicket())
+		seen.Set(peer, 1<<20)
+
+		assert.False(t, f.tree.HoldsTombstone(f.text, vectorCovering(mergedAt), seen),
+			"covering the merge releases the hold whatever deleted the source since")
 	})
 
 	// MergedFrom rides in on a client-supplied element payload, so a stamp can
@@ -83,7 +115,7 @@ func TestTreeHoldsTombstoneForMergeSource(t *testing.T) {
 		f.text.MergedAt = f.nextTicket()
 		f.text.remove(f.nextTicket())
 
-		assert.False(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector(), nil),
+		assert.False(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector(), vectorCovering(f.nextTicket())),
 			"a live element is not a merge source, so it pins nothing")
 	})
 
@@ -93,68 +125,64 @@ func TestTreeHoldsTombstoneForMergeSource(t *testing.T) {
 		f.text.MergedAt = f.nextTicket()
 		f.text.remove(f.nextTicket())
 
-		assert.False(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector(), nil),
+		assert.False(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector(), vectorCovering(f.nextTicket())),
 			"an ID no element answers to holds nothing")
 	})
 
-	// The source's removedAt rides in on a client-supplied element payload
-	// too. One for an actor no change ever came from is never covered by a
-	// collection vector, so holding on it would pin the child, and its bytes
-	// in docSize.GC, for the life of the document. The replica's own vector
-	// has not seen it either, and that is what keeps it from holding.
-	t.Run("source removal no change ever made", func(t *testing.T) {
-		f := newMergeLineageFixture(t)
-		phantom, err := time.ActorIDFromHex("0000000000000000000000ee")
-		require.NoError(t, err)
-		f.p3.remove(time.NewTicket(1<<62, 0, phantom))
-		f.text.MergedFrom = f.p3.id
-		f.text.MergedAt = f.nextTicket()
-		removedAt := f.nextTicket()
-		f.text.remove(removedAt)
+	t.Run("a collection with no vector of its own takes no hold", func(t *testing.T) {
+		f, _, _ := merged(t, nil)
 
-		assert.False(t, f.tree.HoldsTombstone(f.text, vectorCovering(removedAt), vectorCovering(removedAt)),
-			"a removal this replica never applied is not one a later vector releases")
-
-		// The same through Root's collection, which is what a document runs:
-		// the child is purged once its own removal is covered.
+		assert.False(t, f.tree.HoldsTombstone(f.text, time.NewVersionVector(), nil))
 		root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 		root.RegisterGCPair(GCPair{Parent: f.tree, Child: f.text})
-		require.Equal(t, 1, root.GarbageLen())
-		n, err := root.GarbageCollectSeen(vectorCovering(removedAt), vectorCovering(removedAt))
+		n, err := root.GarbageCollect(vectorCovering(f.text.removedAt))
 		require.NoError(t, err)
-		assert.Equal(t, 1, n, "the child is not held for the forged source")
+		assert.Equal(t, 1, n, "Root.GarbageCollect purges as it did before the hold existed")
+	})
+
+	// The forged shape: an element payload whose child names a removed source
+	// and carries a merge ticket for an actor no change ever came from. Decoded,
+	// it derives the same forwarding pointer an honest merge would, so only
+	// the ticket tells it apart: no collection vector ever covers it, and the
+	// replica's own vector has not seen it either.
+	t.Run("a forged merge ticket", func(t *testing.T) {
+		phantom, err := time.ActorIDFromHex("0000000000000000000000ee")
+		require.NoError(t, err)
+		forged := time.NewTicket(1<<62, 0, phantom)
+		f, _, removedAt := merged(t, forged)
+		seen := vectorCovering(removedAt)
+
+		assert.False(t, f.tree.HoldsTombstone(f.text, vectorCovering(removedAt), seen),
+			"a merge this replica never applied is not one a later vector releases")
+		root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		root.RegisterGCPair(GCPair{Parent: f.tree, Child: f.text})
+		n, err := root.GarbageCollectSeen(vectorCovering(removedAt), seen)
+		require.NoError(t, err)
+		assert.Equal(t, 1, n, "the child is purged once its own removal is covered")
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 
-	// The honest counterpart, through Root: a source removal the replica has
-	// applied holds the child until the collection vector covers it too.
-	t.Run("source removal the replica applied", func(t *testing.T) {
-		f := newMergeLineageFixture(t)
-		peer, err := time.ActorIDFromHex("0000000000000000000000dd")
+	// The same ticket claimed in the crafting change's version vector, which
+	// every replica merges into its own: the hold is taken, and lasts exactly
+	// as long as an honest merge in that change would -- until the minimum
+	// synced vector carries the claim.
+	t.Run("a forged merge ticket its change claims", func(t *testing.T) {
+		phantom, err := time.ActorIDFromHex("0000000000000000000000ee")
 		require.NoError(t, err)
-		sourceRemovedAt := time.NewTicket(5, 0, peer)
-		f.p3.remove(sourceRemovedAt)
-		f.text.MergedFrom = f.p3.id
-		f.text.MergedAt = sourceRemovedAt
-		removedAt := f.nextTicket()
-		f.text.remove(removedAt)
-
-		// Every replica has seen the child's removal, not yet the merge.
-		lagging := vectorCovering(removedAt)
-		lagging.Set(peer, 4)
+		forged := time.NewTicket(1<<62, 0, phantom)
+		f, _, removedAt := merged(t, forged)
 		seen := vectorCovering(removedAt)
-		seen.Set(peer, 5)
+		seen.Set(phantom, 1<<62)
+		lagging := vectorCovering(removedAt)
+		lagging.Set(phantom, 0)
 
 		root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 		root.RegisterGCPair(GCPair{Parent: f.tree, Child: f.text})
 		n, err := root.GarbageCollectSeen(lagging, seen)
 		require.NoError(t, err)
-		assert.Equal(t, 0, n, "held while the source's removal is not covered")
-		assert.Equal(t, 1, root.GarbageLen())
-
+		assert.Equal(t, 0, n, "held while a replica has not synced the claim")
 		n, err = root.GarbageCollectSeen(seen, seen)
 		require.NoError(t, err)
-		assert.Equal(t, 1, n, "released once it is")
-		assert.Equal(t, 0, root.GarbageLen())
+		assert.Equal(t, 1, n, "released once every replica has")
 	})
 }

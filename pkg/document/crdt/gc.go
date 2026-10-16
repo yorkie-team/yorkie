@@ -102,6 +102,6 @@ type GCBarrier[C any] interface {
 type GCHold[C any] interface {
 	// HoldsTombstone reports whether the given child must stay linked for
 	// now, given the version vector the collection runs at and the one of
-	// the changes the collecting replica has applied (empty: all of them).
+	// the changes the collecting replica has applied (empty: no hold).
 	HoldsTombstone(child C, vector, seen time.VersionVector) bool
 }

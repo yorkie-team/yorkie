@@ -234,7 +234,19 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 
 // GarbageCollect purge elements that were removed before the given time.
 func (d *InternalDocument) GarbageCollect(vector time.VersionVector) (int, error) {
-	return d.root.GarbageCollectSeen(vector, d.changeID.VersionVector())
+	return d.root.GarbageCollectSeen(vector, d.collectionSeen())
+}
+
+// collectionSeen returns the version vector a collection reads as the changes
+// this document has applied (see crdt.Root.GarbageCollectSeen). A disableGC
+// document keeps only a lamport in its own vector (see applyChanges), which
+// would read as having seen no peer's change, so it returns nil instead: no
+// GCHold is taken, and a collection there runs as one without holds did.
+func (d *InternalDocument) collectionSeen() time.VersionVector {
+	if d.disableGC {
+		return nil
+	}
+	return d.changeID.VersionVector()
 }
 
 // GarbageLen returns the count of removed elements.

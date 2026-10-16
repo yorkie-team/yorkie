@@ -567,8 +567,8 @@ func (r *Root) DeepCopy() (*Root, error) {
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
 //
-// It treats every removal as one this replica has seen; a document collects
-// through GarbageCollectSeen, which bounds the GCHold holds by what it has.
+// It takes no GCHold hold, which needs the collecting replica's own vector; a
+// document collects through GarbageCollectSeen.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	return r.GarbageCollectSeen(vector, nil)
 }
@@ -576,7 +576,7 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 // GarbageCollectSeen is GarbageCollect for a replica whose own version vector
 // is seen: the changes it has applied, which a GCHold reads to tell a hold a
 // later vector releases from one none ever will (see Tree.HoldsTombstone).
-// An empty seen has seen everything.
+// An empty seen takes no hold.
 func (r *Root) GarbageCollectSeen(vector, seen time.VersionVector) (int, error) {
 	count := 0
 

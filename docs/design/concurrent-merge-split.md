@@ -539,26 +539,34 @@ name a revived, live source. They stay inert while it is live; if a later
 edit tombstones it, the next load re-derives the pointer. Both SDKs share
 this window, and closing it needs the durable marker below.
 
-**GC holds on the removed source only.** `Tree.HoldsTombstone` keeps a
-tombstone a merge moved while the §1.1 boundary it provides is still needed:
-while the *source* is a linked tombstone whose own removal the collecting
-version vector does not yet cover (#2099). A `MergedFrom` naming a **live**
-element is never a reason to hold — §1.1 redirects only for a removed
-source, so nothing resolves through it, and since the stamp rides in on a
-client-supplied element payload an unconditional hold would pin the
-tombstone, and its bytes in `docSize.GC`, for the life of the document. The
-hold therefore applies the same removed-source rule as `mergeNodes` and
-`rebuildMergeState` above.
+**GC holds until the merge is common knowledge.** `Tree.HoldsTombstone`
+keeps a tombstone a merge moved while the §1.1 boundary it provides is still
+needed: until the collecting version vector covers the merge ticket the
+child carries, `MergedAt` (#2099). Positions that still need the boundary
+come only from edits concurrent with the merge. `MergedAt` is stamped once,
+by the merge, on every replica; the source's `removedAt` is not used, since
+a later delete of the source overwrites it on the replicas that applied that
+delete only, and they would release at different vectors.
 
-The source's `removedAt` rides in on the same payload, so the hold is also
-taken only for a removal the collecting replica's own version vector covers
-(`Root.GarbageCollectSeen`). A ticket for an actor no change ever came from
-is covered by no collection vector, and a hold on it would never end. An
-honest removal is covered on every replica that holds the source: it applied
-the change that removed it, or one whose version vector carried it. A crafted
-one is covered only if the crafting change's version vector claims it, and
-then every replica merges that claim and the minimum synced vector reaches
-it too, so the hold ends.
+The source must be a linked tombstone. A `MergedFrom` naming a **live**
+element is never a reason to hold — §1.1 redirects only for a removed
+source, so nothing resolves through it — which is the same removed-source
+rule as `mergeNodes` and `rebuildMergeState` above. The source's
+`mergedInto` is not consulted: it is a runtime cache that depends on the
+order a replica applied its merges.
+
+`MergedFrom` and `MergedAt` ride in on a client-supplied element payload,
+so the hold is also taken only for a merge ticket the collecting replica's
+own version vector covers (`Root.GarbageCollectSeen`). A ticket for an
+actor no change ever came from is covered by no collection vector, and a
+hold on it would never end. An honest one is covered on every replica that
+holds the child: it applied the merge, or a change whose version vector
+carried it. A crafted one is covered only if the crafting change's version
+vector claims it; every replica then merges that claim, and the hold ends
+when the minimum synced vector reaches it, as it would for an honest merge
+in that change. A collection without a vector of its own takes no hold:
+`Root.GarbageCollect`, and a `disableGC` document, whose vector keeps only
+a lamport.
 
 **The GC path is not covered.** Dissolution fixes the shape without GC:
 the corpus script `i2189-delete-empty-p-after-undo` (concurrent
