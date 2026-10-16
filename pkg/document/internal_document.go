@@ -234,7 +234,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 
 // GarbageCollect purge elements that were removed before the given time.
 func (d *InternalDocument) GarbageCollect(vector time.VersionVector) (int, error) {
-	return d.root.GarbageCollect(vector)
+	return d.root.GarbageCollectSeen(vector, d.changeID.VersionVector())
 }
 
 // GarbageLen returns the count of removed elements.

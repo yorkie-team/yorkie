@@ -101,6 +101,7 @@ type GCBarrier[C any] interface {
 // of the child's bytes in docSize.GC for the life of the document.
 type GCHold[C any] interface {
 	// HoldsTombstone reports whether the given child must stay linked for
-	// now, given the version vector the collection runs at.
-	HoldsTombstone(child C, vector time.VersionVector) bool
+	// now, given the version vector the collection runs at and the one of
+	// the changes the collecting replica has applied (empty: all of them).
+	HoldsTombstone(child C, vector, seen time.VersionVector) bool
 }

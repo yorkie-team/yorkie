@@ -541,6 +541,16 @@ tombstone, and its bytes in `docSize.GC`, for the life of the document. The
 hold therefore applies the same removed-source rule as `mergeNodes` and
 `rebuildMergeState` above.
 
+The source's `removedAt` rides in on the same payload, so the hold is also
+taken only for a removal the collecting replica's own version vector covers
+(`Root.GarbageCollectSeen`). A ticket for an actor no change ever came from
+is covered by no collection vector, and a hold on it would never end. An
+honest removal is covered on every replica that holds the source: it applied
+the change that removed it, or one whose version vector carried it. A crafted
+one is covered only if the crafting change's version vector claims it, and
+then every replica merges that claim and the minimum synced vector reaches
+it too, so the hold ends.
+
 **The GC path is not covered.** Dissolution fixes the shape without GC:
 the corpus script `i2189-delete-empty-p-after-undo` (concurrent
 cross-paragraph deletes, an undo reviving the merged paragraph, then a

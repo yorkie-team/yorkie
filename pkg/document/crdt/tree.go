@@ -1216,20 +1216,31 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // §1.1 resolves a left-most position inside the merge source to the first
 // child in the target whose MergedFrom names the source; purging that child
 // first sends the position to the fallback slot on one replica while
-// another, which has not collected, still finds it (#2099). The hold always
-// ends: the source's removal becomes covered as the minimum synced vector
-// advances.
+// another, which has not collected, still finds it (#2099).
+//
+// The hold ends once the minimum synced vector covers the source's removal,
+// and it is only taken for a removal the replica's own version vector, seen,
+// already covers. Both inputs a hold reads ride in on a client-supplied
+// element payload, MergedFrom and the source's removedAt alike, and a ticket
+// for an actor no change ever came from is one no collection vector covers:
+// held on it, the child and its bytes in docSize.GC would stay for the life
+// of the document. An honest removal is covered by seen on every replica that
+// holds the source, since that replica applied the change that removed it or
+// one whose version vector carried it (a snapshot, a payload copied from real
+// state). A crafted one is covered only if the crafting change's own version
+// vector claims the ticket, and then every replica that applies it merges the
+// claim into its vector and the minimum synced vector reaches it as well.
 //
 // A removed element is not held for its children. A live child under it (a
 // concurrent insert, or one a restore revived) has no GC pair of its own, so
 // a hold on it would never end; what purging such a subtree should do with
 // the live child is left to a separate change.
-func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
+func (t *Tree) HoldsTombstone(child GCChild, vector, seen time.VersionVector) bool {
 	node, ok := child.(*TreeNode)
 	if !ok || node.Index == nil {
 		return false
 	}
-	return t.holdsForMergeSource(node, vector)
+	return t.holdsForMergeSource(node, vector, seen)
 }
 
 // holdsForMergeSource reports whether node, a child a merge moved, is still
@@ -1242,7 +1253,7 @@ func (t *Tree) HoldsTombstone(child GCChild, vector time.VersionVector) bool {
 // bytes in docSize.GC — for the life of the document, which is exactly the
 // state mergeNodes and rebuildMergeState now refuse to derive a pointer
 // from.
-func (t *Tree) holdsForMergeSource(node *TreeNode, vector time.VersionVector) bool {
+func (t *Tree) holdsForMergeSource(node *TreeNode, vector, seen time.VersionVector) bool {
 	if node.MergedFrom == nil {
 		return false
 	}
@@ -1251,7 +1262,7 @@ func (t *Tree) holdsForMergeSource(node *TreeNode, vector time.VersionVector) bo
 		source.removedAt == nil {
 		return false
 	}
-	return !vector.EqualToOrAfter(source.removedAt)
+	return !vector.EqualToOrAfter(source.removedAt) && time.TicketKnown(seen, source.removedAt)
 }
 
 func (t *Tree) Purge(child GCChild) error {

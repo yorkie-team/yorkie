@@ -566,11 +566,22 @@ func (r *Root) DeepCopy() (*Root, error) {
 //
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
+//
+// It treats every removal as one this replica has seen; a document collects
+// through GarbageCollectSeen, which bounds the GCHold holds by what it has.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
+	return r.GarbageCollectSeen(vector, nil)
+}
+
+// GarbageCollectSeen is GarbageCollect for a replica whose own version vector
+// is seen: the changes it has applied, which a GCHold reads to tell a hold a
+// later vector releases from one none ever will (see Tree.HoldsTombstone).
+// An empty seen has seen everything.
+func (r *Root) GarbageCollectSeen(vector, seen time.VersionVector) (int, error) {
 	count := 0
 
 	for {
-		purged, deferred, err := r.collect(vector)
+		purged, deferred, err := r.collect(vector, seen)
 		if err != nil {
 			return 0, err
 		}
@@ -584,7 +595,7 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 
 // collect runs one collection pass, reporting how much it purged and how much
 // it held back on a barrier.
-func (r *Root) collect(vector time.VersionVector) (int, int, error) {
+func (r *Root) collect(vector, seen time.VersionVector) (int, int, error) {
 	count, deferred := 0, 0
 
 	for _, pair := range r.gcElementPairMap {
@@ -640,7 +651,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// outcome independent of the map's iteration order.
 	nodeDeferred := 0
 	for {
-		purged, held, err := r.collectNodePairsOnce(vector)
+		purged, held, err := r.collectNodePairsOnce(vector, seen)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -658,7 +669,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 // collectNodePairsOnce makes one pass over gcNodePairMap, purging every
 // pair whose removal, GCBarrier and GCHold allow it at vector. It returns how
 // many it purged and how many it had to leave for a barrier or a hold.
-func (r *Root) collectNodePairsOnce(vector time.VersionVector) (int, int, error) {
+func (r *Root) collectNodePairsOnce(vector, seen time.VersionVector) (int, int, error) {
 	count, deferred := 0, 0
 	// Delete by the range key, not by one recomputed after Purge: keyOf reads
 	// the child's IDString, and an entry keyed on a value the purge had
@@ -677,7 +688,7 @@ func (r *Root) collectNodePairsOnce(vector time.VersionVector) (int, int, error)
 				continue
 			}
 		}
-		if parent, ok := pair.Parent.(GCHold[GCChild]); ok && parent.HoldsTombstone(pair.Child, vector) {
+		if parent, ok := pair.Parent.(GCHold[GCChild]); ok && parent.HoldsTombstone(pair.Child, vector, seen) {
 			deferred++
 			continue
 		}

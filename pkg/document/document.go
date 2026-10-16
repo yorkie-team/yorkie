@@ -1258,7 +1258,7 @@ func (d *Document) garbageCollect(vector time.VersionVector) int {
 	// invariants. A nil cloneRoot, not yet built, is skipped by the same
 	// check.
 	if d.cloneRoot != nil && !d.cloneStale {
-		if _, err := d.cloneRoot.GarbageCollect(vector); err != nil {
+		if _, err := d.cloneRoot.GarbageCollectSeen(vector, d.doc.VersionVector()); err != nil {
 			panic(err)
 		}
 	}
