@@ -539,6 +539,13 @@ both. The two orders still disagree on whether the element is live, because
 applies the restore second; that is the pre-existing gap between an
 identity revive and a concurrent remove, not the lineage.
 
+This rule, like `Restore`'s rule of leaving a node a tombstone under a
+removal the change knew (`Tree.knownRemovalAbove`), trusts the pushed
+change's version vector: a forged one that claims a concurrent merge or
+removal makes the outcome depend on the order replicas apply the two, and
+closing that needs the server to validate pushed version vectors
+(#2234).
+
 A snapshot written before this fix can still carry undissolved stamps that
 name a revived, live source. They stay inert while it is live; if a later
 edit tombstones it, the next load re-derives the pointer. Both SDKs share

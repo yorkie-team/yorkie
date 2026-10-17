@@ -1732,6 +1732,11 @@ func (t *Tree) TakeForgotten() []*TreeNode {
 // Each node's nearest such ancestor is memoized and re-checked when read,
 // since a revive in the call can end it; a node found to have none keeps
 // none, since a revive never removes anything.
+//
+// The rule trusts the restoring change's version vector, as the §6.4
+// dissolution does: a forged one claiming a concurrent removal makes the
+// outcome depend on apply order, which needs server-side validation of
+// pushed version vectors to close (#2234).
 func (t *Tree) knownRemovalAbove(versionVector time.VersionVector) func(*TreeNode) bool {
 	memo := make(map[*TreeNode]*TreeNode)
 	var nearest func(n *TreeNode) *TreeNode
