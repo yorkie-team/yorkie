@@ -1054,3 +1054,62 @@ func TestSplitOutOfSightMovesOutATombstone(t *testing.T) {
 	assert.Equal(t, xmls[0], xmls[1], "both replicas show the same tree")
 	assert.Equal(t, shapes[0], shapes[1], "and hold the same once both collect")
 }
+
+// TestSplitOutOfSightKeepsTheLedger pins the ledger of the §7.4 product
+// born a tombstone: the size the split books has to include the removal
+// ticket the tombstone carries, or GC drifts from a rebuild by one ticket.
+// The fixture is TestSplitOutOfSightMovesOutATombstone's, on a Root.
+func TestSplitOutOfSightKeepsTheLedger(t *testing.T) {
+	for _, purge := range []bool{true, false} {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+		top := NewTreeNode(NewTreeNodeID(next(), 0), "top", nil)
+		p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+		ab := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "ab")
+		q := NewTreeNode(NewTreeNodeID(next(), 0), "q", nil)
+		p2 := NewTreeNode(NewTreeNodeID(p.id.CreatedAt, 1), "p", nil)
+		cd := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "cd")
+		p.InsNextID, p2.InsPrevID = p2.id, p.id
+		require.NoError(t, root.Append(top, q))
+		require.NoError(t, top.Append(p))
+		require.NoError(t, p.Append(ab))
+		require.NoError(t, q.Append(p2))
+		require.NoError(t, p2.Append(cd))
+		top.remove(next())
+		tree := NewTree(root, next())
+		doc.Object().Set("t", tree)
+		doc.RegisterElement(tree, doc.Object())
+		vv := time.NewVersionVector()
+		vv.Set(actor, 1000)
+		if purge {
+			_, err := doc.GarbageCollect(vv)
+			require.NoError(t, err)
+			require.True(t, p.detached)
+		}
+
+		pos := NewTreePos(p.id, NewTreeNodeID(ab.id.CreatedAt, 2))
+		pairs, diff, _, err := tree.Edit(pos, pos, nil, 1, next(), next, vv, false)
+		require.NoError(t, err)
+		for _, pair := range pairs {
+			doc.RegisterGCPair(pair)
+		}
+		doc.Acc(diff)
+		rebuilt, err := doc.DeepCopy()
+		require.NoError(t, err)
+		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after the split", purge)
+
+		_, err = doc.GarbageCollect(vv)
+		require.NoError(t, err)
+		rebuilt, err = doc.DeepCopy()
+		require.NoError(t, err)
+		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after collecting", purge)
+		assert.Equal(t, rebuilt.GarbageLen(), doc.GarbageLen(), "purged %v", purge)
+	}
+}

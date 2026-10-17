@@ -388,6 +388,7 @@ func (n *TreeNode) Split(
 					if split.removedAt == nil {
 						if at := removedAncestorAt(n); at != nil {
 							split.remove(at)
+							diff.Meta += time.TicketSize
 						}
 					}
 					if err := insNext.Index.Parent.MoveChildBefore(
@@ -405,7 +406,14 @@ func (n *TreeNode) Split(
 					if dest := insNext.Index.Parent.Value; dest.detached != split.detached {
 						split.detached = dest.detached
 						if split.detached && split.removedAt == nil {
-							split.remove(dest.removedAt)
+							at := dest.removedAt
+							if at == nil {
+								at = removedAncestorAt(dest)
+							}
+							if at != nil {
+								split.remove(at)
+								diff.Meta += time.TicketSize
+							}
 						}
 					}
 				}
