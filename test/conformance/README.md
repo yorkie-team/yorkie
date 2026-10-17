@@ -480,8 +480,10 @@ still moves the minVV and collects (yorkie#2099).
 - `parity/{family}.json`: `{fam, n, steps, observer?, seed0: 1, runs,
   diverged, rows: [{seed, result, checks, digest, xmlDigest}]}` generated
   by the Go runner. `observer` is present, `true`, only for an observer
-  family. `runs` is 200 for a v1 family and 50 for a v2 one; a runner reads
-  it from the header rather than assuming one count.
+  family. `runs` is 200 for the six original families (is, del, merge,
+  style, all, all3) and 50 for every family added since (the undo, span
+  and observer families), whatever script format a family generates; a
+  runner reads it from the header rather than assuming one count.
   `diverged` counts rows whose `result` is `diverged`.
 
 Both runners check `corpus-digests.json`: it must list exactly the files

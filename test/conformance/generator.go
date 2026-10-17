@@ -56,8 +56,10 @@ const (
 	v2Runs      = 50
 )
 
-// Families are the fixture families. The first six are those of format v1;
-// the undo, span and observer families came with format v2.
+// Families are the fixture families. The first six are the original ones,
+// at defaultRuns; the undo, span and observer families came later and run
+// v2Runs, whatever script format they generate (only the span families
+// write format v2 scripts).
 var Families = []Family{
 	{Name: "is", Fam: "is", N: 2, Steps: 24},
 	{Name: "del", Fam: "del", N: 2, Steps: 24},
