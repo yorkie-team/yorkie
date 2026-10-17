@@ -1537,17 +1537,15 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 // every replica applies it before the minimum synced vector lets one purge
 // the ancestor, so they all hold alike. An ancestor revived earlier in the
 // same call is live, so restoring a subtree parent-first revives it whole.
-// An empty vector knows no removal, which keeps a clock-less restore's
-// behaviour as it was.
+// An empty vector is read as knowing every removal, as TicketKnown reads it:
+// every change with operations carries its author's vector, so only a crafted
+// one comes without, and failing open there would bring the GC-timing
+// dependence back.
 //
 // Each node's nearest such ancestor is memoized and re-checked when read,
 // since a revive in the call can end it; a node found to have none keeps
 // none, since a revive never removes anything.
 func (t *Tree) knownRemovalAbove(versionVector time.VersionVector) func(*TreeNode) bool {
-	if len(versionVector) == 0 {
-		return func(*TreeNode) bool { return false }
-	}
-
 	memo := make(map[*TreeNode]*TreeNode)
 	var nearest func(n *TreeNode) *TreeNode
 	nearest = func(n *TreeNode) *TreeNode {
