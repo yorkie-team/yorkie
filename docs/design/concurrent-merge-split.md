@@ -1398,12 +1398,14 @@ result. The JS SDK has to mirror all of the following:
    under the first piece's parent. A removed piece straddling the start
    gives the left anchor its last character before the span; one
    straddling the end gives no right anchor, nor does a right neighbour
-   under another parent. An empty text span keeps its anchors. Every
-   reported span is a copy; the input spans are never modified.
+   under another parent. An empty text span keeps its anchors, and so does
+   a span whose first or last piece is detached. Every reported span is a
+   copy; the input spans are never modified.
 5. **Retombstone cascade.** Retombstoning an element applies the §4.1
    cascade to its unknown split products, with the subtree, and reports a
    span for each node it removed, parent before child, leaving out any
-   node an input span already describes.
+   node an input span already describes. A detached node starts no cascade
+   and is not removed again.
 6. **Recreate.** A recreated text piece is spliced back into its
    insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
    predecessor and what that points at, or, with none, to an adjacent

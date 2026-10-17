@@ -1646,6 +1646,13 @@ func (t *Tree) Retombstone(
 		}
 
 		for _, piece := range pieces {
+			// A detached node is a tombstone already and out of the tree
+			// (see TreeNode.detached). What it links to is not what a
+			// replica that purged one level deeper would see, so it starts
+			// no cascade, as Restore leaves it alone.
+			if piece.detached {
+				continue
+			}
 			if piece.IsRemoved() {
 				// The §4.1 cascade still runs for an element a peer already
 				// removed, as the forward delete's does: whether it reaches
@@ -2047,6 +2054,11 @@ func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
 		return &fresh
 	}
 
+	// A detached node's neighbours are off the tree: the span keeps the
+	// anchors it came with.
+	if first.detached || last.detached {
+		return &fresh
+	}
 	parentID, leftID, _, ok := anchorsOf(first)
 	if !ok {
 		return &fresh

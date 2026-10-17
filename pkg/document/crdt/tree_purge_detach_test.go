@@ -215,3 +215,58 @@ func TestLiveHoldComposesWithTheBarrier(t *testing.T) {
 	gc := doc.DocSize().GC
 	assert.Zero(t, (&gc).Total())
 }
+
+// TestRetombstoneLeavesADetachedNodeAlone pins Retombstone's detached guard.
+// A peer's split cut <r><div><p>ab</p></div></r> into two divs, the product
+// div' and p' carrying "b"; then div, p and "a" were deleted and div purged,
+// leaving p registered and detached. A retombstone naming p, from a change
+// that did not know the split, must neither refresh p's span off the
+// detached subtree nor run the §4.1 cascade from it: p's InsNextID still
+// reaches p', which is attached and live.
+func TestRetombstoneLeavesADetachedNodeAlone(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	require.NoError(t, err)
+	lamport := int64(0)
+	nextTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+	require.NoError(t, p.Append(NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "ab")))
+	require.NoError(t, div.Append(p))
+	require.NoError(t, root.Append(div))
+	tree := NewTree(root, nextTicket())
+	unaware := time.NewVersionVector()
+	unaware.Set(actor, lamport)
+
+	peerLamport := lamport
+	peerTicket := func() *time.Ticket {
+		peerLamport++
+		return time.NewTicket(peerLamport, 0, peer)
+	}
+	_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+	require.NoError(t, err)
+	require.Equal(t, "<r><div><p>a</p></div><div><p>b</p></div></r>", tree.ToXML())
+	product := tree.Root().Children()[1].Children()[0]
+
+	lamport = peerLamport
+	_, _, err = tree.EditT(0, 5, nil, 0, nextTicket(), nextTicket)
+	require.NoError(t, err)
+	require.NoError(t, tree.Purge(div))
+	require.True(t, p.detached)
+	require.Equal(t, "<r><div><p>b</p></div></r>", tree.ToXML())
+
+	span := &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: div.id}
+	pairs, _, edits, spans, err := tree.Retombstone([]*TreeRestoreSpan{span}, nextTicket(), true, unaware)
+	require.NoError(t, err)
+	assert.Empty(t, pairs)
+	assert.Empty(t, edits)
+	require.Len(t, spans, 1)
+	assert.Equal(t, *span, *spans[0], "the span keeps the anchors it came with")
+	assert.False(t, product.IsRemoved(), "the attached split product stays live")
+	assert.Equal(t, "<r><div><p>b</p></div></r>", tree.ToXML())
+}
