@@ -1208,6 +1208,25 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
+// DetachedLiveSize implements GCDetach[GCChild]: the size of the live nodes
+// under child, which Purge detaches with it. Counted as Tree.DataSize counts
+// a node, by its own liveness, so what it returns is exactly what a rebuild
+// stops counting once child is gone. A child inside a subtree an earlier
+// purge already detached returns zero: those nodes left the ledger then.
+func (t *Tree) DetachedLiveSize(child GCChild) resource.DataSize {
+	var size resource.DataSize
+	node, ok := child.(*TreeNode)
+	if !ok || node.Index == nil || node.Index.Parent == nil || !t.isAttached(node) {
+		return size
+	}
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		if n.Value != node && !n.Value.IsRemoved() {
+			size.Add(n.Value.DataSize())
+		}
+	})
+	return size
+}
+
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
@@ -1220,6 +1239,20 @@ func (t *Tree) Purge(child GCChild) error {
 		return nil
 	}
 
+	// The live descendants leave with the node. They have no GC pair of their
+	// own, so nothing would ever unregister them, and a later change that
+	// reached one by identity -- a redo of the restore that revived it --
+	// would charge its removal to a ledger Root already took it out of (see
+	// GCDetach). A rebuild does not hold them either.
+	var detachedLive []*TreeNode
+	if t.isAttached(node) {
+		index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+			if n.Value != node && !n.Value.IsRemoved() {
+				detachedLive = append(detachedLive, n.Value)
+			}
+		})
+	}
+
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err
 	}
@@ -1227,7 +1260,18 @@ func (t *Tree) Purge(child GCChild) error {
 	// unregister a different node that shares this one's ID — see putNode.
 	// Only drop the entry this node actually holds.
 	t.unregisterNode(node)
+	t.unlinkInsChain(node)
+	for _, live := range detachedLive {
+		t.unregisterNode(live)
+		t.unlinkInsChain(live)
+	}
 
+	return nil
+}
+
+// unlinkInsChain joins node's InsPrevID/InsNextID neighbours to each other
+// and clears node's own links, for a node leaving the tree.
+func (t *Tree) unlinkInsChain(node *TreeNode) {
 	insPrevID := node.InsPrevID
 	insNextID := node.InsNextID
 	// NOTE: findFloorNode may return nil when the insertion neighbor was
@@ -1245,8 +1289,16 @@ func (t *Tree) Purge(child GCChild) error {
 	}
 	node.InsPrevID = nil
 	node.InsNextID = nil
+}
 
-	return nil
+// isAttached reports whether node still hangs off this tree's root, rather
+// than off a subtree an earlier purge detached.
+func (t *Tree) isAttached(node *TreeNode) bool {
+	current := node.Index
+	for current.Parent != nil {
+		current = current.Parent
+	}
+	return current == t.IndexTree.Root()
 }
 
 // unregisterNode drops node's own entry from NodeMapByID, if the entry

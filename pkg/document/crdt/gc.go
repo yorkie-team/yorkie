@@ -91,3 +91,16 @@ type GCBarrier[C any] interface {
 	// and unlinking it cannot move anything.
 	PurgeBarrierAt(child C) *time.Ticket
 }
+
+// GCDetach is an optional capability of a GC parent whose Purge detaches the
+// child together with its descendants. A descendant that is still live --
+// one an identity restore revived under an element that stayed removed --
+// has no GC pair of its own and is charged to docSize.Live, while a rebuild
+// walks the attached tree and no longer sees it once its ancestor is gone.
+// Root takes that size out of Live when it purges the child, so the running
+// ledger stays equal to a rebuilt one (yorkie#2244).
+type GCDetach[C any] interface {
+	// DetachedLiveSize returns the total size of the child's live
+	// descendants, which a purge of the child detaches with it.
+	DetachedLiveSize(child C) resource.DataSize
+}

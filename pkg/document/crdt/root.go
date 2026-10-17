@@ -652,11 +652,16 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			}
 		}
 
+		var detachedLive resource.DataSize
+		if parent, ok := pair.Parent.(GCDetach[GCChild]); ok {
+			detachedLive = parent.DetachedLiveSize(pair.Child)
+		}
 		if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
 
 		r.docSize.GC.Sub(pair.Child.DataSize())
+		r.docSize.Live.Sub(detachedLive)
 		delete(r.gcNodePairMap, key)
 		count++
 	}
