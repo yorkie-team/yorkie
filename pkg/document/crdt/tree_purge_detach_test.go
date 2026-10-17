@@ -1204,3 +1204,35 @@ func TestRelinkRecreatedTextSkipsDetachedPieces(t *testing.T) {
 	assert.Nil(t, c.InsNextID)
 	assert.Equal(t, a.id, b.InsPrevID, "the detached piece is left alone")
 }
+
+// TestSplitIntoADetachedParentWithoutARemovalFails pins the §7.4 invariant
+// check: a detached destination always carries a removal, since a purge
+// takes out only a tombstone. Built by hand without one, the move fails the
+// split rather than leave the product live in a detached subtree.
+func TestSplitIntoADetachedParentWithoutARemovalFails(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+	a := NewTreeNode(NewTreeNodeID(next(), 0), "a", nil)
+	b := NewTreeNode(NewTreeNodeID(next(), 0), "b", nil)
+	n := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	x := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "x")
+	s := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	require.NoError(t, root.Append(a, b))
+	require.NoError(t, a.Append(n))
+	require.NoError(t, n.Append(x))
+	require.NoError(t, b.Append(s))
+	n.InsNextID, s.InsPrevID = s.id, n.id
+	tree := NewTree(root, next())
+	b.detached, s.detached = true, true
+
+	known := time.NewVersionVector()
+	known.Set(actor, 1000)
+	_, err = n.Split(tree, 1, next, known)
+	assert.ErrorIs(t, err, ErrDetachedLive)
+}

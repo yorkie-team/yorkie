@@ -39,6 +39,10 @@ var (
 	// the node it resolves to, which means the position cannot be resolved on
 	// this replica.
 	ErrSplitOutOfRange = errors.New("split offset out of range")
+
+	// ErrDetachedLive is returned when a node in a subtree a purge took out
+	// is found live, which the purge never leaves (see TreeNode.detached).
+	ErrDetachedLive = errors.New("live node in a detached subtree")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -406,14 +410,22 @@ func (n *TreeNode) Split(
 					if dest := insNext.Index.Parent.Value; dest.detached != split.detached {
 						split.detached = dest.detached
 						if split.detached && split.removedAt == nil {
+							// Every detached node is a tombstone: a purge
+							// takes out only a removed node and tombstones
+							// what is live under it. A detached destination
+							// without a removal breaks that, and the product
+							// would sit live in a detached subtree, so the
+							// split fails rather than go on.
 							at := dest.removedAt
 							if at == nil {
 								at = removedAncestorAt(dest)
 							}
-							if at != nil {
-								split.remove(at)
-								diff.Meta += time.TicketSize
+							if at == nil {
+								return diff, fmt.Errorf("split %s into detached %s: %w",
+									n.IDString(), dest.IDString(), ErrDetachedLive)
 							}
+							split.remove(at)
+							diff.Meta += time.TicketSize
 						}
 					}
 				}
