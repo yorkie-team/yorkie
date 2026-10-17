@@ -1,8 +1,8 @@
 {
   "v": 2,
   "id": "split-order-older-paragraph-d2",
-  "status": { "go": "known-diverge", "js": "known-diverge" },
-  "note": "TestTreeSameBoundarySplitAfterOlderSplit/the older actor splits the paragraph, older split by replica 1 (tree_split_order_test.go). d2 splits <span>abcde</span> after c and both sync; then d2 runs the case's edit while d1 splits the older product's left half at the same boundary. KNOWN, skipped in the original: the other actor's empty product lands before the paragraph boundary on the replica that applied it first (the edit's position advance passes it) and after it on the other (§7.4 re-parents it next to the older product). Diverges on main too.",
+  "status": { "go": "pass", "js": "known-diverge" },
+  "note": "TestTreeSameBoundarySplitAfterOlderSplit/the older actor splits the paragraph, older split by replica 1 (tree_split_order_test.go). d2 splits <span>abcde</span> after c and both sync; then d2 runs the case's edit while d1 splits the older product's left half at the same boundary. KNOWN, skipped in the original: the other actor's empty product lands before the paragraph boundary on the replica that applied it first (the edit's position advance passes it) and after it on the other (§7.4 re-parents it next to the older product). Go converges since FindTreeNodesWithSplitText step 04 stops at a split product of the left element; JS diverges until it mirrors that rule.",
   "replicas": 2,
   "delivery": "exchange",
   "init": {

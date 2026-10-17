@@ -91,3 +91,38 @@ type GCBarrier[C any] interface {
 	// and unlinking it cannot move anything.
 	PurgeBarrierAt(child C) *time.Ticket
 }
+
+// GCLiveRelease is an optional capability of a GC parent whose Purge takes
+// the child out together with its descendants. A descendant can still be
+// live: an insert or an identity restore concurrent with the child's
+// removal leaves one there, and so can a crafted change that claims not to
+// know the removal. A live node has no GC pair of its own, so purging its
+// ancestor would detach bytes docSize.Live still holds while a rebuild,
+// walking the attached tree, no longer counts them (yorkie#2244).
+//
+// Root therefore purges through PurgeReleasing once removedAt and
+// GCBarrier have both let the child go: it takes the child out, tombstones
+// every live node under it, and reports their size, which Root takes off
+// Live. They leave the document with the child, as if the child's removal
+// had covered them, and they happen only with the purge. Nothing is held
+// back, so no client input can keep a removed element in the tree: what a
+// pass purges is decided by the collection vector and the tree, as on main.
+//
+// Replicas collecting at one vector release the same nodes. A client's
+// synced vector covers a removal only after it has pushed every change it
+// made before learning of it, and the server hands out a minimum vector
+// only with the changes behind it, so an honest change concurrent with the
+// removal is on every replica before any of them purges the child. The
+// server race of yorkie#2110 breaks that contract: a minimum vector can
+// arrive ahead of a change behind it. Such a change, like a crafted one,
+// reaches a replica after its purge; the node it names is then gone or
+// detached and stays a tombstone (see TreeNode.detached), which is what
+// the release made it everywhere else. Released nodes still resolve, as
+// main's detached nodes do, and a position inside the subtree resolves to
+// the place the subtree was purged from, where a replica that has not
+// purged it counts it from.
+type GCLiveRelease[C any] interface {
+	// PurgeReleasing purges child as Purge does, tombstoning every live node
+	// under it, and returns the size they had in docSize.Live.
+	PurgeReleasing(child C) (resource.DataSize, error)
+}

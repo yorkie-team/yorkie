@@ -18,7 +18,9 @@ tree region, replicas diverge after synchronization.
 
 ### Non-Goals
 
-- Undo/redo for merge/split (deferred per `undo-redo.md` Phase 2).
+- Undo/redo for merge/split beyond the identity restore rules (§6.4 and
+  the Rollout and Cross-implementation section): the rest stays deferred
+  per `undo-redo.md` Phase 2.
 - General-purpose `Tree.Move` operation (Phase 2).
 
 ## Text vs Element ID Asymmetry
@@ -97,6 +99,34 @@ rather than returning early — deferred, tracked as a follow-up.
 When a merge redirect places the `to` position before `from` in tree
 order, the range is inverted. This is treated as a no-op
 (`if fromIdx > toIdx { return nil }`).
+
+### §1.3 Step 04: Split Products of the Left Element
+
+Step 04 walks the siblings after the left anchor whose `CreatedAt` is
+newer than the edit, as RGA orders concurrent inserts after the same
+node. A split product of the left element is newer too, but it is not a
+concurrent insert at this position: it is the right half of the element
+the position names. Taking it as the anchor would move the position past
+content the editor saw on the far side of that element.
+
+The product is therefore **passed over, not walked away from**: it is
+never taken as the anchor, but the walk continues through it to the
+concurrent inserts that follow. Stopping the walk at the product would
+also hide those inserts. A replica that has not applied the split yet
+sees them as siblings of the unsplit element and walks past them, so the
+two replicas would anchor the same insert on different nodes. The check
+reads only tree structure (`isSplitProductOf` walks `InsPrevID`), so it
+needs no version vector. Pinned by the corpus scripts
+`split-order-older-*` (a product is not the anchor) and
+`split-product-walk-past-concurrent-insert` (the walk goes on past it).
+
+The rule applies to a pure insert position (`BoundaryPureInsert`) only:
+both ends of an empty Edit range, which is the one caller that asks for it.
+A `BoundaryRange` position (§9.3), a style range's boundary, and a default
+`BoundaryInsert` position, either end of a non-empty Edit range, were
+drawn after the whole element as their client saw it, so the walk takes
+the product as before and the caller's split handling (§9.1/§9.2, §4.1)
+deals with it.
 
 ## Phase 2: Split Sibling Advance
 
@@ -315,13 +345,23 @@ merge-target (`fromParent`). Each moved child receives:
 - **`mergedInto`** (runtime cache): set on the source node, pointing
   to the target. Rebuilt from `MergedFrom` on snapshot load.
 
+**A merge source is a tombstone.** Phase 5 removes every merge boundary
+before Phase 6 moves its children, and every *reader* of `mergedInto`
+(§1.1's redirect, §6.2's propagation, `resolveMergeTarget`) acts only on a
+removed node. Both *derivation* paths require it too: `mergeNodes` and
+`rebuildMergeState` set the pointer only when the source a child's
+`MergedFrom` names is removed. See §6.4 for what happens when a restore
+makes a source live again.
+
 Both live and **tombstoned** children are moved, in child order
 (`collectBetween` collects them with `Children(true)`). Moving the
 tombstones preserves the source's full RGA sequence in the target, so
 a concurrent insert anchored on a removed sibling (e.g. `c` in a
 `cd → c,d` split whose `c` was deleted) resolves in the target through
 the normal path and is ordered against the other concurrent inserts by
-the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04).
+the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04,
+which passes over split products of the left element at an insert
+position, §1.3).
 This is what makes the merging replica converge with a replica that
 applied the insert *before* the merge, including when several clients
 insert at the same anchor.
@@ -422,6 +462,118 @@ With the chain flat, `FindTreeNodesWithSplitText`'s §1.1 redirect stays a
 single hop: `P.mergedInto` already points at the live R, and its boundary
 lookup (first child with `MergedFrom == P`) still resolves because P's
 children retained their original `MergedFrom`. No redirect change is needed.
+
+### §6.4 Revive Dissolves the Lineage
+
+An undo of the delete that merged a node away revives it **by identity**
+(`Tree.Restore` → `TreeNode.unremove`). The element is live again, so by
+§6.1 it is no longer a merge source, and both halves of the lineage are
+dropped at that moment (`Tree.dissolveMergeSources`):
+
+- `mergedInto` on the revived element, and
+- `MergedFrom`/`MergedAt` on every child the merge had moved out of it.
+
+The second half is found through an index of stamped nodes by the source
+they name (`Tree.mergeStamps`, filled wherever a stamped node joins the tree
+or a merge stamps one), keyed on the restored spans' own element IDs rather
+than on the children of the target `mergedInto` names, so a restore visits
+only the nodes that name what it revives. Two kinds of lineage sit outside that target:
+§7.1's `SplitElement` carries merge-stamped children into the other half of
+a split pair, and a **recreated** element — one the restore rebuilds because
+GC had purged it — comes back live under its original ID with no pointer at
+all, while stamps elsewhere may still name it. Keying on the source ID also
+means only lineage naming the revived element is touched, with no dependence
+on a pointer that may be a client's (see `findMergeNode`).
+
+Left undissolved, a later delete of the revived — and by then usually empty
+— element follows the stale pointer and §6.2 tombstones content that delete
+never covered: `<r><p>ab</p></r>` where every other replica holds
+`<r><p>abcd</p></r>` (#2189, the JS half is yorkie-js-sdk#1406).
+
+**Both halves, not just the pointer.** `mergedInto` is a runtime cache that
+`rebuildMergeState` re-derives from the stamps, so dropping only the pointer
+would leave the lineage re-derivable: the source is live at the revive, so
+no pointer comes back on the next load, but the moment a later edit
+tombstones that element the *same* surviving stamps name a removed source
+and the load rebuilds the pointer. One replica (in memory, pointer dropped
+at the revive) would keep the text while another (loaded from a snapshot
+written after it) cascades §6.2 over it. Liveness is a property of the
+moment, so it cannot by itself record that an element stopped being a
+source; clearing the stamps records it durably, and makes the load
+idempotent.
+
+`rebuildMergeState` declines to derive a pointer from a live source but
+leaves the stamps as they are: it also runs on element payloads and on
+`DeepCopy`, so rewriting what it reads would let a decoded payload or a
+clone hold different lineage from its origin. This matches the JS
+`rebuildMergeState`. `mergeNodes` applies the removed-source rule when an
+ordinary merge moves a stamped child again, so neither derivation path can
+plant a pointer on a live element.
+
+**The dissolution keys on the span, not on the outcome.** An element span
+resolves to one of four local outcomes — the element is live already, it is
+a tombstone the span revives, it is purged and recreated, or the recreate
+declines (born tombstoned under a removed parent, or no resolvable parent)
+— and which one a replica takes is a property of that replica's state, not
+of the operation. So `Restore` queues the dissolution from the span's ID
+before the outcome is known, and every replica applying the same undo
+clears the same stamps. Deriving it from the outcome instead let two
+replicas persist different `MergedFrom`/`MergedAt` for one undo, and that
+is exactly the lineage §6.2 cascades on: a replica that still held the
+stamps would tombstone content the replica that dropped them keeps.
+
+Dissolving against an element that is live, or that this replica does not
+hold at all, costs nothing: `rebuildMergeState` already declines to derive
+a pointer from a live source, so the stamps were inert — clearing them only
+makes the inertness durable, which is the same reason both halves are
+dropped together above.
+
+**Only merges the restore knew are dissolved.** A stamp is cleared only when
+the restoring change's version vector covers its `MergedAt`. A merge of the
+same element concurrent with the restore stamps the children it moves on
+every replica: after the dissolution on a replica that applies the restore
+first, before it on one that applies the merge first. Clearing it there
+would leave the stamps on one replica and not the other, so it is left on
+both. The two orders still disagree on whether the element is live, because
+`unremove` clears the concurrent merge's `removedAt` on the replica that
+applies the restore second; that is the pre-existing gap between an
+identity revive and a concurrent remove, not the lineage.
+
+A snapshot written before this fix can still carry undissolved stamps that
+name a revived, live source. They stay inert while it is live; if a later
+edit tombstones it, the next load re-derives the pointer. Both SDKs share
+this window, and closing it needs the durable marker below.
+
+**The GC path is not covered.** Dissolution fixes the shape without GC:
+the corpus script `i2189-delete-empty-p-after-undo` (concurrent
+cross-paragraph deletes, an undo reviving the merged paragraph, then a
+delete of the revived empty paragraph) now converges on
+`<r><p>abcd</p></r>` with collection off. Its minvv run — collection at a
+lagging minimum version vector — still diverges, `<r><p>ab</p></r>`
+against `<r><p>abcd</p></r>`, so the script stays `known-fail` in the
+ledger. The residual cause is not undissolved lineage, which this section
+closes; it is what collection at a lagging vector leaves behind around the
+revived element, and it is open.
+
+**The window against an unaware split.** §7.1's split partitioning reads
+`MergedFrom`/`MergedAt` without going through `mergedInto`, and §9.4's
+per-node filter fails open on any node carrying a stamp. A split or style
+that never saw the merge, and is therefore concurrent with the revive, can
+read those stamps before or after the revive clears them. This has been
+measured rather than assumed. Over every delete range, split position and
+split level of `<r><p>ab</p><p>cd</p></r>` and
+`<r><div><p>ab</p><p>cd</p></div></r>`, with three replicas applying the
+merge, the unaware split and the undo in three orders (942 cases), and,
+on two replicas, over a style in place of the split on the flat tree (25
+cases), the result is the same on
+main, on this branch, and on this branch with the dissolution turned off,
+row for row. §7.1 does read a cleared stamp in some of them, as the nested
+shape in `TestDissolutionAgainstAnUnawareSplitInEveryOrder` does, without
+changing the outcome. The rows that diverge, 303 of 942, diverge identically
+on main: they come from the split racing the merge and the identity revive,
+not from the lineage. A durable "no longer a source" marker on the source
+itself would remove the window altogether; it is a proto change, tracked in
+#2233.
 
 ## Phase 7: Split
 
@@ -826,7 +978,9 @@ outside its range, after the then-live parent. Replicas then diverge
 on attributes.
 
 `FindTreeNodesWithSplitText` takes a boundary mode: `BoundaryInsert`
-(default, §1.1 behavior for edits) and `BoundaryRange`, used by
+(default, §1.1 behavior, used for either end of a non-empty Edit range),
+`BoundaryPureInsert` (both ends of an empty Edit range: §1.1 behavior plus
+§1.3's split-product skip), and `BoundaryRange`, used by
 `Style`/`RemoveStyle`, which resolves the position to right after the
 merge-source tombstone. In visible coordinates this lands before both
 the concurrent inserts and the moved children, so a range end excludes
@@ -1215,6 +1369,88 @@ set. Until it does, the divergence is the one described above.
   interactions widen `MergedFrom`'s original "physically moved"
   meaning.
 
+## Rollout and Cross-implementation
+
+The rules below are replicated: every SDK has to apply them the same way,
+and the Go server applies them too, since it rebuilds documents by
+replaying stored changes through this code (`server/packs/snapshot.go`,
+`server/packs/pushpull.go`) and compaction replaces a document's history
+with such a rebuild (`server/packs/compaction.go`). A server and SDK built
+with them must therefore ship together with the matching yorkie-js-sdk
+change. Until both run them, a JS client and the Go server can derive
+different trees from the same changes, and a compaction keeps the Go
+result. The JS SDK has to mirror all of the following:
+
+1. **§1.3 step 04.** At an insert position (both ends of an empty Edit
+   range), the walk passes over a split product of the left element
+   instead of taking it as the anchor, and goes on to the concurrent
+   inserts after it (`BoundaryPureInsert`, asked for explicitly). Either
+   end of a non-empty Edit range (the default `BoundaryInsert`) and a style
+   boundary (`BoundaryRange`) keep the plain walk.
+2. **Step 03 past purged text.** A left-sibling offset past the end of the
+   floor text piece skips the split only when it lies in a gap of the
+   insertion's chain: the floor piece's `InsNextID` names exactly a text
+   piece of the same insertion whose `InsPrevID` names the floor piece back,
+   and floor end < offset <= that piece's start. Any other such offset is
+   out of range, as before.
+3. **§6.4 dissolution.** `Restore` takes the change's version vector and,
+   after every span applied, clears the `mergedInto` pointer of each
+   element span's node and the `MergedFrom`/`MergedAt` stamps naming its ID
+   whose `MergedAt` that vector covers (a stamp without `MergedAt` counts as
+   covered); an empty vector clears neither half, and an error clears
+   nothing. `unremove` itself leaves the lineage alone.
+   `mergeNodes` and `rebuildMergeState` derive no pointer onto a live
+   source.
+4. **Retombstone spans.** The spans a retombstone reports, which become the
+   reverse operation's, carry anchors re-read after the removal for every
+   span still in the tree, live or not: parent, left and right together
+   under the first piece's parent. A removed piece straddling the start
+   gives the left anchor its last character before the span; one
+   straddling the end gives no right anchor, nor does a right neighbour
+   under another parent. An empty text span keeps its anchors, and so does
+   a span whose first or last piece is detached. Every reported span is a
+   copy; the input spans are never modified.
+5. **Retombstone cascade.** Retombstoning an element applies the §4.1
+   cascade to its unknown split products, with the subtree, and reports a
+   span for each node it removed, parent before child, leaving out any
+   node an input span already describes; an input span whose kind
+   disagrees describes nothing. A cascaded text span cut into parts keeps
+   its left anchor on the first part and its right anchor on the last;
+   between parts, each is anchored on the covered characters of its
+   insertion on either side of its gap. A detached node starts no cascade
+   and is not removed again.
+6. **Recreate.** A recreated text piece is spliced back into its
+   insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
+   predecessor and what that points at, or, with none, to an adjacent
+   successor whose own predecessor is missing or unregistered. Rung (a)
+   follows a same-insertion successor into the element it now sits under
+   when every split between that element and the span's parent is unknown
+   to the restoring change, and a born-tombstoned recreate takes the
+   removal of the parent it actually lands under. A span whose parent is
+   detached is not recreated, as one whose parent was purged.
+7. **Purge accounting.** Purging a removed element tombstones every live
+   node under it with the element's `removedAt` and takes their size off
+   `Live`, in the purge itself, so a purge only ever detaches tombstones
+   and nothing is held back for a live node. Released nodes still resolve
+   by ID, as detached nodes do, from an index kept apart from the one of
+   reachable nodes. A node inserted under, or split off, a detached node
+   is detached too. The purge records the parent and the sibling the
+   purged node sat in front of, and a position inside a detached subtree
+   resolves there, for an edit or a style; a position whose parent is live
+   under a removed ancestor resolves from the topmost removed ancestor.
+   `Restore` resolves a span naming a
+   detached node as if the node were purged: it unregisters and unlinks
+   the node, which stays a tombstone, and recreates the span if its
+   parent is there; recreate never places a node under a detached
+   element, through rung (a)'s split home either. `Restore` also leaves a
+   node a tombstone under an ancestor whose
+   removal the restoring change's version vector covers (a change without
+   clocks is treated as knowing every removal, as `TicketKnown` does). It
+   revives in place in span order, so spans must come parent-first, for a
+   revive as for a recreate: a child listed before its removed parent stays
+   a tombstone. Content inserted under a removed parent is booked to GC
+   only (yorkie#2244; the rule is in `document-size-limit.md`).
+
 ## Key Design Decisions
 
 | Decision | Reason |
@@ -1310,3 +1546,4 @@ For traceability from git history (commit messages reference Fix N).
 | Fix 26 | §6.2 | Skip merge-delete propagation only at a declared boundary |
 | Fix 27 | §9.2 | Style a split family reached by End only if the change began at or in it |
 | Fix 28 | §4.1 | Stop the split-sibling cascade at a known sibling seen alive |
+| Fix 29 | §6.4 | Dissolve the merge lineage when a restore revives the source |

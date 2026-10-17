@@ -1,0 +1,25 @@
+{
+  "v": 2,
+  "id": "i2189-delete-empty-p-after-undo",
+  "issues": ["yorkie#2189"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "Concurrent cross-paragraph deletes, an undo that revives the merged paragraph, then a delete of the revived empty paragraph. Off mode now converges on <r><p>abcd</p></r> on both replicas: the revive dissolves the merge lineage, so the later delete no longer propagates through it (§6.4 of concurrent-merge-split.md). The minvv run still fails I4 — with GC collecting at a lagging minimum vector d1 ends <r><p>ab</p></r> against d2's <r><p>abcd</p></r> — so the #2189 shape survives on the GC path, for a cause the lineage dissolution does not cover and which is still open.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "r",
+    "children": [
+      { "type": "p", "children": [{ "type": "text", "value": "ab" }] },
+      { "type": "p", "children": [{ "type": "text", "value": "cd" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 8 },
+    { "r": 1, "op": "edit", "from": 3, "to": 5 },
+    { "op": "exchange" },
+    { "r": 0, "op": "undo" },
+    { "op": "exchange" },
+    { "r": 1, "op": "edit", "from": 6, "to": 8 },
+    { "op": "exchange" }
+  ]
+}

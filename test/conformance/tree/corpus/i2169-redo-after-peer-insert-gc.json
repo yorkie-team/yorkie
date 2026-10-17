@@ -1,0 +1,89 @@
+{
+  "v": 2,
+  "id": "i2169-redo-after-peer-insert-gc",
+  "issues": [
+    "yorkie#2169",
+    "yorkie-js-sdk#1418"
+  ],
+  "status": {
+    "go": "pass",
+    "js": "known-fail"
+  },
+  "note": "d1 types abc one character at a time, d2 inserts XYZ before it, d1 undoes all three inserts and redoes one. In the minvv run the undone characters are purged before the redo, so the redo recreates 'a' from its span: the span's left anchor still named the paragraph start captured before XYZ arrived, which put 'a' ahead of XYZ while the off run keeps XYZa (I4). Retombstone now refreshes the span's anchors to the node's neighbours right before it removes it. JS status assumed from Go before the fix (yorkie-js-sdk#1466 was closed unmerged); verify with the JS runner.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "edit",
+      "from": 1,
+      "to": 1,
+      "text": "a"
+    },
+    {
+      "r": 0,
+      "op": "edit",
+      "from": 2,
+      "to": 2,
+      "text": "b"
+    },
+    {
+      "r": 0,
+      "op": "edit",
+      "from": 3,
+      "to": 3,
+      "text": "c"
+    },
+    {
+      "op": "exchange"
+    },
+    {
+      "r": 1,
+      "op": "edit",
+      "from": 1,
+      "to": 1,
+      "text": "XYZ"
+    },
+    {
+      "op": "exchange"
+    },
+    {
+      "r": 0,
+      "op": "undo"
+    },
+    {
+      "r": 0,
+      "op": "undo"
+    },
+    {
+      "r": 0,
+      "op": "undo"
+    },
+    {
+      "op": "exchange"
+    },
+    {
+      "r": 0,
+      "op": "redo"
+    },
+    {
+      "op": "exchange"
+    },
+    {
+      "op": "expect",
+      "label": "final",
+      "xml": [
+        "<doc><p>XYZa</p></doc>",
+        "<doc><p>XYZa</p></doc>"
+      ]
+    }
+  ]
+}

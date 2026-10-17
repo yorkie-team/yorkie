@@ -88,6 +88,131 @@ as the deletion is measured. Since `Live <= Total`, the server's gate is also
 never stricter than the SDK's own check against the same limit, so an honest
 client's local check trips first.
 
+**Live has to equal a rebuild.** The stored size is the running ledger of
+the document the server built, so it must match what rebuilding the same
+document reports (`DeepCopy().DocSize()`, a snapshot load), or the gate
+refuses writes for bytes the document no longer holds. Purging a Tree
+element detaches its whole subtree, and a descendant can still be live: an
+insert or an identity restore concurrent with the element's removal leaves
+one there, with no GC pair and charged to `Live`, while a rebuild walks
+only the attached tree (yorkie#2244). The rule that keeps the two equal:
+
+- **A detached node is a tombstone, and stays one.** When a collection
+  purges a removed element, the purge tombstones every live node under it
+  (`GCLiveRelease`, `Tree.PurgeReleasing`) and `Root` takes their bytes
+  off `Live`; it happens only with the purge, never without it. They leave
+  the document with the element, as if its removal had covered them.
+  Everything a purge detaches is therefore a tombstone off `Live`.
+- Nothing makes a detached node live again. `Restore` resolves a span
+  naming one as a replica that purged it does: the node leaves
+  `NodeMapByID` and its chain and stays a tombstone, and the span is
+  recreated only where its parent is attached (`Tree.forgetDetached`). `recreateFromSpan`
+  places nothing under a detached element, `Retombstone` skips one, and
+  content placed under a detached parent, or split off a detached node, is
+  detached itself and born tombstoned, booked to GC only.
+- Detached nodes move from `NodeMapByID` to a side index,
+  `Tree.detachedByID`, so `NodeMapByID` holds exactly the nodes reachable
+  from the root. Lookups consult both and chains keep them, as on main, so
+  every lookup and walk that reached them before still does; no such path
+  can charge `Live` for one. One with a GC pair of its own leaves when that
+  pair is collected; a released node has none and stays, as main's live
+  detached nodes do.
+- A position inside a detached subtree resolves to the place the subtree
+  was purged from (`Tree.purgedSlot`): the purge records the parent and the
+  sibling it sat in front of. A replica that has not purged the subtree
+  resolves the same position at that place too, as the subtree is out of
+  sight there, and a live node under a removed ancestor resolves as from
+  the topmost removed one. So a range with one end in a detached subtree
+  styles, or deletes without merging, the same attached content on both
+  (`TestEditWithOneEndInADetachedSubtree`,
+  `TestStyleWithAnEndInADetachedSubtree`). A delete that merges out of the
+  subtree does not converge: a replica that has not purged it moves the
+  hidden content after the range end into view, and one that purged it has
+  nothing to move (`TestEditMergingOutOfADetachedSubtree`). Only a late or
+  crafted op names a position inside a removed element, and main diverges
+  the same way. The recorded place is runtime state, like the detached
+  mark: a replica reloaded from a snapshot, and the server, which rebuilds
+  from one, hold no detached node, so a late op naming one fails there
+  while a running replica that purged it applies it; main splits the same
+  way.
+
+**One undo, one result.** A copy built from the attached tree holds no
+detached node: a replica that collected further, a snapshot, a `DeepCopy`,
+and the document's clone, which an undo or redo runs on before the root.
+That is why `Restore` resolves a detached node as if it were gone rather
+than leaving it as it is: the clone and the root, and every replica, then
+take the same branch for the same span
+(`TestUndoMatchesOnTheCloneWithoutDetachedNodes`). An op other than
+`Restore` that names a detached node can still resolve on the root and
+fail on a rebuilt clone, which runs it first; main's rebuilt clone holds no
+detached node either, so that gap is the same there.
+
+| Path | With a detached node | Pinned by |
+|---|---|---|
+| GC purge of an ancestor | live nodes under it are released with it | `TestCollectReleasesALiveDescendantWithItsAncestor`, `TestLiveReleaseWaitsForTheBarrier`, `TestTreePurgeWithLiveDescendant`, `TestTreeCraftedReviveCannotPinARemovedChain` |
+| GC purge inside a detached subtree | walks nothing; one pass is O(nodes) | `TestPurgeInsideADetachedSubtreeWalksNothing`, `TestCollectWalksADeletedSubtreeOnce` |
+| `Restore`, element and text spans | resolved as purged: left a tombstone, recreated only under a parent that is there | `TestRestoreLeavesADetachedNodeATombstone`, `TestUndoMatchesOnTheCloneWithoutDetachedNodes` |
+| `Restore` under an ancestor whose removal it knew | left a tombstone, attached or not | `TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC`, `TestTreeRestoreUnderAKnownRemoval` |
+| `recreateFromSpan` under a detached parent or split home | declined, as under a purged one | `TestRestoreRecreatesNothingUnderADetachedParent`, `TestRecreateGoesNowhereDetachedThroughASplitHome` |
+| `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
+| `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only; a range inside the detached subtree visits nothing | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
+| `Edit` delete over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
+| `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree`, `TestStyleWithAnEndInADetachedSubtree` |
+| `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
+| `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
+| `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
+| `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
+
+**Why release instead of hold.** An earlier revision held a removed element
+back from GC while a live node was under it, until that node was removed.
+No one can see a node under a removed element, so no one could remove it:
+an honest insert concurrent with the removal, or a crafted restore that
+claims not to know it, kept the whole ancestor chain in `GC` for good, and
+the server's size gate reads `Live`, not `GC`. Releasing ends with the
+collection vector, which no client input can hold back: what a pass purges
+is decided by `removedAt`, `PurgeBarrierAt` and the tree's shape, as on
+main, and the release runs only once both have let the element go.
+
+**Replicas release alike.** The release reads the tree at the moment each
+replica collects, and replicas collect at different points of the change
+log. A client's synced vector covers a removal only after it has pushed
+every change it made before learning of it, and the server hands out a
+minimum vector only with the changes behind it, so an honest change
+concurrent with the removal is on every replica before any of them purges
+the element, and they release the same nodes. The server race of
+yorkie#2110 breaks that contract, since a minimum vector can arrive ahead
+of a change behind it; the conformance suite's lagging mode models it.
+Under the race, as for a crafted change, a change reaches a replica after
+its purge and names a node that is gone or detached: `Restore` never
+revives a detached node, and recreates one only where the span's parent is
+attached, so it lands as the release left it everywhere else. Released
+nodes stay registered, so an edit whose position names one, such as an
+insert under a detached tombstone anchored on a released node, resolves
+and applies as on main, with its content born tombstoned and detached
+instead of charged to `Live`
+(`TestEditUnderADetachedParentNamingAReleasedNode`). An edit or style
+with an end in a detached subtree resolves that end at the place the
+subtree was purged from, where main counted an index inside the detached
+subtree and could delete or style unrelated attached content. An op naming a node the
+purge unregistered fails, as on main. Under the race, the conformance
+suite's lagging mode turns two runs into errors main did not report: uds3
+2520, a late op naming a node the race let one replica purge first, and ud
+11, which fails the same way in normal mode on main and on this change and
+which main's lagging run only masked; both are inputs the protocol
+contract excludes. `Restore` also leaves a
+node a tombstone under an ancestor whose removal the restoring change knew
+(`Tree.knownRemovalAbove`), which keeps the result before GC from depending
+on it: such a revive would stay live only on replicas that had not
+collected yet, and an undo of the ancestor's removal would then bring it
+back on those alone.
+
+Two divergences remain, both as on main. Whether a concurrent identity
+revive or the removal wins depends on the order a replica applied them
+(yorkie#2247). And content no undo span names, such as an insert concurrent
+with the removal, comes back with the ancestor's undo only on replicas that
+applied the undo before collecting; one that collected first recreates the
+ancestor without it, as main does for anything a purge took.
+
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The
 first snapshot after that arms the gate.

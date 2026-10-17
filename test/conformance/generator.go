@@ -25,23 +25,70 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 )
 
-// Family is a fixture family: which generator family, how many replicas and
-// how many steps.
+// Family is a fixture family: which generator family, how many replicas
+// and how many steps. With Observer the last replica never edits: it only
+// pulls, the way a read-only client keeps its server row moving. Runs is
+// how many seeds its parity fixture pins, 0 meaning defaultRuns.
 type Family struct {
-	Name  string
-	Fam   string
-	N     int
-	Steps int
+	Name     string
+	Fam      string
+	N        int
+	Steps    int
+	Observer bool
+	Runs     int
 }
 
-// Families are the fixture families of format v1.
+// defaultRuns is the seed count of a family that does not state one, and
+// v2Runs the count of the families format v2 added.
+//
+// The parity fixtures are a cross-SDK check — the two runners must agree
+// byte for byte on the same seed — not the net that catches a convergence
+// bug: a seed that caught one is minimized into tree/corpus, which every
+// run replays whatever the seed count is. So the count only has to be wide
+// enough to catch a runner that drifts, and the v2 families take a quarter
+// of the v1 count. That is a CPU bound, not a taste: this package has no
+// build tag, so CI's one test lane runs it beside the integration suite on
+// the same four cores, and the v2 families at the v1 count tripled the
+// suite's share of them (70s to 219s) — which is CPU the timing-sensitive
+// integration tests then miss their deadlines without.
+const (
+	defaultRuns = 200
+	v2Runs      = 50
+)
+
+// Families are the fixture families. The first six are those of format v1;
+// the undo, span and observer families came with format v2.
 var Families = []Family{
-	{"is", "is", 2, 24},
-	{"del", "del", 2, 24},
-	{"merge", "merge", 2, 24},
-	{"style", "style", 2, 24},
-	{"all", "all", 2, 24},
-	{"all3", "all", 3, 30},
+	{Name: "is", Fam: "is", N: 2, Steps: 24},
+	{Name: "del", Fam: "del", N: 2, Steps: 24},
+	{Name: "merge", Fam: "merge", N: 2, Steps: 24},
+	{Name: "style", Fam: "style", N: 2, Steps: 24},
+	{Name: "all", Fam: "all", N: 2, Steps: 24},
+	{Name: "all3", Fam: "all", N: 3, Steps: 30},
+
+	{Name: "ud", Fam: "ud", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "ud3", Fam: "ud", N: 3, Steps: 30, Runs: v2Runs},
+	{Name: "uds", Fam: "uds", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "uds3", Fam: "uds", N: 3, Steps: 30, Runs: v2Runs},
+	{Name: "udm", Fam: "udm", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "udst", Fam: "udst", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "uall", Fam: "uall", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "uall3", Fam: "uall", N: 3, Steps: 30, Runs: v2Runs},
+
+	{Name: "span", Fam: "span", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "spand", Fam: "spand", N: 2, Steps: 24, Runs: v2Runs},
+	{Name: "spand3", Fam: "spand", N: 3, Steps: 30, Runs: v2Runs},
+
+	{Name: "del4o", Fam: "del", N: 4, Steps: 40, Observer: true, Runs: v2Runs},
+	{Name: "all4o", Fam: "all", N: 4, Steps: 40, Observer: true, Runs: v2Runs},
+}
+
+// ParityRuns is how many seeds this family's parity fixture pins.
+func (f Family) ParityRuns() int {
+	if f.Runs == 0 {
+		return defaultRuns
+	}
+	return f.Runs
 }
 
 // FamilyByName returns the fixture family with the given name.
@@ -54,17 +101,35 @@ func FamilyByName(name string) (Family, bool) {
 	return Family{}, false
 }
 
+// Gen emits the script of this family for the given seed.
+func (f Family) Gen(seed uint32) *Script {
+	return generate(seed, f.Fam, f.N, f.Steps, f.Observer)
+}
+
 type weight struct {
 	k string
 	w float64
 }
 
+// famWeights are the event weights of each generator family. `undo` and
+// `redo` are emitted as undo and redo steps, the span kinds (`s…`) as gen
+// steps on the span tree of spanInit, every other kind as a gen step.
 var famWeights = map[string][]weight{
 	"is":    {{"ins", 0.5}, {"split", 0.5}},
 	"del":   {{"ins", 0.35}, {"split", 0.35}, {"del", 0.3}},
 	"merge": {{"ins", 0.35}, {"split", 0.35}, {"merge", 0.3}},
 	"style": {{"ins", 0.35}, {"split", 0.35}, {"style", 0.3}},
 	"all":   {{"ins", 0.3}, {"split", 0.3}, {"del", 0.15}, {"merge", 0.15}, {"style", 0.1}},
+
+	"ud":   {{"ins", 0.35}, {"del", 0.3}, {"undo", 0.25}, {"redo", 0.1}},
+	"uds":  {{"ins", 0.3}, {"split", 0.2}, {"del", 0.2}, {"undo", 0.2}, {"redo", 0.1}},
+	"udm":  {{"ins", 0.3}, {"split", 0.15}, {"del", 0.1}, {"merge", 0.15}, {"undo", 0.2}, {"redo", 0.1}},
+	"udst": {{"ins", 0.3}, {"split", 0.15}, {"style", 0.25}, {"undo", 0.2}, {"redo", 0.1}},
+	"uall": {{"ins", 0.25}, {"split", 0.2}, {"del", 0.1}, {"merge", 0.1}, {"style", 0.05},
+		{"undo", 0.2}, {"redo", 0.1}},
+
+	"span":  {{"sins", 0.4}, {"ssplit", 0.15}, {"senter", 0.15}, {"senter11", 0.3}},
+	"spand": {{"sins", 0.4}, {"ssplit", 0.15}, {"senter", 0.15}, {"senter11", 0.15}, {"sdel", 0.15}},
 }
 
 const valuePool = "cdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -80,8 +145,13 @@ func Mulberry32(a uint32) func() float64 {
 	}
 }
 
-// Gen emits the script of generator family fam for the given seed.
+// Gen emits the script of generator family fam for the given seed, with
+// no observer.
 func Gen(seed uint32, fam string, n, steps int) *Script {
+	return generate(seed, fam, n, steps, false)
+}
+
+func generate(seed uint32, fam string, n, steps int, observer bool) *Script {
 	ws, ok := famWeights[fam]
 	if !ok {
 		panic(fmt.Sprintf("unknown family %q", fam))
@@ -100,14 +170,24 @@ func Gen(seed uint32, fam string, n, steps int) *Script {
 		}
 		return p
 	}
+	pull := func(r int) {
+		out = append(out, Step{R: r, Op: opPull})
+		for cursor[r] < len(authors) && authors[cursor[r]] == r {
+			cursor[r]++
+		}
+		cursor[r]++
+	}
 	for range steps {
 		r := int(math.Floor(rnd() * float64(n)))
-		if rnd() < 0.5 && pending(r) > 0 {
-			out = append(out, Step{R: r, Op: opPull})
-			for cursor[r] < len(authors) && authors[cursor[r]] == r {
-				cursor[r]++
+		if observer && r == n-1 {
+			if pending(r) > 0 {
+				out = append(out, Step{R: r, Op: opSync})
+				cursor[r] = len(authors)
 			}
-			cursor[r]++
+			continue
+		}
+		if rnd() < 0.5 && pending(r) > 0 {
+			pull(r)
 			continue
 		}
 		pick := rnd()
@@ -123,16 +203,29 @@ func Gen(seed uint32, fam string, n, steps int) *Script {
 		f, g, h := rnd(), rnd(), rnd()
 		v := string(valuePool[c%len(valuePool)])
 		c++
-		out = append(out, Step{R: r, Op: opGen, K: k, F: f, G: g, H: h, Val: v})
+		switch k {
+		case opUndo, opRedo:
+			out = append(out, Step{R: r, Op: k})
+		default:
+			out = append(out, Step{R: r, Op: opGen, K: k, F: f, G: g, H: h, Val: v})
+		}
 		authors = append(authors, r)
 	}
-	return &Script{
+	s := &Script{
 		V:        1,
 		ID:       fmt.Sprintf("gen-%s-n%d-s%d-%d", fam, n, steps, seed),
 		Replicas: n,
 		Init:     Init{Text: "abcd"},
 		Steps:    out,
 	}
+	if observer {
+		s.ID = fmt.Sprintf("gen-%s-n%do-s%d-%d", fam, n, steps, seed)
+	}
+	if spanGenKinds[ws[0].k] {
+		s.V = 2
+		s.Init = Init{Node: spanInit()}
+	}
+	return s
 }
 
 // para is a live paragraph: the index of its <p> and the length of its
@@ -226,6 +319,9 @@ func (rn *run) gen(st Step) string {
 		to := p.base + p.size + 2
 		rn.update(st.R, func(t *json.Tree) { t.Style(p.base, to, attrs) })
 		return describeStyle(p.base, to, attrs)
+	}
+	if spanGenKinds[st.K] {
+		return rn.genSpan(st)
 	}
 	panic(fmt.Sprintf("unknown gen kind %q", st.K))
 }
