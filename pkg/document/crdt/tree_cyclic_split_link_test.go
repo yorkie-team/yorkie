@@ -170,6 +170,26 @@ func TestTreeCyclicSplitLink(t *testing.T) {
 		})
 	})
 
+	// Step 04 of an insert's position walks InsPrevID back from every newer
+	// sibling it passes, to tell a split product of the left element from a
+	// concurrent insert. The two middle paragraphs now name each other there
+	// too, a lineage that never reaches the first paragraph.
+	t.Run("an insert's step 04 over an InsPrevID cycle terminates", func(t *testing.T) {
+		tree := poisonedTree(t)
+		first := tree.Root().Children()[0]
+		left, right := tree.Root().Children()[1], tree.Root().Children()[2]
+		left.InsPrevID = right.ID()
+		right.InsPrevID = left.ID()
+
+		pos := crdt.NewTreePos(tree.Root().ID(), first.ID())
+		older := time.NewTicket(1, 0, knownActor)
+		mustFinish(t, "FindTreeNodesWithSplitText", func() {
+			_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, older, crdt.BoundaryInsert)
+			assert.NoError(t, err)
+			assert.NotSame(t, first, anchor, "a lineage that loops back is not the first paragraph's")
+		})
+	})
+
 	t.Run("remove style over the cycle terminates", func(t *testing.T) {
 		tree := poisonedTree(t)
 		from, err := tree.FindPos(0)
