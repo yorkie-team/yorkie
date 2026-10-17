@@ -1648,67 +1648,81 @@ func (t *Tree) Retombstone(
 	return pairs, diff, edits, appendUncoveredSpans(applied, cascaded), nil
 }
 
-// appendUncoveredSpans appends to spans every cascaded span, or the part of
-// it, that names what spans does not already describe: an element by its ID,
-// a text range by the text spans of the same insertion under the same parent. The input spans of a
-// delete routinely include a split product together with the element it was
-// cut off, and the §4.1 cascade from the element reaches the product before
-// its own span does; without this the reverse operation would carry the
-// product twice, and one more copy on every undo/redo that toggles it.
+// appendUncoveredSpans merges the spans the §4.1 cascade captured into the
+// input spans: every cascaded span, or the part of it, that names what the
+// input spans do not already describe -- an element by its ID, a text range
+// by the text spans of the same insertion under the same parent. The input
+// spans of a delete routinely include a split product together with the
+// element it was cut off, and the cascade from the element reaches the
+// product before its own span does; without this the reverse operation
+// would carry the product twice, and one more copy on every undo/redo that
+// toggles it.
 //
-// A cascaded text span covers one current piece, and an input span the
-// pieces of its range when it was recorded. Pieces only ever split, so the
-// piece usually lies inside one input span, but a recreate after GC can
-// bring a range back as one piece across a boundary an input span was
-// recorded at; the part of it the input spans do not cover is kept.
+// A cascaded text piece under a split product can overlap an input span of
+// its insertion recorded under the original element. The merged list puts
+// every input element first, then the kept cascaded spans, then the input
+// text spans, so that a Restore after GC recreates the product's piece under
+// the product before the input span reaches that range, finds it there, and
+// recreates only the rest under the original element. parentsFirst then
+// restores parent-before-child order where the reordering broke it.
+//
+// Coverage is looked up in sorted, merged intervals per (insertion, parent),
+// so the merge costs O(N log N) however the client sized the span list.
 func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan {
 	if len(cascaded) == 0 {
 		return spans
 	}
 
 	elements := make(map[string]struct{}, len(spans))
-	texts := make(map[string][]*TreeRestoreSpan)
+	covers := make(map[string][][2]int)
+	var inputElements, inputTexts []*TreeRestoreSpan
 	for _, span := range spans {
 		if span.IsText {
-			key := textCoverKey(span)
-			texts[key] = append(texts[key], span)
+			inputTexts = append(inputTexts, span)
+			if span.Length > 0 {
+				key := textCoverKey(span)
+				covers[key] = append(covers[key], [2]int{span.ID.Offset, span.ID.Offset + span.Length})
+			}
 		} else {
+			inputElements = append(inputElements, span)
 			elements[span.ID.toIDString()] = struct{}{}
 		}
 	}
+	for key, intervals := range covers {
+		covers[key] = mergeIntervals(intervals)
+	}
 
-	inputs := len(spans)
-	moved := make(map[string][]*TreeRestoreSpan)
+	var kept []*TreeRestoreSpan
 	for _, span := range cascaded {
 		if !span.IsText {
 			if _, ok := elements[span.ID.toIDString()]; !ok {
-				spans = append(spans, span)
+				kept = append(kept, span)
 			}
 			continue
 		}
-		parts := uncoveredTextSpans(span, texts[textCoverKey(span)])
-		spans = append(spans, parts...)
-		key := span.ID.CreatedAt.Key()
-		moved[key] = append(moved[key], parts...)
+		kept = append(kept, uncoveredTextSpans(span, covers[textCoverKey(span)])...)
 	}
 
-	// A kept text part sits under another parent than any input span of its
-	// insertion that overlaps it: a split carried it there. The input span
-	// gives that range up, so that after GC each part is recreated under the
-	// element it now belongs to rather than all of it under the one the
-	// input was recorded under.
-	if len(moved) > 0 {
-		trimmed := make([]*TreeRestoreSpan, 0, len(spans))
-		for i, span := range spans {
-			if i >= inputs || !span.IsText || len(moved[span.ID.CreatedAt.Key()]) == 0 {
-				trimmed = append(trimmed, span)
-				continue
-			}
-			trimmed = append(trimmed, uncoveredTextSpans(span, moved[span.ID.CreatedAt.Key()])...)
+	merged := make([]*TreeRestoreSpan, 0, len(spans)+len(kept))
+	merged = append(merged, inputElements...)
+	merged = append(merged, kept...)
+	merged = append(merged, inputTexts...)
+	return parentsFirst(merged)
+}
+
+// mergeIntervals sorts half-open intervals and merges the ones that overlap
+// or touch.
+func mergeIntervals(intervals [][2]int) [][2]int {
+	slices.SortFunc(intervals, func(a, b [2]int) int { return a[0] - b[0] })
+	merged := intervals[:0]
+	for _, iv := range intervals {
+		if n := len(merged); n > 0 && iv[0] <= merged[n-1][1] {
+			merged[n-1][1] = max(merged[n-1][1], iv[1])
+			continue
 		}
-		spans = trimmed
+		merged = append(merged, iv)
 	}
-	return parentsFirst(spans)
+	return merged
 }
 
 // parentsFirst returns spans in parent-before-child order, as Restore needs
@@ -1808,47 +1822,50 @@ func textCoverKey(span *TreeRestoreSpan) string {
 	return span.ID.CreatedAt.Key() + "|" + parent
 }
 
-// uncoveredTextSpans returns the parts of the text span that none of covers
-// holds, each as a span of its own with the span's anchors.
-func uncoveredTextSpans(span *TreeRestoreSpan, covers []*TreeRestoreSpan) []*TreeRestoreSpan {
+// uncoveredTextSpans returns the parts of the text span that none of covers,
+// sorted and merged intervals, holds, each as a span of its own with the
+// span's anchors.
+func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSpan {
 	// An empty span covers no range for another span to cover; it is kept as
 	// it is rather than dropped from the reverse operation.
 	if span.Length <= 0 {
 		return []*TreeRestoreSpan{span}
 	}
 	start, end := span.ID.Offset, span.ID.Offset+span.Length
-	gaps := [][2]int{{start, end}}
-	for _, cover := range covers {
-		if cover.Length <= 0 {
-			continue
+
+	var gaps [][2]int
+	cursor := start
+	// The first cover that ends past start: covers are disjoint and sorted,
+	// so their ends are sorted too.
+	first, _ := slices.BinarySearchFunc(covers, start, func(iv [2]int, at int) int {
+		if iv[1] <= at {
+			return -1
 		}
-		from, to := cover.ID.Offset, cover.ID.Offset+cover.Length
-		var next [][2]int
-		for _, gap := range gaps {
-			if to <= gap[0] || gap[1] <= from {
-				next = append(next, gap)
-				continue
-			}
-			if gap[0] < from {
-				next = append(next, [2]int{gap[0], from})
-			}
-			if to < gap[1] {
-				next = append(next, [2]int{to, gap[1]})
-			}
+		return 1
+	})
+	for i := first; i < len(covers) && covers[i][0] < end; i++ {
+		if covers[i][0] > cursor {
+			gaps = append(gaps, [2]int{cursor, covers[i][0]})
 		}
-		gaps = next
+		cursor = max(cursor, covers[i][1])
+	}
+	if cursor < end {
+		gaps = append(gaps, [2]int{cursor, end})
 	}
 
 	if len(gaps) == 1 && gaps[0] == [2]int{start, end} {
 		return []*TreeRestoreSpan{span}
 	}
+	// Value is sliced on its own bounds too: a span off the wire need not
+	// carry as many code units as its Length claims.
 	encoded := utf16.Encode([]rune(span.Value))
 	parts := make([]*TreeRestoreSpan, 0, len(gaps))
 	for _, gap := range gaps {
 		part := *span
 		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0]}
 		part.Length = gap[1] - gap[0]
-		part.Value = string(utf16.Decode(encoded[gap[0]-start : gap[1]-start]))
+		from, to := min(gap[0]-start, len(encoded)), min(gap[1]-start, len(encoded))
+		part.Value = string(utf16.Decode(encoded[from:to]))
 		parts = append(parts, &part)
 	}
 	return parts

@@ -65,8 +65,11 @@ func TestAppendUncoveredSpans(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			spans := append([]*TreeRestoreSpan{}, input...)
 			got := appendUncoveredSpans(spans, []*TreeRestoreSpan{tc.cascaded})
-			assert.Equal(t, ranges(append(append([]*TreeRestoreSpan{}, input...), tc.want...)), ranges(got))
-			for _, span := range got[len(input):] {
+			// Input elements, then what the cascade adds, then input text.
+			want := append([]*TreeRestoreSpan{input[0]}, tc.want...)
+			want = append(want, input[1:]...)
+			assert.Equal(t, ranges(want), ranges(got))
+			for _, span := range got[1 : 1+len(tc.want)] {
 				assert.Equal(t, len(span.Value), span.Length)
 			}
 		})
@@ -167,7 +170,8 @@ func TestAppendUncoveredSpansKeepsParentsFirst(t *testing.T) {
 		order = append(order, span.NodeType+"@"+span.ID.toIDString()+"="+span.Value)
 	}
 	assert.Len(t, got, 5, "div, product, productP, ab and the uncovered cd: %v", order)
-	assert.Equal(t, "cd", got[len(got)-1].Value)
+	assert.Equal(t, "cd", got[3].Value, "the cascade's part comes before the input text")
+	assert.Equal(t, "ab", got[4].Value)
 }
 
 // TestParentsFirstIsLinear pins parentsFirst on span sets a client controls:
@@ -207,8 +211,9 @@ func TestParentsFirstIsLinear(t *testing.T) {
 // is covered only by an input span of its insertion under the same parent.
 // The input span recorded "abcd" under p before a split carried "cd" into
 // the product; the cascade reports "cd" under the product. Both are kept,
-// and the input gives up "cd", so a Restore after GC recreates "ab" under p
-// and "cd" under the product instead of all four under p.
+// and the product's "cd" comes first, so a Restore after GC recreates it
+// under the product and then finds it there when the input span reaches
+// that range, recreating only "ab" under p.
 func TestAppendUncoveredSpansMatchesTheParent(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -233,8 +238,8 @@ func TestAppendUncoveredSpansMatchesTheParent(t *testing.T) {
 	}
 	assert.Equal(t, []string{
 		"p@" + root.toIDString() + "=",
-		"text@" + p.ID.toIDString() + "=ab",
 		"p@" + root.toIDString() + "=",
 		"text@" + product.ID.toIDString() + "=cd",
+		"text@" + p.ID.toIDString() + "=abcd",
 	}, order)
 }

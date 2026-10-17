@@ -1168,3 +1168,43 @@ func TestTreeRetombstoneSpanEdgeCases(t *testing.T) {
 		assert.Nil(t, got.RightSiblingID)
 	})
 }
+
+// TestTreeRestoreAfterGCPlacesASplitInsertionByPart pins why the merged
+// retombstone spans put a cascaded text part ahead of the input text span
+// that overlaps it. "abcd" was split into <p>ab</p><p>cd</p>, deleted and
+// purged. The input span still names all of "abcd" under p, the cascade's
+// span names "cd" under the product. Restored in that order, "cd" comes
+// back under the product first, and the input span finds it there and
+// recreates only "ab" under p.
+func TestTreeRestoreAfterGCPlacesASplitInsertionByPart(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "abcd"))
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+	_, _, err := tree.EditT(3, 3, nil, 1, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
+	product := tree.Root().Children()[1]
+
+	// <r>0<p>1ab3</p>4<p>5cd7</p>8</r>: delete both texts, purge both.
+	editT(t, tree, ctx, 5, 7, nil)
+	editT(t, tree, ctx, 1, 3, nil)
+	for _, parent := range []*crdt.TreeNode{p, product} {
+		assert.NoError(t, tree.Purge(parent.Children(true)[0]))
+	}
+	assert.Equal(t, "<r><p></p><p></p></r>", tree.ToXML())
+
+	span := func(offset int, value string, parent *crdt.TreeNode) *crdt.TreeRestoreSpan {
+		return &crdt.TreeRestoreSpan{
+			ID: crdt.NewTreeNodeID(createdAt, offset), NodeType: "text", IsText: true,
+			Length: len(value), Value: value, ParentID: parent.ID(),
+		}
+	}
+	_, _, _, _, _, err = tree.Restore([]*crdt.TreeRestoreSpan{
+		span(2, "cd", product), span(0, "abcd", p),
+	}, false, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
+}
