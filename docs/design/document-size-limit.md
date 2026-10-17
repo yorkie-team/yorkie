@@ -169,6 +169,7 @@ detached node either, so that gap is the same there.
 | `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree`, `TestStyleWithAnEndInADetachedSubtree` |
 | `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
 | §7.4 move of a split product across a purge | the product takes its new parent's side, released into a detached one | `TestSplitMovedAcrossTheDetachedBoundary` |
+| §7.4 move of an empty product cut off a node under a removed ancestor | born tombstoned before it moves, as on a replica that released the node | `TestSplitOutOfSightMovesOutATombstone` |
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
 | `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |

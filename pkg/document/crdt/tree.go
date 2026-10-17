@@ -353,6 +353,7 @@ func (n *TreeNode) Split(
 		// A piece split off a detached node sits in the same detached
 		// subtree (see TreeNode.detached).
 		split.detached = n.detached
+
 		split.InsPrevID = n.id
 		if n.InsNextID != nil {
 			insNext := tree.findFloorNode(n.InsNextID)
@@ -377,6 +378,18 @@ func (n *TreeNode) Split(
 				if !n.IsText() && insNext.Index.Parent != nil &&
 					insNext.Index.Parent != split.Index.Parent &&
 					len(split.Index.Children(true)) == 0 {
+					// An empty product cut off a node out of sight, under a
+					// removed ancestor, is born tombstoned before it moves, as
+					// content inserted under a removed parent is. A replica
+					// that purged the ancestor holds the node released, a
+					// tombstone, and cuts a tombstone off it; moving a live
+					// one out here would show it on this replica alone. The
+					// product holds no children, so nothing goes with it.
+					if split.removedAt == nil {
+						if at := removedAncestorAt(n); at != nil {
+							split.remove(at)
+						}
+					}
 					if err := insNext.Index.Parent.MoveChildBefore(
 						split.Index, insNext.Index,
 					); err != nil {
@@ -1404,6 +1417,17 @@ func (t *Tree) unlinkInsChain(node *TreeNode) {
 // than off a subtree a purge detached.
 func (t *Tree) isAttached(node *TreeNode) bool {
 	return !node.detached
+}
+
+// removedAncestorAt returns the removal of node's nearest removed ancestor,
+// or nil when every ancestor is live.
+func removedAncestorAt(node *TreeNode) *time.Ticket {
+	for n := node.Index.Parent; n != nil; n = n.Parent {
+		if n.Value.removedAt != nil {
+			return n.Value.removedAt
+		}
+	}
+	return nil
 }
 
 // purgedSlot returns where the detached subtree holding node was purged

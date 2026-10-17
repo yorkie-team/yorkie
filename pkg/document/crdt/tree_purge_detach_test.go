@@ -996,3 +996,61 @@ func TestSplitMovedAcrossTheDetachedBoundary(t *testing.T) {
 		})
 	}
 }
+
+// TestSplitOutOfSightMovesOutATombstone pins the empty product §7.4 moves
+// out of a node under a removed ancestor. In <r><top><p>ab</p></top><q><p>cd</p></q></r>
+// with top removed while p is live, the second paragraph is p's earlier
+// split product. A late split at the end of p cuts an empty product that
+// §7.4 moves next to it, into q. One replica purged top, so p is released
+// there and the product is a tombstone; the other did not, and the product
+// must be born a tombstone there too, or it shows as an empty paragraph on
+// that replica alone.
+func TestSplitOutOfSightMovesOutATombstone(t *testing.T) {
+	var xmls, shapes []string
+	for _, purge := range []bool{true, false} {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+		top := NewTreeNode(NewTreeNodeID(next(), 0), "top", nil)
+		p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+		ab := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "ab")
+		q := NewTreeNode(NewTreeNodeID(next(), 0), "q", nil)
+		p2 := NewTreeNode(NewTreeNodeID(p.id.CreatedAt, 1), "p", nil)
+		cd := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "cd")
+		p.InsNextID, p2.InsPrevID = p2.id, p.id
+		require.NoError(t, root.Append(top, q))
+		require.NoError(t, top.Append(p))
+		require.NoError(t, p.Append(ab))
+		require.NoError(t, q.Append(p2))
+		require.NoError(t, p2.Append(cd))
+		tree := NewTree(root, next())
+		top.remove(next())
+		if purge {
+			_, err := tree.PurgeReleasing(top)
+			require.NoError(t, err)
+		}
+
+		vv := time.NewVersionVector()
+		vv.Set(actor, 1000)
+		pos := NewTreePos(p.id, NewTreeNodeID(ab.id.CreatedAt, 2))
+		_, diff, _, err := tree.Edit(pos, pos, nil, 1, next(), next, vv, false)
+		require.NoError(t, err)
+		assert.Zero(t, diff.Total(), "purged %v: nothing charged to Live", purge)
+		require.Len(t, q.Children(true), 2, "purged %v: the product moved into q", purge)
+		assert.True(t, q.Children(true)[0].IsRemoved(), "purged %v: as a tombstone", purge)
+		xmls = append(xmls, tree.ToXML())
+		if !purge {
+			_, err := tree.PurgeReleasing(top)
+			require.NoError(t, err)
+		}
+		shapes = append(shapes, treeShapeOf(tree))
+	}
+	assert.Equal(t, "<r><q><p>cd</p></q></r>", xmls[0])
+	assert.Equal(t, xmls[0], xmls[1], "both replicas show the same tree")
+	assert.Equal(t, shapes[0], shapes[1], "and hold the same once both collect")
+}
