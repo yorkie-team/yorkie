@@ -797,3 +797,27 @@ func TestToTreePosReportsAPurgeWithoutASlot(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNodeNotFound)
 	})
 }
+
+// TestEditMergingOutOfADetachedSubtree pins the one shape where a range with
+// an end in a detached subtree does not converge: a delete that merges. From
+// the start of the root to the middle of the released "ab", the replica that
+// has not purged div merges div and p into the root, bringing the hidden "b"
+// into view, while the replica that purged div holds nothing to move. No
+// honest client names a position inside a removed element, so only a late
+// or crafted op reaches it, and main diverges the same way.
+func TestEditMergingOutOfADetachedSubtree(t *testing.T) {
+	results := map[bool]string{}
+	for _, purge := range []bool{true, false} {
+		tree, _, n, next := halfDetachedFixture(t, purge)
+		actor := n["r"].id.CreatedAt.ActorID()
+		vv := time.NewVersionVector()
+		vv.Set(actor, 1000)
+		from := NewTreePos(n["r"].id, n["r"].id)
+		to := NewTreePos(n["p"].id, NewTreeNodeID(n["ab"].id.CreatedAt, 1))
+		_, _, _, err := tree.Edit(from, to, nil, 0, time.NewTicket(500, 0, actor), next, vv, false)
+		require.NoError(t, err)
+		results[purge] = tree.ToXML()
+	}
+	assert.Equal(t, "<r><q>cd</q></r>", results[true], "purged: nothing to move")
+	assert.Equal(t, "<r><q>cd</q>b</r>", results[false], "not purged: the merge moves b into view")
+}

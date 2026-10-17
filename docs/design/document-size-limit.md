@@ -123,9 +123,18 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   resolves the same position at that place too, as the subtree is out of
   sight there, and a live node under a removed ancestor resolves as from
   the topmost removed one. So a range with one end in a detached subtree
-  deletes or styles the same attached content on both
+  styles, or deletes without merging, the same attached content on both
   (`TestEditWithOneEndInADetachedSubtree`,
-  `TestStyleWithAnEndInADetachedSubtree`).
+  `TestStyleWithAnEndInADetachedSubtree`). A delete that merges out of the
+  subtree does not converge: a replica that has not purged it moves the
+  hidden content after the range end into view, and one that purged it has
+  nothing to move (`TestEditMergingOutOfADetachedSubtree`). Only a late or
+  crafted op names a position inside a removed element, and main diverges
+  the same way. The recorded place is runtime state, like the detached
+  mark: a replica reloaded from a snapshot, and the server, which rebuilds
+  from one, hold no detached node, so a late op naming one fails there
+  while a running replica that purged it applies it; main splits the same
+  way.
 
 **One undo, one result.** A copy built from the attached tree holds no
 detached node: a replica that collected further, a snapshot, a `DeepCopy`,
