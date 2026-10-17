@@ -239,11 +239,12 @@ func census(t *testing.T, doc *document.Document) []*crdt.TreeNode {
 	return treeCRDT(t, doc).Nodes()
 }
 
-// assertNoOrphans pins the property every position lookup depends on: every
-// node registered in NodeMapByID is reachable from the root. findFloorNode
-// answers out of NodeMapByID and toTreePos ascends from whatever it hands
-// back, so a registered node in a detached subtree is an ascent that walks
-// off the top of that subtree -- the #2008 panic.
+// assertNoOrphans pins that every node registered in NodeMapByID is
+// reachable from the root. Detached nodes live in a separate index, which
+// findFloorNode reads too, and toTreePos resolves a position inside a
+// detached subtree to where the subtree was purged from; an unreachable node
+// in NodeMapByID would be one neither knows of, the shape behind the #2008
+// panic.
 //
 // Two independent signals, because either can fire alone. The counts catch
 // any mismatch, including an orphan that is a childless leaf and therefore

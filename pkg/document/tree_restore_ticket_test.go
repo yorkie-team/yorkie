@@ -95,9 +95,10 @@ const (
 // Every assertion about a restored node has to survive the node becoming
 // unreachable -- that is the defect. tree.Nodes() walks the index tree and so
 // loses exactly the nodes worth looking at, while findFloorNode is unexported.
-// Floor is the only door in from outside the crdt package, and it is also what
-// the production position lookup uses, so reading through it measures what the
-// server would actually find.
+// Floor is the only door in from outside the crdt package. The production
+// lookup reads NodeMapByID together with the index of detached nodes; a
+// restored node this helper asserts on is attached, so NodeMapByID is where
+// the server would find it.
 func nodeByID(t *testing.T, doc *document.Document, id *crdt.TreeNodeID) *crdt.TreeNode {
 	t.Helper()
 
