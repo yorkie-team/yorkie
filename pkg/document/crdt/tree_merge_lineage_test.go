@@ -73,6 +73,14 @@ func newMergeLineageFixture(t *testing.T) *mergeLineageFixture {
 	}
 }
 
+// knowing returns the version vector of a change that has seen every ticket
+// up to and including the given one, as a restore's change carries.
+func knowing(ticket *time.Ticket) time.VersionVector {
+	vector := time.NewVersionVector()
+	vector.Set(ticket.ActorID(), ticket.Lamport())
+	return vector
+}
+
 // TestFindMergeNodeRequiresExactElement pins what a merge pointer has to name.
 //
 // MergedFrom survives on an element payload (Set/Add/ArraySet keep the lineage
@@ -164,7 +172,7 @@ func TestRestoreDissolvesMergeLineage(t *testing.T) {
 		ID:       f.p3.id,
 		NodeType: "p",
 		Length:   1,
-	}}, false, nil)
+	}}, false, knowing(f.nextTicket()))
 	require.NoError(t, err)
 	require.Empty(t, recreated, "the tombstone is revived in place, not recreated")
 	require.Len(t, untombstoned, 1)
@@ -244,7 +252,7 @@ func TestRestoreDissolvesLineageAwayFromTheTarget(t *testing.T) {
 	untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 		{ID: src.id, NodeType: "p", Length: 1},
 		{ID: purgedID, NodeType: "p", Length: 1, ParentID: root.id, LeftSiblingID: p2.id},
-	}, false, nil)
+	}, false, knowing(nextTicket()))
 	require.NoError(t, err)
 	require.Len(t, untombstoned, 1)
 	require.Len(t, recreated, 1, "the purged element comes back under its own ID")
@@ -565,7 +573,7 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 
 		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 			{ID: live.id, NodeType: "p", Length: 1},
-		}, false, nil)
+		}, false, knowing(nextTicket()))
 		require.NoError(t, err)
 		require.Empty(t, untombstoned, "a live element is neither revived")
 		require.Empty(t, recreated, "nor recreated")
@@ -595,7 +603,7 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 
 		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 			{ID: purgedID, NodeType: "p", Length: 1, ParentID: dead.id},
-		}, false, nil)
+		}, false, knowing(nextTicket()))
 		require.NoError(t, err)
 		require.Empty(t, untombstoned)
 		require.Empty(t, recreated, "a node born tombstoned is not reported as recreated")
@@ -611,4 +619,27 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 		assert.Nil(t, reborn.mergedInto,
 			"and the reload must not derive a pointer onto the element it brought back")
 	})
+}
+
+// TestRestoreWithoutClocksDissolvesNothing pins that the dissolution fails
+// closed. A change's version vector is whatever its client put on the wire,
+// and an empty one would otherwise read as having seen every merge, clearing
+// the stamps of merges concurrent with the restore on one replica only.
+func TestRestoreWithoutClocksDissolvesNothing(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	f.p3.remove(f.nextTicket())
+	f.text.MergedFrom = f.p3.id
+	mergedAt := f.nextTicket()
+	f.text.MergedAt = mergedAt
+	tree := NewTree(f.tree.Root(), f.nextTicket())
+
+	untombstoned, _, _, _, _, err := tree.Restore([]*TreeRestoreSpan{{
+		ID:       f.p3.id,
+		NodeType: "p",
+		Length:   1,
+	}}, false, time.NewVersionVector())
+	require.NoError(t, err)
+	require.Len(t, untombstoned, 1, "the element is revived all the same")
+	assert.True(t, f.text.MergedFrom.Equal(f.p3.id), "the stamps stay")
+	assert.Same(t, mergedAt, f.text.MergedAt)
 }

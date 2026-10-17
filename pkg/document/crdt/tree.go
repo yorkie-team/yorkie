@@ -1123,6 +1123,13 @@ func (t *Tree) rebuildMergeState() {
 // the arrival order. A stamp without MergedAt predates the field and is
 // treated as known.
 //
+// An empty version vector knows no merge, so the restore dissolves nothing.
+// Elsewhere an empty vector reads as one that has seen everything, the local
+// convention, but here it would make the dissolution unconditional, and a
+// change's vector is whatever its pushing client put on the wire. Every
+// change an SDK makes carries its author's vector, so only a change without
+// clocks takes this path; it leaves the stamps as they are on every replica.
+//
 // It takes IDs, not nodes, because the caller queues one per element span
 // before knowing what the local tree holds for it: the element may be live
 // already, a tombstone the span revived, a recreate, or absent entirely
@@ -1153,7 +1160,7 @@ func (t *Tree) rebuildMergeState() {
 // source ID also means only lineage naming *this* element is touched, with no
 // dependence on a pointer that may be a client's (see findMergeNode).
 func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.VersionVector) {
-	if len(sources) == 0 {
+	if len(sources) == 0 || len(versionVector) == 0 {
 		return
 	}
 
