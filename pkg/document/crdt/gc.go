@@ -117,9 +117,10 @@ type GCBarrier[C any] interface {
 // arrive ahead of a change behind it. Such a change, like a crafted one,
 // reaches a replica after its purge; the node it names is then gone or
 // detached and stays a tombstone (see TreeNode.detached), which is what
-// the release made it everywhere else. Released nodes stay registered, as
-// main leaves its detached nodes, so a position naming one resolves as it
-// does there.
+// the release made it everywhere else. Released nodes still resolve, as
+// main's detached nodes do, and a position inside the subtree resolves to
+// the place the subtree was purged from, where a replica that has not
+// purged it counts it from.
 type GCLiveRelease[C any] interface {
 	// PurgeReleasing purges child as Purge does, tombstoning every live node
 	// under it, and returns the size they had in docSize.Live.

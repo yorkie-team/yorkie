@@ -21,7 +21,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -60,8 +59,11 @@ func TestToTreePosRejectsAChainEndingInAPurgedNode(t *testing.T) {
 
 	// Resolving a position anchored at the text node now walks text -> <p> ->
 	// nil. Before the guard this dereferenced nil and took the process down.
-	_, err = tree.ToIndex(text, text)
-	require.ErrorIs(t, err, crdt.ErrNodeNotFound)
+	// The walk now resolves to the place <p> was purged from, the start of
+	// the root, where a replica that has not purged <p> resolves it too.
+	idx, err := tree.ToIndex(text, text)
+	require.NoError(t, err)
+	require.Equal(t, 0, idx)
 }
 
 // The same walk must stay untouched when the chain does reach an alive

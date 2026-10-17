@@ -110,11 +110,22 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   places nothing under a detached element, `Retombstone` skips one, and
   content placed under a detached parent, or split off a detached node, is
   detached itself and born tombstoned, booked to GC only.
-- Detached nodes stay registered and in their chains, as on main, so every
-  lookup and walk that reached them before still does; no such path can
-  charge `Live` for one. One with a GC pair of its own leaves when that
+- Detached nodes move from `NodeMapByID` to a side index,
+  `Tree.detachedByID`, so `NodeMapByID` holds exactly the nodes reachable
+  from the root. Lookups consult both and chains keep them, as on main, so
+  every lookup and walk that reached them before still does; no such path
+  can charge `Live` for one. One with a GC pair of its own leaves when that
   pair is collected; a released node has none and stays, as main's live
   detached nodes do.
+- A position inside a detached subtree resolves to the place the subtree
+  was purged from (`Tree.purgedSlot`): the purge records the parent and the
+  sibling it sat in front of. A replica that has not purged the subtree
+  resolves the same position at that place too, as the subtree is out of
+  sight there, and a live node under a removed ancestor resolves as from
+  the topmost removed one. So a range with one end in a detached subtree
+  deletes or styles the same attached content on both
+  (`TestEditWithOneEndInADetachedSubtree`,
+  `TestStyleWithAnEndInADetachedSubtree`).
 
 **One undo, one result.** A copy built from the attached tree holds no
 detached node: a replica that collected further, a snapshot, a `DeepCopy`,
@@ -137,7 +148,7 @@ detached node either, so that gap is the same there.
 | `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
 | `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only; a range inside the detached subtree visits nothing | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
 | `Edit` delete over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
-| `Style`, `RemoveStyle` with an end in one | styles and splits nothing | `TestStyleIntoADetachedSubtreeStylesNothing` |
+| `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree`, `TestStyleWithAnEndInADetachedSubtree` |
 | `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
@@ -170,11 +181,10 @@ nodes stay registered, so an edit whose position names one, such as an
 insert under a detached tombstone anchored on a released node, resolves
 and applies as on main, with its content born tombstoned and detached
 instead of charged to `Live`
-(`TestEditUnderADetachedParentNamingAReleasedNode`). A `Style` or
-`RemoveStyle` with an end in a detached subtree styles nothing, as on a
-replica that has purged it, where main counted an index inside the
-detached subtree and could style unrelated attached content
-(`TestStyleIntoADetachedSubtreeStylesNothing`). An op naming a node the
+(`TestEditUnderADetachedParentNamingAReleasedNode`). An edit or style
+with an end in a detached subtree resolves that end at the place the
+subtree was purged from, where main counted an index inside the detached
+subtree and could delete or style unrelated attached content. An op naming a node the
 purge unregistered fails, as on main. Under the race, the conformance
 suite's lagging mode turns two runs into errors main did not report: uds3
 2520, a late op naming a node the race let one replica purge first, and ud

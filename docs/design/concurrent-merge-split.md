@@ -1431,11 +1431,14 @@ result. The JS SDK has to mirror all of the following:
 7. **Purge accounting.** Purging a removed element tombstones every live
    node under it with the element's `removedAt` and takes their size off
    `Live`, in the purge itself, so a purge only ever detaches tombstones
-   and nothing is held back for a live node. Released nodes stay
-   registered, as detached nodes do. A node inserted under, or split off,
-   a detached node is detached too, an edit range with both ends in a
-   detached subtree visits nothing, and a style or style removal with
-   either end in one styles nothing and splits nothing. `Restore` resolves a span naming a
+   and nothing is held back for a live node. Released nodes still resolve
+   by ID, as detached nodes do, from an index kept apart from the one of
+   reachable nodes. A node inserted under, or split off, a detached node
+   is detached too. The purge records the parent and the sibling the
+   purged node sat in front of, and a position inside a detached subtree
+   resolves there, for an edit or a style; a position whose parent is live
+   under a removed ancestor resolves from the topmost removed ancestor.
+   `Restore` resolves a span naming a
    detached node as if the node were purged: it unregisters and unlinks
    the node, which stays a tombstone, and recreates the span if its
    parent is there; recreate never places a node under a detached

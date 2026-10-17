@@ -94,6 +94,8 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	assert.True(t, text.IsRemoved(), `"b" went out with it, as a tombstone`)
 	assertRebuildsSame(t, d1, "after a collection that met the live descendant")
 	assert.Equal(t, 0, d1.GarbageLen(), "nothing is held")
+	assert.Equal(t, len(treeCRDT(t, d1).Nodes()), treeCRDT(t, d1).NodeLen(),
+		"every registered node is reachable from the root")
 	rebuilt, err := d1.InternalDocumentForTest().DeepCopy()
 	require.NoError(t, err)
 	live, rebuiltLive := d1.DocSize().Live, rebuilt.DocSize().Live

@@ -189,10 +189,21 @@ type TreeNode struct {
 	// resolves a detached node as a replica that purged it does (see
 	// Tree.forgetDetached), and anything placed under one, or split off
 	// one, is detached too and born tombstoned, as under any removed
-	// parent. Lookups and chain walks still reach detached tombstones as
-	// they do on main, which is harmless: no op can then charge Live for a
-	// node a rebuild does not hold.
+	// parent. Detached nodes are kept in Tree.detachedByID rather than
+	// NodeMapByID, which holds only what is reachable from the root, and
+	// lookups consult both, so lookups and chain walks still reach detached
+	// tombstones as they do on main. A position inside a detached subtree
+	// resolves to the place the subtree was purged from (Tree.purgedSlot).
+	// None of it can charge Live for a node a rebuild does not hold.
 	detached bool
+
+	// purgedFrom and purgedBefore are set on the node a purge took out: the
+	// parent it left and the sibling it sat in front of, nil for the last.
+	// Runtime only, like detached. They are where a position inside the
+	// subtree resolves on this replica (see Tree.purgedSlot), as a replica
+	// that has not purged the subtree resolves it at the subtree's place.
+	purgedFrom   *TreeNode
+	purgedBefore *TreeNode
 }
 
 // Children returns the children of this node.
@@ -1038,14 +1049,23 @@ type Tree struct {
 	// tree reaches is missing. It is a candidate set, re-checked when read:
 	// an entry for a node that lost its stamp or left the tree is dropped then.
 	mergeStamps map[string]map[*TreeNode]struct{}
+
+	// detachedByID holds the nodes of subtrees a purge took out, by ID, so
+	// NodeMapByID holds exactly the nodes reachable from the root. Lookups
+	// consult both (see findFloorNode), so a position naming a detached node
+	// resolves as it did while main kept such nodes in NodeMapByID. A
+	// detached node leaves it when its own GC pair purges it, or when a
+	// restore names it (see forgetDetached).
+	detachedByID *llrb.Tree[*TreeNodeID, *TreeNode]
 }
 
 // NewTree creates a new instance of Tree.
 func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	tree := &Tree{
-		IndexTree:   index.NewTree[*TreeNode](root.Index),
-		NodeMapByID: llrb.NewTree[*TreeNodeID, *TreeNode](),
-		createdAt:   createdAt,
+		IndexTree:    index.NewTree[*TreeNode](root.Index),
+		NodeMapByID:  llrb.NewTree[*TreeNodeID, *TreeNode](),
+		detachedByID: llrb.NewTree[*TreeNodeID, *TreeNode](),
+		createdAt:    createdAt,
 	}
 
 	// Registering every node is the cost of loading a document, so it runs
@@ -1272,11 +1292,11 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 
 // purgeReleasing takes node, with its subtree, out of the tree, reporting
 // how many nodes it walked and the Live size of the live nodes it released.
-// It unregisters and unlinks only the purged node, as on main. Its subtree
-// is marked detached, its merge stamps leave the index, and every live node
-// in it is tombstoned with node's removedAt (see GCLiveRelease); those stay
-// registered, as main leaves its detached nodes, so a position naming one
-// resolves as it does there. The subtree is walked once in all: a later
+// It unregisters and unlinks the purged node, as on main, and records where
+// it was taken from. Its subtree is marked detached and moved to
+// detachedByID, its merge stamps leave the index, and every live node in it
+// is tombstoned with node's removedAt (see GCLiveRelease); those still
+// resolve, as main's detached nodes do. The subtree is walked once in all: a later
 // purge of a node inside it, through the GC pair that node had booked,
 // finds the mark and walks nothing, so one collection pass costs O(nodes)
 // however the subtree's pairs are ordered. Nothing changes unless the node
@@ -1292,9 +1312,15 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 	if node.Index == nil || node.Index.Parent == nil {
 		return 0, released, nil
 	}
-	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
+	from := node.Index.Parent
+	var before *TreeNode
+	if next := from.NextSiblingOf(node.Index); next != nil {
+		before = next.Value
+	}
+	if err := from.RemoveChild(node.Index); err != nil {
 		return 0, released, err
 	}
+	node.purgedFrom, node.purgedBefore = from.Value, before
 
 	visits := 0
 	if !node.detached {
@@ -1307,6 +1333,9 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 			n.Value.detached = true
 			if n.Value.MergedFrom != nil {
 				t.forgetMergeStamp(n.Value)
+			}
+			if n.Value != node {
+				t.moveToDetached(n.Value)
 			}
 		})
 	}
@@ -1348,6 +1377,39 @@ func (t *Tree) isAttached(node *TreeNode) bool {
 	return !node.detached
 }
 
+// purgedSlot returns where the detached subtree holding node was purged
+// from in the attached tree: the attached parent and the child it sat in
+// front of, nil for the end. A sibling purged since is passed over to the
+// one it sat in front of in turn, and a parent purged since resolves to its
+// own place, so the slot is always in the attached tree. ok is false only
+// for a detached node with no purge recorded above it.
+func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
+	top := node
+	for top.Index.Parent != nil {
+		top = top.Index.Parent.Value
+	}
+	for top.detached {
+		if top.purgedFrom == nil {
+			return nil, nil, false
+		}
+		parent, before := top.purgedFrom, top.purgedBefore
+		for before != nil && before.detached && before.purgedFrom == parent {
+			before = before.purgedBefore
+		}
+		if !parent.detached {
+			if before != nil && before.detached {
+				before = nil
+			}
+			return parent, before, true
+		}
+		top = parent
+		for top.Index.Parent != nil {
+			top = top.Index.Parent.Value
+		}
+	}
+	return nil, nil, false
+}
+
 // unregisterNode drops node's own entry from NodeMapByID, if the entry
 // registered under its ID is this node. NodeMapByID is keyed by ID, so an
 // unconditional Remove would also unregister a different node that shares
@@ -1355,6 +1417,18 @@ func (t *Tree) isAttached(node *TreeNode) bool {
 func (t *Tree) unregisterNode(node *TreeNode) {
 	if key, registered := t.NodeMapByID.Floor(node.id); registered == node && key.Equal(node.id) {
 		t.NodeMapByID.Remove(node.id)
+	}
+	if key, registered := t.detachedByID.Floor(node.id); registered == node && key.Equal(node.id) {
+		t.detachedByID.Remove(node.id)
+	}
+}
+
+// moveToDetached moves node's own entry from NodeMapByID to detachedByID,
+// for a node a purge has just detached.
+func (t *Tree) moveToDetached(node *TreeNode) {
+	if key, registered := t.NodeMapByID.Floor(node.id); registered == node && key.Equal(node.id) {
+		t.NodeMapByID.Remove(node.id)
+		t.detachedByID.Put(node.id, node)
 	}
 }
 
@@ -4722,13 +4796,6 @@ func (t *Tree) StyleByIndex(
 	return pairs, size, err
 }
 
-// namesDetached reports whether pos resolves to a parent or left sibling
-// in a subtree a purge took out.
-func (t *Tree) namesDetached(pos *TreePos) bool {
-	parent, left := t.ToTreeNodes(pos)
-	return (parent != nil && parent.detached) || (left != nil && left.detached)
-}
-
 // styleTargets resolves the nodes a Style or RemoveStyle applies to, in
 // document order and without repeats, along with the size the boundary text
 // splits added to Live.
@@ -4754,15 +4821,6 @@ func (t *Tree) styleTargets(
 	versionVector time.VersionVector,
 ) ([]*TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
-
-	// A range with an end in a subtree a purge took out styles nothing, as
-	// on a replica that purged the subtree's nodes too: the end has no place
-	// in the attached tree to count an index from (see TreeNode.detached).
-	// Checked before anything is split, so a detached piece is not cut
-	// either.
-	if t.namesDetached(from) || t.namesDetached(to) {
-		return nil, diff, nil
-	}
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {
@@ -5474,6 +5532,43 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 		return nil, nil
 	}
 
+	// A parent in a subtree a purge took out has no index in the attached
+	// tree. The position resolves to the place the subtree was purged from,
+	// where a replica that has not purged it counts the subtree from: the
+	// tokens a range ending inside it covers on that replica are the
+	// attached ones before that place, and the subtree's own, which are
+	// tombstones (see TreeNode.detached).
+	if parentNode.detached {
+		slotParent, before, ok := t.purgedSlot(parentNode)
+		if !ok {
+			return nil, fmt.Errorf("least alive ancestor of %s: %w", parentNode.ID().toIDString(), ErrNodeNotFound)
+		}
+		if include || !slotParent.IsRemoved() {
+			offset := 0
+			for _, child := range slotParent.Index.Children(true) {
+				if before != nil && child.Value == before {
+					break
+				}
+				if include || !child.Value.IsRemoved() {
+					offset++
+				}
+			}
+			return &index.TreePos[*TreeNode]{Node: slotParent.Index, Offset: offset}, nil
+		}
+		parentNode = slotParent
+	}
+
+	if !include {
+		// A live parent under a removed ancestor is out of sight too, as on
+		// a replica that collected the ancestor and released it: resolve
+		// from the topmost removed ancestor, as for a removed parent.
+		for n := parentNode.Index.Parent; n != nil; n = n.Parent {
+			if n.Value.IsRemoved() {
+				parentNode = n.Value
+			}
+		}
+	}
+
 	if !include && parentNode.IsRemoved() {
 		// If parentNode is removed, treePos is the position of its least alive ancestor.
 		var childNode *TreeNode
@@ -5601,8 +5696,8 @@ func (t *Tree) dropDuplicateContents(contents []*TreeNode, editedAt *time.Ticket
 				return
 			}
 
-			if key, existing := t.NodeMapByID.Floor(node.Value.id); existing != nil &&
-				key.Equal(node.Value.id) {
+			if existing := t.findFloorNode(node.Value.id); existing != nil &&
+				existing.id.Equal(node.Value.id) {
 				reused = true
 			}
 		})
@@ -5635,6 +5730,14 @@ func (t *Tree) dropDuplicateContents(contents []*TreeNode, editedAt *time.Ticket
 // intended trade for a duplicate: the alternative is unregistering a node that
 // positions still resolve through.
 func (t *Tree) putNode(node *TreeNode) {
+	// A node placed in a detached subtree is not reachable from the root,
+	// so it is registered with the other detached nodes and carries no
+	// lineage anything reads.
+	if node.detached {
+		t.detachedByID.Put(node.id, node)
+		return
+	}
+
 	// Indexed whether or not it gets the ID: a refused node stays in the
 	// index tree, so the lineage it carries is still read (rebuildMergeState
 	// walks the tree) and has to be dissolvable.
@@ -5663,7 +5766,7 @@ func (t *Tree) forgetMergeStamp(node *TreeNode) {
 
 // noteMergeStamp adds node to mergeStamps if it carries a MergedFrom.
 func (t *Tree) noteMergeStamp(node *TreeNode) {
-	if node.MergedFrom == nil {
+	if node.MergedFrom == nil || node.detached {
 		return
 	}
 	if t.mergeStamps == nil {
@@ -5714,6 +5817,11 @@ func (t *Tree) findMergeNode(id *TreeNodeID) *TreeNode {
 // findFloorNode returns node from given id.
 func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
 	key, node := t.NodeMapByID.Floor(id)
+	if t.detachedByID != nil {
+		if dkey, dnode := t.detachedByID.Floor(id); dnode != nil && (node == nil || dkey.Compare(key) > 0) {
+			key, node = dkey, dnode
+		}
+	}
 
 	if node == nil || key.CreatedAt.Compare(id.CreatedAt) != 0 {
 		return nil
