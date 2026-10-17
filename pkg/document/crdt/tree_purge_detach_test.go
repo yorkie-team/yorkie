@@ -1113,3 +1113,27 @@ func TestSplitOutOfSightKeepsTheLedger(t *testing.T) {
 		assert.Equal(t, rebuilt.GarbageLen(), doc.GarbageLen(), "purged %v", purge)
 	}
 }
+
+// TestToIndexUnderARemovedAncestorKeepsItsIndex pins that only the range an
+// operation acts on resolves a live parent under a removed ancestor from the
+// topmost removed one. ToIndex, which reports positions to users, still
+// counts the parent where it sits, as it always has.
+func TestToIndexUnderARemovedAncestorKeepsItsIndex(t *testing.T) {
+	tree, _, n, _ := halfDetachedFixture(t, false)
+	p, div := n["p"], n["div"]
+
+	reported, err := tree.ToIndex(p, p)
+	require.NoError(t, err)
+	where, err := tree.IndexTree.IndexOf(&index.TreePos[*TreeNode]{Node: p.Index, Offset: 0}, false)
+	require.NoError(t, err)
+	assert.Equal(t, where, reported, "ToIndex counts p where it sits")
+
+	ranged, err := tree.rangeIndex(p, p, false)
+	require.NoError(t, err)
+	offset, err := tree.Root().Index.FindOffset(div.Index, false)
+	require.NoError(t, err)
+	at, err := tree.IndexTree.IndexOf(&index.TreePos[*TreeNode]{Node: tree.Root().Index, Offset: offset}, false)
+	require.NoError(t, err)
+	assert.Equal(t, at, ranged, "a range end counts from div's place")
+	assert.NotEqual(t, reported, ranged, "the two resolutions differ here")
+}

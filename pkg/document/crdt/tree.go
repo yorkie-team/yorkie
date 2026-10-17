@@ -4836,11 +4836,11 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 ) error {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
 
-	fromIdx, err := t.ToIndex(fromParent, fromLeft, include)
+	fromIdx, err := t.rangeIndex(fromParent, fromLeft, include)
 	if err != nil {
 		return err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft, include)
+	toIdx, err := t.rangeIndex(toParent, toLeft, include)
 	if err != nil {
 		return err
 	}
@@ -5608,7 +5608,17 @@ func (t *Tree) afterPurgedText(floor *TreeNode, id *TreeNodeID) bool {
 // If includeRemoved is true, it includes removed nodes in the calculation.
 func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool) (*index.TreePos[*TreeNode], error) {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
+	return t.toTreePosIn(parentNode, leftNode, include, false)
+}
 
+// toTreePosIn is toTreePos. With outOfSight set, a live parent under a
+// removed ancestor resolves from the topmost removed one, as a replica that
+// has released it resolves it; only the range an operation acts on needs
+// that (see traverseInPosRange), so positions reported to users keep their
+// index.
+func (t *Tree) toTreePosIn(
+	parentNode, leftNode *TreeNode, include, outOfSight bool,
+) (*index.TreePos[*TreeNode], error) {
 	if parentNode == nil || leftNode == nil {
 		return nil, nil
 	}
@@ -5639,7 +5649,7 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 		parentNode = slotParent
 	}
 
-	if !include {
+	if !include && outOfSight {
 		// A live parent under a removed ancestor is out of sight too, as on
 		// a replica that collected the ancestor and released it: resolve
 		// from the topmost removed ancestor, as for a removed parent.
@@ -5707,7 +5717,21 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 	}, nil
 }
 
-// ToIndex converts the given CRDTTreePos to the index of the tree.
+// rangeIndex is ToIndex for an end of the range an operation acts on: a
+// position whose live parent sits under a removed ancestor counts from the
+// topmost removed one, so the range reaches the same attached content as on
+// a replica that has released that parent (see toTreePosIn).
+func (t *Tree) rangeIndex(parentNode, leftNode *TreeNode, include bool) (int, error) {
+	treePos, err := t.toTreePosIn(parentNode, leftNode, include, true)
+	if err != nil {
+		return 0, err
+	}
+	if treePos == nil {
+		return -1, nil
+	}
+	return t.IndexTree.IndexOf(treePos, include)
+}
+
 // ToIndex converts the given CRDTTreePos to the index of the tree.
 // If includeRemoved is true, it includes removed nodes in the calculation.
 func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode, includeRemoved ...bool) (int, error) {
