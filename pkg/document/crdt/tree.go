@@ -1618,13 +1618,19 @@ func (t *Tree) Retombstone(
 	return pairs, diff, edits, appendUncoveredSpans(applied, cascaded), nil
 }
 
-// appendUncoveredSpans appends to spans every cascaded span that names a node
-// spans does not already describe: an element by its ID, a text piece by a
-// text span of the same insertion whose range holds it. The input spans of a
+// appendUncoveredSpans appends to spans every cascaded span, or the part of
+// it, that names what spans does not already describe: an element by its ID,
+// a text range by the text spans of the same insertion. The input spans of a
 // delete routinely include a split product together with the element it was
 // cut off, and the §4.1 cascade from the element reaches the product before
 // its own span does; without this the reverse operation would carry the
 // product twice, and one more copy on every undo/redo that toggles it.
+//
+// A cascaded text span covers one current piece, and an input span the
+// pieces of its range when it was recorded. Pieces only ever split, so the
+// piece usually lies inside one input span, but a recreate after GC can
+// bring a range back as one piece across a boundary an input span was
+// recorded at; the part of it the input spans do not cover is kept.
 func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan {
 	if len(cascaded) == 0 {
 		return spans
@@ -1642,19 +1648,53 @@ func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan
 	}
 
 	for _, span := range cascaded {
-		if span.IsText {
-			start, end := span.ID.Offset, span.ID.Offset+span.Length
-			if slices.ContainsFunc(texts[span.ID.CreatedAt.Key()], func(s *TreeRestoreSpan) bool {
-				return s.ID.Offset <= start && end <= s.ID.Offset+s.Length
-			}) {
-				continue
+		if !span.IsText {
+			if _, ok := elements[span.ID.toIDString()]; !ok {
+				spans = append(spans, span)
 			}
-		} else if _, ok := elements[span.ID.toIDString()]; ok {
 			continue
 		}
-		spans = append(spans, span)
+		spans = append(spans, uncoveredTextSpans(span, texts[span.ID.CreatedAt.Key()])...)
 	}
 	return spans
+}
+
+// uncoveredTextSpans returns the parts of the text span that none of covers
+// holds, each as a span of its own with the span's anchors.
+func uncoveredTextSpans(span *TreeRestoreSpan, covers []*TreeRestoreSpan) []*TreeRestoreSpan {
+	start, end := span.ID.Offset, span.ID.Offset+span.Length
+	gaps := [][2]int{{start, end}}
+	for _, cover := range covers {
+		from, to := cover.ID.Offset, cover.ID.Offset+cover.Length
+		var next [][2]int
+		for _, gap := range gaps {
+			if to <= gap[0] || gap[1] <= from {
+				next = append(next, gap)
+				continue
+			}
+			if gap[0] < from {
+				next = append(next, [2]int{gap[0], from})
+			}
+			if to < gap[1] {
+				next = append(next, [2]int{to, gap[1]})
+			}
+		}
+		gaps = next
+	}
+
+	if len(gaps) == 1 && gaps[0] == [2]int{start, end} {
+		return []*TreeRestoreSpan{span}
+	}
+	encoded := utf16.Encode([]rune(span.Value))
+	parts := make([]*TreeRestoreSpan, 0, len(gaps))
+	for _, gap := range gaps {
+		part := *span
+		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0]}
+		part.Length = gap[1] - gap[0]
+		part.Value = string(utf16.Decode(encoded[gap[0]-start : gap[1]-start]))
+		parts = append(parts, &part)
+	}
+	return parts
 }
 
 // retombstoneUnknownSplitSiblings applies the §4.1 cascade to an element
