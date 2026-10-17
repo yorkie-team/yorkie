@@ -1355,6 +1355,57 @@ set. Until it does, the divergence is the one described above.
   interactions widen `MergedFrom`'s original "physically moved"
   meaning.
 
+## Rollout and Cross-implementation
+
+The rules below are replicated: every SDK has to apply them the same way,
+and the Go server applies them too, since it rebuilds documents by
+replaying stored changes through this code (`server/packs/snapshot.go`,
+`server/packs/pushpull.go`) and compaction replaces a document's history
+with such a rebuild (`server/packs/compaction.go`). A server and SDK built
+with them must therefore ship together with the matching yorkie-js-sdk
+change. Until both run them, a JS client and the Go server can derive
+different trees from the same changes, and a compaction keeps the Go
+result. The JS SDK has to mirror all of the following:
+
+1. **§1.3 step 04.** At an insert position (an Edit's `from`, and its `to`
+   when the range is empty), the walk passes over a split product of the
+   left element instead of taking it as the anchor, and goes on to the
+   concurrent inserts after it. A non-empty Edit range's end
+   (`BoundaryEditEnd`) and a style boundary (`BoundaryRange`) keep the
+   plain walk.
+2. **Step 03 past purged text.** A left-sibling offset past the end of the
+   floor text piece skips the split only when the insertion's next
+   surviving piece starts at or past that offset; any other such offset is
+   out of range, as before.
+3. **§6.4 dissolution.** `unremove` clears `mergedInto`. `Restore` takes
+   the change's version vector and, after every span applied, clears the
+   `MergedFrom`/`MergedAt` stamps naming each element span's ID whose
+   `MergedAt` that vector covers (a stamp without `MergedAt` counts as
+   covered); an empty vector clears nothing, and an error clears nothing.
+   `mergeNodes` and `rebuildMergeState` derive no pointer onto a live
+   source.
+4. **Retombstone spans.** The spans a retombstone reports, which become the
+   reverse operation's, carry anchors re-read after the removal for every
+   span still in the tree, live or not: parent, left and right together
+   under the first piece's parent, a removed piece straddling a boundary
+   being its own neighbour on that side (left: its last character before
+   the span; right: the piece), and a right anchor under another parent
+   dropped. The input spans are never modified.
+5. **Retombstone cascade.** Retombstoning an element applies the §4.1
+   cascade to its unknown split products, with the subtree, and reports a
+   span for each node it removed, parent before child, leaving out any
+   node an input span already describes.
+6. **Recreate.** A recreated text piece is spliced back into its
+   insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
+   predecessor and what that points at, or, with none, to an adjacent
+   successor whose own predecessor is missing or unregistered. Rung (a)
+   follows a same-insertion successor into the element it now sits under
+   when every split between that element and the span's parent is unknown
+   to the restoring change, and a born-tombstoned recreate takes the
+   removal of the parent it actually lands under.
+7. **Purge accounting.** Purging an element takes its live descendants'
+   size out of `docSize.Live` and unregisters them (yorkie#2244).
+
 ## Key Design Decisions
 
 | Decision | Reason |

@@ -13,8 +13,13 @@ rules also apply to v1 scripts but changed none of them: the undo stacks
 are cleared after the init change, and a `split` of level 2 or more has its
 own step line.
 yorkie-js-sdk keeps a copy of `tree/` with a `SOURCE` file holding the yorkie
-commit it came from. Where this spec is silent, the behaviour of the scratch
-fuzz `tree_1436_fuzz2` (Go and TS twins) is the reference.
+commit it came from. Records are those of the rules in
+`docs/design/concurrent-merge-split.md`; a yorkie change that moves them
+under a replicated rule ships together with the matching yorkie-js-sdk
+change (see that document's Rollout and Cross-implementation section), and
+the JS runner reports the mismatch until then. Where this spec is silent,
+the behaviour of the scratch fuzz `tree_1436_fuzz2` (Go and TS twins) is the
+reference.
 
 ```sh
 go test ./test/conformance/... -count=1                         # corpus + parity
