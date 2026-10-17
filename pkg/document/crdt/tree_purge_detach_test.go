@@ -56,8 +56,7 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 // collection vector covers their removal, the text is tombstoned and goes
 // with them: a purge that left it live would detach bytes Live still holds
 // while a rebuild no longer counts them, and holding div for it instead
-// would keep div for as long as a node no one can see stays live. The text
-// has no GC pair to purge it later, so it leaves NodeMapByID now.
+// would keep div for as long as a node no one can see stays live.
 func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	tree, div, p, text, removedAt := detachFixture(t)
 	root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
@@ -77,7 +76,7 @@ func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	assert.True(t, text.IsRemoved())
 	assert.True(t, text.detached)
 	assert.Same(t, removedAt, text.RemovedAt(), "tombstoned with the ancestor's removal")
-	assert.Equal(t, 1, tree.NodeMapByID.Len(), "the text leaves the index with them: it has no pair of its own")
+	assert.Same(t, text, tree.findFloorNode(text.id), "the text stays registered, as main leaves a detached node")
 	assert.Equal(t, 0, root.GarbageLen())
 	live, gc := root.DocSize().Live, root.DocSize().GC
 	assert.Equal(t, base, live, "the text's bytes left Live with it")
@@ -142,29 +141,70 @@ func TestCollectWalksADeletedSubtreeOnce(t *testing.T) {
 	assert.Equal(t, "<r></r>", tree.ToXML())
 }
 
-// TestRestoreLeavesADetachedNodeATombstone pins Restore's two detached
-// guards. div is purged while p and the text under it are still tombstones
-// whose own removals are not yet collectable, so they stay registered,
-// detached. A restore naming either, by element span or by text span, must
-// not revive it: a detached node is off the ledger and out of the tree, and
-// reviving it would charge Live for bytes no rebuild holds.
+// TestRestoreLeavesADetachedNodeATombstone pins how Restore resolves a
+// detached node. div is purged while p and the text under it are still
+// tombstones whose own removals are not yet collectable, so they stay
+// registered, detached. A restore naming them resolves them as a replica
+// that has purged them does, or a copy of the attached tree: the detached
+// nodes themselves stay tombstones, and each span is recreated if its
+// parent is there. The restoring change does not know div's removal, so
+// only that resolution, not knownRemovalAbove, keeps p and the text from
+// being revived in place.
 func TestRestoreLeavesADetachedNodeATombstone(t *testing.T) {
-	tree, div, p, text, removedAt := detachFixture(t)
-	text.remove(removedAt)
-	_, err := tree.purge(div)
+	other, err := time.ActorIDFromHex("0000000000000000000000ee")
 	require.NoError(t, err)
-	require.True(t, p.detached)
-	require.Same(t, p, tree.findFloorNode(p.id), "p is still registered")
+	unaware := time.NewVersionVector()
+	unaware.Set(other, 1)
 
-	untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
-		{ID: p.id, NodeType: "p", Length: 1, ParentID: div.id},
-		{ID: text.id, NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.id},
-	}, false, nil)
-	require.NoError(t, err)
-	assert.Empty(t, untombstoned)
-	assert.Empty(t, recreated)
-	assert.True(t, p.IsRemoved())
-	assert.True(t, text.IsRemoved())
+	setup := func(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode) {
+		tree, div, p, text, removedAt := detachFixture(t)
+		text.remove(removedAt)
+		_, err := tree.purge(div)
+		require.NoError(t, err)
+		require.True(t, p.detached)
+		require.Same(t, p, tree.findFloorNode(p.id), "p is still registered")
+		return tree, div, p, text
+	}
+	spanOf := func(node, parent *TreeNode) *TreeRestoreSpan {
+		if node.IsText() {
+			return &TreeRestoreSpan{ID: node.id, NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: parent.id}
+		}
+		return &TreeRestoreSpan{ID: node.id, NodeType: node.Type(), Length: 1, ParentID: parent.id}
+	}
+
+	t.Run("under a purged parent nothing comes back", func(t *testing.T) {
+		tree, div, p, text := setup(t)
+		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
+			spanOf(p, div), spanOf(text, p),
+		}, false, unaware)
+		require.NoError(t, err)
+		assert.Empty(t, untombstoned)
+		assert.Empty(t, recreated)
+		assert.True(t, p.IsRemoved())
+		assert.True(t, text.IsRemoved())
+		assert.Equal(t, "<r></r>", tree.ToXML())
+	})
+
+	t.Run("with the purged parent restored first, all three are recreated", func(t *testing.T) {
+		tree, div, p, text := setup(t)
+		spans := []*TreeRestoreSpan{spanOf(div, tree.Root()), spanOf(p, div), spanOf(text, p)}
+		copied, err := tree.DeepCopy()
+		require.NoError(t, err)
+
+		untombstoned, recreated, _, _, _, err := tree.Restore(spans, false, unaware)
+		require.NoError(t, err)
+		assert.Empty(t, untombstoned, "nothing detached is revived in place")
+		assert.Len(t, recreated, 3)
+		assert.True(t, p.IsRemoved())
+		assert.True(t, text.IsRemoved())
+		assert.Equal(t, "<r><div><p>ab</p></div></r>", tree.ToXML())
+
+		// A copy of the attached tree, which holds no detached node, ends
+		// the same.
+		_, _, _, _, _, err = copied.(*Tree).Restore(spans, false, unaware)
+		require.NoError(t, err)
+		assert.Equal(t, tree.ToXML(), copied.(*Tree).ToXML())
+	})
 }
 
 // TestLiveReleaseWaitsForTheBarrier pins that the release runs only once
@@ -360,4 +400,46 @@ func TestRecreateGoesNowhereDetachedThroughASplitHome(t *testing.T) {
 	assert.Same(t, p, recreated[0].Index.Parent.Value, "recreated under p, not the detached p'")
 	assert.Equal(t, "<r><div><p>a</p></div></r>", tree.ToXML())
 	assert.Empty(t, tree.drainPendingGCPairs(), "and nothing is booked to GC")
+}
+
+// TestEditUnderADetachedParentNamingAReleasedNode pins the shape a late
+// change of the yorkie#2110 race can take: an insert whose parent is a
+// detached tombstone, p, and whose left anchor is a node a collection
+// released, the text. Released nodes stay registered, as main leaves its
+// detached nodes, so the position resolves and the insert applies as on
+// main. The content is born tombstoned under the removed p and booked to GC
+// only, so Live is untouched.
+func TestEditUnderADetachedParentNamingAReleasedNode(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
+	root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	root.docSize.Live.Add(text.DataSize())
+	size := div.DataSize()
+	root.RegisterGCPair(GCPair{Parent: tree, Child: div, GCOnlySize: &size})
+	vector := time.NewVersionVector()
+	vector.Set(removedAt.ActorID(), removedAt.Lamport())
+	_, err := root.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, p.detached)
+	require.True(t, text.IsRemoved(), "released")
+	live := root.DocSize().Live
+
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	lamport := int64(100)
+	ticket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, peer)
+	}
+	at := ticket()
+	pos := &TreePos{ParentID: p.id, LeftSiblingID: NewTreeNodeID(text.id.CreatedAt, text.Length())}
+	content := NewTreeNode(NewTreeNodeID(at, 0), "text", nil, "X")
+	pairs, diff, _, err := tree.Edit(pos, pos, []*TreeNode{content}, 0, at, ticket, nil, false)
+	require.NoError(t, err, "the position resolves and the insert applies")
+	assert.True(t, content.IsRemoved(), "born tombstoned under the removed p")
+	assert.True(t, content.detached, "and detached with it, so no restore revives it")
+	assert.Zero(t, diff.Total(), "nothing charged to Live")
+	require.Len(t, pairs, 1)
+	assert.NotNil(t, pairs[0].GCOnlySize, "booked to GC only")
+	assert.Equal(t, live, root.DocSize().Live)
+	assert.Equal(t, "<r></r>", tree.ToXML())
 }

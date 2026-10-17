@@ -182,14 +182,16 @@ type TreeNode struct {
 	// tree (see Tree.purge). Runtime only: a snapshot or DeepCopy
 	// holds the attached tree alone.
 	//
-	// The invariant: a detached node is a tombstone, and stays one. GC
-	// tombstones every live node under a node before purging it
-	// (Tree.ReleaseLive), so everything a purge detaches was removed and off
-	// docSize.Live, and the one op that could make a node live again,
-	// Restore, leaves a detached node alone; anything placed under one is born tombstoned, as
-	// under any removed parent. Lookups and chain walks still reach detached
-	// tombstones as they do on main, which is harmless: no op can then charge
-	// Live for a node a rebuild does not hold.
+	// The invariant: a detached node is a tombstone, and stays one. A purge
+	// tombstones every live node in the subtree it takes out
+	// (Tree.purgeReleasing), so everything it detaches was removed and off
+	// docSize.Live. The one op that could make a node live again, Restore,
+	// resolves a detached node as a replica that purged it does (see
+	// Tree.forgetDetached), and anything placed under one, or split off
+	// one, is detached too and born tombstoned, as under any removed
+	// parent. Lookups and chain walks still reach detached tombstones as
+	// they do on main, which is harmless: no op can then charge Live for a
+	// node a rebuild does not hold.
 	detached bool
 }
 
@@ -337,6 +339,9 @@ func (n *TreeNode) Split(
 	}
 
 	if split != nil {
+		// A piece split off a detached node sits in the same detached
+		// subtree (see TreeNode.detached).
+		split.detached = n.detached
 		split.InsPrevID = n.id
 		if n.InsNextID != nil {
 			insNext := tree.findFloorNode(n.InsNextID)
@@ -1248,61 +1253,57 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // Purge implements GCParent: it detaches child, with its subtree, from the
 // tree. See TreeNode.detached for what a detached node is.
 func (t *Tree) Purge(child GCChild) error {
-	_, err := t.purge(child.(*TreeNode))
+	_, _, err := t.purgeReleasing(child.(*TreeNode))
 	return err
 }
 
-// ReleaseLive implements GCLiveRelease[GCChild]: it tombstones every live
-// node under child with child's removedAt and returns the size they had in
-// Live. A released node has no GC pair to purge it later, so it leaves
-// NodeMapByID and its insertion chain here, as its own purge would have
-// taken it out: a later restore naming it then recreates it, as it does a
-// tombstone purged with the ancestor, instead of finding a detached node it
-// must leave alone. A detached child has nothing live under it and is not
-// walked, so a collection pass walks each node at most once here, as in
-// purge.
-func (t *Tree) ReleaseLive(child GCChild) resource.DataSize {
-	var size resource.DataSize
-	node, ok := child.(*TreeNode)
-	if !ok || node.detached || node.Index == nil || node.removedAt == nil {
-		return size
-	}
-	var released []*TreeNode
-	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-		if n.Value.IsRemoved() {
-			return
-		}
-		size.Add(n.Value.DataSize())
-		n.Value.remove(node.removedAt)
-		released = append(released, n.Value)
-	})
-	for _, n := range released {
-		t.unregisterNode(n)
-		t.unlinkInsChain(n)
-	}
-	return size
+// PurgeReleasing implements GCLiveRelease[GCChild]: it is Purge, and it
+// reports the size the live nodes it released had in Live.
+func (t *Tree) PurgeReleasing(child GCChild) (resource.DataSize, error) {
+	_, released, err := t.purgeReleasing(child.(*TreeNode))
+	return released, err
 }
 
-// purge is Purge, also reporting how many nodes it walked. It unregisters
-// and unlinks only the purged node, as on main; its subtree, tombstones
-// only, is marked detached and its merge stamps leave the index. The subtree
-// is walked once in all: a later purge of a node inside it, through the GC
-// pair that node had booked, finds the mark and walks nothing, so one
-// collection pass costs O(nodes) however the subtree's pairs are ordered.
+// purge is Purge, also reporting how many nodes it walked.
 func (t *Tree) purge(node *TreeNode) (int, error) {
+	visits, _, err := t.purgeReleasing(node)
+	return visits, err
+}
+
+// purgeReleasing takes node, with its subtree, out of the tree, reporting
+// how many nodes it walked and the Live size of the live nodes it released.
+// It unregisters and unlinks only the purged node, as on main. Its subtree
+// is marked detached, its merge stamps leave the index, and every live node
+// in it is tombstoned with node's removedAt (see GCLiveRelease); those stay
+// registered, as main leaves its detached nodes, so a position naming one
+// resolves as it does there. The subtree is walked once in all: a later
+// purge of a node inside it, through the GC pair that node had booked,
+// finds the mark and walks nothing, so one collection pass costs O(nodes)
+// however the subtree's pairs are ordered. Nothing changes unless the node
+// actually leaves its parent.
+func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
+	var released resource.DataSize
+
 	// A parentless node cannot be detached: purging is removal from a parent's
 	// child list. GCPairs never books one, but a pair outlives the tree state
 	// it was booked against (it sits in gcNodePairMap until the minimum synced
 	// version passes it), so a node detached in between reaches here. Dropping
 	// it keeps GarbageCollect advancing instead of panicking on the deref.
 	if node.Index == nil || node.Index.Parent == nil {
-		return 0, nil
+		return 0, released, nil
+	}
+	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
+		return 0, released, err
 	}
 
 	visits := 0
 	if !node.detached {
 		index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
 			visits++
+			if !n.Value.IsRemoved() && node.removedAt != nil {
+				released.Add(n.Value.DataSize())
+				n.Value.remove(node.removedAt)
+			}
 			n.Value.detached = true
 			if n.Value.MergedFrom != nil {
 				t.forgetMergeStamp(n.Value)
@@ -1310,16 +1311,13 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 		})
 	}
 
-	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
-		return visits, err
-	}
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
 	// unregister a different node that shares this one's ID — see putNode.
 	// Only drop the entry this node actually holds.
 	t.unregisterNode(node)
 	t.unlinkInsChain(node)
 
-	return visits, nil
+	return visits, released, nil
 }
 
 // unlinkInsChain joins node's InsPrevID/InsNextID neighbours to each other
@@ -1444,11 +1442,13 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 			mergeSources = append(mergeSources, span.ID)
 
 			node := t.findFloorNode(span.ID)
+			if node != nil && node.id.Equal(span.ID) && node.detached {
+				// Resolved as a replica that purged it does (see
+				// forgetDetached): recreated if its parent is there.
+				t.forgetDetached(node)
+				node = nil
+			}
 			if node != nil && node.id.Equal(span.ID) {
-				// A detached node stays a tombstone (see TreeNode.detached).
-				if node.detached {
-					continue
-				}
 				if node.IsRemoved() && !underKnownRemoval(node) {
 					node.unremove()
 					untombstoned = append(untombstoned, node)
@@ -1477,6 +1477,14 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 		start := span.ID.Offset
 		end := start + span.Length
 		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		if slices.ContainsFunc(pieces, func(piece *TreeNode) bool { return piece.detached }) {
+			for _, piece := range pieces {
+				if piece.detached {
+					t.forgetDetached(piece)
+				}
+			}
+			pieces = t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		}
 		cursor := start
 		pieceIdx := 0
 		for cursor < end {
@@ -1484,15 +1492,6 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				piece := pieces[pieceIdx]
 				pieceEnd := piece.id.Offset + piece.Length()
 				overlapEnd := min(pieceEnd, end)
-				// Held by a detached piece, which stays a tombstone (see
-				// TreeNode.detached): neither revived nor recreated.
-				if piece.detached {
-					cursor = overlapEnd
-					if overlapEnd >= pieceEnd {
-						pieceIdx++
-					}
-					continue
-				}
 				target, iErr := t.isolateTextRange(piece, cursor, overlapEnd, &diff)
 				if iErr != nil {
 					return nil, nil, nil, diff, nil, iErr
@@ -1529,6 +1528,22 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	return untombstoned, recreated, nil, diff, edits, nil
 }
 
+// forgetDetached takes a detached node out of NodeMapByID and its insertion
+// chain, as its own GC pair's purge will, for a Restore that names it.
+//
+// A detached node is a tombstone in a subtree a purge took out, kept
+// registered only until its own removal is collectable. Nothing built from
+// the attached tree holds it: not a replica that has collected that far, a
+// snapshot, a DeepCopy, or the document's clone that an undo runs on first.
+// Those find nothing under the span's ID and recreate it if its parent is
+// there, so this one has to resolve the span the same way. The node itself
+// stays a detached tombstone (see TreeNode.detached), and its pending pair
+// purges it as before, finding it unregistered and unlinked already.
+func (t *Tree) forgetDetached(node *TreeNode) {
+	t.unregisterNode(node)
+	t.unlinkInsChain(node)
+}
+
 // knownRemovalAbove returns a test, for one Restore call, of whether a node
 // sits under a removed ancestor whose removal the restoring change knew.
 //
@@ -1540,8 +1555,9 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 // collects (see GCLiveRelease) and shows it again if the ancestor is
 // restored first. A restore concurrent with the ancestor's removal still
 // revives, as before: every replica applies it before the minimum synced
-// vector lets one purge the ancestor, so they all decide alike. An ancestor revived earlier in the
-// same call is live, so restoring a subtree parent-first revives it whole.
+// vector lets one purge the ancestor, so they all decide alike. An ancestor
+// revived earlier in the same call is live, so restoring a subtree
+// parent-first revives it whole.
 // An empty vector is read as knowing every removal, as TicketKnown reads it:
 // every change with operations carries its author's vector, so only a crafted
 // one comes without, and failing open there would bring the GC-timing
@@ -3065,6 +3081,10 @@ func (t *Tree) Edit(
 
 			leftInChildren = content
 			index.TraverseNode(content.Index, func(node *index.Node[*TreeNode], depth int) {
+				// Content placed in a subtree a purge took out is part of it
+				// (see TreeNode.detached); its parent is removed, so it is
+				// tombstoned below as well.
+				node.Value.detached = fromParent.detached
 				// if insertion happens during concurrent editing and parent node has been removed,
 				// make new nodes as tombstone immediately
 				if fromParent.IsRemoved() {
@@ -4647,6 +4667,13 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 	includeRemoved ...bool,
 ) error {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
+
+	// A range with both ends in a subtree a purge took out encloses nothing
+	// of the attached tree, and an index counted inside that subtree means
+	// nothing in it: there is nothing to visit (see TreeNode.detached).
+	if fromParent != nil && toParent != nil && fromParent.detached && toParent.detached {
+		return nil
+	}
 
 	fromIdx, err := t.ToIndex(fromParent, fromLeft, include)
 	if err != nil {

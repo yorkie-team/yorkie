@@ -100,13 +100,13 @@ type GCBarrier[C any] interface {
 // ancestor would detach bytes docSize.Live still holds while a rebuild,
 // walking the attached tree, no longer counts them (yorkie#2244).
 //
-// Root therefore has the parent release the live nodes first: once
-// removedAt and GCBarrier have both let the child go, and right before
-// Purge, ReleaseLive tombstones every live node under the child and reports
-// their size, which Root takes off Live. They leave the document with the
-// child, as if the child's removal had covered them. Nothing is held back,
-// so no client input can keep a removed element in the tree: what a pass
-// purges is decided by the collection vector and the tree, as on main.
+// Root therefore purges through PurgeReleasing once removedAt and
+// GCBarrier have both let the child go: it takes the child out, tombstones
+// every live node under it, and reports their size, which Root takes off
+// Live. They leave the document with the child, as if the child's removal
+// had covered them, and they happen only with the purge. Nothing is held
+// back, so no client input can keep a removed element in the tree: what a
+// pass purges is decided by the collection vector and the tree, as on main.
 //
 // Replicas collecting at one vector release the same nodes. A client's
 // synced vector covers a removal only after it has pushed every change it
@@ -117,10 +117,11 @@ type GCBarrier[C any] interface {
 // arrive ahead of a change behind it. Such a change, like a crafted one,
 // reaches a replica after its purge; the node it names is then gone or
 // detached and stays a tombstone (see TreeNode.detached), which is what
-// the release made it everywhere else, and an op that cannot resolve a
-// position there fails, as on main.
+// the release made it everywhere else. Released nodes stay registered, as
+// main leaves its detached nodes, so a position naming one resolves as it
+// does there.
 type GCLiveRelease[C any] interface {
-	// ReleaseLive tombstones every live node under child and returns the
-	// size they had in docSize.Live.
-	ReleaseLive(child C) resource.DataSize
+	// PurgeReleasing purges child as Purge does, tombstoning every live node
+	// under it, and returns the size they had in docSize.Live.
+	PurgeReleasing(child C) (resource.DataSize, error)
 }

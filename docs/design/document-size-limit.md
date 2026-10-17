@@ -98,30 +98,41 @@ one there, with no GC pair and charged to `Live`, while a rebuild walks
 only the attached tree (yorkie#2244). The rule that keeps the two equal:
 
 - **A detached node is a tombstone, and stays one.** When a collection
-  purges a removed element, it first tombstones every live node under it
-  (`GCLiveRelease`, `Tree.ReleaseLive`), takes their bytes off `Live`, and
-  takes them out of `NodeMapByID` and their insertion chains, since they
-  have no GC pair to do it later. They leave the document with the
-  element, as if its removal had covered them. Everything a purge detaches
-  is therefore a tombstone off `Live`.
-- Nothing makes a detached node live again. `Restore` leaves one alone and
-  recreates nothing under one, `Retombstone` skips one, and content placed
-  under a removed parent, which a detached parent always is, is born
-  tombstoned and booked to GC only.
-- Detached tombstones with a GC pair of their own stay registered and in
-  their chains until that pair is collected, as on main, so every lookup
-  and walk that reached them before still does; no such path can charge
-  `Live` for one.
+  purges a removed element, the purge tombstones every live node under it
+  (`GCLiveRelease`, `Tree.PurgeReleasing`) and `Root` takes their bytes
+  off `Live`; it happens only with the purge, never without it. They leave
+  the document with the element, as if its removal had covered them.
+  Everything a purge detaches is therefore a tombstone off `Live`.
+- Nothing makes a detached node live again. `Restore` resolves a span
+  naming one as a replica that purged it does: the node leaves
+  `NodeMapByID` and its chain, stays a tombstone, and the span is recreated
+  only if its parent is there (`Tree.forgetDetached`). `recreateFromSpan`
+  places nothing under a detached element, `Retombstone` skips one, and
+  content placed under a detached parent, or split off a detached node, is
+  detached itself and born tombstoned, booked to GC only.
+- Detached nodes stay registered and in their chains, as on main, so every
+  lookup and walk that reached them before still does; no such path can
+  charge `Live` for one. One with a GC pair of its own leaves when that
+  pair is collected; a released node has none and stays, as main's live
+  detached nodes do.
+
+**One undo, one result.** A copy built from the attached tree holds no
+detached node: a replica that collected further, a snapshot, a `DeepCopy`,
+and the document's clone, which an undo or redo runs on before the root.
+That is why `Restore` resolves a detached node as if it were gone rather
+than leaving it as it is: the clone and the root, and every replica, then
+take the same branch for the same span
+(`TestUndoMatchesOnTheCloneWithoutDetachedNodes`).
 
 | Path | With a detached node | Pinned by |
 |---|---|---|
 | GC purge of an ancestor | live nodes under it are released with it | `TestCollectReleasesALiveDescendantWithItsAncestor`, `TestLiveReleaseWaitsForTheBarrier`, `TestTreePurgeWithLiveDescendant`, `TestTreeCraftedReviveCannotPinARemovedChain` |
 | GC purge inside a detached subtree | walks nothing; one pass is O(nodes) | `TestPurgeInsideADetachedSubtreeWalksNothing`, `TestCollectWalksADeletedSubtreeOnce` |
-| `Restore`, element and text spans | left a tombstone, not revived | `TestRestoreLeavesADetachedNodeATombstone` |
+| `Restore`, element and text spans | resolved as purged: left a tombstone, recreated only under a parent that is there | `TestRestoreLeavesADetachedNodeATombstone`, `TestUndoMatchesOnTheCloneWithoutDetachedNodes` |
 | `Restore` under an ancestor whose removal it knew | left a tombstone, attached or not | `TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC`, `TestTreeRestoreUnderAKnownRemoval` |
-| `recreateFromSpan` under a detached parent | declined, as under a purged one | `TestRestoreRecreatesNothingUnderADetachedParent` |
+| `recreateFromSpan` under a detached parent or split home | declined, as under a purged one | `TestRestoreRecreatesNothingUnderADetachedParent`, `TestRecreateGoesNowhereDetachedThroughASplitHome` |
 | `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
-| `Edit` insert under a detached or removed parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
+| `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only; a range inside the detached subtree visits nothing | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
 | `Edit` delete, `Style` over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
@@ -147,14 +158,14 @@ the element, and they release the same nodes. The server race of
 yorkie#2110 breaks that contract, since a minimum vector can arrive ahead
 of a change behind it; the conformance suite's lagging mode models it.
 Under the race, as for a crafted change, a change reaches a replica after
-its purge and names a node that is gone or detached: `Restore` recreates
-nothing under a detached parent and revives no detached node, so it lands
-as the release left it everywhere else, and an op that cannot resolve a
-position there fails, as on main. One narrow shape fails where main went
-on: an op parented on a detached tombstone whose left anchor the release
-took out errors with "node not found", where main applied it under the
-detached parent and left its bytes in `Live`. No conformance seed reaches
-it. `Restore` also leaves a
+its purge and names a node that is gone or detached: `Restore` revives no
+detached node and recreates nothing under one, so it lands as the release
+left it everywhere else. Released nodes stay registered, so an op whose
+position names one, such as an insert under a detached tombstone anchored
+on a released node, resolves and applies as on main, with its content born
+tombstoned and detached instead of charged to `Live`
+(`TestEditUnderADetachedParentNamingAReleasedNode`). An op naming a node
+the purge unregistered fails, as on main. `Restore` also leaves a
 node a tombstone under an ancestor whose removal the restoring change knew
 (`Tree.knownRemovalAbove`), which keeps the result before GC from depending
 on it: such a revive would stay live only on replicas that had not

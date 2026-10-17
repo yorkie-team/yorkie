@@ -655,10 +655,12 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		// Live nodes under the child go with it, off Live (see
 		// GCLiveRelease), so the purge detaches tombstones only.
 		if parent, ok := pair.Parent.(GCLiveRelease[GCChild]); ok {
-			r.docSize.Live.Sub(parent.ReleaseLive(pair.Child))
-		}
-
-		if err := pair.Parent.Purge(pair.Child); err != nil {
+			released, err := parent.PurgeReleasing(pair.Child)
+			if err != nil {
+				return 0, 0, err
+			}
+			r.docSize.Live.Sub(released)
+		} else if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
 
