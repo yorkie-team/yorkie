@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
@@ -1136,4 +1137,38 @@ func TestToIndexUnderARemovedAncestorKeepsItsIndex(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, at, ranged, "a range end counts from div's place")
 	assert.NotEqual(t, reported, ranged, "the two resolutions differ here")
+}
+
+// TestDropGCPairGivesBackWhatRegistrationPutIn pins Root.DropGCPair's
+// accounting: it takes out of GC what registering the pair added, the
+// child's size for an ordinary pair and GCOnlySize for one booked with it,
+// leaves a pair registered under the key for another child alone, and is a
+// no-op when nothing is registered.
+func TestDropGCPairGivesBackWhatRegistrationPutIn(t *testing.T) {
+	tree, _, p, text, removedAt := detachFixture(t)
+	text.remove(removedAt)
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	base := doc.DocSize()
+
+	doc.docSize.Live.Add(text.DataSize())
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: text})
+	doc.DropGCPair(GCPair{Parent: tree, Child: text})
+	assert.Equal(t, 0, doc.GarbageLen())
+	gc := doc.DocSize().GC
+	assert.Equal(t, base.GC, gc, "an ordinary pair gives back the child's size")
+
+	booked := resource.DataSize{Data: 7, Meta: 3}
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
+	doc.DropGCPair(GCPair{Parent: tree, Child: p})
+	assert.Equal(t, 0, doc.GarbageLen())
+	assert.Equal(t, base.GC, doc.DocSize().GC, "a GCOnlySize pair gives back GCOnlySize")
+
+	other := NewTreeNode(p.id, "p", nil)
+	other.remove(removedAt)
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
+	doc.DropGCPair(GCPair{Parent: tree, Child: other})
+	assert.Equal(t, 1, doc.GarbageLen(), "another child's pair under the key stays")
+
+	doc.DropGCPair(GCPair{Parent: tree, Child: text})
+	assert.Equal(t, 1, doc.GarbageLen(), "dropping an unregistered pair does nothing")
 }

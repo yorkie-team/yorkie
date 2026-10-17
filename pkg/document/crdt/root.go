@@ -755,7 +755,9 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 
 // DropGCPair removes the pending GC pair of a child that has left the
 // document without being purged, such as a detached node a restore forgot,
-// taking the size the pair holds out of GC. It is a no-op when no pair is
+// taking out of GC what registering the pair put in: GCOnlySize when the
+// pair was booked with it, the child's size otherwise, as RegisterGCPair
+// gives back when it cancels a pair. It is a no-op when no pair is
 // registered under the key, or the one registered is another child's.
 func (r *Root) DropGCPair(pair GCPair) {
 	key := keyOf(pair)
@@ -763,7 +765,11 @@ func (r *Root) DropGCPair(pair GCPair) {
 	if !ok || p.Child != pair.Child {
 		return
 	}
-	r.docSize.GC.Sub(p.Child.DataSize())
+	if _, isRHTNode := p.Child.(*RHTNode); isRHTNode || p.GCOnlySize == nil {
+		r.docSize.GC.Sub(p.Child.DataSize())
+	} else {
+		r.docSize.GC.Sub(*p.GCOnlySize)
+	}
 	delete(r.gcNodePairMap, key)
 }
 
