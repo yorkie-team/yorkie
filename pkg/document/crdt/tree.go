@@ -1688,17 +1688,41 @@ func parentsFirst(spans []*TreeRestoreSpan) []*TreeRestoreSpan {
 		return spans
 	}
 
+	// Each span's depth is computed once and reused by its descendants, so
+	// the whole list costs O(n). A crafted span set can name its parents in
+	// a cycle; a span reached again while its own depth is pending ends the
+	// chain there, at depth 0.
+	const (
+		unvisited = iota
+		pending
+		done
+	)
 	depth := make([]int, len(spans))
-	for i, span := range spans {
-		// Bounded by the list's length: a crafted span set can name its
-		// parents in a cycle.
-		for d, current := 0, span; d < len(spans); d++ {
-			j, ok := parentOf(current)
-			if !ok || j == i {
+	state := make([]int, len(spans))
+	var chain []int
+	for i := range spans {
+		chain = chain[:0]
+		base := 0
+		for current := i; ; {
+			if state[current] == done {
+				base = depth[current] + 1
 				break
 			}
-			depth[i]++
-			current = spans[j]
+			if state[current] == pending {
+				break
+			}
+			state[current] = pending
+			chain = append(chain, current)
+			j, ok := parentOf(spans[current])
+			if !ok {
+				break
+			}
+			current = j
+		}
+		for k := len(chain) - 1; k >= 0; k-- {
+			depth[chain[k]] = base
+			state[chain[k]] = done
+			base++
 		}
 	}
 	order := make([]int, len(spans))

@@ -168,3 +168,36 @@ func TestAppendUncoveredSpansKeepsParentsFirst(t *testing.T) {
 	assert.Len(t, got, 5, "div, product, productP, ab and the uncovered cd: %v", order)
 	assert.Equal(t, "cd", got[len(got)-1].Value)
 }
+
+// TestParentsFirstIsLinear pins parentsFirst on span sets a client controls:
+// many spans that all name the last one as their parent, and a chain whose
+// parents loop back on themselves. Depths are memoized, so the first shape
+// stays linear, and the second ends without looping.
+func TestParentsFirstIsLinear(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	id := func(lamport int) *TreeNodeID { return NewTreeNodeID(time.NewTicket(int64(lamport), 0, actor), 0) }
+
+	t.Run("every span names the last one as parent", func(t *testing.T) {
+		const n = 100000
+		spans := make([]*TreeRestoreSpan, n)
+		for i := range spans {
+			spans[i] = &TreeRestoreSpan{ID: id(i + 1), NodeType: "p", ParentID: id(n)}
+		}
+		spans[n-1].ParentID = id(n + 1)
+
+		sorted := parentsFirst(spans)
+		require.Len(t, sorted, n)
+		assert.Same(t, spans[n-1], sorted[0], "the parent comes first")
+		assert.Same(t, spans[0], sorted[1], "the rest keep their order")
+	})
+
+	t.Run("parents named in a cycle", func(t *testing.T) {
+		spans := []*TreeRestoreSpan{
+			{ID: id(1), NodeType: "p", ParentID: id(3)},
+			{ID: id(2), NodeType: "p", ParentID: id(1)},
+			{ID: id(3), NodeType: "p", ParentID: id(2)},
+		}
+		assert.Len(t, parentsFirst(spans), 3)
+	})
+}
