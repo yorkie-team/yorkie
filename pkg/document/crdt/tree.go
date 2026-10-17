@@ -3758,11 +3758,10 @@ func (t *Tree) mergeNodes(
 		// change lands on, so replicas holding the same tree decide alike.
 		//
 		// Left live, it would be stranded instead: Phase 5 has already
-		// tombstoned the source it stays under, and that source's eventual
-		// Purge detaches the subtree without unregistering it from
-		// NodeMapByID or taking it back out of docSize.Live -- the
-		// detached-but-registered shape that sends toTreePos off the top of a
-		// subtree nothing references (#2008). So it is tombstoned where it
+		// tombstoned the source it stays under, and GCLiveHold would keep
+		// that source, and its removed ancestors, out of every purge for as
+		// long as the node stayed live, with nothing an honest client could
+		// see or delete to release them. So it is tombstoned where it
 		// stands, with its descendants, exactly as propagateMergeDeletes
 		// tombstones a merge-moved child whose source this edit deletes. The
 		// pair the caller books does both halves: it moves the bytes from Live
