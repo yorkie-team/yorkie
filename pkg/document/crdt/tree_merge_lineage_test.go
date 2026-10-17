@@ -570,6 +570,8 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 		tree.putNode(live)
 		moved.MergedFrom = live.id
 		moved.MergedAt = nextTicket()
+		// Re-read as a decode does, which indexes the stamp.
+		tree = NewTree(tree.Root(), nextTicket())
 
 		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 			{ID: live.id, NodeType: "p", Length: 1},
@@ -600,6 +602,7 @@ func TestRestoreDissolvesLineageWhateverTheSpanResolvesTo(t *testing.T) {
 		purgedID := NewTreeNodeID(nextTicket(), 0)
 		moved.MergedFrom = purgedID
 		moved.MergedAt = nextTicket()
+		tree = NewTree(tree.Root(), nextTicket())
 
 		untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
 			{ID: purgedID, NodeType: "p", Length: 1, ParentID: dead.id},

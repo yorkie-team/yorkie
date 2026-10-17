@@ -1014,6 +1014,13 @@ type Tree struct {
 	// otherwise never be registered for GC. Edit, Style and RemoveStyle
 	// drain this buffer into the GC pairs they return.
 	pendingGCPairs []GCPair
+
+	// mergeStamps indexes the nodes that carry a MergedFrom by the source it
+	// names, so dissolveMergeSources visits only those (#2189). An entry is
+	// added wherever a stamped node joins the tree or a node is stamped; it
+	// is a candidate list, re-checked when read, and an entry for a node
+	// that lost its stamp or left the tree is dropped then.
+	mergeStamps map[string][]*TreeNode
 }
 
 // NewTree creates a new instance of Tree.
@@ -1031,6 +1038,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	nodeCount := 0
 	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
 		tree.NodeMapByID.Put(node.Value.id, node.Value)
+		tree.noteMergeStamp(node.Value)
 		nodeCount++
 	})
 	if tree.NodeMapByID.Len() != nodeCount {
@@ -1144,9 +1152,9 @@ func (t *Tree) rebuildMergeState() {
 // stamps, so dropping only the pointer would let a reload resurrect the live
 // element as a source. The two halves are dropped together.
 //
-// The sweep keys on the sources' own IDs and visits the whole tree rather than
-// walking the children of the target mergedInto names, because that target is
-// not where all of the lineage necessarily lives:
+// The sweep keys on the sources' own IDs, through the mergeStamps index,
+// rather than walking the children of the target mergedInto names, because
+// that target is not where all of the lineage necessarily lives:
 //
 //   - §7.1's SplitElement relocates merge-stamped children into the other half
 //     of the split pair, out of reach of a children-of-target walk; and
@@ -1172,21 +1180,33 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 		}
 	}
 
-	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
-		child := node.Value
-		if child.MergedFrom == nil {
-			return
-		}
-		if _, ok := ids[child.MergedFrom.toIDString()]; !ok {
-			return
-		}
-		if child.MergedAt != nil && !time.TicketKnown(versionVector, child.MergedAt) {
-			return
-		}
+	for key := range ids {
+		var kept []*TreeNode
+		visited := make(map[*TreeNode]struct{})
+		for _, child := range t.mergeStamps[key] {
+			if _, ok := visited[child]; ok {
+				continue
+			}
+			visited[child] = struct{}{}
+			// Only a node still stamped with this source and still in the
+			// tree, tombstones included, as a walk of the tree would reach.
+			if child.MergedFrom == nil || child.MergedFrom.toIDString() != key || !t.isAttached(child) {
+				continue
+			}
+			if child.MergedAt != nil && !time.TicketKnown(versionVector, child.MergedAt) {
+				kept = append(kept, child)
+				continue
+			}
 
-		child.MergedFrom = nil
-		child.MergedAt = nil
-	})
+			child.MergedFrom = nil
+			child.MergedAt = nil
+		}
+		if len(kept) == 0 {
+			delete(t.mergeStamps, key)
+		} else {
+			t.mergeStamps[key] = kept
+		}
+	}
 }
 
 // Marshal returns the JSON encoding of this Tree.
@@ -1268,6 +1288,7 @@ func (t *Tree) Purge(child GCChild) error {
 	// Only drop the entry this node actually holds.
 	t.unregisterNode(node)
 	t.unlinkInsChain(node)
+	t.forgetMergeStamp(node)
 	for _, live := range detachedLive {
 		t.unregisterNode(live)
 		t.unlinkInsChain(live)
@@ -3456,6 +3477,7 @@ func (t *Tree) mergeNodes(
 		if node.MergedFrom == nil {
 			node.MergedFrom = node.Index.Parent.Value.id
 			node.MergedAt = editedAt
+			t.noteMergeStamp(node)
 		}
 		if err := dest.Index.MoveChild(node.Index); err != nil {
 			return stranded, err
@@ -5186,6 +5208,34 @@ func (t *Tree) putNode(node *TreeNode) {
 	}
 
 	t.NodeMapByID.Put(node.id, node)
+	t.noteMergeStamp(node)
+}
+
+// forgetMergeStamp drops node's entry from mergeStamps, for a node leaving
+// the tree. Its live descendants' entries are dropped when next read.
+func (t *Tree) forgetMergeStamp(node *TreeNode) {
+	if node.MergedFrom == nil {
+		return
+	}
+	key := node.MergedFrom.toIDString()
+	nodes := slices.DeleteFunc(t.mergeStamps[key], func(n *TreeNode) bool { return n == node })
+	if len(nodes) == 0 {
+		delete(t.mergeStamps, key)
+	} else {
+		t.mergeStamps[key] = nodes
+	}
+}
+
+// noteMergeStamp adds node to mergeStamps if it carries a MergedFrom.
+func (t *Tree) noteMergeStamp(node *TreeNode) {
+	if node.MergedFrom == nil {
+		return
+	}
+	if t.mergeStamps == nil {
+		t.mergeStamps = make(map[string][]*TreeNode)
+	}
+	key := node.MergedFrom.toIDString()
+	t.mergeStamps[key] = append(t.mergeStamps[key], node)
 }
 
 // findMergeNode resolves one end of a merge relation -- the source a

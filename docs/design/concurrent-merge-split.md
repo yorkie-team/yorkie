@@ -470,9 +470,11 @@ dropped at that moment (`Tree.dissolveMergeSources`):
 - `mergedInto` on the revived element, and
 - `MergedFrom`/`MergedAt` on every child the merge had moved out of it.
 
-The second half is swept by one whole-tree traversal per `Restore` call,
-keyed on the restored spans' own element IDs rather than on the children of
-the target `mergedInto` names. Two kinds of lineage sit outside that target:
+The second half is found through an index of stamped nodes by the source
+they name (`Tree.mergeStamps`, filled wherever a stamped node joins the tree
+or a merge stamps one), keyed on the restored spans' own element IDs rather
+than on the children of the target `mergedInto` names, so a restore visits
+only the nodes that name what it revives. Two kinds of lineage sit outside that target:
 §7.1's `SplitElement` carries merge-stamped children into the other half of
 a split pair, and a **recreated** element — one the restore rebuilds because
 GC had purged it — comes back live under its original ID with no pointer at
