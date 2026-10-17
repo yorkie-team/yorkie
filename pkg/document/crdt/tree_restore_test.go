@@ -997,3 +997,50 @@ func TestTreeRetombstoneRefreshesAnAlreadyRemovedSpan(t *testing.T) {
 	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID)
 	assert.Equal(t, p.ID(), applied[0].ParentID)
 }
+
+// TestTreeRetombstoneDoesNotDuplicateASpan pins that the spans Retombstone
+// reports name each node once. The input spans hold an element and a split
+// product cut off it, as a delete's do; the §4.1 cascade from the element
+// reaches the product before the product's own span. Fed back through
+// repeated undo/redo cycles, a duplicate would grow the list by one copy per
+// cycle.
+func TestTreeRetombstoneDoesNotDuplicateASpan(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "ab"))
+	at := helper.TimeT(ctx)
+	known := time.NewVersionVector()
+	known.Set(at.ActorID(), at.Lamport())
+
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	assert.NoError(t, err)
+	lamport := at.Lamport()
+	peerTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, peer)
+	}
+	_, _, err = tree.EditT(2, 2, nil, 1, peerTicket(), peerTicket)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+
+	left, product := tree.Root().Children()[0], tree.Root().Children()[1]
+	spans := []*crdt.TreeRestoreSpan{
+		elementSpan(left, tree.Root()),
+		textSpan(left.Children()[0], left),
+		elementSpan(product, tree.Root()),
+		textSpan(product.Children()[0], product),
+	}
+
+	for cycle := range 3 {
+		_, _, _, applied, err := tree.Retombstone(spans, helper.TimeT(ctx), false, known)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r></r>", tree.ToXML())
+		assert.Len(t, applied, len(spans), "cycle %d: one span per node", cycle)
+
+		_, _, _, _, _, err = tree.Restore(applied, false, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+		spans = applied
+	}
+}

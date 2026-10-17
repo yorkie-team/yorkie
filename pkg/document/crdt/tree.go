@@ -1576,7 +1576,46 @@ func (t *Tree) Retombstone(
 		// tombstones now, just as one this call removed does (#2169).
 		applied = append(applied, t.refreshSpanAnchors(span))
 	}
-	return pairs, diff, edits, append(applied, cascaded...), nil
+	return pairs, diff, edits, appendUncoveredSpans(applied, cascaded), nil
+}
+
+// appendUncoveredSpans appends to spans every cascaded span that names a node
+// spans does not already describe: an element by its ID, a text piece by a
+// text span of the same insertion whose range holds it. The input spans of a
+// delete routinely include a split product together with the element it was
+// cut off, and the §4.1 cascade from the element reaches the product before
+// its own span does; without this the reverse operation would carry the
+// product twice, and one more copy on every undo/redo that toggles it.
+func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan {
+	if len(cascaded) == 0 {
+		return spans
+	}
+
+	elements := make(map[string]struct{}, len(spans))
+	texts := make(map[string][]*TreeRestoreSpan)
+	for _, span := range spans {
+		if span.IsText {
+			key := span.ID.CreatedAt.Key()
+			texts[key] = append(texts[key], span)
+		} else {
+			elements[span.ID.toIDString()] = struct{}{}
+		}
+	}
+
+	for _, span := range cascaded {
+		if span.IsText {
+			start, end := span.ID.Offset, span.ID.Offset+span.Length
+			if slices.ContainsFunc(texts[span.ID.CreatedAt.Key()], func(s *TreeRestoreSpan) bool {
+				return s.ID.Offset <= start && end <= s.ID.Offset+s.Length
+			}) {
+				continue
+			}
+		} else if _, ok := elements[span.ID.toIDString()]; ok {
+			continue
+		}
+		spans = append(spans, span)
+	}
+	return spans
 }
 
 // retombstoneUnknownSplitSiblings applies the §4.1 cascade to an element
