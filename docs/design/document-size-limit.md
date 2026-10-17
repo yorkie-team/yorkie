@@ -130,11 +130,7 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   (`TestEditWithOneEndInADetachedSubtree`,
   `TestStyleWithAnEndInADetachedSubtree`), and so does a range with its two
   ends in two purged subtrees, over the attached content between them
-  (`TestRangeBetweenTwoDetachedSubtrees`). A recorded sibling that has
-  since left the slot parent by a merge, not a purge, leaves the slot at
-  the parent's end; whether an unpurged replica moved the subtree along
-  with it depends on which side of the merging range the subtree sat, which
-  the purged replica cannot tell, so that case is the merge case below. A delete that merges out of the
+  (`TestRangeBetweenTwoDetachedSubtrees`). A delete that merges out of the
   subtree does not converge: a replica that has not purged it moves the
   hidden content after the range end into view, and one that purged it has
   nothing to move (`TestEditMergingOutOfADetachedSubtree`). Only a late or
@@ -143,7 +139,12 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   mark: a replica reloaded from a snapshot, and the server, which rebuilds
   from one, hold no detached node, so a late op naming one fails there
   while a running replica that purged it applies it; main splits the same
-  way.
+  way. And a sibling recorded at the purge that has since left the slot
+  parent by a merge, not a purge, leaves the slot at the parent's end:
+  whether a replica that has not purged the subtree moved it along depends
+  on which side of the merging range the subtree sat, which the purged
+  replica does not record. Like the cases above, only a late or crafted op
+  names a position there.
 
 **One undo, one result.** A copy built from the attached tree holds no
 detached node: a replica that collected further, a snapshot, a `DeepCopy`,
