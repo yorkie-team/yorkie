@@ -1390,10 +1390,11 @@ result. The JS SDK has to mirror all of the following:
 4. **Retombstone spans.** The spans a retombstone reports, which become the
    reverse operation's, carry anchors re-read after the removal for every
    span still in the tree, live or not: parent, left and right together
-   under the first piece's parent, a removed piece straddling a boundary
-   being its own neighbour on that side (left: its last character before
-   the span; right: the piece), and a right anchor under another parent
-   dropped. The input spans are never modified.
+   under the first piece's parent. A removed piece straddling the start
+   gives the left anchor its last character before the span; one
+   straddling the end gives no right anchor, nor does a right neighbour
+   under another parent. An empty text span keeps its anchors. Every
+   reported span is a copy; the input spans are never modified.
 5. **Retombstone cascade.** Retombstoning an element applies the §4.1
    cascade to its unknown split products, with the subtree, and reports a
    span for each node it removed, parent before child, leaving out any

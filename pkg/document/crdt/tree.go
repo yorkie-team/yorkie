@@ -1858,11 +1858,12 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 // piece a peer had already removed is skipped by the removal but still
 // bounds the range, and anchoring on the first piece the removal touched
 // instead would name a neighbour inside the range. A removed piece that
-// straddles a boundary is not split here, so its own characters outside the
-// range are the neighbour on that side: the left anchor names its last one
-// before the range, the right anchor the piece itself. A purged end leaves
-// the neighbour of the nearest surviving piece, which is what now sits beside
-// the gap.
+// straddles a boundary is not split here. At the start, its own last
+// character before the range is the left neighbour; at the end, the piece
+// starts inside the span, so there is no right anchor, which never names a
+// node that starts inside the range. A purged end leaves the neighbour of
+// the nearest surviving piece, which is what now sits beside the gap. A text
+// span is read at exactly its Length, so an empty one keeps its anchors.
 //
 // The three anchors are always replaced together, under the first piece's
 // parent (see anchorsOf): recreateFromSpan honours a sibling anchor only
@@ -1871,46 +1872,54 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 // right anchor under another parent -- the span was split across elements --
 // is dropped rather than paired with the wrong one.
 //
-// It never writes through the pointer it is given. The spans Retombstone
+// It never writes through the pointer it is given, and returns a copy on
+// every path. The spans Retombstone
 // receives are the TreeEdit operation's own payload — the same objects
 // to_pb serializes at push time, the clone and the root execution both run,
 // and the reverse operation shares — so a refresh written in place would
 // retroactively rewrite an unpushed change with anchors derived from local
 // state. Only the copy reaches the reverse operation this execution builds.
 func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
-	start := span.ID.Offset
-	end := start + max(span.Length, 1)
+	// Always a copy, refreshed or not, so the reverse operation never shares
+	// a span with the operation's own payload.
+	fresh := *span
 
 	var first, last *TreeNode
+	start, end := span.ID.Offset, span.ID.Offset+span.Length
 	if span.IsText {
+		// A text span names exactly its Length; an empty one has no piece
+		// to read anchors off.
+		if span.Length <= 0 {
+			return &fresh
+		}
 		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
 		if len(pieces) == 0 {
-			return span
+			return &fresh
 		}
 		first, last = pieces[0], pieces[len(pieces)-1]
 	} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
 		first, last = n, n
 	} else {
-		return span
+		return &fresh
 	}
 
 	parentID, leftID, _, ok := anchorsOf(first)
 	if !ok {
-		return span
+		return &fresh
 	}
 	if span.IsText && first.id.Offset < start {
 		leftID = NewTreeNodeID(span.ID.CreatedAt, start-1)
 	}
 
+	// A removed piece that straddles the span's end starts inside the span,
+	// so it is no right anchor: it is left out, and the left anchor and the
+	// same-insertion rung of recreateFromSpan place the range.
 	var rightID *TreeNodeID
-	if lastParentID, _, lastRightID, ok := anchorsOf(last); ok && lastParentID.Equal(parentID) {
+	if lastParentID, _, lastRightID, ok := anchorsOf(last); ok && lastParentID.Equal(parentID) &&
+		(!span.IsText || last.id.Offset+last.Length() <= end) {
 		rightID = lastRightID
-		if span.IsText && last.id.Offset+last.Length() > end {
-			rightID = last.id
-		}
 	}
 
-	fresh := *span
 	fresh.ParentID, fresh.LeftSiblingID, fresh.RightSiblingID = parentID, leftID, rightID
 	return &fresh
 }
