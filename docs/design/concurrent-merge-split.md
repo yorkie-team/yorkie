@@ -967,9 +967,10 @@ outside its range, after the then-live parent. Replicas then diverge
 on attributes.
 
 `FindTreeNodesWithSplitText` takes a boundary mode: `BoundaryInsert`
-(default, §1.1 behavior for edits) and `BoundaryRange`, used by
-`Style`/`RemoveStyle`, which resolves the position to right after the
-merge-source tombstone. In visible coordinates this lands before both
+(default, §1.1 behavior for an empty Edit range), `BoundaryEditEnd`
+(either end of a non-empty Edit range: §1.1 behavior, without §1.3's
+split-product skip), and `BoundaryRange`, used by `Style`/`RemoveStyle`,
+which resolves the position to right after the merge-source tombstone. In visible coordinates this lands before both
 the concurrent inserts and the moved children, so a range end excludes
 them and a range start includes them — matching the styling replica in
 both directions. Ranges that genuinely cover the merged content
