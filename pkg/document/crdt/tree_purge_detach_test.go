@@ -724,3 +724,76 @@ func treeShapeOf(tree *Tree) string {
 	walk(tree.Root())
 	return sb.String()
 }
+
+// TestPurgedSlotOverPurgeOrders pins purgedSlot over every order a replica
+// can purge in. The tree is <r><l>LL</l><top><p>ab</p></top><s>x</s><q>cd</q></r>
+// with top, p, "ab", s and "x" removed. A replica that purges nothing
+// resolves "ab" to the place top sits, before s; every purge order must
+// resolve it to the same index: past a sibling purged after (s), up
+// through a parent purged after its child (p, then top), and both.
+func TestPurgedSlotOverPurgeOrders(t *testing.T) {
+	build := func(t *testing.T) (*Tree, map[string]*TreeNode) {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		n := map[string]*TreeNode{}
+		mk := func(name, typ string, value ...string) *TreeNode {
+			n[name] = NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, value...)
+			return n[name]
+		}
+		root := mk("r", "r")
+		require.NoError(t, root.Append(mk("l", "l"), mk("top", "top"), mk("s", "s"), mk("q", "q")))
+		require.NoError(t, n["l"].Append(mk("LL", "text", "LL")))
+		require.NoError(t, n["top"].Append(mk("p", "p")))
+		require.NoError(t, n["p"].Append(mk("ab", "text", "ab")))
+		require.NoError(t, n["s"].Append(mk("x", "text", "x")))
+		require.NoError(t, n["q"].Append(mk("cd", "text", "cd")))
+		tree := NewTree(root, next())
+		removedAt := next()
+		for _, name := range []string{"top", "p", "ab", "s", "x"} {
+			n[name].remove(removedAt)
+		}
+		return tree, n
+	}
+
+	unpurged, un := build(t)
+	want, err := unpurged.ToIndex(un["ab"], un["ab"])
+	require.NoError(t, err)
+	require.Equal(t, 4, want, "after <l>LL</l>, where top sits")
+
+	for _, order := range [][]string{
+		{"top"}, {"p"}, {"s"}, {"p", "top"}, {"top", "p"}, {"top", "s"}, {"s", "top"},
+		{"p", "top", "s"}, {"s", "p", "top"}, {"p", "s", "top"}, {"top", "s", "p"},
+	} {
+		tree, n := build(t)
+		for _, name := range order {
+			require.NoError(t, tree.Purge(n[name]))
+		}
+		got, err := tree.ToIndex(n["ab"], n["ab"])
+		require.NoError(t, err, "purged %v", order)
+		assert.Equal(t, want, got, "purged %v", order)
+	}
+}
+
+// TestToTreePosReportsAPurgeWithoutASlot pins the guard behind #2008 now
+// that every purge records where it took a node from: a detached node with
+// no recorded purge above it fails the lookup with ErrNodeNotFound instead
+// of dereferencing a nil parent.
+func TestToTreePosReportsAPurgeWithoutASlot(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
+	text.remove(removedAt)
+	require.NoError(t, tree.Purge(div))
+	require.True(t, p.detached)
+	div.purgedFrom = nil
+
+	assert.NotPanics(t, func() {
+		_, err := tree.ToIndex(p, text)
+		assert.ErrorIs(t, err, ErrNodeNotFound)
+		_, err = tree.ToIndex(p, text, true)
+		assert.ErrorIs(t, err, ErrNodeNotFound)
+	})
+}

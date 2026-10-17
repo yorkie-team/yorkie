@@ -1392,7 +1392,9 @@ func (t *Tree) isAttached(node *TreeNode) bool {
 // from in the attached tree: the attached parent and the child it sat in
 // front of, nil for the end. A sibling purged since is passed over to the
 // one it sat in front of in turn, and a parent purged since resolves to its
-// own place, so the slot is always in the attached tree. ok is false only
+// own place, so the slot is always in the attached tree. A sibling that has
+// left the parent some other way is not found among its children, and the
+// caller then counts to the end, as for nil. ok is false only
 // for a detached node with no purge recorded above it.
 func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
 	top := node
@@ -1408,9 +1410,6 @@ func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
 			before = before.purgedBefore
 		}
 		if !parent.detached {
-			if before != nil && before.detached {
-				before = nil
-			}
 			return parent, before, true
 		}
 		top = parent
