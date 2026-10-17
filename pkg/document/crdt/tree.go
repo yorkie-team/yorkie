@@ -3358,74 +3358,73 @@ func (t *Tree) reversedFromAnchorRecovery(
 // crafted chain that loops back on itself, and a text link cuts it because an
 // element is never split off a text node.
 func (t *Tree) isSplitProductOf(node, origin *TreeNode) bool {
-	current := node
-	var walker insNextWalker
-	walker.visit(current)
-	for current != nil {
-		if current == origin {
-			return true
+	return t.splitLineageOf(origin).reaches(node)
+}
+
+// splitLineage answers, for one origin, whether nodes were split off it,
+// memoizing every node a walk back along InsPrevID visits. It is the one
+// implementation of that walk: isSplitProductOf asks it once, and step 04
+// asks it for every sibling of one position, where the products of repeated
+// splits at one anchor are both the siblings and the links of the chain, so
+// the memo keeps those questions at O(siblings + chain) in all.
+type splitLineage struct {
+	tree  *Tree
+	known map[*TreeNode]bool
+}
+
+// splitLineageOf returns the split lineage of origin.
+func (t *Tree) splitLineageOf(origin *TreeNode) *splitLineage {
+	return &splitLineage{tree: t, known: map[*TreeNode]bool{origin: true}}
+}
+
+// reaches reports whether walking InsPrevID back from node arrives at the
+// origin. The walk may start at a text node, but only ever steps onto an
+// element: an element is never split off a text node. A crafted chain that
+// loops back on itself reaches no origin.
+func (l *splitLineage) reaches(node *TreeNode) bool {
+	var path []*TreeNode
+	onPath := make(map[*TreeNode]struct{})
+	answer := false
+	for current := node; ; {
+		if result, ok := l.known[current]; ok {
+			answer = result
+			break
 		}
+		if _, ok := onPath[current]; ok {
+			break
+		}
+		path = append(path, current)
+		onPath[current] = struct{}{}
+
 		if current.InsPrevID == nil {
-			return false
+			break
 		}
-		prev := t.findFloorNode(current.InsPrevID)
-		if prev == nil || prev.IsText() || !walker.visit(prev) {
-			return false
+		prev := l.tree.findFloorNode(current.InsPrevID)
+		if prev == nil || prev.IsText() {
+			break
 		}
 		current = prev
 	}
-
-	return false
+	for _, n := range path {
+		l.known[n] = answer
+	}
+	return answer
 }
 
 // splitProductTest returns a test for whether a sibling the step-04 walk of
 // FindTreeNodesWithSplitText is about to pass was split off left, the element
-// the position anchors on: the same answer isSplitProductOf gives, walking
-// InsPrevID back, but memoized across the siblings of one walk. Every node a
-// walk back visits is answered once, so the siblings of one position cost
-// O(siblings + chain), not one chain walk each -- the products of repeated
-// splits at one anchor are both siblings and links of the same chain. Only
-// an element anchor has split products; a left-most position anchors on its
-// parent, not on a sibling.
+// the position anchors on, sharing one splitLineage across the walk. Only an
+// element sibling with an InsPrevID can be one, and only an element anchor has
+// split products; a left-most position anchors on its parent, not on a
+// sibling.
 func (t *Tree) splitProductTest(left *TreeNode, isLeftMost bool) func(next *TreeNode) bool {
 	if isLeftMost || left.IsText() {
 		return func(*TreeNode) bool { return false }
 	}
 
-	known := map[*TreeNode]bool{left: true}
+	lineage := t.splitLineageOf(left)
 	return func(next *TreeNode) bool {
-		if next.IsText() || next.InsPrevID == nil {
-			return false
-		}
-
-		var path []*TreeNode
-		onPath := make(map[*TreeNode]struct{})
-		answer := false
-		for current := next; ; {
-			if result, ok := known[current]; ok {
-				answer = result
-				break
-			}
-			// A crafted chain that loops back on itself reaches no origin.
-			if _, ok := onPath[current]; ok {
-				break
-			}
-			path = append(path, current)
-			onPath[current] = struct{}{}
-
-			if current.InsPrevID == nil {
-				break
-			}
-			prev := t.findFloorNode(current.InsPrevID)
-			if prev == nil || prev.IsText() {
-				break
-			}
-			current = prev
-		}
-		for _, n := range path {
-			known[n] = answer
-		}
-		return answer
+		return !next.IsText() && next.InsPrevID != nil && lineage.reaches(next)
 	}
 }
 
