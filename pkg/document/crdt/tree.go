@@ -5118,11 +5118,11 @@ func (t *Tree) boundaryRangeCovers(
 		return false, nil
 	}
 
-	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	fromIdx, err := t.rangeIndex(fromParent, fromLeft, false)
 	if err != nil {
 		return false, err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft)
+	toIdx, err := t.rangeIndex(toParent, toLeft, false)
 	if err != nil {
 		return false, err
 	}
