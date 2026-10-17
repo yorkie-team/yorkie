@@ -108,10 +108,16 @@ type GCBarrier[C any] interface {
 // in Live meanwhile. That retention is the shape a rebuild reports too, so
 // the ledger and a rebuild agree throughout.
 //
-// The test reads only the liveness of the child's descendants, which every
-// replica that applied the same changes agrees on, and Root asks it only
-// after removedAt and GCBarrier have both let the child go: it can delay a
-// purge those allow, never allow one they defer.
+// The test reads the liveness of the child's descendants at the moment of
+// the collection, and the replicas collect at different change prefixes, so
+// it decides alike only because of what can make a node live under a
+// removed ancestor. Restore does not revive a node under an ancestor whose
+// removal the restoring change knew (Tree.knownRemovalAbove), so the one
+// way left is a restore concurrent with that removal, and every replica
+// applies such a restore before the minimum synced vector lets it purge the
+// ancestor. Root asks the test only after removedAt and GCBarrier have both
+// let the child go: it can delay a purge those allow, never allow one they
+// defer.
 type GCLiveHold[C any] interface {
 	// LiveDescendantTest returns a test of whether a child has a live
 	// descendant, valid for one collection pass.

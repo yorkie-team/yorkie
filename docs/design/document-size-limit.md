@@ -113,6 +113,7 @@ attached tree (yorkie#2244). The rule that keeps the two equal:
 | GC purge of an ancestor | held while a live node is under it | `TestCollectHoldsAnElementWithALiveDescendant`, `TestTreePurgeWithLiveDescendant` |
 | GC purge inside a detached subtree | walks nothing; one pass is O(nodes) | `TestPurgeInsideADetachedSubtreeWalksNothing`, `TestCollectWalksADeletedSubtreeOnce` |
 | `Restore`, element and text spans | left a tombstone, not revived or recreated | `TestRestoreLeavesADetachedNodeATombstone` |
+| `Restore` under an ancestor whose removal it knew | left a tombstone, attached or not | `TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC`, `TestTreeRestoreUnderAKnownRemoval` |
 | `Retombstone`, the §4.1 cascades | reach only tombstones: no new GC pair | `TestTreeOpsNamingACollectedSubtree` |
 | `recreateFromSpan` under a detached parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
 | `Edit` insert under a detached or removed parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
@@ -135,11 +136,29 @@ both allow the purge. The retained bytes are the removed ancestors of a
 live node, kept in `GC` until that node goes, which is what a rebuild of
 the same tree reports as well.
 
-One residual is not a ledger matter. An identity restore of a node whose
-ancestor one replica already took out and another did not leaves the two
-apart in tombstones only: the first leaves the node a tombstone, the second
-revives it under the removed ancestor it still holds and GC then holds that
-ancestor. Both stay invisible, as on main.
+**The hold decides alike on every replica.** It reads the tree at the
+moment each replica collects, and replicas collect at different points of
+the change log, so what matters is what can make a node live under a
+removed ancestor between those points. `Restore` does not revive a node
+under an ancestor whose removal the restoring change knew
+(`Tree.knownRemovalAbove`): such a revive would leave the node live only on
+the replicas that had not yet purged the ancestor, and the ancestor's undo
+would then bring it back on those alone. A restore concurrent with the
+ancestor's removal still revives the node, and every replica applies it
+before the minimum synced vector lets one purge the ancestor, so they hold
+alike. Whether that concurrent revive or the removal wins on a replica
+depends on the order it applied them, which is the identity revive against
+concurrent remove race main has without any GC; the hold follows that
+liveness and adds no difference of its own.
+
+**What a crafted restore can extend.** A client can still make a node live
+under a removed element with an identity restore that claims not to know
+the element's removal, and the restore-identity check fails open on a
+change without clocks (#2234). That keeps the element's removed ancestors
+in `GC` for as long as the node stays live, which is as long as the client
+could keep any content of its own; the held bytes are the ancestor chain of
+a node `Live` already counts, bounded by the tree's depth, and the server's
+size gate reads `Live`, not `GC`.
 
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The

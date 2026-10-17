@@ -1208,3 +1208,50 @@ func TestTreeRestoreAfterGCPlacesASplitInsertionByPart(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
 }
+
+// TestTreeRestoreUnderAKnownRemoval pins Restore's rule for a node under a
+// removed ancestor. A change that knew the paragraph's removal leaves its
+// text a tombstone when it names the text alone, but revives both when it
+// names the paragraph first, as an undo of the paragraph's delete does: a
+// paragraph revived earlier in the call is live. A change without clocks
+// knows no removal and revives as before.
+func TestTreeRestoreUnderAKnownRemoval(t *testing.T) {
+	setup := func(t *testing.T) (*crdt.Tree, *crdt.TreeNode, *crdt.TreeNode, time.VersionVector) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+		text := p.Children()[0]
+		editT(t, tree, ctx, 0, 7, nil)
+		assert.True(t, p.IsRemoved())
+		assert.True(t, text.IsRemoved())
+		at := helper.TimeT(ctx)
+		known := time.NewVersionVector()
+		known.Set(at.ActorID(), at.Lamport())
+		return tree, p, text, known
+	}
+
+	t.Run("the text alone stays a tombstone", func(t *testing.T) {
+		tree, p, text, known := setup(t)
+		untombstoned, _, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{textSpan(text, p)}, false, known)
+		assert.NoError(t, err)
+		assert.Empty(t, untombstoned)
+		assert.True(t, text.IsRemoved())
+	})
+
+	t.Run("the paragraph first revives both", func(t *testing.T) {
+		tree, p, text, known := setup(t)
+		spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+		untombstoned, _, _, _, _, err := tree.Restore(spans, false, known)
+		assert.NoError(t, err)
+		assert.Len(t, untombstoned, 2)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+	})
+
+	t.Run("a change without clocks revives as before", func(t *testing.T) {
+		tree, p, text, _ := setup(t)
+		untombstoned, _, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{textSpan(text, p)}, false, nil)
+		assert.NoError(t, err)
+		assert.Len(t, untombstoned, 1)
+		assert.False(t, text.IsRemoved())
+	})
+}

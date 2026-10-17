@@ -55,22 +55,23 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 			return nil
 		}))
 		crossSync(t, d1, d2)
-		// d2 deletes "b", d1 then deletes the paragraph, and d2 undoes its
-		// delete: "b" comes back by identity under the removed paragraph on
-		// both replicas, which start from the same tree.
+		// d1 deletes the paragraph while d2 deletes "b" and undoes that, so
+		// d2's restore is concurrent with the paragraph's removal: d1, which
+		// applies it after the removal, revives "b" under the removed
+		// paragraph, while d2 tombstones "b" again when the removal arrives,
+		// the identity-revive-versus-remove race main has too. Only the
+		// visible tree can be compared while that holds; once "b" is removed
+		// on both (release), the full tree can.
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 4, nil, 0)
+			return nil
+		}))
 		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Edit(2, 3, nil, 0)
 			return nil
 		}))
-		crossSync(t, d1, d2)
-		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(0, 3, nil, 0)
-			return nil
-		}))
-		crossSync(t, d1, d2)
 		require.NoError(t, d2.Undo())
 		crossSync(t, d1, d2)
-		require.Equal(t, treeShape(t, d1), treeShape(t, d2))
 		if release {
 			require.NoError(t, d2.Redo())
 			crossSync(t, d1, d2)
@@ -112,38 +113,33 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 	ops := []struct {
 		name string
 		op   opFor
-		// revivesUnderPurged marks an identity restore of "b" alone: once d1
-		// has taken the paragraph out, d1 leaves "b" a tombstone while d2
-		// revives it under the paragraph it still holds, which GC then holds
-		// for "b". Both stay invisible, as on main.
-		revivesUnderPurged bool
 	}{
 		{"insert under the paragraph", func(tree *crdt.Tree, p, _, _ *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), p.ID())
 			text := crdt.NewTreeNode(crdt.NewTreeNodeID(at, 0), "text", nil, "XYZ")
 			return operations.NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{text}, 0, at)
-		}, false},
+		}},
 		{"insert after b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), crdt.NewTreeNodeID(b.ID().CreatedAt, b.ID().Offset+b.Len()))
 			text := crdt.NewTreeNode(crdt.NewTreeNodeID(at, 0), "text", nil, "XYZ")
 			return operations.NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{text}, 0, at)
-		}, false},
+		}},
 		{"delete over the paragraph", func(tree *crdt.Tree, p, _, _ *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			from := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			to := crdt.NewTreePos(tree.Root().ID(), p.ID())
 			return operations.NewTreeEdit(tree.CreatedAt(), from, to, nil, 0, at)
-		}, false},
+		}},
 		{"style the paragraph", func(tree *crdt.Tree, p, _, _ *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			from := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			to := crdt.NewTreePos(tree.Root().ID(), p.ID())
 			return operations.NewTreeStyle(tree.CreatedAt(), from, to, map[string]string{"k": "v"}, at)
-		}, false},
+		}},
 		{"restore b under p", func(tree *crdt.Tree, p, a, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), p.ID())
 			span := spanOf(b, p.ID(), a.ID(), nil)
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				[]*crdt.TreeRestoreSpan{span}, crdt.RestoreModeRestore, nil)
-		}, true},
+		}},
 		{"restore the paragraph and b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			spans := []*crdt.TreeRestoreSpan{
@@ -152,13 +148,13 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 			}
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				spans, crdt.RestoreModeRestore, nil)
-		}, false},
+		}},
 		{"restore a span anchored on b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), p.ID())
 			span := spanOf(b, p.ID(), b.ID(), b.ID())
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				[]*crdt.TreeRestoreSpan{span}, crdt.RestoreModeRestore, nil)
-		}, true},
+		}},
 		{"retombstone p and b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			spans := []*crdt.TreeRestoreSpan{
@@ -167,7 +163,7 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 			}
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				nil, crdt.RestoreModeRetombstone, spans)
-		}, false},
+		}},
 	}
 
 	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
@@ -201,10 +197,7 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 				d1.GarbageCollect(final)
 				d2.GarbageCollect(final)
 				assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
-				if release && tc.revivesUnderPurged {
-					require.Len(t, treeCRDT(t, d2).Root().Children(true), 2,
-						"d2 holds the paragraph for the revived b; it stays invisible")
-				} else {
+				if release {
 					assert.Equal(t, treeShape(t, d1), treeShape(t, d2), "and the same tree once both collect")
 				}
 				assertRebuildsSame(t, d1, "after both collect")

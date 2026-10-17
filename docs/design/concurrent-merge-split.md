@@ -1414,9 +1414,10 @@ result. The JS SDK has to mirror all of the following:
    removal of the parent it actually lands under.
 7. **Purge accounting.** GC holds a removed element while a live node is
    under it, so a purge only ever detaches tombstones. `Restore` leaves a
-   detached node a tombstone, and content inserted under a removed parent
-   is booked to GC only (yorkie#2244; the rule is in
-   `document-size-limit.md`).
+   detached node a tombstone, and also a node under an ancestor whose
+   removal the restoring change's version vector covers (an empty vector
+   covers none); content inserted under a removed parent is booked to GC
+   only (yorkie#2244; the rule is in `document-size-limit.md`).
 
 ## Key Design Decisions
 

@@ -1424,6 +1424,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	// way leaves the lineage of spans it never applied alone.
 	var mergeSources []*TreeNodeID
 
+	underKnownRemoval := t.knownRemovalAbove(versionVector)
 	for _, span := range spans {
 		if !span.kindAgrees() {
 			continue
@@ -1443,7 +1444,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				if node.detached {
 					continue
 				}
-				if node.IsRemoved() {
+				if node.IsRemoved() && !underKnownRemoval(node) {
 					node.unremove()
 					untombstoned = append(untombstoned, node)
 					revived(node)
@@ -1491,7 +1492,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				if iErr != nil {
 					return nil, nil, nil, diff, nil, iErr
 				}
-				if target.IsRemoved() {
+				if target.IsRemoved() && !underKnownRemoval(target) {
 					target.unremove()
 					untombstoned = append(untombstoned, target)
 					revived(target)
@@ -1521,6 +1522,51 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	t.dissolveMergeSources(mergeSources, versionVector)
 
 	return untombstoned, recreated, nil, diff, edits, nil
+}
+
+// knownRemovalAbove returns a test, for one Restore call, of whether a node
+// sits under a removed ancestor whose removal the restoring change knew.
+//
+// Restore leaves such a node a tombstone. The restoring change saw its
+// ancestor go, so a revive there would bring back a node no one can see,
+// and how long it then stayed live would depend on when each replica
+// collected: one that had already purged the ancestor leaves the node out
+// with it, one that had not would hold the ancestor for the node (see
+// GCLiveHold) and show the node again if the ancestor were restored. A
+// restore concurrent with the ancestor's removal still revives, as before:
+// every replica applies it before the minimum synced vector lets one purge
+// the ancestor, so they all hold alike. An ancestor revived earlier in the
+// same call is live, so restoring a subtree parent-first revives it whole.
+// An empty vector knows no removal, which keeps a clock-less restore's
+// behaviour as it was.
+//
+// Each node's nearest such ancestor is memoized and re-checked when read,
+// since a revive in the call can end it; a node found to have none keeps
+// none, since a revive never removes anything.
+func (t *Tree) knownRemovalAbove(versionVector time.VersionVector) func(*TreeNode) bool {
+	if len(versionVector) == 0 {
+		return func(*TreeNode) bool { return false }
+	}
+
+	memo := make(map[*TreeNode]*TreeNode)
+	var nearest func(n *TreeNode) *TreeNode
+	nearest = func(n *TreeNode) *TreeNode {
+		if found, ok := memo[n]; ok && (found == nil || found.IsRemoved()) {
+			return found
+		}
+		var found *TreeNode
+		if n.Index != nil && n.Index.Parent != nil {
+			parent := n.Index.Parent.Value
+			if parent.removedAt != nil && time.TicketKnown(versionVector, parent.removedAt) {
+				found = parent
+			} else {
+				found = nearest(parent)
+			}
+		}
+		memo[n] = found
+		return found
+	}
+	return func(n *TreeNode) bool { return nearest(n) != nil }
 }
 
 // isolateTextRange splits piece so that a node exactly covering the absolute

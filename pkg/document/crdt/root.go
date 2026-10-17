@@ -557,8 +557,9 @@ func (r *Root) DeepCopy() (*Root, error) {
 
 // GarbageCollect purge elements that were removed before the given time.
 //
-// A pass can hold a purge back (see GCBarrier), and holding one back can be the
-// only reason another is held back: purging a node hands its successor to the
+// A pass can hold a purge back (see GCBarrier, and GCLiveHold, which counts
+// as deferred the same way), and holding one back can be the only reason
+// another is held back: purging a node hands its successor to the
 // node in front of it, and that successor is one this pass already found
 // stable. So a pass that both purged and deferred may have more to do, and the
 // loop repeats until a pass purges nothing new or defers nothing. Everything

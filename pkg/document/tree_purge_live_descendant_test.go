@@ -103,3 +103,61 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	assert.Equal(t, 0, d1.GarbageLen(), "nothing is left held")
 	assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
 }
+
+// TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC pins that a restore
+// leaves a node a tombstone under an ancestor whose removal the restoring
+// change knew, so the result cannot depend on when each replica collects.
+//
+// d2 deletes "b"; d1 then deletes the paragraph, and d2 sees that before it
+// undoes its delete. d1 collects first, taking the paragraph out; d2 undoes
+// and collects at the same vector. Had the undo revived "b" under the
+// removed paragraph, d2's collection would hold the paragraph for it while
+// d1's had already taken it, and d1's undo of the paragraph delete would
+// bring the paragraph back with "b" on d2 and without it on d1.
+func TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+	vector := func() time.VersionVector {
+		vv := d1.VersionVector().DeepCopy()
+		for _, actor := range []time.ActorID{a1, a2} {
+			if v := d2.VersionVector().VersionOf(actor); v > vv.VersionOf(actor) {
+				vv.Set(actor, v)
+			}
+		}
+		return vv
+	}
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		}})
+		return nil
+	}))
+	crossSync(t, d1, d2)
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(2, 3, nil, 0)
+		return nil
+	}))
+	crossSync(t, d1, d2)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 3, nil, 0)
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	d1.GarbageCollect(vector())
+	require.NoError(t, d2.Undo())
+	d2.GarbageCollect(vector())
+	crossSync(t, d1, d2)
+	assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
+	assert.Equal(t, d1.DocSize().Live, d2.DocSize().Live)
+	assertRebuildsSame(t, d1, "after both collect")
+	assertRebuildsSame(t, d2, "after both collect")
+
+	require.NoError(t, d1.Undo())
+	crossSync(t, d1, d2)
+	assert.Equal(t, "<doc><p>a</p><p>cd</p></doc>", treeXML(t, d1))
+	assert.Equal(t, treeXML(t, d1), treeXML(t, d2), "the paragraph comes back the same everywhere")
+	assertRebuildsSame(t, d1, "after the paragraph's undo")
+	assertRebuildsSame(t, d2, "after the paragraph's undo")
+}
