@@ -1184,15 +1184,12 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 		return
 	}
 
-	ids := make(map[string]struct{}, len(sources))
+	ids := make(map[string]*TreeNodeID, len(sources))
 	for _, id := range sources {
-		ids[id.toIDString()] = struct{}{}
-		if src := t.findFloorNode(id); src != nil && src.id.Equal(id) {
-			src.mergedInto = nil
-		}
+		ids[id.toIDString()] = id
 	}
 
-	for key := range ids {
+	for key, id := range ids {
 		stamped := t.mergeStamps[key]
 		for child := range stamped {
 			// Only a node still stamped with this source and still in the
@@ -1209,8 +1206,15 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 			child.MergedAt = nil
 			delete(stamped, child)
 		}
+		// The pointer follows the stamps: it goes only when no stamp naming
+		// the source is left, as a reload would then derive none. One that a
+		// merge the restore did not know still stamps keeps it, as a reload
+		// of a removed source would derive it again.
 		if len(stamped) == 0 {
 			delete(t.mergeStamps, key)
+			if src := t.findFloorNode(id); src != nil && src.id.Equal(id) {
+				src.mergedInto = nil
+			}
 		}
 	}
 }

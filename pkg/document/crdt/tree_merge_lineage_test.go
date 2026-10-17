@@ -696,3 +696,26 @@ func TestRestoreDissolvesTheStampOfANodeRefusedItsID(t *testing.T) {
 	assert.Nil(t, f.text.MergedFrom)
 	assert.Nil(t, twin.MergedFrom, "the refused node's stamp goes too")
 }
+
+// TestRestoreKeepsThePointerWithAnUnknownMergesStamp pins that the pointer
+// half of the dissolution follows the stamps. A merge the restoring change
+// did not know still stamps a child of the source; its stamp stays, and so
+// does the source's pointer, as a reload would derive it again from that
+// stamp once the source is removed.
+func TestRestoreKeepsThePointerWithAnUnknownMergesStamp(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	peer, err := time.ActorIDFromHex("0000000000000000000000dd")
+	require.NoError(t, err)
+	f.p3.remove(f.nextTicket())
+	f.text.MergedFrom = f.p3.id
+	f.text.MergedAt = time.NewTicket(1<<20, 0, peer)
+	tree := NewTree(f.tree.Root(), f.nextTicket())
+	require.NotNil(t, f.p3.mergedInto)
+
+	_, _, _, _, _, err = tree.Restore([]*TreeRestoreSpan{{
+		ID: f.p3.id, NodeType: "p", Length: 1,
+	}}, false, knowing(f.nextTicket()))
+	require.NoError(t, err)
+	assert.True(t, f.text.MergedFrom.Equal(f.p3.id), "the unknown merge's stamp stays")
+	assert.NotNil(t, f.p3.mergedInto, "and the pointer stays with it")
+}
