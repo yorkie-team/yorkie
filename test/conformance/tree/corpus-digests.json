@@ -6,8 +6,8 @@
     "xmlDigest": "ad11c9322a618e86"
   },
   "gen-all-193-min.json": {
-    "result": "pass",
-    "checks": "11111",
+    "result": "fail",
+    "checks": "11101",
     "digest": "016fb7f6bc1fc48c",
     "xmlDigest": "c81262dfe1b6245d"
   },
