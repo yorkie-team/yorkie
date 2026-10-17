@@ -1321,7 +1321,10 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 }
 
 // Purge implements GCParent: it detaches child, with its subtree, from the
-// tree. See TreeNode.detached for what a detached node is.
+// tree, releasing the live nodes under it as PurgeReleasing does. It cannot
+// report their size, so a caller that keeps a size ledger purges through
+// PurgeReleasing instead, as Root does (see GCLiveRelease). See
+// TreeNode.detached for what a detached node is.
 func (t *Tree) Purge(child GCChild) error {
 	_, _, err := t.purgeReleasing(child.(*TreeNode))
 	return err
@@ -1362,6 +1365,12 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 	if node.Index == nil || node.Index.Parent == nil {
 		return 0, released, nil
 	}
+	// Only a tombstone is purged: a GC pair claims its child is removed, and
+	// a live node taken out would carry live bytes, and the live nodes under
+	// it, out of the tree with no removal to release them with.
+	if node.removedAt == nil {
+		return 0, released, nil
+	}
 	from := node.Index.Parent
 	var before *TreeNode
 	if next := from.NextSiblingOf(node.Index); next != nil {
@@ -1376,7 +1385,7 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 	if !node.detached {
 		index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
 			visits++
-			if !n.Value.IsRemoved() && node.removedAt != nil {
+			if !n.Value.IsRemoved() {
 				released.Add(n.Value.DataSize())
 				n.Value.remove(node.removedAt)
 			}
@@ -1563,6 +1572,9 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	// way leaves the lineage of spans it never applied alone.
 	var mergeSources []*TreeNodeID
 
+	// The forgotten list reports this call's alone (see TakeForgotten).
+	t.forgotten = nil
+
 	underKnownRemoval := t.knownRemovalAbove(versionVector)
 	for _, span := range spans {
 		if !span.kindAgrees() {
@@ -1686,8 +1698,9 @@ func (t *Tree) forgetDetached(node *TreeNode) {
 	t.forgotten = append(t.forgotten, node)
 }
 
-// TakeForgotten returns the detached nodes Restore forgot and clears the
-// list. The caller drops their pending GC pairs (Root.DropGCPair) before it
+// TakeForgotten returns the detached nodes the last Restore forgot and
+// clears the list; each Restore starts it afresh, so a caller that does not
+// take it leaves nothing for a later one to act on. The caller drops their pending GC pairs (Root.DropGCPair) before it
 // registers the pairs the same Restore booked: a recreate reuses the
 // forgotten node's ID, and a pair left under that key would make the
 // recreated node's registration cancel it instead of adding its own.
