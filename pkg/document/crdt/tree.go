@@ -1877,8 +1877,14 @@ func textCoverKey(span *TreeRestoreSpan) string {
 }
 
 // uncoveredTextSpans returns the parts of the text span that none of covers,
-// sorted and merged intervals, holds, each as a span of its own with the
-// span's anchors.
+// sorted and merged intervals, holds, each as a span of its own. A part
+// keeps the span's left anchor only if it starts where the span does, and
+// its right anchor only if it ends there too; between parts, the anchors are
+// the covered characters of the same insertion on either side. A Restore
+// after GC recreates the parts before the covering spans, so a part past
+// the first places itself after the part before it (the floor of the
+// character in front of its gap), not after the span's left neighbour,
+// which would put it ahead of that part.
 func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSpan {
 	// An empty span covers no range for another span to cover; it is kept as
 	// it is rather than dropped from the reverse operation.
@@ -1920,6 +1926,12 @@ func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSp
 		part.Length = gap[1] - gap[0]
 		from, to := min(gap[0]-start, len(encoded)), min(gap[1]-start, len(encoded))
 		part.Value = string(utf16.Decode(encoded[from:to]))
+		if gap[0] > start {
+			part.LeftSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0] - 1}
+		}
+		if gap[1] < end {
+			part.RightSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[1]}
+		}
 		parts = append(parts, &part)
 	}
 	return parts

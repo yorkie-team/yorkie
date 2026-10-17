@@ -1404,8 +1404,11 @@ result. The JS SDK has to mirror all of the following:
 5. **Retombstone cascade.** Retombstoning an element applies the §4.1
    cascade to its unknown split products, with the subtree, and reports a
    span for each node it removed, parent before child, leaving out any
-   node an input span already describes. A detached node starts no cascade
-   and is not removed again.
+   node an input span already describes. A cascaded text span cut into
+   parts keeps its left anchor on the first part and its right anchor on
+   the last; between parts, each is anchored on the covered characters of
+   its insertion on either side of its gap. A detached node starts no
+   cascade and is not removed again.
 6. **Recreate.** A recreated text piece is spliced back into its
    insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
    predecessor and what that points at, or, with none, to an adjacent

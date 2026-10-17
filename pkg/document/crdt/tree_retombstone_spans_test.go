@@ -76,6 +76,60 @@ func TestAppendUncoveredSpans(t *testing.T) {
 	}
 }
 
+// TestUncoveredTextSpansAnchorEachGap pins the anchors of a cascaded text
+// span cut into two parts by an input span inside it. Each part is anchored
+// on its own gap, and a Restore after GC that recreates the parts before the
+// input span brings the text back in order: the second part after the
+// first, not after the left neighbour the whole span had.
+func TestUncoveredTextSpansAnchorEachGap(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	nextTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+	insertion := nextTicket()
+	require.NoError(t, p.Append(NewTreeNode(NewTreeNodeID(insertion, 0), "text", nil, "abcde")))
+	require.NoError(t, root.Append(p))
+	tree := NewTree(root, nextTicket())
+
+	// <r><p>abcde</p></r>: delete "bcde" and purge it.
+	_, _, err = tree.EditT(2, 6, nil, 0, nextTicket(), nextTicket)
+	require.NoError(t, err)
+	a := p.Children(true)[0]
+	removed := p.Children(true)[1]
+	require.Equal(t, "a", a.Value)
+	require.NoError(t, tree.Purge(removed))
+	require.Equal(t, "<r><p>a</p></r>", tree.ToXML())
+
+	at := func(offset int) *TreeNodeID { return NewTreeNodeID(insertion, offset) }
+	cascaded := &TreeRestoreSpan{
+		ID: at(1), NodeType: "text", IsText: true, Length: 4, Value: "bcde",
+		ParentID: p.id, LeftSiblingID: a.id,
+	}
+	parts := uncoveredTextSpans(cascaded, [][2]int{{2, 4}})
+	require.Len(t, parts, 2)
+	assert.Equal(t, "b", parts[0].Value)
+	assert.Equal(t, a.id, parts[0].LeftSiblingID, "the first part keeps the span's left")
+	assert.Equal(t, at(2), parts[0].RightSiblingID, "and ends before the covered c")
+	assert.Equal(t, "e", parts[1].Value)
+	assert.Equal(t, at(3), parts[1].LeftSiblingID, "the second starts after the covered d")
+	assert.Nil(t, parts[1].RightSiblingID, "and keeps the span's right")
+
+	input := &TreeRestoreSpan{
+		ID: at(2), NodeType: "text", IsText: true, Length: 2, Value: "cd",
+		ParentID: p.id, LeftSiblingID: a.id,
+	}
+	known := time.NewVersionVector()
+	known.Set(actor, lamport)
+	_, _, _, _, _, err = tree.Restore(append(parts, input), false, known)
+	require.NoError(t, err)
+	assert.Equal(t, "<r><p>abcde</p></r>", tree.ToXML())
+}
+
 // TestRetombstoneCascadesWhateverArrivedFirst pins that the §4.1 cascade in
 // Retombstone does not depend on arrival order. A peer's Enter split <p>ab</p>
 // unknown to the retombstoning change, and a concurrent delete, which knew
