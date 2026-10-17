@@ -98,8 +98,20 @@ type GCBarrier[C any] interface {
 // and a live node has no GC pair of its own, so purging its ancestor would
 // detach bytes that docSize.Live still holds while a rebuild, walking the
 // attached tree, no longer counts them (yorkie#2244). Root therefore holds a
-// child back while a live node is under it; the hold ends when that node is
-// removed and, in turn, collected.
+// child back while a live node is under it.
+//
+// What ends the hold is that node's removal: once every node under the
+// child is a tombstone, the child goes on the next pass that covers it, and
+// each tombstone below goes on its own pair's. The hold never outlives a
+// node a client could delete, and what it keeps is that node's removed
+// ancestors, whose bytes stay in docSize.GC; the live node itself is counted
+// in Live meanwhile. That retention is the shape a rebuild reports too, so
+// the ledger and a rebuild agree throughout.
+//
+// The test reads only the liveness of the child's descendants, which every
+// replica that applied the same changes agrees on, and Root asks it only
+// after removedAt and GCBarrier have both let the child go: it can delay a
+// purge those allow, never allow one they defer.
 type GCLiveHold[C any] interface {
 	// LiveDescendantTest returns a test of whether a child has a live
 	// descendant, valid for one collection pass.

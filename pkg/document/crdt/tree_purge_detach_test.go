@@ -162,3 +162,56 @@ func TestRestoreLeavesADetachedNodeATombstone(t *testing.T) {
 	assert.True(t, p.IsRemoved())
 	assert.True(t, text.IsRemoved())
 }
+
+// TestLiveHoldComposesWithTheBarrier pins that the live-descendant hold only
+// ever delays a purge removedAt and GCBarrier allow. div is removed with live
+// text under it and a sibling after it whose creation the collection vector
+// does not cover. Neither the barrier nor the hold alone lets div go; with
+// the barrier covered the hold still keeps it; with the text removed, the
+// text goes and div waits for the barrier, then goes, and the ledger then
+// holds nothing for either.
+func TestLiveHoldComposesWithTheBarrier(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000dd")
+	require.NoError(t, err)
+	lamport := int64(0)
+	nextTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "div", nil)
+	text := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "ab")
+	after := NewTreeNode(NewTreeNodeID(time.NewTicket(50, 0, peer), 0), "p", nil)
+	require.NoError(t, root.Append(div, after))
+	require.NoError(t, div.Append(text))
+	tree := NewTree(root, nextTicket())
+	removedAt := nextTicket()
+	div.remove(removedAt)
+
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	size := div.DataSize()
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: div, GCOnlySize: &size})
+	collect := func(peerSeen int64) int {
+		vector := time.NewVersionVector()
+		vector.Set(actor, lamport)
+		vector.Set(peer, peerSeen)
+		n, err := doc.GarbageCollect(vector)
+		require.NoError(t, err)
+		return n
+	}
+
+	assert.Equal(t, 0, collect(0), "the barrier and the hold both keep div")
+	assert.Equal(t, 0, collect(50), "barrier covered: the live text still holds div")
+
+	text.remove(nextTicket())
+	textSize := text.DataSize()
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: text, GCOnlySize: &textSize})
+	assert.Equal(t, 1, collect(0), "text removed: it goes, while the barrier keeps div")
+	assert.Same(t, div, tree.Root().Children(true)[0])
+	assert.Equal(t, 1, collect(50), "both allow: div goes")
+	assert.Equal(t, 0, doc.GarbageLen())
+	gc := doc.DocSize().GC
+	assert.Zero(t, (&gc).Total())
+}

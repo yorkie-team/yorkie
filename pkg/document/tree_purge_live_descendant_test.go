@@ -98,6 +98,7 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	crossSync(t, d1, d2)
 	require.True(t, text.IsRemoved())
 	assert.Positive(t, collect(t))
+	// The hold ends with the live node: GC and Live both equal a rebuild.
 	assertRebuildsSame(t, d1, "after the hold is released")
 	assert.Equal(t, 0, d1.GarbageLen(), "nothing is left held")
 	assert.Equal(t, treeXML(t, d1), treeXML(t, d2))

@@ -121,6 +121,20 @@ attached tree (yorkie#2244). The rule that keeps the two equal:
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
 | `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
 
+**How this hold differs from the ones rejected before.** Earlier revisions
+held a removed element for its children twice. Holding while the element
+had *any* child never ended for a live child, which has no GC pair; this
+hold ends when the live node under the element is removed and its removal
+is collectable, which an ordinary delete brings about, and it never holds
+for a tombstone child. Holding only while an uncovered tombstone sat below
+it, and unregistering the subtree on purge, left live descendants' bytes in
+`Live` and bypassed `PurgeBarrierAt`; here nothing live is ever purged, so
+nothing is left in `Live`, nothing is unregistered beyond the purged node
+as on main, and the hold is asked only after `removedAt` and the barrier
+both allow the purge. The retained bytes are the removed ancestors of a
+live node, kept in `GC` until that node goes, which is what a rebuild of
+the same tree reports as well.
+
 One residual is not a ledger matter. An identity restore of a node whose
 ancestor one replica already took out and another did not leaves the two
 apart in tombstones only: the first leaves the node a tombstone, the second
