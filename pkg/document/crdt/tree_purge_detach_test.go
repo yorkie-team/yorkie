@@ -301,3 +301,63 @@ func TestRestoreRecreatesNothingUnderADetachedParent(t *testing.T) {
 	assert.Empty(t, p.Children(true), "nothing is placed under the detached p")
 	assert.Empty(t, tree.drainPendingGCPairs(), "and nothing is booked to GC")
 }
+
+// TestRecreateGoesNowhereDetachedThroughASplitHome pins the detached check
+// on rung (a)'s split home. A peer's split carried "b" of <p>ab</p> into p'
+// under a new div', which was then deleted and purged, leaving p' and "b"
+// registered and detached. Recreating the purged "a" under p, from a change
+// that did not know the split, must not follow "b" into p': it would land
+// in a subtree nothing references and be booked to GC for bytes no rebuild
+// holds. It falls through to the other rungs and lands under p.
+func TestRecreateGoesNowhereDetachedThroughASplitHome(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	require.NoError(t, err)
+	lamport := int64(0)
+	nextTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+	insertion := nextTicket()
+	require.NoError(t, p.Append(NewTreeNode(NewTreeNodeID(insertion, 0), "text", nil, "ab")))
+	require.NoError(t, div.Append(p))
+	require.NoError(t, root.Append(div))
+	tree := NewTree(root, nextTicket())
+	unaware := time.NewVersionVector()
+	unaware.Set(actor, lamport)
+
+	peerLamport := lamport
+	peerTicket := func() *time.Ticket {
+		peerLamport++
+		return time.NewTicket(peerLamport, 0, peer)
+	}
+	_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+	require.NoError(t, err)
+	require.Equal(t, "<r><div><p>a</p></div><div><p>b</p></div></r>", tree.ToXML())
+	product := tree.Root().Children()[1]
+	productP := product.Children()[0]
+
+	lamport = peerLamport
+	_, _, err = tree.EditT(5, 10, nil, 0, nextTicket(), nextTicket)
+	require.NoError(t, err)
+	_, err = tree.purge(product)
+	require.NoError(t, err)
+	require.True(t, productP.detached)
+	_, _, err = tree.EditT(2, 3, nil, 0, nextTicket(), nextTicket)
+	require.NoError(t, err)
+	require.NoError(t, tree.Purge(p.Children(true)[0]))
+	require.Equal(t, "<r><div><p></p></div></r>", tree.ToXML())
+
+	_, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{{
+		ID: NewTreeNodeID(insertion, 0), NodeType: "text", IsText: true, Length: 1, Value: "a", ParentID: p.id,
+	}}, false, unaware)
+	require.NoError(t, err)
+	require.Len(t, recreated, 1)
+	assert.Same(t, p, recreated[0].Index.Parent.Value, "recreated under p, not the detached p'")
+	assert.Equal(t, "<r><div><p>a</p></div></r>", tree.ToXML())
+	assert.Empty(t, tree.drainPendingGCPairs(), "and nothing is booked to GC")
+}

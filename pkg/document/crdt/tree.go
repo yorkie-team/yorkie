@@ -2449,8 +2449,10 @@ func (t *Tree) concurrentSplitHome(succ, parent *TreeNode, versionVector time.Ve
 		return nil
 	}
 
+	// A detached home is out of the tree, as recreateParent refuses a
+	// detached parent for (see TreeNode.detached).
 	home := succ.Index.Parent.Value
-	if home.IsText() || home == parent {
+	if home.IsText() || home == parent || home.detached {
 		return nil
 	}
 
