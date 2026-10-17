@@ -147,9 +147,10 @@ would then bring it back on those alone. A restore concurrent with the
 ancestor's removal still revives the node, and every replica applies it
 before the minimum synced vector lets one purge the ancestor, so they hold
 alike. Whether that concurrent revive or the removal wins on a replica
-depends on the order it applied them, which is the identity revive against
-concurrent remove race main has without any GC; the hold follows that
-liveness and adds no difference of its own.
+depends on the order it applied them. That is the identity revive against
+concurrent remove race, which diverges on main without any GC
+(yorkie#2247). The hold does not cause it, but it keeps the divergence
+visible where a purge of the ancestor used to drop the revived node.
 
 **What a crafted restore can extend.** A client can still make a node live
 under a removed element with an identity restore that claims not to know
