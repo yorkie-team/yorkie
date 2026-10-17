@@ -1139,12 +1139,14 @@ func TestToIndexUnderARemovedAncestorKeepsItsIndex(t *testing.T) {
 	assert.NotEqual(t, reported, ranged, "the two resolutions differ here")
 }
 
-// TestDropGCPairGivesBackWhatRegistrationPutIn pins Root.DropGCPair's
-// accounting: it takes out of GC what registering the pair added, the
-// child's size for an ordinary pair and GCOnlySize for one booked with it,
-// leaves a pair registered under the key for another child alone, and is a
-// no-op when nothing is registered.
-func TestDropGCPairGivesBackWhatRegistrationPutIn(t *testing.T) {
+// TestDropGCPairGivesBackThePurgeAmount pins Root.DropGCPair's accounting:
+// it takes out of GC what purging the child would, its size, for an
+// ordinary pair and for one booked with GCOnlySize alike, leaves a pair
+// registered under the key for another child alone, and is a no-op when
+// nothing is registered. TestRestoreAfterDetachKeepsTheLedger pins why the
+// GCOnlySize case is the size too: a split piece's bytes are in GC under its
+// sibling's charge by the time the piece is forgotten.
+func TestDropGCPairGivesBackThePurgeAmount(t *testing.T) {
 	tree, _, p, text, removedAt := detachFixture(t)
 	text.remove(removedAt)
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
@@ -1154,15 +1156,15 @@ func TestDropGCPairGivesBackWhatRegistrationPutIn(t *testing.T) {
 	doc.RegisterGCPair(GCPair{Parent: tree, Child: text})
 	doc.DropGCPair(GCPair{Parent: tree, Child: text})
 	assert.Equal(t, 0, doc.GarbageLen())
-	gc := doc.DocSize().GC
-	assert.Equal(t, base.GC, gc, "an ordinary pair gives back the child's size")
+	assert.Equal(t, base.GC, doc.DocSize().GC, "an ordinary pair gives back the child's size")
 
-	booked := resource.DataSize{Data: 7, Meta: 3}
-	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
+	size := p.DataSize()
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &size})
 	doc.DropGCPair(GCPair{Parent: tree, Child: p})
 	assert.Equal(t, 0, doc.GarbageLen())
-	assert.Equal(t, base.GC, doc.DocSize().GC, "a GCOnlySize pair gives back GCOnlySize")
+	assert.Equal(t, base.GC, doc.DocSize().GC, "a GCOnlySize pair gives back the child's size")
 
+	booked := resource.DataSize{Data: 7, Meta: 3}
 	other := NewTreeNode(p.id, "p", nil)
 	other.remove(removedAt)
 	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
