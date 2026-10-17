@@ -383,3 +383,67 @@ func TestRetombstoneReverseSharesNoAttributes(t *testing.T) {
 	reverse[0].Attributes.Set("k", "w", next())
 	assert.Equal(t, "v", span.Attributes.Get("k"))
 }
+
+// TestDeleteCascadeReportsParentsFirst pins the order of the spans the §4.1
+// cascade adds to a delete's reverse. A peer's split cut
+// <r><div><p>ab</p></div></r> into two divs, the product div' holding p'
+// and "b"; a delete of the first div that did not know the split cascades
+// to the product. Its reverse has to name div' before p' before "b": an
+// undo, which knows the delete, revives a node only once its parent is live
+// again, so a child listed first would stay a tombstone.
+func TestDeleteCascadeReportsParentsFirst(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(next(), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	require.NoError(t, p.Append(NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "ab")))
+	require.NoError(t, div.Append(p))
+	require.NoError(t, root.Append(div))
+	tree := NewTree(root, next())
+	unaware := time.NewVersionVector()
+	unaware.Set(actor, lamport+10)
+
+	peerLamport := lamport
+	peerTicket := func() *time.Ticket {
+		peerLamport++
+		return time.NewTicket(peerLamport, 0, peer)
+	}
+	_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+	require.NoError(t, err)
+	require.Equal(t, "<r><div><p>a</p></div><div><p>b</p></div></r>", tree.ToXML())
+
+	lamport = peerLamport
+	from, err := tree.FindPos(0)
+	require.NoError(t, err)
+	to, err := tree.FindPos(5)
+	require.NoError(t, err)
+	at := next()
+	unaware.Set(actor, at.Lamport())
+	_, _, info, err := tree.Edit(from, to, nil, 0, at, next, unaware, true)
+	require.NoError(t, err)
+	require.Equal(t, "<r></r>", tree.ToXML(), "the cascade took the product too")
+
+	seen := map[string]bool{root.id.toIDString(): true}
+	for _, span := range info.RemovedSpans {
+		require.NotNil(t, span.ParentID)
+		assert.True(t, seen[span.ParentID.toIDString()], "%s comes after its parent", span.NodeType)
+		if !span.IsText {
+			seen[span.ID.toIDString()] = true
+		}
+	}
+
+	known := time.NewVersionVector()
+	known.Set(actor, at.Lamport())
+	known.Set(peer, peerLamport)
+	_, _, _, _, _, err = tree.Restore(info.RemovedSpans, false, known)
+	require.NoError(t, err)
+	assert.Equal(t, "<r><div><p>a</p></div><div><p>b</p></div></r>", tree.ToXML(), "the undo brings all of it back")
+}

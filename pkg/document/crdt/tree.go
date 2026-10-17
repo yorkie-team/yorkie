@@ -4419,14 +4419,18 @@ func (t *Tree) appendUnknownSplitSiblings(
 				break
 			}
 		} else {
-			toBeRemoveds = append(toBeRemoveds, next)
-			// Cascade through the full subtree, not just immediate children.
-			sibling := next
-			index.TraverseNode(sibling.Index, func(n *index.Node[*TreeNode], _ int) {
-				if n.Value != sibling {
-					toBeRemoveds = append(toBeRemoveds, n.Value)
+			// Cascade through the full subtree, not just immediate children,
+			// parent before child: the order becomes the reverse operation's
+			// spans, and Restore revives a child only once its parent is live
+			// again (see knownRemovalAbove).
+			var preorder func(n *index.Node[*TreeNode])
+			preorder = func(n *index.Node[*TreeNode]) {
+				toBeRemoveds = append(toBeRemoveds, n.Value)
+				for _, child := range n.Children(true) {
+					preorder(child)
 				}
-			})
+			}
+			preorder(next.Index)
 		}
 		if next.InsNextID == nil {
 			break
