@@ -92,14 +92,40 @@ client's local check trips first.
 the document the server built, so it must match what rebuilding the same
 document reports (`DeepCopy().DocSize()`, a snapshot load), or the gate
 refuses writes for bytes the document no longer holds. Purging a Tree
-element detaches its whole subtree, including descendants that are still
-live: a child an identity restore revived under an element that stayed
-removed has no GC pair and is charged to `Live`. `Root` takes those
-descendants' size out of `Live` when it purges the element (`GCDetach`),
-and marks the detached subtree. The nodes keep their identity, as before,
-but `Restore` and `Retombstone` leave a detached node alone, so a later
-change that names one by identity neither takes it out of a ledger a second
-time nor charges one for it (yorkie#2244).
+element detaches its whole subtree, and a descendant can still be live: a
+child an identity restore revived under an element that stayed removed has
+no GC pair and is charged to `Live`, while a rebuild walks only the
+attached tree (yorkie#2244). The rule that keeps the two equal:
+
+- **A detached node is a tombstone, and stays one.** GC holds a removed
+  element while a live node is under it (`GCLiveHold`); the hold ends once
+  that node is removed and its own removal is collectable. Everything a
+  purge detaches was therefore already off `Live`.
+- Nothing makes a detached node live again. `Restore` leaves one alone, and
+  content placed under a removed parent, which a detached parent always is,
+  is born tombstoned and booked to GC only.
+- Detached tombstones stay registered and in their chains, as on main, so
+  every lookup and walk that reached them before still does; no such path
+  can charge `Live` for one.
+
+| Path | With a detached node | Pinned by |
+|---|---|---|
+| GC purge of an ancestor | held while a live node is under it | `TestCollectHoldsAnElementWithALiveDescendant`, `TestTreePurgeWithLiveDescendant` |
+| GC purge inside a detached subtree | walks nothing; one pass is O(nodes) | `TestPurgeInsideADetachedSubtreeWalksNothing`, `TestCollectWalksADeletedSubtreeOnce` |
+| `Restore`, element and text spans | left a tombstone, not revived or recreated | `TestRestoreLeavesADetachedNodeATombstone` |
+| `Retombstone`, the §4.1 cascades | reach only tombstones: no new GC pair | `TestTreeOpsNamingACollectedSubtree` |
+| `recreateFromSpan` under a detached parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
+| `Edit` insert under a detached or removed parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
+| `Edit` delete, `Style` over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
+| `refreshSpanAnchors`, `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
+| `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
+| `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
+
+One residual is not a ledger matter. An identity restore of a node whose
+ancestor one replica already took out and another did not leaves the two
+apart in tombstones only: the first leaves the node a tombstone, the second
+revives it under the removed ancestor it still holds and GC then holds that
+ancestor. Both stay invisible, as on main.
 
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The

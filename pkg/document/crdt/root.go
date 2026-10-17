@@ -640,6 +640,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// zero, and have its size subtracted again on the next pass. No IDString
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
+	liveTests := make(map[GCParent]func(GCChild) bool)
 	for key, pair := range r.gcNodePairMap {
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			continue
@@ -652,25 +653,25 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			}
 		}
 
-		var detachedLive resource.DataSize
-		var err error
-		if parent, ok := pair.Parent.(GCDetach[GCChild]); ok {
-			detachedLive, err = parent.PurgeDetached(pair.Child)
-		} else {
-			err = pair.Parent.Purge(pair.Child)
+		// A purge never detaches a live node (see GCLiveHold), so everything
+		// it takes out of the tree was a tombstone, already off Live.
+		if parent, ok := pair.Parent.(GCLiveHold[GCChild]); ok {
+			test, built := liveTests[pair.Parent]
+			if !built {
+				test = parent.LiveDescendantTest()
+				liveTests[pair.Parent] = test
+			}
+			if test(pair.Child) {
+				deferred++
+				continue
+			}
 		}
-		if err != nil {
+
+		if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
 
 		r.docSize.GC.Sub(pair.Child.DataSize())
-		// Every live node is charged to Live at its DataSize, so the size of
-		// the live nodes the purge detached is what Live holds for them. It
-		// is still never taken below zero: Live is what MaxSizePerDocument
-		// is checked against, and an under-count would switch the gate off.
-		detachedLive.Data = min(detachedLive.Data, r.docSize.Live.Data)
-		detachedLive.Meta = min(detachedLive.Meta, r.docSize.Live.Meta)
-		r.docSize.Live.Sub(detachedLive)
 		delete(r.gcNodePairMap, key)
 		count++
 	}

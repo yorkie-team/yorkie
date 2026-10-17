@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -51,47 +50,52 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 	return tree, div, p, text, removedAt
 }
 
-// TestPurgeDetachedCountsADetachedSubtreeOnce pins the already-detached
-// guard of PurgeDetached. Purging div detaches p with the live text under
-// it, and reports the text's size for Root to take out of Live. p keeps a GC
-// pair of its own and is purged later, inside the subtree that already left
-// the tree; reporting the text again would take it out of Live twice.
-func TestPurgeDetachedCountsADetachedSubtreeOnce(t *testing.T) {
-	tree, div, p, text, _ := detachFixture(t)
-
-	size, err := tree.PurgeDetached(div)
-	require.NoError(t, err)
-	assert.Equal(t, text.DataSize(), size, "the purge reports the live text")
-
-	size, err = tree.PurgeDetached(p)
-	require.NoError(t, err)
-	assert.Equal(t, resource.DataSize{}, size, "already detached: nothing left to report")
-}
-
-// TestCollectNeverTakesLiveBelowZero pins the clamp at the call site. The
-// live text under the purged elements was never charged to this Root's
-// Live, which an honest replica cannot reach since every live node is
-// charged at its size; the subtraction still stops at zero instead of
-// leaving a negative Live that would switch the size gate off.
-func TestCollectNeverTakesLiveBelowZero(t *testing.T) {
-	tree, div, p, _, removedAt := detachFixture(t)
+// TestCollectHoldsAnElementWithALiveDescendant pins the GC hold behind the
+// detached-node invariant. div and p are removed with live text under them,
+// the shape an identity restore leaves. Neither is purged while the text is
+// live: a purge would detach bytes Live still holds while a rebuild no
+// longer counts them. Once the text is removed too, all three go.
+func TestCollectHoldsAnElementWithALiveDescendant(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
 	root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
-	// Booked to GC only, as born-dead nodes are, so Live holds nothing for
-	// any of the three nodes.
 	for _, node := range []*TreeNode{div, p} {
 		size := node.DataSize()
 		root.RegisterGCPair(GCPair{Parent: tree, Child: node, GCOnlySize: &size})
 	}
-	require.Zero(t, root.DocSize().Live.Data, "nothing of the text is charged to Live")
 
 	vector := time.NewVersionVector()
-	vector.Set(removedAt.ActorID(), removedAt.Lamport())
+	vector.Set(removedAt.ActorID(), removedAt.Lamport()+1)
 	n, err := root.GarbageCollect(vector)
 	require.NoError(t, err)
-	assert.Equal(t, 2, n)
-	live := root.DocSize().Live
-	assert.GreaterOrEqual(t, live.Data, 0, "the text's bytes are not taken out of a Live that never held them")
-	assert.GreaterOrEqual(t, live.Meta, 0)
+	assert.Equal(t, 0, n, "held while the text under them is live")
+	assert.Equal(t, "<r></r>", tree.ToXML())
+	assert.Len(t, tree.Root().Children(true), 1, "div is still in the tree")
+
+	text.remove(time.NewTicket(removedAt.Lamport()+1, 0, removedAt.ActorID()))
+	size := text.DataSize()
+	root.RegisterGCPair(GCPair{Parent: tree, Child: text, GCOnlySize: &size})
+	n, err = root.GarbageCollect(vector)
+	require.NoError(t, err)
+	assert.Equal(t, 3, n, "released once nothing under them is live")
+	assert.Empty(t, tree.Root().Children(true))
+}
+
+// TestPurgeInsideADetachedSubtreeWalksNothing pins the detached mark: a node
+// a purge already took out with its ancestor is purged later, through its
+// own GC pair, without walking anything.
+func TestPurgeInsideADetachedSubtreeWalksNothing(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
+	text.remove(removedAt)
+
+	walked, err := tree.purge(div)
+	require.NoError(t, err)
+	assert.Equal(t, 3, walked)
+	assert.True(t, p.detached)
+	assert.True(t, text.detached)
+
+	walked, err = tree.purge(p)
+	require.NoError(t, err)
+	assert.Equal(t, 0, walked, "already detached: nothing to walk")
 }
 
 // TestCollectWalksADeletedSubtreeOnce pins the cost of collecting a deleted
@@ -125,11 +129,36 @@ func TestCollectWalksADeletedSubtreeOnce(t *testing.T) {
 
 	visits := 0
 	for _, node := range nodes {
-		_, walked, err := tree.purgeDetached(node)
+		walked, err := tree.purge(node)
 		require.NoError(t, err)
 		visits += walked
 	}
 	assert.Equal(t, depth, visits, "every node is walked exactly once")
 	assert.Equal(t, 1, tree.NodeMapByID.Len(), "only the root is left registered")
 	assert.Equal(t, "<r></r>", tree.ToXML())
+}
+
+// TestRestoreLeavesADetachedNodeATombstone pins Restore's two detached
+// guards. div is purged while p and the text under it are still tombstones
+// whose own removals are not yet collectable, so they stay registered,
+// detached. A restore naming either, by element span or by text span, must
+// not revive it: a detached node is off the ledger and out of the tree, and
+// reviving it would charge Live for bytes no rebuild holds.
+func TestRestoreLeavesADetachedNodeATombstone(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
+	text.remove(removedAt)
+	_, err := tree.purge(div)
+	require.NoError(t, err)
+	require.True(t, p.detached)
+	require.Same(t, p, tree.findFloorNode(p.id), "p is still registered")
+
+	untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
+		{ID: p.id, NodeType: "p", Length: 1, ParentID: div.id},
+		{ID: text.id, NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.id},
+	}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, untombstoned)
+	assert.Empty(t, recreated)
+	assert.True(t, p.IsRemoved())
+	assert.True(t, text.IsRemoved())
 }
