@@ -939,3 +939,60 @@ func TestRangeBetweenTwoDetachedSubtrees(t *testing.T) {
 		assert.Equal(t, attrs[0], attrs[1], "style %v: the same attributes on m", style)
 	}
 }
+
+// TestSplitMovedAcrossTheDetachedBoundary pins §7.4's move of an empty split
+// product next to its InsNext sibling when the two sit on different sides of
+// a purge. n, in a, and its earlier split product s, in b, are linked; one of
+// a and b is purged. Splitting n at its end moves the new product before s,
+// and the product takes s's side: detached and a tombstone inside a purged
+// subtree, attached outside one, and indexed where its side says, so
+// NodeMapByID still holds exactly what is reachable from the root.
+func TestSplitMovedAcrossTheDetachedBoundary(t *testing.T) {
+	for _, purged := range []string{"a", "b"} {
+		t.Run("purged "+purged, func(t *testing.T) {
+			actor, err := time.ActorIDFromHex("000000000000000000000001")
+			require.NoError(t, err)
+			lamport := int64(0)
+			next := func() *time.Ticket {
+				lamport++
+				return time.NewTicket(lamport, 0, actor)
+			}
+			root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+			a := NewTreeNode(NewTreeNodeID(next(), 0), "a", nil)
+			b := NewTreeNode(NewTreeNodeID(next(), 0), "b", nil)
+			n := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+			x := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "x")
+			s := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+			require.NoError(t, root.Append(a, b))
+			require.NoError(t, a.Append(n))
+			require.NoError(t, n.Append(x))
+			require.NoError(t, b.Append(s))
+			n.InsNextID, s.InsPrevID = s.id, n.id
+			tree := NewTree(root, next())
+			gone := map[string]*TreeNode{"a": a, "b": b}[purged]
+			removedAt := next()
+			gone.remove(removedAt)
+			if purged == "a" {
+				n.remove(removedAt)
+				x.remove(removedAt)
+			} else {
+				s.remove(removedAt)
+			}
+			_, err = tree.PurgeReleasing(gone)
+			require.NoError(t, err)
+
+			known := time.NewVersionVector()
+			known.Set(actor, 1000)
+			_, err = n.Split(tree, 1, next, known)
+			require.NoError(t, err)
+			product := s.Index.Parent.Children(true)[0].Value
+			require.NotSame(t, s, product, "the product sits before s")
+			assert.Equal(t, s.detached, product.detached, "the product takes s's side")
+			if product.detached {
+				assert.True(t, product.IsRemoved(), "a detached product is a tombstone")
+			}
+			assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable")
+			assert.Same(t, product, tree.findFloorNode(product.id))
+		})
+	}
+}

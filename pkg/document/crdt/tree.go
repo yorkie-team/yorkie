@@ -382,6 +382,19 @@ func (n *TreeNode) Split(
 					); err != nil {
 						return diff, err
 					}
+
+					// The move can cross into or out of a subtree a purge
+					// took out (see TreeNode.detached). The product takes
+					// its new parent's side: out of one it is an attached
+					// tombstone, as split off a removed node, and into one
+					// it is released as the purge released what it found
+					// there, so it is booked to GC below and not to Live.
+					if dest := insNext.Index.Parent.Value; dest.detached != split.detached {
+						split.detached = dest.detached
+						if split.detached && split.removedAt == nil {
+							split.remove(dest.removedAt)
+						}
+					}
 				}
 			}
 		}
