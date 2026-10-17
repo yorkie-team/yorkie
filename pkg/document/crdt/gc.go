@@ -112,10 +112,13 @@ type GCBarrier[C any] interface {
 // synced vector covers a removal only after it has pushed every change it
 // made before learning of it, and the server hands out a minimum vector
 // only with the changes behind it, so an honest change concurrent with the
-// removal is on every replica before any of them purges the child. A
-// crafted change can reach a replica after its purge; the node it names is
-// then detached and stays a tombstone (see TreeNode.detached), which is
-// what the release made it everywhere else.
+// removal is on every replica before any of them purges the child. The
+// server race of yorkie#2110 breaks that contract: a minimum vector can
+// arrive ahead of a change behind it. Such a change, like a crafted one,
+// reaches a replica after its purge; the node it names is then gone or
+// detached and stays a tombstone (see TreeNode.detached), which is what
+// the release made it everywhere else, and an op that cannot resolve a
+// position there fails, as on main.
 type GCLiveRelease[C any] interface {
 	// ReleaseLive tombstones every live node under child and returns the
 	// size they had in docSize.Live.

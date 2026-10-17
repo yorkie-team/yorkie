@@ -143,10 +143,18 @@ log. A client's synced vector covers a removal only after it has pushed
 every change it made before learning of it, and the server hands out a
 minimum vector only with the changes behind it, so an honest change
 concurrent with the removal is on every replica before any of them purges
-the element, and they release the same nodes. A change that reaches a
-replica after its purge names a node that is gone or detached: `Restore`
-recreates nothing under a detached parent and revives no detached node, so
-it lands as the release left it everywhere else. `Restore` also leaves a
+the element, and they release the same nodes. The server race of
+yorkie#2110 breaks that contract, since a minimum vector can arrive ahead
+of a change behind it; the conformance suite's lagging mode models it.
+Under the race, as for a crafted change, a change reaches a replica after
+its purge and names a node that is gone or detached: `Restore` recreates
+nothing under a detached parent and revives no detached node, so it lands
+as the release left it everywhere else, and an op that cannot resolve a
+position there fails, as on main. One narrow shape fails where main went
+on: an op parented on a detached tombstone whose left anchor the release
+took out errors with "node not found", where main applied it under the
+detached parent and left its bytes in `Live`. No conformance seed reaches
+it. `Restore` also leaves a
 node a tombstone under an ancestor whose removal the restoring change knew
 (`Tree.knownRemovalAbove`), which keeps the result before GC from depending
 on it: such a revive would stay live only on replicas that had not
