@@ -1561,8 +1561,11 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 		// purged gaps.
 		start := span.ID.Offset
 		end := start + span.Length
+		// Detached pieces are forgotten until none is left: each lookup
+		// answers with whatever now holds the range, which is never a
+		// detached piece once the loop ends.
 		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
-		if slices.ContainsFunc(pieces, func(piece *TreeNode) bool { return piece.detached }) {
+		for slices.ContainsFunc(pieces, func(piece *TreeNode) bool { return piece.detached }) {
 			for _, piece := range pieces {
 				if piece.detached {
 					t.forgetDetached(piece)
