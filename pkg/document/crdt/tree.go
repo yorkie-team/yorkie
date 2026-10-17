@@ -1582,6 +1582,13 @@ func (t *Tree) Retombstone(
 
 		for _, piece := range pieces {
 			if piece.IsRemoved() {
+				// The §4.1 cascade still runs for an element a peer already
+				// removed, as the forward delete's does: whether it reaches
+				// the unknown split products must not depend on whether the
+				// peer's delete arrived first.
+				pairs, edits, cascaded = t.retombstoneUnknownSplitSiblings(
+					piece, executedAt, measure, versionVector, pairs, edits, cascaded,
+				)
 				continue
 			}
 			target := piece

@@ -71,3 +71,61 @@ func TestAppendUncoveredSpans(t *testing.T) {
 		})
 	}
 }
+
+// TestRetombstoneCascadesWhateverArrivedFirst pins that the §4.1 cascade in
+// Retombstone does not depend on arrival order. A peer's Enter split <p>ab</p>
+// unknown to the retombstoning change, and a concurrent delete, which knew
+// the split, removed the paragraph alone. One replica applies the
+// retombstone first, the other the delete; both must end with the split
+// product removed.
+func TestRetombstoneCascadesWhateverArrivedFirst(t *testing.T) {
+	build := func(t *testing.T) (*Tree, *TreeNode, *TreeNode, func() *time.Ticket, time.VersionVector) {
+		t.Helper()
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+		require.NoError(t, err)
+		lamport := int64(0)
+		nextTicket := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+		p := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "p", nil)
+		require.NoError(t, p.Append(NewTreeNode(NewTreeNodeID(nextTicket(), 0), "text", nil, "ab")))
+		require.NoError(t, root.Append(p))
+		tree := NewTree(root, nextTicket())
+		known := time.NewVersionVector()
+		known.Set(actor, lamport)
+
+		peerLamport := lamport
+		peerTicket := func() *time.Ticket {
+			peerLamport++
+			return time.NewTicket(peerLamport, 0, peer)
+		}
+		_, _, err = tree.EditT(2, 2, nil, 1, peerTicket(), peerTicket)
+		require.NoError(t, err)
+		require.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+		return tree, p, tree.Root().Children()[1], nextTicket, known
+	}
+	retombstone := func(t *testing.T, tree *Tree, p *TreeNode, at *time.Ticket, known time.VersionVector) {
+		t.Helper()
+		_, _, _, _, err := tree.Retombstone([]*TreeRestoreSpan{{
+			ID: p.id, NodeType: "p", ParentID: tree.Root().id,
+		}}, at, false, known)
+		require.NoError(t, err)
+	}
+
+	first, p1, product1, next1, known1 := build(t)
+	retombstone(t, first, p1, next1(), known1)
+	p1.remove(next1())
+
+	second, p2, product2, next2, known2 := build(t)
+	retombstoneAt, deleteAt := next2(), next2()
+	p2.remove(deleteAt)
+	retombstone(t, second, p2, retombstoneAt, known2)
+
+	assert.True(t, product1.IsRemoved(), "retombstone first: the cascade takes the product")
+	assert.True(t, product2.IsRemoved(), "delete first: so it does here")
+	assert.Equal(t, first.ToXML(), second.ToXML())
+}
