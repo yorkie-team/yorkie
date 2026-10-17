@@ -284,6 +284,7 @@ func (e *TreeEdit) Execute(
 			untombstoned, recreated, restorePairs, restoreDiff, restoreEdits, err := obj.Restore(
 				toRestore, measure, versionVector,
 			)
+			dropForgottenPairs(root, obj)
 			if err != nil {
 				return ExecutionResult{}, err
 			}
@@ -1176,4 +1177,15 @@ func validateTreeRestoreIdentities(
 		createdAts = append(createdAts, span.ID.CreatedAt)
 	}
 	return validateRestoreTickets(createdAts, versionVector)
+}
+
+// dropForgottenPairs drops the pending GC pairs of the detached nodes the
+// last Restore on tree forgot (see crdt.Tree.TakeForgotten). It runs before
+// the Restore's own pairs register, and on failure too, since a forgotten
+// node is out of the index either way: a recreate can reuse its ID, and the
+// new pair has to register under that key afresh.
+func dropForgottenPairs(root *crdt.Root, tree *crdt.Tree) {
+	for _, node := range tree.TakeForgotten() {
+		root.DropGCPair(crdt.GCPair{Parent: tree, Child: node})
+	}
 }

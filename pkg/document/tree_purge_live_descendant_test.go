@@ -317,3 +317,66 @@ func TestTreeCraftedReviveCannotPinARemovedChain(t *testing.T) {
 	assert.Equal(t, 0, d1.GarbageLen(), "nothing is held in GC")
 	assertRebuildsSame(t, d1, "after the collection")
 }
+
+// TestRestoreAfterDetachKeepsTheLedger pins the GC pair of a detached node a
+// restore recreates. d2's delete of "b" carries a later ticket than d1's
+// delete of the paragraph, so a collection that covers d1's alone purges
+// the paragraph and "a" but leaves "b" detached with its own pair pending.
+// d1's undo recreates "ab" under the recreated paragraph, under the same
+// IDs; the pending pair of the old "b" must not stay registered under the
+// recreated piece's key, or the next delete of it cancels both pairs and
+// docSize.GC drifts from a rebuild.
+func TestRestoreAfterDetachKeepsTheLedger(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		}})
+		return nil
+	}))
+	crossSync(t, d1, d2)
+	for range 5 {
+		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Style(4, 7, map[string]string{"k": "v"})
+			return nil
+		}))
+	}
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 4, nil, 0)
+		return nil
+	}))
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(2, 3, nil, 0)
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	pieces := treeCRDT(t, d1).Root().Children(true)[0].Children(true)
+	require.Len(t, pieces, 2)
+	b := pieces[1]
+	require.Equal(t, a2, b.RemovedAt().ActorID(), "d2's later delete wins the tombstone of b")
+
+	// Cover d1's delete and not d2's.
+	vector := d1.VersionVector().DeepCopy()
+	vector.Set(a2, b.RemovedAt().Lamport()-1)
+	vector.Set(a1, d1.VersionVector().VersionOf(a1))
+	d1.GarbageCollect(vector)
+	require.Len(t, treeCRDT(t, d1).Root().Children(true), 1, "the paragraph is purged")
+	require.Equal(t, 1, d1.GarbageLen(), "the pair of b is still pending")
+
+	require.NoError(t, d1.Undo())
+	assert.Equal(t, `<doc><p>ab</p><p k="v">cd</p></doc>`, treeXML(t, d1))
+	assertRebuildsSame(t, d1, "after the undo")
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 4, nil, 0)
+		return nil
+	}))
+	assertRebuildsSame(t, d1, "after deleting the recreated paragraph")
+	full := d1.VersionVector().DeepCopy()
+	full.Set(a2, d2.VersionVector().VersionOf(a2))
+	d1.GarbageCollect(full)
+	assertRebuildsSame(t, d1, "after collecting it")
+	assert.Equal(t, 0, d1.GarbageLen())
+}

@@ -1065,6 +1065,11 @@ type Tree struct {
 	// drain this buffer into the GC pairs they return.
 	pendingGCPairs []GCPair
 
+	// forgotten holds the detached nodes Restore forgot since the last
+	// TakeForgotten, whose pending GC pairs the caller drops (see
+	// forgetDetached).
+	forgotten []*TreeNode
+
 	// mergeStamps indexes the nodes that carry a MergedFrom by the source it
 	// names, so dissolveMergeSources visits only those (#2189). Every way a
 	// node joins the index tree registers it -- NewTree, or putNode, which
@@ -1639,11 +1644,25 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 // snapshot, a DeepCopy, or the document's clone that an undo runs on first.
 // Those find nothing under the span's ID and recreate it if its parent is
 // there, so this one has to resolve the span the same way. The node itself
-// stays a detached tombstone (see TreeNode.detached), and its pending pair
-// purges it as before, finding it unregistered and unlinked already.
+// stays a detached tombstone (see TreeNode.detached). It leaves the document
+// here as a purge would take it, so its pending GC pair goes too: Restore's
+// caller drops it (see TakeForgotten), and the recreate that may follow
+// under the same ID books its own.
 func (t *Tree) forgetDetached(node *TreeNode) {
 	t.unregisterNode(node)
 	t.unlinkInsChain(node)
+	t.forgotten = append(t.forgotten, node)
+}
+
+// TakeForgotten returns the detached nodes Restore forgot and clears the
+// list. The caller drops their pending GC pairs (Root.DropGCPair) before it
+// registers the pairs the same Restore booked: a recreate reuses the
+// forgotten node's ID, and a pair left under that key would make the
+// recreated node's registration cancel it instead of adding its own.
+func (t *Tree) TakeForgotten() []*TreeNode {
+	forgotten := t.forgotten
+	t.forgotten = nil
+	return forgotten
 }
 
 // knownRemovalAbove returns a test, for one Restore call, of whether a node

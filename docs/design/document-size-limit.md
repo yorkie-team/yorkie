@@ -106,7 +106,10 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
 - Nothing makes a detached node live again. `Restore` resolves a span
   naming one as a replica that purged it does: the node leaves
   `NodeMapByID` and its chain and stays a tombstone, and the span is
-  recreated only where its parent is attached (`Tree.forgetDetached`). `recreateFromSpan`
+  recreated only where its parent is attached (`Tree.forgetDetached`). The
+  node's pending GC pair is dropped with it, with its bytes out of GC, so a
+  recreate under the same ID registers its own
+  (`TestRestoreAfterDetachKeepsTheLedger`). `recreateFromSpan`
   places nothing under a detached element, `Retombstone` skips one, and
   content placed under a detached parent, or split off a detached node, is
   detached itself and born tombstoned, booked to GC only.
