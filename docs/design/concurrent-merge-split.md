@@ -555,16 +555,25 @@ ledger. The residual cause is not undissolved lineage, which this section
 closes; it is what collection at a lagging vector leaves behind around the
 revived element, and it is open.
 
-**Known limitation.** §7.1's split partitioning reads `MergedFrom`/
-`MergedAt` without going through `mergedInto`, and §9.4's per-node filter
-fails open on any node carrying a stamp. A split or style that never saw the
-merge and is therefore concurrent with the revive can read those stamps
-before or after the revive clears them, and resolve differently on each
-replica. The window needs an unseen-merge split concurrent with the undo;
-the undissolved pointer above needs only an ordinary reload, which is why
-the lineage is cleared rather than kept. Narrowing this further needs a
-durable "no longer a source" marker on the source itself — a proto change,
-tracked in #2233.
+**The window against an unaware split.** §7.1's split partitioning reads
+`MergedFrom`/`MergedAt` without going through `mergedInto`, and §9.4's
+per-node filter fails open on any node carrying a stamp. A split or style
+that never saw the merge, and is therefore concurrent with the revive, can
+read those stamps before or after the revive clears them. This has been
+measured rather than assumed. Over every delete range, split position and
+split level of `<r><p>ab</p><p>cd</p></r>` and
+`<r><div><p>ab</p><p>cd</p></div></r>`, with three replicas applying the
+merge, the unaware split and the undo in three orders (942 cases), and,
+on two replicas, over a style in place of the split on the flat tree (25
+cases), the result is the same on
+main, on this branch, and on this branch with the dissolution turned off,
+row for row. §7.1 does read a cleared stamp in some of them, as the nested
+shape in `TestDissolutionAgainstAnUnawareSplitInEveryOrder` does, without
+changing the outcome. The rows that diverge, 303 of 942, diverge identically
+on main: they come from the split racing the merge and the identity revive,
+not from the lineage. A durable "no longer a source" marker on the source
+itself would remove the window altogether; it is a proto change, tracked in
+#2233.
 
 ## Phase 7: Split
 
