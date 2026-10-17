@@ -129,3 +129,42 @@ func TestRetombstoneCascadesWhateverArrivedFirst(t *testing.T) {
 	assert.True(t, product2.IsRemoved(), "delete first: so it does here")
 	assert.Equal(t, first.ToXML(), second.ToXML())
 }
+
+// TestAppendUncoveredSpansKeepsParentsFirst pins the order of the merged
+// spans. The input names div and productP, a child of the split product,
+// but not the product itself, which only the cascade reports; the cascade's
+// own productP is left out and its text kept only where the input does not
+// cover it. Every span must still follow the span of its parent, or a
+// Restore after GC declines the child for want of a parent.
+func TestAppendUncoveredSpansKeepsParentsFirst(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNodeID(ticket(1), 0)
+	div := &TreeRestoreSpan{ID: NewTreeNodeID(ticket(2), 0), NodeType: "div", ParentID: root}
+	product := &TreeRestoreSpan{ID: NewTreeNodeID(ticket(3), 0), NodeType: "div", ParentID: root}
+	productP := &TreeRestoreSpan{ID: NewTreeNodeID(ticket(4), 0), NodeType: "p", ParentID: product.ID}
+	text := func(offset int, value string) *TreeRestoreSpan {
+		return &TreeRestoreSpan{
+			ID: NewTreeNodeID(ticket(5), offset), NodeType: "text", IsText: true,
+			Length: len(value), Value: value, ParentID: productP.ID,
+		}
+	}
+
+	input := []*TreeRestoreSpan{div, productP, text(0, "ab")}
+	cascaded := []*TreeRestoreSpan{product, {ID: productP.ID, NodeType: "p", ParentID: product.ID}, text(1, "bcd")}
+	got := appendUncoveredSpans(input, cascaded)
+
+	seen := map[string]bool{root.toIDString(): true}
+	var order []string
+	for _, span := range got {
+		require.NotNil(t, span.ParentID)
+		assert.True(t, seen[span.ParentID.toIDString()], "%s comes after its parent", span.NodeType)
+		if !span.IsText {
+			seen[span.ID.toIDString()] = true
+		}
+		order = append(order, span.NodeType+"@"+span.ID.toIDString()+"="+span.Value)
+	}
+	assert.Len(t, got, 5, "div, product, productP, ab and the uncovered cd: %v", order)
+	assert.Equal(t, "cd", got[len(got)-1].Value)
+}

@@ -1663,7 +1663,66 @@ func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan
 		}
 		spans = append(spans, uncoveredTextSpans(span, texts[span.ID.CreatedAt.Key()])...)
 	}
-	return spans
+	return parentsFirst(spans)
+}
+
+// parentsFirst returns spans in parent-before-child order, as Restore needs
+// them: once GC has purged the nodes, each is recreated under a parent an
+// earlier span brought back, and one whose parent is not there yet is
+// declined. Leaving out a cascaded element an input span already names can
+// put the input span of one of its descendants ahead of the cascaded spans
+// it hangs under. Spans already in order are returned as they are;
+// otherwise they are stably sorted by how many of their ancestors the list
+// itself holds, which keeps the order of every span against its siblings.
+func parentsFirst(spans []*TreeRestoreSpan) []*TreeRestoreSpan {
+	position := make(map[string]int, len(spans))
+	for i, span := range spans {
+		if !span.IsText {
+			position[span.ID.toIDString()] = i
+		}
+	}
+	parentOf := func(span *TreeRestoreSpan) (int, bool) {
+		if span.ParentID == nil {
+			return 0, false
+		}
+		i, ok := position[span.ParentID.toIDString()]
+		return i, ok
+	}
+
+	inOrder := true
+	for i, span := range spans {
+		if j, ok := parentOf(span); ok && j > i {
+			inOrder = false
+			break
+		}
+	}
+	if inOrder {
+		return spans
+	}
+
+	depth := make([]int, len(spans))
+	for i, span := range spans {
+		// Bounded by the list's length: a crafted span set can name its
+		// parents in a cycle.
+		for d, current := 0, span; d < len(spans); d++ {
+			j, ok := parentOf(current)
+			if !ok || j == i {
+				break
+			}
+			depth[i]++
+			current = spans[j]
+		}
+	}
+	order := make([]int, len(spans))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return depth[a] - depth[b] })
+	sorted := make([]*TreeRestoreSpan, len(spans))
+	for i, j := range order {
+		sorted[i] = spans[j]
+	}
+	return sorted
 }
 
 // uncoveredTextSpans returns the parts of the text span that none of covers
