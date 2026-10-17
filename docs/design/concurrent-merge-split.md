@@ -1375,8 +1375,10 @@ result. The JS SDK has to mirror all of the following:
    (`BoundaryEditEnd`) and a style boundary (`BoundaryRange`) keep the
    plain walk.
 2. **Step 03 past purged text.** A left-sibling offset past the end of the
-   floor text piece skips the split only when the insertion's next
-   surviving piece starts at or past that offset; any other such offset is
+   floor text piece skips the split only when it lies in a gap of the
+   insertion's chain: the floor piece's `InsNextID` names exactly a text
+   piece of the same insertion whose `InsPrevID` names the floor piece back,
+   and floor end < offset <= that piece's start. Any other such offset is
    out of range, as before.
 3. **§6.4 dissolution.** `unremove` clears `mergedInto`. `Restore` takes
    the change's version vector and, after every span applied, clears the

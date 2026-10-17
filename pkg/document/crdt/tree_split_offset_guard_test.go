@@ -79,6 +79,26 @@ func TestFindTreeNodesWithSplitTextSplitOffset(t *testing.T) {
 		assert.Equal(t, []string{"b", `" w"`, `"ld"`}, childrenOfP(tree), "nothing was split")
 	})
 
+	t.Run("a gap the chain does not link both ways is out of range", func(t *testing.T) {
+		// The same purge of "or", but the surviving "ld" no longer points back
+		// at " w": the gap is not one Purge left between two neighbours.
+		tree, ctx := newBoldHelloWorldTree(t)
+		world := tree.Root().Index.Children()[0].Children()[1].Value
+		createdAt, baseOffset := world.ID().CreatedAt, world.ID().Offset
+		editT(t, tree, ctx, 10, 12, nil)
+		pieces := tree.Root().Index.Children()[0].Children(true)
+		gap, tail := pieces[2].Value, pieces[3].Value
+		require.NoError(t, tree.Purge(gap))
+		tail.InsPrevID = nil
+
+		pos := crdt.NewTreePos(
+			tree.Root().Index.Children()[0].Value.ID(),
+			crdt.NewTreeNodeID(createdAt, baseOffset+3),
+		)
+		_, _, _, err := tree.FindTreeNodesWithSplitText(pos, helper.TimeT(ctx))
+		assert.ErrorIs(t, err, crdt.ErrSplitOutOfRange)
+	})
+
 	t.Run("an offset past the last surviving piece is out of range", func(t *testing.T) {
 		tree, ctx := newBoldHelloWorldTree(t)
 		world := tree.Root().Index.Children()[0].Children()[1].Value
