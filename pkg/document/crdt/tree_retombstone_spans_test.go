@@ -60,6 +60,7 @@ func TestAppendUncoveredSpans(t *testing.T) {
 		{"a piece no input span touches", text(0, "ab"), []*TreeRestoreSpan{text(0, "ab")}},
 		{"a piece that overlaps one input span", text(1, "bcde"), []*TreeRestoreSpan{text(1, "b"), text(4, "e")}},
 		{"a piece across two input spans", text(3, "defg"), []*TreeRestoreSpan{text(4, "ef")}},
+		{"an empty piece inside an input span", text(3, ""), []*TreeRestoreSpan{text(3, "")}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			spans := append([]*TreeRestoreSpan{}, input...)

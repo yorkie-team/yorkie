@@ -1135,6 +1135,14 @@ func TestTreeRetombstoneSpanEdgeCases(t *testing.T) {
 		assert.Equal(t, *span, *got)
 	})
 
+	t.Run("a span whose kind does not agree is still copied", func(t *testing.T) {
+		tree, ctx, p, _, stale := setup(t)
+		span := &crdt.TreeRestoreSpan{ID: stale, NodeType: "p", IsText: true, ParentID: p.ID()}
+		got := retombstone(t, tree, ctx, span)
+		assert.NotSame(t, span, got)
+		assert.Equal(t, *span, *got)
+	})
+
 	t.Run("an empty text span keeps its anchors", func(t *testing.T) {
 		tree, ctx, p, createdAt, stale := setup(t)
 		span := &crdt.TreeRestoreSpan{

@@ -1579,7 +1579,10 @@ func (t *Tree) Retombstone(
 	var cascaded []*TreeRestoreSpan
 	for _, span := range spans {
 		if !span.kindAgrees() {
-			applied = append(applied, span)
+			// Skipped, but reported as a copy like every other span, so the
+			// reverse operation never shares the operation's payload.
+			skipped := *span
+			applied = append(applied, &skipped)
 			continue
 		}
 		start := span.ID.Offset
@@ -1806,9 +1809,17 @@ func textCoverKey(span *TreeRestoreSpan) string {
 // uncoveredTextSpans returns the parts of the text span that none of covers
 // holds, each as a span of its own with the span's anchors.
 func uncoveredTextSpans(span *TreeRestoreSpan, covers []*TreeRestoreSpan) []*TreeRestoreSpan {
+	// An empty span covers no range for another span to cover; it is kept as
+	// it is rather than dropped from the reverse operation.
+	if span.Length <= 0 {
+		return []*TreeRestoreSpan{span}
+	}
 	start, end := span.ID.Offset, span.ID.Offset+span.Length
 	gaps := [][2]int{{start, end}}
 	for _, cover := range covers {
+		if cover.Length <= 0 {
+			continue
+		}
 		from, to := cover.ID.Offset, cover.ID.Offset+cover.Length
 		var next [][2]int
 		for _, gap := range gaps {
@@ -1855,6 +1866,12 @@ func uncoveredTextSpans(span *TreeRestoreSpan, covers []*TreeRestoreSpan) []*Tre
 // same: the spans the acting operation carries describe only the element, so
 // without an entry of its own a cascaded sibling would be removed by the redo
 // and left tombstoned by the matching undo.
+//
+// Unlike the forward delete's cascade, it needs no merge-boundary exclusion:
+// that one keeps the split siblings of a node whose children the same edit
+// moves by a merge, and an edit that merges records no identity spans
+// (TreeEditReverseInfo.SpansComplete), so no span a retombstone acts on ever
+// names such a node.
 //
 // The spans go out parent before child, as Restore requires: once GC has
 // purged the cascade, the undo recreates each node under a parent an earlier
