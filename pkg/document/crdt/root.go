@@ -653,10 +653,13 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		var detachedLive resource.DataSize
+		var err error
 		if parent, ok := pair.Parent.(GCDetach[GCChild]); ok {
-			detachedLive = parent.DetachedLiveSize(pair.Child)
+			detachedLive, err = parent.PurgeDetached(pair.Child)
+		} else {
+			err = pair.Parent.Purge(pair.Child)
 		}
-		if err := pair.Parent.Purge(pair.Child); err != nil {
+		if err != nil {
 			return 0, 0, err
 		}
 

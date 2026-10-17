@@ -664,3 +664,34 @@ func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	require.NoError(t, tree.Purge(f.p2))
 	assert.Empty(t, tree.mergeStamps, "no entry outlives the subtree it named")
 }
+
+// TestRestoreDissolvesTheStampOfANodeRefusedItsID pins that a stamped node
+// putNode refuses the ID lookup -- a tombstone that shares its ID with a live
+// node -- is still indexed for the dissolution. It stays in the index tree,
+// where rebuildMergeState reads its stamp, so leaving it out would keep on
+// one replica lineage another dissolves.
+func TestRestoreDissolvesTheStampOfANodeRefusedItsID(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	f.p3.remove(f.nextTicket())
+	f.text.MergedFrom = f.p3.id
+	f.text.MergedAt = f.nextTicket()
+
+	tree := NewTree(f.tree.Root(), f.nextTicket())
+
+	// A tombstone joins under the same ID as the live text, stamped the same
+	// way, and putNode refuses it the lookup.
+	twin := NewTreeNode(f.text.id, "text", nil, "cd")
+	twin.MergedFrom = f.p3.id
+	twin.MergedAt = f.text.MergedAt
+	twin.removedAt = f.nextTicket()
+	require.NoError(t, f.p2.Append(twin))
+	tree.putNode(twin)
+	require.Same(t, f.text, tree.findFloorNode(f.text.id), "the live node keeps the ID")
+
+	_, _, _, _, _, err := tree.Restore([]*TreeRestoreSpan{{
+		ID: f.p3.id, NodeType: "p", Length: 1,
+	}}, false, knowing(f.nextTicket()))
+	require.NoError(t, err)
+	assert.Nil(t, f.text.MergedFrom)
+	assert.Nil(t, twin.MergedFrom, "the refused node's stamp goes too")
+}

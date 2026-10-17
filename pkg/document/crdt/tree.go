@@ -1016,11 +1016,13 @@ type Tree struct {
 	pendingGCPairs []GCPair
 
 	// mergeStamps indexes the nodes that carry a MergedFrom by the source it
-	// names, so dissolveMergeSources visits only those (#2189). An entry is
-	// added wherever a stamped node joins the tree or a node is stamped; it
-	// is a candidate list, re-checked when read, and an entry for a node
-	// that lost its stamp or left the tree is dropped then.
-	mergeStamps map[string][]*TreeNode
+	// names, so dissolveMergeSources visits only those (#2189). Every way a
+	// node joins the index tree registers it -- NewTree, or putNode, which
+	// indexes a node even when it refuses it the ID lookup -- and mergeNodes
+	// indexes a node it stamps in place, so no stamped node a walk of the
+	// tree reaches is missing. It is a candidate set, re-checked when read:
+	// an entry for a node that lost its stamp or left the tree is dropped then.
+	mergeStamps map[string]map[*TreeNode]struct{}
 }
 
 // NewTree creates a new instance of Tree.
@@ -1181,30 +1183,24 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 	}
 
 	for key := range ids {
-		var kept []*TreeNode
-		visited := make(map[*TreeNode]struct{})
-		for _, child := range t.mergeStamps[key] {
-			if _, ok := visited[child]; ok {
-				continue
-			}
-			visited[child] = struct{}{}
+		stamped := t.mergeStamps[key]
+		for child := range stamped {
 			// Only a node still stamped with this source and still in the
 			// tree, tombstones included, as a walk of the tree would reach.
 			if child.MergedFrom == nil || child.MergedFrom.toIDString() != key || !t.isAttached(child) {
+				delete(stamped, child)
 				continue
 			}
 			if child.MergedAt != nil && !time.TicketKnown(versionVector, child.MergedAt) {
-				kept = append(kept, child)
 				continue
 			}
 
 			child.MergedFrom = nil
 			child.MergedAt = nil
+			delete(stamped, child)
 		}
-		if len(kept) == 0 {
+		if len(stamped) == 0 {
 			delete(t.mergeStamps, key)
-		} else {
-			t.mergeStamps[key] = kept
 		}
 	}
 }
@@ -1235,42 +1231,22 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
-// DetachedLiveSize implements GCDetach[GCChild]: the size of the live nodes
-// under child, which Purge detaches with it. Counted as Tree.DataSize counts
-// a node, by its own liveness, so what it returns is exactly what a rebuild
-// stops counting once child is gone. A child inside a subtree an earlier
-// purge already detached returns zero: those nodes left the ledger then.
-func (t *Tree) DetachedLiveSize(child GCChild) resource.DataSize {
-	var size resource.DataSize
-	node, ok := child.(*TreeNode)
-	if !ok || node.Index == nil || node.Index.Parent == nil {
-		return size
-	}
-	for _, live := range t.detachedLiveDescendants(node) {
-		size.Add(live.DataSize())
-	}
-	return size
-}
-
-// detachedLiveDescendants returns the live nodes under node that purging it
-// detaches from the tree: none when node is itself inside a subtree an
-// earlier purge already detached, since those left the tree then. Both
-// DetachedLiveSize and Purge read it, so the size Root takes out of Live and
-// the nodes Purge unregisters are the same set.
-func (t *Tree) detachedLiveDescendants(node *TreeNode) []*TreeNode {
-	if !t.isAttached(node) {
-		return nil
-	}
-	var live []*TreeNode
-	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-		if n.Value != node && !n.Value.IsRemoved() {
-			live = append(live, n.Value)
-		}
-	})
-	return live
-}
-
+// Purge implements GCParent: it detaches child, with its subtree, from the
+// tree. See PurgeDetached.
 func (t *Tree) Purge(child GCChild) error {
+	_, err := t.PurgeDetached(child)
+	return err
+}
+
+// PurgeDetached implements GCDetach[GCChild]: it purges child as Purge does
+// and returns the size of the live nodes under it, which the purge detaches
+// with it. Counted as Tree.DataSize counts a node, by its own liveness, so
+// it is exactly what a rebuild stops counting once child is gone. A child
+// inside a subtree an earlier purge already detached returns zero: those
+// nodes left the ledger then. The subtree is walked once, for the size, the
+// nodes to unregister and the merge stamps to forget alike.
+func (t *Tree) PurgeDetached(child GCChild) (resource.DataSize, error) {
+	var size resource.DataSize
 	node := child.(*TreeNode)
 
 	// A parentless node cannot be detached: purging is removal from a parent's
@@ -1279,18 +1255,30 @@ func (t *Tree) Purge(child GCChild) error {
 	// version passes it), so a node detached in between reaches here. Dropping
 	// it keeps GarbageCollect advancing instead of panicking on the deref.
 	if node.Index == nil || node.Index.Parent == nil {
-		return nil
+		return size, nil
 	}
 
 	// The live descendants leave with the node. They have no GC pair of their
 	// own, so nothing would ever unregister them, and a later change that
 	// reached one by identity -- a redo of the restore that revived it --
 	// would charge its removal to a ledger Root already took it out of (see
-	// GCDetach). A rebuild does not hold them either.
-	detachedLive := t.detachedLiveDescendants(node)
+	// GCDetach). A rebuild does not hold them either. Every stamped node of
+	// the subtree also leaves mergeStamps, so the index holds no reference
+	// that keeps a purged subtree alive.
+	attached := t.isAttached(node)
+	var detachedLive, stamped []*TreeNode
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		if attached && n.Value != node && !n.Value.IsRemoved() {
+			detachedLive = append(detachedLive, n.Value)
+			size.Add(n.Value.DataSize())
+		}
+		if n.Value.MergedFrom != nil {
+			stamped = append(stamped, n.Value)
+		}
+	})
 
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
-		return err
+		return resource.DataSize{}, err
 	}
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
 	// unregister a different node that shares this one's ID — see putNode.
@@ -1301,11 +1289,11 @@ func (t *Tree) Purge(child GCChild) error {
 		t.unregisterNode(live)
 		t.unlinkInsChain(live)
 	}
-	// Every stamped node of the detached subtree leaves mergeStamps, so the
-	// index holds no reference that keeps a purged subtree alive.
-	t.forgetMergeStamps(node)
+	for _, n := range stamped {
+		t.forgetMergeStamp(n)
+	}
 
-	return nil
+	return size, nil
 }
 
 // unlinkInsChain joins node's InsPrevID/InsNextID neighbours to each other
@@ -5335,6 +5323,11 @@ func (t *Tree) dropDuplicateContents(contents []*TreeNode, editedAt *time.Ticket
 // intended trade for a duplicate: the alternative is unregistering a node that
 // positions still resolve through.
 func (t *Tree) putNode(node *TreeNode) {
+	// Indexed whether or not it gets the ID: a refused node stays in the
+	// index tree, so the lineage it carries is still read (rebuildMergeState
+	// walks the tree) and has to be dissolvable.
+	t.noteMergeStamp(node)
+
 	key, existing := t.NodeMapByID.Floor(node.id)
 	if existing != nil && existing != node && key.Equal(node.id) &&
 		node.IsRemoved() && !existing.IsRemoved() {
@@ -5342,35 +5335,16 @@ func (t *Tree) putNode(node *TreeNode) {
 	}
 
 	t.NodeMapByID.Put(node.id, node)
-	t.noteMergeStamp(node)
 }
 
-// forgetMergeStamps drops from mergeStamps the entries of root and every node
-// under it, for a subtree leaving the tree.
-func (t *Tree) forgetMergeStamps(root *TreeNode) {
-	if len(t.mergeStamps) == 0 {
-		return
-	}
-	leaving := make(map[string]map[*TreeNode]struct{})
-	index.TraverseNode(root.Index, func(n *index.Node[*TreeNode], _ int) {
-		if n.Value.MergedFrom == nil {
-			return
-		}
-		key := n.Value.MergedFrom.toIDString()
-		if leaving[key] == nil {
-			leaving[key] = make(map[*TreeNode]struct{})
-		}
-		leaving[key][n.Value] = struct{}{}
-	})
-	for key, nodes := range leaving {
-		kept := slices.DeleteFunc(t.mergeStamps[key], func(n *TreeNode) bool {
-			_, ok := nodes[n]
-			return ok
-		})
-		if len(kept) == 0 {
+// forgetMergeStamp drops node's entry from mergeStamps, for a node leaving
+// the tree.
+func (t *Tree) forgetMergeStamp(node *TreeNode) {
+	key := node.MergedFrom.toIDString()
+	if stamped := t.mergeStamps[key]; stamped != nil {
+		delete(stamped, node)
+		if len(stamped) == 0 {
 			delete(t.mergeStamps, key)
-		} else {
-			t.mergeStamps[key] = kept
 		}
 	}
 }
@@ -5381,10 +5355,13 @@ func (t *Tree) noteMergeStamp(node *TreeNode) {
 		return
 	}
 	if t.mergeStamps == nil {
-		t.mergeStamps = make(map[string][]*TreeNode)
+		t.mergeStamps = make(map[string]map[*TreeNode]struct{})
 	}
 	key := node.MergedFrom.toIDString()
-	t.mergeStamps[key] = append(t.mergeStamps[key], node)
+	if t.mergeStamps[key] == nil {
+		t.mergeStamps[key] = make(map[*TreeNode]struct{})
+	}
+	t.mergeStamps[key][node] = struct{}{}
 }
 
 // findMergeNode resolves one end of a merge relation -- the source a
