@@ -92,80 +92,73 @@ client's local check trips first.
 the document the server built, so it must match what rebuilding the same
 document reports (`DeepCopy().DocSize()`, a snapshot load), or the gate
 refuses writes for bytes the document no longer holds. Purging a Tree
-element detaches its whole subtree, and a descendant can still be live: a
-child an identity restore revived under an element that stayed removed has
-no GC pair and is charged to `Live`, while a rebuild walks only the
-attached tree (yorkie#2244). The rule that keeps the two equal:
+element detaches its whole subtree, and a descendant can still be live: an
+insert or an identity restore concurrent with the element's removal leaves
+one there, with no GC pair and charged to `Live`, while a rebuild walks
+only the attached tree (yorkie#2244). The rule that keeps the two equal:
 
-- **A detached node is a tombstone, and stays one.** GC holds a removed
-  element while a live node is under it (`GCLiveHold`); the hold ends once
-  that node is removed and its own removal is collectable. Everything a
-  purge detaches was therefore already off `Live`.
-- Nothing makes a detached node live again. `Restore` leaves one alone, and
-  content placed under a removed parent, which a detached parent always is,
-  is born tombstoned and booked to GC only.
-- Detached tombstones stay registered and in their chains, as on main, so
-  every lookup and walk that reached them before still does; no such path
-  can charge `Live` for one.
+- **A detached node is a tombstone, and stays one.** When a collection
+  purges a removed element, it first tombstones every live node under it
+  (`GCLiveRelease`, `Tree.ReleaseLive`), takes their bytes off `Live`, and
+  takes them out of `NodeMapByID` and their insertion chains, since they
+  have no GC pair to do it later. They leave the document with the
+  element, as if its removal had covered them. Everything a purge detaches
+  is therefore a tombstone off `Live`.
+- Nothing makes a detached node live again. `Restore` leaves one alone and
+  recreates nothing under one, `Retombstone` skips one, and content placed
+  under a removed parent, which a detached parent always is, is born
+  tombstoned and booked to GC only.
+- Detached tombstones with a GC pair of their own stay registered and in
+  their chains until that pair is collected, as on main, so every lookup
+  and walk that reached them before still does; no such path can charge
+  `Live` for one.
 
 | Path | With a detached node | Pinned by |
 |---|---|---|
-| GC purge of an ancestor | held while a live node is under it | `TestCollectHoldsAnElementWithALiveDescendant`, `TestTreePurgeWithLiveDescendant` |
+| GC purge of an ancestor | live nodes under it are released with it | `TestCollectReleasesALiveDescendantWithItsAncestor`, `TestLiveReleaseWaitsForTheBarrier`, `TestTreePurgeWithLiveDescendant`, `TestTreeCraftedReviveCannotPinARemovedChain` |
 | GC purge inside a detached subtree | walks nothing; one pass is O(nodes) | `TestPurgeInsideADetachedSubtreeWalksNothing`, `TestCollectWalksADeletedSubtreeOnce` |
-| `Restore`, element and text spans | left a tombstone, not revived or recreated | `TestRestoreLeavesADetachedNodeATombstone` |
+| `Restore`, element and text spans | left a tombstone, not revived | `TestRestoreLeavesADetachedNodeATombstone` |
 | `Restore` under an ancestor whose removal it knew | left a tombstone, attached or not | `TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC`, `TestTreeRestoreUnderAKnownRemoval` |
-| `Retombstone`, the §4.1 cascades | reach only tombstones: no new GC pair | `TestTreeOpsNamingACollectedSubtree` |
-| `recreateFromSpan` under a detached parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
+| `recreateFromSpan` under a detached parent | declined, as under a purged one | `TestRestoreRecreatesNothingUnderADetachedParent` |
+| `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
 | `Edit` insert under a detached or removed parent | born tombstoned, GC only | `TestTreeOpsNamingACollectedSubtree` |
 | `Edit` delete, `Style` over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
-| `refreshSpanAnchors`, `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
+| `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
 | `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
 
-**How this hold differs from the ones rejected before.** Earlier revisions
-held a removed element for its children twice. Holding while the element
-had *any* child never ended for a live child, which has no GC pair; this
-hold ends when the live node under the element is removed and its removal
-is collectable, which an ordinary delete brings about, and it never holds
-for a tombstone child. Holding only while an uncovered tombstone sat below
-it, and unregistering the subtree on purge, left live descendants' bytes in
-`Live` and bypassed `PurgeBarrierAt`; here nothing live is ever purged, so
-nothing is left in `Live`, nothing is unregistered beyond the purged node
-as on main, and the hold is asked only after `removedAt` and the barrier
-both allow the purge. The retained bytes are the removed ancestors of a
-live node, kept in `GC` until that node goes, which is what a rebuild of
-the same tree reports as well.
+**Why release instead of hold.** An earlier revision held a removed element
+back from GC while a live node was under it, until that node was removed.
+No one can see a node under a removed element, so no one could remove it:
+an honest insert concurrent with the removal, or a crafted restore that
+claims not to know it, kept the whole ancestor chain in `GC` for good, and
+the server's size gate reads `Live`, not `GC`. Releasing ends with the
+collection vector, which no client input can hold back: what a pass purges
+is decided by `removedAt`, `PurgeBarrierAt` and the tree's shape, as on
+main, and the release runs only once both have let the element go.
 
-**The hold decides alike on every replica.** It reads the tree at the
-moment each replica collects, and replicas collect at different points of
-the change log, so what matters is what can make a node live under a
-removed ancestor between those points. `Restore` does not revive a node
-under an ancestor whose removal the restoring change knew
-(`Tree.knownRemovalAbove`): such a revive would leave the node live only on
-the replicas that had not yet purged the ancestor, and the ancestor's undo
-would then bring it back on those alone. Two ways are left: a restore
-concurrent with the ancestor's removal, and an `Edit` whose merge moves
-live children into the removed element. An honest change of either kind
-is concurrent with the removal, because a client builds positions from its
-visible tree, and every replica applies it before the minimum synced
-vector lets one purge the ancestor, so they hold alike. A crafted merge
-that names the removed element after knowing its removal moves the
-children on a replica that still holds the element and fails with "node
-not found" on one that purged it. Any op naming a purged node diverges
-that way, on main as well, so the hold adds nothing to it. Whether that concurrent revive or the removal wins on a replica
-depends on the order it applied them. That is the identity revive against
-concurrent remove race, which diverges on main without any GC
-(yorkie#2247). The hold does not cause it, but it keeps the divergence
-visible where a purge of the ancestor used to drop the revived node.
+**Replicas release alike.** The release reads the tree at the moment each
+replica collects, and replicas collect at different points of the change
+log. A client's synced vector covers a removal only after it has pushed
+every change it made before learning of it, and the server hands out a
+minimum vector only with the changes behind it, so an honest change
+concurrent with the removal is on every replica before any of them purges
+the element, and they release the same nodes. A change that reaches a
+replica after its purge names a node that is gone or detached: `Restore`
+recreates nothing under a detached parent and revives no detached node, so
+it lands as the release left it everywhere else. `Restore` also leaves a
+node a tombstone under an ancestor whose removal the restoring change knew
+(`Tree.knownRemovalAbove`), which keeps the result before GC from depending
+on it: such a revive would stay live only on replicas that had not
+collected yet, and an undo of the ancestor's removal would then bring it
+back on those alone.
 
-**What a crafted restore can extend.** A client can still make a node live
-under a removed element with an identity restore that claims not to know
-the element's removal, and the restore-identity check fails open on a
-change without clocks (#2234). That keeps the element's removed ancestors
-in `GC` for as long as the node stays live, which is as long as the client
-could keep any content of its own; the held bytes are the ancestor chain of
-a node `Live` already counts, bounded by the tree's depth, and the server's
-size gate reads `Live`, not `GC`.
+Two divergences remain, both as on main. Whether a concurrent identity
+revive or the removal wins depends on the order a replica applied them
+(yorkie#2247). And content no undo span names, such as an insert concurrent
+with the removal, comes back with the ancestor's undo only on replicas that
+applied the undo before collecting; one that collected first recreates the
+ancestor without it, as main does for anything a purge took.
 
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The

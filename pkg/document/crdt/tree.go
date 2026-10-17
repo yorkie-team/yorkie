@@ -182,11 +182,11 @@ type TreeNode struct {
 	// tree (see Tree.purge). Runtime only: a snapshot or DeepCopy
 	// holds the attached tree alone.
 	//
-	// The invariant: a detached node is a tombstone, and stays one. GC never
-	// purges a node while a live node is under it (Tree.LiveDescendantTest),
-	// so everything a purge detaches was removed and off docSize.Live, and
-	// the one op that could make a node live again, Restore, leaves a
-	// detached node alone; anything placed under one is born tombstoned, as
+	// The invariant: a detached node is a tombstone, and stays one. GC
+	// tombstones every live node under a node before purging it
+	// (Tree.ReleaseLive), so everything a purge detaches was removed and off
+	// docSize.Live, and the one op that could make a node live again,
+	// Restore, leaves a detached node alone; anything placed under one is born tombstoned, as
 	// under any removed parent. Lookups and chain walks still reach detached
 	// tombstones as they do on main, which is harmless: no op can then charge
 	// Live for a node a rebuild does not hold.
@@ -1252,30 +1252,35 @@ func (t *Tree) Purge(child GCChild) error {
 	return err
 }
 
-// LiveDescendantTest implements GCLiveHold[GCChild]: whether a node has a
-// live node under it, memoized for one collection pass, so the pass reads
-// each node's children at most once however many pairs it asks about.
-func (t *Tree) LiveDescendantTest() func(GCChild) bool {
-	memo := make(map[*TreeNode]bool)
-	var hasLive func(n *TreeNode) bool
-	hasLive = func(n *TreeNode) bool {
-		if result, ok := memo[n]; ok {
-			return result
-		}
-		result := false
-		for _, child := range n.Index.Children(true) {
-			if !child.Value.IsRemoved() || hasLive(child.Value) {
-				result = true
-				break
-			}
-		}
-		memo[n] = result
-		return result
+// ReleaseLive implements GCLiveRelease[GCChild]: it tombstones every live
+// node under child with child's removedAt and returns the size they had in
+// Live. A released node has no GC pair to purge it later, so it leaves
+// NodeMapByID and its insertion chain here, as its own purge would have
+// taken it out: a later restore naming it then recreates it, as it does a
+// tombstone purged with the ancestor, instead of finding a detached node it
+// must leave alone. A detached child has nothing live under it and is not
+// walked, so a collection pass walks each node at most once here, as in
+// purge.
+func (t *Tree) ReleaseLive(child GCChild) resource.DataSize {
+	var size resource.DataSize
+	node, ok := child.(*TreeNode)
+	if !ok || node.detached || node.Index == nil || node.removedAt == nil {
+		return size
 	}
-	return func(child GCChild) bool {
-		node, ok := child.(*TreeNode)
-		return ok && node.Index != nil && hasLive(node)
+	var released []*TreeNode
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		if n.Value.IsRemoved() {
+			return
+		}
+		size.Add(n.Value.DataSize())
+		n.Value.remove(node.removedAt)
+		released = append(released, n.Value)
+	})
+	for _, n := range released {
+		t.unregisterNode(n)
+		t.unlinkInsChain(n)
 	}
+	return size
 }
 
 // purge is Purge, also reporting how many nodes it walked. It unregisters
@@ -1529,13 +1534,13 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 //
 // Restore leaves such a node a tombstone. The restoring change saw its
 // ancestor go, so a revive there would bring back a node no one can see,
-// and how long it then stayed live would depend on when each replica
-// collected: one that had already purged the ancestor leaves the node out
-// with it, one that had not would hold the ancestor for the node (see
-// GCLiveHold) and show the node again if the ancestor were restored. A
-// restore concurrent with the ancestor's removal still revives, as before:
-// every replica applies it before the minimum synced vector lets one purge
-// the ancestor, so they all hold alike. An ancestor revived earlier in the
+// and whether it then came back with the ancestor would depend on when each
+// replica collected: one that had already purged the ancestor leaves the
+// node out with it, while one that had not keeps the node live until it
+// collects (see GCLiveRelease) and shows it again if the ancestor is
+// restored first. A restore concurrent with the ancestor's removal still
+// revives, as before: every replica applies it before the minimum synced
+// vector lets one purge the ancestor, so they all decide alike. An ancestor revived earlier in the
 // same call is live, so restoring a subtree parent-first revives it whole.
 // An empty vector is read as knowing every removal, as TicketKnown reads it:
 // every change with operations carries its author's vector, so only a crafted
@@ -3773,10 +3778,10 @@ func (t *Tree) mergeNodes(
 		// change lands on, so replicas holding the same tree decide alike.
 		//
 		// Left live, it would be stranded instead: Phase 5 has already
-		// tombstoned the source it stays under, and GCLiveHold would keep
-		// that source, and its removed ancestors, out of every purge for as
-		// long as the node stayed live, with nothing an honest client could
-		// see or delete to release them. So it is tombstoned where it
+		// tombstoned the source it stays under, so the node would sit out of
+		// sight until a collection released it with the source (see
+		// GCLiveRelease), and a restore of the source would show it again
+		// only on replicas that had not collected yet. So it is tombstoned where it
 		// stands, with its descendants, exactly as propagateMergeDeletes
 		// tombstones a merge-moved child whose source this edit deletes. The
 		// pair the caller books does both halves: it moves the bytes from Live

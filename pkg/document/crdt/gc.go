@@ -92,39 +92,32 @@ type GCBarrier[C any] interface {
 	PurgeBarrierAt(child C) *time.Ticket
 }
 
-// GCLiveHold is an optional capability of a GC parent whose Purge takes the
-// child out together with its descendants. A descendant can still be live --
-// one an identity restore revived under an element that stayed removed --
-// and a live node has no GC pair of its own, so purging its ancestor would
-// detach bytes that docSize.Live still holds while a rebuild, walking the
-// attached tree, no longer counts them (yorkie#2244). Root therefore holds a
-// child back while a live node is under it.
+// GCLiveRelease is an optional capability of a GC parent whose Purge takes
+// the child out together with its descendants. A descendant can still be
+// live: an insert or an identity restore concurrent with the child's
+// removal leaves one there, and so can a crafted change that claims not to
+// know the removal. A live node has no GC pair of its own, so purging its
+// ancestor would detach bytes docSize.Live still holds while a rebuild,
+// walking the attached tree, no longer counts them (yorkie#2244).
 //
-// What ends the hold is that node's removal: once every node under the
-// child is a tombstone, the child goes on the next pass that covers it, and
-// each tombstone below goes on its own pair's. The hold never outlives a
-// node a client could delete, and what it keeps is that node's removed
-// ancestors, whose bytes stay in docSize.GC; the live node itself is counted
-// in Live meanwhile. That retention is the shape a rebuild reports too, so
-// the ledger and a rebuild agree throughout.
+// Root therefore has the parent release the live nodes first: once
+// removedAt and GCBarrier have both let the child go, and right before
+// Purge, ReleaseLive tombstones every live node under the child and reports
+// their size, which Root takes off Live. They leave the document with the
+// child, as if the child's removal had covered them. Nothing is held back,
+// so no client input can keep a removed element in the tree: what a pass
+// purges is decided by the collection vector and the tree, as on main.
 //
-// The test reads the liveness of the child's descendants at the moment of
-// the collection, and the replicas collect at different change prefixes, so
-// it decides alike only because of what can make a node live under a
-// removed ancestor. Restore does not revive a node under an ancestor whose
-// removal the restoring change knew (Tree.knownRemovalAbove). Two ways are
-// left: a restore concurrent with that removal, and an Edit whose merge
-// moves live children into the removed element. An honest change of either
-// kind is concurrent with the removal, since a client builds positions from
-// its visible tree, and every replica applies it before the minimum synced
-// vector lets it purge the ancestor. A crafted merge that names the removed
-// element after knowing its removal moves the children on a replica that
-// still holds it and fails on one that purged it, which is how any op
-// naming a purged node diverges, on main as here. Root asks the test only after removedAt and GCBarrier have both
-// let the child go: it can delay a purge those allow, never allow one they
-// defer.
-type GCLiveHold[C any] interface {
-	// LiveDescendantTest returns a test of whether a child has a live
-	// descendant, valid for one collection pass.
-	LiveDescendantTest() func(child C) bool
+// Replicas collecting at one vector release the same nodes. A client's
+// synced vector covers a removal only after it has pushed every change it
+// made before learning of it, and the server hands out a minimum vector
+// only with the changes behind it, so an honest change concurrent with the
+// removal is on every replica before any of them purges the child. A
+// crafted change can reach a replica after its purge; the node it names is
+// then detached and stays a tombstone (see TreeNode.detached), which is
+// what the release made it everywhere else.
+type GCLiveRelease[C any] interface {
+	// ReleaseLive tombstones every live node under child and returns the
+	// size they had in docSize.Live.
+	ReleaseLive(child C) resource.DataSize
 }

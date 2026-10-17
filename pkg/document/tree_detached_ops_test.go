@@ -32,9 +32,9 @@ import (
 )
 
 // TestTreeOpsNamingACollectedSubtree throws every kind of Tree operation at
-// the nodes of a removed paragraph that GC met with a live descendant under
-// it, and at the same paragraph once GC has taken it, on two replicas: d1,
-// which collected, and d2, which did not. The ops come straight off the
+// the nodes of a removed paragraph that GC has taken, with a live descendant
+// under it or without, on two replicas: d1, which collected, and d2, which
+// did not. The ops come straight off the
 // operation layer, naming the nodes by ID and position as a client could put
 // them on the wire. After each, both replicas must agree on the visible tree
 // and each one's size ledger must equal a rebuild; once d2 collects too, both
@@ -42,8 +42,9 @@ import (
 func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 	// replicas builds <doc><p>ab</p><p>cd</p></doc>, with the first
 	// paragraph removed and "b" revived under it, and runs a collection on
-	// d1 only. With release set, "b" is removed again first,
-	// so that collection takes the paragraph out of the tree.
+	// d1 only, which takes the paragraph out of the tree. With release set,
+	// "b" is removed again first; without, the collection tombstones it and
+	// takes it out with the paragraph.
 	replicas := func(t *testing.T, release bool) (d1, d2 *document.Document, vv time.VersionVector) {
 		t.Helper()
 		d1, d2, _, _ = newReplicas(t)
@@ -59,9 +60,8 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 		// d2's restore is concurrent with the paragraph's removal: d1, which
 		// applies it after the removal, revives "b" under the removed
 		// paragraph, while d2 tombstones "b" again when the removal arrives,
-		// the identity-revive-versus-remove race main has too. Only the
-		// visible tree can be compared while that holds; once "b" is removed
-		// on both (release), the full tree can.
+		// the identity-revive-versus-remove race main has too (yorkie#2247).
+		// Only the visible tree can be compared until both collect.
 		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Edit(0, 4, nil, 0)
 			return nil
@@ -172,11 +172,7 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 		for i, tc := range ops {
 			t.Run(fmt.Sprintf("released %v: %s", release, tc.name), func(t *testing.T) {
 				d1, d2, vv := replicas(t, release)
-				if release {
-					require.Len(t, treeCRDT(t, d1).Root().Children(true), 1, "d1 took the paragraph out")
-				} else {
-					require.Len(t, treeCRDT(t, d1).Root().Children(true), 2, "d1 held the paragraph")
-				}
+				require.Len(t, treeCRDT(t, d1).Root().Children(true), 1, "d1 took the paragraph out")
 
 				// Nodes are named off d2, which still holds them all.
 				tree, paragraph, a, b := nodes(t, d2)
@@ -197,9 +193,7 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 				d1.GarbageCollect(final)
 				d2.GarbageCollect(final)
 				assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
-				if release {
-					assert.Equal(t, treeShape(t, d1), treeShape(t, d2), "and the same tree once both collect")
-				}
+				assert.Equal(t, treeShape(t, d1), treeShape(t, d2), "and the same tree once both collect")
 				assertRebuildsSame(t, d1, "after both collect")
 				assertRebuildsSame(t, d2, "after both collect")
 			})

@@ -557,9 +557,8 @@ func (r *Root) DeepCopy() (*Root, error) {
 
 // GarbageCollect purge elements that were removed before the given time.
 //
-// A pass can hold a purge back (see GCBarrier, and GCLiveHold, which counts
-// as deferred the same way), and holding one back can be the only reason
-// another is held back: purging a node hands its successor to the
+// A pass can hold a purge back (see GCBarrier), and holding one back can be the
+// only reason another is held back: purging a node hands its successor to the
 // node in front of it, and that successor is one this pass already found
 // stable. So a pass that both purged and deferred may have more to do, and the
 // loop repeats until a pass purges nothing new or defers nothing. Everything
@@ -641,7 +640,6 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// zero, and have its size subtracted again on the next pass. No IDString
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
-	liveTests := make(map[GCParent]func(GCChild) bool)
 	for key, pair := range r.gcNodePairMap {
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			continue
@@ -654,18 +652,10 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			}
 		}
 
-		// A purge never detaches a live node (see GCLiveHold), so everything
-		// it takes out of the tree was a tombstone, already off Live.
-		if parent, ok := pair.Parent.(GCLiveHold[GCChild]); ok {
-			test, built := liveTests[pair.Parent]
-			if !built {
-				test = parent.LiveDescendantTest()
-				liveTests[pair.Parent] = test
-			}
-			if test(pair.Child) {
-				deferred++
-				continue
-			}
+		// Live nodes under the child go with it, off Live (see
+		// GCLiveRelease), so the purge detaches tombstones only.
+		if parent, ok := pair.Parent.(GCLiveRelease[GCChild]); ok {
+			r.docSize.Live.Sub(parent.ReleaseLive(pair.Child))
 		}
 
 		if err := pair.Parent.Purge(pair.Child); err != nil {

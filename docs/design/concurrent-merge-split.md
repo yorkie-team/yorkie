@@ -1415,9 +1415,12 @@ result. The JS SDK has to mirror all of the following:
    to the restoring change, and a born-tombstoned recreate takes the
    removal of the parent it actually lands under. A span whose parent is
    detached is not recreated, as one whose parent was purged.
-7. **Purge accounting.** GC holds a removed element while a live node is
-   under it, so a purge only ever detaches tombstones. `Restore` leaves a
-   detached node a tombstone, and also a node under an ancestor whose
+7. **Purge accounting.** Before purging a removed element, GC tombstones
+   every live node under it with the element's `removedAt`, takes their
+   size off `Live`, and unregisters them and unlinks them from their
+   insertion chains, so a purge only ever detaches tombstones and nothing
+   is held back for a live node. `Restore` leaves a detached node a
+   tombstone, and also a node under an ancestor whose
    removal the restoring change's version vector covers (a change without
    clocks is treated as knowing every removal, as `TicketKnown` does). It
    revives in place in span order, so spans must come parent-first, for a

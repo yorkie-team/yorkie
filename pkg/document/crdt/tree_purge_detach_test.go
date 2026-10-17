@@ -50,34 +50,38 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 	return tree, div, p, text, removedAt
 }
 
-// TestCollectHoldsAnElementWithALiveDescendant pins the GC hold behind the
-// detached-node invariant. div and p are removed with live text under them,
-// the shape an identity restore leaves. Neither is purged while the text is
-// live: a purge would detach bytes Live still holds while a rebuild no
-// longer counts them. Once the text is removed too, all three go.
-func TestCollectHoldsAnElementWithALiveDescendant(t *testing.T) {
+// TestCollectReleasesALiveDescendantWithItsAncestor pins the release behind
+// the detached-node invariant. div and p are removed with live text under
+// them, the shape a concurrent insert or identity restore leaves. Once the
+// collection vector covers their removal, the text is tombstoned and goes
+// with them: a purge that left it live would detach bytes Live still holds
+// while a rebuild no longer counts them, and holding div for it instead
+// would keep div for as long as a node no one can see stays live. The text
+// has no GC pair to purge it later, so it leaves NodeMapByID now.
+func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	tree, div, p, text, removedAt := detachFixture(t)
 	root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	base := root.DocSize().Live
+	root.docSize.Live.Add(text.DataSize())
 	for _, node := range []*TreeNode{div, p} {
 		size := node.DataSize()
 		root.RegisterGCPair(GCPair{Parent: tree, Child: node, GCOnlySize: &size})
 	}
 
 	vector := time.NewVersionVector()
-	vector.Set(removedAt.ActorID(), removedAt.Lamport()+1)
+	vector.Set(removedAt.ActorID(), removedAt.Lamport())
 	n, err := root.GarbageCollect(vector)
 	require.NoError(t, err)
-	assert.Equal(t, 0, n, "held while the text under them is live")
-	assert.Equal(t, "<r></r>", tree.ToXML())
-	assert.Len(t, tree.Root().Children(true), 1, "div is still in the tree")
-
-	text.remove(time.NewTicket(removedAt.Lamport()+1, 0, removedAt.ActorID()))
-	size := text.DataSize()
-	root.RegisterGCPair(GCPair{Parent: tree, Child: text, GCOnlySize: &size})
-	n, err = root.GarbageCollect(vector)
-	require.NoError(t, err)
-	assert.Equal(t, 3, n, "released once nothing under them is live")
+	assert.Equal(t, 2, n, "div and p go, with the text under them")
 	assert.Empty(t, tree.Root().Children(true))
+	assert.True(t, text.IsRemoved())
+	assert.True(t, text.detached)
+	assert.Same(t, removedAt, text.RemovedAt(), "tombstoned with the ancestor's removal")
+	assert.Equal(t, 1, tree.NodeMapByID.Len(), "the text leaves the index with them: it has no pair of its own")
+	assert.Equal(t, 0, root.GarbageLen())
+	live, gc := root.DocSize().Live, root.DocSize().GC
+	assert.Equal(t, base, live, "the text's bytes left Live with it")
+	assert.Zero(t, (&gc).Total())
 }
 
 // TestPurgeInsideADetachedSubtreeWalksNothing pins the detached mark: a node
@@ -163,14 +167,12 @@ func TestRestoreLeavesADetachedNodeATombstone(t *testing.T) {
 	assert.True(t, text.IsRemoved())
 }
 
-// TestLiveHoldComposesWithTheBarrier pins that the live-descendant hold only
-// ever delays a purge removedAt and GCBarrier allow. div is removed with live
-// text under it and a sibling after it whose creation the collection vector
-// does not cover. Neither the barrier nor the hold alone lets div go; with
-// the barrier covered the hold still keeps it; with the text removed, the
-// text goes and div waits for the barrier, then goes, and the ledger then
-// holds nothing for either.
-func TestLiveHoldComposesWithTheBarrier(t *testing.T) {
+// TestLiveReleaseWaitsForTheBarrier pins that the release runs only once
+// removedAt and GCBarrier both let a purge go. div is removed with live text
+// under it and a sibling after it whose creation the collection vector does
+// not cover. While the barrier keeps div, the text stays live and charged
+// to Live; once it is covered, div goes and the text with it.
+func TestLiveReleaseWaitsForTheBarrier(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 	peer, err := time.ActorIDFromHex("0000000000000000000000dd")
@@ -191,6 +193,8 @@ func TestLiveHoldComposesWithTheBarrier(t *testing.T) {
 	div.remove(removedAt)
 
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	base := doc.DocSize().Live
+	doc.docSize.Live.Add(text.DataSize())
 	size := div.DataSize()
 	doc.RegisterGCPair(GCPair{Parent: tree, Child: div, GCOnlySize: &size})
 	collect := func(peerSeen int64) int {
@@ -202,17 +206,18 @@ func TestLiveHoldComposesWithTheBarrier(t *testing.T) {
 		return n
 	}
 
-	assert.Equal(t, 0, collect(0), "the barrier and the hold both keep div")
-	assert.Equal(t, 0, collect(50), "barrier covered: the live text still holds div")
+	assert.Equal(t, 0, collect(0), "the barrier keeps div")
+	assert.False(t, text.IsRemoved(), "and the text under it live")
+	live := doc.DocSize().Live
+	live.Sub(base)
+	assert.Equal(t, text.DataSize(), live)
 
-	text.remove(nextTicket())
-	textSize := text.DataSize()
-	doc.RegisterGCPair(GCPair{Parent: tree, Child: text, GCOnlySize: &textSize})
-	assert.Equal(t, 1, collect(0), "text removed: it goes, while the barrier keeps div")
-	assert.Same(t, div, tree.Root().Children(true)[0])
-	assert.Equal(t, 1, collect(50), "both allow: div goes")
+	assert.Equal(t, 1, collect(50), "barrier covered: div goes")
+	assert.True(t, text.IsRemoved())
+	assert.True(t, text.detached)
 	assert.Equal(t, 0, doc.GarbageLen())
-	gc := doc.DocSize().GC
+	live, gc := doc.DocSize().Live, doc.DocSize().GC
+	assert.Equal(t, base, live)
 	assert.Zero(t, (&gc).Total())
 }
 
