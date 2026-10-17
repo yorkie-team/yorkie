@@ -30,11 +30,13 @@ import (
 // TestTreePurgeWithLiveDescendant checks the size ledger when GC purges a
 // removed element that still has a live descendant (yorkie#2244).
 //
-// d1 deletes the first paragraph whole, then applies d2's delete of its text
-// and d2's undo of that delete, which revives the text by identity under the
-// paragraph d1 removed. Purging the paragraph detaches the text with it, so a
-// rebuild no longer counts the text, and the running ledger must not either:
-// Live is what MaxSizePerDocument is checked against.
+// d1 deletes the first paragraph whole, then applies d2's delete of its "b"
+// and d2's undo of that delete, which revives "b" by identity under the
+// paragraph d1 removed, as a piece chained after the removed "a". Purging
+// the paragraph detaches "b" with it, so a rebuild no longer counts it, and
+// the running ledger must not either: Live is what MaxSizePerDocument is
+// checked against. The purge also unregisters "b" and takes it out of its
+// insertion chain, as a rebuild has neither.
 func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	d1, d2, a1, a2 := newReplicas(t)
 
@@ -56,15 +58,19 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 		return nil
 	}))
 	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetTree("t").Edit(1, 3, nil, 0)
+		root.GetTree("t").Edit(2, 3, nil, 0)
 		return nil
 	}))
 	require.NoError(t, d2.Undo())
 	crossSync(t, d1, d2)
 
-	text := treeCRDT(t, d1).Root().Children(true)[0].Children(true)[0]
+	pieces := treeCRDT(t, d1).Root().Children(true)[0].Children(true)
+	require.Len(t, pieces, 2)
+	head, text := pieces[0], pieces[1]
 	require.True(t, text.Index.Parent.Value.IsRemoved(), "the paragraph stays removed")
-	require.False(t, text.IsRemoved(), "its text is live again under it")
+	require.True(t, head.IsRemoved(), `"a" stays removed`)
+	require.False(t, text.IsRemoved(), `"b" is live again under it`)
+	require.True(t, head.InsNextID.Equal(text.ID()), "the two pieces are chained")
 	assertRebuildsSame(t, d1, "before collection")
 
 	vv := d1.VersionVector().DeepCopy()
@@ -75,6 +81,14 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	}
 	assert.Positive(t, d1.GarbageCollect(vv))
 	require.Equal(t, "<doc><p>cd</p></doc>", treeXML(t, d1))
+
+	tree := treeCRDT(t, d1)
+	if _, registered := tree.NodeMapByID.Floor(text.ID()); registered == text {
+		assert.Fail(t, "the detached live piece is still registered")
+	}
+	assert.Nil(t, text.InsPrevID, "the detached live piece leaves its insertion chain")
+	assert.Nil(t, text.InsNextID)
+	assert.Nil(t, head.InsNextID, "and nothing in the chain points at it")
 
 	assertRebuildsSame(t, d1, "after purging an element with a live descendant")
 	rebuilt, err := d1.InternalDocumentForTest().DeepCopy()
