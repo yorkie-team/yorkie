@@ -112,10 +112,15 @@ type GCBarrier[C any] interface {
 // the collection, and the replicas collect at different change prefixes, so
 // it decides alike only because of what can make a node live under a
 // removed ancestor. Restore does not revive a node under an ancestor whose
-// removal the restoring change knew (Tree.knownRemovalAbove), so the one
-// way left is a restore concurrent with that removal, and every replica
-// applies such a restore before the minimum synced vector lets it purge the
-// ancestor. Root asks the test only after removedAt and GCBarrier have both
+// removal the restoring change knew (Tree.knownRemovalAbove). Two ways are
+// left: a restore concurrent with that removal, and an Edit whose merge
+// moves live children into the removed element. An honest change of either
+// kind is concurrent with the removal, since a client builds positions from
+// its visible tree, and every replica applies it before the minimum synced
+// vector lets it purge the ancestor. A crafted merge that names the removed
+// element after knowing its removal moves the children on a replica that
+// still holds it and fails on one that purged it, which is how any op
+// naming a purged node diverges, on main as here. Root asks the test only after removedAt and GCBarrier have both
 // let the child go: it can delay a purge those allow, never allow one they
 // defer.
 type GCLiveHold[C any] interface {

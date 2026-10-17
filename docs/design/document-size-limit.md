@@ -143,10 +143,16 @@ removed ancestor between those points. `Restore` does not revive a node
 under an ancestor whose removal the restoring change knew
 (`Tree.knownRemovalAbove`): such a revive would leave the node live only on
 the replicas that had not yet purged the ancestor, and the ancestor's undo
-would then bring it back on those alone. A restore concurrent with the
-ancestor's removal still revives the node, and every replica applies it
-before the minimum synced vector lets one purge the ancestor, so they hold
-alike. Whether that concurrent revive or the removal wins on a replica
+would then bring it back on those alone. Two ways are left: a restore
+concurrent with the ancestor's removal, and an `Edit` whose merge moves
+live children into the removed element. An honest change of either kind
+is concurrent with the removal, because a client builds positions from its
+visible tree, and every replica applies it before the minimum synced
+vector lets one purge the ancestor, so they hold alike. A crafted merge
+that names the removed element after knowing its removal moves the
+children on a replica that still holds the element and fails with "node
+not found" on one that purged it. Any op naming a purged node diverges
+that way, on main as well, so the hold adds nothing to it. Whether that concurrent revive or the removal wins on a replica
 depends on the order it applied them. That is the identity revive against
 concurrent remove race, which diverges on main without any GC
 (yorkie#2247). The hold does not cause it, but it keeps the divergence
