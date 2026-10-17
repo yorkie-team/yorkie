@@ -821,3 +821,42 @@ func TestEditMergingOutOfADetachedSubtree(t *testing.T) {
 	assert.Equal(t, "<r><q>cd</q></r>", results[true], "purged: nothing to move")
 	assert.Equal(t, "<r><q>cd</q>b</r>", results[false], "not purged: the merge moves b into view")
 }
+
+// TestFindFloorNodeReadsBothIndexes pins that a lookup answers from
+// NodeMapByID and detachedByID together, with the floor across both: the
+// piece of an insertion that is still attached for an offset inside it,
+// and the detached piece for an offset inside that one.
+func TestFindFloorNodeReadsBothIndexes(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	tree := NewTree(root, time.NewTicket(2, 0, actor))
+	insertion := time.NewTicket(3, 0, actor)
+	attached := NewTreeNode(NewTreeNodeID(insertion, 0), "text", nil, "ab")
+	detached := NewTreeNode(NewTreeNodeID(insertion, 2), "text", nil, "cd")
+	detached.detached = true
+	tree.putNode(attached)
+	tree.putNode(detached)
+	require.Equal(t, 2, tree.NodeLen(), "the detached piece is not in NodeMapByID")
+
+	assert.Same(t, attached, tree.findFloorNode(NewTreeNodeID(insertion, 1)))
+	assert.Same(t, detached, tree.findFloorNode(NewTreeNodeID(insertion, 3)))
+	assert.Same(t, detached, tree.findFloorNode(NewTreeNodeID(insertion, 2)))
+	assert.Nil(t, tree.findFloorNode(NewTreeNodeID(time.NewTicket(4, 0, actor), 0)))
+}
+
+// TestADetachedNodeCarriesNoIndexedLineage pins that a node placed in a
+// detached subtree is not indexed by the source its MergedFrom names, so
+// no purge has to take a stamp it gained after detachment back out.
+func TestADetachedNodeCarriesNoIndexedLineage(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	tree := NewTree(root, time.NewTicket(2, 0, actor))
+	source := NewTreeNodeID(time.NewTicket(3, 0, actor), 0)
+	node := NewTreeNode(NewTreeNodeID(time.NewTicket(4, 0, actor), 0), "p", nil)
+	node.MergedFrom = source
+	node.detached = true
+	tree.putNode(node)
+	assert.Empty(t, tree.mergeStamps[source.toIDString()])
+}
