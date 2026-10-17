@@ -634,22 +634,17 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 // mirroring remove()'s ancestor-length bookkeeping so the node becomes visible
 // again in place.
 //
-// A merge source is a tombstone: §1.1's insert redirect, §6.2's propagation
-// and resolveMergeTarget all read mergedInto only on a removed node. Reviving
-// the node therefore dissolves the forwarding pointer with the tombstone that
-// gave it meaning — left in place, a later delete of this now-live element
-// would cascade §6.2 over children a merge moved out of it before the revive
-// and tombstone content every other replica keeps (#2189). The persisted half
-// of the lineage — MergedFrom/MergedAt on those children, which
-// rebuildMergeState derives this pointer from — is cleared by
-// Tree.dissolveMergeSources, which Restore runs over every element span it
-// applies, whatever that span turned out to resolve to locally.
+// It leaves the merge lineage alone. A revived merge source loses it, both
+// the mergedInto pointer and the MergedFrom/MergedAt stamps on the children a
+// merge moved out of it, in Tree.dissolveMergeSources, which Restore runs over
+// every element span it applies (#2189). Keeping both halves there, under the
+// one gate on the restoring change's version vector, is what keeps them in
+// step: a restore that dissolves nothing keeps the pointer with its stamps.
 func (n *TreeNode) unremove() {
 	if n.removedAt == nil {
 		return
 	}
 	n.removedAt = nil
-	n.mergedInto = nil
 	n.Index.UpdateAncestorsLength(n.Index.PaddedLength())
 }
 
@@ -783,7 +778,8 @@ func (n *TreeNode) DropEngineOnlyLinks() {
 //
 // Cleared via unremove rather than by assignment so each node's padded length
 // is given back to its ancestors, undoing what FromTreeNodes' removed-aware
-// length pass withheld. Post-order matters: a child is revived before its
+// length pass withheld. Only the tombstone is cleared: the merge lineage on
+// this content is DropEngineOnlyLinks' to drop, and it already has. Post-order matters: a child is revived before its
 // parent, so the parent's own padded length already includes it when the
 // parent hands its length further up.
 func (n *TreeNode) ClearTombstones() {

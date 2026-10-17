@@ -1381,11 +1381,12 @@ result. The JS SDK has to mirror all of the following:
    piece of the same insertion whose `InsPrevID` names the floor piece back,
    and floor end < offset <= that piece's start. Any other such offset is
    out of range, as before.
-3. **§6.4 dissolution.** `unremove` clears `mergedInto`. `Restore` takes
-   the change's version vector and, after every span applied, clears the
-   `MergedFrom`/`MergedAt` stamps naming each element span's ID whose
-   `MergedAt` that vector covers (a stamp without `MergedAt` counts as
-   covered); an empty vector clears nothing, and an error clears nothing.
+3. **§6.4 dissolution.** `Restore` takes the change's version vector and,
+   after every span applied, clears the `mergedInto` pointer of each
+   element span's node and the `MergedFrom`/`MergedAt` stamps naming its ID
+   whose `MergedAt` that vector covers (a stamp without `MergedAt` counts as
+   covered); an empty vector clears neither half, and an error clears
+   nothing. `unremove` itself leaves the lineage alone.
    `mergeNodes` and `rebuildMergeState` derive no pointer onto a live
    source.
 4. **Retombstone spans.** The spans a retombstone reports, which become the

@@ -645,6 +645,7 @@ func TestRestoreWithoutClocksDissolvesNothing(t *testing.T) {
 	require.Len(t, untombstoned, 1, "the element is revived all the same")
 	assert.True(t, f.text.MergedFrom.Equal(f.p3.id), "the stamps stay")
 	assert.Same(t, mergedAt, f.text.MergedAt)
+	assert.NotNil(t, f.p3.mergedInto, "and so does the pointer, in step with them")
 }
 
 // TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree pins that the
