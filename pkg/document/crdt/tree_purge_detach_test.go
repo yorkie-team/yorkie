@@ -860,3 +860,82 @@ func TestADetachedNodeCarriesNoIndexedLineage(t *testing.T) {
 	tree.putNode(node)
 	assert.Empty(t, tree.mergeStamps[source.toIDString()])
 }
+
+// TestRangeBetweenTwoDetachedSubtrees pins a range whose two ends sit in two
+// different purged subtrees with attached content between them. In
+// <r><a><pa>ab</pa></a><m>MM</m><b><pb>cd</pb></b></r>, with a and b
+// removed while pa and pb are live, one replica purges a and b and the
+// other does not. A delete and a style from the end of "ab" to the end of
+// "cd" each resolve their ends where the subtrees sit, so both reach m on
+// both replicas, and the two agree once both collect.
+func TestRangeBetweenTwoDetachedSubtrees(t *testing.T) {
+	build := func(t *testing.T, purge bool) (*Tree, *Root, map[string]*TreeNode, func() *time.Ticket) {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		n := map[string]*TreeNode{}
+		mk := func(name, typ string, value ...string) *TreeNode {
+			n[name] = NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, value...)
+			return n[name]
+		}
+		root := mk("r", "r")
+		require.NoError(t, root.Append(mk("a", "a"), mk("m", "m"), mk("b", "b")))
+		require.NoError(t, n["a"].Append(mk("pa", "pa")))
+		require.NoError(t, n["pa"].Append(mk("ab", "text", "ab")))
+		require.NoError(t, n["m"].Append(mk("MM", "text", "MM")))
+		require.NoError(t, n["b"].Append(mk("pb", "pb")))
+		require.NoError(t, n["pb"].Append(mk("cd", "text", "cd")))
+		tree := NewTree(root, next())
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		removedAt := next()
+		for _, name := range []string{"a", "b"} {
+			n[name].remove(removedAt)
+			size := n[name].DataSize()
+			doc.RegisterGCPair(GCPair{Parent: tree, Child: n[name], GCOnlySize: &size})
+		}
+		if purge {
+			vector := time.NewVersionVector()
+			vector.Set(actor, lamport)
+			_, err := doc.GarbageCollect(vector)
+			require.NoError(t, err)
+			require.True(t, n["pa"].detached)
+			require.True(t, n["pb"].detached)
+		}
+		return tree, doc, n, next
+	}
+
+	for _, style := range []bool{false, true} {
+		var shapes, attrs []string
+		for _, purge := range []bool{true, false} {
+			tree, doc, n, next := build(t, purge)
+			actor := n["r"].id.CreatedAt.ActorID()
+			vv := time.NewVersionVector()
+			vv.Set(actor, 1000)
+			from := NewTreePos(n["pa"].id, NewTreeNodeID(n["ab"].id.CreatedAt, 2))
+			to := NewTreePos(n["pb"].id, NewTreeNodeID(n["cd"].id.CreatedAt, 2))
+			at := time.NewTicket(500, 0, actor)
+			if style {
+				_, _, _, err := tree.Style(from, to, map[string]string{"k": "v"}, at, vv)
+				require.NoError(t, err)
+				assert.Equal(t, `<r><m k="v">MM</m></r>`, tree.ToXML(), "purged %v", purge)
+			} else {
+				pairs, _, _, err := tree.Edit(from, to, nil, 0, at, next, vv, false)
+				require.NoError(t, err)
+				assert.Equal(t, "<r></r>", tree.ToXML(), "purged %v", purge)
+				for _, pair := range pairs {
+					doc.RegisterGCPair(pair)
+				}
+			}
+			_, err := doc.GarbageCollect(vv)
+			require.NoError(t, err)
+			shapes = append(shapes, treeShapeOf(tree))
+			attrs = append(attrs, n["m"].Attributes())
+		}
+		assert.Equal(t, shapes[0], shapes[1], "style %v: the same tree once both collect", style)
+		assert.Equal(t, attrs[0], attrs[1], "style %v: the same attributes on m", style)
+	}
+}

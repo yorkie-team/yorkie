@@ -125,7 +125,13 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   the topmost removed one. So a range with one end in a detached subtree
   styles, or deletes without merging, the same attached content on both
   (`TestEditWithOneEndInADetachedSubtree`,
-  `TestStyleWithAnEndInADetachedSubtree`). A delete that merges out of the
+  `TestStyleWithAnEndInADetachedSubtree`), and so does a range with its two
+  ends in two purged subtrees, over the attached content between them
+  (`TestRangeBetweenTwoDetachedSubtrees`). A recorded sibling that has
+  since left the slot parent by a merge, not a purge, leaves the slot at
+  the parent's end; whether an unpurged replica moved the subtree along
+  with it depends on which side of the merging range the subtree sat, which
+  the purged replica cannot tell, so that case is the merge case below. A delete that merges out of the
   subtree does not converge: a replica that has not purged it moves the
   hidden content after the range end into view, and one that purged it has
   nothing to move (`TestEditMergingOutOfADetachedSubtree`). Only a late or
@@ -155,7 +161,7 @@ detached node either, so that gap is the same there.
 | `Restore` under an ancestor whose removal it knew | left a tombstone, attached or not | `TestTreeReviveUnderAKnownRemovalDoesNotDependOnGC`, `TestTreeRestoreUnderAKnownRemoval` |
 | `recreateFromSpan` under a detached parent or split home | declined, as under a purged one | `TestRestoreRecreatesNothingUnderADetachedParent`, `TestRecreateGoesNowhereDetachedThroughASplitHome` |
 | `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
-| `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only; a range inside the detached subtree visits nothing | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
+| `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
 | `Edit` delete over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
 | `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree`, `TestStyleWithAnEndInADetachedSubtree` |
 | `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |

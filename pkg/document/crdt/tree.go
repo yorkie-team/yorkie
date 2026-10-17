@@ -1393,8 +1393,10 @@ func (t *Tree) isAttached(node *TreeNode) bool {
 // front of, nil for the end. A sibling purged since is passed over to the
 // one it sat in front of in turn, and a parent purged since resolves to its
 // own place, so the slot is always in the attached tree. A sibling that has
-// left the parent some other way is not found among its children, and the
-// caller then counts to the end, as for nil. ok is false only
+// left the parent some other way, by a merge moving it out, is not found
+// among its children, and the caller then counts to the end, as for nil:
+// whether a replica that has not purged the subtree moved it along depends
+// on which side of the merging range it sat, which is not recorded. ok is false only
 // for a detached node with no purge recorded above it.
 func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
 	top := node
@@ -4765,13 +4767,6 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 	includeRemoved ...bool,
 ) error {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
-
-	// A range with both ends in a subtree a purge took out encloses nothing
-	// of the attached tree, and an index counted inside that subtree means
-	// nothing in it: there is nothing to visit (see TreeNode.detached).
-	if fromParent != nil && toParent != nil && fromParent.detached && toParent.detached {
-		return nil
-	}
 
 	fromIdx, err := t.ToIndex(fromParent, fromLeft, include)
 	if err != nil {
