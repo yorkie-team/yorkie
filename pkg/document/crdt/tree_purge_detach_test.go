@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -48,6 +49,23 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 	div.remove(removedAt)
 	p.remove(removedAt)
 	return tree, div, p, text, removedAt
+}
+
+// TestPurgeDetachedCountsADetachedSubtreeOnce pins the already-detached
+// guard of PurgeDetached. Purging div detaches p with the live text under
+// it, and reports the text's size for Root to take out of Live. p keeps a GC
+// pair of its own and is purged later, inside the subtree that already left
+// the tree; reporting the text again would take it out of Live twice.
+func TestPurgeDetachedCountsADetachedSubtreeOnce(t *testing.T) {
+	tree, div, p, text, _ := detachFixture(t)
+
+	size, err := tree.PurgeDetached(div)
+	require.NoError(t, err)
+	assert.Equal(t, text.DataSize(), size, "the purge reports the live text")
+
+	size, err = tree.PurgeDetached(p)
+	require.NoError(t, err)
+	assert.Equal(t, resource.DataSize{}, size, "already detached: nothing left to report")
 }
 
 // TestCollectNeverTakesLiveBelowZero pins the clamp at the call site. The
