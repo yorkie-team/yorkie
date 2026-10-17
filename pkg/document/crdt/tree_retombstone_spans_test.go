@@ -353,3 +353,33 @@ func TestRetombstoneAnEmptyTextSpanRemovesNothing(t *testing.T) {
 	require.Len(t, reverse, 1)
 	assert.Equal(t, 0, reverse[0].Length)
 }
+
+// TestRetombstoneReverseSharesNoAttributes pins that the reverse spans a
+// retombstone reports copy the attribute snapshot rather than alias the
+// operation's: writing to one leaves the other as it was.
+func TestRetombstoneReverseSharesNoAttributes(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	require.NoError(t, root.Append(p))
+	tree := NewTree(root, next())
+
+	attrs := NewRHT()
+	attrs.Set("k", "v", next())
+	span := &TreeRestoreSpan{ID: p.id, NodeType: "p", Attributes: attrs, ParentID: root.id}
+	known := time.NewVersionVector()
+	known.Set(actor, lamport)
+	_, _, _, reverse, err := tree.Retombstone([]*TreeRestoreSpan{span}, next(), false, known)
+	require.NoError(t, err)
+	require.Len(t, reverse, 1)
+	require.NotSame(t, span.Attributes, reverse[0].Attributes)
+
+	reverse[0].Attributes.Set("k", "w", next())
+	assert.Equal(t, "v", span.Attributes.Get("k"))
+}

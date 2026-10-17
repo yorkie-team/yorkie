@@ -1012,6 +1012,17 @@ type TreeRestoreSpan struct {
 	RightSiblingID *TreeNodeID
 }
 
+// copy returns a copy of the span that shares nothing mutable with it: the
+// IDs are never written once made, and the attribute snapshot is copied, so a
+// reverse operation built from it never aliases the operation's payload.
+func (s *TreeRestoreSpan) copy() *TreeRestoreSpan {
+	copied := *s
+	if s.Attributes != nil {
+		copied.Attributes = s.Attributes.DeepCopy()
+	}
+	return &copied
+}
+
 // kindAgrees reports whether the span's IsText flag matches its NodeType, as
 // it always does on a span an honest replica captured. A span that disagrees
 // would recreate a node of the wrong kind -- an element carrying a Value is
@@ -1725,8 +1736,7 @@ func (t *Tree) Retombstone(
 		if !span.kindAgrees() {
 			// Skipped, but reported as a copy like every other span, so the
 			// reverse operation never shares the operation's payload.
-			skipped := *span
-			applied = append(applied, &skipped)
+			applied = append(applied, span.copy())
 			continue
 		}
 		start := span.ID.Offset
@@ -2029,7 +2039,7 @@ func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSp
 		if from >= to {
 			continue
 		}
-		part := *span
+		part := *span.copy()
 		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0]}
 		part.Length = to - from
 		part.Value = string(utf16.Decode(encoded[from:to]))
@@ -2157,7 +2167,7 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
 	// Always a copy, refreshed or not, so the reverse operation never shares
 	// a span with the operation's own payload.
-	fresh := *span
+	fresh := *span.copy()
 
 	var first, last *TreeNode
 	start, end := span.ID.Offset, span.ID.Offset+span.Length
