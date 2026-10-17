@@ -88,6 +88,17 @@ as the deletion is measured. Since `Live <= Total`, the server's gate is also
 never stricter than the SDK's own check against the same limit, so an honest
 client's local check trips first.
 
+**Live has to equal a rebuild.** The stored size is the running ledger of
+the document the server built, so it must match what rebuilding the same
+document reports (`DeepCopy().DocSize()`, a snapshot load), or the gate
+refuses writes for bytes the document no longer holds. Purging a Tree
+element detaches its whole subtree, including descendants that are still
+live: a child an identity restore revived under an element that stayed
+removed has no GC pair and is charged to `Live`. `Root` takes those
+descendants' size out of `Live` when it purges the element (`GCDetach`),
+and `Tree.Purge` unregisters them, so a later change that names one by
+identity does not take it out a second time (yorkie#2244).
+
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The
 first snapshot after that arms the gate.

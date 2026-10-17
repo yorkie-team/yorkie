@@ -18,7 +18,9 @@ tree region, replicas diverge after synchronization.
 
 ### Non-Goals
 
-- Undo/redo for merge/split (deferred per `undo-redo.md` Phase 2).
+- Undo/redo for merge/split beyond the identity restore rules (§6.4 and
+  the Rollout and Cross-implementation section): the rest stays deferred
+  per `undo-redo.md` Phase 2.
 - General-purpose `Tree.Move` operation (Phase 2).
 
 ## Text vs Element ID Asymmetry
