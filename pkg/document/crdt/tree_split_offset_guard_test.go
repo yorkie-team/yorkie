@@ -142,3 +142,35 @@ func TestFindTreeNodesWithSplitTextSplitProductByMode(t *testing.T) {
 		})
 	}
 }
+
+// TestTreeEditRangeStartsAfterAConcurrentlySplitElement pins the Edit end of
+// §1.3: a non-empty range is not an insert position at either end. A delete
+// of the second paragraph, declared from right after the first one, meets a
+// concurrent split of that first paragraph. Its start passes over the split
+// product, as the walk always has, so the product -- content the deleting
+// client saw inside the first paragraph -- stays out of the range.
+func TestTreeEditRangeStartsAfterAConcurrentlySplitElement(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "ab"))
+	editT(t, tree, ctx, 4, 4, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 5, 5, textNode(ctx, "cd"))
+	require.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
+
+	// <r>0<p>1ab3</p>4<p>5cd7</p>8</r>: the delete covers [4, 8).
+	editedAt := helper.TimeT(ctx)
+	from, err := tree.FindPos(4)
+	require.NoError(t, err)
+	to, err := tree.FindPos(8)
+	require.NoError(t, err)
+
+	_, _, err = tree.EditT(2, 2, nil, 1, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+	require.Equal(t, "<r><p>a</p><p>b</p><p>cd</p></r>", tree.ToXML())
+
+	_, _, _, err = tree.Edit(from, to, nil, 0, editedAt, issueTicket(ctx), nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML(),
+		"the split product is not inside the range")
+}

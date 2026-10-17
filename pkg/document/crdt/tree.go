@@ -2568,16 +2568,17 @@ func (t *Tree) Edit(
 	var info TreeEditReverseInfo
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	// Only an empty range is a pure insert position (§1.3); both ends of a
+	// non-empty range are boundaries its client drew around whole elements.
+	mode := BoundaryEditEnd
+	if from.ParentID.Equal(to.ParentID) && from.LeftSiblingID.Equal(to.LeftSiblingID) {
+		mode = BoundaryInsert
+	}
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, mode)
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
-	// The end of a range is not an insert position unless the range is empty.
-	toMode := BoundaryEditEnd
-	if from.ParentID.Equal(to.ParentID) && from.LeftSiblingID.Equal(to.LeftSiblingID) {
-		toMode = BoundaryInsert
-	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, toMode)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, mode)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, info, err
@@ -4870,10 +4871,10 @@ const (
 	// nodes concurrently inserted at that anchor.
 	BoundaryRange
 
-	// BoundaryEditEnd is the end of an Edit's range when it is not also the
-	// insert position. It resolves as BoundaryInsert does, except that step
-	// 04 does not pass over a split product of the left element (§1.3):
-	// only an insert lands between the element and its product.
+	// BoundaryEditEnd is either end of a non-empty Edit range. It resolves
+	// as BoundaryInsert does, except that step 04 does not pass over a split
+	// product of the left element (§1.3): only a pure insert, an empty range,
+	// lands between the element and its product.
 	BoundaryEditEnd
 )
 
@@ -4990,8 +4991,8 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	// same insert on different nodes.
 	//
 	// Only an insert position does this (BoundaryInsert). A range boundary
-	// after the element -- a style range's (BoundaryRange) or the end of a
-	// non-empty Edit range (BoundaryEditEnd) -- was drawn after the whole
+	// after the element -- a style range's (BoundaryRange) or either end of
+	// a non-empty Edit range (BoundaryEditEnd) -- was drawn after the whole
 	// element its client saw, unsplit, so the walk takes the product as it
 	// always has, and the split handling of the caller starts from there.
 	anchorElement := leftNode

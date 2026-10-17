@@ -118,11 +118,10 @@ needs no version vector. Pinned by the corpus scripts
 `split-order-older-*` (a product is not the anchor) and
 `split-product-walk-past-concurrent-insert` (the walk goes on past it).
 
-The rule applies to an insert position (`BoundaryInsert`) only: an
-Edit's `from`, and its `to` when the range is empty. A `BoundaryRange`
-position (§9.3), a style range's boundary, and a `BoundaryEditEnd`
-position, the end of a non-empty Edit range, were drawn after the whole
-element as their client saw it, so the walk takes the product as before
+The rule applies to an insert position (`BoundaryInsert`) only: both ends
+of an empty Edit range. A `BoundaryRange` position (§9.3), a style range's
+boundary, and a `BoundaryEditEnd` position, either end of a non-empty Edit
+range, were drawn after the whole element as their client saw it, so the walk takes the product as before
 and the caller's split handling (§9.1/§9.2, §4.1) deals with it.
 
 ## Phase 2: Split Sibling Advance
@@ -1367,10 +1366,10 @@ change. Until both run them, a JS client and the Go server can derive
 different trees from the same changes, and a compaction keeps the Go
 result. The JS SDK has to mirror all of the following:
 
-1. **§1.3 step 04.** At an insert position (an Edit's `from`, and its `to`
-   when the range is empty), the walk passes over a split product of the
-   left element instead of taking it as the anchor, and goes on to the
-   concurrent inserts after it. A non-empty Edit range's end
+1. **§1.3 step 04.** At an insert position (both ends of an empty Edit
+   range), the walk passes over a split product of the left element
+   instead of taking it as the anchor, and goes on to the concurrent
+   inserts after it. Either end of a non-empty Edit range
    (`BoundaryEditEnd`) and a style boundary (`BoundaryRange`) keep the
    plain walk.
 2. **Step 03 past purged text.** A left-sibling offset past the end of the
