@@ -181,6 +181,15 @@ type TreeNode struct {
 	// detached is set on every node of a subtree a purge took out of the
 	// tree (see Tree.PurgeDetached). Runtime only: a snapshot or DeepCopy
 	// holds the attached tree alone.
+	//
+	// The invariant: a purge takes its whole subtree out of the tree as if
+	// every node in it were purged with it. Each is unregistered from
+	// NodeMapByID and unlinked from its insertion chain, its stamps leave
+	// mergeStamps, and the live ones' bytes leave docSize.Live, so nothing
+	// reaches a detached node by ID, by chain, by the §4.1 cascade or by a
+	// position, and no op can charge or discharge a ledger for it. The one
+	// thing still naming it is the GC pair a removed descendant had already
+	// booked, and purging that walks nothing and reports nothing.
 	detached bool
 }
 
@@ -1244,10 +1253,31 @@ func (t *Tree) Purge(child GCChild) error {
 // with it. Counted as Tree.DataSize counts a node, by its own liveness, so
 // it is exactly what a rebuild stops counting once child is gone. A child
 // inside a subtree an earlier purge already detached returns zero: those
-// nodes left the ledger then.
+// nodes left the ledger then. See TreeNode.detached for what a detached
+// node is.
 func (t *Tree) PurgeDetached(child GCChild) (resource.DataSize, error) {
+	size, _, err := t.purgeDetached(child.(*TreeNode))
+	return size, err
+}
+
+// purgeDetached is PurgeDetached, also reporting how many nodes it walked.
+//
+// The subtree is walked once in all: every node in it is marked detached, so
+// a later purge of one of them, through the GC pair a removed descendant had
+// booked, walks nothing. One collection pass therefore costs O(nodes)
+// however the subtree's own pairs are ordered.
+//
+// Every node of the subtree leaves the tree as the purged node does, live
+// ones included: registered, a live descendant would be reachable by ID or
+// through its chain neighbours by later changes on this replica only, which
+// could revive, remove or anchor on it while its bytes are no longer on the
+// ledger, and it is invisible on every replica anyway, since its ancestor's
+// removal is one every replica has seen. Unregistered, a change naming it
+// resolves as one naming any purged node does: a recreate under it declines
+// for want of a parent, and a restore that brings its ancestor back by span
+// brings it back with it, as on a replica that never purged.
+func (t *Tree) purgeDetached(node *TreeNode) (resource.DataSize, int, error) {
 	var size resource.DataSize
-	node := child.(*TreeNode)
 
 	// A parentless node cannot be detached: purging is removal from a parent's
 	// child list. GCPairs never books one, but a pair outlives the tree state
@@ -1255,38 +1285,22 @@ func (t *Tree) PurgeDetached(child GCChild) (resource.DataSize, error) {
 	// version passes it), so a node detached in between reaches here. Dropping
 	// it keeps GarbageCollect advancing instead of panicking on the deref.
 	if node.Index == nil || node.Index.Parent == nil {
-		return size, nil
+		return size, 0, nil
 	}
 
-	// A node inside a subtree an earlier purge detached left the ledger, and
-	// the merge-stamp index, with that subtree: there is nothing to walk.
+	// Already out of the tree, its ledger and its index with the subtree an
+	// earlier purge detached: only the unlink from its detached parent is left.
 	if node.detached {
 		if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
-			return resource.DataSize{}, err
+			return resource.DataSize{}, 0, err
 		}
-		t.unregisterNode(node)
-		t.unlinkInsChain(node)
-		return size, nil
+		return size, 0, nil
 	}
 
-	// Otherwise the node takes its subtree out of the tree, and the subtree
-	// is walked once: each node is marked detached, so no later purge of a
-	// node inside it walks it again, and one collection pass costs O(nodes)
-	// however the subtree's own GC pairs are ordered. The live descendants
-	// have no GC pair; their size is reported for Root to take out of Live,
-	// and every stamped node leaves mergeStamps, so the index keeps no
-	// purged subtree alive.
-	//
-	// The live descendants stay registered, as on main: a later change that
-	// names one by identity still finds it, so a position through it fails
-	// as it does on main and on every replica that purged, and Restore and
-	// Retombstone leave a detached node alone (see their pieces loops), so
-	// such a change neither charges nor discharges a ledger the node left.
+	var leaving []*TreeNode
 	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-		if purgeVisitForTest != nil {
-			purgeVisitForTest()
-		}
 		n.Value.detached = true
+		leaving = append(leaving, n.Value)
 		if n.Value != node && !n.Value.IsRemoved() {
 			size.Add(n.Value.DataSize())
 		}
@@ -1296,20 +1310,23 @@ func (t *Tree) PurgeDetached(child GCChild) (resource.DataSize, error) {
 	})
 
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
-		return resource.DataSize{}, err
+		return resource.DataSize{}, len(leaving), err
+	}
+	// Unlink every node while all of them are still registered: a chain
+	// neighbour is looked up by ID, and one unregistered first would make
+	// that floor lookup answer with another piece of the insertion.
+	for _, n := range leaving {
+		t.unlinkInsChain(n)
 	}
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
 	// unregister a different node that shares this one's ID — see putNode.
-	// Only drop the entry this node actually holds.
-	t.unregisterNode(node)
-	t.unlinkInsChain(node)
+	// Only drop the entry each node actually holds.
+	for _, n := range leaving {
+		t.unregisterNode(n)
+	}
 
-	return size, nil
+	return size, len(leaving), nil
 }
-
-// purgeVisitForTest, when set, is called once per node PurgeDetached walks,
-// so a test can count the walk's steps. Always nil outside tests.
-var purgeVisitForTest func()
 
 // unlinkInsChain joins node's InsPrevID/InsNextID neighbours to each other
 // and clears node's own links, for a node leaving the tree.
@@ -1433,11 +1450,6 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 
 			node := t.findFloorNode(span.ID)
 			if node != nil && node.id.Equal(span.ID) {
-				// A node a purge detached is off the ledger and out of the
-				// tree; reviving it would charge Live for nothing visible.
-				if node.detached {
-					continue
-				}
 				if node.IsRemoved() {
 					node.unremove()
 					untombstoned = append(untombstoned, node)
@@ -1473,15 +1485,6 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				piece := pieces[pieceIdx]
 				pieceEnd := piece.id.Offset + piece.Length()
 				overlapEnd := min(pieceEnd, end)
-				if piece.detached {
-					// Held by a detached piece: neither revived nor
-					// recreated, as for a detached element above.
-					cursor = overlapEnd
-					if overlapEnd >= pieceEnd {
-						pieceIdx++
-					}
-					continue
-				}
 				target, iErr := t.isolateTextRange(piece, cursor, overlapEnd, &diff)
 				if iErr != nil {
 					return nil, nil, nil, diff, nil, iErr
@@ -1597,11 +1600,6 @@ func (t *Tree) Retombstone(
 		}
 
 		for _, piece := range pieces {
-			// A node a purge detached is off the ledger: removing it would
-			// charge GC for bytes Live no longer holds.
-			if piece.detached {
-				continue
-			}
 			if piece.IsRemoved() {
 				// The §4.1 cascade still runs for an element a peer already
 				// removed, as the forward delete's does: whether it reaches
@@ -1896,9 +1894,6 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 	siblings := t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed)
 	spans := make(map[*TreeNode]*TreeRestoreSpan, len(siblings))
 	for _, sibling := range siblings {
-		if sibling.detached {
-			continue
-		}
 		var from, to int
 		visible := false
 		if measure {
