@@ -232,3 +232,27 @@ func TestFindTreeNodesWithSplitTextManySplitProducts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Same(t, left, anchor, "every product is passed over")
 }
+
+// TestTreeEditPureInsertStaysBeforeASplitProduct pins Edit's choice of
+// boundary mode for an empty range. An insert declared right after <p>ab</p>
+// meets a concurrent split of that paragraph; as a pure insert it lands
+// between the paragraph and its product (§1.3), where the default walk
+// would take it past the product.
+func TestTreeEditPureInsertStaysBeforeASplitProduct(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "ab"))
+	left := tree.Root().Children()[0]
+
+	editedAt := helper.TimeT(ctx)
+	pos := crdt.NewTreePos(tree.Root().ID(), left.ID())
+	_, _, err := tree.EditT(2, 2, nil, 1, helper.TimeT(ctx), issueTicket(ctx))
+	require.NoError(t, err)
+	require.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+
+	content := crdt.NewTreeNode(crdt.NewTreeNodeID(editedAt, 0), "p", nil)
+	_, _, _, err = tree.Edit(pos, pos, []*crdt.TreeNode{content}, 0, editedAt, issueTicket(ctx), nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, "<r><p>a</p><p></p><p>b</p></r>", tree.ToXML())
+}
