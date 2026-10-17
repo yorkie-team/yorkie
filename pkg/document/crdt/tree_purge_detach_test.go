@@ -1236,3 +1236,99 @@ func TestSplitIntoADetachedParentWithoutARemovalFails(t *testing.T) {
 	_, err = n.Split(tree, 1, next, known)
 	assert.ErrorIs(t, err, ErrDetachedLive)
 }
+
+// TestPurgeOfALiveNodeChangesNothing pins that a purge only takes out a
+// tombstone: asked to purge a live node, Purge and PurgeReleasing leave the
+// tree, the indexes and every node as they were, and report nothing
+// released.
+func TestPurgeOfALiveNodeChangesNothing(t *testing.T) {
+	tree, div, p, text, _ := detachFixture(t)
+	div.removedAt, p.removedAt = nil, nil
+	div.Index.UpdateDescendantsLength()
+	tree.Root().Index.UpdateDescendantsLength()
+	before := tree.ToXML()
+
+	require.NoError(t, tree.Purge(div))
+	released, err := tree.PurgeReleasing(div)
+	require.NoError(t, err)
+	assert.Zero(t, released.Total(), "nothing released")
+	assert.Equal(t, before, tree.ToXML())
+	assert.Same(t, tree.Root(), div.Index.Parent.Value, "div stays in the tree")
+	for _, n := range []*TreeNode{div, p, text} {
+		assert.False(t, n.detached, "%s is not detached", n.Type())
+		assert.False(t, n.IsRemoved(), "%s stays live", n.Type())
+	}
+	assert.Equal(t, len(tree.Nodes()), tree.NodeLen())
+}
+
+// TestTakeForgottenReportsTheLastRestoreAlone pins that each Restore starts
+// the forgotten list afresh: a caller that never takes the first Restore's
+// list does not leave its nodes for a later caller to drop pairs for.
+func TestTakeForgottenReportsTheLastRestoreAlone(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
+	text.remove(removedAt)
+	require.NoError(t, tree.Purge(div))
+	other, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	unaware := time.NewVersionVector()
+	unaware.Set(other, 1)
+
+	_, _, _, _, _, err = tree.Restore([]*TreeRestoreSpan{
+		{ID: p.id, NodeType: "p", Length: 1, ParentID: div.id},
+	}, false, unaware)
+	require.NoError(t, err)
+	_, _, _, _, _, err = tree.Restore([]*TreeRestoreSpan{
+		{ID: text.id, NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.id},
+	}, false, unaware)
+	require.NoError(t, err)
+
+	forgotten := tree.TakeForgotten()
+	require.Len(t, forgotten, 1, "only the second Restore's")
+	assert.Same(t, text, forgotten[0])
+	assert.Empty(t, tree.TakeForgotten(), "and taking it clears it")
+}
+
+// TestRelinkRecreatedTextLeavesADetachedSuccessor pins the successor side of
+// the relink: a recreated attached piece with no surviving predecessor does
+// not link to a detached piece at its exact end offset, as a replica that
+// purged that piece has nothing there to link to.
+func TestRelinkRecreatedTextLeavesADetachedSuccessor(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "p", nil)
+	require.NoError(t, root.Append(p))
+	tree := NewTree(root, time.NewTicket(3, 0, actor))
+	insertion := time.NewTicket(4, 0, actor)
+	a := NewTreeNode(NewTreeNodeID(insertion, 0), "text", nil, "a")
+	b := NewTreeNode(NewTreeNodeID(insertion, 1), "text", nil, "b")
+	require.NoError(t, p.Append(a))
+	b.detached = true
+	b.remove(time.NewTicket(5, 0, actor))
+	tree.putNode(a)
+	tree.putNode(b)
+
+	tree.relinkRecreatedText(a)
+	assert.Nil(t, a.InsNextID, "the recreated piece does not link to the detached one")
+	assert.Nil(t, b.InsPrevID, "and the detached one is left alone")
+}
+
+// TestRegisterGCPairCancelsAGCOnlyPairByItsBooking pins the RegisterGCPair
+// branch DropGCPair's doc leans on: registering a pair booked with
+// GCOnlySize a second time cancels it and gives back GCOnlySize, the amount
+// the first registration put in, rather than the child's size.
+func TestRegisterGCPairCancelsAGCOnlyPairByItsBooking(t *testing.T) {
+	tree, _, p, _, _ := detachFixture(t)
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	base := doc.DocSize()
+
+	booked := resource.DataSize{Data: 7, Meta: 3}
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
+	gc := doc.DocSize().GC
+	gc.Sub(base.GC)
+	assert.Equal(t, booked, gc, "registration adds the booking")
+
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
+	assert.Equal(t, 0, doc.GarbageLen())
+	assert.Equal(t, base.GC, doc.DocSize().GC, "cancelling gives the booking back")
+}
