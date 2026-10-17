@@ -646,3 +646,21 @@ func TestRestoreWithoutClocksDissolvesNothing(t *testing.T) {
 	assert.True(t, f.text.MergedFrom.Equal(f.p3.id), "the stamps stay")
 	assert.Same(t, mergedAt, f.text.MergedAt)
 }
+
+// TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree pins that the
+// mergeStamps index lets go of every stamped node a purge detaches, not only
+// the purged node itself, so it keeps no purged subtree alive.
+func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	f.p3.remove(f.nextTicket())
+	f.text.MergedFrom = f.p3.id
+	f.text.MergedAt = f.nextTicket()
+	tree := NewTree(f.tree.Root(), f.nextTicket())
+	require.Len(t, tree.mergeStamps[f.p3.id.toIDString()], 1)
+
+	// The stamped text goes with its paragraph, which is the node purged.
+	f.p2.remove(f.nextTicket())
+	f.text.remove(f.nextTicket())
+	require.NoError(t, tree.Purge(f.p2))
+	assert.Empty(t, tree.mergeStamps, "no entry outlives the subtree it named")
+}

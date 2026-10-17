@@ -1243,15 +1243,31 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 func (t *Tree) DetachedLiveSize(child GCChild) resource.DataSize {
 	var size resource.DataSize
 	node, ok := child.(*TreeNode)
-	if !ok || node.Index == nil || node.Index.Parent == nil || !t.isAttached(node) {
+	if !ok || node.Index == nil || node.Index.Parent == nil {
 		return size
 	}
+	for _, live := range t.detachedLiveDescendants(node) {
+		size.Add(live.DataSize())
+	}
+	return size
+}
+
+// detachedLiveDescendants returns the live nodes under node that purging it
+// detaches from the tree: none when node is itself inside a subtree an
+// earlier purge already detached, since those left the tree then. Both
+// DetachedLiveSize and Purge read it, so the size Root takes out of Live and
+// the nodes Purge unregisters are the same set.
+func (t *Tree) detachedLiveDescendants(node *TreeNode) []*TreeNode {
+	if !t.isAttached(node) {
+		return nil
+	}
+	var live []*TreeNode
 	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
 		if n.Value != node && !n.Value.IsRemoved() {
-			size.Add(n.Value.DataSize())
+			live = append(live, n.Value)
 		}
 	})
-	return size
+	return live
 }
 
 func (t *Tree) Purge(child GCChild) error {
@@ -1271,14 +1287,7 @@ func (t *Tree) Purge(child GCChild) error {
 	// reached one by identity -- a redo of the restore that revived it --
 	// would charge its removal to a ledger Root already took it out of (see
 	// GCDetach). A rebuild does not hold them either.
-	var detachedLive []*TreeNode
-	if t.isAttached(node) {
-		index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-			if n.Value != node && !n.Value.IsRemoved() {
-				detachedLive = append(detachedLive, n.Value)
-			}
-		})
-	}
+	detachedLive := t.detachedLiveDescendants(node)
 
 	if err := node.Index.Parent.RemoveChild(node.Index); err != nil {
 		return err
@@ -1288,11 +1297,13 @@ func (t *Tree) Purge(child GCChild) error {
 	// Only drop the entry this node actually holds.
 	t.unregisterNode(node)
 	t.unlinkInsChain(node)
-	t.forgetMergeStamp(node)
 	for _, live := range detachedLive {
 		t.unregisterNode(live)
 		t.unlinkInsChain(live)
 	}
+	// Every stamped node of the detached subtree leaves mergeStamps, so the
+	// index holds no reference that keeps a purged subtree alive.
+	t.forgetMergeStamps(node)
 
 	return nil
 }
@@ -5212,18 +5223,33 @@ func (t *Tree) putNode(node *TreeNode) {
 	t.noteMergeStamp(node)
 }
 
-// forgetMergeStamp drops node's entry from mergeStamps, for a node leaving
-// the tree. Its live descendants' entries are dropped when next read.
-func (t *Tree) forgetMergeStamp(node *TreeNode) {
-	if node.MergedFrom == nil {
+// forgetMergeStamps drops from mergeStamps the entries of root and every node
+// under it, for a subtree leaving the tree.
+func (t *Tree) forgetMergeStamps(root *TreeNode) {
+	if len(t.mergeStamps) == 0 {
 		return
 	}
-	key := node.MergedFrom.toIDString()
-	nodes := slices.DeleteFunc(t.mergeStamps[key], func(n *TreeNode) bool { return n == node })
-	if len(nodes) == 0 {
-		delete(t.mergeStamps, key)
-	} else {
-		t.mergeStamps[key] = nodes
+	leaving := make(map[string]map[*TreeNode]struct{})
+	index.TraverseNode(root.Index, func(n *index.Node[*TreeNode], _ int) {
+		if n.Value.MergedFrom == nil {
+			return
+		}
+		key := n.Value.MergedFrom.toIDString()
+		if leaving[key] == nil {
+			leaving[key] = make(map[*TreeNode]struct{})
+		}
+		leaving[key][n.Value] = struct{}{}
+	})
+	for key, nodes := range leaving {
+		kept := slices.DeleteFunc(t.mergeStamps[key], func(n *TreeNode) bool {
+			_, ok := nodes[n]
+			return ok
+		})
+		if len(kept) == 0 {
+			delete(t.mergeStamps, key)
+		} else {
+			t.mergeStamps[key] = kept
+		}
 	}
 }
 
