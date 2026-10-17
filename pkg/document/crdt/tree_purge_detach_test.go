@@ -265,13 +265,16 @@ func TestRetombstoneLeavesADetachedNodeAlone(t *testing.T) {
 	require.True(t, p.detached)
 	require.Equal(t, "<r><div><p>b</p></div></r>", tree.ToXML())
 
-	span := &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: div.id}
+	// The span names the root as p's parent, which a refresh off the
+	// detached p would rewrite to div.
+	span := &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: tree.Root().id}
 	pairs, _, edits, spans, err := tree.Retombstone([]*TreeRestoreSpan{span}, nextTicket(), true, unaware)
 	require.NoError(t, err)
 	assert.Empty(t, pairs)
 	assert.Empty(t, edits)
 	require.Len(t, spans, 1)
 	assert.Equal(t, *span, *spans[0], "the span keeps the anchors it came with")
+	assert.Equal(t, tree.Root().id, spans[0].ParentID)
 	assert.False(t, product.IsRemoved(), "the attached split product stays live")
 	assert.Equal(t, "<r><div><p>b</p></div></r>", tree.ToXML())
 }
