@@ -1270,4 +1270,45 @@ func TestTreeRestoreUnderAKnownRemoval(t *testing.T) {
 		assert.Empty(t, untombstoned)
 		assert.True(t, text.IsRemoved())
 	})
+
+	// <r><p><q>ab</q></p></r> with "a" and "b" deleted apart, the paragraph
+	// removed by a known delete and q revived by a concurrent change: the
+	// first text's walk finds the paragraph through live q, and the second
+	// must look again once the paragraph is revived between them.
+	t.Run("a revived ancestor is looked at again", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+		editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+		editT(t, tree, ctx, 1, 1, crdt.NewTreeNode(helper.PosT(ctx), "q", nil))
+		editT(t, tree, ctx, 2, 2, textNode(ctx, "ab"))
+		editT(t, tree, ctx, 2, 3, nil)
+		editT(t, tree, ctx, 2, 3, nil)
+		p := tree.Root().Children()[0]
+		q := p.Children()[0]
+		x1, x2 := q.Children(true)[0], q.Children(true)[1]
+		assert.Equal(t, "a", x1.Value)
+		assert.Equal(t, "b", x2.Value)
+		editT(t, tree, ctx, 0, 4, nil)
+		assert.Equal(t, "<r></r>", tree.ToXML())
+
+		other, err := time.ActorIDFromHex("000000000000000000000009")
+		assert.NoError(t, err)
+		concurrent := time.NewVersionVector()
+		concurrent.Set(other, 1)
+		_, _, _, _, _, err = tree.Restore([]*crdt.TreeRestoreSpan{elementSpan(q, p)}, false, concurrent)
+		assert.NoError(t, err)
+		assert.False(t, q.IsRemoved())
+		assert.True(t, p.IsRemoved())
+
+		at := helper.TimeT(ctx)
+		known := time.NewVersionVector()
+		known.Set(at.ActorID(), at.Lamport())
+		spans := []*crdt.TreeRestoreSpan{textSpan(x1, q), elementSpan(p, tree.Root()), textSpan(x2, q)}
+		_, _, _, _, _, err = tree.Restore(spans, false, known)
+		assert.NoError(t, err)
+		assert.True(t, x1.IsRemoved(), "listed before the paragraph's revive")
+		assert.False(t, x2.IsRemoved(), "listed after it")
+		assert.Equal(t, "<r><p><q>b</q></p></r>", tree.ToXML())
+		assertLengthCacheSound(t, tree, "after the revive")
+	})
 }
