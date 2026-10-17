@@ -76,6 +76,30 @@ func TestAppendUncoveredSpans(t *testing.T) {
 	}
 }
 
+// TestAppendUncoveredSpansIgnoresAWrongKind pins that an input span whose
+// kind disagrees, which Retombstone skipped and Restore skips too, leaves a
+// cascaded span naming the same node in the list: it describes nothing.
+func TestAppendUncoveredSpansIgnoresAWrongKind(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	element := NewTreeNodeID(time.NewTicket(2, 0, actor), 0)
+	insertion := time.NewTicket(3, 0, actor)
+
+	wrongElement := &TreeRestoreSpan{ID: element, NodeType: "text"}
+	cascadedElement := &TreeRestoreSpan{ID: element, NodeType: "p"}
+	got := appendUncoveredSpans([]*TreeRestoreSpan{wrongElement}, []*TreeRestoreSpan{cascadedElement})
+	assert.Equal(t, []*TreeRestoreSpan{wrongElement, cascadedElement}, got)
+
+	wrongText := &TreeRestoreSpan{
+		ID: NewTreeNodeID(insertion, 0), NodeType: "p", IsText: true, Length: 2, Value: "ab",
+	}
+	cascadedText := &TreeRestoreSpan{
+		ID: NewTreeNodeID(insertion, 0), NodeType: "text", IsText: true, Length: 2, Value: "ab",
+	}
+	got = appendUncoveredSpans([]*TreeRestoreSpan{wrongText}, []*TreeRestoreSpan{cascadedText})
+	assert.Equal(t, []*TreeRestoreSpan{cascadedText, wrongText}, got)
+}
+
 // TestUncoveredTextSpansAnchorEachGap pins the anchors of a cascaded text
 // span cut into two parts by an input span inside it. Each part is anchored
 // on its own gap, and a Restore after GC that recreates the parts before the

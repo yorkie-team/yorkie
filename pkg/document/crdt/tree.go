@@ -1731,15 +1731,20 @@ func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan
 	covers := make(map[string][][2]int)
 	var inputElements, inputTexts []*TreeRestoreSpan
 	for _, span := range spans {
+		// A span whose kind disagrees was skipped, and Restore skips it
+		// too, so it describes nothing a cascaded span could leave to it.
+		describes := span.kindAgrees()
 		if span.IsText {
 			inputTexts = append(inputTexts, span)
-			if span.Length > 0 {
+			if describes && span.Length > 0 {
 				key := textCoverKey(span)
 				covers[key] = append(covers[key], [2]int{span.ID.Offset, span.ID.Offset + span.Length})
 			}
 		} else {
 			inputElements = append(inputElements, span)
-			elements[span.ID.toIDString()] = struct{}{}
+			if describes {
+				elements[span.ID.toIDString()] = struct{}{}
+			}
 		}
 	}
 	for key, intervals := range covers {
