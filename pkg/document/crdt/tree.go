@@ -2403,7 +2403,7 @@ func (t *Tree) relinkRecreatedText(node *TreeNode) {
 		// own -- none at all, or one that names a piece no longer registered
 		// -- and both ends of that link are written here.
 		succ := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: end})
-		if succ != nil && succ != node && succ.IsText() &&
+		if succ != nil && succ != node && succ.IsText() && succ.detached == node.detached &&
 			succ.id.Offset == end && !t.registersExactly(succ.InsPrevID) {
 			node.InsNextID = succ.id
 			succ.InsPrevID = node.id
@@ -2412,6 +2412,18 @@ func (t *Tree) relinkRecreatedText(node *TreeNode) {
 	}
 
 	succID := pred.InsNextID
+	// Pass over detached successors, which an attached piece does not link
+	// to, as a replica that purged them joined their neighbours.
+	if !node.detached {
+		var walker insNextWalker
+		for succID != nil {
+			succ := t.findFloorNode(succID)
+			if succ == nil || !succ.id.Equal(succID) || !succ.detached || !walker.visit(succ) {
+				break
+			}
+			succID = succ.InsNextID
+		}
+	}
 	node.InsPrevID = pred.id
 	node.InsNextID = succID
 	pred.InsNextID = node.id
@@ -2442,7 +2454,14 @@ func (t *Tree) survivingInsPrev(node *TreeNode, start int) *TreeNode {
 	}
 
 	pred := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: start - 1})
-	if pred == nil || pred == node || !pred.IsText() || pred.id.Offset+pred.Len() > start {
+	// A detached piece is not part of the attached tree's chain: an attached
+	// piece looks past it, as on a replica that purged it (see
+	// TreeNode.detached).
+	for pred != nil && pred != node && pred.detached && !node.detached && pred.id.Offset > 0 {
+		pred = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: pred.id.Offset - 1})
+	}
+	if pred == nil || pred == node || !pred.IsText() || pred.id.Offset+pred.Len() > start ||
+		(pred.detached && !node.detached) {
 		return nil
 	}
 

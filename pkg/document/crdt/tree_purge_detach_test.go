@@ -1174,3 +1174,33 @@ func TestDropGCPairGivesBackThePurgeAmount(t *testing.T) {
 	doc.DropGCPair(GCPair{Parent: tree, Child: text})
 	assert.Equal(t, 1, doc.GarbageLen(), "dropping an unregistered pair does nothing")
 }
+
+// TestRelinkRecreatedTextSkipsDetachedPieces pins that a recreated attached
+// piece is spliced into its insertion's chain past detached pieces, as on a
+// replica that purged them and joined their neighbours: "a" is attached,
+// "b" detached, and the recreated "c" links to "a" and leaves "b" alone.
+func TestRelinkRecreatedTextSkipsDetachedPieces(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "p", nil)
+	require.NoError(t, root.Append(p))
+	tree := NewTree(root, time.NewTicket(3, 0, actor))
+	insertion := time.NewTicket(4, 0, actor)
+	a := NewTreeNode(NewTreeNodeID(insertion, 0), "text", nil, "a")
+	b := NewTreeNode(NewTreeNodeID(insertion, 1), "text", nil, "b")
+	c := NewTreeNode(NewTreeNodeID(insertion, 2), "text", nil, "c")
+	require.NoError(t, p.Append(a, c))
+	b.detached = true
+	b.remove(time.NewTicket(5, 0, actor))
+	a.InsNextID, b.InsPrevID = b.id, a.id
+	tree.putNode(a)
+	tree.putNode(b)
+	tree.putNode(c)
+
+	tree.relinkRecreatedText(c)
+	assert.Equal(t, c.id, a.InsNextID)
+	assert.Equal(t, a.id, c.InsPrevID)
+	assert.Nil(t, c.InsNextID)
+	assert.Equal(t, a.id, b.InsPrevID, "the detached piece is left alone")
+}
