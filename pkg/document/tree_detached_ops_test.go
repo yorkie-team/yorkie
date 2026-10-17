@@ -110,36 +110,45 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 		}
 		return span
 	}
+	// Each case names what it does on each replica: d1 collected, so an op
+	// that names the purged paragraph fails there as on main, while d2
+	// resolves it. fails is d1 failing; changes says whether the op moved
+	// d1's and d2's tree.
+	type outcome struct {
+		fails              bool
+		changes1, changes2 bool
+	}
 	ops := []struct {
 		name string
 		op   opFor
+		want outcome
 	}{
 		{"insert under the paragraph", func(tree *crdt.Tree, p, _, _ *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), p.ID())
 			text := crdt.NewTreeNode(crdt.NewTreeNodeID(at, 0), "text", nil, "XYZ")
 			return operations.NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{text}, 0, at)
-		}},
+		}, outcome{fails: true, changes2: true}},
 		{"insert after b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), crdt.NewTreeNodeID(b.ID().CreatedAt, b.ID().Offset+b.Len()))
 			text := crdt.NewTreeNode(crdt.NewTreeNodeID(at, 0), "text", nil, "XYZ")
 			return operations.NewTreeEdit(tree.CreatedAt(), pos, pos, []*crdt.TreeNode{text}, 0, at)
-		}},
+		}, outcome{fails: true, changes2: true}},
 		{"delete over the paragraph", func(tree *crdt.Tree, p, _, _ *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			from := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			to := crdt.NewTreePos(tree.Root().ID(), p.ID())
 			return operations.NewTreeEdit(tree.CreatedAt(), from, to, nil, 0, at)
-		}},
+		}, outcome{fails: true}},
 		{"style the paragraph", func(tree *crdt.Tree, p, _, _ *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			from := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			to := crdt.NewTreePos(tree.Root().ID(), p.ID())
 			return operations.NewTreeStyle(tree.CreatedAt(), from, to, map[string]string{"k": "v"}, at)
-		}},
+		}, outcome{fails: true}},
 		{"restore b under p", func(tree *crdt.Tree, p, a, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), p.ID())
 			span := spanOf(b, p.ID(), a.ID(), nil)
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				[]*crdt.TreeRestoreSpan{span}, crdt.RestoreModeRestore, nil)
-		}},
+		}, outcome{}},
 		{"restore the paragraph and b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			spans := []*crdt.TreeRestoreSpan{
@@ -148,13 +157,13 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 			}
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				spans, crdt.RestoreModeRestore, nil)
-		}},
+		}, outcome{changes1: true, changes2: true}},
 		{"restore a span anchored on b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(p.ID(), p.ID())
 			span := spanOf(b, p.ID(), b.ID(), b.ID())
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				[]*crdt.TreeRestoreSpan{span}, crdt.RestoreModeRestore, nil)
-		}},
+		}, outcome{}},
 		{"retombstone p and b", func(tree *crdt.Tree, p, _, b *crdt.TreeNode, at *time.Ticket) operations.Operation {
 			pos := crdt.NewTreePos(tree.Root().ID(), tree.Root().ID())
 			spans := []*crdt.TreeRestoreSpan{
@@ -163,7 +172,7 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 			}
 			return operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at,
 				nil, crdt.RestoreModeRetombstone, spans)
-		}},
+		}, outcome{changes1: true, changes2: true}},
 	}
 
 	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
@@ -183,7 +192,16 @@ func TestTreeOpsNamingACollectedSubtree(t *testing.T) {
 					op := tc.op(tree, paragraph, a, b, at)
 					// An op the replica cannot resolve fails there; that is
 					// what a purged node does on main, and it changes nothing.
-					_, _ = op.Execute(d.InternalDocumentForTest().Root(), operations.OpSourceRemote, opVV)
+					before := treeShape(t, d)
+					_, err := op.Execute(d.InternalDocumentForTest().Root(), operations.OpSourceRemote, opVV)
+					changed := before != treeShape(t, d)
+					if d == d1 {
+						assert.Equal(t, tc.want.fails, err != nil, "d1 fails: %v", err)
+						assert.Equal(t, tc.want.changes1, changed, "d1 changes")
+					} else {
+						assert.NoError(t, err, "d2 resolves it")
+						assert.Equal(t, tc.want.changes2, changed, "d2 changes")
+					}
 					assertRebuildsSame(t, d, tc.name)
 				}
 				assert.Equal(t, treeXML(t, d1), treeXML(t, d2), "both replicas show the same tree")
