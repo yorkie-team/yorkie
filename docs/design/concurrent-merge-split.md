@@ -120,11 +120,13 @@ needs no version vector. Pinned by the corpus scripts
 `split-order-older-*` (a product is not the anchor) and
 `split-product-walk-past-concurrent-insert` (the walk goes on past it).
 
-The rule applies to an insert position (`BoundaryInsert`) only: both ends
-of an empty Edit range. A `BoundaryRange` position (§9.3), a style range's
-boundary, and a `BoundaryEditEnd` position, either end of a non-empty Edit
-range, were drawn after the whole element as their client saw it, so the walk takes the product as before
-and the caller's split handling (§9.1/§9.2, §4.1) deals with it.
+The rule applies to a pure insert position (`BoundaryPureInsert`) only:
+both ends of an empty Edit range, which is the one caller that asks for it.
+A `BoundaryRange` position (§9.3), a style range's boundary, and a default
+`BoundaryInsert` position, either end of a non-empty Edit range, were
+drawn after the whole element as their client saw it, so the walk takes
+the product as before and the caller's split handling (§9.1/§9.2, §4.1)
+deals with it.
 
 ## Phase 2: Split Sibling Advance
 
@@ -967,10 +969,11 @@ outside its range, after the then-live parent. Replicas then diverge
 on attributes.
 
 `FindTreeNodesWithSplitText` takes a boundary mode: `BoundaryInsert`
-(default, §1.1 behavior for an empty Edit range), `BoundaryEditEnd`
-(either end of a non-empty Edit range: §1.1 behavior, without §1.3's
-split-product skip), and `BoundaryRange`, used by `Style`/`RemoveStyle`,
-which resolves the position to right after the merge-source tombstone. In visible coordinates this lands before both
+(default, §1.1 behavior, used for either end of a non-empty Edit range),
+`BoundaryPureInsert` (both ends of an empty Edit range: §1.1 behavior plus
+§1.3's split-product skip), and `BoundaryRange`, used by
+`Style`/`RemoveStyle`, which resolves the position to right after the
+merge-source tombstone. In visible coordinates this lands before both
 the concurrent inserts and the moved children, so a range end excludes
 them and a range start includes them — matching the styling replica in
 both directions. Ranges that genuinely cover the merged content
@@ -1372,9 +1375,9 @@ result. The JS SDK has to mirror all of the following:
 1. **§1.3 step 04.** At an insert position (both ends of an empty Edit
    range), the walk passes over a split product of the left element
    instead of taking it as the anchor, and goes on to the concurrent
-   inserts after it. Either end of a non-empty Edit range
-   (`BoundaryEditEnd`) and a style boundary (`BoundaryRange`) keep the
-   plain walk.
+   inserts after it (`BoundaryPureInsert`, asked for explicitly). Either
+   end of a non-empty Edit range (the default `BoundaryInsert`) and a style
+   boundary (`BoundaryRange`) keep the plain walk.
 2. **Step 03 past purged text.** A left-sibling offset past the end of the
    floor text piece skips the split only when it lies in a gap of the
    insertion's chain: the floor piece's `InsNextID` names exactly a text

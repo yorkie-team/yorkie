@@ -2808,9 +2808,9 @@ func (t *Tree) Edit(
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	// Only an empty range is a pure insert position (§1.3); both ends of a
 	// non-empty range are boundaries its client drew around whole elements.
-	mode := BoundaryEditEnd
+	mode := BoundaryInsert
 	if from.ParentID.Equal(to.ParentID) && from.LeftSiblingID.Equal(to.LeftSiblingID) {
-		mode = BoundaryInsert
+		mode = BoundaryPureInsert
 	}
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, mode)
 	if err != nil {
@@ -5152,11 +5152,12 @@ const (
 	// nodes concurrently inserted at that anchor.
 	BoundaryRange
 
-	// BoundaryEditEnd is either end of a non-empty Edit range. It resolves
-	// as BoundaryInsert does, except that step 04 does not pass over a split
-	// product of the left element (§1.3): only a pure insert, an empty range,
-	// lands between the element and its product.
-	BoundaryEditEnd
+	// BoundaryPureInsert is a pure insert position, both ends of an empty
+	// Edit range. It resolves as BoundaryInsert does, and step 04 also passes
+	// over a split product of the left element (§1.3): only a pure insert
+	// lands between the element and its product. A caller has to ask for it;
+	// one that does not keeps the plain walk.
+	BoundaryPureInsert
 )
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
@@ -5271,13 +5272,14 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	// siblings of the unsplit element -- so the two sides would anchor the
 	// same insert on different nodes.
 	//
-	// Only an insert position does this (BoundaryInsert). A range boundary
-	// after the element -- a style range's (BoundaryRange) or either end of
-	// a non-empty Edit range (BoundaryEditEnd) -- was drawn after the whole
-	// element its client saw, unsplit, so the walk takes the product as it
-	// always has, and the split handling of the caller starts from there.
+	// Only a pure insert position does this (BoundaryPureInsert). Any other
+	// boundary after the element -- a style range's (BoundaryRange) or
+	// either end of a non-empty Edit range (BoundaryInsert) -- was drawn
+	// after the whole element its client saw, unsplit, so the walk takes the
+	// product as it always has, and the caller's split handling starts from
+	// there.
 	var isSplitProduct func(*TreeNode) bool
-	if mode == BoundaryInsert {
+	if mode == BoundaryPureInsert {
 		isSplitProduct = t.splitProductTest(leftNode, isLeftMost)
 	}
 	parentChildren := realParentNode.Index.Children(true)

@@ -184,7 +184,7 @@ func TestTreeCyclicSplitLink(t *testing.T) {
 		pos := crdt.NewTreePos(tree.Root().ID(), first.ID())
 		older := time.NewTicket(1, 0, knownActor)
 		mustFinish(t, "FindTreeNodesWithSplitText", func() {
-			_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, older, crdt.BoundaryInsert)
+			_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, older, crdt.BoundaryPureInsert)
 			assert.NoError(t, err)
 			assert.NotSame(t, first, anchor, "a lineage that loops back is not the first paragraph's")
 		})

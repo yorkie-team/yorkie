@@ -135,9 +135,9 @@ func TestFindTreeNodesWithSplitTextSplitProductByMode(t *testing.T) {
 		mode crdt.PosBoundary
 		want string
 	}{
-		{"an insert stays before the product", crdt.BoundaryInsert, "left"},
+		{"a pure insert stays before the product", crdt.BoundaryPureInsert, "left"},
+		{"the default goes past it", crdt.BoundaryInsert, "product"},
 		{"a range boundary goes past it", crdt.BoundaryRange, "product"},
-		{"an edit's range end goes past it", crdt.BoundaryEditEnd, "product"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := helper.TextChangeContext(helper.TestRoot())
@@ -228,7 +228,7 @@ func TestFindTreeNodesWithSplitTextManySplitProducts(t *testing.T) {
 	require.Equal(t, "<p>b</p>", crdt.ToXML(last))
 	require.Len(t, tree.Root().Children(), products+1)
 
-	_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, editedAt, crdt.BoundaryInsert)
+	_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, editedAt, crdt.BoundaryPureInsert)
 	require.NoError(t, err)
 	assert.Same(t, left, anchor, "every product is passed over")
 }
